@@ -186,7 +186,7 @@ struct InsertableDelegation {
 //
 // `RealmOrganization*` enums serialize snake_case via serde; we store the same
 // snake_case strings in TEXT[] columns. We round-trip through serde_json so the
-// stored strings stay byte-identical to the on-wire `ck.realm.organization`
+// stored strings stay byte-identical to the on-wire `ak.realm.organization`
 // values and cannot drift from the SDK definition.
 
 fn issuer_role_str(role: RealmOrganizationIssuerRole) -> String {

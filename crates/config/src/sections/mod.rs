@@ -37,7 +37,7 @@ pub use self::branding::BrandingConfig;
 pub use self::captcha::{CaptchaConfig, CaptchaServiceKind};
 pub use self::clients::{ClientAuthMethodConfig, ClientConfig, ClientsConfig};
 pub use self::arkret::{
-    CokretConfig, DeploymentProfileConfig, IdentityRegistryConfig, IdentityRegistryKind,
+    ArkretConfig, DeploymentProfileConfig, IdentityRegistryConfig, IdentityRegistryKind,
     PrincipalMethodConfig, PrincipalServerConfig, StaridConfig,
 };
 pub use self::database::{DatabaseConfig, PgSslMode};
@@ -178,8 +178,8 @@ pub struct RootConfig {
     pub database: DatabaseConfig,
 
     /// Arkret-specific audiences, DIDs, and downstream integration metadata
-    #[serde(default, skip_serializing_if = "CokretConfig::is_default")]
-    pub arkret: CokretConfig,
+    #[serde(default, skip_serializing_if = "ArkretConfig::is_default")]
+    pub arkret: ArkretConfig,
 
     /// Configuration related to sending monitoring data
     #[serde(default, skip_serializing_if = "TelemetryConfig::is_default")]
@@ -297,7 +297,7 @@ impl RootConfig {
             clients: ClientsConfig::default(),
             http: HttpConfig::default(),
             database: DatabaseConfig::default(),
-            arkret: CokretConfig::default(),
+            arkret: ArkretConfig::default(),
             telemetry: TelemetryConfig::default(),
             templates: TemplatesConfig::default(),
             email: EmailConfig::default(),
@@ -322,7 +322,7 @@ impl RootConfig {
             clients: ClientsConfig::default(),
             http: HttpConfig::default(),
             database: DatabaseConfig::default(),
-            arkret: CokretConfig::default(),
+            arkret: ArkretConfig::default(),
             telemetry: TelemetryConfig::default(),
             templates: TemplatesConfig::default(),
             passwords: PasswordsConfig::default(),
@@ -353,7 +353,7 @@ pub struct AppConfig {
     pub database: DatabaseConfig,
 
     #[serde(default)]
-    pub arkret: CokretConfig,
+    pub arkret: ArkretConfig,
 
     #[serde(default)]
     pub templates: TemplatesConfig,

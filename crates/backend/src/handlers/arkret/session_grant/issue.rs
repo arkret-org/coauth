@@ -28,7 +28,7 @@ use crate::handlers::arkret::*;
 pub async fn issue_session_grant_endpoint(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<arkret_core::SessionGrantOutcome>, CokretRouteError> {
+) -> Result<Json<arkret_core::SessionGrantOutcome>, ArkretRouteError> {
     use crate::handlers::account::auth::extract_dpop_binding_for_kickoff;
     use crate::handlers::account::auth::oidc_bridge::{
         OidcCodeExchangeInput, exchange_oidc_code_for_session_grant,
@@ -41,7 +41,7 @@ pub async fn issue_session_grant_endpoint(
     let dpop_binding = extract_dpop_binding_for_kickoff(req, depot, &url_builder)
         .await
         .map_err(|error| {
-            CokretRouteError::coded(
+            ArkretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
                 ERROR_CODE_INVALID_SIGNATURE,
                 format!("reason_code=proof_invalid; invalid grant-binding DPoP proof: {error}"),
@@ -51,9 +51,9 @@ pub async fn issue_session_grant_endpoint(
     let raw_body: serde_json::Value = req
         .parse_json()
         .await
-        .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
+        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
     let body: arkret_core::SessionGrantRequestBody = serde_json::from_value(raw_body.clone())
-        .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
+        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
     enforce_session_grant_inception_key_window(&body, &raw_body)?;
     match body.proof.proof_kind {
         arkret_core::SessionGrantProofKind::OidcCodeExchange => {
@@ -86,13 +86,13 @@ pub async fn issue_session_grant_endpoint(
                 .map_err(map_oidc_exchange_error)?;
 
             let device_id = arkret_core::DeviceId::new(success.device_id.clone()).map_err(|e| {
-                CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                     format!("issued grant carried a non-protocol device_id: {e}"),
                 ))
             })?;
             let principal_id =
                 arkret_core::Did::new(success.principal_did.clone()).map_err(|e| {
-                    CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                    ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                         format!("issued grant carried a non-DID principal_id: {e}"),
                     ))
                 })?;
@@ -105,7 +105,7 @@ pub async fn issue_session_grant_endpoint(
             // `additionalProperties:false` agent-only schema.
             let grant_id =
                 arkret_core::GrantId::new(success.persisted_grant_id.clone()).map_err(|e| {
-                    CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                    ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                         format!("issued grant carried a non-protocol grant_id: {e}"),
                     ))
                 })?;
@@ -133,7 +133,7 @@ pub async fn issue_session_grant_endpoint(
             )?;
             issue_agent_key_proof_session_grant(req, depot, binding, &body).await
         }
-        other => Err(CokretRouteError::coded(
+        other => Err(ArkretRouteError::coded(
             StatusCode::NOT_IMPLEMENTED,
             ERROR_CODE_UNSUPPORTED_FEATURE,
             format!(
@@ -146,23 +146,23 @@ pub async fn issue_session_grant_endpoint(
 fn require_agent_key_proof_dpop_binding(
     binding: Option<crate::handlers::account::auth::DpopSessionBinding>,
     body_binding: Option<&arkret_core::SessionGrantDpopBindingProof>,
-) -> Result<crate::handlers::account::auth::DpopSessionBinding, CokretRouteError> {
+) -> Result<crate::handlers::account::auth::DpopSessionBinding, ArkretRouteError> {
     let binding = binding.ok_or_else(|| {
-        CokretRouteError::coded(
+        ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
             arkret_core::error::ERROR_CODE_DID_PROOF_REQUIRED,
             "agent_key_proof session grant requires a grant-binding DPoP proof",
         )
     })?;
     let body_binding = body_binding.ok_or_else(|| {
-        CokretRouteError::coded(
+        ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
             ERROR_CODE_INVALID_SIGNATURE,
             "reason_code=proof_invalid; agent_key_proof body must carry dpop_binding_proof",
         )
     })?;
     if body_binding.proof_jwt != binding.proof_jwt {
-        return Err(CokretRouteError::coded(
+        return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
             ERROR_CODE_INVALID_SIGNATURE,
             "reason_code=proof_invalid; DPoP header does not match body dpop_binding_proof",
@@ -179,7 +179,7 @@ fn require_agent_key_proof_dpop_binding(
 fn enforce_session_grant_inception_key_window(
     body: &arkret_core::SessionGrantRequestBody,
     raw_body: &serde_json::Value,
-) -> Result<(), CokretRouteError> {
+) -> Result<(), ArkretRouteError> {
     if !matches!(
         body.proof.proof_kind,
         arkret_core::SessionGrantProofKind::DidBoundSignature
@@ -197,8 +197,8 @@ fn enforce_session_grant_inception_key_window(
 
 fn inception_key_window_error(
     error: crate::services::inception_key_window::InceptionKeyWindowError,
-) -> CokretRouteError {
-    CokretRouteError::coded(
+) -> ArkretRouteError {
+    ArkretRouteError::coded(
         StatusCode::FORBIDDEN,
         ERROR_CODE_FAILED_PRECONDITION,
         format!("reason_code={}; {error}", error.reason_code()),
@@ -210,7 +210,7 @@ async fn issue_agent_key_proof_session_grant(
     depot: &Depot,
     dpop_binding: crate::handlers::account::auth::DpopSessionBinding,
     body: &arkret_core::SessionGrantRequestBody,
-) -> Result<Json<arkret_core::SessionGrantOutcome>, CokretRouteError> {
+) -> Result<Json<arkret_core::SessionGrantOutcome>, ArkretRouteError> {
     use crate::handlers::account::agents::{AgentSessionProofError, validate_agent_session_proof};
 
     let url_builder = depot.url_builder()?;
@@ -234,7 +234,7 @@ async fn issue_agent_key_proof_session_grant(
         Err(AgentSessionProofError::Rejection(rejection)) => {
             repo.cancel().await.ok();
             let status = rejection.http_status();
-            return Err(CokretRouteError::coded(
+            return Err(ArkretRouteError::coded(
                 status,
                 rejection.code(),
                 rejection.code(),
@@ -246,7 +246,7 @@ async fn issue_agent_key_proof_session_grant(
             // shown CAPTCHA/OTP. The reason_code + approval_request_id ride the
             // message so the conformant runtime can route the controller to the
             // out-of-band approval surface.
-            return Err(CokretRouteError::coded(
+            return Err(ArkretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
                 arkret_core::error::ERROR_CODE_CLAIM_REQUIRED,
                 serde_json::json!({
@@ -269,14 +269,14 @@ async fn issue_agent_key_proof_session_grant(
             .user()
             .lookup(user_id)
             .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
         user.is_some_and(|user| user.locked_at.is_some() || user.deactivated_at.is_some())
     } else {
         false
     };
     if controller_blocked {
         repo.cancel().await.ok();
-        return Err(CokretRouteError::coded(
+        return Err(ArkretRouteError::coded(
             StatusCode::FORBIDDEN,
             ERROR_CODE_FAILED_PRECONDITION,
             "accountable controller is deactivated or suspended",
@@ -295,7 +295,7 @@ async fn issue_agent_key_proof_session_grant(
     let expires_at = now + authorization.ttl;
 
     let session_public_key = serde_json::to_string(&dpop_binding.public_jwk).map_err(|error| {
-        CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(error))
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(error))
     })?;
     let material = mint_agent_session_grant(
         &arkret_config,
@@ -313,14 +313,14 @@ async fn issue_agent_key_proof_session_grant(
 
     let persisted = persist_unbound_session_grant(&mut repo, &mut rng, &*clock, &material)
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     repo.save()
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     let principal_id =
         arkret_core::Did::new(authorization.agent_principal_id.clone()).map_err(|e| {
-            CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
                 "agent principal is not a valid DID: {e}"
             )))
         })?;
@@ -332,7 +332,7 @@ async fn issue_agent_key_proof_session_grant(
     // canonical constraint projection are already baked into the minted grant
     // above.
     let grant_id = arkret_core::GrantId::new(persisted.grant_id.to_string()).map_err(|e| {
-        CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "issued agent grant carried a non-protocol grant_id: {e}"
         )))
     })?;
@@ -350,21 +350,21 @@ async fn issue_agent_key_proof_session_grant(
     }))
 }
 
-fn map_session_grant_material_error(error: SessionGrantError) -> CokretRouteError {
+fn map_session_grant_material_error(error: SessionGrantError) -> ArkretRouteError {
     match error {
-        error @ SessionGrantError::DidWebPrincipalNotExplicit => CokretRouteError::coded(
+        error @ SessionGrantError::DidWebPrincipalNotExplicit => ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             ERROR_CODE_INVALID_PARAM,
             error.to_string(),
         ),
         SessionGrantError::InceptionKeyWindowExceeded(error) => inception_key_window_error(error),
-        other => CokretRouteError::Internal(Box::new(other)),
+        other => ArkretRouteError::Internal(Box::new(other)),
     }
 }
 
 fn map_oidc_exchange_error(
     error: crate::handlers::account::auth::oidc_bridge::OidcExchangeError,
-) -> CokretRouteError {
+) -> ArkretRouteError {
     let (status, code) = match error.code {
         "internal_error" => (StatusCode::INTERNAL_SERVER_ERROR, ERROR_CODE_INTERNAL_ERROR),
         REASON_PROOF_INVALID | "invalid_authorization_code" | "invalid_client" => {
@@ -394,7 +394,7 @@ fn map_oidc_exchange_error(
     } else {
         format!("reason_code={}; {}", error.code, error.message)
     };
-    CokretRouteError::coded(status, code, message)
+    ArkretRouteError::coded(status, code, message)
 }
 
 #[cfg(test)]
@@ -420,9 +420,9 @@ mod tests {
         }
     }
 
-    fn assert_coded(error: CokretRouteError, expected_status: StatusCode, expected_code: &str) {
+    fn assert_coded(error: ArkretRouteError, expected_status: StatusCode, expected_code: &str) {
         match error {
-            CokretRouteError::Coded { status, code, .. } => {
+            ArkretRouteError::Coded { status, code, .. } => {
                 assert_eq!(status, expected_status);
                 assert_eq!(code, expected_code);
             }
@@ -431,8 +431,8 @@ mod tests {
     }
 
     fn unwrap_binding_error(
-        result: Result<DpopSessionBinding, CokretRouteError>,
-    ) -> CokretRouteError {
+        result: Result<DpopSessionBinding, ArkretRouteError>,
+    ) -> ArkretRouteError {
         match result {
             Ok(_) => panic!("expected DPoP binding rejection"),
             Err(error) => error,
@@ -447,7 +447,7 @@ mod tests {
         });
 
         match err {
-            CokretRouteError::Coded {
+            ArkretRouteError::Coded {
                 status,
                 code,
                 message,

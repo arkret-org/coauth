@@ -113,22 +113,18 @@ coauth-policy = {version = "=0.3.0",path = "crates/policy"}
 coauth-principal = {version = "=0.3.0",path = "crates/principal"}
 coauth-tasks = {version = "=0.3.0",path = "crates/tasks"}
 coauth-templates = {version = "=0.3.0",path = "crates/templates"}
-# Umbrella `arkret` SDK pulled in for the pure-protocol modules that don't
-# have a smaller-crate home: today just `arkret::identity::binding` (consumed
-# by `services::passkey_derive`). Default features pull in the heavy
-# client / openmls / sync surface, so opt into only `full-surface` (gates the
-# identity tree).
-arkret = {version = "0.3.0",path = "../arkret-rust-sdk/crates/sdk",default-features = false,features = ["full-surface"]}
 # Arkret v1 protocol SDK pieces — `arkret-core` exposes the typed
 # identifiers + the `MoveSigner` trait + `UnsignedMove` builder, while
 # `arkret-signatures` (with the `signer` feature) provides the production
 # Ed25519 backend used by `anchor_pending_move`.
 arkret-core = {version = "0.3.0",path = "../arkret-rust-sdk/crates/core",default-features = false}
+arkret-crypto = {version = "0.3.0",path = "../arkret-rust-sdk/crates/crypto",default-features = false}
 # Lightweight typed-identifier validators (no heavy transitive deps beyond
 # what `arkret-core` already pulls in). Used by `coauth-config` for the
-# `ck:trust_domain:<scope>` wire-form check so config and SDK never drift.
+# `ak:trust_domain:<scope>` wire-form check so config and SDK never drift.
 arkret-identifiers = {version = "0.3.0",path = "../arkret-rust-sdk/crates/identifiers",default-features = false}
 arkret-signatures = {version = "0.3.0",path = "../arkret-rust-sdk/crates/signatures",default-features = false,features = ["signer"]}
+arkret-state = {version = "0.3.0",path = "../arkret-rust-sdk/crates/state",default-features = false}
 compact_str = "0.9.1"
 console = "0.16.3"
 const-oid = {version = "0.9.6",features = ["std"]}

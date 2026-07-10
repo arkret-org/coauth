@@ -1,4 +1,4 @@
-//! Admin endpoints for managing CKP-0007 `ck.circle.*` capability grants.
+//! Admin endpoints for managing CKP-0007 `ak.circle.*` capability grants.
 //!
 //! Surfaces three routes consumed by sodmin and any other admin client:
 //!
@@ -54,7 +54,7 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
     }
 
     // CKP-0007 P2B.5: High-risk Circle capability grants
-    // (ck.circle.member.add.others, ck.circle.audit) MUST be preceded by
+    // (ak.circle.member.add.others, ak.circle.audit) MUST be preceded by
     // an N-of-M approved RiskActionProposal. The propose / approve
     // workflow lives in `admin/v1/accounts/risk_action.rs` and persists
     // each approval as an `ApprovalProof` row inside the proposal's

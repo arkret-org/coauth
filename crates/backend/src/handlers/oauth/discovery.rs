@@ -1,4 +1,4 @@
-use coauth_config::{CokretConfig, IdentityRegistryKind};
+use coauth_config::{ArkretConfig, IdentityRegistryKind};
 use coauth_data::{SiteConfig, UrlBuilder};
 use coauth_iana::oauth::{
     OAuthAuthorizationEndpointResponseType, OAuthClientAuthenticationMethod,
@@ -108,7 +108,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
         .get::<SiteConfig>("site_config")
         .expect("SiteConfig not found in depot");
     let arkret_config = depot
-        .get::<CokretConfig>("arkret_config")
+        .get::<ArkretConfig>("arkret_config")
         .cloned()
         .unwrap_or_default();
 
@@ -353,9 +353,9 @@ mod tests {
         );
         depot.insert(
             "arkret_config",
-            CokretConfig {
+            ArkretConfig {
                 service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
-                ..CokretConfig::default()
+                ..ArkretConfig::default()
             },
         );
         depot

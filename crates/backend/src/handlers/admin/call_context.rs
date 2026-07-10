@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::personal::session::{PersonalSession, PersonalSessionOwner};
 use coauth_data::{
     BoxClock, BoxRepository, RepositoryError, Session, TokenFormatError, TokenType, User,
@@ -289,7 +289,7 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
     }
 
     let configured_org_id = depot
-        .get::<CokretConfig>("arkret_config")
+        .get::<ArkretConfig>("arkret_config")
         .ok()
         .and_then(|config| config.admin_org_id.clone());
     let presented_org_id = req

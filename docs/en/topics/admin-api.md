@@ -371,7 +371,7 @@ realm classes explicit. Every admin route belongs to one of them:
 - **Collaboration Realm** — Spaces, Strands, Circles, membership, content
   policy. Operators who hold capabilities here govern what the principal
   *does together with other principals*. The six CKP-0007
-  `ck.circle.*` capability actions live in this class.
+  `ak.circle.*` capability actions live in this class.
 
 | Route prefix                                              | Class                  |
 |-----------------------------------------------------------|------------------------|
@@ -401,19 +401,19 @@ of the rollout will split these into per-class scopes so that an
 operator can be granted Collaboration-only access without being able to
 mutate identity state.
 
-## CKP-0007 `ck.circle.*` capability grants
+## CKP-0007 `ak.circle.*` capability grants
 
 The Collaboration class exposes a typed grant surface for the six
 CKP-0007 capability actions:
 
 | action                        | risk   | required constraint        |
 |-------------------------------|--------|----------------------------|
-| `ck.circle.create`            | medium | (none)                     |
-| `ck.circle.manage`            | medium | `allowed_circle_ids`       |
-| `ck.circle.member.add`        | low    | (none)                     |
-| `ck.circle.member.manage`     | medium | `allowed_circle_ids`       |
-| `ck.circle.member.add.others` | high   | `allowed_circle_ids`       |
-| `ck.circle.audit`             | high   | (paired with audit check)  |
+| `ak.circle.create`            | medium | (none)                     |
+| `ak.circle.manage`            | medium | `allowed_circle_ids`       |
+| `ak.circle.member.add`        | low    | (none)                     |
+| `ak.circle.member.manage`     | medium | `allowed_circle_ids`       |
+| `ak.circle.member.add.others` | high   | `allowed_circle_ids`       |
+| `ak.circle.audit`             | high   | (paired with audit check)  |
 
 Endpoints:
 

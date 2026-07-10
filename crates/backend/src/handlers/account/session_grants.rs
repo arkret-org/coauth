@@ -11,7 +11,7 @@ use ulid::Ulid;
 
 use crate::handlers::account::DepotExt as _;
 use crate::handlers::arkret::{
-    CokretRouteError, SessionGrantAuthz, SessionGrantRecord, require_session_grant_caller,
+    ArkretRouteError, SessionGrantAuthz, SessionGrantRecord, require_session_grant_caller,
 };
 
 #[derive(Debug, Serialize)]
@@ -28,7 +28,7 @@ struct SessionGrantRevokeOutcome {
 pub async fn list_session_grants(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SessionGrantListOutcome>, CokretRouteError> {
+) -> Result<Json<SessionGrantListOutcome>, ArkretRouteError> {
     let clock = crate::handlers::make_clock();
     let subject = req.query::<String>("subject");
     let device_id = req.query::<String>("device_id");
@@ -57,7 +57,7 @@ pub async fn list_session_grants(
 
     if let Some(browser_session_id) = req.query::<String>("browser_session_id") {
         let browser_session_id = Ulid::from_string(&browser_session_id)
-            .map_err(|_| CokretRouteError::BadRequest("invalid browser_session_id".into()))?;
+            .map_err(|_| ArkretRouteError::BadRequest("invalid browser_session_id".into()))?;
         filter = filter.for_browser_session(browser_session_id);
     }
 
@@ -70,10 +70,10 @@ pub async fn list_session_grants(
         .oauth_session_grant()
         .list(filter, Pagination::first(100))
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     repo.cancel()
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(SessionGrantListOutcome {
         grants: page
@@ -88,19 +88,19 @@ pub async fn list_session_grants(
 pub async fn revoke_session_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SessionGrantRevokeOutcome>, CokretRouteError> {
+) -> Result<Json<SessionGrantRevokeOutcome>, ArkretRouteError> {
     let clock = crate::handlers::make_clock();
     let raw_id = req
         .param::<String>("id")
-        .ok_or_else(|| CokretRouteError::BadRequest("missing session grant id".into()))?;
+        .ok_or_else(|| ArkretRouteError::BadRequest("missing session grant id".into()))?;
     let id = Ulid::from_string(&raw_id)
-        .map_err(|_| CokretRouteError::BadRequest("invalid session grant id".into()))?;
+        .map_err(|_| ArkretRouteError::BadRequest("invalid session grant id".into()))?;
 
     // Revocation is destructive — server_name scope is not enough.
     match require_session_grant_caller(req, depot).await?.authz {
         SessionGrantAuthz::Admin => {}
         SessionGrantAuthz::PrincipalServer => {
-            return Err(CokretRouteError::Forbidden(
+            return Err(ArkretRouteError::Forbidden(
                 "session-grant revocation requires admin scope".to_owned(),
             ));
         }
@@ -111,17 +111,17 @@ pub async fn revoke_session_grant(
         .oauth_session_grant()
         .lookup(id)
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
-        .ok_or(CokretRouteError::NotFound)?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .ok_or(ArkretRouteError::NotFound)?;
 
     let grant = repo
         .oauth_session_grant()
         .revoke(&clock, grant)
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     repo.save()
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(SessionGrantRevokeOutcome {
         grant: grant.into(),

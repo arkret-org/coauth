@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::{
     AppVersion, BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, PgRepositoryFactory,
     RepositoryFactory, SiteConfig, SystemClock, UrlBuilder,
@@ -49,7 +49,7 @@ static JWKS_CACHE: std::sync::LazyLock<JwksCache> = std::sync::LazyLock::new(Jwk
 pub struct AppState {
     pub repository_factory: PgRepositoryFactory,
     pub templates: Templates,
-    pub arkret_config: CokretConfig,
+    pub arkret_config: ArkretConfig,
     pub key_store: Keystore,
     pub cookie_manager: CookieManager,
     pub encrypter: Encrypter,
@@ -313,7 +313,7 @@ pub trait DepotExt {
     fn get_box_repository_factory(&self) -> Option<&BoxRepositoryFactory>;
     fn get_templates(&self) -> Option<&Templates>;
     fn get_translator(&self) -> Option<&Arc<Translator>>;
-    fn get_arkret_config(&self) -> Option<&CokretConfig>;
+    fn get_arkret_config(&self) -> Option<&ArkretConfig>;
     fn get_keystore(&self) -> Option<&Keystore>;
     fn get_encrypter(&self) -> Option<&Encrypter>;
     fn get_url_builder(&self) -> Option<&UrlBuilder>;
@@ -350,8 +350,8 @@ impl DepotExt for Depot {
         self.get::<Arc<Translator>>("translator").ok()
     }
 
-    fn get_arkret_config(&self) -> Option<&CokretConfig> {
-        self.get::<CokretConfig>("arkret_config").ok()
+    fn get_arkret_config(&self) -> Option<&ArkretConfig> {
+        self.get::<ArkretConfig>("arkret_config").ok()
     }
 
     fn get_keystore(&self) -> Option<&Keystore> {

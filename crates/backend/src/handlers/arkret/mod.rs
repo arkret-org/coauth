@@ -16,7 +16,7 @@ pub use session_grant::*;
 mod tests;
 
 use anyhow::Error as AnyhowError;
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::{RepositoryAccess, UrlBuilder, User};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable;
@@ -104,7 +104,7 @@ pub enum SessionGrantError {
 }
 
 #[derive(Debug, Error)]
-pub enum CokretRouteError {
+pub enum ArkretRouteError {
     #[error(transparent)]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
 
@@ -137,8 +137,8 @@ pub enum CokretRouteError {
     Forbidden(String),
 }
 
-impl CokretRouteError {
-    /// Build a [`CokretRouteError::Coded`] carrying a registry error code that
+impl ArkretRouteError {
+    /// Build a [`ArkretRouteError::Coded`] carrying a registry error code that
     /// will surface as the envelope's top-level `code`.
     pub fn coded(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
         Self::Coded {
@@ -149,7 +149,7 @@ impl CokretRouteError {
     }
 }
 
-impl From<RouteError> for CokretRouteError {
+impl From<RouteError> for ArkretRouteError {
     fn from(value: RouteError) -> Self {
         match value {
             RouteError::BadRequest(message) => Self::BadRequest(message),
@@ -159,7 +159,7 @@ impl From<RouteError> for CokretRouteError {
     }
 }
 
-impl From<coauth_data::RepositoryError> for CokretRouteError {
+impl From<coauth_data::RepositoryError> for ArkretRouteError {
     fn from(value: coauth_data::RepositoryError) -> Self {
         Self::Internal(Box::new(value))
     }
@@ -216,7 +216,7 @@ impl SessionGrantCaller {
     pub(crate) fn resolve_read_audience(
         &self,
         requested: Option<&str>,
-    ) -> Result<Option<String>, CokretRouteError> {
+    ) -> Result<Option<String>, ArkretRouteError> {
         let requested = requested.map(str::trim).filter(|a| !a.is_empty());
         match &self.allowed_audiences {
             None => Ok(requested.map(ToOwned::to_owned)),
@@ -225,14 +225,14 @@ impl SessionGrantCaller {
                     if allowed.iter().any(|candidate| candidate == audience) {
                         Ok(Some(audience.to_owned()))
                     } else {
-                        Err(CokretRouteError::Forbidden(
+                        Err(ArkretRouteError::Forbidden(
                             "principal-server caller may only query its own audience".to_owned(),
                         ))
                     }
                 }
                 None => match allowed.as_slice() {
                     [audience] => Ok(Some(audience.clone())),
-                    _ => Err(CokretRouteError::Forbidden(
+                    _ => Err(ArkretRouteError::Forbidden(
                         "principal-server caller must specify an allowed audience".to_owned(),
                     )),
                 },
@@ -254,20 +254,20 @@ impl SessionGrantCaller {
 pub(crate) async fn require_session_grant_caller(
     req: &Request,
     depot: &Depot,
-) -> Result<SessionGrantCaller, CokretRouteError> {
+) -> Result<SessionGrantCaller, ArkretRouteError> {
     use coauth_data::{RepositoryAccess, TokenType};
 
     let auth_header = req
         .headers()
         .get(http::header::AUTHORIZATION)
-        .ok_or_else(|| CokretRouteError::Unauthorized("missing authorization header".to_owned()))?;
+        .ok_or_else(|| ArkretRouteError::Unauthorized("missing authorization header".to_owned()))?;
     let auth_str = auth_header
         .to_str()
-        .map_err(|_| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
+        .map_err(|_| ArkretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
     let token = auth_str
         .strip_prefix("Bearer ")
         .or_else(|| auth_str.strip_prefix("bearer "))
-        .ok_or_else(|| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
+        .ok_or_else(|| ArkretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
 
     // Static bearer fallback: a Principal Server may authenticate with a
     // token configured in `arkret.principal_servers[].
@@ -285,7 +285,7 @@ pub(crate) async fn require_session_grant_caller(
     let now = crate::handlers::make_clock().now();
 
     let token_type = TokenType::check(token)
-        .map_err(|_| CokretRouteError::Unauthorized("invalid bearer token".to_owned()))?;
+        .map_err(|_| ArkretRouteError::Unauthorized("invalid bearer token".to_owned()))?;
 
     let mut repo = depot.repo().await?;
     let scope = match token_type {
@@ -294,12 +294,12 @@ pub(crate) async fn require_session_grant_caller(
                 .oauth_access_token()
                 .find_by_token(token)
                 .await
-                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
-                .ok_or_else(|| CokretRouteError::Unauthorized("unknown access token".to_owned()))?;
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+                .ok_or_else(|| ArkretRouteError::Unauthorized("unknown access token".to_owned()))?;
             // SEC-SG-EXPIRY / REL-04: reject revoked or expired access tokens.
             if !access.is_valid(now) {
                 repo.cancel().await?;
-                return Err(CokretRouteError::Unauthorized(
+                return Err(ArkretRouteError::Unauthorized(
                     "access token is expired or revoked".to_owned(),
                 ));
             }
@@ -307,16 +307,16 @@ pub(crate) async fn require_session_grant_caller(
                 .oauth_session()
                 .lookup(access.session_id)
                 .await
-                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
                 .ok_or_else(|| {
-                    CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                    ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                         "access token references missing session",
                     ))
                 })?;
             // SEC-SG-EXPIRY / REL-04: reject finished (logged-out) sessions.
             if !session.is_valid() {
                 repo.cancel().await?;
-                return Err(CokretRouteError::Unauthorized(
+                return Err(ArkretRouteError::Unauthorized(
                     "session is finished".to_owned(),
                 ));
             }
@@ -327,12 +327,12 @@ pub(crate) async fn require_session_grant_caller(
                 .personal_access_token()
                 .find_by_token(token)
                 .await
-                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
-                .ok_or_else(|| CokretRouteError::Unauthorized("unknown access token".to_owned()))?;
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+                .ok_or_else(|| ArkretRouteError::Unauthorized("unknown access token".to_owned()))?;
             // SEC-SG-EXPIRY / REL-04: reject revoked or expired personal tokens.
             if !access.is_valid(now) {
                 repo.cancel().await?;
-                return Err(CokretRouteError::Unauthorized(
+                return Err(ArkretRouteError::Unauthorized(
                     "access token is expired or revoked".to_owned(),
                 ));
             }
@@ -340,23 +340,23 @@ pub(crate) async fn require_session_grant_caller(
                 .personal_session()
                 .lookup(access.session_id)
                 .await
-                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
                 .ok_or_else(|| {
-                    CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                    ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                         "access token references missing session",
                     ))
                 })?;
             // SEC-SG-EXPIRY / REL-04: reject revoked personal sessions.
             if !session.is_valid() {
                 repo.cancel().await?;
-                return Err(CokretRouteError::Unauthorized(
+                return Err(ArkretRouteError::Unauthorized(
                     "session is revoked".to_owned(),
                 ));
             }
             session.scope.clone()
         }
         _ => {
-            return Err(CokretRouteError::Unauthorized(
+            return Err(ArkretRouteError::Unauthorized(
                 "unsupported access token type".to_owned(),
             ));
         }
@@ -378,14 +378,14 @@ pub(crate) async fn require_session_grant_caller(
             .collect();
         Ok(SessionGrantCaller::principal_server(allowed_audiences))
     } else {
-        Err(CokretRouteError::Forbidden(
+        Err(ArkretRouteError::Forbidden(
             "missing admin or principal-server scope".to_owned(),
         ))
     }
 }
 
 pub(crate) fn principal_server_static_session_grant_bearer_matches(
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     token: &str,
 ) -> bool {
     principal_server_static_session_grant_bearer_audience(arkret_config, token).is_some()
@@ -396,7 +396,7 @@ pub(crate) fn principal_server_static_session_grant_bearer_matches(
 /// configured static bearer matches. The audience scopes what a static-bearer
 /// Principal Server caller is allowed to read (SEC-SG-ENUM).
 fn principal_server_static_session_grant_bearer_audience(
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     token: &str,
 ) -> Option<String> {
     if token.trim().is_empty() {
@@ -414,7 +414,7 @@ fn principal_server_static_session_grant_bearer_audience(
         .map(|server| server.audience.clone())
 }
 
-impl Scribe for CokretRouteError {
+impl Scribe for ArkretRouteError {
     fn render(self, res: &mut Response) {
         let (status, code, message) = match self {
             Self::Internal(_) => (
@@ -459,22 +459,22 @@ impl Scribe for CokretRouteError {
 
 fn map_did_resolve_error(
     error: crate::services::did_resolver::DidResolveError,
-) -> CokretRouteError {
+) -> ArkretRouteError {
     match error {
         crate::services::did_resolver::DidResolveError::NotFound
         | crate::services::did_resolver::DidResolveError::UnsupportedMethod => {
-            CokretRouteError::NotFound
+            ArkretRouteError::NotFound
         }
         crate::services::did_resolver::DidResolveError::InvalidDid(message) => {
-            CokretRouteError::BadRequest(format!("invalid did: {message}"))
+            ArkretRouteError::BadRequest(format!("invalid did: {message}"))
         }
         crate::services::did_resolver::DidResolveError::DidWebPrincipalNotExplicit => {
-            CokretRouteError::BadRequest(
+            ArkretRouteError::BadRequest(
                 "did:web principal requires deployment_profile=personal_node and principal_method=did:web"
                     .to_owned(),
             )
         }
-        other => CokretRouteError::Internal(Box::new(other)),
+        other => ArkretRouteError::Internal(Box::new(other)),
     }
 }
 
@@ -484,22 +484,22 @@ fn map_did_resolve_error(
 /// `identity-did.md` §3 makes `did:webvh` the default service DID method and
 /// any `did:web` downgrade an explicit no-history choice, so an unconfigured
 /// `arkret.service_did` fails startup validation instead of silently minting
-/// a `did:web` identity (see `CokretConfig::validate`).
-pub(crate) fn service_did_for(arkret_config: &CokretConfig) -> String {
+/// a `did:web` identity (see `ArkretConfig::validate`).
+pub(crate) fn service_did_for(arkret_config: &ArkretConfig) -> String {
     arkret_config
         .service_did
         .clone()
         .expect("arkret.service_did is enforced by startup configuration validation")
 }
 
-pub(crate) fn issuer_did_for(arkret_config: &CokretConfig) -> String {
+pub(crate) fn issuer_did_for(arkret_config: &ArkretConfig) -> String {
     arkret_config
         .issuer_did
         .clone()
         .unwrap_or_else(|| service_did_for(arkret_config))
 }
 
-pub(crate) fn user_did_for(arkret_config: &CokretConfig, user: &User) -> String {
+pub(crate) fn user_did_for(arkret_config: &ArkretConfig, user: &User) -> String {
     format!("{}:users:{}", service_did_for(arkret_config), user.id)
 }
 
@@ -509,7 +509,7 @@ pub(crate) fn is_did_web_principal(did: &str) -> bool {
 }
 
 pub(crate) fn ensure_principal_did_method_allowed(
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     did: &str,
 ) -> Result<(), SessionGrantError> {
     if is_did_web_principal(did) && !arkret_config.did_web_principal_allowed() {
@@ -522,7 +522,7 @@ pub(crate) fn ensure_principal_did_method_allowed(
 ///
 /// This identifies the authenticated coauth account. Principal-server DIDs are
 /// resolved later by the `session-grants` bridge for the requested audience.
-pub(crate) fn oidc_subject_for_user(arkret_config: &CokretConfig, user: &User) -> String {
+pub(crate) fn oidc_subject_for_user(arkret_config: &ArkretConfig, user: &User) -> String {
     user_did_for(arkret_config, user)
 }
 
@@ -535,7 +535,7 @@ pub(crate) struct PrincipalDidBinding {
 
 pub(crate) async fn principal_did_binding_for_user<R>(
     repo: &mut R,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     user: &User,
 ) -> Result<Option<PrincipalDidBinding>, R::Error>
 where
@@ -560,7 +560,7 @@ where
 
 pub(crate) async fn principal_did_for_user<R>(
     repo: &mut R,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     user: &User,
 ) -> Result<Option<String>, R::Error>
 where
@@ -578,7 +578,7 @@ where
 /// personal-node profile and `did:web` principal method.
 pub(crate) async fn published_principal_did_for_user<R>(
     repo: &mut R,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     user: &User,
 ) -> Result<Option<String>, R::Error>
 where
@@ -628,11 +628,11 @@ pub const HANDLE_NOT_CANONICAL_CODE: &str = ERROR_CODE_INVALID_PARAM;
 
 /// Reject any inbound `handle` that is not in the canonical
 /// `<localpart>:<domain>` shape (spec 7157ee8 §3.1). Returns a
-/// [`CokretRouteError::Coded`] wrapping the standard error envelope
+/// [`ArkretRouteError::Coded`] wrapping the standard error envelope
 /// `code = "invalid_param"`.
-pub(crate) fn require_canonical_handle(input: &str) -> Result<&str, CokretRouteError> {
+pub(crate) fn require_canonical_handle(input: &str) -> Result<&str, ArkretRouteError> {
     coauth_data::user::validate_canonical_handle(input).map_err(|(_code, message)| {
-        CokretRouteError::coded(
+        ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             HANDLE_NOT_CANONICAL_CODE,
             format!("reason_code=handle_not_canonical; {message}"),
@@ -644,11 +644,11 @@ pub(crate) fn required_audience(url_builder: &UrlBuilder) -> String {
     url_builder.absolute_url("/_arkret").to_string()
 }
 
-pub(crate) fn trust_domain_for(url_builder: &UrlBuilder, arkret_config: &CokretConfig) -> String {
+pub(crate) fn trust_domain_for(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -> String {
     arkret_config.trust_domain.clone().unwrap_or_else(|| {
         let scope = derived_trust_domain_scope(url_builder.public_hostname());
         let trust_domain = format!("ak:trust_domain:{scope}");
-        debug_assert!(CokretConfig::validate_trust_domain(&trust_domain).is_ok());
+        debug_assert!(ArkretConfig::validate_trust_domain(&trust_domain).is_ok());
         trust_domain
     })
 }
@@ -681,7 +681,7 @@ fn derived_trust_domain_scope(host: &str) -> String {
 
 pub(crate) fn required_audience_for(
     url_builder: &UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
 ) -> String {
     arkret_config
         .admin_audience
@@ -691,7 +691,7 @@ pub(crate) fn required_audience_for(
 
 pub(crate) fn is_allowed_session_grant_audience(
     url_builder: &UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     audience: &str,
 ) -> bool {
     let audience = audience.trim();
@@ -733,7 +733,7 @@ pub(crate) enum SessionGrantTargetError {
 /// must disambiguate.
 pub(crate) fn password_login_session_grant_target(
     url_builder: &UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     requested_audience: Option<&str>,
 ) -> Result<SessionGrantTarget, SessionGrantTargetError> {
     if let Some(audience) = requested_audience.map(str::trim).filter(|a| !a.is_empty()) {
@@ -812,7 +812,7 @@ fn preferred_signing_key(
     })
 }
 
-pub(crate) fn parse_local_user_did_for(arkret_config: &CokretConfig, did: &str) -> Option<Ulid> {
+pub(crate) fn parse_local_user_did_for(arkret_config: &ArkretConfig, did: &str) -> Option<Ulid> {
     let prefix = format!("{}:users:", service_did_for(arkret_config));
     did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
 }
@@ -885,27 +885,27 @@ pub fn test_endpoints_enabled() -> bool {
 pub async fn debug_issue_dpop_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<DebugIssueDpopGrantOutcome>, CokretRouteError> {
+) -> Result<Json<DebugIssueDpopGrantOutcome>, ArkretRouteError> {
     use coauth_jose::jwk::{PublicJsonWebKey, Thumbprint};
 
     if !test_endpoints_enabled() {
-        return Err(CokretRouteError::NotFound);
+        return Err(ArkretRouteError::NotFound);
     }
 
     let body: DebugIssueDpopGrantRequestBody = req
         .parse_json()
         .await
-        .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
+        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
 
     if body.actor_id.trim().is_empty() {
-        return Err(CokretRouteError::BadRequest("missing actor_id".to_owned()));
+        return Err(ArkretRouteError::BadRequest("missing actor_id".to_owned()));
     }
     if body.device_id.trim().is_empty() {
-        return Err(CokretRouteError::BadRequest("missing device_id".to_owned()));
+        return Err(ArkretRouteError::BadRequest("missing device_id".to_owned()));
     }
 
     let public_jwk: PublicJsonWebKey = serde_json::from_value(body.dpop_jwk.clone())
-        .map_err(|error| CokretRouteError::BadRequest(format!("invalid dpop_jwk: {error}")))?;
+        .map_err(|error| ArkretRouteError::BadRequest(format!("invalid dpop_jwk: {error}")))?;
     let jkt = public_jwk.params().thumbprint_sha256_base64();
 
     let url_builder = depot.url_builder()?;
@@ -918,15 +918,15 @@ pub async fn debug_issue_dpop_grant(
     // `user_did_for` form the harness passes). Scoped so its repo connection is
     // released before the principal-DID mint below opens its own transaction.
     let user_id = parse_local_user_did_for(&arkret_config, &body.actor_id).ok_or_else(|| {
-        CokretRouteError::BadRequest("actor_id is not a local Arkret user DID".to_owned())
+        ArkretRouteError::BadRequest("actor_id is not a local Arkret user DID".to_owned())
     })?;
     let user = {
         let mut repo = depot.repo().await?;
         repo.user()
             .lookup(user_id)
             .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
-            .ok_or(CokretRouteError::NotFound)?
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+            .ok_or(ArkretRouteError::NotFound)?
     };
 
     let audience = body
@@ -935,7 +935,7 @@ pub async fn debug_issue_dpop_grant(
         .unwrap_or_else(|| required_audience_for(&url_builder, &arkret_config));
     let grant_target =
         password_login_session_grant_target(&url_builder, &arkret_config, Some(&audience))
-            .map_err(|error| CokretRouteError::BadRequest(error.to_string()))?;
+            .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
     let scopes = body.scopes.clone().unwrap_or_else(|| {
         vec![
             format!("urn:arkret:client:device:{}", body.device_id),
@@ -944,7 +944,7 @@ pub async fn debug_issue_dpop_grant(
     });
 
     // Mint (or reuse) the model-B principal DID, whose document designates
-    // coauth's `CokretDeviceEnrollmentAuthority`, BEFORE issuing the grant. The
+    // coauth's `ArkretDeviceEnrollmentAuthority`, BEFORE issuing the grant. The
     // grant subject MUST be this minted `did:webvh:…:webvh:<ulid>` (mirroring the
     // OIDC/password-login path, account/auth.rs), NOT the coauth-local
     // `user_did_for` fallback (`…:users:<ulid>`) whose soland document carries no
@@ -969,7 +969,7 @@ pub async fn debug_issue_dpop_grant(
         {
             Ok(did) => did,
             Err(message) => {
-                return Err(CokretRouteError::Internal(
+                return Err(ArkretRouteError::Internal(
                     format!("principal DID minting failed: {message}").into(),
                 ));
             }
@@ -997,7 +997,7 @@ pub async fn debug_issue_dpop_grant(
     )
     .await
     .map_err(|message| {
-        CokretRouteError::Internal(
+        ArkretRouteError::Internal(
             format!("principal account registration failed: {message}").into(),
         )
     })?;
@@ -1010,7 +1010,7 @@ pub async fn debug_issue_dpop_grant(
         .browser_session()
         .add(&mut rng, &*clock, &user, user_agent)
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     let material = issue_test_session_grant_for_audience(
         &*clock,
@@ -1023,16 +1023,16 @@ pub async fn debug_issue_dpop_grant(
         Some(&principal_did),
         Some(jkt.clone()),
     )
-    .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     let persisted =
         persist_session_grant(&mut repo, &mut rng, &*clock, &browser_session, &material)
             .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     repo.save()
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(DebugIssueDpopGrantOutcome {
         grant_id: persisted.grant_id.to_string(),

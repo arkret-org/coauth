@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use chrono::Duration;
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::clock::MockClock;
 use coauth_data::oauth::{LocalizedClientMetadata, NewSessionGrant};
 use coauth_data::{
@@ -126,7 +126,7 @@ async fn authorization_code_openid_exchange_does_not_require_principal_did_row()
     .bind(None);
     let site_config = crate::handlers::test_utils::test_site_config();
     let url_builder = UrlBuilder::new("https://auth.local.host/".parse().unwrap(), None, None);
-    let arkret_config = CokretConfig::default();
+    let arkret_config = ArkretConfig::default();
     let templates = test_templates(url_builder.clone()).await;
     let key_store = eddsa_keystore();
     let principal_server: Arc<dyn ConnectorAdmin> = Arc::new(DbConnectorAdmin::new(

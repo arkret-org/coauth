@@ -1,4 +1,4 @@
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::oauth::OAuthClientRepository;
 use coauth_data::{BoxClock, BoxRepository, BoxRng, SystemClock};
 use coauth_jose::constraints::Constrainable;
@@ -139,7 +139,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
     // request. The `?` operator funnels the common `RouteError` into
     // `RouteError::Internal` via the `From` impl above.
     let url_builder = depot.url_builder()?;
-    let arkret_config: CokretConfig = depot.arkret_config()?;
+    let arkret_config: ArkretConfig = depot.arkret_config()?;
     let key_store = depot.key_store()?;
     let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
 

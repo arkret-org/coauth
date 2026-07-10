@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::{
     BoxRepository, Client, Clock, DeviceCodeGrantState, SiteConfig, TokenType, UrlBuilder,
 };
@@ -30,7 +30,7 @@ pub async fn exchange_device_code(
     client: &Client,
     key_store: &Keystore,
     url_builder: &UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     site_config: &SiteConfig,
     mut repo: BoxRepository,
     principal_server: &Arc<dyn ConnectorAdmin>,

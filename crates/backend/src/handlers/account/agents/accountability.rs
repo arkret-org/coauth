@@ -13,7 +13,7 @@
 use std::collections::BTreeSet;
 
 use chrono::{DateTime, Utc};
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::RepositoryAccess;
 use coauth_data::accountability::{
     AccountabilityGrantFanoutState, AccountabilitySubjectKind, NewAccountabilityGrant,
@@ -71,7 +71,7 @@ pub struct AccountabilityGrantRequestBody {
     pub controller_did: String,
 
     /// Capability actions covered by the grant. Each entry must be a
-    /// registered `ck.agent.*` action from `capability-action-registry.json`;
+    /// registered `ak.agent.*` action from `capability-action-registry.json`;
     /// the agent principal below references the union as a single
     /// accountability grant.
     pub capabilities: Vec<String>,
@@ -88,7 +88,7 @@ pub struct AccountabilityGrantRequestBody {
 /// freshly minted `ak:grant:<uuid7>` typed id, the
 /// `agent_principal_id`, the canonical capability list, and the issuer
 /// controller DID. coauth rejects actions outside the registered
-/// `ck.agent.*` set before issuing the response; soland still verifies
+/// `ak.agent.*` set before issuing the response; soland still verifies
 /// the grant on ingest.
 ///
 /// `accountability_grant_id` and `agent_principal_id` are emitted as
@@ -296,7 +296,7 @@ pub async fn post_accountability_grant(
 pub(super) fn normalize_capabilities(capabilities: Vec<String>) -> Result<Vec<String>, AppError> {
     if capabilities.is_empty() {
         return Err(AppError::bad_request(
-            "capabilities must list at least one ck.agent.* action",
+            "capabilities must list at least one ak.agent.* action",
         ));
     }
 
@@ -310,7 +310,7 @@ pub(super) fn normalize_capabilities(capabilities: Vec<String>) -> Result<Vec<St
         }
         if !is_registered_agent_capability(capability) {
             return Err(AppError::bad_request(format!(
-                "capability {capability:?} is not a registered ck.agent.* action"
+                "capability {capability:?} is not a registered ak.agent.* action"
             )));
         }
         unique.insert(capability.to_owned());
@@ -348,7 +348,7 @@ fn build_soland_fanout_payload(
     response: &AccountabilityGrantOutcome,
     raw_payload_digest: &str,
     service_did: &str,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
 ) -> Result<serde_json::Value, AppError> {
     let principal_servers: Vec<_> = arkret_config
         .principal_servers
@@ -445,7 +445,7 @@ pub async fn revoke_accountability_grant_by_id(
 /// bearer configured under
 /// `arkret.principal_servers[].session_grant_introspection_bearer` —
 /// shared with the existing session-grant introspection path.
-fn authn_internal_caller(req: &Request, arkret_config: &CokretConfig) -> Result<(), AppError> {
+fn authn_internal_caller(req: &Request, arkret_config: &ArkretConfig) -> Result<(), AppError> {
     let authorization = req
         .headers()
         .get(http::header::AUTHORIZATION)

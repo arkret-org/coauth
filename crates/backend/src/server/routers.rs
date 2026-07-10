@@ -161,7 +161,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // Principal Server validating a presented grant calls this to learn
         // whether it is active and to obtain the session public key for RFC 9421
         // PoP verification. It is a spec operation
-        // (`ck.gate.account.command.introspect_session_grant`), so it lives under
+        // (`ak.gate.account.command.introspect_session_grant`), so it lives under
         // `/_arkret`; the handler self-authorizes via the configured
         // `session_grant_introspection_bearer` (or an admin scope).
         .push(
@@ -180,19 +180,19 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                 .post(arkret::issue_session_grant_endpoint),
         )
         // CKP-0008 §4.5 runtime key pairing
-        // (`ck.gate.account.command.pair_agent_key`): the agent runtime submits
+        // (`ak.gate.account.command.pair_agent_key`): the agent runtime submits
         // its locally-generated public key + proof-of-possession; coauth
         // validates the PoP, writes a durable agent key authorization, and fans
-        // `ck.agent.key.authorize` out to soland.
+        // `ak.agent.key.authorize` out to soland.
         .push(
             Router::with_path("gate/account/agent-key-pair")
                 .options(oidc_preflight_handler)
                 .post(agents::post_agent_key_pair),
         )
-        // ck.gate.account.command.enroll_device (device-lifecycle §5.4 /
+        // ak.gate.account.command.enroll_device (device-lifecycle §5.4 /
         // key-management §5.0.6) — managed-DID service_attested enrollment.
         // An authenticated end user posts their device public key; coauth
-        // signs a `service_attested` `ck.device.authorize` under the user's
+        // signs a `service_attested` `ak.device.authorize` under the user's
         // principal DID with the persistent enrollment key and returns the
         // Event for the client to submit to soland. coauth does not contact
         // soland.
@@ -391,7 +391,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // returns the verified summary. The actual invite-claim
         // reducer lives on soland; this endpoint is the trusted
         // pre-flight check the claimant runs before submitting
-        // `ck.invite.claim`.
+        // `ak.invite.claim`.
         .push(Router::with_path("self/invites/3pid/verify").post(invite_accept::post_verify_invite))
         // Device code link & approval
         .push(Router::with_path("self/device-link").get(approval::device_link_get))
@@ -487,7 +487,7 @@ pub(super) fn build_admin_router(router: Router) -> Router {
         )
         // Audit feed
         .push(Router::with_path("audit-feed").get(audit_feed::handler))
-        // CKP-0007 ck.circle.* capability grants (P2B.2). Wire shape is in
+        // CKP-0007 ak.circle.* capability grants (P2B.2). Wire shape is in
         // coauth-admin-types::circle_capability_admin; persistence is durable.
         .push(
             Router::with_path("circles/capabilities")
@@ -511,7 +511,7 @@ pub(super) fn build_admin_router(router: Router) -> Router {
         )
         // COA-ORG: organization principal control + delegation management.
         // Wire shapes are in coauth-admin-types::organization_admin + the SDK
-        // ck.realm.organization payload; persistence is durable.
+        // ak.realm.organization payload; persistence is durable.
         .push(
             Router::with_path("organizations")
                 .push(Router::with_path("bootstrap").post(organizations::bootstrap_handler))

@@ -99,7 +99,7 @@
       "description": "Arkret-specific audiences, DIDs, and downstream integration metadata",
       "allOf": [
         {
-          "$ref": "#/definitions/CokretConfig"
+          "$ref": "#/definitions/ArkretConfig"
         }
       ]
     },
@@ -719,7 +719,7 @@
           "format": "uri"
         },
         "max_body_bytes": {
-          "description": "Maximum accepted request-body size, in bytes. Requests exceeding this\nlimit are rejected with `413 Payload Too Large` before they reach a\nhandler. Defaults to 1 MiB to match the Arkret\n`ck.server.query.describe.limits.max_body_bytes` advertisement.",
+          "description": "Maximum accepted request-body size, in bytes. Requests exceeding this\nlimit are rejected with `413 Payload Too Large` before they reach a\nhandler. Defaults to 1 MiB to match the Arkret\n`ak.server.query.describe.limits.max_body_bytes` advertisement.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0,
@@ -1305,7 +1305,7 @@
         }
       ]
     },
-    "CokretConfig": {
+    "ArkretConfig": {
       "description": "Arkret-specific deployment settings layered on top of the generic OIDC\nand account-management configuration.",
       "type": "object",
       "properties": {
@@ -1398,7 +1398,7 @@
           "default": 2
         },
         "trust_domain": {
-          "description": "Round R2/R3 (2026-05-20) — deployment trust-domain identifier\ninjected into Realm policy and the server-describe document.\n\nWire form: `ck:trust_domain:<scope>` where `<scope>` matches\n`[a-z0-9._:-]{1,128}`. This value enters the canonical transcript\nof every `ck.cross_signing.reset` proof; **changing\n`trust_domain` invalidates existing cross-signing reset proofs**\n— see the README \"Trust domain rotation\" note.\n\nWhen omitted, callers expected to honour cross-deployment replay\nprotection (`Realm` policy, principal-server describe) MUST be\ntold the trust domain is unset and fail closed.\n\nTypically injected into `soland` via its config API on first\nboot; see `services::onboarding_starid` for the call site.",
+          "description": "Round R2/R3 (2026-05-20) — deployment trust-domain identifier\ninjected into Realm policy and the server-describe document.\n\nWire form: `ak:trust_domain:<scope>` where `<scope>` matches\n`[a-z0-9._:-]{1,128}`. This value enters the canonical transcript\nof every `ak.cross_signing.reset` proof; **changing\n`trust_domain` invalidates existing cross-signing reset proofs**\n— see the README \"Trust domain rotation\" note.\n\nWhen omitted, callers expected to honour cross-deployment replay\nprotection (`Realm` policy, principal-server describe) MUST be\ntold the trust domain is unset and fail closed.\n\nTypically injected into `soland` via its config API on first\nboot; see `services::onboarding_starid` for the call site.",
           "type": [
             "string",
             "null"
@@ -1414,7 +1414,7 @@
           ]
         },
         "password_login_session_grants_enabled": {
-          "description": "Fail-closed gate for the temporary password-login bridge that returns a\nCokret principal-server session grant directly from\n`POST /_coauth/gate/account/auth/login`.\n\nDefaults to `false`: production callers must use the OIDC/passkey bridge\nand proof-bound grant exchange. When enabled for development, the login\nhandler still requires a valid DPoP proof before minting the grant.",
+          "description": "Fail-closed gate for the temporary password-login bridge that returns a\nArkret principal-server session grant directly from\n`POST /_coauth/gate/account/auth/login`.\n\nDefaults to `false`: production callers must use the OIDC/passkey bridge\nand proof-bound grant exchange. When enabled for development, the login\nhandler still requires a valid DPoP proof before minting the grant.",
           "type": "boolean"
         },
         "admin_org_id": {

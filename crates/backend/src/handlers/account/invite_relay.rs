@@ -66,7 +66,7 @@ pub struct InviteRelayRequestBody {
     /// Base URL of the target's `server_name` (`soland`).
     ///
     /// Optional in the body; when omitted, falls back to
-    /// `CokretConfig::principal_server_url`. If neither is present the
+    /// `ArkretConfig::principal_server_url`. If neither is present the
     /// handler returns 400 `config_required` because there's nowhere to
     /// query the consent cell.
     #[serde(default)]
@@ -83,7 +83,7 @@ pub struct InviteRelayRequestBody {
     /// (`peer=...;scope=<scope>` or `peer=...;scope=any`).
     pub scope: String,
 
-    /// Mirror of the holder's `ck.realm.policy_components.preauth
+    /// Mirror of the holder's `ak.realm.policy_components.preauth
     /// .require_consent` policy bit. Defaults to `true` (fail closed).
     #[serde(default = "default_require_consent")]
     pub require_consent: bool,
@@ -420,7 +420,7 @@ mod tests {
     fn active_cell(scope: &str) -> serde_json::Value {
         serde_json::json!({
             "ok": true,
-            "cell_id": format!("ak:cell:ck.component.consent.grant.v1:c-{scope}"),
+            "cell_id": format!("ak:cell:ak.component.consent.grant.v1:c-{scope}"),
             "holder_did": "did:web:holder",
             "peer_did": "did:web:inviter",
             "consent_scope": scope,

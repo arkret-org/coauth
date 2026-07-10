@@ -92,11 +92,11 @@ arkret:
   service_did: did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:auth.local.host:webvh:service
   principal_server_url: https://local.host/
   # Deployment trust-domain identifier injected into Realm policy and the
-  # server-describe document. Wire form: ck:trust_domain:<scope> where <scope>
+  # server-describe document. Wire form: ak:trust_domain:<scope> where <scope>
   # matches [a-z0-9._:-]{1,128}. Changing it invalidates existing cross-signing
   # reset proofs (see README "Trust domain rotation"). When omitted, replay
   # protection fails closed.
-  # trust_domain: ck:trust_domain:<scope>
+  # trust_domain: ak:trust_domain:<scope>
   # Lifetime, in seconds, of the DPoP-bound Arkret session-grant JWTs returned
   # by the REST auth bridge login/exchange paths and rotated through
   # /_arkret/gate/account/session-grants/refresh. Default: 28800 (8h). The grant

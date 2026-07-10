@@ -32,7 +32,7 @@ coauth 以 Auth Server 角色对 Principal Server 发起两类**无 principal se
 | coauth 调用 | Principal Server 端点 | Operation id | 时机 |
 | --- | --- | --- | --- |
 | 设备验签公钥目录查询 | `POST /_soland/gate/account/device-signing-keys/query` | `org.arkret.soland.gate.account.device_signing_keys.query` | 在 session-grant 刷新 / soft-logout 恢复时验证设备 holder proof |
-| 协作 capability fanout | `POST /_soland/root/authz/capability-fanout` | `org.arkret.soland.root.authz.capability_fanout.submit` | 物化 coauth 签发的 `ck.capability.grant` / `ck.capability.revoke` |
+| 协作 capability fanout | `POST /_soland/root/authz/capability-fanout` | `org.arkret.soland.root.authz.capability_fanout.submit` | 物化 coauth 签发的 `ak.capability.grant` / `ak.capability.revoke` |
 
 两条边都用对应 `principal_servers` 条目上配置的共享 bearer 鉴权：
 

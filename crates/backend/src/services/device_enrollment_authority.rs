@@ -4,9 +4,9 @@
 //! attested by a **persistent** service key — distinct from the inception
 //! `did_key_seed` which is consumed and discarded after minting
 //! (`zh/identity/key-management.md` §5.0.6 rule 2). coauth holds exactly one
-//! such key process-wide; it signs `service_attested` `ck.device.authorize`
+//! such key process-wide; it signs `service_attested` `ak.device.authorize`
 //! events on behalf of any principal whose DID document designates this
-//! authority via a `CokretDeviceEnrollmentAuthority` service entry
+//! authority via a `ArkretDeviceEnrollmentAuthority` service entry
 //! (`zh/crypto-media/device-lifecycle.md` §5.4).
 //!
 //! The key is loaded from `COAUTH_DEVICE_ENROLLMENT_KEY_SEED` (base64 of a
@@ -82,7 +82,7 @@ impl EnrollmentAuthority {
     }
 
     /// The enrollment authority DID (`did:key:z…`). Written into principal DID
-    /// documents as the `CokretDeviceEnrollmentAuthority` `serviceEndpoint`,
+    /// documents as the `ArkretDeviceEnrollmentAuthority` `serviceEndpoint`,
     /// recorded as the event `executed_by` and the payload `authorized_by` /
     /// `enrollment_authority_binding.authority_did`.
     #[must_use]

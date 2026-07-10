@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Duration, Utc};
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::{Clock, UrlBuilder, User};
 use coauth_jose::constraints::Constrainable;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
@@ -48,7 +48,7 @@ fn hash_for_handle_claim(value: impl Into<String>) -> Result<Hash, SessionGrantE
 pub(crate) fn issue_handle_claim(
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     key_store: &Keystore,
     user: &User,
     subject_did: &str,
@@ -67,7 +67,7 @@ pub(crate) fn issue_handle_claim(
     let subject_id = subject_did.to_owned();
 
     // HC-COAUTH-2 — the subject MUST be a holder/principal DID, not a
-    // `ck:actor:` / `ck:account:` typed id or a service DID. Validating
+    // `ak:actor:` / `ak:account:` typed id or a service DID. Validating
     // here keeps the issuer honest about whatever the caller passed and
     // lets the same reason code surface as soland / the SDK.
     ensure_subject_is_principal_did(&subject_id)?;

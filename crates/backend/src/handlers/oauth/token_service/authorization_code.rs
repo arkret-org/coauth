@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use chrono::Duration;
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::{AuthorizationGrantStage, BoxRepository, Client, Clock, SiteConfig, UrlBuilder};
 use coauth_i18n::Locale;
 use coauth_keystore::Keystore;
@@ -37,7 +37,7 @@ pub async fn exchange_authorization_code(
     client: &Client,
     key_store: &Keystore,
     url_builder: &UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     site_config: &SiteConfig,
     mut repo: BoxRepository,
     principal_server: &Arc<dyn ConnectorAdmin>,

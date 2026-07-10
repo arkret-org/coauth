@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Round 4 — frontier source for `ck.self.policy.query.check`.
+//! Round 4 — frontier source for `ak.self.policy.query.check`.
 //!
 //! The spec ([`policy-server.md` §4]) requires every signed decision to
 //! carry three frontier digests:
@@ -218,7 +218,7 @@ impl FrontierSource for SolandFrontierSource {
                 )));
             }
 
-            // soland returns the typed `ck.peer.events.query.frontier`
+            // soland returns the typed `ak.peer.events.query.frontier`
             // federation-peer response directly (no envelope wrapper). Decode
             // it strongly; a malformed or incomplete response surfaces as an
             // error the caller maps to a signed sentinel rather than a 500.

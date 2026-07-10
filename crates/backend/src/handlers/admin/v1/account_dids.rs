@@ -9,7 +9,7 @@ use coauth_admin_types::{
     DidBindingResolverDescriptor, DidBindingResolverMode, DidBindingState,
     DidBindingVerificationStatus,
 };
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::audit::{
     AdminOperation, AdminOperationFilter, AdminOperationLog, NewAdminOperationLog,
 };
@@ -62,7 +62,7 @@ pub struct AddAccountDidBindingRequestBody {
     /// [`crate::services::did_binding_proof`]).
     pub control_proof: ControlProofPayload,
 
-    /// Optional SDK `ck.schema.did_continuity_proof.v1` payload. Required
+    /// Optional SDK `ak.schema.did_continuity_proof.v1` payload. Required
     /// when promoting a weak `did:web` primary binding to `did:webvh`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[salvo(schema(value_type = serde_json::Value))]
@@ -590,7 +590,7 @@ async fn enforce_did_binding_rate_limit(
 
 pub(crate) async fn preview_bindings_for_user(
     user: &User,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Vec<AccountDidBindingPreview> {
     binding_records_for_user(user, arkret_config, did_resolver)
@@ -609,7 +609,7 @@ pub(crate) async fn preview_bindings_for_user(
 
 pub(crate) async fn primary_did_for_user(
     user: &User,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Result<Option<String>, AppError> {
     match did_resolver.primary_did_for_user(arkret_config, user).await {
@@ -623,7 +623,7 @@ pub(crate) async fn primary_did_for_user(
 
 async fn binding_records_for_user(
     user: &User,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Result<Vec<AccountDidBinding>, AppError> {
     let Some(primary_did) = primary_did_for_user(user, arkret_config, did_resolver).await? else {
@@ -806,7 +806,7 @@ fn did_binding_state_wire(state: DidBindingState) -> &'static str {
 }
 
 fn did_bindings_meta(
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> AccountDidBindingsMeta {
     AccountDidBindingsMeta {
@@ -821,7 +821,7 @@ fn did_bindings_meta(
 }
 
 fn resolver_descriptor(
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> DidBindingResolverDescriptor {
     match did_resolver.delegated_resolver(arkret_config) {

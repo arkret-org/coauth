@@ -58,7 +58,7 @@ pub struct DidDocument {
 /// holder's verified handle claims they'd prefer surfaced as the canonical
 /// display handle. It is explicitly **NOT** a handle declaration channel —
 /// a verifier MUST still construct the `claim_set_snapshot` from signed
-/// `ck.schema.handle_claim.v1` evidence and MUST ignore this field if the
+/// `ak.schema.handle_claim.v1` evidence and MUST ignore this field if the
 /// pointed-at handle is not backed by such a claim. Default is `null`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DidDocumentMetadata {

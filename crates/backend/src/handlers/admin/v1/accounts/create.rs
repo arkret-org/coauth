@@ -5,7 +5,7 @@
 //! Creation endpoints: `POST /accounts` and `POST /accounts/batch-invite`.
 
 use chrono::Duration;
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
 use coauth_data::{BoxClock, BoxRepository};
 use coauth_principal::ConnectorProvisionRequest;
@@ -179,14 +179,14 @@ pub struct BatchInviteConsentGate {
     #[serde(default = "default_invite_scope")]
     pub scope: String,
 
-    /// Override `CokretConfig::principal_server_url` per request. Useful
+    /// Override `ArkretConfig::principal_server_url` per request. Useful
     /// when a deployment fans out across multiple `server_names` and
     /// the global config points at a different one.
     #[serde(default)]
     pub target_principal_url: Option<Url>,
 
     /// Mirror of the holder's
-    /// `ck.realm.policy_components.preauth.require_consent` policy bit.
+    /// `ak.realm.policy_components.preauth.require_consent` policy bit.
     /// Defaults to `true` (fail closed: missing / revoked consent → 422).
     #[serde(default = "default_require_consent")]
     pub require_consent: bool,
@@ -256,14 +256,14 @@ pub enum BatchInviteGateOutcome {
 /// I/O so unit tests can inject a wiremock-backed `reqwest::Client`.
 ///
 /// `gate_url_override` lets the caller supply a per-request URL that wins
-/// over the global `CokretConfig::principal_server_url`. Both `None` →
+/// over the global `ArkretConfig::principal_server_url`. Both `None` →
 /// gate is skipped (returns `Allow`) — same behaviour as omitting
 /// `peer_did` entirely. This keeps the no-config / no-peer paths
 /// indistinguishable, which matches the spec note that the gate is
 /// optional infrastructure.
 pub async fn evaluate_batch_invite_gate(
     gate: Option<&BatchInviteConsentGate>,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     http_client: &reqwest::Client,
 ) -> BatchInviteGateOutcome {
     let Some(gate) = gate else {
@@ -502,15 +502,15 @@ mod consent_gate_tests {
     //! `accounts::tests`; here we only need to confirm the gate logic
     //! routes the three outcomes correctly given the principal-server
     //! response.
-    use coauth_config::CokretConfig;
+    use coauth_config::ArkretConfig;
     use wiremock::matchers::{method, path_regex, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
     use crate::handlers::test_utils::setup;
 
-    fn empty_config() -> CokretConfig {
-        CokretConfig::default()
+    fn empty_config() -> ArkretConfig {
+        ArkretConfig::default()
     }
 
     fn gate_for(consent_id: &str, peer: &str, holder: &str) -> BatchInviteConsentGate {
@@ -527,7 +527,7 @@ mod consent_gate_tests {
     fn active_cell(peer: &str, scope: &str) -> serde_json::Value {
         serde_json::json!({
             "ok": true,
-            "cell_id": format!("ak:cell:ck.component.consent.grant.v1:c-{scope}"),
+            "cell_id": format!("ak:cell:ak.component.consent.grant.v1:c-{scope}"),
             "holder_did": "did:web:holder",
             "peer_did": peer,
             "consent_scope": scope,

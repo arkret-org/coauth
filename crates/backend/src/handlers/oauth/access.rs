@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 use std::time::Duration;
 
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::oauth::{
     OAuthAuthorizationGrantRepository, OAuthClientRepository, OAuthDeviceCodeGrantRepository,
     OAuthSessionRepository,
@@ -170,7 +170,7 @@ pub async fn accept_authorization_consent(
     clock: &BoxClock,
     key_store: &Keystore,
     url_builder: &UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     policy_factory: &PolicyFactory,
     browser_session: &BrowserSession,
     grant_id: Ulid,

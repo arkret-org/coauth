@@ -1,8 +1,8 @@
 //! `POST /_arkret/gate/account/device-enroll`
-//! (`ck.gate.account.command.enroll_device`) — managed-DID `service_attested`
+//! (`ak.gate.account.command.enroll_device`) — managed-DID `service_attested`
 //! device enrollment (device-lifecycle §5.4, key-management §5.0.6).
 //!
-//! coauth signs exactly one shape: a `service_attested` `ck.device.authorize`
+//! coauth signs exactly one shape: a `service_attested` `ak.device.authorize`
 //! for **the calling user's own device**, under the user's principal DID. It
 //! never acts as a general signing oracle and never contacts soland — the
 //! signed Event is returned to the client (inkson) which submits it to
@@ -14,7 +14,7 @@
 //! 2. Resolve that user's principal DID for the targeted principal server.
 //! 3. Use the client-supplied `device_id` (this session's id) so the projected `device_public_key`
 //!    lands under the id the session and recovery look up.
-//! 4. Assemble the B-model `ck.device.authorize` envelope: `actor_id` = principal DID, `realm_id` =
+//! 4. Assemble the B-model `ak.device.authorize` envelope: `actor_id` = principal DID, `realm_id` =
 //!    principal-control realm, `executed_by` = enrollment authority DID, `authorization_ref` =
 //!    `"{principal}#enrollment-authority"`, payload carries the `enrollment_authority_binding`.
 //! 5. Sign the proof with the persistent enrollment key (VM mapped to `executed_by`) and return the
@@ -35,7 +35,7 @@ use arkret_core::{
 use arkret_signatures::{SignEventOptions, sign_event};
 use salvo::prelude::*;
 
-use super::{CokretRouteError, SessionGrantPayload};
+use super::{ArkretRouteError, SessionGrantPayload};
 use crate::handlers::common::DepotExt;
 use crate::services::device_enrollment_authority::enrollment_authority;
 
@@ -45,28 +45,28 @@ const ENROLLMENT_BINDING_KIND: &str = "service_attested";
 
 /// Extract the `Authorization: Bearer <token>` value (the caller's
 /// `ak.session.grant`), or a 401.
-fn bearer_token_from_request(req: &Request) -> Result<String, CokretRouteError> {
+fn bearer_token_from_request(req: &Request) -> Result<String, ArkretRouteError> {
     let header = req
         .headers()
         .get(http::header::AUTHORIZATION)
-        .ok_or_else(|| CokretRouteError::Unauthorized("missing authorization header".to_owned()))?;
+        .ok_or_else(|| ArkretRouteError::Unauthorized("missing authorization header".to_owned()))?;
     let value = header
         .to_str()
-        .map_err(|_| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
+        .map_err(|_| ArkretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
     value
         .strip_prefix("Bearer ")
         .or_else(|| value.strip_prefix("bearer "))
         .map(str::trim)
         .filter(|token| !token.is_empty())
         .map(str::to_owned)
-        .ok_or_else(|| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))
+        .ok_or_else(|| ArkretRouteError::Unauthorized("invalid authorization header".to_owned()))
 }
 
 /// Decode `device_public_key` (multibase or base64) into the raw 32-byte key.
-fn decode_device_public_key(input: &str) -> Result<[u8; 32], CokretRouteError> {
+fn decode_device_public_key(input: &str) -> Result<[u8; 32], ArkretRouteError> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
-        return Err(CokretRouteError::BadRequest(
+        return Err(ArkretRouteError::BadRequest(
             "device_public_key is empty".to_owned(),
         ));
     }
@@ -74,19 +74,19 @@ fn decode_device_public_key(input: &str) -> Result<[u8; 32], CokretRouteError> {
     // Multibase `z…` carries the `0xed01` ed25519-pub multicodec prefix.
     if trimmed.starts_with('z') {
         return arkret_core::decode_ed25519_multibase(trimmed).map_err(|error| {
-            CokretRouteError::BadRequest(format!("invalid multibase device_public_key: {error}"))
+            ArkretRouteError::BadRequest(format!("invalid multibase device_public_key: {error}"))
         });
     }
 
     // Otherwise treat as base64 (standard or URL-safe, padded or not) of the
     // raw 32-byte key.
     let raw = decode_base64_any(trimmed).ok_or_else(|| {
-        CokretRouteError::BadRequest(
+        ArkretRouteError::BadRequest(
             "device_public_key must be multibase (z…) or base64".to_owned(),
         )
     })?;
     raw.try_into().map_err(|raw: Vec<u8>| {
-        CokretRouteError::BadRequest(format!(
+        ArkretRouteError::BadRequest(format!(
             "device_public_key must decode to 32 bytes, got {}",
             raw.len()
         ))
@@ -128,7 +128,7 @@ fn enforce_device_authorize_inception_key_window(
     grant_payload: &SessionGrantPayload,
     raw_body: &serde_json::Value,
     now: DateTime<Utc>,
-) -> Result<(), CokretRouteError> {
+) -> Result<(), ArkretRouteError> {
     let request_anchor =
         crate::services::inception_key_window::device_authorize_request_anchor(raw_body);
     let grant_anchor =
@@ -151,8 +151,8 @@ fn enforce_device_authorize_inception_key_window(
 
 fn inception_key_window_error(
     error: crate::services::inception_key_window::InceptionKeyWindowError,
-) -> CokretRouteError {
-    CokretRouteError::coded(
+) -> ArkretRouteError {
+    ArkretRouteError::coded(
         StatusCode::FORBIDDEN,
         ERROR_CODE_FAILED_PRECONDITION,
         format!("reason_code={}; {error}", error.reason_code()),
@@ -162,7 +162,7 @@ fn inception_key_window_error(
 fn enforce_service_attested_device_authorize_provenance(
     event: &Event,
     payload: &DeviceAuthorizePayload,
-) -> Result<(), CokretRouteError> {
+) -> Result<(), ArkretRouteError> {
     payload
         .validate_service_attested_provenance(
             event.executed_by.as_ref(),
@@ -172,8 +172,8 @@ fn enforce_service_attested_device_authorize_provenance(
         .map_err(|error| service_attested_provenance_error(error.to_string()))
 }
 
-fn service_attested_provenance_error(message: impl std::fmt::Display) -> CokretRouteError {
-    CokretRouteError::coded(
+fn service_attested_provenance_error(message: impl std::fmt::Display) -> ArkretRouteError {
+    ArkretRouteError::coded(
         StatusCode::FORBIDDEN,
         ERROR_CODE_FAILED_PRECONDITION,
         format!("reason_code=service_attested_provenance_required; {message}"),
@@ -184,16 +184,16 @@ fn service_attested_provenance_error(message: impl std::fmt::Display) -> CokretR
 /// deployment has zero / multiple (the request body carries no audience, so
 /// disambiguation is impossible — fail closed).
 fn sole_principal_audience(
-    arkret_config: &coauth_config::CokretConfig,
-) -> Result<String, CokretRouteError> {
+    arkret_config: &coauth_config::ArkretConfig,
+) -> Result<String, ArkretRouteError> {
     match arkret_config.principal_servers.as_slice() {
         [server] => Ok(server.audience.clone()),
-        [] => Err(CokretRouteError::coded(
+        [] => Err(ArkretRouteError::coded(
             StatusCode::SERVICE_UNAVAILABLE,
             ERROR_CODE_SERVICE_UNAVAILABLE,
             "no principal server is configured for device enrollment",
         )),
-        _ => Err(CokretRouteError::coded(
+        _ => Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             ERROR_CODE_INVALID_PARAM,
             "multiple principal servers configured; device-enroll cannot pick one",
@@ -202,12 +202,12 @@ fn sole_principal_audience(
 }
 
 /// `POST /_arkret/gate/account/device-enroll`
-/// (`ck.gate.account.command.enroll_device`).
+/// (`ak.gate.account.command.enroll_device`).
 #[handler]
 pub async fn device_enroll_endpoint(
     req: &mut Request,
     depot: &mut Depot,
-) -> Result<Json<AccountDeviceEnrollOutcome>, CokretRouteError> {
+) -> Result<Json<AccountDeviceEnrollOutcome>, ArkretRouteError> {
     use coauth_data::RepositoryAccess;
     use coauth_jose::jwt::Jwt;
 
@@ -227,7 +227,7 @@ pub async fn device_enroll_endpoint(
     //    principal DID, and the DB lookup below proves coauth issued it.
     let grant_jwt = bearer_token_from_request(req)?;
     let dpop_header = dpop_header_from_request(req).ok_or_else(|| {
-        CokretRouteError::coded(
+        ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
             ERROR_CODE_DID_PROOF_REQUIRED,
             "session-grant grant-binding DPoP proof required",
@@ -237,14 +237,14 @@ pub async fn device_enroll_endpoint(
     let raw_body: serde_json::Value = req
         .parse_json()
         .await
-        .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
+        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
     let body: AccountDeviceEnrollRequestBody = serde_json::from_value(raw_body.clone())
-        .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
+        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
 
     // Read `cnf.jkt` from the grant payload; the persisted row is the source of
     // truth (no JWT signature check here — the DB lookup authenticates it).
     let jwt: Jwt<'_, SessionGrantPayload> = Jwt::try_from(grant_jwt.as_str())
-        .map_err(|_| CokretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
+        .map_err(|_| ArkretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
     let grant_payload = jwt.payload().clone();
     enforce_device_authorize_inception_key_window(&grant_payload, &raw_body, clock.now())?;
     let expected_jkt = grant_payload
@@ -252,7 +252,7 @@ pub async fn device_enroll_endpoint(
         .as_ref()
         .map(|cnf| cnf.jkt.clone())
         .ok_or_else(|| {
-            CokretRouteError::BadRequest("grant_jwt is not DPoP-bound (cnf.jkt missing)".to_owned())
+            ArkretRouteError::BadRequest("grant_jwt is not DPoP-bound (cnf.jkt missing)".to_owned())
         })?;
 
     let mut repo = depot.repo().await?;
@@ -260,9 +260,9 @@ pub async fn device_enroll_endpoint(
         .oauth_session_grant()
         .lookup_by_grant_jwt(&grant_jwt)
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .ok_or_else(|| {
-            CokretRouteError::coded(
+            ArkretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
                 ERROR_CODE_SESSION_GRANT_NOT_FOUND,
                 "no session grant matches the presented bearer",
@@ -270,7 +270,7 @@ pub async fn device_enroll_endpoint(
         })?;
     if grant_row.revoked_at.is_some() {
         repo.cancel().await.ok();
-        return Err(CokretRouteError::coded(
+        return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
             ERROR_CODE_GRANT_ALREADY_CONSUMED,
             "session grant has been revoked",
@@ -278,7 +278,7 @@ pub async fn device_enroll_endpoint(
     }
     if grant_row.expires_at <= clock.now() {
         repo.cancel().await.ok();
-        return Err(CokretRouteError::coded(
+        return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
             ERROR_CODE_SESSION_GRANT_NOT_FOUND,
             "session grant has expired",
@@ -286,7 +286,7 @@ pub async fn device_enroll_endpoint(
     }
     let Some(browser_session_id) = grant_row.browser_session_id else {
         repo.cancel().await.ok();
-        return Err(CokretRouteError::coded(
+        return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
             ERROR_CODE_SESSION_GRANT_NOT_FOUND,
             "device enrollment requires a browser-bound session grant",
@@ -296,15 +296,15 @@ pub async fn device_enroll_endpoint(
         .browser_session()
         .lookup(browser_session_id)
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .ok_or_else(|| {
-            CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                 "session grant references missing browser session",
             ))
         })?;
     if browser_session.finished_at.is_some() {
         repo.cancel().await.ok();
-        return Err(CokretRouteError::coded(
+        return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
             ERROR_CODE_SESSION_LOGGED_OUT,
             "browser session is logged out",
@@ -322,14 +322,14 @@ pub async fn device_enroll_endpoint(
         .verify(&dpop_header, &htm, &htu, dpop_now, Some(&grant_jwt))
         .await
         .map_err(|error| {
-            CokretRouteError::coded(
+            ArkretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
                 ERROR_CODE_INVALID_SIGNATURE,
                 error.to_string(),
             )
         })?;
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
-        CokretRouteError::coded(
+        ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
             ERROR_CODE_INVALID_SIGNATURE,
             error.to_string(),
@@ -339,13 +339,13 @@ pub async fn device_enroll_endpoint(
     // 3. The principal DID is the grant subject. Bind the event proof to the configured principal
     //    server and require the grant to target it.
     let principal_id = Did::new(grant_payload.subject.clone()).map_err(|error| {
-        CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "grant subject is not a valid principal DID: {error}"
         )))
     })?;
     let audience = sole_principal_audience(&arkret_config)?;
     if grant_payload.audience != audience {
-        return Err(CokretRouteError::coded(
+        return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             ERROR_CODE_AUDIENCE_MISMATCH,
             "session grant was not issued for this principal server",
@@ -362,7 +362,7 @@ pub async fn device_enroll_endpoint(
     // 4. Assemble the B-model envelope.
     let authority = enrollment_authority();
     let authority_did = Did::new(authority.did().to_owned()).map_err(|error| {
-        CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "enrollment authority DID is invalid: {error}"
         )))
     })?;
@@ -370,9 +370,9 @@ pub async fn device_enroll_endpoint(
         "{}{ENROLLMENT_AUTHORITY_SERVICE_FRAGMENT}",
         principal_id.as_str()
     );
-    let realm_id_string = arkret::auth::principal_control_realm_id(&principal_id);
+    let realm_id_string = arkret_core::principal_control_realm_id(&principal_id);
     let realm_id = RealmId::new(realm_id_string).map_err(|error| {
-        CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "derived principal-control realm id is invalid: {error}"
         )))
     })?;
@@ -404,7 +404,7 @@ pub async fn device_enroll_endpoint(
     };
 
     let content = serde_json::to_value(&payload).map_err(|error| {
-        CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "failed to serialize device-enroll payload: {error}"
         )))
     })?;
@@ -412,7 +412,7 @@ pub async fn device_enroll_endpoint(
     let mut event = Event {
         event_id: EventId::new(arkret_core::identifiers::new_prefixed_uuid7("ak:event:")).map_err(
             |error| {
-                CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                     format!("failed to mint event id: {error}"),
                 ))
             },
@@ -460,7 +460,7 @@ pub async fn device_enroll_endpoint(
             .with_audience(Audience::Single(audience.clone())),
     )
     .map_err(|error| {
-        CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "failed to sign device-enroll event: {error}"
         )))
     })?;

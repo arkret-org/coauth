@@ -1,6 +1,6 @@
 use std::sync::{Arc, LazyLock};
 
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SiteConfig, SystemClock, UrlBuilder,
 };
@@ -336,7 +336,7 @@ async fn handle_post(
         .get::<UrlBuilder>("url_builder")
         .expect("UrlBuilder not found in depot");
     let arkret_config = depot
-        .get::<CokretConfig>("arkret_config")
+        .get::<ArkretConfig>("arkret_config")
         .cloned()
         .unwrap_or_default();
     let principal_server = depot

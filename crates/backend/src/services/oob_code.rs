@@ -5,7 +5,7 @@
 //! 3PID Out-Of-Band (OOB) code generation + verification — Round R2/R3 T15.
 //!
 //! Two legal code forms are supported, configurable per deployment via
-//! `CokretConfig::oob_code_kind` (default `OobCodeKind::OfflineVerifiable`):
+//! `ArkretConfig::oob_code_kind` (default `OobCodeKind::OfflineVerifiable`):
 //!
 //! ## Form 1 — `OobCodeKind::OfflineVerifiable`
 //!
@@ -99,7 +99,7 @@ pub enum OobCodeKind {
     /// know to apply the 3-strike rule.
     ///
     /// FEATURE-GATED OFF: config rejects `oob_code_kind=lookup` (see
-    /// `coauth-config` `CokretConfig::validate`, the
+    /// `coauth-config` `ArkretConfig::validate`, the
     /// "oob_code_kind=lookup is disabled until lookup-mode strike counters
     /// are durable" guard). Every Form-2 code path below
     /// (`LOOKUP_CODE_LEN`, `LOOKUP_STRIKE_LIMIT`,

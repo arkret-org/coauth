@@ -722,7 +722,7 @@ pub async fn post_webvh_finish(
         .to_ascii_lowercase();
     let also_known_as = [format!("acct:{local_id}")];
     // The minted principal DID document MUST designate coauth as the
-    // CokretDeviceEnrollmentAuthority; without it soland rejects every device
+    // ArkretDeviceEnrollmentAuthority; without it soland rejects every device
     // authorization event with `device_enrollment_authority_not_designated`, so
     // the account can never enroll a device or publish an MLS KeyPackage. The
     // OIDC login path already injects this (auth/oidc_bridge.rs); the password
@@ -913,7 +913,7 @@ struct WebvhProviderTarget {
 }
 
 fn resolve_webvh_provider(
-    config: &coauth_config::CokretConfig,
+    config: &coauth_config::ArkretConfig,
     requested: Option<&str>,
 ) -> Result<WebvhProviderTarget, String> {
     let requested = requested.and_then(|value| Url::parse(value).ok());

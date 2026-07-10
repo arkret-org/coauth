@@ -17,7 +17,7 @@
 //! proofs + the presenter DID, runs `verify_invite`, and on success
 //! returns a JSON summary of the verified invite. It does NOT forward
 //! to soland — that's the consumer's job (typically inkson), which
-//! then submits a separate `ck.invite.claim` via soland's existing
+//! then submits a separate `ak.invite.claim` via soland's existing
 //! invite-acceptance reducer per the contract in
 //! `cotest/e2e/scenarios/invites/third-party.md` Phase C.
 //!

@@ -78,7 +78,7 @@ CREATE TABLE public.accountability_subject_revocations (
 -- tracks event-payload.schema.json#/$defs/agent_key_authorize_payload
 -- (agent_principal_id, key_id, verification_method, accountable_principal_id,
 -- audience, issued_at, expires_at) so the fan-out payload soland writes as
--- `ck.agent.key.authorize` stays field-aligned with the spec.
+-- `ak.agent.key.authorize` stays field-aligned with the spec.
 CREATE TABLE public.agent_key_authorizations (
     id uuid NOT NULL,
     authorized_event_id text NOT NULL,
@@ -195,7 +195,7 @@ CREATE TABLE public.organization_delegations (
     revoked_at timestamp with time zone
 );
 
-COMMENT ON TABLE public.organization_delegations IS 'Organization DID delegations to Account Authority / governance service principals. Backs the SDK RealmOrganizationDelegationResolver and the ck.realm.organization issuance + audit API.';
+COMMENT ON TABLE public.organization_delegations IS 'Organization DID delegations to Account Authority / governance service principals. Backs the SDK RealmOrganizationDelegationResolver and the ak.realm.organization issuance + audit API.';
 
 CREATE TABLE public.collaboration_capability_grants (
     id uuid NOT NULL,

@@ -1,8 +1,8 @@
 //! Durable collaboration capability grants.
 //!
 //! This module owns the shared domain types for collaboration capability
-//! grants used by productivity and policy profiles (`ck.pin.*`,
-//! `ck.rsvp.set`, and Realm policy facet actions). Operator-facing admin
+//! grants used by productivity and policy profiles (`ak.pin.*`,
+//! `ak.rsvp.set`, and Realm policy facet actions). Operator-facing admin
 //! DTOs re-export these types so stored and wire action names cannot drift
 //! from the canonical capability-action registry.
 
@@ -21,22 +21,22 @@ pub use crate::storage::collaboration_capability::*;
 )]
 #[serde(rename_all = "snake_case")]
 pub enum CollaborationCapabilityAction {
-    /// `ck.rsvp.set` — write RSVP state for calendar events.
+    /// `ak.rsvp.set` — write RSVP state for calendar events.
     #[serde(rename = "ak.rsvp.set")]
     RsvpSet,
-    /// `ck.pin.add` — add or update a pinned item.
+    /// `ak.pin.add` — add or update a pinned item.
     #[serde(rename = "ak.pin.add")]
     PinAdd,
-    /// `ck.pin.remove` — remove a pinned item.
+    /// `ak.pin.remove` — remove a pinned item.
     #[serde(rename = "ak.pin.remove")]
     PinRemove,
-    /// `ck.pin.reorder` — update pinned-item ordering.
+    /// `ak.pin.reorder` — update pinned-item ordering.
     #[serde(rename = "ak.pin.reorder")]
     PinReorder,
-    /// `ck.realm.disappearing_policy` — manage disappearing-message policy.
+    /// `ak.realm.disappearing_policy` — manage disappearing-message policy.
     #[serde(rename = "ak.realm.disappearing_policy")]
     RealmDisappearingPolicy,
-    /// `ck.realm.search_policy` — manage blind-search policy.
+    /// `ak.realm.search_policy` — manage blind-search policy.
     #[serde(rename = "ak.realm.search_policy")]
     RealmSearchPolicy,
 }
@@ -184,9 +184,9 @@ pub struct CollaborationCapabilityGrant {
     pub id: String,
     /// Standard protocol grant id materialized by the soland fan-out.
     pub capability_grant_id: String,
-    /// Standard `ck.capability.grant` event id queued for soland ingestion.
+    /// Standard `ak.capability.grant` event id queued for soland ingestion.
     pub grant_event_id: String,
-    /// Standard `ck.capability.revoke` event id, when revocation is queued.
+    /// Standard `ak.capability.revoke` event id, when revocation is queued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revoke_event_id: Option<String>,
     /// Subject (account or DID) that holds the grant.

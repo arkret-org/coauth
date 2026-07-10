@@ -2,11 +2,11 @@
 //! device directory (`POST /_soland/gate/account/device-signing-keys/query`).
 //!
 //! A device-identity DID proof (session-grant refresh / soft-logout restore) is
-//! signed by the device's `ck.device.authorize`-authorized signing key. That
+//! signed by the device's `ak.device.authorize`-authorized signing key. That
 //! key is NOT a verificationMethod in the principal's DID document — the DID
 //! document only carries the inception / control keys. The source of truth for
 //! per-device signing keys is the Principal Server's device directory, written
-//! by the `ck.device.authorize` projector and masked by `ck.device.revoke`.
+//! by the `ak.device.authorize` projector and masked by `ak.device.revoke`.
 //!
 //! This module is the Auth Server's read into that directory: given the
 //! principal DID (the session-grant subject) and the bound `device_id`, it
@@ -16,7 +16,7 @@
 //! same static bearer coauth already holds for that server's embedded
 //! `did:webvh` registration surface.
 
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use arkret_core::DeviceSigningKeyDirectoryQueryRequestBody;
 use thiserror::Error;
 
@@ -27,7 +27,7 @@ use crate::outbound_http;
 // responsibility — so the `/_soland/*` S2S edge below is the correct, compliant
 // surface, not a "violation" to be migrated off.
 //
-// The protocol read face `POST /_arkret/self/keys/query` (`ck.self.keys.query
+// The protocol read face `POST /_arkret/self/keys/query` (`ak.self.keys.query
 // .lookup`) is *definitionally* member-to-member: device-lifecycle.md §8.1
 // (`:701`) requires the server to authenticate the requester and return a
 // directory record ONLY when an authorization relationship exists between
@@ -39,7 +39,7 @@ use crate::outbound_http;
 // it is *not* an eligible caller of that protocol operation — by design, not by
 // a missing exemption. There is no spec gap and no protocol S2S directory-read
 // operation to migrate to (decision 4's "already covered by
-// `ck.self.keys.query.lookup`" was over-optimistic; service-http-binding.md
+// `ak.self.keys.query.lookup`" was over-optimistic; service-http-binding.md
 // §2.1.3(b) is the correct framing).
 //
 // soland therefore exposes this as a product-surface S2S contract on its own
@@ -93,13 +93,13 @@ pub struct ResolvedDeviceSigningKey {
 /// the Principal Server selected by `audience`.
 ///
 /// The Principal Server endpoint + bearer come from
-/// [`CokretConfig::principal_servers`]; the session-grant `audience` selects the
+/// [`ArkretConfig::principal_servers`]; the session-grant `audience` selects the
 /// row (its `audience` field). Only verified, non-revoked devices are returned,
 /// so a present result is itself proof the key is currently authorized; an
 /// absent device yields [`DeviceSigningDirectoryError::DeviceNotAuthorized`].
 pub async fn resolve_authorized_device_signing_key(
     http_client: &reqwest::Client,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     audience: &str,
     principal_id: &str,
     device_id: &str,

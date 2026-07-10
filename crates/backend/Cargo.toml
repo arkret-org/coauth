@@ -13,11 +13,6 @@ workspace = true
 
 # Arkret v1 SDK: shared protocol DTOs, RFC 9421 signatures, and typed
 # identity helpers used by the account, peer-protocol, and WebVH bridges.
-# Umbrella `arkret` SDK — currently consumed only for
-# `arkret::identity::binding::*` (multicodec helpers used by
-# `services::passkey_derive`). Opted in via workspace declaration with
-# default features off + `full-surface` on, so the heavier client /
-# openmls / sync surface stays out of the backend build.
 anyhow = {workspace = true}
 argon2 = {workspace = true}
 async-trait = {workspace = true}
@@ -39,9 +34,10 @@ coauth-policy = {workspace = true}
 coauth-principal = {workspace = true}
 coauth-tasks = {workspace = true}
 coauth-templates = {workspace = true}
-arkret = {workspace = true}
 arkret-core = {workspace = true}
+arkret-crypto = {workspace = true}
 arkret-signatures = {workspace = true,features = ["signer"]}
+arkret-state = {workspace = true}
 cookie = {workspace = true}
 data-encoding = {workspace = true}
 deadpool = {workspace = true}

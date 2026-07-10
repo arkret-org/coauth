@@ -7,7 +7,7 @@ use salvo::prelude::*;
 
 use crate::handlers::account::DepotExt as _;
 use crate::handlers::arkret::{
-    CokretRouteError, PatchPrimaryHandlePreferenceRequestBody, PrimaryHandlePreferenceOutcome,
+    ArkretRouteError, PatchPrimaryHandlePreferenceRequestBody, PrimaryHandlePreferenceOutcome,
     require_canonical_handle,
 };
 
@@ -21,14 +21,14 @@ use crate::handlers::arkret::{
 pub async fn patch_primary_handle_preference(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<PrimaryHandlePreferenceOutcome>, CokretRouteError> {
+) -> Result<Json<PrimaryHandlePreferenceOutcome>, ArkretRouteError> {
     let body: PatchPrimaryHandlePreferenceRequestBody = req
         .parse_json()
         .await
-        .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
+        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
     let requested = body
         .primary_handle
-        .ok_or_else(|| CokretRouteError::BadRequest("missing primary_handle".to_owned()))?;
+        .ok_or_else(|| ArkretRouteError::BadRequest("missing primary_handle".to_owned()))?;
 
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
@@ -43,7 +43,7 @@ pub async fn patch_primary_handle_preference(
         .entity
         .browser_session()
         .map(|session| session.user.clone())
-        .ok_or_else(|| CokretRouteError::Unauthorized("browser session required".to_owned()))?;
+        .ok_or_else(|| ArkretRouteError::Unauthorized("browser session required".to_owned()))?;
 
     let claim = if let Some(handle) = requested.as_deref() {
         require_canonical_handle(handle)?;
@@ -51,9 +51,9 @@ pub async fn patch_primary_handle_preference(
             repo.user_primary_handle_preference()
                 .verified_handle_claim(user.id, handle, clock.now())
                 .await
-                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
                 .ok_or_else(|| {
-                    CokretRouteError::BadRequest(
+                    ArkretRouteError::BadRequest(
                         "primary_handle_not_verified_for_holder".to_owned(),
                     )
                 })?,
@@ -75,11 +75,11 @@ pub async fn patch_primary_handle_preference(
             ),
         )
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     repo.save()
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(PrimaryHandlePreferenceOutcome {
         primary_handle: preference.handle,

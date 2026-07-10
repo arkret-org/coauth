@@ -2,7 +2,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, RepositoryAccess, UrlBuilder, User};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::jwk::PublicJsonWebKey;
@@ -142,10 +142,10 @@ pub const DID_DOCUMENT_MAX_BYTES: usize = 10 * 1024 * 1024;
 
 #[async_trait]
 pub trait DidResolverService: Send + Sync {
-    fn service_did(&self, arkret_config: &CokretConfig) -> String;
-    fn issuer_did(&self, arkret_config: &CokretConfig) -> String;
-    fn user_did(&self, arkret_config: &CokretConfig, user: &User) -> String;
-    fn parse_local_user_did(&self, arkret_config: &CokretConfig, did: &str) -> Option<Ulid>;
+    fn service_did(&self, arkret_config: &ArkretConfig) -> String;
+    fn issuer_did(&self, arkret_config: &ArkretConfig) -> String;
+    fn user_did(&self, arkret_config: &ArkretConfig, user: &User) -> String;
+    fn parse_local_user_did(&self, arkret_config: &ArkretConfig, did: &str) -> Option<Ulid>;
     /// Resolve the primary principal DID for a user.
     ///
     /// This only returns the local/starid `did:web` forms when the deployment
@@ -154,17 +154,17 @@ pub trait DidResolverService: Send + Sync {
     /// rows instead of deriving a fallback DID here.
     async fn primary_did_for_user(
         &self,
-        arkret_config: &CokretConfig,
+        arkret_config: &ArkretConfig,
         user: &User,
     ) -> Result<String, SessionGrantError>;
-    fn delegated_resolver(&self, arkret_config: &CokretConfig) -> Option<String>;
-    fn proof_required_for_pairwise(&self, arkret_config: &CokretConfig) -> bool;
+    fn delegated_resolver(&self, arkret_config: &ArkretConfig) -> Option<String>;
+    fn proof_required_for_pairwise(&self, arkret_config: &ArkretConfig) -> bool;
 
     async fn resolve_did_document(
         &self,
         http_client: &reqwest::Client,
         url_builder: &UrlBuilder,
-        arkret_config: &CokretConfig,
+        arkret_config: &ArkretConfig,
         key_store: &Keystore,
         repo: &mut BoxRepository,
         did: &str,
@@ -176,26 +176,26 @@ pub struct DefaultDidResolverService;
 
 #[async_trait]
 impl DidResolverService for DefaultDidResolverService {
-    fn service_did(&self, arkret_config: &CokretConfig) -> String {
+    fn service_did(&self, arkret_config: &ArkretConfig) -> String {
         service_did_for(arkret_config)
     }
 
-    fn issuer_did(&self, arkret_config: &CokretConfig) -> String {
+    fn issuer_did(&self, arkret_config: &ArkretConfig) -> String {
         issuer_did_for(arkret_config)
     }
 
-    fn user_did(&self, arkret_config: &CokretConfig, user: &User) -> String {
+    fn user_did(&self, arkret_config: &ArkretConfig, user: &User) -> String {
         user_did_for(arkret_config, user)
     }
 
-    fn parse_local_user_did(&self, arkret_config: &CokretConfig, did: &str) -> Option<Ulid> {
+    fn parse_local_user_did(&self, arkret_config: &ArkretConfig, did: &str) -> Option<Ulid> {
         let prefix = format!("{}:users:", self.service_did(arkret_config));
         did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
     }
 
     async fn primary_did_for_user(
         &self,
-        arkret_config: &CokretConfig,
+        arkret_config: &ArkretConfig,
         user: &User,
     ) -> Result<String, SessionGrantError> {
         if !arkret_config.did_web_principal_allowed() {
@@ -232,14 +232,14 @@ impl DidResolverService for DefaultDidResolverService {
         ))
     }
 
-    fn delegated_resolver(&self, arkret_config: &CokretConfig) -> Option<String> {
+    fn delegated_resolver(&self, arkret_config: &ArkretConfig) -> Option<String> {
         arkret_config
             .identity_registry
             .as_ref()
             .map(|registry| registry.resolver.to_string())
     }
 
-    fn proof_required_for_pairwise(&self, arkret_config: &CokretConfig) -> bool {
+    fn proof_required_for_pairwise(&self, arkret_config: &ArkretConfig) -> bool {
         arkret_config
             .identity_registry
             .as_ref()
@@ -250,7 +250,7 @@ impl DidResolverService for DefaultDidResolverService {
         &self,
         http_client: &reqwest::Client,
         url_builder: &UrlBuilder,
-        arkret_config: &CokretConfig,
+        arkret_config: &ArkretConfig,
         key_store: &Keystore,
         repo: &mut BoxRepository,
         did: &str,

@@ -18,7 +18,7 @@
 //! ```
 //!
 //! Replay boundary (identity-did §5.1 / §3.6, conformance vector
-//! `ck.vector.identity.did_proof_replay_window.v1`):
+//! `ak.vector.identity.did_proof_replay_window.v1`):
 //!   - `audience` MUST equal the local coauth service DID, so a proof minted for another receiver
 //!     cannot be relayed here.
 //!   - `trust_domain` MUST equal this deployment's trust domain, so the identical proof bytes
@@ -72,7 +72,7 @@
 
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
@@ -92,7 +92,7 @@ pub const DID_BINDING_CONTROL_PROOF_SCHEMA: &str = "ak.schema.did_binding_contro
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BindingStatementClaims {
     /// Schema discriminator. Must equal
-    /// `ck.schema.did_binding_control_proof.v1`.
+    /// `ak.schema.did_binding_control_proof.v1`.
     pub schema: String,
     /// The DID being bound.
     pub account_did: String,
@@ -259,7 +259,7 @@ fn ensure_full_identity_fact_resolution(
 pub async fn validate_control_proof(
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
@@ -679,7 +679,7 @@ pub fn issuer_is_allowed(allowlist: &[String], iss: &str) -> bool {
 pub async fn verify_verification_service_proof(
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,

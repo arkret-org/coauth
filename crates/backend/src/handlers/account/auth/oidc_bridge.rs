@@ -173,7 +173,7 @@ fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url
 /// localparts` edge is used during OIDC token exchange to *list and sync* the
 /// account's primary localpart binding on the Principal Server
 /// (`ensure_soland_account_localpart_bound`). It is intentionally NOT migrated
-/// to the protocol directory reads `ck.find.directory.query.list_handles_for_
+/// to the protocol directory reads `ak.find.directory.query.list_handles_for_
 /// subject` / `resolve_handle`: those are read-only handle lookups and cannot
 /// perform the write/sync binding this provisioning flow requires. coauth and
 /// soland share this static-bearer-gated `/_soland/*` edge as a deployment-local
@@ -192,7 +192,7 @@ fn soland_account_localparts_endpoint(
 }
 
 pub(crate) fn principal_server_operation_bearer<'a>(
-    arkret_config: &'a coauth_config::CokretConfig,
+    arkret_config: &'a coauth_config::ArkretConfig,
     audience: &str,
 ) -> Option<&'a str> {
     arkret_config
@@ -401,7 +401,7 @@ pub(super) async fn ensure_principal_did_for_user(
     encrypter: &coauth_keystore::Encrypter,
     http_client: &reqwest::Client,
     url_builder: &coauth_data::UrlBuilder,
-    arkret_config: &coauth_config::CokretConfig,
+    arkret_config: &coauth_config::ArkretConfig,
     user: &User,
     audience: &str,
 ) -> Result<String, String> {
@@ -454,7 +454,7 @@ pub(crate) async fn ensure_principal_did_for_user_committed(
     encrypter: &coauth_keystore::Encrypter,
     http_client: &reqwest::Client,
     url_builder: &coauth_data::UrlBuilder,
-    arkret_config: &coauth_config::CokretConfig,
+    arkret_config: &coauth_config::ArkretConfig,
     user: &User,
     audience: &str,
 ) -> Result<String, String> {
@@ -1223,7 +1223,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         Some(coauth_iana::oauth::OAuthTokenTypeHint::AccessToken),
         // Internal self-introspection of a token this bridge just minted;
         // the full device/principal/session association is required here.
-        crate::handlers::oauth::introspection_service::CokretAssociationDisclosure::Full,
+        crate::handlers::oauth::introspection_service::ArkretAssociationDisclosure::Full,
     )
     .await
     {

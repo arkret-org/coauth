@@ -133,7 +133,7 @@ mod tests {
     use std::sync::{Arc, Once};
 
     use coauth_config::{
-        CokretConfig, DeploymentProfileConfig, PrincipalMethodConfig, StaridConfig,
+        ArkretConfig, DeploymentProfileConfig, PrincipalMethodConfig, StaridConfig,
     };
     use serde_json::json;
     use ulid::Ulid;
@@ -247,7 +247,7 @@ mod tests {
     async fn primary_did_for_user_routes_to_starid_form_when_flag_set() {
         install_crypto_provider();
         let resolver = DefaultDidResolverService;
-        let arkret_config = CokretConfig {
+        let arkret_config = ArkretConfig {
             deployment_profile: DeploymentProfileConfig::PersonalNode,
             principal_method: PrincipalMethodConfig::DidWeb,
             starid: Some(StaridConfig {
@@ -256,7 +256,7 @@ mod tests {
                 path_prefix: "accounts".to_owned(),
                 admin_token: None,
             }),
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         };
 
         let user_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
@@ -290,7 +290,7 @@ mod tests {
         let user = sample_user(user_id);
 
         let error = resolver
-            .primary_did_for_user(&CokretConfig::default(), &user)
+            .primary_did_for_user(&ArkretConfig::default(), &user)
             .await
             .unwrap_err();
         assert!(matches!(

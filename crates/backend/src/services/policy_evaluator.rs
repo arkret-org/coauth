@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Round 4 — pluggable evaluator for `ck.self.policy.query.check`.
+//! Round 4 — pluggable evaluator for `ak.self.policy.query.check`.
 //!
 //! The spec [`policy-server.md` §4] defines the decision lattice as
 //! `allow | soft_deny | hard_deny | quarantine | require_review`; the
@@ -16,7 +16,7 @@
 //!
 //! The pre-round-4 `coauth_policy::PolicyFactory` evaluator only understands
 //! `register` / `email` / `client_registration` / `authorization_grant`
-//! shapes — it predates the round-4 `ck.self.policy.query.check` request and does
+//! shapes — it predates the round-4 `ak.self.policy.query.check` request and does
 //! not know about realm scoping or frontier digests. Bolting a new
 //! method onto it would force every existing handler to re-test. We
 //! ship a dedicated [`PolicyEvaluator`] trait here and leave the
@@ -98,7 +98,7 @@ pub fn is_circle_selector(selector: &str) -> bool {
 
 /// POLICY-1: deployment-level "strict reject" mode for unverified
 /// `accountable_principal_ids[]` entries. When the
-/// `ck.profile.accountable_principals.strict_reject.v1` profile is
+/// `ak.profile.accountable_principals.strict_reject.v1` profile is
 /// declared by the deployment, Actor Profile create/update events that
 /// carry unverified `accountable_principal_ids[]` entries MUST be rejected
 /// wholesale with `failed_precondition / accountability_grant_missing`.
@@ -197,7 +197,7 @@ impl PolicyDecision {
     }
 
     /// POLICY-1: signal "strict reject" mode for the
-    /// `ck.profile.accountable_principals.strict_reject.v1` deployment profile.
+    /// `ak.profile.accountable_principals.strict_reject.v1` deployment profile.
     /// When the profile is declared, Actor Profile create/update events
     /// containing unverified `accountable_principal_ids[]` entries MUST be
     /// rejected with `failed_precondition / accountability_grant_missing`.
@@ -225,7 +225,7 @@ impl PolicyDecision {
     }
 }
 
-/// Evaluate a `ck.self.policy.query.check` request against the configured rules.
+/// Evaluate a `ak.self.policy.query.check` request against the configured rules.
 /// Object-safe: handlers carry an `Arc<dyn PolicyEvaluator>`.
 pub trait PolicyEvaluator: Send + Sync {
     fn evaluate<'a>(
@@ -455,7 +455,7 @@ fn match_rules_with_grants(
         return PolicyDecision::hard_deny("capability_denied", policy_version.to_owned());
     }
 
-    // CAP-1 (R3 spec-sync) — `ck.call.{join,screen_share,record,
+    // CAP-1 (R3 spec-sync) — `ak.call.{join,screen_share,record,
     // transcribe,moderate}` are recognised capability actions even when
     // no realm rule names them explicitly. Default-allow path; the
     // recognition is a no-op for matching purposes but ensures the

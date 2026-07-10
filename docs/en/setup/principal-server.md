@@ -35,7 +35,7 @@ v1 protocol operations:
 | coauth call | Principal Server endpoint | Operation id | When |
 | --- | --- | --- | --- |
 | Device signing-key directory lookup | `POST /_soland/gate/account/device-signing-keys/query` | `org.arkret.soland.gate.account.device_signing_keys.query` | Verifying a device holder proof during session-grant refresh / soft-logout restore |
-| Collaboration capability fanout | `POST /_soland/root/authz/capability-fanout` | `org.arkret.soland.root.authz.capability_fanout.submit` | Materialising a coauth-issued `ck.capability.grant` / `ck.capability.revoke` |
+| Collaboration capability fanout | `POST /_soland/root/authz/capability-fanout` | `org.arkret.soland.root.authz.capability_fanout.submit` | Materialising a coauth-issued `ak.capability.grant` / `ak.capability.revoke` |
 
 Both edges are authenticated with the shared bearer configured on the matching
 `principal_servers` entry:

@@ -1,4 +1,4 @@
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::oauth::{
     OAuthAccessTokenRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
 };
@@ -71,21 +71,21 @@ pub enum IntrospectionError {
 /// de-anonymisation surface. They are S2S material for the trusted
 /// Principal Server (which enforces the `/_arkret/self/*` surface), not
 /// for arbitrary confidential OIDC clients. Callers pass
-/// [`CokretAssociationDisclosure::Full`] only when authenticated as the
+/// [`ArkretAssociationDisclosure::Full`] only when authenticated as the
 /// Principal Server (homeserver bearer) or for internal self-introspection;
 /// untrusted confidential clients pass
-/// [`CokretAssociationDisclosure::Redacted`].
+/// [`ArkretAssociationDisclosure::Redacted`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CokretAssociationDisclosure {
+pub enum ArkretAssociationDisclosure {
     /// Return the full device/principal/session association.
     Full,
     /// Omit arkret association fields; only standard RFC 7662 claims.
     Redacted,
 }
 
-impl CokretAssociationDisclosure {
+impl ArkretAssociationDisclosure {
     fn is_full(self) -> bool {
-        matches!(self, CokretAssociationDisclosure::Full)
+        matches!(self, ArkretAssociationDisclosure::Full)
     }
 }
 
@@ -93,11 +93,11 @@ pub async fn introspect_token(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     activity_tracker: &ActivityTracker,
     token_str: &str,
     token_type_hint: Option<OAuthTokenTypeHint>,
-    disclosure: CokretAssociationDisclosure,
+    disclosure: ArkretAssociationDisclosure,
 ) -> Result<IntrospectionResponse, IntrospectionError> {
     let token_type = TokenType::check(token_str)?;
     if let Some(hint) = token_type_hint
@@ -362,6 +362,6 @@ pub async fn introspect_token(
     Ok(reply)
 }
 
-fn principal_subject_for_user(arkret_config: &CokretConfig, user: &coauth_data::User) -> String {
+fn principal_subject_for_user(arkret_config: &ArkretConfig, user: &coauth_data::User) -> String {
     arkret::oidc_subject_for_user(arkret_config, user)
 }

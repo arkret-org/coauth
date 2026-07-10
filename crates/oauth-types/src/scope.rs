@@ -84,7 +84,7 @@ pub const ARKRET_PRINCIPAL_SERVER_SESSION_BIND: ScopeToken =
 /// `urn:arkret:admin:*` — Arkret admin capability family.
 pub const ARKRET_ADMIN: ScopeToken = ScopeToken::from_static("urn:arkret:admin:*");
 
-/// `ck.agent.manage` — CKP-0008 controller-approval scope. Covers the
+/// `ak.agent.manage` — CKP-0008 controller-approval scope. Covers the
 /// admin subset of the 14 personal-agent capability actions
 /// (provision / pause / resume / deactivate / grant.attach / grant.detach
 /// / rotate_key + sidecar_thread.* lifecycle hooks). Issued by coauth as

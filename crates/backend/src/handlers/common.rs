@@ -12,7 +12,7 @@ use std::net::IpAddr;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, BrowserSession, RepositoryError,
     Session, SiteConfig, SystemClock, UrlBuilder, User,
@@ -242,7 +242,7 @@ pub trait DepotExt {
     fn templates(&self) -> Result<coauth_templates::Templates, RouteError>;
     fn frontend_script_src(&self) -> Result<String, RouteError>;
     fn translator(&self) -> Result<Arc<coauth_i18n::Translator>, RouteError>;
-    fn arkret_config(&self) -> Result<CokretConfig, RouteError>;
+    fn arkret_config(&self) -> Result<ArkretConfig, RouteError>;
     fn cookie_manager(&self) -> Result<crate::handlers::CookieManager, RouteError>;
     fn metadata_cache(&self) -> Result<crate::handlers::MetadataCache, RouteError>;
     fn jwks_cache(&self) -> Result<crate::handlers::JwksCache, RouteError>;
@@ -342,7 +342,7 @@ impl DepotExt for Depot {
         depot_get(self, "translator")
     }
 
-    fn arkret_config(&self) -> Result<CokretConfig, RouteError> {
+    fn arkret_config(&self) -> Result<ArkretConfig, RouteError> {
         depot_get(self, "arkret_config")
     }
 

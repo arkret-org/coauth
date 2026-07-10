@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Duration;
-use coauth_config::{CokretConfig, RateLimitingConfig};
+use coauth_config::{ArkretConfig, RateLimitingConfig};
 use coauth_data::clock::MockClock;
 use coauth_data::personal::session::PersonalSessionOwner;
 use coauth_data::personal::{PersonalAccessTokenRepository, PersonalSessionRepository};
@@ -113,7 +113,7 @@ pub(crate) async fn policy_factory(
 pub(crate) struct TestState {
     pub repository_factory: PgRepositoryFactory,
     pub templates: Templates,
-    pub arkret_config: CokretConfig,
+    pub arkret_config: ArkretConfig,
     pub key_store: Keystore,
     pub cookie_manager: CookieManager,
     pub metadata_cache: MetadataCache,
@@ -259,9 +259,9 @@ impl TestState {
         // `arkret.service_did` is required (the backend no longer derives a
         // `did:web` fallback from the host); pin the value the old host
         // derivation used to produce so DID-shaped assertions stay stable.
-        let arkret_config = CokretConfig {
+        let arkret_config = ArkretConfig {
             service_did: Some("did:web:example.com".to_owned()),
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         };
 
         let templates = Templates::load(

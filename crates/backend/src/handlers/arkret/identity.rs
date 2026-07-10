@@ -24,7 +24,7 @@ const DIRECTORY_RESOLVE_FAILURE_FLOOR: Duration = Duration::from_millis(25);
 #[handler]
 pub async fn identity_describe(
     depot: &Depot,
-) -> Result<Json<IdentityDescribeOutcome>, CokretRouteError> {
+) -> Result<Json<IdentityDescribeOutcome>, ArkretRouteError> {
     let arkret_config = depot.arkret_config()?;
     let registry_mode = if delegated_identity_registry_descriptor(&arkret_config).is_some() {
         "delegated_resolver"
@@ -45,11 +45,11 @@ pub async fn identity_describe(
 pub async fn identity_resolve(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<IdentityResolveOutcome>, CokretRouteError> {
+) -> Result<Json<IdentityResolveOutcome>, ArkretRouteError> {
     let body: IdentityResolveRequestBody = req
         .parse_json()
         .await
-        .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
+        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
@@ -73,7 +73,7 @@ pub async fn identity_resolve(
         .map_err(map_did_resolve_error)?;
     repo.cancel()
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(IdentityResolveOutcome {
         did_document: did_document_ref(resolution.document)?,
@@ -88,10 +88,10 @@ pub async fn identity_resolve(
 pub async fn identity_document(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<IdentityDocumentViewOutcome>, CokretRouteError> {
+) -> Result<Json<IdentityDocumentViewOutcome>, ArkretRouteError> {
     let did = req
         .query::<String>("did")
-        .ok_or_else(|| CokretRouteError::BadRequest("missing did query parameter".into()))?;
+        .ok_or_else(|| ArkretRouteError::BadRequest("missing did query parameter".into()))?;
     let did = parse_did_field("did", did)?;
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
@@ -114,7 +114,7 @@ pub async fn identity_document(
         .map_err(map_did_resolve_error)?;
     repo.cancel()
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(IdentityDocumentViewOutcome(IdentityDocumentView {
         did_document: did_document_ref(resolution.document)?,
@@ -127,14 +127,14 @@ pub async fn identity_document(
 #[handler]
 pub async fn directory_describe(
     depot: &Depot,
-) -> Result<Json<DirectoryDescribeOutcome>, CokretRouteError> {
+) -> Result<Json<DirectoryDescribeOutcome>, ArkretRouteError> {
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let service_did = parse_did_field("service_did", service_did_for(&arkret_config))?;
     let trust_domain =
         arkret_core::TypedTrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
             .map_err(|error| {
-                CokretRouteError::Internal(Box::new(std::io::Error::other(format!(
+                ArkretRouteError::Internal(Box::new(std::io::Error::other(format!(
                     "invalid trust_domain: {error}"
                 ))))
             })?;
@@ -206,7 +206,7 @@ pub async fn directory_describe(
         last_materialized_at: None,
     };
     description.validate().map_err(|error| {
-        CokretRouteError::Internal(Box::new(std::io::Error::other(format!(
+        ArkretRouteError::Internal(Box::new(std::io::Error::other(format!(
             "invalid directory describe: {error}"
         ))))
     })?;
@@ -218,12 +218,12 @@ pub async fn directory_describe(
 pub async fn directory_resolve_handle(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<DirectoryHandleResolutionOutcome>, CokretRouteError> {
+) -> Result<Json<DirectoryHandleResolutionOutcome>, ArkretRouteError> {
     let started_at = Instant::now();
     let body: DirectoryResolveHandleRequestBody = req
         .parse_json()
         .await
-        .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
+        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
@@ -238,7 +238,7 @@ pub async fn directory_resolve_handle(
         .check_directory_lookup(requester)
         .await
         .map_err(|error| {
-            CokretRouteError::coded(
+            ArkretRouteError::coded(
                 StatusCode::TOO_MANY_REQUESTS,
                 ERROR_CODE_RATE_LIMITED,
                 error.to_string(),
@@ -257,7 +257,7 @@ pub async fn directory_resolve_handle(
         .user()
         .find_by_handle(&handle)
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
     else {
         return Err(directory_resolve_not_found(started_at).await);
     };
@@ -271,7 +271,7 @@ pub async fn directory_resolve_handle(
     // yet — fail closed with 404 rather than synthesising an identifier.
     let principal_binding = principal_did_binding_for_user(&mut repo, &arkret_config, &user)
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let Some(principal_binding) = principal_binding else {
         return Err(directory_resolve_not_found(started_at).await);
     };
@@ -318,7 +318,7 @@ pub async fn directory_resolve_handle(
     )
     .map_err(map_handle_claim_issue_error)?;
     claim_material.payload.validate().map_err(|error| {
-        CokretRouteError::Internal(Box::new(std::io::Error::other(format!(
+        ArkretRouteError::Internal(Box::new(std::io::Error::other(format!(
             "issued handle claim failed SDK validation: {error}"
         ))))
     })?;
@@ -352,9 +352,9 @@ fn directory_handle_claim_audience(
 }
 
 fn directory_handle_delivery_binding(
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     principal_binding: &PrincipalDidBinding,
-) -> Result<arkret_core::DeliveryBindingHint, CokretRouteError> {
+) -> Result<arkret_core::DeliveryBindingHint, ArkretRouteError> {
     let recipient_service_did = principal_binding
         .principal_server_did
         .as_ref()
@@ -362,7 +362,7 @@ fn directory_handle_delivery_binding(
         .or_else(|| arkret_core::Did::new(principal_binding.audience.clone()).ok())
         .or_else(|| arkret_core::Did::new(service_did_for(arkret_config)).ok())
         .ok_or_else(|| {
-            CokretRouteError::Internal(Box::new(std::io::Error::other(
+            ArkretRouteError::Internal(Box::new(std::io::Error::other(
                 "no valid DID available for handle claim delivery binding",
             )))
         })?;
@@ -382,19 +382,19 @@ fn directory_handle_delivery_binding(
     })
 }
 
-fn map_handle_claim_issue_error(error: SessionGrantError) -> CokretRouteError {
+fn map_handle_claim_issue_error(error: SessionGrantError) -> ArkretRouteError {
     match error {
-        SessionGrantError::HandleClaimSubject(error) => CokretRouteError::coded(
+        SessionGrantError::HandleClaimSubject(error) => ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             ERROR_CODE_INVALID_PARAM,
             error.to_string(),
         ),
-        error @ SessionGrantError::DidWebPrincipalNotExplicit => CokretRouteError::coded(
+        error @ SessionGrantError::DidWebPrincipalNotExplicit => ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             ERROR_CODE_INVALID_PARAM,
             error.to_string(),
         ),
-        other => CokretRouteError::Internal(Box::new(other)),
+        other => ArkretRouteError::Internal(Box::new(other)),
     }
 }
 
@@ -428,12 +428,12 @@ fn normalize_handle_alias(alias: &str, default_domain: &str) -> Option<String> {
     Some(format!("{localpart}:{authority}"))
 }
 
-async fn directory_resolve_not_found(started_at: Instant) -> CokretRouteError {
+async fn directory_resolve_not_found(started_at: Instant) -> ArkretRouteError {
     let elapsed = started_at.elapsed();
     if let Some(remaining) = DIRECTORY_RESOLVE_FAILURE_FLOOR.checked_sub(elapsed) {
         tokio::time::sleep(remaining).await;
     }
-    CokretRouteError::NotFound
+    ArkretRouteError::NotFound
 }
 
 fn directory_resolve_request_has_disclosure_gate(body: &DirectoryResolveHandleRequestBody) -> bool {
@@ -455,14 +455,14 @@ fn directory_resolve_request_has_disclosure_gate(body: &DirectoryResolveHandleRe
         && !body.proofs.is_empty()
 }
 
-fn parse_did_field(field: &str, value: String) -> Result<Did, CokretRouteError> {
+fn parse_did_field(field: &str, value: String) -> Result<Did, ArkretRouteError> {
     Did::new(value)
-        .map_err(|error| CokretRouteError::BadRequest(format!("invalid {field}: {error}")))
+        .map_err(|error| ArkretRouteError::BadRequest(format!("invalid {field}: {error}")))
 }
 
-fn did_document_ref(document: DidDocument) -> Result<DidDocumentRef, CokretRouteError> {
+fn did_document_ref(document: DidDocument) -> Result<DidDocumentRef, ArkretRouteError> {
     let did = parse_did_field("did_document.id", document.id.clone())?;
     let document = serde_json::to_value(document)
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     Ok(DidDocumentRef { did, document })
 }

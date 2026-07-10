@@ -1,5 +1,5 @@
 use anyhow::Error as AnyhowError;
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::upstream_oauth::UpstreamOAuthProviderRepository;
 use coauth_data::user::{BrowserSessionRepository, UserPasswordRepository, UserRepository};
 use coauth_data::{
@@ -60,7 +60,7 @@ pub async fn login_with_password(
     limiter: &Limiter,
     principal_server: &dyn ConnectorAdmin,
     url_builder: &UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     site_config: &SiteConfig,
     request: PasswordLoginRequestBody,
 ) -> Result<PasswordLoginOutcome, PasswordLoginError> {
@@ -216,7 +216,7 @@ async fn find_user_by_login_identifier(
     site_config: &SiteConfig,
     principal_server: &dyn ConnectorAdmin,
     url_builder: &UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     repo: &mut BoxRepository,
     identifier: &str,
 ) -> Result<Option<User>, RepositoryError> {

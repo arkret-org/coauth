@@ -1,4 +1,4 @@
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_keystore::Keystore;
 use arkret_core::ErasureReceipt;
@@ -49,13 +49,13 @@ fn validate_retained_stub(
     Ok(())
 }
 
-/// Verify a `ck.schema.erasure_receipt.v1` receipt before accepting it as a
+/// Verify a `ak.schema.erasure_receipt.v1` receipt before accepting it as a
 /// completed erasure proof.
 #[allow(clippy::too_many_arguments)]
 pub async fn verify_erasure_receipt(
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,

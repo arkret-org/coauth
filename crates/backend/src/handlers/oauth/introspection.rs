@@ -1,6 +1,6 @@
 use std::sync::{Arc, LazyLock};
 
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, SystemClock, UrlBuilder};
 use coauth_iana::oauth::{OAuthClientAuthenticationMethod, OAuthTokenTypeHint};
 use coauth_keystore::Encrypter;
@@ -199,7 +199,7 @@ async fn handle_post(
         .get::<UrlBuilder>("url_builder")
         .map_err(|_| depot_missing("UrlBuilder"))?;
     let arkret_config = depot
-        .get::<CokretConfig>("arkret_config")
+        .get::<ArkretConfig>("arkret_config")
         .cloned()
         .unwrap_or_default();
 
@@ -219,7 +219,7 @@ async fn handle_post(
         {
             return Err(RouteError::InvalidBearerToken);
         }
-        introspection_service::CokretAssociationDisclosure::Full
+        introspection_service::ArkretAssociationDisclosure::Full
     } else {
         // Otherwise, it presented regular client credentials, so we verify them
         let client = credentials
@@ -238,7 +238,7 @@ async fn handle_post(
         credentials
             .verify(http_client, encrypter, method, &client)
             .await?;
-        introspection_service::CokretAssociationDisclosure::Redacted
+        introspection_service::ArkretAssociationDisclosure::Redacted
     };
 
     let Some(form) = form else {

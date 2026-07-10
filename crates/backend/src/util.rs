@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use coauth_config::{
-    AccountConfig, BrandingConfig, CaptchaConfig, CokretConfig, DatabaseConfig, EmailConfig,
+    AccountConfig, BrandingConfig, CaptchaConfig, ArkretConfig, DatabaseConfig, EmailConfig,
     EmailProviderConfig, EmailSmtpMode, ExperimentalConfig, HttpConfig, PasswordsConfig,
     PolicyConfig, PolicyEngine, SmsConfig, SmsProviderConfig, TemplatesConfig,
 };
@@ -81,7 +81,7 @@ pub fn handle_valid(handle: &str) -> bool {
 }
 
 /// Validate that a string is a Arkret typed wire id of shape
-/// `ck:<prefix>:<uuid-v7>`, where `<uuid-v7>` parses as a strict v7 UUID.
+/// `ak:<prefix>:<uuid-v7>`, where `<uuid-v7>` parses as a strict v7 UUID.
 ///
 /// This is the Move/Anchor/Lattice typed-id surface (spec `wire-ids.md` —
 /// rebased onto `UUIDv7` in 2026-05). coauth's internal admin tokens and
@@ -689,7 +689,7 @@ pub async fn load_policy_factory_dynamic_data(
 pub fn principal_server_connection_from_config(
     site_config: &SiteConfig,
     repository_factory: BoxRepositoryFactory,
-    arkret_config: CokretConfig,
+    arkret_config: ArkretConfig,
     http_client: reqwest::Client,
 ) -> (Arc<dyn ConnectorAdmin>, ConnectorRegistry) {
     let registry = ConnectorRegistry::new();
@@ -893,7 +893,7 @@ mod tests {
     fn typed_uuid7_rejects_extra_segments() {
         // Cell-family ids have more colons; the basic helper rejects them.
         let id = Uuid::now_v7();
-        let s = format!("ak:cell:ck.component.consent.grant.v1:{id}");
+        let s = format!("ak:cell:ak.component.consent.grant.v1:{id}");
         assert!(!super::is_typed_uuid7(&s, "cell"));
     }
 

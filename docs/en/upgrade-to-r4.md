@@ -17,7 +17,7 @@ Read this page before enabling a build that includes the R4 changes.
 - **Invite claims** use a two-proof chain: a verification-service
   proof for the verified 3PID and a subject proof signed by the
   inviter actor key.
-- **`ck.cross_signing.publish`** is now compare-and-swap. Publishers
+- **`ak.cross_signing.publish`** is now compare-and-swap. Publishers
   must read the current generation and submit
   `expected_previous_generation`; accepted generations advance by
   exactly one.
@@ -35,7 +35,7 @@ Use the release notes attached to the build and the matching
 ## Trust domain rotation
 
 `arkret.trust_domain` is part of the canonical transcript for every
-`ck.cross_signing.reset` proof. Changing it invalidates reset proofs
+`ak.cross_signing.reset` proof. Changing it invalidates reset proofs
 that were issued under the previous trust domain.
 
 Before rotating:

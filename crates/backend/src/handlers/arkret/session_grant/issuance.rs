@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 #[cfg(test)]
 use coauth_data::UrlBuilder;
 use coauth_data::oauth::NewSessionGrant;
@@ -20,7 +20,7 @@ use crate::handlers::arkret::*;
 
 fn new_session_grant_id() -> GrantId {
     GrantId::new(new_prefixed_uuid7("ak:grant:"))
-        .expect("generated ck:grant uuidv7 id must be valid")
+        .expect("generated ak:grant uuidv7 id must be valid")
 }
 
 // Test-only convenience wrapper (re-exported under `#[cfg(test)]` from the
@@ -30,7 +30,7 @@ pub(crate) fn issue_session_grant(
     _rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
@@ -57,7 +57,7 @@ pub(crate) fn issue_session_grant(
 // principal_did`.
 pub(crate) fn issue_session_grant_for_audience(
     clock: &dyn Clock,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
@@ -83,7 +83,7 @@ pub(crate) fn issue_session_grant_for_audience(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn issue_test_session_grant_for_audience(
     clock: &dyn Clock,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
@@ -109,7 +109,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
 #[allow(clippy::too_many_arguments)]
 fn issue_session_grant_for_audience_inner(
     clock: &dyn Clock,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
@@ -253,7 +253,7 @@ where
 /// uniform without repeating the agent principal DID outside `subject`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn mint_agent_session_grant(
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     key_store: &Keystore,
     agent_principal_id: &str,
     audience: String,

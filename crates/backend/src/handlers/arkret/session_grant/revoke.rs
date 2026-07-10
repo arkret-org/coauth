@@ -40,57 +40,57 @@ fn empty_session_revoke_body() -> SessionRevokeRequestBody {
     }
 }
 
-fn session_grant_not_found() -> CokretRouteError {
-    CokretRouteError::coded(
+fn session_grant_not_found() -> ArkretRouteError {
+    ArkretRouteError::coded(
         StatusCode::NOT_FOUND,
         ERROR_CODE_SESSION_GRANT_NOT_FOUND,
         "session grant is unknown, inactive, or not owned by the current principal",
     )
 }
 
-fn selector_conflict(message: impl Into<String>) -> CokretRouteError {
-    CokretRouteError::coded(
+fn selector_conflict(message: impl Into<String>) -> ArkretRouteError {
+    ArkretRouteError::coded(
         StatusCode::UNPROCESSABLE_ENTITY,
         ERROR_CODE_SESSION_REVOKE_SELECTOR_CONFLICT,
         message,
     )
 }
 
-fn lifecycle_proof_required(message: impl Into<String>) -> CokretRouteError {
-    CokretRouteError::coded(
+fn lifecycle_proof_required(message: impl Into<String>) -> ArkretRouteError {
+    ArkretRouteError::coded(
         StatusCode::UNAUTHORIZED,
         ERROR_CODE_DID_PROOF_REQUIRED,
         message,
     )
 }
 
-fn lifecycle_proof_invalid(message: impl Into<String>) -> CokretRouteError {
-    CokretRouteError::coded(
+fn lifecycle_proof_invalid(message: impl Into<String>) -> ArkretRouteError {
+    ArkretRouteError::coded(
         StatusCode::UNAUTHORIZED,
         REASON_PROOF_INVALID,
         format!("reason_code=proof_invalid; {}", message.into()),
     )
 }
 
-fn bearer_session_grant(req: &Request) -> Result<&str, CokretRouteError> {
+fn bearer_session_grant(req: &Request) -> Result<&str, ArkretRouteError> {
     let auth_header = req
         .headers()
         .get(http::header::AUTHORIZATION)
-        .ok_or_else(|| CokretRouteError::Unauthorized("missing authorization header".to_owned()))?;
+        .ok_or_else(|| ArkretRouteError::Unauthorized("missing authorization header".to_owned()))?;
     let auth_str = auth_header
         .to_str()
-        .map_err(|_| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
+        .map_err(|_| ArkretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
     auth_str
         .strip_prefix("Bearer ")
         .or_else(|| auth_str.strip_prefix("bearer "))
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))
+        .ok_or_else(|| ArkretRouteError::Unauthorized("invalid authorization header".to_owned()))
 }
 
 async fn parse_session_revoke_body(
     req: &mut Request,
-) -> Result<SessionRevokeRequestBody, CokretRouteError> {
+) -> Result<SessionRevokeRequestBody, ArkretRouteError> {
     let has_json_content_type = req
         .headers()
         .get(http::header::CONTENT_TYPE)
@@ -114,7 +114,7 @@ async fn parse_session_revoke_body(
     let body: Option<SessionRevokeRequestBody> = req
         .parse_json()
         .await
-        .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
+        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
     Ok(body.unwrap_or_else(empty_session_revoke_body))
 }
 
@@ -125,7 +125,7 @@ enum RevokeSelector {
     All,
 }
 
-fn revoke_selector(body: &SessionRevokeRequestBody) -> Result<RevokeSelector, CokretRouteError> {
+fn revoke_selector(body: &SessionRevokeRequestBody) -> Result<RevokeSelector, ArkretRouteError> {
     if body.all_sessions == Some(false) {
         return Err(selector_conflict(
             "all_sessions selector must be omitted or set to true",
@@ -208,7 +208,7 @@ fn grant_is_owned_by_current_principal(grant: &SessionGrant, principal_did: &str
     grant.subject == principal_did || grant_is_agent_delegated_to_controller(grant, principal_did)
 }
 
-fn validate_lifecycle_proof_kind(proof_kind: &str) -> Result<(), CokretRouteError> {
+fn validate_lifecycle_proof_kind(proof_kind: &str) -> Result<(), ArkretRouteError> {
     match proof_kind {
         "did_bound_signature" | "paired_device_proof" | "agent_key_proof" => Ok(()),
         other => Err(lifecycle_proof_invalid(format!(
@@ -221,7 +221,7 @@ fn validate_lifecycle_proof_window(
     issued_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
     now: DateTime<Utc>,
-) -> Result<(), CokretRouteError> {
+) -> Result<(), ArkretRouteError> {
     if expires_at <= issued_at {
         return Err(lifecycle_proof_invalid(
             "lifecycle proof expires_at must be after issued_at",
@@ -248,7 +248,7 @@ fn validate_lifecycle_proof_window(
 async fn verify_cross_session_lifecycle_proof(
     http_client: &reqwest::Client,
     url_builder: &coauth_data::UrlBuilder,
-    arkret_config: &coauth_config::CokretConfig,
+    arkret_config: &coauth_config::ArkretConfig,
     key_store: &coauth_keystore::Keystore,
     repo: &mut coauth_data::BoxRepository,
     did_resolver: &dyn crate::services::did_resolver::DidResolverService,
@@ -258,12 +258,12 @@ async fn verify_cross_session_lifecycle_proof(
     current_device_id: &DeviceId,
     service_did: &Did,
     now: DateTime<Utc>,
-) -> Result<(), CokretRouteError> {
+) -> Result<(), ArkretRouteError> {
     validate_lifecycle_proof_kind(&proof.proof_kind)?;
     validate_lifecycle_proof_window(proof.issued_at, proof.expires_at, now)?;
 
     if proof.audience != current_grant.audience {
-        return Err(CokretRouteError::coded(
+        return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             ERROR_CODE_AUDIENCE_MISMATCH,
             "session revoke lifecycle proof audience must match the current session grant audience",
@@ -271,7 +271,7 @@ async fn verify_cross_session_lifecycle_proof(
     }
 
     let actor_id = Did::new(current_grant.subject.clone()).map_err(|error| {
-        CokretRouteError::coded(
+        ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             ERROR_CODE_INVALID_PARAM,
             format!("current session grant subject is not a DID: {error}"),
@@ -287,7 +287,7 @@ async fn verify_cross_session_lifecycle_proof(
         None,
     )
     .map_err(|error| {
-        CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "session revoke request digest canonicalization failed: {error}"
         )))
     })?;
@@ -298,7 +298,7 @@ async fn verify_cross_session_lifecycle_proof(
     }
 
     let payload = proof.canonical_signing_bytes().map_err(|error| {
-        CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "session revoke lifecycle proof canonicalization failed: {error}"
         )))
     })?;
@@ -371,14 +371,14 @@ async fn revoke_one_active_grant(
     repo: &mut coauth_data::BoxRepository,
     clock: &dyn coauth_data::Clock,
     grant: SessionGrant,
-) -> Result<SessionGrant, CokretRouteError> {
+) -> Result<SessionGrant, ArkretRouteError> {
     if !grant.is_active(clock) {
         return Err(session_grant_not_found());
     }
     repo.oauth_session_grant()
         .revoke(clock, grant)
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
 }
 
 async fn revoke_owned_active_grants(
@@ -386,7 +386,7 @@ async fn revoke_owned_active_grants(
     clock: &dyn coauth_data::Clock,
     current_principal_did: &str,
     filter_device_id: Option<&str>,
-) -> Result<Vec<SessionGrant>, CokretRouteError> {
+) -> Result<Vec<SessionGrant>, ArkretRouteError> {
     let mut revoked = Vec::new();
     let mut after = None;
     let now = clock.now();
@@ -404,7 +404,7 @@ async fn revoke_owned_active_grants(
             .oauth_session_grant()
             .list(filter, pagination)
             .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
         if page.edges.is_empty() {
             break;
         }
@@ -446,7 +446,7 @@ fn revoked_outcome(grants: Vec<SessionGrant>) -> SessionRevokeOutcome {
 pub async fn revoke_session_grant_endpoint(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SessionRevokeOutcome>, CokretRouteError> {
+) -> Result<Json<SessionRevokeOutcome>, ArkretRouteError> {
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
@@ -459,7 +459,7 @@ pub async fn revoke_session_grant_endpoint(
     let selector = revoke_selector(&body)?;
 
     let service_did = Did::new(service_did_for(&arkret_config)).map_err(|error| {
-        CokretRouteError::coded(
+        ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             ERROR_CODE_INVALID_PARAM,
             format!("configured service_did is invalid: {error}"),
@@ -471,7 +471,7 @@ pub async fn revoke_session_grant_endpoint(
         .oauth_session_grant()
         .lookup_by_grant_jwt(&presented_grant_jwt)
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .filter(|grant| grant.is_active(&clock))
         .ok_or_else(session_grant_not_found)?;
 
@@ -481,7 +481,7 @@ pub async fn revoke_session_grant_endpoint(
         .map(|value| DeviceId::new(value.clone()))
         .transpose()
         .map_err(|error| {
-            CokretRouteError::coded(
+            ArkretRouteError::coded(
                 StatusCode::BAD_REQUEST,
                 ERROR_CODE_INVALID_PARAM,
                 format!("current session grant device_id is invalid: {error}"),
@@ -529,7 +529,7 @@ pub async fn revoke_session_grant_endpoint(
                 .oauth_session_grant()
                 .lookup_by_grant_id(&target_grant_id)
                 .await
-                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
                 .filter(|grant| grant.is_active(&clock))
                 .filter(|grant| grant_is_owned_by_current_principal(grant, &current_principal_did))
                 .ok_or_else(session_grant_not_found)?;
@@ -566,7 +566,7 @@ pub async fn revoke_session_grant_endpoint(
 #[cfg(test)]
 mod tests {
     use chrono::{Duration, Utc};
-    use coauth_config::{CokretConfig, DeploymentProfileConfig, PrincipalMethodConfig};
+    use coauth_config::{ArkretConfig, DeploymentProfileConfig, PrincipalMethodConfig};
     use coauth_keystore::{JsonWebKeySet, Keystore, PrivateKey};
     use coauth_oauth_types::scope::Scope;
     use rand_chacha::ChaChaRng;
@@ -581,12 +581,12 @@ mod tests {
         Keystore::new(JsonWebKeySet::new(vec![eddsa]))
     }
 
-    fn personal_did_web_config() -> CokretConfig {
-        CokretConfig {
+    fn personal_did_web_config() -> ArkretConfig {
+        ArkretConfig {
             deployment_profile: DeploymentProfileConfig::PersonalNode,
             principal_method: PrincipalMethodConfig::DidWeb,
             service_did: Some("did:web:auth.example".to_owned()),
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         }
     }
 

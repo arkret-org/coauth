@@ -17,7 +17,7 @@ use crate::handlers::arkret::*;
 fn introspection_grant_record(
     grant: &SessionGrant,
     browser_session: Option<&BrowserSession>,
-) -> Result<SessionGrantIntrospectGrant, CokretRouteError> {
+) -> Result<SessionGrantIntrospectGrant, ArkretRouteError> {
     // `cnf.jkt` is not stored as its own column — it lives inside the signed
     // grant payload. Parse it back out of the persisted `grant_jwt` (the same
     // way the refresh / logout paths read the prior grant's binding). A grant
@@ -54,7 +54,7 @@ fn introspection_grant_record(
         .map(|device_id| DeviceId::new(device_id.clone()))
         .transpose()
         .map_err(|error| {
-            CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
                 "stored session grant device_id is invalid: {error}"
             )))
         })?;
@@ -173,11 +173,11 @@ fn verify_session_grant_introspection_proof(
 pub async fn introspect_session_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SessionGrantIntrospectOutcome>, CokretRouteError> {
+) -> Result<Json<SessionGrantIntrospectOutcome>, ArkretRouteError> {
     let body: SessionGrantIntrospectRequestBody = req
         .parse_json()
         .await
-        .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
+        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
 
     // Exactly one of `id` / `grant_jwt` identifies the grant. Reject both
     // missing AND both present, rather than silently preferring `id` and
@@ -187,14 +187,14 @@ pub async fn introspect_session_grant(
     // this is a schema_violation (not bad_json, which means unparseable JSON).
     match (body.id.is_some(), body.grant_jwt.is_some()) {
         (false, false) => {
-            return Err(CokretRouteError::coded(
+            return Err(ArkretRouteError::coded(
                 StatusCode::BAD_REQUEST,
                 ERROR_CODE_SCHEMA_VIOLATION,
                 "exactly one of id or grant_jwt is required",
             ));
         }
         (true, true) => {
-            return Err(CokretRouteError::coded(
+            return Err(ArkretRouteError::coded(
                 StatusCode::BAD_REQUEST,
                 ERROR_CODE_SCHEMA_VIOLATION,
                 "id and grant_jwt are mutually exclusive",
@@ -212,12 +212,12 @@ pub async fn introspect_session_grant(
         repo.oauth_session_grant()
             .lookup_by_grant_id(id)
             .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
     } else if let Some(grant_jwt) = body.grant_jwt.as_deref() {
         repo.oauth_session_grant()
             .lookup_by_grant_jwt(grant_jwt)
             .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
     } else {
         None
     };
@@ -225,7 +225,7 @@ pub async fn introspect_session_grant(
     let Some(grant) = grant else {
         repo.cancel()
             .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
         return Ok(Json(SessionGrantIntrospectOutcome {
             active: false,
             status: SessionGrantIntrospectStatus::NotFound,
@@ -243,7 +243,7 @@ pub async fn introspect_session_grant(
         if !allowed.iter().any(|audience| audience == &grant.audience) {
             repo.cancel()
                 .await
-                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
             return Ok(Json(SessionGrantIntrospectOutcome {
                 active: false,
                 status: SessionGrantIntrospectStatus::AudienceMismatch,
@@ -258,7 +258,7 @@ pub async fn introspect_session_grant(
         repo.browser_session()
             .lookup(browser_session_id)
             .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
     } else {
         None
     };
@@ -269,7 +269,7 @@ pub async fn introspect_session_grant(
         repo.user()
             .lookup(user_id)
             .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
     } else {
         None
     };
@@ -335,7 +335,7 @@ pub async fn introspect_session_grant(
     // Principal Server exchange and silently broke the refresh chain.
     repo.cancel()
         .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(SessionGrantIntrospectOutcome {
         active,

@@ -29,7 +29,7 @@ The current `coauth` password-recovery endpoints are explicitly
 account-password scoped. A successful
 `POST /_coauth/gate/account/password-recovery/set` consumes the email
 recovery ticket and writes a new account password, but it does **not**
-authorize a device, emit `ck.cross_signing.reset`, or treat
+authorize a device, emit `ak.cross_signing.reset`, or treat
 `trusted_recovery_service` as satisfied.
 
 The response carries a `trust_boundary` object documenting that scope:

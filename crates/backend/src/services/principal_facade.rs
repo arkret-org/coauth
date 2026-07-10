@@ -23,7 +23,7 @@ use std::collections::HashSet;
 
 use anyhow::Context as _;
 use async_trait::async_trait;
-use coauth_config::{CokretConfig, PrincipalServerConfig};
+use coauth_config::{ArkretConfig, PrincipalServerConfig};
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess};
 use coauth_principal::{
     ConnectorAccountProfile, ConnectorAdmin, ConnectorProvisionRequest,
@@ -36,7 +36,7 @@ use url::Url;
 pub struct DbConnectorAdmin {
     server_name: String,
     repository_factory: BoxRepositoryFactory,
-    arkret_config: CokretConfig,
+    arkret_config: ArkretConfig,
     http_client: reqwest::Client,
 }
 
@@ -47,7 +47,7 @@ impl DbConnectorAdmin {
     pub fn new(
         server_name: impl Into<String>,
         repository_factory: BoxRepositoryFactory,
-        arkret_config: CokretConfig,
+        arkret_config: ArkretConfig,
         http_client: reqwest::Client,
     ) -> Self {
         Self {
@@ -68,7 +68,7 @@ struct CapabilityFanoutTarget {
 
 pub(crate) async fn submit_collaboration_capability_fanout_to_principal_servers(
     http_client: &reqwest::Client,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     request: &PrincipalCapabilityFanoutRequest,
 ) -> Result<(), anyhow::Error> {
     let targets = capability_fanout_targets(arkret_config, request.body())?;
@@ -96,7 +96,7 @@ pub(crate) async fn submit_collaboration_capability_fanout_to_principal_servers(
 // coauth issues the collaboration capability fanout in its Auth-Server role: it
 // holds no principal session and signs as the issuing *service* DID, not a
 // logged-in principal device. The protocol path `POST /_arkret/self/events`
-// (submitting a `ck.capability.grant` Event) is gated to `user_session` /
+// (submitting a `ak.capability.grant` Event) is gated to `user_session` /
 // `device_proof` / a principal-authorised delegated service signature
 // (service-http-binding.md §2.1 row `self/events` + §189; api-conventions.md
 // requires `ak.session.grant` + DPoP). A bare service with no principal context
@@ -168,7 +168,7 @@ async fn submit_collaboration_capability_fanout_to_target(
 }
 
 fn capability_fanout_targets(
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     body: &CapabilityFanoutBody,
 ) -> Result<Vec<CapabilityFanoutTarget>, anyhow::Error> {
     let entries = &body.principal_servers;
@@ -215,7 +215,7 @@ fn capability_fanout_targets(
 }
 
 fn configured_principal_server<'a>(
-    arkret_config: &'a CokretConfig,
+    arkret_config: &'a ArkretConfig,
     name: &str,
     endpoint: &Url,
 ) -> Option<&'a PrincipalServerConfig> {
@@ -310,8 +310,8 @@ mod tests {
     const EVENT: &str = "ak:event:01970000-0000-7000-8000-000000000001";
     const GRANT: &str = "ak:grant:01970000-0000-7000-8000-000000000002";
 
-    fn arkret_config() -> CokretConfig {
-        CokretConfig {
+    fn arkret_config() -> ArkretConfig {
+        ArkretConfig {
             principal_servers: vec![PrincipalServerConfig {
                 name: "soland-dev".to_owned(),
                 audience: "soland".to_owned(),
@@ -320,7 +320,7 @@ mod tests {
                 session_grant_introspection_bearer: None,
                 embedded_webvh_registration_bearer: Some("secret".to_owned()),
             }],
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         }
     }
 

@@ -1,14 +1,14 @@
-//! CKP-0008 §4.5 runtime key pairing (`ck.gate.account.command.pair_agent_key`).
+//! CKP-0008 §4.5 runtime key pairing (`ak.gate.account.command.pair_agent_key`).
 //!
 //! `POST /_arkret/gate/account/agent-key-pair`. The agent runtime generated a
 //! key pair locally and submits the public key plus a proof-of-possession. The
-//! controller supplies the signed `ck.agent.key.authorize` event; coauth only
+//! controller supplies the signed `ak.agent.key.authorize` event; coauth only
 //! validates the request binding, persists the accepted authorization for
 //! `agent_key_proof`, and queues the signed event for soland projection.
 
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::accountability::{AccountabilityGrantFanoutState, AccountabilitySubjectKind};
 use coauth_data::agent_key::NewAgentKeyAuthorization;
 use coauth_data::audit::AdminOperation;
@@ -38,7 +38,7 @@ const RUNTIME_ATTESTATION_SELF_ASSERTED: &str = "self_asserted";
 const AGENT_KEY_AUTHORIZE_FANOUT_QUEUE: &str = "soland-agent-key-authorize-fanout";
 
 /// Internal coauth→soland fan-out envelope kind wrapping the controller-signed
-/// `ck.agent.key.authorize` event.
+/// `ak.agent.key.authorize` event.
 const AGENT_KEY_AUTHORIZE_FANOUT_KIND: &str = "org.arkret.coauth.agent_key_authorize.fanout.v1";
 
 /// CKP-0008 agent runtime authorizations are short-lived; session grants minted
@@ -72,11 +72,11 @@ struct RuntimeAttestationInput {
 }
 
 /// `POST /_arkret/gate/account/agent-key-pair`
-/// (`ck.gate.account.command.pair_agent_key`).
+/// (`ak.gate.account.command.pair_agent_key`).
 ///
 /// Validates the runtime key pairing proof-of-possession and, on success,
 /// records a durable agent key authorization and queues the
-/// `ck.agent.key.authorize` soland fan-out. Returns the SDK
+/// `ak.agent.key.authorize` soland fan-out. Returns the SDK
 /// [`AgentKeyPairOutcome`] carrying the minted authorization event ref.
 #[handler]
 #[tracing::instrument(name = "handler.account.agents.agent_key_pair", skip_all)]
@@ -147,7 +147,7 @@ pub async fn post_agent_key_pair(
     }
     let agent_id = arkret_core::Did::new(agent_principal_id.clone())
         .map_err(|error| AppError::bad_request(format!("agent_principal_id invalid: {error}")))?;
-    let expected_pop_digest = arkret::agent::agent_key_pair_proof_request_binding_digest(
+    let expected_pop_digest = arkret_core::agent_key_pair_proof_request_binding_digest(
         &body.pairing_request_id,
         &agent_id,
         &body.verification_method,
@@ -374,7 +374,7 @@ fn runtime_public_key_digest(
     verification_method: &str,
 ) -> Result<String, AppError> {
     validate_runtime_public_key(public_key, verification_method)?;
-    arkret::agent::agent_runtime_public_key_digest(public_key)
+    arkret_core::agent_runtime_public_key_digest(public_key)
         .map(|digest| digest.as_str().to_owned())
         .map_err(|error| AppError::bad_request(format!("public_key is invalid: {error}")))
 }
@@ -395,7 +395,7 @@ fn validate_controller_authorize_event<'a>(
     }
     if envelope.get("kind").and_then(Value::as_str) != Some("ak.agent.key.authorize") {
         return Err(AppError::bad_request(
-            "authorize_event.kind must be ck.agent.key.authorize",
+            "authorize_event.kind must be ak.agent.key.authorize",
         ));
     }
 
@@ -571,7 +571,7 @@ async fn verify_authorize_event_controller_signature(
     controller_did: &str,
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
@@ -695,14 +695,14 @@ fn ensure_authorize_event_scope_is_action_object(scope: &Value) -> Result<(), Ap
     Ok(())
 }
 
-/// Build the canonical `ck.agent.key.authorize` fan-out payload for soland.
+/// Build the canonical `ak.agent.key.authorize` fan-out payload for soland.
 /// The wrapping envelope is coauth-internal queue metadata.
 fn build_agent_key_authorize_fanout_payload(
     authorized_event_id: &str,
     pairing_request_id: &str,
     authorize_event: &Value,
     service_did: &str,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
 ) -> serde_json::Value {
     let principal_servers: Vec<_> = arkret_config
         .principal_servers

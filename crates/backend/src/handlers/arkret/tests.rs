@@ -1,6 +1,6 @@
 use chrono::{Duration, Utc};
 use coauth_config::{
-    CokretConfig, DeploymentProfileConfig, IdentityRegistryConfig, IdentityRegistryKind,
+    ArkretConfig, DeploymentProfileConfig, IdentityRegistryConfig, IdentityRegistryKind,
     PrincipalMethodConfig, PrincipalServerConfig,
 };
 use coauth_data::{BrowserSession, Clock, RepositoryAccess, SessionGrant, SystemClock, User};
@@ -74,23 +74,23 @@ fn assert_subject_did_occurs_once(raw_payload: &serde_json::Value, subject: &str
     );
 }
 
-fn personal_node_did_web_config() -> CokretConfig {
-    CokretConfig {
+fn personal_node_did_web_config() -> ArkretConfig {
+    ArkretConfig {
         // Personal-node no-history profile legitimately advertises a did:web
         // service DID (spec identity-did.md §3.1 personal_node exception).
         service_did: Some("did:web:auth.example.com".to_owned()),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
-        ..CokretConfig::default()
+        ..ArkretConfig::default()
     }
 }
 
 /// Test config with the now-mandatory service_did set (the backend no longer
 /// derives a did:web default; startup validation enforces it in production).
-fn test_arkret_config() -> CokretConfig {
-    CokretConfig {
+fn test_arkret_config() -> ArkretConfig {
+    ArkretConfig {
         service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
-        ..CokretConfig::default()
+        ..ArkretConfig::default()
     }
 }
 
@@ -108,9 +108,9 @@ fn service_and_user_identifiers_follow_arkret_shape() {
     // There is no host-derived `did:web` fallback any more: the service DID
     // is always the explicitly configured one (did:webvh by default; startup
     // validation fails fast when it is missing).
-    let arkret_config = CokretConfig {
+    let arkret_config = ArkretConfig {
         service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
-        ..CokretConfig::default()
+        ..ArkretConfig::default()
     };
     assert_eq!(
         service_did_for(&arkret_config),
@@ -139,7 +139,7 @@ fn service_and_user_identifiers_follow_arkret_shape() {
 #[test]
 fn service_describe_exposes_auth_account_boundary_profile() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let arkret_config = CokretConfig {
+    let arkret_config = ArkretConfig {
         service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
         issuer_did: Some("did:webvh:ztest:issuer.example.com:webvh:issuer".to_owned()),
         admin_audience: Some("https://auth.example.com/api/admin".to_owned()),
@@ -163,7 +163,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         principal_server_url: None,
         high_risk_threshold: 2,
         trust_domain: None,
-        oob_code_kind: CokretConfig::default().oob_code_kind,
+        oob_code_kind: ArkretConfig::default().oob_code_kind,
         password_login_session_grants_enabled: false,
         admin_org_id: None,
         verification_service_did: None,
@@ -230,10 +230,10 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         .as_array()
         .unwrap();
     assert!(supported_reducer_profiles.contains(&serde_json::json!("ak.reducer.v1")));
-    // T6.3 — `ck.schema.v1` was a coauth-only placeholder. The actual
-    // schemas this surface emits are `ck.schema.core.v1` (umbrella
+    // T6.3 — `ak.schema.v1` was a coauth-only placeholder. The actual
+    // schemas this surface emits are `ak.schema.core.v1` (umbrella
     // core schemas, soland / SDK convention) and
-    // `ck.schema.service_describe.v1` (this very payload).
+    // `ak.schema.service_describe.v1` (this very payload).
     let supported_schema_profiles = body["x_coauth_supported_schema_profiles"]
         .as_array()
         .unwrap();
@@ -243,12 +243,12 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     );
     assert!(
         !supported_schema_profiles.contains(&serde_json::json!("ak.schema.v1")),
-        "the removed `ck.schema.v1` placeholder MUST NOT be advertised"
+        "the removed `ak.schema.v1` placeholder MUST NOT be advertised"
     );
     let supported_operations = body["supported_operations"].as_array().unwrap();
     assert!(
         supported_operations.contains(&serde_json::json!("ak.self.policy.query.check")),
-        "implemented POST /api/v1/policy/check MUST be advertised as ck.self.policy.query.check"
+        "implemented POST /api/v1/policy/check MUST be advertised as ak.self.policy.query.check"
     );
     let not_authoritative_for = body["x_coauth_service_boundary"]["not_authoritative_for"]
         .as_array()
@@ -265,7 +265,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     assert!(service_roles.contains(&serde_json::json!("identity_resolver")));
     assert!(service_roles.contains(&serde_json::json!("account_registry")));
 
-    // T6.3 — ck.identity.* operations MUST be declared as
+    // T6.3 — ak.identity.* operations MUST be declared as
     // schema-valid external interop while preserving their delegated-
     // resolver boundary in notes, not as canonical identity registry
     // surface.
@@ -285,7 +285,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     assert!(compat.iter().any(|(name, notes)| {
         *name == "ak.root.identity.registry.query.describe" && notes.contains("delegated-resolver")
     }));
-    // verified_profiles MUST NOT include ck.profile.identity_registry.v1
+    // verified_profiles MUST NOT include ak.profile.identity_registry.v1
     // because coauth is a delegated resolver, not a registry.
     let verified = body["verified_profiles"]
         .as_array()
@@ -301,11 +301,11 @@ fn service_describe_exposes_auth_account_boundary_profile() {
 #[test]
 fn service_describe_marks_personal_node_did_web_service_as_no_history() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let arkret_config = CokretConfig {
+    let arkret_config = ArkretConfig {
         service_did: Some("did:web:auth.example.com".to_owned()),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
-        ..CokretConfig::default()
+        ..ArkretConfig::default()
     };
     let body =
         serde_json::to_value(service_describe_response(&url_builder, &arkret_config, &[])).unwrap();
@@ -321,8 +321,8 @@ fn service_describe_marks_personal_node_did_web_service_as_no_history() {
     );
 }
 
-fn config_with_static_session_grant_bearer(bearer: &str) -> CokretConfig {
-    CokretConfig {
+fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
+    ArkretConfig {
         service_did: Some(
             "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:coauth"
                 .to_owned(),
@@ -335,7 +335,7 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> CokretConfig {
             session_grant_introspection_bearer: Some(bearer.to_owned()),
             embedded_webvh_registration_bearer: None,
         }],
-        ..CokretConfig::default()
+        ..ArkretConfig::default()
     }
 }
 
@@ -458,7 +458,7 @@ fn describe_separates_claim_levels() {
     assert!(experimental.is_disjoint(&verified_ids));
 
     // compat_surfaces entries must declare a schema-known kind.
-    // T6.3 — coauth's `ck.identity.*` proxy operations are NOT a
+    // T6.3 — coauth's `ak.identity.*` proxy operations are NOT a
     // canonical identity registry; the delegated-resolver semantics
     // are carried in notes while kind stays schema-valid.
     for surface in body["compat_surfaces"]
@@ -506,7 +506,7 @@ fn service_describe_emits_trust_domain_when_configured() {
         None,
         None,
     );
-    let config = CokretConfig {
+    let config = ArkretConfig {
         service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
         trust_domain: Some("ak:trust_domain:example.net".to_owned()),
         ..Default::default()
@@ -542,7 +542,7 @@ fn service_describe_derives_valid_trust_domain_for_ipv6_host() {
     ))
     .unwrap();
     assert_eq!(body["trust_domain"], "ak:trust_domain:host-::1");
-    CokretConfig::validate_trust_domain(body["trust_domain"].as_str().unwrap()).unwrap();
+    ArkretConfig::validate_trust_domain(body["trust_domain"].as_str().unwrap()).unwrap();
 }
 
 #[test]
@@ -578,10 +578,10 @@ fn service_describe_advertises_configured_session_grant_ttl() {
         None,
         None,
     );
-    let config = CokretConfig {
+    let config = ArkretConfig {
         service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
         session_grant_ttl: Duration::try_minutes(15).unwrap(),
-        ..CokretConfig::default()
+        ..ArkretConfig::default()
     };
 
     let body = serde_json::to_value(service_describe_response(&url_builder, &config, &[])).unwrap();
@@ -670,9 +670,9 @@ fn session_grant_rejects_implicit_did_web_fallback() {
     // A did:web service DID derives a did:web user principal; without an
     // explicit `did_web_principal_allowed` opt-in the grant MUST be rejected
     // with `DidWebPrincipalNotExplicit`.
-    let arkret_config = CokretConfig {
+    let arkret_config = ArkretConfig {
         service_did: Some("did:web:auth.example.com".to_owned()),
-        ..CokretConfig::default()
+        ..ArkretConfig::default()
     };
     let key_store = test_keystore();
     let now = clock.now();
@@ -707,14 +707,14 @@ fn session_grant_rejects_implicit_did_web_fallback() {
 fn session_grant_uses_configured_ttl() {
     let clock = SystemClock::default();
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
-    let arkret_config = CokretConfig {
+    let arkret_config = ArkretConfig {
         // Personal-node no-history profile legitimately advertises a did:web
         // service DID (spec identity-did.md §3.1 personal_node exception).
         service_did: Some("did:web:auth.example.com".to_owned()),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
         session_grant_ttl: Duration::try_minutes(15).unwrap(),
-        ..CokretConfig::default()
+        ..ArkretConfig::default()
     };
     let key_store = test_keystore();
     let now = clock.now();
@@ -1193,7 +1193,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
     let bearer = "agent-session-grant-introspection";
-    state.arkret_config = CokretConfig {
+    state.arkret_config = ArkretConfig {
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
         ..config_with_static_session_grant_bearer(bearer)
@@ -1517,7 +1517,7 @@ fn parse_local_handle_round_trips_local_user_handle() {
 fn require_canonical_handle_rejects_acct_aliases() {
     let err = require_canonical_handle("acct:alice@example.com").unwrap_err();
     match err {
-        CokretRouteError::Coded { code, message, .. } => {
+        ArkretRouteError::Coded { code, message, .. } => {
             assert_eq!(code, HANDLE_NOT_CANONICAL_CODE);
             assert!(
                 message.contains("acct:"),

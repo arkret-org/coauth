@@ -14,7 +14,7 @@ use coauth_admin_types::collaboration_capability_admin::{
     ListCollaborationCapabilityGrantsOutcome, ListCollaborationCapabilityTemplatesOutcome,
     RiskTier, collaboration_capability_templates,
 };
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::queue::{CollaborationCapabilityFanoutJob, QueueJobRepositoryExt as _};
 use coauth_data::{
     CollaborationCapabilityAction, CollaborationCapabilityRevokeFanout,
@@ -315,7 +315,7 @@ fn build_grant_fanout_payload(
     approval_evidence_ref: Option<&str>,
     issued_at: DateTime<Utc>,
     service_did: &str,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     key_store: &Keystore,
 ) -> Result<CapabilityFanoutBody, AppError> {
     let mut grant = json!({
@@ -376,7 +376,7 @@ fn build_revoke_fanout_payload(
     realm_id: &str,
     revoked_at: DateTime<Utc>,
     service_did: &str,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     key_store: &Keystore,
 ) -> Result<CapabilityFanoutBody, AppError> {
     let mut revoke_payload = json!({
@@ -502,7 +502,7 @@ fn sign_detached_jws(
     Ok((verification_method, format!("{protected}..{signature}")))
 }
 
-fn principal_servers(arkret_config: &CokretConfig) -> Vec<Value> {
+fn principal_servers(arkret_config: &ArkretConfig) -> Vec<Value> {
     arkret_config
         .principal_servers
         .iter()
@@ -521,7 +521,7 @@ fn principal_servers(arkret_config: &CokretConfig) -> Vec<Value> {
 mod tests {
     use chrono::TimeZone as _;
     use coauth_admin_types::collaboration_capability_admin::CollaborationCapabilityAction;
-    use coauth_config::{CokretConfig, PrincipalServerConfig};
+    use coauth_config::{ArkretConfig, PrincipalServerConfig};
     use coauth_keystore::{JsonWebKeySet, Keystore, PrivateKey};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng as _;
@@ -540,8 +540,8 @@ mod tests {
         assert!(req.validate().is_err());
     }
 
-    fn config() -> CokretConfig {
-        CokretConfig {
+    fn config() -> ArkretConfig {
+        ArkretConfig {
             principal_servers: vec![PrincipalServerConfig {
                 name: "soland-dev".to_owned(),
                 audience: "http://soland.test".to_owned(),
@@ -550,7 +550,7 @@ mod tests {
                 session_grant_introspection_bearer: None,
                 embedded_webvh_registration_bearer: None,
             }],
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         }
     }
 

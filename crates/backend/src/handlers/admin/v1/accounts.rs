@@ -96,7 +96,7 @@ impl AccountRecord {
     /// configured registry without blocking the runtime.
     pub(crate) async fn from_user(
         user: coauth_data::User,
-        arkret_config: &coauth_config::CokretConfig,
+        arkret_config: &coauth_config::ArkretConfig,
         did_resolver: &dyn DidResolverService,
     ) -> Result<Self, AppError> {
         let status = admin_account_status(user.status);
@@ -616,7 +616,7 @@ async fn patch_account(
 /// drive an async closure, so we walk the edges by hand.
 async fn map_page_async(
     page: coauth_data::Page<coauth_data::User>,
-    arkret_config: &coauth_config::CokretConfig,
+    arkret_config: &coauth_config::ArkretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Result<coauth_data::Page<AccountRecord>, AppError> {
     let coauth_data::Page {

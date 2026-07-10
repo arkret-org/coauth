@@ -10,7 +10,7 @@
 //! `server_name`. It is an `OrSet` cell:
 //!
 //! ```text
-//! ak:cell:ck.component.consent.grant.v1:<consent_id>
+//! ak:cell:ak.component.consent.grant.v1:<consent_id>
 //! ```
 //!
 //! `grant` adds a tag, `revoke` removes a tag. Whether an invite is allowed
@@ -262,7 +262,7 @@ fn normalize_scope(scope: &str) -> String {
 /// lookup result and the requested `(peer_did, scope)` pair.
 ///
 /// `require_consent` mirrors the principal control Realm's
-/// `ck.realm.policy_components.preauth.require_consent` toggle. When `true`
+/// `ak.realm.policy_components.preauth.require_consent` toggle. When `true`
 /// and the lookup result is `Unknown` or revoked/absent, the invite is
 /// rejected with `ConsentRequired`. When `false` the same condition routes
 /// to a holder-side quarantine (caller decides how to enact that).
@@ -357,7 +357,7 @@ mod tests {
     fn active_cell(scope: &str) -> serde_json::Value {
         serde_json::json!({
             "ok": true,
-            "cell_id": format!("ak:cell:ck.component.consent.grant.v1:c-{scope}"),
+            "cell_id": format!("ak:cell:ak.component.consent.grant.v1:c-{scope}"),
             "holder_did": "did:web:holder",
             "peer_did": "did:web:peer",
             "consent_scope": scope,
@@ -372,7 +372,7 @@ mod tests {
     fn revoked_cell(scope: &str) -> serde_json::Value {
         serde_json::json!({
             "ok": true,
-            "cell_id": format!("ak:cell:ck.component.consent.grant.v1:c-{scope}"),
+            "cell_id": format!("ak:cell:ak.component.consent.grant.v1:c-{scope}"),
             "holder_did": "did:web:holder",
             "peer_did": "did:web:peer",
             "consent_scope": scope,

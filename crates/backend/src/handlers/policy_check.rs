@@ -35,7 +35,7 @@
 use std::time::Duration;
 
 use chrono::Utc;
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepositoryFactory, PgRepositoryFactory};
 use coauth_keystore::Keystore;
 use arkret_core::{
@@ -45,7 +45,7 @@ use salvo::prelude::*;
 use serde_json::Value;
 
 use crate::app_state::DepotExt as AppStateDepotExt;
-use crate::handlers::arkret::{self, CokretRouteError};
+use crate::handlers::arkret::{self, ArkretRouteError};
 use crate::handlers::common::DepotExt;
 use crate::services::policy_evaluator::{
     EvaluatorError, PolicyDecision, PolicyEvaluator, PolicyObligation, RuleEvaluator,
@@ -61,19 +61,19 @@ const EVALUATOR_DEADLINE: Duration = Duration::from_secs(2);
 
 /// Default decision expiry when the evaluator does not pin one. Spec §3
 /// (`cache_ttl_seconds: 300`) lets the realm declare a longer TTL via
-/// `ck.realm.policy_server`; until we plumb that through we default to
+/// `ak.realm.policy_server`; until we plumb that through we default to
 /// 30 s on allow paths.
 const DEFAULT_ALLOW_TTL_SECONDS: i64 = 30;
 
 /// `POST /_arkret/self/policy/check`
 ///
-/// Round 4 `ck.self.policy.query.check` endpoint. Consumes
+/// Round 4 `ak.self.policy.query.check` endpoint. Consumes
 /// [`PolicyCheckRequestBody`], emits a signed [`PolicyCheckOutcome`].
 #[handler]
 pub async fn post_policy_check(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<PolicyCheckOutcome>, CokretRouteError> {
+) -> Result<Json<PolicyCheckOutcome>, ArkretRouteError> {
     let arkret_config = depot.arkret_config()?;
     require_policy_check_bearer(req, &arkret_config)?;
     let key_store = depot.key_store()?;
@@ -85,7 +85,7 @@ pub async fn post_policy_check(
     let pg_pool = depot
         .get_pg_pool()
         .ok_or_else(|| {
-            CokretRouteError::Internal(Box::new(std::io::Error::other(
+            ArkretRouteError::Internal(Box::new(std::io::Error::other(
                 "pg_pool not found in depot",
             )))
         })?
@@ -95,16 +95,16 @@ pub async fn post_policy_check(
     let body: PolicyCheckRequestBody = req
         .parse_json()
         .await
-        .map_err(|e| CokretRouteError::BadRequest(format!("invalid policy-check body: {e}")))?;
+        .map_err(|e| ArkretRouteError::BadRequest(format!("invalid policy-check body: {e}")))?;
 
     // Reject obviously malformed requests early. The SDK newtype
     // validators already enforced `Did` / `RealmId` / `Hash` shapes
     // during deserialise, so this is purely defence-in-depth.
     if body.action.trim().is_empty() {
-        return Err(CokretRouteError::BadRequest("action is required".into()));
+        return Err(ArkretRouteError::BadRequest("action is required".into()));
     }
     if body.request_id.trim().is_empty() {
-        return Err(CokretRouteError::BadRequest(
+        return Err(ArkretRouteError::BadRequest(
             "request_id is required".into(),
         ));
     }
@@ -133,23 +133,23 @@ pub async fn post_policy_check(
 
 fn require_policy_check_bearer(
     req: &Request,
-    arkret_config: &CokretConfig,
-) -> Result<(), CokretRouteError> {
+    arkret_config: &ArkretConfig,
+) -> Result<(), ArkretRouteError> {
     let auth_header = req
         .headers()
         .get(http::header::AUTHORIZATION)
-        .ok_or_else(|| CokretRouteError::Unauthorized("missing authorization header".to_owned()))?;
+        .ok_or_else(|| ArkretRouteError::Unauthorized("missing authorization header".to_owned()))?;
     let auth_str = auth_header
         .to_str()
-        .map_err(|_| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
+        .map_err(|_| ArkretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
     let token = auth_str
         .strip_prefix("Bearer ")
         .or_else(|| auth_str.strip_prefix("bearer "))
-        .ok_or_else(|| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
+        .ok_or_else(|| ArkretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
     if arkret::principal_server_static_session_grant_bearer_matches(arkret_config, token) {
         Ok(())
     } else {
-        Err(CokretRouteError::Unauthorized(
+        Err(ArkretRouteError::Unauthorized(
             "invalid policy-check bearer".to_owned(),
         ))
     }
@@ -161,16 +161,16 @@ fn require_policy_check_bearer(
 /// full salvo Depot.
 pub(crate) async fn build_policy_check_response(
     request: &PolicyCheckRequestBody,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     key_store: &Keystore,
     frontier_source: &dyn FrontierSource,
     evaluator: &dyn PolicyEvaluator,
-) -> Result<PolicyCheckOutcome, CokretRouteError> {
+) -> Result<PolicyCheckOutcome, ArkretRouteError> {
     // Policy server identity: coauth's own service DID (signs the
     // response with its preferred signing key).
     let policy_server_did = arkret::service_did_for(arkret_config);
     let policy_server_id = Did::new(policy_server_did.clone()).map_err(|e| {
-        CokretRouteError::Internal(Box::new(std::io::Error::other(format!(
+        ArkretRouteError::Internal(Box::new(std::io::Error::other(format!(
             "policy server DID failed SDK validation: {e}"
         ))))
     })?;
@@ -281,7 +281,7 @@ pub(crate) async fn build_policy_check_response(
             // Signing failure is a true server-side fault — we can't
             // emit an unsigned response per spec §5 (the caller would
             // reject it). Surface as 500.
-            return Err(CokretRouteError::Internal(Box::new(std::io::Error::other(
+            return Err(ArkretRouteError::Internal(Box::new(std::io::Error::other(
                 format!("policy decision signing failed: {e}"),
             ))));
         }
@@ -319,11 +319,11 @@ pub(crate) async fn build_policy_check_response(
 #[allow(dead_code)]
 pub(crate) async fn build_policy_check_response_with_defaults(
     request: &PolicyCheckRequestBody,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     key_store: &Keystore,
     http_client: &reqwest::Client,
     repository_factory: BoxRepositoryFactory,
-) -> Result<PolicyCheckOutcome, CokretRouteError> {
+) -> Result<PolicyCheckOutcome, ArkretRouteError> {
     let frontier_source = SolandFrontierSource::new(
         arkret_config.principal_server_url.clone(),
         http_client.clone(),
@@ -493,9 +493,9 @@ mod tests {
         let request = req();
         // `service_did` is mandatory (no derived fallback): pin the value the
         // old host derivation produced for this test base URL.
-        let arkret_config = CokretConfig {
+        let arkret_config = ArkretConfig {
             service_did: Some("did:web:coauth.example".to_owned()),
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         };
         let frontier_source = StaticFrontierSource::new(Frontier::empty());
         let evaluator = FixedEvaluator(PolicyDecision::allow("policy-v1".into()));

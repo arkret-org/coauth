@@ -28,12 +28,12 @@
 //!
 //! SDK-10 migration (2026-05-18): the multibase / multicodec envelope
 //! is now produced by
-//! `arkret::identity::binding::multicodec_ed25519_from_bytes` so coauth,
+//! `arkret_core::ed25519_pubkey_to_did_key_multibase` so coauth,
 //! inkson, and any other consumer reach the same bytes for the same 32-byte
 //! input. The COSE→32-byte digest step stays here because it's coupled to
 //! webauthn-rs's `Passkey` / `COSEKey` types (which are coauth-specific deps).
 
-use arkret::identity::binding::multicodec_ed25519_from_bytes;
+use arkret_core::ed25519_pubkey_to_did_key_multibase;
 use sha2::{Digest, Sha256};
 use webauthn_rs::prelude::Passkey;
 
@@ -65,7 +65,7 @@ pub fn derive_update_key_from_cose_bytes(cose_bytes: &[u8]) -> String {
     let digest = Sha256::digest(cose_bytes);
     let mut bytes = [0u8; 32];
     bytes.copy_from_slice(&digest);
-    multicodec_ed25519_from_bytes(&bytes)
+    ed25519_pubkey_to_did_key_multibase(&bytes)
 }
 
 #[cfg(test)]
@@ -79,7 +79,7 @@ mod tests {
     //! `services::onboarding_starid::tests` wire-up below + the admin
     //! `passkeys::register_finish` handler tests. Here we lock down the
     //! pure derivation contract on raw COSE-key bytes.
-    use arkret::identity::binding::decode_multicodec_ed25519;
+    use arkret_core::decode_ed25519_multibase;
 
     use super::*;
 

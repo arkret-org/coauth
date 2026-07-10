@@ -18,7 +18,7 @@ const TRUST_DOMAIN_PREFIX: &str = "ak:trust_domain:";
 // the access bearers minted from it are short-lived (capped server-side), so a
 // multi-hour grant gives a normal working-session length WITHOUT long-lived
 // bearers. Stays within the spec ceiling (`conformance-profiles.md`
-// §ck.profile.auth_server.v1: minutes-to-hours, not multi-day) and the
+// §ak.profile.auth_server.v1: minutes-to-hours, not multi-day) and the
 // configurable [min, max] = [60s, 24h] range below.
 const SESSION_GRANT_TTL_MICROS: i64 = 8 * 60 * 60 * 1_000_000;
 const SESSION_GRANT_TTL_MIN_SECONDS: i64 = 60;
@@ -96,7 +96,7 @@ impl PrincipalMethodConfig {
 /// and account-management configuration.
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct CokretConfig {
+pub struct ArkretConfig {
     /// Principal Server audiences trusted to consume session grants and admin
     /// tokens emitted by coauth.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -191,7 +191,7 @@ pub struct CokretConfig {
     ///
     /// Wire form: `ak:trust_domain:<scope>` where `<scope>` matches
     /// `[a-z0-9._:-]{1,128}`. This value enters the canonical transcript
-    /// of every `ck.cross_signing.reset` proof; **changing
+    /// of every `ak.cross_signing.reset` proof; **changing
     /// `trust_domain` invalidates existing cross-signing reset proofs**
     /// — see the README "Trust domain rotation" note.
     ///
@@ -282,7 +282,7 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 
-impl Default for CokretConfig {
+impl Default for ArkretConfig {
     fn default() -> Self {
         Self {
             principal_servers: Vec::new(),
@@ -307,7 +307,7 @@ impl Default for CokretConfig {
     }
 }
 
-impl CokretConfig {
+impl ArkretConfig {
     /// Returns `true` when the Arkret section carries no explicit overrides.
     #[must_use]
     pub fn is_default(&self) -> bool {
@@ -460,7 +460,7 @@ pub enum OobCodeKindConfig {
     Lookup,
 }
 
-impl ConfigurationSection for CokretConfig {
+impl ConfigurationSection for ArkretConfig {
     const PATH: &'static str = "arkret";
 
     fn validate(
@@ -682,46 +682,46 @@ fn default_path_prefix() -> String {
 mod tests {
     use super::*;
 
-    fn valid_service_config() -> CokretConfig {
-        CokretConfig {
+    fn valid_service_config() -> ArkretConfig {
+        ArkretConfig {
             service_did: Some("did:webvh:ztest:auth.example:webvh:service".to_owned()),
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         }
     }
 
     #[test]
     fn trust_domain_accepts_well_formed_scope() {
-        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:example.net").is_ok());
-        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:soland-prod.eu").is_ok());
-        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:tenant_a.shard_1").is_ok());
+        assert!(ArkretConfig::validate_trust_domain("ak:trust_domain:example.net").is_ok());
+        assert!(ArkretConfig::validate_trust_domain("ak:trust_domain:soland-prod.eu").is_ok());
+        assert!(ArkretConfig::validate_trust_domain("ak:trust_domain:tenant_a.shard_1").is_ok());
     }
 
     #[test]
     fn trust_domain_rejects_uppercase_and_empty() {
-        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:Example").is_err());
-        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:").is_err());
-        assert!(CokretConfig::validate_trust_domain("example.net").is_err());
+        assert!(ArkretConfig::validate_trust_domain("ak:trust_domain:Example").is_err());
+        assert!(ArkretConfig::validate_trust_domain("ak:trust_domain:").is_err());
+        assert!(ArkretConfig::validate_trust_domain("example.net").is_err());
     }
 
     #[test]
     fn trust_domain_rejects_overlong_scope() {
         let too_long = format!("ak:trust_domain:{}", "a".repeat(129));
-        assert!(CokretConfig::validate_trust_domain(&too_long).is_err());
+        assert!(ArkretConfig::validate_trust_domain(&too_long).is_err());
         let just_right = format!("ak:trust_domain:{}", "a".repeat(128));
-        assert!(CokretConfig::validate_trust_domain(&just_right).is_ok());
+        assert!(ArkretConfig::validate_trust_domain(&just_right).is_ok());
     }
 
     #[test]
     fn trust_domain_rejects_disallowed_chars() {
-        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:bad space").is_err());
-        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:bad/slash").is_err());
+        assert!(ArkretConfig::validate_trust_domain("ak:trust_domain:bad space").is_err());
+        assert!(ArkretConfig::validate_trust_domain("ak:trust_domain:bad/slash").is_err());
         // Scope MUST start with [a-z0-9], not a separator.
-        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:.dotleader").is_err());
+        assert!(ArkretConfig::validate_trust_domain("ak:trust_domain:.dotleader").is_err());
     }
 
     #[test]
     fn lookup_oob_kind_is_fail_closed_until_strikes_are_durable() {
-        let config = CokretConfig {
+        let config = ArkretConfig {
             oob_code_kind: OobCodeKindConfig::Lookup,
             ..valid_service_config()
         };
@@ -737,14 +737,14 @@ mod tests {
         // bearers, and stays within the spec ceiling (minutes-to-hours, not
         // multi-day) and the [60s, 24h] configurable range.
         assert_eq!(
-            CokretConfig::default().session_grant_ttl,
+            ArkretConfig::default().session_grant_ttl,
             Duration::try_hours(8).unwrap()
         );
     }
 
     #[test]
     fn session_grant_ttl_deserializes_seconds() {
-        let config: CokretConfig =
+        let config: ArkretConfig =
             serde_json::from_value(serde_json::json!({ "session_grant_ttl": 900 })).unwrap();
 
         assert_eq!(config.session_grant_ttl, Duration::try_minutes(15).unwrap());
@@ -752,23 +752,23 @@ mod tests {
 
     #[test]
     fn did_web_principal_requires_explicit_personal_node_profile() {
-        assert!(!CokretConfig::default().did_web_principal_allowed());
+        assert!(!ArkretConfig::default().did_web_principal_allowed());
 
-        let personal_web = CokretConfig {
+        let personal_web = ArkretConfig {
             deployment_profile: DeploymentProfileConfig::PersonalNode,
             principal_method: PrincipalMethodConfig::DidWeb,
             // Even the personal-node no-history profile must configure its
             // service DID explicitly — omitting it fails validation.
             service_did: Some("did:web:personal.example".to_owned()),
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         };
         assert!(personal_web.did_web_principal_allowed());
         assert!(personal_web.validate(&figment::Figment::new()).is_ok());
 
-        let personal_web_unconfigured = CokretConfig {
+        let personal_web_unconfigured = ArkretConfig {
             deployment_profile: DeploymentProfileConfig::PersonalNode,
             principal_method: PrincipalMethodConfig::DidWeb,
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         };
         assert!(
             personal_web_unconfigured
@@ -776,15 +776,15 @@ mod tests {
                 .is_err()
         );
 
-        let personal_default = CokretConfig {
+        let personal_default = ArkretConfig {
             deployment_profile: DeploymentProfileConfig::PersonalNode,
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         };
         assert!(!personal_default.did_web_principal_allowed());
 
-        let organization_web = CokretConfig {
+        let organization_web = ArkretConfig {
             principal_method: PrincipalMethodConfig::DidWeb,
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         };
         assert!(!organization_web.did_web_principal_allowed());
         assert!(organization_web.validate(&figment::Figment::new()).is_err());
@@ -793,7 +793,7 @@ mod tests {
     #[test]
     fn service_did_requires_webvh_or_explicit_no_history_web() {
         assert!(
-            CokretConfig::default()
+            ArkretConfig::default()
                 .validate(&figment::Figment::new())
                 .is_err()
         );
@@ -803,40 +803,40 @@ mod tests {
                 .is_ok()
         );
 
-        let organization_web = CokretConfig {
+        let organization_web = ArkretConfig {
             service_did: Some("did:web:auth.example".to_owned()),
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         };
         assert!(organization_web.validate(&figment::Figment::new()).is_err());
 
-        let personal_web = CokretConfig {
+        let personal_web = ArkretConfig {
             deployment_profile: DeploymentProfileConfig::PersonalNode,
             principal_method: PrincipalMethodConfig::DidWeb,
             service_did: Some("did:web:auth.example".to_owned()),
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         };
         assert!(personal_web.validate(&figment::Figment::new()).is_ok());
     }
 
     #[test]
     fn verification_allowlist_ignores_deprecated_single_value() {
-        let config = CokretConfig {
+        let config = ArkretConfig {
             verification_service_did: Some("did:web:verifier.example".to_owned()),
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         };
         assert!(config.verification_service_allowlist().is_empty());
     }
 
     #[test]
     fn verification_allowlist_merges_and_dedups() {
-        let config = CokretConfig {
+        let config = ArkretConfig {
             verification_service_did: Some("did:web:a.example".to_owned()),
             verification_service_dids: vec![
                 "did:web:a.example".to_owned(),
                 "  ".to_owned(), // whitespace dropped
                 "did:web:b.example".to_owned(),
             ],
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         };
         assert_eq!(
             config.verification_service_allowlist(),
@@ -850,7 +850,7 @@ mod tests {
     #[test]
     fn verification_allowlist_empty_when_unset() {
         assert!(
-            CokretConfig::default()
+            ArkretConfig::default()
                 .verification_service_allowlist()
                 .is_empty()
         );
@@ -858,7 +858,7 @@ mod tests {
 
     #[test]
     fn verification_dids_deserializes_list() {
-        let config: CokretConfig = serde_json::from_value(serde_json::json!({
+        let config: ArkretConfig = serde_json::from_value(serde_json::json!({
             "verification_service_dids": ["did:web:x.example", "did:web:y.example"]
         }))
         .unwrap();
@@ -874,9 +874,9 @@ mod tests {
     #[test]
     fn session_grant_ttl_rejects_out_of_range_values() {
         let figment = figment::Figment::new();
-        let config = CokretConfig {
+        let config = ArkretConfig {
             session_grant_ttl: Duration::try_seconds(30).unwrap(),
-            ..CokretConfig::default()
+            ..ArkretConfig::default()
         };
         assert!(config.validate(&figment).is_err());
     }

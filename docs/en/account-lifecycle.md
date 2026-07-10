@@ -20,7 +20,7 @@ for operator action, audit views, and UI gating.
 
 ## Third-party invite claim strand
 
-Round R4 invite claims use the `ck.schema.invite.v1`
+Round R4 invite claims use the `ak.schema.invite.v1`
 `third_party_invite` shape. Plaintext 3PID values, such as email
 addresses and phone numbers, are not carried on the wire.
 
@@ -59,7 +59,7 @@ In `lookup` mode, three failed lookup attempts move the invite to
 
 ## Claim proof chain
 
-A successful `ck.invite.claim` requires two linked proofs:
+A successful `ak.invite.claim` requires two linked proofs:
 
 1. **Verification-service proof**: a signed JWT from the trusted 3PID
    verification service. `coauth` verifies issuer, audience, subject,

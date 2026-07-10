@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::{UpstreamOAuthProvider, UrlBuilder};
 use coauth_jose::claims::{self, TokenHash};
 use coauth_keystore::{Encrypter, Keystore};
@@ -91,7 +91,7 @@ pub trait UpstreamOidcService: Send + Sync {
     fn session_grant_target_for_requested_audience(
         &self,
         url_builder: &UrlBuilder,
-        arkret_config: &CokretConfig,
+        arkret_config: &ArkretConfig,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String>;
 
@@ -251,7 +251,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
     fn session_grant_target_for_requested_audience(
         &self,
         url_builder: &UrlBuilder,
-        arkret_config: &CokretConfig,
+        arkret_config: &ArkretConfig,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String> {
         if let Some(requested_audience) = requested_audience

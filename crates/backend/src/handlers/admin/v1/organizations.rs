@@ -13,7 +13,7 @@
 //! - `POST   /organizations/{org_did}/delegations/{ref}/renew` — renew validity.
 //! - `POST   /organizations/{org_did}/rotate-controller` — rotate the control stream / frontier
 //!   ref.
-//! - `POST   /organizations/{org_did}/statements` — issue a signed `ck.realm.organization`
+//! - `POST   /organizations/{org_did}/statements` — issue a signed `ak.realm.organization`
 //!   statement (COA-ORG-03).
 //!
 //! Wire shapes come from [`coauth_admin_types::organization_admin`] (which

@@ -247,7 +247,7 @@ fn map_risk_action_proposals_error(error: RiskActionProposalsError) -> AppError 
 
 async fn admin_actor_id(
     admin_user: Option<&coauth_data::User>,
-    arkret_config: &coauth_config::CokretConfig,
+    arkret_config: &coauth_config::ArkretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Result<String, AppError> {
     let admin_user = admin_user.ok_or_else(|| {
@@ -359,7 +359,7 @@ pub(crate) fn risk_action_approval_transcript_bytes(
 async fn verify_approval_proof_jws(
     http_client: &reqwest::Client,
     url_builder: &coauth_data::UrlBuilder,
-    arkret_config: &coauth_config::CokretConfig,
+    arkret_config: &coauth_config::ArkretConfig,
     key_store: &coauth_keystore::Keystore,
     repo: &mut coauth_data::BoxRepository,
     did_resolver: &dyn DidResolverService,

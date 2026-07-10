@@ -1,12 +1,12 @@
 //! CKP-0008 §4.6 agent runtime authentication (`agent_key_proof` branch of
-//! `ck.gate.account.command.issue_session_grant`).
+//! `ak.gate.account.command.issue_session_grant`).
 //!
 //! This is the independent validator the session-grant endpoint calls; it MUST
 //! NOT fall back to the password / OIDC / passkey validators.
 
 use std::collections::BTreeSet;
 
-use coauth_config::CokretConfig;
+use coauth_config::ArkretConfig;
 use coauth_data::RepositoryAccess;
 use coauth_data::accountability::{AccountabilityGrant, AccountabilitySubjectKind};
 use coauth_data::agent_key::NewAgentSessionProofReplay;
@@ -49,7 +49,7 @@ const AGENT_SERVICE_SCOPE_ACTIONS: &[&str] = &[
 
 /// Closed action set of the `limited` tier (CKP-0008 §4.5 baseline). Shared
 /// with `key_pair.rs`, which projects the same set into the spec-typed
-/// `agent_key_scope.actions` on the `ck.agent.key.authorize` fan-out payload.
+/// `agent_key_scope.actions` on the `ak.agent.key.authorize` fan-out payload.
 pub(super) const LIMITED_AGENT_SCOPE_ACTIONS: &[&str] = &[
     "ak.self.events.query.describe",
     "ak.self.events.command.submit",
@@ -137,7 +137,7 @@ pub async fn validate_agent_session_proof(
     rng: &mut (dyn rand_core::RngCore + Send),
     clock: &dyn coauth_data::Clock,
     url_builder: &coauth_data::UrlBuilder,
-    arkret_config: &CokretConfig,
+    arkret_config: &ArkretConfig,
     body: &arkret_core::SessionGrantRequestBody,
 ) -> Result<AgentSessionAuthorization, AgentSessionProofError> {
     let now = clock.now();
@@ -184,7 +184,7 @@ pub async fn validate_agent_session_proof(
         .ok_or(AgentAuthRejection::ProofInvalid)?;
 
     // The key MUST be authorized by an accepted, unexpired, unrevoked
-    // `ck.agent.key.authorize`. Resolve it by the request's
+    // `ak.agent.key.authorize`. Resolve it by the request's
     // `agent_key_authorization_ref` (the minted authorize event id).
     let authorization_ref = body
         .agent_key_authorization_ref
@@ -1277,7 +1277,7 @@ mod tests {
         let scope = intersect_requested_scope_with_agent_key_scope(
             AGENT_KEY_SCOPE_LIMITED,
             &[
-                " ck.self.events.command.submit ".to_owned(),
+                " ak.self.events.command.submit ".to_owned(),
                 "ak.message.create".to_owned(),
                 "ak.self.events.command.submit".to_owned(),
                 "ak.reaction.add".to_owned(),
@@ -1407,7 +1407,7 @@ mod tests {
 
     #[test]
     fn session_scope_is_requested_key_grant_policy_intersection() {
-        let mut capability_scope = capability_scope(&["ak.message.create", "ck.reaction.add"]);
+        let mut capability_scope = capability_scope(&["ak.message.create", "ak.reaction.add"]);
         capability_scope.realm_ids = Some(set(&["realm-a", "realm-b"]));
         capability_scope.allowed_tracks = Some(set(&["main", "ops"]));
 
@@ -1424,7 +1424,7 @@ mod tests {
 
         let effective_scope = intersect_agent_session_scope(
             AGENT_KEY_SCOPE_REALM,
-            &["ak.message.create".to_owned(), "ck.reaction.add".to_owned()],
+            &["ak.message.create".to_owned(), "ak.reaction.add".to_owned()],
             &scope_request,
             &capability_scope,
             Some(&policy_scope),
