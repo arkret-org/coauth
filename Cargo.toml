@@ -158,7 +158,7 @@ diesel-async = {version = "0.9",features = [
 ]}
 diesel_migrations = "2.3"
 digest = "0.10.7"
-dioxus = {version = "0.7.9",features = ["web", "router"]}
+dioxus = {version = "0.7.9",default-features = false,features = ["minimal", "web", "router"]}
 dotenvy = "0.15.7"
 ecdsa = {version = "0.16.9",features = ["signing", "verifying"]}
 ed25519-dalek = {version = "2.2.0",features = ["rand_core", "pkcs8"]}
@@ -300,13 +300,18 @@ rustc-hash = "2.1.2"
 rustls = "0.23.40"
 rustls-pki-types = "1.14.1"
 rustls-platform-verifier = "0.7.0"
-salvo = {git = "https://github.com/salvo-rs/salvo.git",branch = "main",features = [
+salvo = {version = "0.94",default-features = false,features = [
+    "fix-http1-request-uri",
+    "server",
+    "server-handle",
+    "http1",
+    "http2",
+    "matched-path",
     "oapi",
     "cors",
     "cookie",
     "serve-static",
     "logging",
-    "test",
     "rate-limiter",
 ]}
 schemars = {version = "1.2.1",features = [
@@ -340,7 +345,18 @@ subtle = "2.6.1"
 thiserror = "2.0.18"
 thiserror-ext = "0.3.0"
 time = "0.3"
-tokio = {version = "1.52.3",features = ["full"]}
+tokio = {version = "1.52.3",default-features = false,features = [
+    "fs",
+    "io-std",
+    "io-util",
+    "macros",
+    "net",
+    "rt",
+    "rt-multi-thread",
+    "signal",
+    "sync",
+    "time",
+]}
 tokio-postgres = {version = "0.7",features = [
     "with-chrono-0_4",
     "with-uuid-1",
