@@ -87,8 +87,8 @@ arkret:
   principal_method: did:webvh
   # Production deployments must use a real did:webvh service DID minted through
   # starid:
-  #   coauth config service-did init --starid-url https://starid.example \
-  #     --host auth.example.com --key-output service-did-keys.yaml
+  #   coauth config service-id init --starid-url https://starid.example \
+  #     --host auth.example.com --key-output service-id-keys.yaml
   service_id: did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:auth.local.host:webvh:service
   principal_server_url: https://local.host/
   # Deployment trust-domain identifier injected into Realm policy and the

@@ -25,8 +25,8 @@ const SESSION_GRANT_TTL_MIN_SECONDS: i64 = 60;
 const SESSION_GRANT_TTL_MAX_SECONDS: i64 = 86_400;
 const SERVICE_ID_BOOTSTRAP_HELP: &str = concat!(
     "Local development: run `coauth config generate --dev -o config.dev.yaml`. ",
-    "Production: run `coauth config service-did init --starid-url <https://starid.example> ",
-    "--host <auth.example.com> --key-output <service-did-keys.yaml>` and copy the emitted ",
+    "Production: run `coauth config service-id init --starid-url <https://starid.example> ",
+    "--host <auth.example.com> --key-output <service-id-keys.yaml>` and copy the emitted ",
     "`arkret.service_id` into your config."
 );
 

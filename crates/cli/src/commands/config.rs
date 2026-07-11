@@ -33,8 +33,8 @@ const WEBVH_METHOD_VERSION: &str = "did:webvh:1.0";
 const SERVICE_ID_MISSING_HELP: &str = concat!(
     "coauth config generate requires arkret.service_id for organization deployments. ",
     "For local development run `coauth config generate --dev -o config.dev.yaml`. ",
-    "For production run `coauth config service-did init --starid-url <https://starid.example> ",
-    "--host <auth.example.com> --key-output <service-did-keys.yaml>` and copy the emitted ",
+    "For production run `coauth config service-id init --starid-url <https://starid.example> ",
+    "--host <auth.example.com> --key-output <service-id-keys.yaml>` and copy the emitted ",
     "`arkret.service_id` into your config."
 );
 
