@@ -67,8 +67,9 @@ pub(super) const LIMITED_AGENT_SCOPE_ACTIONS: &[&str] = &[
 pub struct AgentSessionAuthorization {
     /// Agent principal DID the proof authenticated.
     pub agent_principal_id: String,
-    /// Controller DID accountable for the agent.
-    pub controller_did: String,
+    /// Controller principal DID accountable for the agent (spec
+    /// `controller_principal_id`, e.g. agent_pause/resume/deactivate payloads).
+    pub controller_principal_id: String,
     /// Effective granted scope. Service-surface tokens are intersected with the
     /// authorized key scope and policy/resource constraints; content capability
     /// tokens are additionally intersected with active capability grants.
@@ -258,7 +259,7 @@ pub async fn validate_agent_session_proof(
         return Err(AgentSessionProofError::HumanApprovalRequired(details));
     }
 
-    let controller_did = authorization.accountable_principal_id.clone();
+    let controller_principal_id = authorization.accountable_principal_id.clone();
     let active_grants = repo
         .accountability_grant()
         .list_active_for_subject(
@@ -269,7 +270,7 @@ pub async fn validate_agent_session_proof(
         .map_err(|_| AgentAuthRejection::AccountabilityGrantMissing)?
         .into_iter()
         .filter(|grant| {
-            grant.controller_did == controller_did
+            grant.controller_did == controller_principal_id
                 && grant.agent_principal_id == agent_principal_id
                 && grant.revoked_at.is_none()
         })
@@ -315,7 +316,7 @@ pub async fn validate_agent_session_proof(
     }
 
     let mut scope_details = serde_json::json!({
-        "controller_did": &controller_did,
+        "controller_principal_id": &controller_principal_id,
         "realm_ids": &effective_scope.realm_ids,
         "strand_ids": &effective_scope.strand_ids,
         "resources": {
@@ -367,7 +368,7 @@ pub async fn validate_agent_session_proof(
 
     Ok(AgentSessionAuthorization {
         agent_principal_id,
-        controller_did,
+        controller_principal_id,
         granted_scope: effective_scope.granted_scope,
         scope_details,
         wire_scope_details,

@@ -1250,7 +1250,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
             .to_owned();
     let now = state.clock.now();
     let scope_details = serde_json::json!({
-        "controller_did": "did:web:alice.example",
+        "controller_principal_id": "did:web:alice.example",
         "resources": {
             "realm_refs": ["ak:realm:team"],
         },

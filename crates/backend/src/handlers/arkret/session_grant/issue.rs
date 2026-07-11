@@ -251,7 +251,7 @@ async fn issue_agent_key_proof_session_grant(
     // the DID maps to a coauth-hosted account. Bind the lookup to an owned
     // value so the sub-repo borrow is released before `repo.cancel()`.
     let controller_blocked = if let Some(user_id) =
-        parse_local_user_did_for(&arkret_config, &authorization.controller_did)
+        parse_local_user_did_for(&arkret_config, &authorization.controller_principal_id)
     {
         let user = repo
             .user()

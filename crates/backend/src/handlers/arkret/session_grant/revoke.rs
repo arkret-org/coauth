@@ -190,7 +190,7 @@ fn grant_payload(grant: &SessionGrant) -> Option<SessionGrantPayload> {
         .map(|jwt| jwt.payload().clone())
 }
 
-fn grant_is_agent_delegated_to_controller(grant: &SessionGrant, controller_did: &str) -> bool {
+fn grant_is_agent_delegated_to_controller(grant: &SessionGrant, controller_principal_id: &str) -> bool {
     let Some(payload) = grant_payload(grant) else {
         return false;
     };
@@ -199,9 +199,9 @@ fn grant_is_agent_delegated_to_controller(grant: &SessionGrant, controller_did: 
     }
     payload
         .scope_details
-        .get("controller_did")
+        .get("controller_principal_id")
         .and_then(serde_json::Value::as_str)
-        .is_some_and(|value| value == controller_did)
+        .is_some_and(|value| value == controller_principal_id)
 }
 
 fn grant_is_owned_by_current_principal(grant: &SessionGrant, principal_did: &str) -> bool {
@@ -590,7 +590,7 @@ mod tests {
         }
     }
 
-    fn agent_session_grant(controller_did: &str) -> SessionGrant {
+    fn agent_session_grant(controller_principal_id: &str) -> SessionGrant {
         let now = Utc::now();
         let material = mint_agent_session_grant(
             &personal_did_web_config(),
@@ -601,7 +601,7 @@ mod tests {
             "runtime-dpop-jkt".to_owned(),
             "{\"kty\":\"OKP\"}".to_owned(),
             serde_json::json!({
-                "controller_did": controller_did,
+                "controller_principal_id": controller_principal_id,
                 "resources": {
                     "realm_refs": ["ak:realm:team"],
                 },
