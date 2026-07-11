@@ -140,7 +140,7 @@ fn shared_nonce_store() -> &'static Arc<NonceStore> {
 /// `InviteVerificationError::http_status()`.
 ///
 /// When the deployment has an empty verification-service allowlist
-/// (`arkret.verification_service_did` / `arkret.verification_service_dids`
+/// (`arkret.verification_service_id` / `arkret.verification_service_ids`
 /// both unset) the route returns `503 verifier_not_configured` — there's
 /// no trusted `iss` set to compare the binding proof against, so we
 /// cannot safely run the verifier.
@@ -180,7 +180,7 @@ pub async fn post_verify_invite(
     if expected_iss_allowlist.is_empty() {
         warn!(
             "POST /_coauth/self/invites/3pid/verify called but no verification-service DID is configured \
-             (arkret.verification_service_did / arkret.verification_service_dids); \
+             (arkret.verification_service_id / arkret.verification_service_ids); \
              returning 503 verifier_not_configured"
         );
         res.status_code(StatusCode::SERVICE_UNAVAILABLE);
@@ -191,7 +191,7 @@ pub async fn post_verify_invite(
         }));
         return Ok(());
     }
-    let expected_aud = did_resolver.service_did(&arkret_config);
+    let expected_aud = did_resolver.service_id(&arkret_config);
 
     let mut repo = depot.repo().await?;
     let nonce_store = shared_nonce_store();
@@ -204,7 +204,7 @@ pub async fn post_verify_invite(
     };
 
     let mut ctx = VerifierCtx {
-        expected_verification_service_dids: &expected_iss_allowlist,
+        expected_verification_service_ids: &expected_iss_allowlist,
         expected_audience: expected_aud.as_str(),
         now,
         nonce_store: nonce_store.as_ref(),

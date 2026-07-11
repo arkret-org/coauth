@@ -30,7 +30,7 @@ use webauthn_rs::prelude::{
 use crate::handlers::admin::audit_helper::record_admin_operation_signed;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::params::extract_ulid_param;
-use crate::handlers::arkret::service_did_for;
+use crate::handlers::arkret::service_id_for;
 use crate::handlers::common::DepotExt;
 use crate::services::onboarding_starid::{
     OnboardingStaridError, mint_principal_did_for_first_credential,
@@ -142,10 +142,10 @@ fn audit_signing_context(
 ) -> Result<(coauth_keystore::Keystore, String, bool), AppError> {
     let key_store = depot.key_store()?;
     let arkret_config = depot.arkret_config()?;
-    let service_did = service_did_for(&arkret_config);
+    let service_id = service_id_for(&arkret_config);
     Ok((
         key_store,
-        service_did,
+        service_id,
         arkret_config.audit_signature_fail_closed,
     ))
 }
@@ -182,13 +182,13 @@ pub async fn register_start(
         .await
         .map_err(map_webauthn_error)?;
 
-    let (key_store, service_did, audit_fail_closed) = audit_signing_context(depot)?;
+    let (key_store, service_id, audit_fail_closed) = audit_signing_context(depot)?;
     record_admin_operation_signed(
         &mut repo,
         &mut rng,
         &*clock,
         &key_store,
-        &service_did,
+        &service_id,
         audit_fail_closed,
         admin_user.as_ref(),
         AdminOperation::Other("passkey.register.start".to_owned()),
@@ -274,13 +274,13 @@ pub async fn register_finish(
         (None, None)
     };
 
-    let (key_store, service_did, audit_fail_closed) = audit_signing_context(depot)?;
+    let (key_store, service_id, audit_fail_closed) = audit_signing_context(depot)?;
     record_admin_operation_signed(
         &mut repo,
         &mut rng,
         &*clock,
         &key_store,
-        &service_did,
+        &service_id,
         audit_fail_closed,
         admin_user.as_ref(),
         AdminOperation::Other("passkey.register.finish".to_owned()),
@@ -356,13 +356,13 @@ pub async fn auth_finish(req: &mut Request, depot: &Depot) -> JsonResult<Passkey
         .map_err(map_webauthn_error)?;
     let cred_b64 = Base64UrlUnpadded::encode_string(cred_id.as_ref());
 
-    let (key_store, service_did, audit_fail_closed) = audit_signing_context(depot)?;
+    let (key_store, service_id, audit_fail_closed) = audit_signing_context(depot)?;
     record_admin_operation_signed(
         &mut repo,
         &mut rng,
         &*clock,
         &key_store,
-        &service_did,
+        &service_id,
         audit_fail_closed,
         admin_user.as_ref(),
         AdminOperation::Other("passkey.auth.finish".to_owned()),

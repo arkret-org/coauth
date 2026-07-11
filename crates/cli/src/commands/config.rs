@@ -19,23 +19,23 @@ use url::Url;
 
 const DEV_DATABASE_URI: &str = "postgresql://coauth:coauth@localhost/coauth";
 const DEV_PUBLIC_BASE: &str = "https://auth.local.host/";
-const DEV_SERVICE_DID: &str =
+const DEV_SERVICE_ID: &str =
     "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:auth.local.host:webvh:service";
 const DEV_SOLAND_URL: &str = "https://local.host/";
-const DEV_SOLAND_SERVICE_DID: &str =
+const DEV_SOLAND_SERVICE_ID: &str =
     "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service";
 const DEV_SOLAND_SESSION_GRANT_BEARER: &str = "local-coauth-session-grant-introspection";
 const DEV_SOLAND_WEBVH_REGISTRATION_BEARER: &str = "local-soland-webvh-registration";
 
-const DEFAULT_SERVICE_DID_PATH: &str = "webvh/service";
+const DEFAULT_SERVICE_ID_PATH: &str = "webvh/service";
 const SCID_PLACEHOLDER: &str = "{SCID}";
 const WEBVH_METHOD_VERSION: &str = "did:webvh:1.0";
-const SERVICE_DID_MISSING_HELP: &str = concat!(
-    "coauth config generate requires arkret.service_did for organization deployments. ",
+const SERVICE_ID_MISSING_HELP: &str = concat!(
+    "coauth config generate requires arkret.service_id for organization deployments. ",
     "For local development run `coauth config generate --dev -o config.dev.yaml`. ",
     "For production run `coauth config service-did init --starid-url <https://starid.example> ",
     "--host <auth.example.com> --key-output <service-did-keys.yaml>` and copy the emitted ",
-    "`arkret.service_did` into your config."
+    "`arkret.service_id` into your config."
 );
 
 #[derive(Parser, Debug)]
@@ -60,7 +60,7 @@ enum Command {
     Generate(GenerateOptions),
 
     /// Create and manage coauth service DID material
-    ServiceDid(ServiceDidOptions),
+    ServiceId(ServiceIdOptions),
 
     /// Synchronise clients and providers from the config into the database
     Sync {
@@ -84,9 +84,9 @@ struct GenerateOptions {
     #[clap(long)]
     dev: bool,
 
-    /// Service DID to write into arkret.service_did for production configs
+    /// Service DID to write into arkret.service_id for production configs
     #[clap(long)]
-    service_did: Option<String>,
+    service_id: Option<String>,
 
     /// Override http.public_base and http.issuer in the generated config
     #[clap(long)]
@@ -98,19 +98,19 @@ struct GenerateOptions {
 }
 
 #[derive(Args, Debug)]
-struct ServiceDidOptions {
+struct ServiceIdOptions {
     #[command(subcommand)]
-    command: ServiceDidCommand,
+    command: ServiceIdCommand,
 }
 
 #[derive(Subcommand, Debug)]
-enum ServiceDidCommand {
+enum ServiceIdCommand {
     /// Mint a did:webvh service DID through starid and print the config snippet
-    Init(ServiceDidInitOptions),
+    Init(ServiceIdInitOptions),
 }
 
 #[derive(Args, Debug)]
-struct ServiceDidInitOptions {
+struct ServiceIdInitOptions {
     /// Base URL of the starid deployment, for example https://starid.example
     #[clap(long)]
     starid_url: Url,
@@ -124,7 +124,7 @@ struct ServiceDidInitOptions {
     port: Option<u16>,
 
     /// DID path beneath the host; defaults to /webvh/service
-    #[clap(long, default_value = DEFAULT_SERVICE_DID_PATH)]
+    #[clap(long, default_value = DEFAULT_SERVICE_ID_PATH)]
     path: String,
 
     /// File that receives the generated private DID/update key seeds
@@ -140,12 +140,12 @@ struct ServiceDidInitOptions {
     admin_token_env: String,
 
     /// Output format for the public config result
-    #[clap(long, value_enum, default_value_t = ServiceDidOutput::Yaml)]
-    output: ServiceDidOutput,
+    #[clap(long, value_enum, default_value_t = ServiceIdOutput::Yaml)]
+    output: ServiceIdOutput,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
-enum ServiceDidOutput {
+enum ServiceIdOutput {
     /// Print a YAML snippet ready to merge into config.yaml
     Yaml,
     /// Print only the minted DID
@@ -160,7 +160,7 @@ impl Options {
             Command::Dump { output } => Self::handle_dump(figment, output).await,
             Command::Check => Self::handle_check(figment),
             Command::Generate(options) => Self::handle_generate(options).await,
-            Command::ServiceDid(options) => Self::handle_service_did(options).await,
+            Command::ServiceId(options) => Self::handle_service_id(options).await,
             Command::Sync { prune, dry_run } => Self::handle_sync(figment, prune, dry_run).await,
         }
     }
@@ -187,8 +187,8 @@ impl Options {
     async fn handle_generate(options: GenerateOptions) -> anyhow::Result<ExitCode> {
         let _span = info_span!("cli.config.generate").entered();
 
-        if !options.dev && options.service_did.is_none() {
-            bail!(SERVICE_DID_MISSING_HELP);
+        if !options.dev && options.service_id.is_none() {
+            bail!(SERVICE_ID_MISSING_HELP);
         }
 
         let mut rng = rand_chacha::ChaChaRng::from_entropy();
@@ -200,9 +200,9 @@ impl Options {
         Ok(ExitCode::SUCCESS)
     }
 
-    async fn handle_service_did(options: ServiceDidOptions) -> anyhow::Result<ExitCode> {
+    async fn handle_service_id(options: ServiceIdOptions) -> anyhow::Result<ExitCode> {
         match options.command {
-            ServiceDidCommand::Init(options) => handle_service_did_init(options).await,
+            ServiceIdCommand::Init(options) => handle_service_id_init(options).await,
         }
     }
 
@@ -260,26 +260,26 @@ fn apply_generated_config_options(
             .unwrap_or_else(|| DEV_PUBLIC_BASE.parse().expect("valid dev public base"));
         config.http.public_base = public_base.clone();
         config.http.issuer = Some(public_base);
-        config.arkret.service_did = Some(
+        config.arkret.service_id = Some(
             options
-                .service_did
+                .service_id
                 .clone()
-                .unwrap_or_else(|| DEV_SERVICE_DID.to_owned()),
+                .unwrap_or_else(|| DEV_SERVICE_ID.to_owned()),
         );
         config.arkret.principal_server_url =
             Some(DEV_SOLAND_URL.parse().expect("valid dev soland URL"));
         config.arkret.principal_servers = vec![PrincipalServerConfig {
             name: "soland-dev".to_owned(),
-            audience: DEV_SOLAND_SERVICE_DID.to_owned(),
+            audience: DEV_SOLAND_SERVICE_ID.to_owned(),
             endpoint: DEV_SOLAND_URL.parse().expect("valid dev soland URL"),
-            did: Some(DEV_SOLAND_SERVICE_DID.to_owned()),
+            did: Some(DEV_SOLAND_SERVICE_ID.to_owned()),
             session_grant_introspection_bearer: Some(DEV_SOLAND_SESSION_GRANT_BEARER.to_owned()),
             embedded_webvh_registration_bearer: Some(
                 DEV_SOLAND_WEBVH_REGISTRATION_BEARER.to_owned(),
             ),
         }];
     } else {
-        config.arkret.service_did = options.service_did.clone();
+        config.arkret.service_id = options.service_id.clone();
         if let Some(public_base) = options.public_base.clone() {
             config.http.public_base = public_base.clone();
             config.http.issuer = Some(public_base);
@@ -292,14 +292,14 @@ fn apply_generated_config_options(
     Ok(())
 }
 
-async fn handle_service_did_init(options: ServiceDidInitOptions) -> anyhow::Result<ExitCode> {
-    let _span = info_span!("cli.config.service_did.init").entered();
+async fn handle_service_id_init(options: ServiceIdInitOptions) -> anyhow::Result<ExitCode> {
+    let _span = info_span!("cli.config.service_id.init").entered();
 
     let host = options.host.trim();
     if host.is_empty() {
         bail!("--host must not be empty");
     }
-    let path = normalize_service_did_path(&options.path)?;
+    let path = normalize_service_id_path(&options.path)?;
     let path_segments = webvh_path_segments(&path)?;
 
     let mut rng = OsRng;
@@ -324,7 +324,7 @@ async fn handle_service_did_init(options: ServiceDidInitOptions) -> anyhow::Resu
     )?;
 
     let admin_token =
-        service_did_admin_token(options.admin_token.as_deref(), &options.admin_token_env);
+        service_id_admin_token(options.admin_token.as_deref(), &options.admin_token_env);
     let endpoint_segments = if admin_token.is_some() {
         &["_starid", "admin", "dids"][..]
     } else {
@@ -357,10 +357,10 @@ async fn handle_service_did_init(options: ServiceDidInitOptions) -> anyhow::Resu
         .context("starid response did not include a string `did` field")?
         .to_owned();
 
-    write_service_did_key_bundle(
+    write_service_id_key_bundle(
         options.key_output.as_path(),
-        &ServiceDidKeyBundle {
-            service_did: &did,
+        &ServiceIdKeyBundle {
+            service_id: &did,
             starid_url: options.starid_url.as_str(),
             host,
             path: &path,
@@ -373,7 +373,7 @@ async fn handle_service_did_init(options: ServiceDidInitOptions) -> anyhow::Resu
     )
     .await?;
 
-    let public_output = service_did_public_output(
+    let public_output = service_id_public_output(
         options.output,
         &did,
         options.key_output.as_path(),
@@ -383,7 +383,7 @@ async fn handle_service_did_init(options: ServiceDidInitOptions) -> anyhow::Resu
     Ok(ExitCode::SUCCESS)
 }
 
-fn normalize_service_did_path(path: &str) -> anyhow::Result<String> {
+fn normalize_service_id_path(path: &str) -> anyhow::Result<String> {
     let path = path.trim().trim_matches('/');
     if path.is_empty() {
         bail!("--path must include at least one non-empty segment");
@@ -570,7 +570,7 @@ fn webvh_did(scid: &str, host: &str, port: Option<u16>, path_segments: &[String]
     out
 }
 
-fn service_did_admin_token(inline: Option<&str>, env_name: &str) -> Option<String> {
+fn service_id_admin_token(inline: Option<&str>, env_name: &str) -> Option<String> {
     inline
         .map(str::trim)
         .filter(|token| !token.is_empty())
@@ -597,8 +597,8 @@ fn join_starid_endpoint(base: &Url, segments: &[&str]) -> anyhow::Result<Url> {
     Ok(url)
 }
 
-struct ServiceDidKeyBundle<'a> {
-    service_did: &'a str,
+struct ServiceIdKeyBundle<'a> {
+    service_id: &'a str,
     starid_url: &'a str,
     host: &'a str,
     path: &'a str,
@@ -609,12 +609,12 @@ struct ServiceDidKeyBundle<'a> {
     update_key_seed_multibase: &'a str,
 }
 
-async fn write_service_did_key_bundle(
+async fn write_service_id_key_bundle(
     dest: &Utf8Path,
-    bundle: &ServiceDidKeyBundle<'_>,
+    bundle: &ServiceIdKeyBundle<'_>,
 ) -> anyhow::Result<()> {
     let yaml = serde_yaml_ng::to_string(&json!({
-        "service_did": bundle.service_did,
+        "service_id": bundle.service_id,
         "starid_url": bundle.starid_url,
         "host": bundle.host,
         "path": bundle.path,
@@ -644,23 +644,23 @@ fn signing_seed_multibase(signing: &SigningKey) -> String {
     arkret_core::encode_multibase_base58btc(signing.to_bytes())
 }
 
-fn service_did_public_output(
-    output: ServiceDidOutput,
+fn service_id_public_output(
+    output: ServiceIdOutput,
     did: &str,
     key_output: &Utf8Path,
     response_body: &Value,
 ) -> anyhow::Result<String> {
     match output {
-        ServiceDidOutput::Yaml => Ok(serde_yaml_ng::to_string(&json!({
+        ServiceIdOutput::Yaml => Ok(serde_yaml_ng::to_string(&json!({
             "arkret": {
-                "service_did": did,
+                "service_id": did,
             }
         }))?),
-        ServiceDidOutput::Did => Ok(format!("{did}\n")),
-        ServiceDidOutput::Json => Ok(format!(
+        ServiceIdOutput::Did => Ok(format!("{did}\n")),
+        ServiceIdOutput::Json => Ok(format!(
             "{}\n",
             serde_json::to_string_pretty(&json!({
-                "service_did": did,
+                "service_id": did,
                 "key_output": key_output.as_str(),
                 "starid_response": response_body,
             }))?

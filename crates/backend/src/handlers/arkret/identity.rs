@@ -33,7 +33,7 @@ pub async fn identity_describe(
     };
 
     Ok(Json(IdentityDescribeOutcome(IdentityDescription {
-        service_did: parse_did_field("service_did", service_did_for(&arkret_config))?,
+        service_id: parse_did_field("service_id", service_id_for(&arkret_config))?,
         registry_mode: registry_mode.to_owned(),
         supported_receipts: Vec::new(),
         protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
@@ -130,7 +130,7 @@ pub async fn directory_describe(
 ) -> Result<Json<DirectoryDescribeOutcome>, ArkretRouteError> {
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
-    let service_did = parse_did_field("service_did", service_did_for(&arkret_config))?;
+    let service_id = parse_did_field("service_id", service_id_for(&arkret_config))?;
     let trust_domain =
         arkret_core::TypedTrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
             .map_err(|error| {
@@ -144,7 +144,7 @@ pub async fn directory_describe(
         "directory.handle_lookup".to_owned(),
     ];
     let description = DirectoryDescription {
-        service_did,
+        service_id,
         trust_domain,
         service_type: "directory_service".to_owned(),
         protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
@@ -355,19 +355,19 @@ fn directory_handle_delivery_binding(
     arkret_config: &ArkretConfig,
     principal_binding: &PrincipalDidBinding,
 ) -> Result<arkret_core::DeliveryBindingHint, ArkretRouteError> {
-    let recipient_service_did = principal_binding
+    let recipient_service_id = principal_binding
         .principal_server_did
         .as_ref()
         .and_then(|did| arkret_core::Did::new(did.clone()).ok())
         .or_else(|| arkret_core::Did::new(principal_binding.audience.clone()).ok())
-        .or_else(|| arkret_core::Did::new(service_did_for(arkret_config)).ok())
+        .or_else(|| arkret_core::Did::new(service_id_for(arkret_config)).ok())
         .ok_or_else(|| {
             ArkretRouteError::Internal(Box::new(std::io::Error::other(
                 "no valid DID available for handle claim delivery binding",
             )))
         })?;
     Ok(arkret_core::DeliveryBindingHint {
-        recipient_service_did,
+        recipient_service_id,
         recipient_service_type: arkret_core::RecipientServiceType::PrincipalServer,
         binding_source: arkret_core::HandleHintBindingSource::Explicit,
         delivery_modes: BTreeSet::from([

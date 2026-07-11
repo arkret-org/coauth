@@ -585,7 +585,7 @@ mod tests {
                     applet_id: None,
                     effective_scope: None,
                     registration_epoch: None,
-                    service_did: None,
+                    service_id: None,
                     capability_grant_refs: Vec::new(),
                     audience: "https://principal.example/api",
                     scope,

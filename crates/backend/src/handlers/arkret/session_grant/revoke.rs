@@ -34,7 +34,7 @@ fn empty_session_revoke_body() -> SessionRevokeRequestBody {
         applet_id: None,
         effective_scope: None,
         registration_epoch: None,
-        service_did: None,
+        service_id: None,
         capability_grant_refs: Vec::new(),
         proof: None,
     }
@@ -171,7 +171,7 @@ fn session_revoke_has_applet_selector(body: &SessionRevokeRequestBody) -> bool {
     body.applet_id.is_some()
         || body.effective_scope.is_some()
         || body.registration_epoch.is_some()
-        || body.service_did.is_some()
+        || body.service_id.is_some()
         || !body.capability_grant_refs.is_empty()
 }
 
@@ -190,7 +190,7 @@ fn grant_payload(grant: &SessionGrant) -> Option<SessionGrantPayload> {
         .map(|jwt| jwt.payload().clone())
 }
 
-fn grant_is_agent_delegated_to_controller(grant: &SessionGrant, controller_principal_id: &str) -> bool {
+fn grant_is_agent_delegated_to_controller(grant: &SessionGrant, controller_id: &str) -> bool {
     let Some(payload) = grant_payload(grant) else {
         return false;
     };
@@ -199,9 +199,9 @@ fn grant_is_agent_delegated_to_controller(grant: &SessionGrant, controller_princ
     }
     payload
         .scope_details
-        .get("controller_principal_id")
+        .get("controller_id")
         .and_then(serde_json::Value::as_str)
-        .is_some_and(|value| value == controller_principal_id)
+        .is_some_and(|value| value == controller_id)
 }
 
 fn grant_is_owned_by_current_principal(grant: &SessionGrant, principal_did: &str) -> bool {
@@ -256,7 +256,7 @@ async fn verify_cross_session_lifecycle_proof(
     proof: &AccountLifecycleProof,
     current_grant: &SessionGrant,
     current_device_id: &DeviceId,
-    service_did: &Did,
+    service_id: &Did,
     now: DateTime<Utc>,
 ) -> Result<(), ArkretRouteError> {
     validate_lifecycle_proof_kind(&proof.proof_kind)?;
@@ -279,7 +279,7 @@ async fn verify_cross_session_lifecycle_proof(
     })?;
     let expected_digest = AccountLifecycleProof::session_revoke_request_digest(
         &actor_id,
-        service_did,
+        service_id,
         current_device_id,
         body.target_grant_id.as_ref(),
         body.target_device_id.as_ref(),
@@ -458,11 +458,11 @@ pub async fn revoke_session_grant_endpoint(
     let body = parse_session_revoke_body(req).await?;
     let selector = revoke_selector(&body)?;
 
-    let service_did = Did::new(service_did_for(&arkret_config)).map_err(|error| {
+    let service_id = Did::new(service_id_for(&arkret_config)).map_err(|error| {
         ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             ERROR_CODE_INVALID_PARAM,
-            format!("configured service_did is invalid: {error}"),
+            format!("configured service_id is invalid: {error}"),
         )
     })?;
 
@@ -513,7 +513,7 @@ pub async fn revoke_session_grant_endpoint(
             proof,
             &current_grant,
             current_device_id,
-            &service_did,
+            &service_id,
             clock.now(),
         )
         .await?;
@@ -585,12 +585,12 @@ mod tests {
         ArkretConfig {
             deployment_profile: DeploymentProfileConfig::PersonalNode,
             principal_method: PrincipalMethodConfig::DidWeb,
-            service_did: Some("did:web:auth.example".to_owned()),
+            service_id: Some("did:web:auth.example".to_owned()),
             ..ArkretConfig::default()
         }
     }
 
-    fn agent_session_grant(controller_principal_id: &str) -> SessionGrant {
+    fn agent_session_grant(controller_id: &str) -> SessionGrant {
         let now = Utc::now();
         let material = mint_agent_session_grant(
             &personal_did_web_config(),
@@ -601,7 +601,7 @@ mod tests {
             "runtime-dpop-jkt".to_owned(),
             "{\"kty\":\"OKP\"}".to_owned(),
             serde_json::json!({
-                "controller_principal_id": controller_principal_id,
+                "controller_id": controller_id,
                 "resources": {
                     "realm_refs": ["ak:realm:team"],
                 },
@@ -621,7 +621,7 @@ mod tests {
             applet_id: None,
             effective_scope: None,
             registration_epoch: None,
-            service_did: None,
+            service_id: None,
             capability_grant_refs: Vec::new(),
             audience: material.audience,
             scope: Scope::from_iter(["ak.self.events.stream.subscribe".parse().unwrap()]),

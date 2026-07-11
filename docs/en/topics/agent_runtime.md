@@ -25,7 +25,7 @@ The endpoint is server-to-server only:
 - browser sessions and end-user OAuth tokens are rejected;
 - the path `{id}` must be the agent principal DID, percent-encoded as a single
   URL path segment;
-- the `controller_did` is normalized before use;
+- the `controller_id` is normalized before use;
 - each requested capability must be registered in the local `ak.agent.*`
   capability registry.
 

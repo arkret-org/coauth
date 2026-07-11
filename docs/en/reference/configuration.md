@@ -90,7 +90,7 @@ arkret:
     resolver: https://resolver.example.com/
     proof_required_for_pairwise: true
 
-  service_did: did:webvh:<scid>:auth.example.com:webvh:service
+  service_id: did:webvh:<scid>:auth.example.com:webvh:service
   issuer_did: did:webvh:<scid>:auth.example.com:webvh:service
   admin_audience: https://auth.example.com/_arkret
   session_grant_ttl: 300
@@ -103,8 +103,8 @@ arkret:
 - `principal_method`: principal DID method. Defaults to `did:webvh`; `did:web`
   must be explicitly paired with `deployment_profile: personal_node`.
 - `identity_registry`: delegated DID / identity resolver, typically a public DID resolver service
-- `service_did`: explicit service DID, otherwise derived from `http.public_base`
-- `issuer_did`: DID emitted in session grants, defaults to `service_did`
+- `service_id`: explicit service DID, otherwise derived from `http.public_base`
+- `issuer_did`: DID emitted in session grants, defaults to `service_id`
 - `admin_audience`: audience expected by Arkret admin integrations, defaults
   to the local `/_arkret` endpoint
 - `session_grant_ttl`: lifetime in seconds for Arkret session-grant JWTs

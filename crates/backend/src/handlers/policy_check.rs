@@ -168,7 +168,7 @@ pub(crate) async fn build_policy_check_response(
 ) -> Result<PolicyCheckOutcome, ArkretRouteError> {
     // Policy server identity: coauth's own service DID (signs the
     // response with its preferred signing key).
-    let policy_server_did = arkret::service_did_for(arkret_config);
+    let policy_server_did = arkret::service_id_for(arkret_config);
     let policy_server_id = Did::new(policy_server_did.clone()).map_err(|e| {
         ArkretRouteError::Internal(Box::new(std::io::Error::other(format!(
             "policy server DID failed SDK validation: {e}"
@@ -408,7 +408,7 @@ mod tests {
             action: "ak.message.create".into(),
             request_canonical_digest: Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
             source: PolicyCheckSource {
-                service_did: Did::new("did:web:soland.example").unwrap(),
+                service_id: Did::new("did:web:soland.example").unwrap(),
                 service_type: "principal_server".into(),
                 source_ip_digest: Some(Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap()),
                 signed_transport: true,
@@ -491,10 +491,10 @@ mod tests {
                 .with_alg(JsonWebSignatureAlg::EdDsa),
         ]));
         let request = req();
-        // `service_did` is mandatory (no derived fallback): pin the value the
+        // `service_id` is mandatory (no derived fallback): pin the value the
         // old host derivation produced for this test base URL.
         let arkret_config = ArkretConfig {
-            service_did: Some("did:web:coauth.example".to_owned()),
+            service_id: Some("did:web:coauth.example".to_owned()),
             ..ArkretConfig::default()
         };
         let frontier_source = StaticFrontierSource::new(Frontier::empty());

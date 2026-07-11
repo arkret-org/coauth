@@ -22,7 +22,7 @@ pub struct SessionGrantFilter<'a> {
     applet_id: Option<&'a str>,
     effective_scope: Option<&'a Value>,
     registration_epoch: Option<&'a str>,
-    service_did: Option<&'a str>,
+    service_id: Option<&'a str>,
     audience: Option<&'a str>,
     active_at: Option<DateTime<Utc>>,
 }
@@ -98,12 +98,12 @@ impl<'a> SessionGrantFilter<'a> {
         applet_id: &'a str,
         effective_scope: &'a Value,
         registration_epoch: &'a str,
-        service_did: Option<&'a str>,
+        service_id: Option<&'a str>,
     ) -> Self {
         self.applet_id = Some(applet_id);
         self.effective_scope = Some(effective_scope);
         self.registration_epoch = Some(registration_epoch);
-        self.service_did = service_did;
+        self.service_id = service_id;
         self
     }
 
@@ -127,8 +127,8 @@ impl<'a> SessionGrantFilter<'a> {
 
     /// Return the service DID constraint, if present.
     #[must_use]
-    pub fn service_did(&self) -> Option<&'a str> {
-        self.service_did
+    pub fn service_id(&self) -> Option<&'a str> {
+        self.service_id
     }
 
     /// Restrict results to a grant audience.
@@ -178,7 +178,7 @@ pub struct NewSessionGrant<'a> {
     /// Applet registration epoch hash.
     pub registration_epoch: Option<&'a str>,
     /// Applet service DID bound to the delegation, when available.
-    pub service_did: Option<&'a str>,
+    pub service_id: Option<&'a str>,
     /// Capability grant refs that backed the applet delegation.
     pub capability_grant_refs: Vec<String>,
     /// Intended grant audience.

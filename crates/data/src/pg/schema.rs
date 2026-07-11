@@ -31,7 +31,7 @@ diesel::table! {
         handle_aliases -> Array<Text>,
         old_did -> Nullable<Text>,
         new_did -> Nullable<Text>,
-        issuer_service_did -> Nullable<Text>,
+        issuer_service_id -> Nullable<Text>,
         audience -> Nullable<Text>,
         claim_digest -> Nullable<Text>,
         details -> Jsonb,
@@ -59,8 +59,8 @@ diesel::table! {
     accountability_grants (id) {
         id -> Uuid,
         accountability_grant_id -> Text,
-        agent_principal_id -> Text,
-        controller_did -> Text,
+        agent_id -> Text,
+        controller_id -> Text,
         capabilities -> Array<Text>,
         capabilities_digest -> Text,
         reason -> Nullable<Text>,
@@ -95,7 +95,7 @@ diesel::table! {
     agent_key_authorizations (id) {
         id -> Uuid,
         authorized_event_id -> Text,
-        agent_principal_id -> Text,
+        agent_id -> Text,
         key_id -> Text,
         verification_method -> Text,
         public_key -> Jsonb,
@@ -123,7 +123,7 @@ diesel::table! {
 diesel::table! {
     agent_session_proof_replay (id) {
         id -> Uuid,
-        agent_principal_id -> Text,
+        agent_id -> Text,
         verification_method -> Text,
         challenge -> Text,
         nonce -> Text,
@@ -599,7 +599,7 @@ diesel::table! {
         applet_id -> Nullable<Text>,
         effective_scope -> Nullable<Jsonb>,
         registration_epoch -> Nullable<Text>,
-        service_did -> Nullable<Text>,
+        service_id -> Nullable<Text>,
         capability_grant_refs -> Array<Text>,
         audience -> Text,
         scope_list -> Array<Text>,

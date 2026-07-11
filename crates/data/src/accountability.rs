@@ -13,9 +13,9 @@ pub struct AccountabilityGrant {
     /// Wire typed id: `ak:grant:<uuid7>`.
     pub accountability_grant_id: String,
     /// Agent principal id covered by this grant.
-    pub agent_principal_id: String,
+    pub agent_id: String,
     /// Controller DID that accepted accountability for the grant.
-    pub controller_did: String,
+    pub controller_id: String,
     /// Canonical capability/action set.
     pub capabilities: Vec<String>,
     /// Deterministic digest of controller, agent, and canonical capabilities.
@@ -101,9 +101,9 @@ pub struct ParseAccountabilityGrantFanoutStateError;
 #[serde(rename_all = "snake_case")]
 pub enum AccountabilitySubjectKind {
     /// Controller DID subject.
-    ControllerDid,
+    ControllerId,
     /// Agent principal id subject.
-    AgentPrincipalId,
+    AgentId,
 }
 
 impl AccountabilitySubjectKind {
@@ -111,8 +111,8 @@ impl AccountabilitySubjectKind {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::ControllerDid => "controller_did",
-            Self::AgentPrincipalId => "agent_principal_id",
+            Self::ControllerId => "controller_id",
+            Self::AgentId => "agent_id",
         }
     }
 }
@@ -128,8 +128,8 @@ impl std::str::FromStr for AccountabilitySubjectKind {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
-            "controller_did" => Ok(Self::ControllerDid),
-            "agent_principal_id" => Ok(Self::AgentPrincipalId),
+            "controller_id" => Ok(Self::ControllerId),
+            "agent_id" => Ok(Self::AgentId),
             _ => Err(ParseAccountabilitySubjectKindError),
         }
     }

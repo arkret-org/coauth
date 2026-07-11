@@ -163,7 +163,7 @@ pub async fn patch_user(
             rng,
             clock,
             signing.keystore,
-            signing.service_did,
+            signing.service_id,
             signing.fail_closed,
             admin_user,
             AdminOperation::UserUpdated,

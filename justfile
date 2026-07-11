@@ -34,7 +34,7 @@ export COAUTH_OUTBOUND_HTTP_PRIVATE_ALLOWLIST := "auth.local.host,local.host"
 # Dev-only coauth service DID. Production deployments must configure a real
 # did:webvh service DID in their config file; this keeps `just dev` aligned with
 # the fail-closed config validator even when config.dev.yaml is regenerated.
-export COAUTH_ARKRET__SERVICE_DID := "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:auth.local.host:webvh:service"
+export COAUTH_ARKRET__SERVICE_ID := "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:auth.local.host:webvh:service"
 
 # Default recipe: show available commands
 default:

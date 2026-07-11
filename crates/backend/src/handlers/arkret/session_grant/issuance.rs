@@ -203,7 +203,7 @@ where
                 applet_id: None,
                 effective_scope: None,
                 registration_epoch: None,
-                service_did: None,
+                service_id: None,
                 capability_grant_refs: Vec::new(),
                 audience: &material.audience,
                 scope,
@@ -255,7 +255,7 @@ where
 pub(crate) fn mint_agent_session_grant(
     arkret_config: &ArkretConfig,
     key_store: &Keystore,
-    agent_principal_id: &str,
+    agent_id: &str,
     audience: String,
     scopes: Vec<String>,
     dpop_jkt: String,
@@ -264,7 +264,7 @@ pub(crate) fn mint_agent_session_grant(
     now: DateTime<Utc>,
     expires_at: DateTime<Utc>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
-    ensure_principal_did_method_allowed(arkret_config, agent_principal_id)?;
+    ensure_principal_did_method_allowed(arkret_config, agent_id)?;
     let issuer = issuer_did_for(arkret_config);
     let grant_id = new_session_grant_id();
     let cnf = Some(SessionGrantConfirmation {
@@ -275,7 +275,7 @@ pub(crate) fn mint_agent_session_grant(
     let payload = SessionGrantPayload {
         kind: "ak.session.grant".to_owned(),
         grant_id: grant_id.clone(),
-        subject: agent_principal_id.to_owned(),
+        subject: agent_id.to_owned(),
         audience: audience.clone(),
         scopes: scopes.clone(),
         not_before: now,
@@ -299,7 +299,7 @@ pub(crate) fn mint_agent_session_grant(
         expires_at: expires_at.to_rfc3339(),
         expires_at_timestamp: expires_at,
         issuer,
-        subject: agent_principal_id.to_owned(),
+        subject: agent_id.to_owned(),
         device_id: None,
         audience,
         scopes,
@@ -309,7 +309,7 @@ pub(crate) fn mint_agent_session_grant(
 
 fn compact_agent_scope_details(mut scope_details: serde_json::Value) -> serde_json::Value {
     if let Some(object) = scope_details.as_object_mut() {
-        object.remove("agent_principal_id");
+        object.remove("agent_id");
         object.remove("principal_id");
         object.remove("subject");
         object.remove("audience");

@@ -74,8 +74,8 @@ mod tests {
         let now = clock.now();
         NewAccountabilityGrant {
             accountability_grant_id: grant_id(rng, clock),
-            agent_principal_id: agent.to_owned(),
-            controller_did: controller.to_owned(),
+            agent_id: agent.to_owned(),
+            controller_id: controller.to_owned(),
             capabilities: vec!["ak.self.agent.command.provision".to_owned()],
             capabilities_digest: digest(label),
             reason: Some("test grant".to_owned()),
@@ -274,7 +274,7 @@ mod tests {
             .accountability_grant()
             .revoke_for_subject(
                 &clock,
-                AccountabilitySubjectKind::ControllerDid,
+                AccountabilitySubjectKind::ControllerId,
                 &controller,
                 "controller_paused",
             )
@@ -283,7 +283,7 @@ mod tests {
         assert_eq!(revoked, 2);
         assert!(
             repo.accountability_grant()
-                .list_active_for_subject(AccountabilitySubjectKind::ControllerDid, &controller)
+                .list_active_for_subject(AccountabilitySubjectKind::ControllerId, &controller)
                 .await
                 .unwrap()
                 .is_empty()
@@ -305,7 +305,7 @@ mod tests {
             .mark_subject_revoked(
                 &mut rng,
                 &clock,
-                AccountabilitySubjectKind::AgentPrincipalId,
+                AccountabilitySubjectKind::AgentId,
                 &agent_two,
                 "agent_deactivated",
             )
@@ -313,7 +313,7 @@ mod tests {
             .unwrap();
         assert!(
             repo.accountability_grant()
-                .subject_revoked(AccountabilitySubjectKind::AgentPrincipalId, &agent_two)
+                .subject_revoked(AccountabilitySubjectKind::AgentId, &agent_two)
                 .await
                 .unwrap()
         );
@@ -321,7 +321,7 @@ mod tests {
             .accountability_grant()
             .revoke_for_subject(
                 &clock,
-                AccountabilitySubjectKind::AgentPrincipalId,
+                AccountabilitySubjectKind::AgentId,
                 &agent_two,
                 "agent_deactivated",
             )
@@ -338,8 +338,8 @@ mod tests {
 struct AccountabilityGrantRow {
     id: Uuid,
     accountability_grant_id: String,
-    agent_principal_id: String,
-    controller_did: String,
+    agent_id: String,
+    controller_id: String,
     capabilities: Vec<String>,
     capabilities_digest: String,
     reason: Option<String>,
@@ -372,8 +372,8 @@ impl TryFrom<AccountabilityGrantRow> for AccountabilityGrant {
         Ok(Self {
             id,
             accountability_grant_id: value.accountability_grant_id,
-            agent_principal_id: value.agent_principal_id,
-            controller_did: value.controller_did,
+            agent_id: value.agent_id,
+            controller_id: value.controller_id,
             capabilities: value.capabilities,
             capabilities_digest: value.capabilities_digest,
             reason: value.reason,
@@ -398,8 +398,8 @@ impl TryFrom<AccountabilityGrantRow> for AccountabilityGrant {
 struct InsertableAccountabilityGrant {
     id: Uuid,
     accountability_grant_id: String,
-    agent_principal_id: String,
-    controller_did: String,
+    agent_id: String,
+    controller_id: String,
     capabilities: Vec<String>,
     capabilities_digest: String,
     reason: Option<String>,
@@ -486,8 +486,8 @@ impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
         let row = InsertableAccountabilityGrant {
             id: Uuid::from(id),
             accountability_grant_id: params.accountability_grant_id,
-            agent_principal_id: params.agent_principal_id,
-            controller_did: params.controller_did,
+            agent_id: params.agent_id,
+            controller_id: params.controller_id,
             capabilities: params.capabilities,
             capabilities_digest: params.capabilities_digest,
             reason: params.reason,
@@ -511,8 +511,8 @@ impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
         Ok(AccountabilityGrant {
             id,
             accountability_grant_id: row.accountability_grant_id,
-            agent_principal_id: row.agent_principal_id,
-            controller_did: row.controller_did,
+            agent_id: row.agent_id,
+            controller_id: row.controller_id,
             capabilities: row.capabilities,
             capabilities_digest: row.capabilities_digest,
             reason: row.reason,
@@ -554,13 +554,13 @@ impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
     )]
     async fn find_active_by_fingerprint(
         &mut self,
-        agent_principal_id: &str,
-        controller_did: &str,
+        agent_id: &str,
+        controller_id: &str,
         capabilities_digest: &str,
     ) -> Result<Option<AccountabilityGrant>, Self::Error> {
         accountability_grants::table
-            .filter(accountability_grants::agent_principal_id.eq(agent_principal_id))
-            .filter(accountability_grants::controller_did.eq(controller_did))
+            .filter(accountability_grants::agent_id.eq(agent_id))
+            .filter(accountability_grants::controller_id.eq(controller_id))
             .filter(accountability_grants::capabilities_digest.eq(capabilities_digest))
             .filter(accountability_grants::revoked_at.is_null())
             .select(AccountabilityGrantRow::as_select())
@@ -589,11 +589,11 @@ impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
             .into_boxed();
 
         query = match subject_kind {
-            AccountabilitySubjectKind::ControllerDid => {
-                query.filter(accountability_grants::controller_did.eq(subject_id))
+            AccountabilitySubjectKind::ControllerId => {
+                query.filter(accountability_grants::controller_id.eq(subject_id))
             }
-            AccountabilitySubjectKind::AgentPrincipalId => {
-                query.filter(accountability_grants::agent_principal_id.eq(subject_id))
+            AccountabilitySubjectKind::AgentId => {
+                query.filter(accountability_grants::agent_id.eq(subject_id))
             }
         };
 
@@ -642,8 +642,8 @@ impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
         let base = accountability_grants::table.filter(accountability_grants::revoked_at.is_null());
 
         let count = match subject_kind {
-            AccountabilitySubjectKind::ControllerDid => {
-                diesel::update(base.filter(accountability_grants::controller_did.eq(subject_id)))
+            AccountabilitySubjectKind::ControllerId => {
+                diesel::update(base.filter(accountability_grants::controller_id.eq(subject_id)))
                     .set((
                         accountability_grants::revoked_at.eq(Some(now)),
                         accountability_grants::revoked_reason.eq(Some(reason.to_owned())),
@@ -652,17 +652,15 @@ impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
                     .execute(self.conn)
                     .await?
             }
-            AccountabilitySubjectKind::AgentPrincipalId => {
-                diesel::update(
-                    base.filter(accountability_grants::agent_principal_id.eq(subject_id)),
-                )
-                .set((
-                    accountability_grants::revoked_at.eq(Some(now)),
-                    accountability_grants::revoked_reason.eq(Some(reason.to_owned())),
-                    accountability_grants::updated_at.eq(now),
-                ))
-                .execute(self.conn)
-                .await?
+            AccountabilitySubjectKind::AgentId => {
+                diesel::update(base.filter(accountability_grants::agent_id.eq(subject_id)))
+                    .set((
+                        accountability_grants::revoked_at.eq(Some(now)),
+                        accountability_grants::revoked_reason.eq(Some(reason.to_owned())),
+                        accountability_grants::updated_at.eq(now),
+                    ))
+                    .execute(self.conn)
+                    .await?
             }
         };
 

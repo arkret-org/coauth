@@ -53,7 +53,7 @@ mod tests {
     fn proof_replay(label: &str, clock: &dyn Clock) -> NewAgentSessionProofReplay {
         let now = clock.now();
         NewAgentSessionProofReplay {
-            agent_principal_id: format!("did:web:{label}-agent.example"),
+            agent_id: format!("did:web:{label}-agent.example"),
             verification_method: format!("did:web:{label}-agent.example#runtime-key-1"),
             challenge: format!("challenge-{label}"),
             nonce: format!("nonce-{label}"),
@@ -97,7 +97,7 @@ mod tests {
 struct AgentKeyAuthorizationRow {
     id: Uuid,
     authorized_event_id: String,
-    agent_principal_id: String,
+    agent_id: String,
     key_id: String,
     verification_method: String,
     public_key: serde_json::Value,
@@ -136,7 +136,7 @@ impl TryFrom<AgentKeyAuthorizationRow> for AgentKeyAuthorization {
         Ok(Self {
             id,
             authorized_event_id: value.authorized_event_id,
-            agent_principal_id: value.agent_principal_id,
+            agent_id: value.agent_id,
             key_id: value.key_id,
             verification_method: value.verification_method,
             public_key: value.public_key,
@@ -167,7 +167,7 @@ impl TryFrom<AgentKeyAuthorizationRow> for AgentKeyAuthorization {
 struct InsertableAgentKeyAuthorization {
     id: Uuid,
     authorized_event_id: String,
-    agent_principal_id: String,
+    agent_id: String,
     key_id: String,
     verification_method: String,
     public_key: serde_json::Value,
@@ -193,7 +193,7 @@ struct InsertableAgentKeyAuthorization {
 #[diesel(table_name = agent_session_proof_replay)]
 struct InsertableProofReplay {
     id: Uuid,
-    agent_principal_id: String,
+    agent_id: String,
     verification_method: String,
     challenge: String,
     nonce: String,
@@ -228,7 +228,7 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
         let row = InsertableAgentKeyAuthorization {
             id: Uuid::from(id),
             authorized_event_id: params.authorized_event_id,
-            agent_principal_id: params.agent_principal_id,
+            agent_id: params.agent_id,
             key_id: params.key_id,
             verification_method: params.verification_method,
             public_key: params.public_key,
@@ -258,7 +258,7 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
         Ok(AgentKeyAuthorization {
             id,
             authorized_event_id: row.authorized_event_id,
-            agent_principal_id: row.agent_principal_id,
+            agent_id: row.agent_id,
             key_id: row.key_id,
             verification_method: row.verification_method,
             public_key: row.public_key,
@@ -306,10 +306,10 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
     )]
     async fn list_active_for_agent(
         &mut self,
-        agent_principal_id: &str,
+        agent_id: &str,
     ) -> Result<Vec<AgentKeyAuthorization>, Self::Error> {
         agent_key_authorizations::table
-            .filter(agent_key_authorizations::agent_principal_id.eq(agent_principal_id))
+            .filter(agent_key_authorizations::agent_id.eq(agent_id))
             .filter(agent_key_authorizations::revoked_at.is_null())
             .order(agent_key_authorizations::issued_at.asc())
             .select(AgentKeyAuthorizationRow::as_select())
@@ -325,13 +325,13 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
     async fn revoke_for_agent(
         &mut self,
         clock: &dyn Clock,
-        agent_principal_id: &str,
+        agent_id: &str,
         reason: &str,
     ) -> Result<usize, Self::Error> {
         let now = clock.now();
         let count = diesel::update(
             agent_key_authorizations::table
-                .filter(agent_key_authorizations::agent_principal_id.eq(agent_principal_id))
+                .filter(agent_key_authorizations::agent_id.eq(agent_id))
                 .filter(agent_key_authorizations::revoked_at.is_null()),
         )
         .set((
@@ -359,7 +359,7 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
         let id = new_id(now, rng);
         let row = InsertableProofReplay {
             id: Uuid::from(id),
-            agent_principal_id: params.agent_principal_id,
+            agent_id: params.agent_id,
             verification_method: params.verification_method,
             challenge: params.challenge,
             nonce: params.nonce,

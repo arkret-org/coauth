@@ -27,8 +27,8 @@ use crate::outbound_http;
 
 const SIGNATURE_LABEL: &str = "sig1";
 const SIGNATURE_WINDOW_SECONDS: i64 = 300;
-const SOURCE_SERVICE_DID_HEADER: &str = "Source-Service-DID";
-const DESTINATION_SERVICE_DID_HEADER: &str = "Destination-Service-DID";
+const SOURCE_SERVICE_ID_HEADER: &str = "Source-Service-ID";
+const DESTINATION_SERVICE_ID_HEADER: &str = "Destination-Service-ID";
 
 #[derive(Debug, Error)]
 pub enum PeerProtocolClientError {
@@ -52,8 +52,8 @@ pub enum PeerProtocolClientError {
 
 #[derive(Debug, Clone)]
 pub struct PeerProtocolIdentity {
-    pub source_service_did: String,
-    pub destination_service_did: String,
+    pub source_service_id: String,
+    pub destination_service_id: String,
     pub source_trust_domain: String,
     pub destination_trust_domain: String,
 }
@@ -61,15 +61,15 @@ pub struct PeerProtocolIdentity {
 impl PeerProtocolIdentity {
     #[must_use]
     pub fn same_destination(
-        source_service_did: impl Into<String>,
+        source_service_id: impl Into<String>,
         source_trust_domain: impl Into<String>,
     ) -> Self {
-        let source_service_did = source_service_did.into();
+        let source_service_id = source_service_id.into();
         let source_trust_domain = source_trust_domain.into();
         Self {
-            destination_service_did: source_service_did.clone(),
+            destination_service_id: source_service_id.clone(),
             destination_trust_domain: source_trust_domain.clone(),
-            source_service_did,
+            source_service_id,
             source_trust_domain,
         }
     }
@@ -187,12 +187,12 @@ impl<'a> PeerProtocolClient<'a> {
     ) -> Result<SignedPeerRequest, PeerProtocolClientError> {
         let mut headers = vec![
             (
-                SOURCE_SERVICE_DID_HEADER.to_owned(),
-                self.identity.source_service_did.clone(),
+                SOURCE_SERVICE_ID_HEADER.to_owned(),
+                self.identity.source_service_id.clone(),
             ),
             (
-                DESTINATION_SERVICE_DID_HEADER.to_owned(),
-                self.identity.destination_service_did.clone(),
+                DESTINATION_SERVICE_ID_HEADER.to_owned(),
+                self.identity.destination_service_id.clone(),
             ),
             (
                 HEADER_SOURCE_TRUST_DOMAIN.to_owned(),
@@ -208,8 +208,8 @@ impl<'a> PeerProtocolClient<'a> {
             Component::Method,
             Component::TargetUri,
             Component::Authority,
-            Component::Header(SOURCE_SERVICE_DID_HEADER.to_ascii_lowercase()),
-            Component::Header(DESTINATION_SERVICE_DID_HEADER.to_ascii_lowercase()),
+            Component::Header(SOURCE_SERVICE_ID_HEADER.to_ascii_lowercase()),
+            Component::Header(DESTINATION_SERVICE_ID_HEADER.to_ascii_lowercase()),
             Component::Header(HEADER_SOURCE_TRUST_DOMAIN.to_ascii_lowercase()),
             Component::Header(HEADER_DESTINATION_TRUST_DOMAIN.to_ascii_lowercase()),
         ];
@@ -243,7 +243,7 @@ impl<'a> PeerProtocolClient<'a> {
             .join(" ");
         let signature_input_header = format!(
             "{SIGNATURE_LABEL}=({covered_wire});created={created};expires={expires};keyid=\"{}#{}\";alg=\"ed25519\"",
-            self.identity.source_service_did, kid
+            self.identity.source_service_id, kid
         );
         let signature_input = parse_signature_input(&signature_input_header)
             .map_err(|_| PeerProtocolClientError::Sign)?;
@@ -374,7 +374,7 @@ mod tests {
                 .map(|(_, value)| value.as_str())
         };
 
-        assert_eq!(header("Source-Service-DID"), Some("did:web:auth.example"));
+        assert_eq!(header("Source-Service-ID"), Some("did:web:auth.example"));
         let expected_digest = sha256_digest(body);
         assert_eq!(
             header(HEADER_REQUEST_CANONICAL_DIGEST),

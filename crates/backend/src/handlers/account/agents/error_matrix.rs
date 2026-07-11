@@ -168,13 +168,13 @@ pub const PAUSED_REVOCATION_FRESHNESS_WINDOW: chrono::Duration = chrono::Duratio
 /// AUTH-1: fail-closed DID match. Returns
 /// [`AgentAuthRejection::VerificationMethodPrincipalMismatch`] when the
 /// proof's verification_method DID does not exactly equal the agent
-/// principal DID derived from the agent_principal_id in the request body.
+/// principal DID derived from the agent_id in the request body.
 /// This MUST be invoked **before** the proof validator so a crypto bug
 /// can't mask a principal-binding bug.
 ///
 /// `verification_method` is the DID URL extracted from the JWS header (or
 /// the embedded `verification_method` claim); `agent_principal_did` is the
-/// canonical DID carried by `agent_principal_id`.
+/// canonical DID carried by `agent_id`.
 pub fn enforce_verification_method_binding(
     verification_method: &str,
     agent_principal_did: &str,

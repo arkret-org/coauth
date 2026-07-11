@@ -317,21 +317,21 @@ pub async fn post_invite_relay(
         }
     }
 
-    let service_did = arkret::service_did_for(&arkret_config);
+    let service_id = arkret::service_id_for(&arkret_config);
     let trust_domain = arkret::trust_domain_for(&url_builder, &arkret_config);
-    let destination_service_did = params.invite_delivery.as_ref().map_or_else(
-        || service_did.clone(),
+    let destination_service_id = params.invite_delivery.as_ref().map_or_else(
+        || service_id.clone(),
         |delivery| {
             delivery
                 .invite_address
-                .recipient_service_did
+                .recipient_service_id
                 .as_str()
                 .to_owned()
         },
     );
     let identity = PeerProtocolIdentity {
-        source_service_did: service_did,
-        destination_service_did,
+        source_service_id: service_id,
+        destination_service_id,
         source_trust_domain: trust_domain.clone(),
         destination_trust_domain: trust_domain,
     };

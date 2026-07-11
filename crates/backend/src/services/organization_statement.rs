@@ -90,7 +90,7 @@ pub struct OrganizationStatementRequest {
 
 /// Issue a signed `ak.realm.organization` statement.
 ///
-/// `service_did` is the coauth service DID used to construct the
+/// `service_id` is the coauth service DID used to construct the
 /// `verification_method` DID-URL. `now` and `resolver` feed the SDK
 /// self-verification step. The returned payload is structurally + semantically
 /// valid per the SDK verifier; the cryptographic signature in
@@ -98,7 +98,7 @@ pub struct OrganizationStatementRequest {
 /// transcript.
 pub fn issue_organization_statement<R>(
     key_store: &Keystore,
-    service_did: &str,
+    service_id: &str,
     request: OrganizationStatementRequest,
     now: chrono::DateTime<chrono::Utc>,
     resolver: &R,
@@ -122,7 +122,7 @@ where
     let (alg, key) =
         preferred_service_signing_key(key_store).ok_or(OrganizationStatementError::NoSigningKey)?;
     let key_id = key.kid().ok_or(OrganizationStatementError::NoSigningKey)?;
-    let verification_method = format!("{service_did}#{key_id}");
+    let verification_method = format!("{service_id}#{key_id}");
 
     // Build the statement with a placeholder proof. The canonical signing bytes
     // are produced by the SDK (shared with soland's verifier) and exclude

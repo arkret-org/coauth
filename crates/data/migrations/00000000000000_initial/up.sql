@@ -45,8 +45,8 @@ CREATE TABLE public.account_security_events (
 CREATE TABLE public.accountability_grants (
     id uuid NOT NULL,
     accountability_grant_id text NOT NULL,
-    agent_principal_id text NOT NULL,
-    controller_did text NOT NULL,
+    agent_id text NOT NULL,
+    controller_id text NOT NULL,
     capabilities text[] NOT NULL,
     capabilities_digest text NOT NULL,
     reason text,
@@ -76,13 +76,13 @@ CREATE TABLE public.accountability_subject_revocations (
 
 -- AKP-0008 §4.5: durable accepted agent key authorizations. Column order
 -- tracks event-payload.schema.json#/$defs/agent_key_authorize_payload
--- (agent_principal_id, key_id, verification_method, accountable_principal_id,
+-- (agent_id, key_id, verification_method, accountable_principal_id,
 -- audience, issued_at, expires_at) so the fan-out payload soland writes as
 -- `ak.agent.key.authorize` stays field-aligned with the spec.
 CREATE TABLE public.agent_key_authorizations (
     id uuid NOT NULL,
     authorized_event_id text NOT NULL,
-    agent_principal_id text NOT NULL,
+    agent_id text NOT NULL,
     key_id text NOT NULL,
     verification_method text NOT NULL,
     public_key jsonb NOT NULL,
@@ -112,7 +112,7 @@ CREATE TABLE public.agent_key_authorizations (
 -- inside the window is still rejected. A sweeper prunes rows past `prune_after`.
 CREATE TABLE public.agent_session_proof_replay (
     id uuid NOT NULL,
-    agent_principal_id text NOT NULL,
+    agent_id text NOT NULL,
     verification_method text NOT NULL,
     challenge text NOT NULL,
     nonce text NOT NULL,
@@ -224,7 +224,7 @@ CREATE TABLE public.handle_audit_log (
     handle_aliases text[] DEFAULT ARRAY[]::text[] NOT NULL,
     old_did text,
     new_did text,
-    issuer_service_did text,
+    issuer_service_id text,
     audience text,
     claim_digest text,
     details jsonb DEFAULT '{}'::jsonb NOT NULL,
@@ -426,7 +426,7 @@ CREATE TABLE public.oauth_session_grants (
     applet_id text,
     effective_scope jsonb,
     registration_epoch text,
-    service_did text,
+    service_id text,
     capability_grant_refs text[] DEFAULT '{}'::text[] NOT NULL,
     audience text NOT NULL,
     scope_list text[] NOT NULL,
@@ -925,10 +925,10 @@ ALTER TABLE ONLY public.agent_session_proof_replay
     ADD CONSTRAINT agent_session_proof_replay_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.agent_session_proof_replay
-    ADD CONSTRAINT agent_session_proof_replay_challenge_key UNIQUE (agent_principal_id, verification_method, challenge);
+    ADD CONSTRAINT agent_session_proof_replay_challenge_key UNIQUE (agent_id, verification_method, challenge);
 
 ALTER TABLE ONLY public.agent_session_proof_replay
-    ADD CONSTRAINT agent_session_proof_replay_nonce_key UNIQUE (agent_principal_id, verification_method, nonce);
+    ADD CONSTRAINT agent_session_proof_replay_nonce_key UNIQUE (agent_id, verification_method, nonce);
 
 ALTER TABLE ONLY public.dpop_jti_replay
     ADD CONSTRAINT dpop_jti_replay_pkey PRIMARY KEY (jti_digest);
@@ -1163,17 +1163,17 @@ CREATE INDEX account_security_events_type_created_idx ON public.account_security
 
 CREATE INDEX account_security_events_user_created_idx ON public.account_security_events USING btree (user_id, created_at);
 
-CREATE UNIQUE INDEX accountability_grants_active_fingerprint_idx ON public.accountability_grants USING btree (agent_principal_id, controller_did, capabilities_digest) WHERE (revoked_at IS NULL);
+CREATE UNIQUE INDEX accountability_grants_active_fingerprint_idx ON public.accountability_grants USING btree (agent_id, controller_id, capabilities_digest) WHERE (revoked_at IS NULL);
 
-CREATE INDEX accountability_grants_agent_active_idx ON public.accountability_grants USING btree (agent_principal_id, issued_at) WHERE (revoked_at IS NULL);
+CREATE INDEX accountability_grants_agent_active_idx ON public.accountability_grants USING btree (agent_id, issued_at) WHERE (revoked_at IS NULL);
 
-CREATE INDEX accountability_grants_controller_active_idx ON public.accountability_grants USING btree (controller_did, issued_at) WHERE (revoked_at IS NULL);
+CREATE INDEX accountability_grants_controller_active_idx ON public.accountability_grants USING btree (controller_id, issued_at) WHERE (revoked_at IS NULL);
 
 CREATE INDEX accountability_grants_revoked_idx ON public.accountability_grants USING btree (revoked_at) WHERE (revoked_at IS NOT NULL);
 
 CREATE INDEX accountability_subject_revocations_subject_idx ON public.accountability_subject_revocations USING btree (subject_kind, subject_id, revoked_at);
 
-CREATE INDEX agent_key_authorizations_agent_active_idx ON public.agent_key_authorizations USING btree (agent_principal_id, issued_at) WHERE (revoked_at IS NULL);
+CREATE INDEX agent_key_authorizations_agent_active_idx ON public.agent_key_authorizations USING btree (agent_id, issued_at) WHERE (revoked_at IS NULL);
 
 CREATE INDEX agent_key_authorizations_revoked_idx ON public.agent_key_authorizations USING btree (revoked_at) WHERE (revoked_at IS NOT NULL);
 
@@ -1259,7 +1259,7 @@ CREATE INDEX oauth_session_grants_active_idx ON public.oauth_session_grants USIN
 
 CREATE INDEX oauth_session_grants_device_id_idx ON public.oauth_session_grants USING btree (device_id) WHERE (device_id IS NOT NULL);
 
-CREATE INDEX oauth_session_grants_applet_delegation_active_idx ON public.oauth_session_grants USING btree (applet_id, registration_epoch, service_did, expires_at) WHERE ((revoked_at IS NULL) AND (applet_id IS NOT NULL));
+CREATE INDEX oauth_session_grants_applet_delegation_active_idx ON public.oauth_session_grants USING btree (applet_id, registration_epoch, service_id, expires_at) WHERE ((revoked_at IS NULL) AND (applet_id IS NOT NULL));
 
 CREATE INDEX oauth_session_grants_applet_effective_scope_idx ON public.oauth_session_grants USING gin (effective_scope) WHERE (effective_scope IS NOT NULL);
 

@@ -18,7 +18,7 @@ coauth config generate > config.yaml
 - `database`
 - `arkret.principal_servers`
 - `arkret.identity_registry`
-- `arkret.service_did`
+- `arkret.service_id`
 - `arkret.issuer_did`
 - `arkret.admin_audience`
 - `secrets`

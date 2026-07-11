@@ -384,7 +384,7 @@ pub async fn issue_statement_handler(
 
     let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
-    let service_did = crate::handlers::arkret::service_did_for(&arkret_config);
+    let service_id = crate::handlers::arkret::service_id_for(&arkret_config);
 
     let call_context = extract_call_context(req, depot).await?;
     let executed_by = call_context
@@ -439,9 +439,9 @@ pub async fn issue_statement_handler(
     // delegation row; direct statements use the offline resolver.
     let payload = if body.delegation_ref.is_some() {
         let resolver = RepositoryDelegationResolver::new(delegation, now);
-        issue_organization_statement(&key_store, &service_did, request, now, &resolver)
+        issue_organization_statement(&key_store, &service_id, request, now, &resolver)
     } else {
-        issue_organization_statement(&key_store, &service_did, request, now, &offline_resolver())
+        issue_organization_statement(&key_store, &service_id, request, now, &offline_resolver())
     }
     .map_err(|e| AppError::bad_request(format!("organization statement issuance failed: {e}")))?;
 

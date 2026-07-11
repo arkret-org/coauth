@@ -23,11 +23,11 @@ const TRUST_DOMAIN_PREFIX: &str = "ak:trust_domain:";
 const SESSION_GRANT_TTL_MICROS: i64 = 8 * 60 * 60 * 1_000_000;
 const SESSION_GRANT_TTL_MIN_SECONDS: i64 = 60;
 const SESSION_GRANT_TTL_MAX_SECONDS: i64 = 86_400;
-const SERVICE_DID_BOOTSTRAP_HELP: &str = concat!(
+const SERVICE_ID_BOOTSTRAP_HELP: &str = concat!(
     "Local development: run `coauth config generate --dev -o config.dev.yaml`. ",
     "Production: run `coauth config service-did init --starid-url <https://starid.example> ",
     "--host <auth.example.com> --key-output <service-did-keys.yaml>` and copy the emitted ",
-    "`arkret.service_did` into your config."
+    "`arkret.service_id` into your config."
 );
 
 fn default_session_grant_ttl() -> Duration {
@@ -139,10 +139,10 @@ pub struct ArkretConfig {
     /// personal-node no-history profile selected by
     /// `deployment_profile=personal_node` and `principal_method=did:web`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub service_did: Option<String>,
+    pub service_id: Option<String>,
 
     /// Optional issuer DID to embed in Arkret session grants and discovery
-    /// documents. Defaults to `service_did`.
+    /// documents. Defaults to `service_id`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issuer_did: Option<String>,
 
@@ -241,13 +241,13 @@ pub struct ArkretConfig {
     /// verifier endpoint returns `503 verifier_not_configured` because
     /// it has no trusted `iss` to compare against.
     ///
-    /// Override at runtime via `COAUTH_VERIFICATION_SERVICE_DID`.
+    /// Override at runtime via `COAUTH_VERIFICATION_SERVICE_ID`.
     ///
     /// Deprecated single-value form. New deployments use
-    /// [`Self::verification_service_dids`]; this field is ignored by the
+    /// [`Self::verification_service_ids`]; this field is ignored by the
     /// effective allowlist.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub verification_service_did: Option<String>,
+    pub verification_service_id: Option<String>,
 
     /// SEC-07a — explicit allowlist of trusted 3PID verification-service
     /// DIDs whose `binding_proof` JWTs this coauth deployment will accept
@@ -255,15 +255,15 @@ pub struct ArkretConfig {
     ///
     /// Per `spec/v1/zh/sync/third-party-invites.md` §2.1 (Allowlist MUST)
     /// the verification service is the trust root of a 3PID invite, so the
-    /// acceptable `verification_service_did` MUST be constrained to an
+    /// acceptable `verification_service_id` MUST be constrained to an
     /// explicit authorization set rather than taken from invite metadata.
-    /// Any `binding_proof.verification_service_did` not in this set MUST be
+    /// Any `binding_proof.verification_service_id` not in this set MUST be
     /// rejected (and MUST NOT be admitted merely because the `subject_proof`
     /// is valid — see §4.3 step 2a).
     ///
     /// The effective set is computed by [`Self::verification_service_allowlist`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub verification_service_dids: Vec<String>,
+    pub verification_service_ids: Vec<String>,
 
     /// Require signed admin-audit writes to succeed before committing
     /// security-sensitive admin mutations. Defaults to `false` so existing
@@ -290,7 +290,7 @@ impl Default for ArkretConfig {
             principal_method: PrincipalMethodConfig::default(),
             identity_registry: None,
             starid: None,
-            service_did: None,
+            service_id: None,
             issuer_did: None,
             session_grant_ttl: default_session_grant_ttl(),
             admin_audience: None,
@@ -300,8 +300,8 @@ impl Default for ArkretConfig {
             oob_code_kind: OobCodeKindConfig::default(),
             password_login_session_grants_enabled: false,
             admin_org_id: None,
-            verification_service_did: None,
-            verification_service_dids: Vec::new(),
+            verification_service_id: None,
+            verification_service_ids: Vec::new(),
             audit_signature_fail_closed: false,
         }
     }
@@ -316,7 +316,7 @@ impl ArkretConfig {
             && PrincipalMethodConfig::is_default(&self.principal_method)
             && self.identity_registry.is_none()
             && self.starid.is_none()
-            && self.service_did.is_none()
+            && self.service_id.is_none()
             && self.issuer_did.is_none()
             && session_grant_ttl_is_default(&self.session_grant_ttl)
             && self.admin_audience.is_none()
@@ -326,13 +326,13 @@ impl ArkretConfig {
             && matches!(self.oob_code_kind, OobCodeKindConfig::OfflineVerifiable)
             && !self.password_login_session_grants_enabled
             && self.admin_org_id.is_none()
-            && self.verification_service_did.is_none()
-            && self.verification_service_dids.is_empty()
+            && self.verification_service_id.is_none()
+            && self.verification_service_ids.is_empty()
             && !self.audit_signature_fail_closed
     }
 
     /// SEC-07a — effective allowlist of trusted 3PID verification-service
-    /// DIDs from the multi-value [`Self::verification_service_dids`].
+    /// DIDs from the multi-value [`Self::verification_service_ids`].
     ///
     /// Empty/whitespace-only entries are dropped and duplicates are
     /// collapsed. An empty result means no verifier is configured and the
@@ -347,7 +347,7 @@ impl ArkretConfig {
                 out.push(trimmed.to_owned());
             }
         };
-        for did in &self.verification_service_dids {
+        for did in &self.verification_service_ids {
             push(did);
         }
         out
@@ -416,7 +416,7 @@ impl ArkretConfig {
     /// Returns whether this deployment explicitly opts into the no-history
     /// `did:web` service DID exception.
     #[must_use]
-    pub const fn did_web_service_did_allowed(&self) -> bool {
+    pub const fn did_web_service_id_allowed(&self) -> bool {
         self.did_web_principal_allowed()
     }
 
@@ -488,25 +488,25 @@ impl ConfigurationSection for ArkretConfig {
             .into());
         }
 
-        match self.service_did.as_deref().map(str::trim) {
+        match self.service_id.as_deref().map(str::trim) {
             Some("") => {
                 return Err(std::io::Error::other(format!(
-                    "arkret.service_did must not be empty. {SERVICE_DID_BOOTSTRAP_HELP}"
+                    "arkret.service_id must not be empty. {SERVICE_ID_BOOTSTRAP_HELP}"
                 ))
                 .into());
             }
-            Some(service_did) if service_did.starts_with("did:webvh:") => {}
-            Some(service_did)
-                if service_did.starts_with("did:web:") && self.did_web_service_did_allowed() => {}
-            Some(service_did) if service_did.starts_with("did:web:") => {
+            Some(service_id) if service_id.starts_with("did:webvh:") => {}
+            Some(service_id)
+                if service_id.starts_with("did:web:") && self.did_web_service_id_allowed() => {}
+            Some(service_id) if service_id.starts_with("did:web:") => {
                 return Err(std::io::Error::other(format!(
-                    "arkret.service_did=did:web requires the explicit personal-node no-history profile. {SERVICE_DID_BOOTSTRAP_HELP}"
+                    "arkret.service_id=did:web requires the explicit personal-node no-history profile. {SERVICE_ID_BOOTSTRAP_HELP}"
                 ))
                 .into());
             }
             Some(_) => {
                 return Err(std::io::Error::other(format!(
-                    "arkret.service_did must use did:webvh, except explicit personal-node no-history did:web. {SERVICE_DID_BOOTSTRAP_HELP}"
+                    "arkret.service_id must use did:webvh, except explicit personal-node no-history did:web. {SERVICE_ID_BOOTSTRAP_HELP}"
                 ))
                 .into());
             }
@@ -516,7 +516,7 @@ impl ConfigurationSection for ArkretConfig {
             // a request path silently minting a downgraded identity.
             None => {
                 return Err(std::io::Error::other(format!(
-                    "arkret.service_did is required (did:webvh by default; explicit did:web only for the personal-node no-history profile). {SERVICE_DID_BOOTSTRAP_HELP}"
+                    "arkret.service_id is required (did:webvh by default; explicit did:web only for the personal-node no-history profile). {SERVICE_ID_BOOTSTRAP_HELP}"
                 ))
                 .into());
             }
@@ -524,7 +524,7 @@ impl ConfigurationSection for ArkretConfig {
 
         if let Some(issuer_did) = self.issuer_did.as_deref().map(str::trim)
             && issuer_did.starts_with("did:web:")
-            && !self.did_web_service_did_allowed()
+            && !self.did_web_service_id_allowed()
         {
             return Err(std::io::Error::other(
                 "arkret.issuer_did=did:web requires the explicit personal-node no-history profile",
@@ -684,7 +684,7 @@ mod tests {
 
     fn valid_service_config() -> ArkretConfig {
         ArkretConfig {
-            service_did: Some("did:webvh:ztest:auth.example:webvh:service".to_owned()),
+            service_id: Some("did:webvh:ztest:auth.example:webvh:service".to_owned()),
             ..ArkretConfig::default()
         }
     }
@@ -759,7 +759,7 @@ mod tests {
             principal_method: PrincipalMethodConfig::DidWeb,
             // Even the personal-node no-history profile must configure its
             // service DID explicitly — omitting it fails validation.
-            service_did: Some("did:web:personal.example".to_owned()),
+            service_id: Some("did:web:personal.example".to_owned()),
             ..ArkretConfig::default()
         };
         assert!(personal_web.did_web_principal_allowed());
@@ -791,7 +791,7 @@ mod tests {
     }
 
     #[test]
-    fn service_did_requires_webvh_or_explicit_no_history_web() {
+    fn service_id_requires_webvh_or_explicit_no_history_web() {
         assert!(
             ArkretConfig::default()
                 .validate(&figment::Figment::new())
@@ -804,7 +804,7 @@ mod tests {
         );
 
         let organization_web = ArkretConfig {
-            service_did: Some("did:web:auth.example".to_owned()),
+            service_id: Some("did:web:auth.example".to_owned()),
             ..ArkretConfig::default()
         };
         assert!(organization_web.validate(&figment::Figment::new()).is_err());
@@ -812,7 +812,7 @@ mod tests {
         let personal_web = ArkretConfig {
             deployment_profile: DeploymentProfileConfig::PersonalNode,
             principal_method: PrincipalMethodConfig::DidWeb,
-            service_did: Some("did:web:auth.example".to_owned()),
+            service_id: Some("did:web:auth.example".to_owned()),
             ..ArkretConfig::default()
         };
         assert!(personal_web.validate(&figment::Figment::new()).is_ok());
@@ -821,7 +821,7 @@ mod tests {
     #[test]
     fn verification_allowlist_ignores_deprecated_single_value() {
         let config = ArkretConfig {
-            verification_service_did: Some("did:web:verifier.example".to_owned()),
+            verification_service_id: Some("did:web:verifier.example".to_owned()),
             ..ArkretConfig::default()
         };
         assert!(config.verification_service_allowlist().is_empty());
@@ -830,8 +830,8 @@ mod tests {
     #[test]
     fn verification_allowlist_merges_and_dedups() {
         let config = ArkretConfig {
-            verification_service_did: Some("did:web:a.example".to_owned()),
-            verification_service_dids: vec![
+            verification_service_id: Some("did:web:a.example".to_owned()),
+            verification_service_ids: vec![
                 "did:web:a.example".to_owned(),
                 "  ".to_owned(), // whitespace dropped
                 "did:web:b.example".to_owned(),
@@ -859,7 +859,7 @@ mod tests {
     #[test]
     fn verification_dids_deserializes_list() {
         let config: ArkretConfig = serde_json::from_value(serde_json::json!({
-            "verification_service_dids": ["did:web:x.example", "did:web:y.example"]
+            "verification_service_ids": ["did:web:x.example", "did:web:y.example"]
         }))
         .unwrap();
         assert_eq!(

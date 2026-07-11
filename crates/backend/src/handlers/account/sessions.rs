@@ -1,3 +1,4 @@
+use coauth_data::Pagination;
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -12,7 +13,6 @@ use crate::handlers::account::service::sessions::{
     end_oauth_session as end_oauth_session_service, list_active_oauth_sessions_for_requester,
     load_browser_session_detail, load_oauth_session_detail, set_oauth_session_human_name,
 };
-use coauth_data::Pagination;
 
 // ── Response types ─────────────────────────────────────────────
 

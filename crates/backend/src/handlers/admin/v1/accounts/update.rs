@@ -13,7 +13,7 @@ use crate::handlers::admin::audit_helper::AdminAuditSigning;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::params::extract_ulid_param;
 use crate::handlers::admin::response::SingleOutcome;
-use crate::handlers::arkret::service_did_for;
+use crate::handlers::arkret::service_id_for;
 use crate::handlers::common::DepotExt;
 use crate::{AppError, JsonResult};
 
@@ -47,10 +47,10 @@ pub async fn update_account(
     let key_store = depot.key_store()?;
     let arkret_config = depot.arkret_config()?;
     let did_resolver = depot.did_resolver_service()?;
-    let service_did = service_did_for(&arkret_config);
+    let service_id = service_id_for(&arkret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
-        service_did: &service_did,
+        service_id: &service_id,
         fail_closed: arkret_config.audit_signature_fail_closed,
     };
     let mut rng = crate::handlers::account::make_rng();

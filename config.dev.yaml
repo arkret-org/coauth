@@ -138,7 +138,7 @@ rate_limiting:
       burst: 100000
       per_second: 100000
 arkret:
-  service_did: did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:auth.local.host:webvh:service
+  service_id: did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:auth.local.host:webvh:service
   principal_server_url: https://local.host/
   principal_servers:
   - name: soland-dev

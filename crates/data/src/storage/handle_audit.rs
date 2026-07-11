@@ -34,7 +34,7 @@ pub struct NewHandleAuditEvent {
     handle_aliases: Vec<String>,
     old_did: Option<String>,
     new_did: Option<String>,
-    issuer_service_did: Option<String>,
+    issuer_service_id: Option<String>,
     audience: Option<String>,
     claim_digest: Option<String>,
     details: Value,
@@ -53,7 +53,7 @@ impl NewHandleAuditEvent {
             handle_aliases: Vec::new(),
             old_did: None,
             new_did: None,
-            issuer_service_did: None,
+            issuer_service_id: None,
             audience: None,
             claim_digest: None,
             details: Value::Null,
@@ -101,8 +101,8 @@ impl NewHandleAuditEvent {
 
     /// Set the issuer service DID that signed the affected `handle_claim`.
     #[must_use]
-    pub fn with_issuer_service_did(mut self, did: impl Into<String>) -> Self {
-        self.issuer_service_did = Some(did.into());
+    pub fn with_issuer_service_id(mut self, did: impl Into<String>) -> Self {
+        self.issuer_service_id = Some(did.into());
         self
     }
 
@@ -173,8 +173,8 @@ impl NewHandleAuditEvent {
 
     /// Borrow the issuer service DID.
     #[must_use]
-    pub fn issuer_service_did(&self) -> Option<&str> {
-        self.issuer_service_did.as_deref()
+    pub fn issuer_service_id(&self) -> Option<&str> {
+        self.issuer_service_id.as_deref()
     }
 
     /// Borrow the audience.

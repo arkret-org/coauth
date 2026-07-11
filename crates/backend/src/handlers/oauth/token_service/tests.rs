@@ -357,7 +357,7 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
                 applet_id: None,
                 effective_scope: None,
                 registration_epoch: None,
-                service_did: None,
+                service_id: None,
                 capability_grant_refs: Vec::new(),
                 audience: "did:web:audience.example",
                 scope,

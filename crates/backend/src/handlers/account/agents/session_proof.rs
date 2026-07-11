@@ -66,10 +66,10 @@ pub(super) const LIMITED_AGENT_SCOPE_ACTIONS: &[&str] = &[
 /// Outcome of validating an `agent_key_proof` session-grant request.
 pub struct AgentSessionAuthorization {
     /// Agent principal DID the proof authenticated.
-    pub agent_principal_id: String,
+    pub agent_id: String,
     /// Controller principal DID accountable for the agent (spec
-    /// `controller_principal_id`, e.g. agent_pause/resume/deactivate payloads).
-    pub controller_principal_id: String,
+    /// `controller_id`, e.g. agent_pause/resume/deactivate payloads).
+    pub controller_id: String,
     /// Effective granted scope. Service-surface tokens are intersected with the
     /// authorized key scope and policy/resource constraints; content capability
     /// tokens are additionally intersected with active capability grants.
@@ -138,7 +138,7 @@ pub async fn validate_agent_session_proof(
     let proof = &body.proof;
 
     // The agent principal MUST be present for this branch.
-    let agent_principal_id = body
+    let agent_id = body
         .principal_id
         .as_ref()
         .map(|did| did.as_str().to_owned())
@@ -150,7 +150,7 @@ pub async fn validate_agent_session_proof(
         .verification_method
         .as_deref()
         .ok_or(AgentAuthRejection::VerificationMethodPrincipalMismatch)?;
-    enforce_verification_method_binding(verification_method, &agent_principal_id)?;
+    enforce_verification_method_binding(verification_method, &agent_id)?;
 
     // expiry / audience.
     let expires_at = proof.expires_at.ok_or(AgentAuthRejection::ProofInvalid)?;
@@ -194,7 +194,7 @@ pub async fn validate_agent_session_proof(
     validate_agent_key_authorization_binding(
         &authorization,
         now,
-        &agent_principal_id,
+        &agent_id,
         verification_method,
         &proof.audience,
     )?;
@@ -221,7 +221,7 @@ pub async fn validate_agent_session_proof(
             rng,
             clock,
             NewAgentSessionProofReplay {
-                agent_principal_id: agent_principal_id.clone(),
+                agent_id: agent_id.clone(),
                 verification_method: verification_method.to_owned(),
                 challenge: proof.challenge.clone(),
                 nonce: nonce.to_owned(),
@@ -259,19 +259,16 @@ pub async fn validate_agent_session_proof(
         return Err(AgentSessionProofError::HumanApprovalRequired(details));
     }
 
-    let controller_principal_id = authorization.accountable_principal_id.clone();
+    let controller_id = authorization.accountable_principal_id.clone();
     let active_grants = repo
         .accountability_grant()
-        .list_active_for_subject(
-            AccountabilitySubjectKind::AgentPrincipalId,
-            &agent_principal_id,
-        )
+        .list_active_for_subject(AccountabilitySubjectKind::AgentId, &agent_id)
         .await
         .map_err(|_| AgentAuthRejection::AccountabilityGrantMissing)?
         .into_iter()
         .filter(|grant| {
-            grant.controller_did == controller_principal_id
-                && grant.agent_principal_id == agent_principal_id
+            grant.controller_id == controller_id
+                && grant.agent_id == agent_id
                 && grant.revoked_at.is_none()
         })
         .collect::<Vec<_>>();
@@ -302,7 +299,7 @@ pub async fn validate_agent_session_proof(
         &capability_scope,
         realm_policy.as_ref(),
         policy_data,
-        &agent_principal_id,
+        &agent_id,
     )?;
 
     let mut constraints = serde_json::json!({
@@ -316,7 +313,7 @@ pub async fn validate_agent_session_proof(
     }
 
     let mut scope_details = serde_json::json!({
-        "controller_principal_id": &controller_principal_id,
+        "controller_id": &controller_id,
         "realm_ids": &effective_scope.realm_ids,
         "strand_ids": &effective_scope.strand_ids,
         "resources": {
@@ -367,8 +364,8 @@ pub async fn validate_agent_session_proof(
     };
 
     Ok(AgentSessionAuthorization {
-        agent_principal_id,
-        controller_principal_id,
+        agent_id,
+        controller_id,
         granted_scope: effective_scope.granted_scope,
         scope_details,
         wire_scope_details,
@@ -392,7 +389,7 @@ fn canonical_session_grant_request_digest_without_signature(
 fn validate_agent_key_authorization_binding(
     authorization: &coauth_data::agent_key::AgentKeyAuthorization,
     now: chrono::DateTime<chrono::Utc>,
-    agent_principal_id: &str,
+    agent_id: &str,
     verification_method: &str,
     audience: &str,
 ) -> Result<(), AgentAuthRejection> {
@@ -409,7 +406,7 @@ fn validate_agent_key_authorization_binding(
     {
         return Err(AgentAuthRejection::ProofInvalid);
     }
-    if authorization.agent_principal_id != agent_principal_id
+    if authorization.agent_id != agent_id
         || authorization.verification_method != verification_method
     {
         return Err(AgentAuthRejection::VerificationMethodPrincipalMismatch);
@@ -491,7 +488,7 @@ fn intersect_agent_session_scope(
     capability_scope: &AgentSessionCapabilityScope,
     realm_policy: Option<&AgentSessionRealmPolicy>,
     policy_data: Option<&Value>,
-    agent_principal_id: &str,
+    agent_id: &str,
 ) -> Result<EffectiveAgentSessionScope, AgentAuthRejection> {
     let key_scope =
         intersect_requested_scope_with_agent_key_scope(agent_key_scope, requested_scope)?;
@@ -573,7 +570,7 @@ fn intersect_agent_session_scope(
 
         let policy_data = policy_data.ok_or(AgentAuthRejection::PolicyUnavailable)?;
         granted_scope.retain(|token| {
-            realm_policy_allows_session_scope(policy_data, agent_principal_id, token, &realm_ids)
+            realm_policy_allows_session_scope(policy_data, agent_id, token, &realm_ids)
         });
         if granted_scope.is_empty() {
             return Err(AgentAuthRejection::PolicyViolation);
@@ -590,7 +587,7 @@ fn intersect_agent_session_scope(
     } else {
         if let Some(policy_data) = policy_data {
             granted_scope.retain(|token| {
-                realm_policy_allows_session_scope(policy_data, agent_principal_id, token, &[])
+                realm_policy_allows_session_scope(policy_data, agent_id, token, &[])
             });
             if granted_scope.is_empty() {
                 return Err(AgentAuthRejection::PolicyViolation);
@@ -835,18 +832,18 @@ fn missing_resource_selector_rejection(
 
 fn realm_policy_allows_session_scope(
     policy_data: &Value,
-    agent_principal_id: &str,
+    agent_id: &str,
     action: &str,
     realm_ids: &[String],
 ) -> bool {
-    if policy_scope_rejects_session_scope(policy_data, agent_principal_id, action) {
+    if policy_scope_rejects_session_scope(policy_data, agent_id, action) {
         return false;
     }
 
     if let Some(default_scope) = policy_data
         .get("realms")
         .and_then(|realms| realms.get("default"))
-        && policy_scope_rejects_session_scope(default_scope, agent_principal_id, action)
+        && policy_scope_rejects_session_scope(default_scope, agent_id, action)
     {
         return false;
     }
@@ -855,7 +852,7 @@ fn realm_policy_allows_session_scope(
         if let Some(realm_scope) = policy_data
             .get("realms")
             .and_then(|realms| realms.get(realm_id.as_str()))
-            && policy_scope_rejects_session_scope(realm_scope, agent_principal_id, action)
+            && policy_scope_rejects_session_scope(realm_scope, agent_id, action)
         {
             return false;
         }
@@ -864,12 +861,8 @@ fn realm_policy_allows_session_scope(
     true
 }
 
-fn policy_scope_rejects_session_scope(
-    scope: &Value,
-    agent_principal_id: &str,
-    action: &str,
-) -> bool {
-    value_contains_str(scope.get("deny_actors"), agent_principal_id)
+fn policy_scope_rejects_session_scope(scope: &Value, agent_id: &str, action: &str) -> bool {
+    value_contains_str(scope.get("deny_actors"), agent_id)
         || value_contains_str(scope.get("deny_actions"), action)
         || value_contains_str(scope.get("require_review_actions"), action)
 }
@@ -1148,7 +1141,7 @@ mod tests {
         coauth_data::agent_key::AgentKeyAuthorization {
             id: coauth_data::Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
             authorized_event_id: "ak:event:01970000-0000-7000-8000-000000000021".to_owned(),
-            agent_principal_id: "did:web:agent.example".to_owned(),
+            agent_id: "did:web:agent.example".to_owned(),
             key_id: "runtime-key-1".to_owned(),
             verification_method: "did:web:agent.example#runtime-key-1".to_owned(),
             public_key: serde_json::json!({

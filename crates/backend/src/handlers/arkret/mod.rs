@@ -497,24 +497,24 @@ fn map_did_resolve_error(
 /// There is deliberately NO host-derived `did:web` fallback here:
 /// `identity-did.md` §3 makes `did:webvh` the default service DID method and
 /// any `did:web` downgrade an explicit no-history choice, so an unconfigured
-/// `arkret.service_did` fails startup validation instead of silently minting
+/// `arkret.service_id` fails startup validation instead of silently minting
 /// a `did:web` identity (see `ArkretConfig::validate`).
-pub(crate) fn service_did_for(arkret_config: &ArkretConfig) -> String {
+pub(crate) fn service_id_for(arkret_config: &ArkretConfig) -> String {
     arkret_config
-        .service_did
+        .service_id
         .clone()
-        .expect("arkret.service_did is enforced by startup configuration validation")
+        .expect("arkret.service_id is enforced by startup configuration validation")
 }
 
 pub(crate) fn issuer_did_for(arkret_config: &ArkretConfig) -> String {
     arkret_config
         .issuer_did
         .clone()
-        .unwrap_or_else(|| service_did_for(arkret_config))
+        .unwrap_or_else(|| service_id_for(arkret_config))
 }
 
 pub(crate) fn user_did_for(arkret_config: &ArkretConfig, user: &User) -> String {
-    format!("{}:users:{}", service_did_for(arkret_config), user.id)
+    format!("{}:users:{}", service_id_for(arkret_config), user.id)
 }
 
 #[must_use]
@@ -827,7 +827,7 @@ fn preferred_signing_key(
 }
 
 pub(crate) fn parse_local_user_did_for(arkret_config: &ArkretConfig, did: &str) -> Option<Ulid> {
-    let prefix = format!("{}:users:", service_did_for(arkret_config));
+    let prefix = format!("{}:users:", service_id_for(arkret_config));
     did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
 }
 

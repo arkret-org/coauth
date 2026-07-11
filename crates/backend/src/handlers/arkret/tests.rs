@@ -120,18 +120,18 @@ fn personal_node_did_web_config() -> ArkretConfig {
     ArkretConfig {
         // Personal-node no-history profile legitimately advertises a did:web
         // service DID (spec identity-did.md §3.1 personal_node exception).
-        service_did: Some("did:web:auth.example.com".to_owned()),
+        service_id: Some("did:web:auth.example.com".to_owned()),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
         ..ArkretConfig::default()
     }
 }
 
-/// Test config with the now-mandatory service_did set (the backend no longer
+/// Test config with the now-mandatory service_id set (the backend no longer
 /// derives a did:web default; startup validation enforces it in production).
 fn test_arkret_config() -> ArkretConfig {
     ArkretConfig {
-        service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
+        service_id: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
         ..ArkretConfig::default()
     }
 }
@@ -151,11 +151,11 @@ fn service_and_user_identifiers_follow_arkret_shape() {
     // is always the explicitly configured one (did:webvh by default; startup
     // validation fails fast when it is missing).
     let arkret_config = ArkretConfig {
-        service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
+        service_id: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
         ..ArkretConfig::default()
     };
     assert_eq!(
-        service_did_for(&arkret_config),
+        service_id_for(&arkret_config),
         "did:webvh:ztest:auth.example.com:webvh:service"
     );
     assert_eq!(
@@ -182,7 +182,7 @@ fn service_and_user_identifiers_follow_arkret_shape() {
 fn service_describe_exposes_auth_account_boundary_profile() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
     let arkret_config = ArkretConfig {
-        service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
+        service_id: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
         issuer_did: Some("did:webvh:ztest:issuer.example.com:webvh:issuer".to_owned()),
         admin_audience: Some("https://auth.example.com/api/admin".to_owned()),
         principal_servers: vec![PrincipalServerConfig {
@@ -208,8 +208,8 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         oob_code_kind: ArkretConfig::default().oob_code_kind,
         password_login_session_grants_enabled: false,
         admin_org_id: None,
-        verification_service_did: None,
-        verification_service_dids: Vec::new(),
+        verification_service_id: None,
+        verification_service_ids: Vec::new(),
         audit_signature_fail_closed: false,
     };
 
@@ -217,7 +217,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         serde_json::to_value(service_describe_response(&url_builder, &arkret_config, &[])).unwrap();
 
     assert_eq!(
-        body["service_did"],
+        body["service_id"],
         "did:webvh:ztest:auth.example.com:webvh:service"
     );
     assert_eq!(body["trust_domain"], "ak:trust_domain:auth.example.com");
@@ -344,7 +344,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
 fn service_describe_marks_personal_node_did_web_service_as_no_history() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
     let arkret_config = ArkretConfig {
-        service_did: Some("did:web:auth.example.com".to_owned()),
+        service_id: Some("did:web:auth.example.com".to_owned()),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
         ..ArkretConfig::default()
@@ -352,20 +352,20 @@ fn service_describe_marks_personal_node_did_web_service_as_no_history() {
     let body =
         serde_json::to_value(service_describe_response(&url_builder, &arkret_config, &[])).unwrap();
 
-    assert_eq!(body["service_did"], "did:web:auth.example.com");
+    assert_eq!(body["service_id"], "did:web:auth.example.com");
     assert_eq!(
-        body["auth_metadata"]["service_did_history_evidence_kind"],
+        body["auth_metadata"]["service_id_history_evidence_kind"],
         "none"
     );
     assert_eq!(
-        body["auth_metadata"]["service_did_trust_profile"],
+        body["auth_metadata"]["service_id_trust_profile"],
         "no_history_service"
     );
 }
 
 fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
     ArkretConfig {
-        service_did: Some(
+        service_id: Some(
             "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:coauth"
                 .to_owned(),
         ),
@@ -549,7 +549,7 @@ fn service_describe_emits_trust_domain_when_configured() {
         None,
     );
     let config = ArkretConfig {
-        service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
+        service_id: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
         trust_domain: Some("ak:trust_domain:example.net".to_owned()),
         ..Default::default()
     };
@@ -621,7 +621,7 @@ fn service_describe_advertises_configured_session_grant_ttl() {
         None,
     );
     let config = ArkretConfig {
-        service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
+        service_id: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
         session_grant_ttl: Duration::try_minutes(15).unwrap(),
         ..ArkretConfig::default()
     };
@@ -713,7 +713,7 @@ fn session_grant_rejects_implicit_did_web_fallback() {
     // explicit `did_web_principal_allowed` opt-in the grant MUST be rejected
     // with `DidWebPrincipalNotExplicit`.
     let arkret_config = ArkretConfig {
-        service_did: Some("did:web:auth.example.com".to_owned()),
+        service_id: Some("did:web:auth.example.com".to_owned()),
         ..ArkretConfig::default()
     };
     let key_store = test_keystore();
@@ -752,7 +752,7 @@ fn session_grant_uses_configured_ttl() {
     let arkret_config = ArkretConfig {
         // Personal-node no-history profile legitimately advertises a did:web
         // service DID (spec identity-did.md §3.1 personal_node exception).
-        service_did: Some("did:web:auth.example.com".to_owned()),
+        service_id: Some("did:web:auth.example.com".to_owned()),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
         session_grant_ttl: Duration::try_minutes(15).unwrap(),
@@ -806,7 +806,7 @@ fn session_grant_record_exposes_metadata_without_secrets() {
         applet_id: None,
         effective_scope: None,
         registration_epoch: None,
-        service_did: None,
+        service_id: None,
         capability_grant_refs: Vec::new(),
         audience: "https://soland.example.com/api".to_owned(),
         scope: Scope::from_iter([PRINCIPAL_SERVER_SESSION_BIND_SCOPE.parse().unwrap()]),
@@ -847,7 +847,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
         applet_id: None,
         effective_scope: None,
         registration_epoch: None,
-        service_did: None,
+        service_id: None,
         capability_grant_refs: Vec::new(),
         audience: "https://soland.example.com/api".to_owned(),
         scope: Scope::from_iter([PRINCIPAL_SERVER_SESSION_BIND_SCOPE.parse().unwrap()]),
@@ -1250,7 +1250,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
             .to_owned();
     let now = state.clock.now();
     let scope_details = serde_json::json!({
-        "controller_principal_id": "did:web:alice.example",
+        "controller_id": "did:web:alice.example",
         "resources": {
             "realm_refs": ["ak:realm:team"],
         },
@@ -1601,7 +1601,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     let key_store = test_keystore();
 
     let hint = arkret_core::DeliveryBindingHint {
-        recipient_service_did: arkret_core::Did::new("did:web:soland.example").unwrap(),
+        recipient_service_id: arkret_core::Did::new("did:web:soland.example").unwrap(),
         recipient_service_type: arkret_core::RecipientServiceType::PrincipalServer,
         binding_source: arkret_core::HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: [arkret_core::DeliveryMode::Events].into_iter().collect(),
@@ -1701,7 +1701,7 @@ fn issue_handle_claim_rejects_did_web_subject_without_explicit_personal_node_gat
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
     let key_store = test_keystore();
     let hint = arkret_core::DeliveryBindingHint {
-        recipient_service_did: arkret_core::Did::new("did:web:soland.example").unwrap(),
+        recipient_service_id: arkret_core::Did::new("did:web:soland.example").unwrap(),
         recipient_service_type: arkret_core::RecipientServiceType::PrincipalServer,
         binding_source: arkret_core::HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: [arkret_core::DeliveryMode::Events].into_iter().collect(),
@@ -1740,7 +1740,7 @@ fn issue_handle_claim_accepts_organization_handle_claim_kind() {
     let key_store = test_keystore();
 
     let hint = arkret_core::DeliveryBindingHint {
-        recipient_service_did: arkret_core::Did::new("did:web:soland.example").unwrap(),
+        recipient_service_id: arkret_core::Did::new("did:web:soland.example").unwrap(),
         recipient_service_type: arkret_core::RecipientServiceType::PrincipalServer,
         binding_source: arkret_core::HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: [arkret_core::DeliveryMode::Events].into_iter().collect(),

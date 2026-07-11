@@ -45,7 +45,7 @@ pub enum AuditSignatureStatus {
 #[derive(Clone, Copy)]
 pub struct AdminAuditSigning<'a> {
     pub keystore: &'a Keystore,
-    pub service_did: &'a str,
+    pub service_id: &'a str,
     pub fail_closed: bool,
 }
 
@@ -87,7 +87,7 @@ pub async fn record_admin_operation_signed(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn coauth_data::Clock,
     keystore: &Keystore,
-    service_did: &str,
+    service_id: &str,
     fail_closed: bool,
     admin_user: Option<&coauth_data::User>,
     operation: AdminOperation,
@@ -105,7 +105,7 @@ pub async fn record_admin_operation_signed(
     }
 
     let log = repo.audit().add_admin_operation(rng, clock, params).await?;
-    sign_persisted_admin_operation(repo, keystore, service_did, fail_closed, &log).await
+    sign_persisted_admin_operation(repo, keystore, service_id, fail_closed, &log).await
 }
 
 /// Record a signed service-originated admin audit row.
@@ -121,31 +121,31 @@ pub(crate) async fn record_service_admin_operation_signed(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn coauth_data::Clock,
     keystore: &Keystore,
-    service_did: &str,
+    service_id: &str,
     fail_closed: bool,
     operation: AdminOperation,
     resource_type: &str,
     resource_id: Option<Ulid>,
     details: serde_json::Value,
 ) -> Result<(), RepositoryError> {
-    let admin_user_id = service_admin_user_id(service_did);
+    let admin_user_id = service_admin_user_id(service_id);
     let mut params = NewAdminOperationLog::new(admin_user_id, operation, resource_type, details);
     if let Some(id) = resource_id {
         params = params.with_resource_id(id);
     }
 
     let log = repo.audit().add_admin_operation(rng, clock, params).await?;
-    sign_persisted_admin_operation(repo, keystore, service_did, fail_closed, &log).await
+    sign_persisted_admin_operation(repo, keystore, service_id, fail_closed, &log).await
 }
 
 async fn sign_persisted_admin_operation(
     repo: &mut BoxRepository,
     keystore: &Keystore,
-    service_did: &str,
+    service_id: &str,
     fail_closed: bool,
     log: &AdminOperationLog,
 ) -> Result<(), RepositoryError> {
-    let signature = match sign_admin_operation_log(keystore, service_did, log) {
+    let signature = match sign_admin_operation_log(keystore, service_id, log) {
         Ok(signature) => signature,
         Err(err) if fail_closed => return Err(RepositoryError::from_error(err)),
         Err(err) => {
@@ -178,8 +178,8 @@ async fn sign_persisted_admin_operation(
     }
 }
 
-pub(crate) fn service_admin_user_id(service_did: &str) -> Ulid {
-    let name = format!("coauth:service-admin:{service_did}");
+pub(crate) fn service_admin_user_id(service_id: &str) -> Ulid {
+    let name = format!("coauth:service-admin:{service_id}");
     let digest = Sha256::digest(name.as_bytes());
     let mut bytes = [0u8; 16];
     bytes.copy_from_slice(&digest[..16]);
@@ -193,7 +193,7 @@ pub(crate) fn service_admin_user_id(service_did: &str) -> Ulid {
 pub fn verify_admin_operation_signature(
     log: &AdminOperationLog,
     keystore: &Keystore,
-    service_did: &str,
+    service_id: &str,
 ) -> AuditSignatureStatus {
     let Some(signature_value) = log
         .audit_signature
@@ -207,7 +207,7 @@ pub fn verify_admin_operation_signature(
         Ok(parsed) => parsed,
         Err(()) => return AuditSignatureStatus::Invalid,
     };
-    if parsed.service_did != service_did {
+    if parsed.service_id != service_id {
         return AuditSignatureStatus::KeyUnavailable;
     }
 
@@ -295,7 +295,7 @@ enum SignError {
 
 fn sign_admin_operation_log(
     keystore: &Keystore,
-    service_did: &str,
+    service_id: &str,
     log: &AdminOperationLog,
 ) -> Result<String, SignError> {
     let transcript = transcript_for_log(log);
@@ -319,7 +319,7 @@ fn sign_admin_operation_log(
 
     let sig_bytes: Box<[u8]> = raw.into();
     let sig_b64 = Base64UrlUnpadded::encode_string(&sig_bytes);
-    Ok(format!("{service_did}#{kid}:{sig_b64}"))
+    Ok(format!("{service_id}#{kid}:{sig_b64}"))
 }
 
 fn audit_signature_algorithms() -> [JsonWebSignatureAlg; 7] {
@@ -335,15 +335,15 @@ fn audit_signature_algorithms() -> [JsonWebSignatureAlg; 7] {
 }
 
 struct ParsedAuditSignature<'a> {
-    service_did: &'a str,
+    service_id: &'a str,
     kid: &'a str,
     signature: Vec<u8>,
 }
 
 fn parse_audit_signature(value: &str) -> Result<ParsedAuditSignature<'_>, ()> {
     let (did_url, signature_b64) = value.rsplit_once(':').ok_or(())?;
-    let (service_did, kid) = did_url.rsplit_once('#').ok_or(())?;
-    if service_did.is_empty() || kid.is_empty() || signature_b64.is_empty() {
+    let (service_id, kid) = did_url.rsplit_once('#').ok_or(())?;
+    if service_id.is_empty() || kid.is_empty() || signature_b64.is_empty() {
         return Err(());
     }
     let signature = Base64UrlUnpadded::decode_vec(signature_b64).map_err(|_| ())?;
@@ -351,7 +351,7 @@ fn parse_audit_signature(value: &str) -> Result<ParsedAuditSignature<'_>, ()> {
         return Err(());
     }
     Ok(ParsedAuditSignature {
-        service_did,
+        service_id,
         kid,
         signature,
     })
@@ -402,61 +402,61 @@ mod tests {
         }
     }
 
-    fn signed_test_log(service_did: &str) -> (Keystore, AdminOperationLog) {
+    fn signed_test_log(service_id: &str) -> (Keystore, AdminOperationLog) {
         let keystore = test_keystore();
         let mut log = test_log(None);
-        log.audit_signature = Some(sign_admin_operation_log(&keystore, service_did, &log).unwrap());
+        log.audit_signature = Some(sign_admin_operation_log(&keystore, service_id, &log).unwrap());
         (keystore, log)
     }
 
     #[test]
     fn signed_row_verifies() {
-        let service_did = "did:web:coauth.example";
-        let (keystore, log) = signed_test_log(service_did);
+        let service_id = "did:web:coauth.example";
+        let (keystore, log) = signed_test_log(service_id);
         assert_eq!(
-            verify_admin_operation_signature(&log, &keystore, service_did),
+            verify_admin_operation_signature(&log, &keystore, service_id),
             AuditSignatureStatus::Verified
         );
     }
 
     #[test]
     fn details_tamper_invalidates_signature() {
-        let service_did = "did:web:coauth.example";
-        let (keystore, mut log) = signed_test_log(service_did);
+        let service_id = "did:web:coauth.example";
+        let (keystore, mut log) = signed_test_log(service_id);
         log.details["ticket"] = serde_json::json!("SEC-999");
         assert_eq!(
-            verify_admin_operation_signature(&log, &keystore, service_did),
+            verify_admin_operation_signature(&log, &keystore, service_id),
             AuditSignatureStatus::Invalid
         );
     }
 
     #[test]
     fn resource_id_tamper_invalidates_signature() {
-        let service_did = "did:web:coauth.example";
-        let (keystore, mut log) = signed_test_log(service_did);
+        let service_id = "did:web:coauth.example";
+        let (keystore, mut log) = signed_test_log(service_id);
         log.resource_id = Some(Ulid::from(Uuid::from_bytes([4; 16])));
         assert_eq!(
-            verify_admin_operation_signature(&log, &keystore, service_did),
+            verify_admin_operation_signature(&log, &keystore, service_id),
             AuditSignatureStatus::Invalid
         );
     }
 
     #[test]
     fn row_id_or_created_at_replay_invalidates_signature() {
-        let service_did = "did:web:coauth.example";
-        let (keystore, log) = signed_test_log(service_did);
+        let service_id = "did:web:coauth.example";
+        let (keystore, log) = signed_test_log(service_id);
 
         let mut replayed_id = log.clone();
         replayed_id.id = Ulid::from(Uuid::from_bytes([5; 16]));
         assert_eq!(
-            verify_admin_operation_signature(&replayed_id, &keystore, service_did),
+            verify_admin_operation_signature(&replayed_id, &keystore, service_id),
             AuditSignatureStatus::Invalid
         );
 
         let mut replayed_time = log;
         replayed_time.created_at += chrono::Duration::seconds(1);
         assert_eq!(
-            verify_admin_operation_signature(&replayed_time, &keystore, service_did),
+            verify_admin_operation_signature(&replayed_time, &keystore, service_id),
             AuditSignatureStatus::Invalid
         );
     }
@@ -475,10 +475,10 @@ mod tests {
 
     #[test]
     fn key_unavailable_status_is_reported() {
-        let service_did = "did:web:coauth.example";
-        let (_keystore, log) = signed_test_log(service_did);
+        let service_id = "did:web:coauth.example";
+        let (_keystore, log) = signed_test_log(service_id);
         assert_eq!(
-            verify_admin_operation_signature(&log, &other_keystore(), service_did),
+            verify_admin_operation_signature(&log, &other_keystore(), service_id),
             AuditSignatureStatus::KeyUnavailable
         );
     }
@@ -494,7 +494,7 @@ mod tests {
             .unwrap();
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(8);
-        let service_did = "did:web:coauth.example";
+        let service_id = "did:web:coauth.example";
         let keystore = test_keystore();
 
         record_service_admin_operation_signed(
@@ -502,14 +502,14 @@ mod tests {
             &mut rng,
             &clock,
             &keystore,
-            service_did,
+            service_id,
             false,
             AdminOperation::Other("accountability_grant_issued".to_owned()),
             "agent",
             None,
             serde_json::json!({
                 "accountability_grant_id": "ak:grant:test",
-                "agent_principal_id": "did:web:agent.example",
+                "agent_id": "did:web:agent.example",
             }),
         )
         .await
@@ -519,7 +519,7 @@ mod tests {
             .audit()
             .list_admin_operations(
                 AdminOperationFilter::new()
-                    .for_admin_user(service_admin_user_id(service_did))
+                    .for_admin_user(service_admin_user_id(service_id))
                     .for_resource_type("agent")
                     .with_limit(1),
             )
@@ -537,7 +537,7 @@ mod tests {
                 .is_some_and(|sig| sig.starts_with("did:web:coauth.example#audit-test:"))
         );
         assert_eq!(
-            verify_admin_operation_signature(&rows[0], &keystore, service_did),
+            verify_admin_operation_signature(&rows[0], &keystore, service_id),
             AuditSignatureStatus::Verified
         );
 

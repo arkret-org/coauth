@@ -22,7 +22,7 @@ controller DID、agent principal id，以及一组规范化的 `ak.agent.*`
   中配置的 soland/sodmin 静态 bearer；
 - 浏览器 session 与终端用户 OAuth token 会被拒绝；
 - 路径 `{id}` 必须是 agent principal DID，并按单个 URL path segment 做 percent-encoding；
-- `controller_did` 会在使用前规范化；
+- `controller_id` 会在使用前规范化；
 - 每个请求的 capability 都必须存在于本地 `ak.agent.*` capability registry。
 
 成功后，coauth 会持久化 accountability grant，写入签名 admin audit 行，

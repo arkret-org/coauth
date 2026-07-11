@@ -226,7 +226,7 @@ pub async fn add_account_did(
     // receiver (local coauth service DID) and this deployment
     // (`trust_domain`) so it cannot be relayed cross-receiver or carried
     // cross-deployment. The nonce is consumed single-use on success.
-    let expected_audience = crate::handlers::arkret::service_did_for(&arkret_config);
+    let expected_audience = crate::handlers::arkret::service_id_for(&arkret_config);
     let expected_trust_domain =
         crate::handlers::arkret::trust_domain_for(&url_builder, &arkret_config);
     enforce_did_continuity_for_primary_upgrade(

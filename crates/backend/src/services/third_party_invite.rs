@@ -284,8 +284,8 @@ pub fn schedule_terminal_zeroize(rec: &ThirdPartyInviteRecord) -> Option<DateTim
 /// build.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InviteClaimBindingProof {
-    /// `verification_service_did` from the originating invite.
-    pub verification_service_did: Did,
+    /// `verification_service_id` from the originating invite.
+    pub verification_service_id: Did,
     /// Verification method identifier (DID URL `#fragment` form), e.g.
     /// `did:web:auth.example#key-1`. The fragment is mandatory per
     /// round 4 (kid pattern `^did:[a-z0-9]+:[^\s]+#.+$`).
@@ -371,7 +371,7 @@ pub struct VerifierCtx<'a> {
     /// any other issuer is rejected *before* the subject proof is examined,
     /// so a valid `subject_proof` can never admit an off-allowlist verifier
     /// (§4.3 step 2a).
-    pub expected_verification_service_dids: &'a [String],
+    pub expected_verification_service_ids: &'a [String],
     /// Expected `aud` of the verification-service proof — the local
     /// coauth service DID.
     pub expected_audience: &'a str,
@@ -551,7 +551,7 @@ pub async fn verify_invite(
         ctx.repo,
         ctx.did_resolver,
         &req.binding_proof_jws,
-        ctx.expected_verification_service_dids,
+        ctx.expected_verification_service_ids,
         ctx.expected_audience,
         ctx.now,
     )
@@ -770,7 +770,7 @@ mod tests {
             lookup_table_ref: None,
             pepper_id: None,
             max_claims: 1,
-            verification_service_did: Did::new("did:web:auth.example").unwrap(),
+            verification_service_id: Did::new("did:web:auth.example").unwrap(),
             verification_public_key: "z6MkAuthKey".to_owned(),
         }
     }
@@ -784,7 +784,7 @@ mod tests {
             lookup_table_ref: Some("lkup-1".to_owned()),
             pepper_id: Some("pepper-1".to_owned()),
             max_claims: 1,
-            verification_service_did: Did::new("did:web:auth.example").unwrap(),
+            verification_service_id: Did::new("did:web:auth.example").unwrap(),
             verification_public_key: "z6MkAuthKey".to_owned(),
         }
     }

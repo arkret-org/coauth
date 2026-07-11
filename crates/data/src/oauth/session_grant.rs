@@ -18,7 +18,7 @@ pub struct SessionGrant {
     pub applet_id: Option<String>,
     pub effective_scope: Option<Value>,
     pub registration_epoch: Option<String>,
-    pub service_did: Option<String>,
+    pub service_id: Option<String>,
     pub capability_grant_refs: Vec<String>,
     pub audience: String,
     pub scope: Scope,

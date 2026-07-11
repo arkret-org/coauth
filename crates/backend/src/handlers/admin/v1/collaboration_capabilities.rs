@@ -38,7 +38,7 @@ use ulid::Ulid;
 use crate::JsonResult;
 use crate::error::AppError;
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::arkret::service_did_for;
+use crate::handlers::arkret::service_id_for;
 use crate::handlers::common::{DepotExt, make_clock, make_rng};
 
 #[endpoint]
@@ -132,7 +132,7 @@ pub async fn create_handler(
         .map_or_else(|| "service".to_owned(), |u| format!("user:{}", u.id));
 
     let arkret_config = depot.arkret_config()?;
-    let service_did = service_did_for(&arkret_config);
+    let service_id = service_id_for(&arkret_config);
     let key_store = depot.key_store()?;
     let capability_grant_id = GrantId::new(new_prefixed_uuid7("ak:grant:"))
         .map_err(|err| AppError::internal_box(Box::new(err)))?
@@ -150,7 +150,7 @@ pub async fn create_handler(
         body.expires_at,
         body.approval_evidence_ref.as_deref(),
         issued_at,
-        &service_did,
+        &service_id,
         &arkret_config,
         &key_store,
     );
@@ -254,14 +254,14 @@ pub async fn revoke_handler(
     match revoked {
         Some(revoked) => {
             let arkret_config = depot.arkret_config()?;
-            let service_did = service_did_for(&arkret_config);
+            let service_id = service_id_for(&arkret_config);
             let key_store = depot.key_store()?;
             let revoke_fanout_payload = build_revoke_fanout_payload(
                 &revoke_event_id,
                 &revoked.capability_grant_id,
                 &revoked.realm_id,
                 revoked.revoked_at.unwrap_or_else(|| clock.now()),
-                &service_did,
+                &service_id,
                 &arkret_config,
                 &key_store,
             )?;
@@ -314,7 +314,7 @@ fn build_grant_fanout_payload(
     expires_at: Option<DateTime<Utc>>,
     approval_evidence_ref: Option<&str>,
     issued_at: DateTime<Utc>,
-    service_did: &str,
+    service_id: &str,
     arkret_config: &ArkretConfig,
     key_store: &Keystore,
 ) -> Result<CapabilityFanoutBody, AppError> {
@@ -322,7 +322,7 @@ fn build_grant_fanout_payload(
         "id": capability_grant_id,
         "schema": "ak.schema.capability.v1",
         "realm_id": realm_id,
-        "issuer": service_did,
+        "issuer": service_id,
         "subject": subject,
         "actions": [action.as_action_str()],
         "resources": [{ "kind": "realm", "realm_id": realm_id }],
@@ -345,7 +345,7 @@ fn build_grant_fanout_payload(
     });
     let proof = sign_fanout_proof(
         key_store,
-        service_did,
+        service_id,
         "ak.capability.grant",
         grant_event_id,
         capability_grant_id,
@@ -358,7 +358,7 @@ fn build_grant_fanout_payload(
     Ok(CapabilityFanoutBody {
         kind: CAPABILITY_FANOUT_KIND.to_owned(),
         operation: "grant".to_owned(),
-        issuer_service_did: service_did.to_owned(),
+        issuer_service_id: service_id.to_owned(),
         event_kind: "ak.capability.grant".to_owned(),
         event_id: grant_event_id.to_owned(),
         capability_grant_id: capability_grant_id.to_owned(),
@@ -375,7 +375,7 @@ fn build_revoke_fanout_payload(
     capability_grant_id: &str,
     realm_id: &str,
     revoked_at: DateTime<Utc>,
-    service_did: &str,
+    service_id: &str,
     arkret_config: &ArkretConfig,
     key_store: &Keystore,
 ) -> Result<CapabilityFanoutBody, AppError> {
@@ -386,7 +386,7 @@ fn build_revoke_fanout_payload(
     });
     let proof = sign_fanout_proof(
         key_store,
-        service_did,
+        service_id,
         "ak.capability.revoke",
         revoke_event_id,
         capability_grant_id,
@@ -398,7 +398,7 @@ fn build_revoke_fanout_payload(
     Ok(CapabilityFanoutBody {
         kind: CAPABILITY_FANOUT_KIND.to_owned(),
         operation: "revoke".to_owned(),
-        issuer_service_did: service_did.to_owned(),
+        issuer_service_id: service_id.to_owned(),
         event_kind: "ak.capability.revoke".to_owned(),
         event_id: revoke_event_id.to_owned(),
         capability_grant_id: capability_grant_id.to_owned(),
@@ -409,7 +409,7 @@ fn build_revoke_fanout_payload(
 
 fn sign_fanout_proof(
     key_store: &Keystore,
-    service_did: &str,
+    service_id: &str,
     event_kind: &str,
     event_id: &str,
     capability_grant_id: &str,
@@ -435,7 +435,7 @@ fn sign_fanout_proof(
             format!("capability fanout proof digest: {err}"),
         )
     })?;
-    let (verification_method, jws) = sign_detached_jws(key_store, service_did, &transcript_bytes)?;
+    let (verification_method, jws) = sign_detached_jws(key_store, service_id, &transcript_bytes)?;
 
     Ok(json!({
         "kind": "detached_jws",
@@ -449,7 +449,7 @@ fn sign_fanout_proof(
 
 fn sign_detached_jws(
     key_store: &Keystore,
-    service_did: &str,
+    service_id: &str,
     payload_bytes: &[u8],
 ) -> Result<(String, String), AppError> {
     let alg = JsonWebSignatureAlg::EdDsa;
@@ -465,7 +465,7 @@ fn sign_detached_jws(
             "capability fanout signing key is missing kid",
         )
     })?;
-    let verification_method = format!("{service_did}#{key_id}");
+    let verification_method = format!("{service_id}#{key_id}");
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(verification_method.clone());
     let protected =
         Base64UrlUnpadded::encode_string(&serde_json::to_vec(&header).map_err(|err| {

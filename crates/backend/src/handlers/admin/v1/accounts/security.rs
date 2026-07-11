@@ -20,7 +20,7 @@ use zeroize::Zeroizing;
 use crate::handlers::admin::audit_helper::record_admin_operation_signed;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::params::extract_ulid_param;
-use crate::handlers::arkret::service_did_for;
+use crate::handlers::arkret::service_id_for;
 use crate::handlers::common::DepotExt;
 use crate::{AppError, AppResult};
 
@@ -29,10 +29,10 @@ fn audit_signing_context(
 ) -> Result<(coauth_keystore::Keystore, String, bool), AppError> {
     let key_store = depot.key_store()?;
     let arkret_config = depot.arkret_config()?;
-    let service_did = service_did_for(&arkret_config);
+    let service_id = service_id_for(&arkret_config);
     Ok((
         key_store,
-        service_did,
+        service_id,
         arkret_config.audit_signature_fail_closed,
     ))
 }
@@ -102,13 +102,13 @@ pub async fn set_password(req: &mut Request, depot: &Depot) -> AppResult<StatusC
         .add(&mut rng, &clock, &user, version, hashed_password, None)
         .await?;
 
-    let (key_store, service_did, audit_fail_closed) = audit_signing_context(depot)?;
+    let (key_store, service_id, audit_fail_closed) = audit_signing_context(depot)?;
     record_admin_operation_signed(
         &mut repo,
         &mut rng,
         &*clock,
         &key_store,
-        &service_did,
+        &service_id,
         audit_fail_closed,
         admin_user.as_ref(),
         AdminOperation::UserPasswordSet,

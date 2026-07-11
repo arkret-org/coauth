@@ -29,8 +29,8 @@ struct DiscoveryDocument {
     #[serde(rename = "org.arkret.server_describe")]
     arkret_server_describe: String,
 
-    #[serde(rename = "org.arkret.service_did")]
-    arkret_service_did: String,
+    #[serde(rename = "org.arkret.service_id")]
+    arkret_service_id: String,
 
     #[serde(rename = "org.arkret.did_binding_methods")]
     arkret_did_binding_methods: Vec<String>,
@@ -309,7 +309,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
         ],
         arkret_api_endpoint: url_builder.absolute_url("/_arkret").to_string(),
         arkret_server_describe: url_builder.absolute_url("/_arkret/describe").to_string(),
-        arkret_service_did: arkret::service_did_for(&arkret_config),
+        arkret_service_id: arkret::service_id_for(&arkret_config),
         arkret_did_binding_methods: vec!["session_grant".to_owned()],
         arkret_supported_scopes: vec![
             scope::COAUTH_ADMIN.to_string(),
@@ -354,7 +354,7 @@ mod tests {
         depot.insert(
             "arkret_config",
             ArkretConfig {
-                service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
+                service_id: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
                 ..ArkretConfig::default()
             },
         );

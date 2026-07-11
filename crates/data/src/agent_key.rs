@@ -24,7 +24,7 @@ pub struct AgentKeyAuthorization {
     /// resolves `agent_key_authorization_ref` against this id.
     pub authorized_event_id: String,
     /// Agent principal DID the authorized key belongs to.
-    pub agent_principal_id: String,
+    pub agent_id: String,
     /// Stable key id (`<verification_method>` fragment scope).
     pub key_id: String,
     /// DID URL of the authorized verification method.
@@ -75,7 +75,7 @@ pub struct AgentSessionProofReplay {
     /// Storage row id.
     pub id: Ulid,
     /// Agent principal DID the proof authenticated.
-    pub agent_principal_id: String,
+    pub agent_id: String,
     /// Verification method DID URL the proof was signed with.
     pub verification_method: String,
     /// One-time challenge value consumed.

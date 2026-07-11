@@ -36,7 +36,7 @@ use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
 use crate::handlers::admin::v1::account_dids::{preview_bindings_for_user, primary_did_for_user};
-use crate::handlers::arkret::service_did_for;
+use crate::handlers::arkret::service_id_for;
 use crate::handlers::common::DepotExt;
 use crate::services::account_claims::{
     AccountClaimFilter, AccountClaimRecord as StoredAccountClaimRecord,
@@ -499,10 +499,10 @@ async fn patch_account(
     let id = extract_ulid_param(req)?;
     let principal_server = depot.principal_server()?;
     let key_store = depot.key_store()?;
-    let service_did = service_did_for(&arkret_config);
+    let service_id = service_id_for(&arkret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
-        service_did: &service_did,
+        service_id: &service_id,
         fail_closed: arkret_config.audit_signature_fail_closed,
     };
     let mut rng = crate::handlers::account::make_rng();
@@ -1134,7 +1134,7 @@ mod tests {
         assert_eq!(body["data"][0]["active"], true);
         assert_eq!(body["meta"]["supports_write_operations"], true);
 
-        let recovery_did = crate::handlers::arkret::service_did_for(&state.arkret_config);
+        let recovery_did = crate::handlers::arkret::service_id_for(&state.arkret_config);
         let nonce = "did-binding-add-nonce";
         let control_proof = sign_did_binding_control_proof(&state, &recovery_did, user.id, nonce);
         let response = state
@@ -1267,7 +1267,7 @@ mod tests {
         // identity-did §5.1 / §3.6: bind the proof to this receiver (local
         // service DID) and this deployment (trust_domain), with a bounded
         // freshness window (exp - iat <= 300s).
-        let audience = crate::handlers::arkret::service_did_for(&state.arkret_config);
+        let audience = crate::handlers::arkret::service_id_for(&state.arkret_config);
         let trust_domain =
             crate::handlers::arkret::trust_domain_for(&state.url_builder, &state.arkret_config);
         let iat = state.clock.now();

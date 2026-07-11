@@ -101,7 +101,7 @@ under [`../arkret-spec/spec/v1/`](../arkret-spec/spec/v1/).
   generation and submits `expected_previous_generation`; new generation
   is strictly `current + 1`.
 - **`/policy/check` v2** — request switches to `PolicyCheckRequestBody`
-  (`signed_transport` + `source_ip_digest` + `source.{service_did,
+  (`signed_transport` + `source_ip_digest` + `source.{service_id,
   service_type}`); response is `PolicyCheckOutcome` carrying the
   `bound_to{realm_id, actor_id, action, request_canonical_digest,
   policy_server_id}` envelope plus `auth_state_digest` /
@@ -180,7 +180,7 @@ arkret:
     kind: public_did_resolver
     resolver: https://resolver.example.com/
     proof_required_for_pairwise: true
-  service_did: did:webvh:<scid>:auth.example.com:webvh:service
+  service_id: did:webvh:<scid>:auth.example.com:webvh:service
   issuer_did: did:webvh:<scid>:auth.example.com:webvh:service
   admin_audience: https://auth.example.com/_arkret
 

@@ -144,7 +144,7 @@ struct PlaintextVisibilityDescriptor {
 pub(crate) struct ServiceDescribeOutcome {
     // --- canonical `ak.schema.service_describe.v1` fields, in the schema's
     //     property order (see service-describe.schema.json). ---
-    service_did: String,
+    service_id: String,
     /// Round 4 (spec a77b995) — deployment-scope trust domain (wire
     /// form `ak:trust_domain:<scope>`). Explicit configuration wins;
     /// otherwise coauth derives a stable deployment-local value from the
@@ -414,7 +414,7 @@ fn build_auth_metadata(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -
         .to_string();
     let origin = url_builder.http_base().to_string();
     let origin = origin.strip_suffix('/').unwrap_or(&origin).to_owned();
-    let service_did = service_did_for(arkret_config);
+    let service_id = service_id_for(arkret_config);
 
     let mut extra = std::collections::BTreeMap::new();
     extra.insert(
@@ -442,13 +442,10 @@ fn build_auth_metadata(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -
         "session_grant_scope".to_owned(),
         json!(PRINCIPAL_SERVER_SESSION_BIND_SCOPE),
     );
-    if service_did.starts_with("did:web:") {
+    if service_id.starts_with("did:web:") {
+        extra.insert("service_id_history_evidence_kind".to_owned(), json!("none"));
         extra.insert(
-            "service_did_history_evidence_kind".to_owned(),
-            json!("none"),
-        );
-        extra.insert(
-            "service_did_trust_profile".to_owned(),
+            "service_id_trust_profile".to_owned(),
             json!("no_history_service"),
         );
     }
@@ -539,7 +536,7 @@ pub(crate) fn service_describe_response(
     let admin_audience = required_audience_for(url_builder, arkret_config);
 
     ServiceDescribeOutcome {
-        service_did: service_did_for(arkret_config),
+        service_id: service_id_for(arkret_config),
         // Round 4 — surface the deployment trust domain so federation
         // peers can verify cross-deployment replay protection (see
         // `arkret-spec` round-4 §f9bd7eb).

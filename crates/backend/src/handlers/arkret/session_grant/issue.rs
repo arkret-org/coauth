@@ -251,7 +251,7 @@ async fn issue_agent_key_proof_session_grant(
     // the DID maps to a coauth-hosted account. Bind the lookup to an owned
     // value so the sub-repo borrow is released before `repo.cancel()`.
     let controller_blocked = if let Some(user_id) =
-        parse_local_user_did_for(&arkret_config, &authorization.controller_principal_id)
+        parse_local_user_did_for(&arkret_config, &authorization.controller_id)
     {
         let user = repo
             .user()
@@ -288,7 +288,7 @@ async fn issue_agent_key_proof_session_grant(
     let material = mint_agent_session_grant(
         &arkret_config,
         &key_store,
-        &authorization.agent_principal_id,
+        &authorization.agent_id,
         audience,
         authorization.granted_scope.clone(),
         dpop_binding.jkt.clone(),
@@ -306,12 +306,11 @@ async fn issue_agent_key_proof_session_grant(
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
-    let principal_id =
-        arkret_core::Did::new(authorization.agent_principal_id.clone()).map_err(|e| {
-            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                "agent principal is not a valid DID: {e}"
-            )))
-        })?;
+    let principal_id = arkret_core::Did::new(authorization.agent_id.clone()).map_err(|e| {
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "agent principal is not a valid DID: {e}"
+        )))
+    })?;
 
     // grant_id / session_public_key / audience are SessionGrantOutcome
     // top-level fields (mirroring SessionGrantRefreshOutcome), NOT entries in

@@ -15,7 +15,7 @@ pub struct NewAgentKeyAuthorization {
     /// Minted `ak:event:<uuid7>` authorization event id.
     pub authorized_event_id: String,
     /// Agent principal DID the authorized key belongs to.
-    pub agent_principal_id: String,
+    pub agent_id: String,
     /// Stable key id.
     pub key_id: String,
     /// DID URL of the authorized verification method.
@@ -57,7 +57,7 @@ pub struct NewAgentKeyAuthorization {
 #[derive(Debug, Clone)]
 pub struct NewAgentSessionProofReplay {
     /// Agent principal DID the proof authenticated.
-    pub agent_principal_id: String,
+    pub agent_id: String,
     /// Verification method DID URL the proof was signed with.
     pub verification_method: String,
     /// One-time challenge value consumed.
@@ -98,14 +98,14 @@ pub trait AgentKeyAuthorizationRepository: Send + Sync {
     /// List active (not revoked) authorizations for an agent principal.
     async fn list_active_for_agent(
         &mut self,
-        agent_principal_id: &str,
+        agent_id: &str,
     ) -> Result<Vec<AgentKeyAuthorization>, Self::Error>;
 
     /// Revoke every active authorization for an agent principal.
     async fn revoke_for_agent(
         &mut self,
         clock: &dyn Clock,
-        agent_principal_id: &str,
+        agent_id: &str,
         reason: &str,
     ) -> Result<usize, Self::Error>;
 
@@ -138,12 +138,12 @@ repository_impl!(AgentKeyAuthorizationRepository:
     ) -> Result<Option<AgentKeyAuthorization>, Self::Error>;
     async fn list_active_for_agent(
         &mut self,
-        agent_principal_id: &str,
+        agent_id: &str,
     ) -> Result<Vec<AgentKeyAuthorization>, Self::Error>;
     async fn revoke_for_agent(
         &mut self,
         clock: &dyn Clock,
-        agent_principal_id: &str,
+        agent_id: &str,
         reason: &str,
     ) -> Result<usize, Self::Error>;
     async fn consume_proof_challenge(

@@ -130,7 +130,7 @@ pub struct HandleAuditEvent {
     /// New DID the handle resolves to as of this event.
     pub new_did: Option<String>,
     /// Issuer service DID that signed the affected claim, if any.
-    pub issuer_service_did: Option<String>,
+    pub issuer_service_id: Option<String>,
     /// Audience the affected claim was bound to.
     pub audience: Option<String>,
     /// `sha256:<hex>` digest of the canonical-JSON form of the emitted

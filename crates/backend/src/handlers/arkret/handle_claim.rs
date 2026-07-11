@@ -58,7 +58,7 @@ pub(crate) fn issue_handle_claim(
 ) -> Result<HandleClaimMaterial, SessionGrantError> {
     use crate::services::handle_subject_validator::ensure_subject_is_principal_did;
 
-    let issuer_service_did = service_did_for(arkret_config);
+    let issuer_service_id = service_id_for(arkret_config);
     // The subject is the user's MINTED principal DID (`did:webvh:…` hosted
     // by the principal server), supplied by the caller. coauth used to
     // derive it via `user_did_for` (`did:web:<coauth-host>:users:<ulid>`),
@@ -73,7 +73,7 @@ pub(crate) fn issue_handle_claim(
     ensure_subject_is_principal_did(&subject_id)?;
     ensure_principal_did_method_allowed(arkret_config, &subject_id)?;
     let subject = did_for_handle_claim(subject_id.clone())?;
-    let issuer_service = did_for_handle_claim(issuer_service_did.clone())?;
+    let issuer_service = did_for_handle_claim(issuer_service_id.clone())?;
 
     // Spec 7157ee8 §3.1 — canonical handle wire form is
     // `<localpart>:<domain>`.
@@ -95,8 +95,8 @@ pub(crate) fn issue_handle_claim(
         handle: Some(handle),
         handle_aliases: aliases.clone(),
         subject: Some(subject),
-        issuer: Some(issuer_service_did.clone()),
-        issuer_service_did: Some(issuer_service),
+        issuer: Some(issuer_service_id.clone()),
+        issuer_service_id: Some(issuer_service),
         binding_state: Some(HandleBindingState::Verified),
         claim_kind: Some(claim_kind),
         visibility: None,
@@ -120,7 +120,7 @@ pub(crate) fn issue_handle_claim(
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
-    let verification_method = format!("{issuer_service_did}#{key_id}");
+    let verification_method = format!("{issuer_service_id}#{key_id}");
     let proof_payload_digest = hash_for_handle_claim(claim_digest.clone())?;
 
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());

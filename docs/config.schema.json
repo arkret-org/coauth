@@ -1354,7 +1354,7 @@
             }
           ]
         },
-        "service_did": {
+        "service_id": {
           "description": "Explicit service DID for the coauth deployment.\n\nRequired: startup validation fails fast when omitted — there is no\nhost-derived `did:web` fallback. Deployments MUST configure a\n`did:webvh` service DID; the only `did:web` exception is the explicit\npersonal-node no-history profile selected by\n`deployment_profile=personal_node` and `principal_method=did:web`.",
           "type": [
             "string",
@@ -1362,7 +1362,7 @@
           ]
         },
         "issuer_did": {
-          "description": "Optional issuer DID to embed in Arkret session grants and discovery\ndocuments. Defaults to `service_did`.",
+          "description": "Optional issuer DID to embed in Arkret session grants and discovery\ndocuments. Defaults to `service_id`.",
           "type": [
             "string",
             "null"
@@ -1424,15 +1424,15 @@
             "null"
           ]
         },
-        "verification_service_did": {
-          "description": "Round 4 — DID of the trusted 3PID verification service whose\n`binding_proof` JWTs this coauth deployment will accept on\n`POST /_coauth/self/invites/3pid/verify`. When omitted, the invite\nverifier endpoint returns `503 verifier_not_configured` because\nit has no trusted `iss` to compare against.\n\nOverride at runtime via `COAUTH_VERIFICATION_SERVICE_DID`.\n\nDeprecated single-value form. New deployments use\n[`Self::verification_service_dids`]; this field is ignored by the\neffective allowlist.",
+        "verification_service_id": {
+          "description": "Round 4 — DID of the trusted 3PID verification service whose\n`binding_proof` JWTs this coauth deployment will accept on\n`POST /_coauth/self/invites/3pid/verify`. When omitted, the invite\nverifier endpoint returns `503 verifier_not_configured` because\nit has no trusted `iss` to compare against.\n\nOverride at runtime via `COAUTH_VERIFICATION_SERVICE_ID`.\n\nDeprecated single-value form. New deployments use\n[`Self::verification_service_ids`]; this field is ignored by the\neffective allowlist.",
           "type": [
             "string",
             "null"
           ]
         },
-        "verification_service_dids": {
-          "description": "SEC-07a — explicit allowlist of trusted 3PID verification-service\nDIDs whose `binding_proof` JWTs this coauth deployment will accept\non `POST /_coauth/self/invites/3pid/verify`.\n\nPer `spec/v1/zh/sync/third-party-invites.md` §2.1 (Allowlist MUST)\nthe verification service is the trust root of a 3PID invite, so the\nacceptable `verification_service_did` MUST be constrained to an\nexplicit authorization set rather than taken from invite metadata.\nAny `binding_proof.verification_service_did` not in this set MUST be\nrejected (and MUST NOT be admitted merely because the `subject_proof`\nis valid — see §4.3 step 2a).\n\nThe effective set is computed by [`Self::verification_service_allowlist`].",
+        "verification_service_ids": {
+          "description": "SEC-07a — explicit allowlist of trusted 3PID verification-service\nDIDs whose `binding_proof` JWTs this coauth deployment will accept\non `POST /_coauth/self/invites/3pid/verify`.\n\nPer `spec/v1/zh/sync/third-party-invites.md` §2.1 (Allowlist MUST)\nthe verification service is the trust root of a 3PID invite, so the\nacceptable `verification_service_id` MUST be constrained to an\nexplicit authorization set rather than taken from invite metadata.\nAny `binding_proof.verification_service_id` not in this set MUST be\nrejected (and MUST NOT be admitted merely because the `subject_proof`\nis valid — see §4.3 step 2a).\n\nThe effective set is computed by [`Self::verification_service_allowlist`].",
           "type": "array",
           "items": {
             "type": "string"

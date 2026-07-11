@@ -73,7 +73,7 @@ database:
   uri: postgresql://coauth:change-me@postgres/coauth
 
 arkret:
-  service_did: did:webvh:<scid>:auth.example.com:webvh:service
+  service_id: did:webvh:<scid>:auth.example.com:webvh:service
   issuer_did: did:webvh:<scid>:auth.example.com:webvh:service
   admin_audience: http://localhost:7080/_arkret
 

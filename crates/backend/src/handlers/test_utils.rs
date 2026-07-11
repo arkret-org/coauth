@@ -256,11 +256,11 @@ impl TestState {
 
         let url_builder = UrlBuilder::new("https://example.com/".parse()?, None, None);
 
-        // `arkret.service_did` is required (the backend no longer derives a
+        // `arkret.service_id` is required (the backend no longer derives a
         // `did:web` fallback from the host); pin the value the old host
         // derivation used to produce so DID-shaped assertions stay stable.
         let arkret_config = ArkretConfig {
-            service_did: Some("did:web:example.com".to_owned()),
+            service_id: Some("did:web:example.com".to_owned()),
             ..ArkretConfig::default()
         };
 

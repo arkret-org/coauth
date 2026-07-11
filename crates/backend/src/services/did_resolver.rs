@@ -13,7 +13,7 @@ use ulid::Ulid;
 use url::Url;
 
 use crate::handlers::arkret::{
-    DidDocument, SessionGrantError, VerificationMethod, issuer_did_for, service_did_for,
+    DidDocument, SessionGrantError, VerificationMethod, issuer_did_for, service_id_for,
     user_did_for,
 };
 use crate::outbound_http::RequestBuilderExt as _;
@@ -142,7 +142,7 @@ pub const DID_DOCUMENT_MAX_BYTES: usize = 10 * 1024 * 1024;
 
 #[async_trait]
 pub trait DidResolverService: Send + Sync {
-    fn service_did(&self, arkret_config: &ArkretConfig) -> String;
+    fn service_id(&self, arkret_config: &ArkretConfig) -> String;
     fn issuer_did(&self, arkret_config: &ArkretConfig) -> String;
     fn user_did(&self, arkret_config: &ArkretConfig, user: &User) -> String;
     fn parse_local_user_did(&self, arkret_config: &ArkretConfig, did: &str) -> Option<Ulid>;
@@ -176,8 +176,8 @@ pub struct DefaultDidResolverService;
 
 #[async_trait]
 impl DidResolverService for DefaultDidResolverService {
-    fn service_did(&self, arkret_config: &ArkretConfig) -> String {
-        service_did_for(arkret_config)
+    fn service_id(&self, arkret_config: &ArkretConfig) -> String {
+        service_id_for(arkret_config)
     }
 
     fn issuer_did(&self, arkret_config: &ArkretConfig) -> String {
@@ -189,7 +189,7 @@ impl DidResolverService for DefaultDidResolverService {
     }
 
     fn parse_local_user_did(&self, arkret_config: &ArkretConfig, did: &str) -> Option<Ulid> {
-        let prefix = format!("{}:users:", self.service_did(arkret_config));
+        let prefix = format!("{}:users:", self.service_id(arkret_config));
         did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
     }
 

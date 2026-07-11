@@ -25,7 +25,7 @@ use crate::handlers::account::{DepotExt, make_clock, make_rng};
 use crate::handlers::admin::CreatedJson;
 use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
 use crate::handlers::arkret::{
-    VerificationMethod, is_allowed_session_grant_audience, service_did_for,
+    VerificationMethod, is_allowed_session_grant_audience, service_id_for,
 };
 use crate::services::did_binding_proof::normalize_did_for_binding;
 use crate::services::did_resolver::DidResolverService;
@@ -95,11 +95,11 @@ pub async fn post_agent_key_pair(
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
 
-    let agent_principal_id = normalize_did_for_binding(body.agent_principal_id.as_str())
-        .map_err(|error| AppError::bad_request(format!("agent_principal_id invalid: {error}")))?;
+    let agent_id = normalize_did_for_binding(body.agent_id.as_str())
+        .map_err(|error| AppError::bad_request(format!("agent_id invalid: {error}")))?;
     ensure_body_pairing_request_id_present(&body.pairing_request_id)?;
 
-    enforce_verification_method_binding(&body.verification_method, &agent_principal_id)
+    enforce_verification_method_binding(&body.verification_method, &agent_id)
         .map_err(AgentAuthRejection::into_app_error)?;
 
     let public_key = validate_runtime_public_key(&body.public_key, &body.verification_method)?;
@@ -145,11 +145,11 @@ pub async fn post_agent_key_pair(
     if !pop.request_canonical_digest.starts_with("sha256:") {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error());
     }
-    let agent_id = arkret_core::Did::new(agent_principal_id.clone())
-        .map_err(|error| AppError::bad_request(format!("agent_principal_id invalid: {error}")))?;
+    let agent_did = arkret_core::Did::new(agent_id.clone())
+        .map_err(|error| AppError::bad_request(format!("agent_id invalid: {error}")))?;
     let expected_pop_digest = arkret_core::agent_key_pair_proof_request_binding_digest(
         &body.pairing_request_id,
-        &agent_id,
+        &agent_did,
         &body.verification_method,
         &body.public_key,
         body.runtime_attestation.as_ref(),
@@ -184,7 +184,7 @@ pub async fn post_agent_key_pair(
         runtime_public_key_digest(&body.public_key, &body.verification_method)?;
     let authorize_event = validate_controller_authorize_event(
         &body.authorize_event,
-        &agent_principal_id,
+        &agent_id,
         &body.verification_method,
         &runtime_public_key_digest,
         &body.pairing_request_id,
@@ -194,7 +194,7 @@ pub async fn post_agent_key_pair(
 
     if let Err(error) = verify_authorize_event_controller_signature(
         &body.authorize_event,
-        &authorize_event.controller_did,
+        &authorize_event.controller_id,
         &http_client,
         &url_builder,
         &arkret_config,
@@ -210,14 +210,11 @@ pub async fn post_agent_key_pair(
 
     let accountable_grants = repo
         .accountability_grant()
-        .list_active_for_subject(
-            AccountabilitySubjectKind::AgentPrincipalId,
-            &agent_principal_id,
-        )
+        .list_active_for_subject(AccountabilitySubjectKind::AgentId, &agent_id)
         .await?;
     if !accountable_grants
         .iter()
-        .any(|grant| grant.controller_did == authorize_event.controller_did)
+        .any(|grant| grant.controller_id == authorize_event.controller_id)
     {
         repo.cancel().await.ok();
         return Err(AgentAuthRejection::AccountabilityGrantMissing.into_app_error());
@@ -229,7 +226,7 @@ pub async fn post_agent_key_pair(
     let issued_at = authorize_event.issued_at;
     let expires_at = authorize_event.expires_at;
 
-    let service_did = service_did_for(&arkret_config);
+    let service_id = service_id_for(&arkret_config);
     let outcome_event_id = arkret_core::EventId::new(authorized_event_id.clone())
         .map_err(|err| AppError::internal_box(Box::new(err)))?;
 
@@ -237,7 +234,7 @@ pub async fn post_agent_key_pair(
         &authorized_event_id,
         &body.pairing_request_id,
         &body.authorize_event,
-        &service_did,
+        &service_id,
         &arkret_config,
     );
     let raw_payload_digest = canonical_digest(&fanout_payload)?;
@@ -251,11 +248,11 @@ pub async fn post_agent_key_pair(
             &*clock,
             NewAgentKeyAuthorization {
                 authorized_event_id: authorized_event_id.clone(),
-                agent_principal_id: agent_principal_id.clone(),
+                agent_id: agent_id.clone(),
                 key_id: key_id.clone(),
                 verification_method: body.verification_method.clone(),
                 public_key: public_key.public_key.clone(),
-                accountable_principal_id: authorize_event.controller_did.clone(),
+                accountable_principal_id: authorize_event.controller_id.clone(),
                 agent_key_scope,
                 audience: vec![pop.audience.clone()],
                 issued_at,
@@ -274,11 +271,11 @@ pub async fn post_agent_key_pair(
         .await?;
 
     let audit_details = serde_json::json!({
-        "actor": { "kind": "service", "service_did": &service_did },
+        "actor": { "kind": "service", "service_id": &service_id },
         "operation": "agent_key_authorize_issued",
         "authorized_event_id": &authorized_event_id,
-        "agent_principal_id": &agent_principal_id,
-        "controller_did": &authorize_event.controller_did,
+        "agent_id": &agent_id,
+        "controller_id": &authorize_event.controller_id,
         "verification_method": &body.verification_method,
         "audience": &pop.audience,
         "issued_at": issued_at,
@@ -297,7 +294,7 @@ pub async fn post_agent_key_pair(
         &mut *rng,
         &*clock,
         &key_store,
-        &service_did,
+        &service_id,
         arkret_config.audit_signature_fail_closed,
         AdminOperation::Other("agent_key_authorize_issued".to_owned()),
         "agent",
@@ -332,7 +329,7 @@ pub async fn post_agent_key_pair(
 #[derive(Debug)]
 struct ValidatedAuthorizeEvent<'a> {
     event_id: String,
-    controller_did: String,
+    controller_id: String,
     key_id: String,
     agent_key_scope: &'a Value,
     issued_at: DateTime<Utc>,
@@ -381,7 +378,7 @@ fn runtime_public_key_digest(
 
 fn validate_controller_authorize_event<'a>(
     envelope: &'a Value,
-    agent_principal_id: &str,
+    agent_id: &str,
     verification_method: &str,
     runtime_public_key_digest: &str,
     pairing_request_id: &str,
@@ -406,21 +403,21 @@ fn validate_controller_authorize_event<'a>(
         .ok_or_else(|| AppError::bad_request("authorize_event.event_id is required"))?;
     arkret_core::EventId::new(event_id.to_owned())
         .map_err(|err| AppError::bad_request(format!("authorize_event.event_id invalid: {err}")))?;
-    let controller_did = envelope
+    let controller_id = envelope
         .get("actor_id")
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| AppError::bad_request("authorize_event.actor_id is required"))?;
-    arkret_core::Did::new(controller_did.to_owned())
+    arkret_core::Did::new(controller_id.to_owned())
         .map_err(|err| AppError::bad_request(format!("authorize_event.actor_id invalid: {err}")))?;
-    ensure_authorize_event_has_controller_signature(envelope, controller_did)?;
+    ensure_authorize_event_has_controller_signature(envelope, controller_id)?;
 
     let payload = envelope
         .get("payload")
         .ok_or_else(|| AppError::bad_request("authorize_event.payload is required"))?;
-    if payload.get("agent_principal_id").and_then(Value::as_str) != Some(agent_principal_id) {
+    if payload.get("agent_id").and_then(Value::as_str) != Some(agent_id) {
         return Err(AppError::bad_request(
-            "authorize_event.payload.agent_principal_id must match the request",
+            "authorize_event.payload.agent_id must match the request",
         ));
     }
     if payload.get("verification_method").and_then(Value::as_str) != Some(verification_method) {
@@ -431,7 +428,7 @@ fn validate_controller_authorize_event<'a>(
     if payload
         .get("accountable_principal_id")
         .and_then(Value::as_str)
-        != Some(controller_did)
+        != Some(controller_id)
     {
         return Err(AppError::forbidden(
             "authorize_event.payload.accountable_principal_id must match actor_id",
@@ -510,7 +507,7 @@ fn validate_controller_authorize_event<'a>(
         ));
     }
     if let Some(approved_by) = approval.get("approved_by").and_then(Value::as_str)
-        && approved_by != controller_did
+        && approved_by != controller_id
     {
         return Err(AppError::forbidden(
             "authorize_event.payload.approval_evidence.approved_by must match actor_id",
@@ -519,7 +516,7 @@ fn validate_controller_authorize_event<'a>(
 
     Ok(ValidatedAuthorizeEvent {
         event_id: event_id.to_owned(),
-        controller_did: controller_did.to_owned(),
+        controller_id: controller_id.to_owned(),
         key_id: key_id.to_owned(),
         agent_key_scope,
         issued_at,
@@ -536,7 +533,7 @@ fn ensure_body_pairing_request_id_present(pairing_request_id: &str) -> Result<()
 
 fn ensure_authorize_event_has_controller_signature(
     envelope: &Value,
-    controller_did: &str,
+    controller_id: &str,
 ) -> Result<(), AppError> {
     let proofs = envelope
         .get("proofs")
@@ -554,7 +551,7 @@ fn ensure_authorize_event_has_controller_signature(
             .get("verification_method")
             .and_then(Value::as_str)
             .is_some_and(|verification_method| {
-                verification_method_controller(verification_method) == controller_did
+                verification_method_controller(verification_method) == controller_id
             })
     });
     if !signed_by_controller {
@@ -568,7 +565,7 @@ fn ensure_authorize_event_has_controller_signature(
 #[allow(clippy::too_many_arguments)]
 async fn verify_authorize_event_controller_signature(
     envelope: &Value,
-    controller_did: &str,
+    controller_id: &str,
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
@@ -583,7 +580,7 @@ async fn verify_authorize_event_controller_signature(
             arkret_config,
             key_store,
             repo,
-            controller_did,
+            controller_id,
         )
         .await
         .map_err(|error| {
@@ -599,14 +596,14 @@ async fn verify_authorize_event_controller_signature(
     }
     verify_authorize_event_controller_signature_with_methods(
         envelope,
-        controller_did,
+        controller_id,
         &resolution.document.verification_method,
     )
 }
 
 fn verify_authorize_event_controller_signature_with_methods(
     envelope: &Value,
-    controller_did: &str,
+    controller_id: &str,
     verification_methods: &[VerificationMethod],
 ) -> Result<(), AppError> {
     let event: arkret_core::Event = serde_json::from_value(envelope.clone()).map_err(|error| {
@@ -614,7 +611,7 @@ fn verify_authorize_event_controller_signature_with_methods(
             "authorize_event must be a complete signed Event envelope: {error}"
         ))
     })?;
-    if event.actor_id.as_str() != controller_did {
+    if event.actor_id.as_str() != controller_id {
         return Err(AppError::bad_request(
             "authorize_event.actor_id must match the resolved controller DID",
         ));
@@ -636,7 +633,7 @@ fn verify_authorize_event_controller_signature_with_methods(
 
     let mut saw_controller_proof = false;
     for proof in &event.proofs {
-        if verification_method_controller(&proof.verification_method) != controller_did {
+        if verification_method_controller(&proof.verification_method) != controller_id {
             continue;
         }
         saw_controller_proof = true;
@@ -701,7 +698,7 @@ fn build_agent_key_authorize_fanout_payload(
     authorized_event_id: &str,
     pairing_request_id: &str,
     authorize_event: &Value,
-    service_did: &str,
+    service_id: &str,
     arkret_config: &ArkretConfig,
 ) -> serde_json::Value {
     let principal_servers: Vec<_> = arkret_config
@@ -719,7 +716,7 @@ fn build_agent_key_authorize_fanout_payload(
 
     serde_json::json!({
         "kind": AGENT_KEY_AUTHORIZE_FANOUT_KIND,
-        "issuer_service_did": service_did,
+        "issuer_service_id": service_id,
         "authorized_event_id": authorized_event_id,
         "pairing_request_id": pairing_request_id,
         "authorize_event": authorize_event,
@@ -769,7 +766,7 @@ mod tests {
             "hlc": "01970e589d21-0001-a13f9c2e",
             "prev_refs": [],
             "payload": {
-                "agent_principal_id": AGENT,
+                "agent_id": AGENT,
                 "key_id": "runtime-key-1",
                 "verification_method": VM,
                 "public_key_digest": PUBLIC_KEY_DIGEST,

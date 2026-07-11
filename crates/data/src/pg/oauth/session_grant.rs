@@ -39,7 +39,7 @@ struct SessionGrantLookup {
     applet_id: Option<String>,
     effective_scope: Option<Value>,
     registration_epoch: Option<String>,
-    service_did: Option<String>,
+    service_id: Option<String>,
     capability_grant_refs: Vec<String>,
     audience: String,
     scope_list: Vec<String>,
@@ -83,7 +83,7 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
             applet_id: value.applet_id,
             effective_scope: value.effective_scope,
             registration_epoch: value.registration_epoch,
-            service_did: value.service_did,
+            service_id: value.service_id,
             capability_grant_refs: value.capability_grant_refs,
             audience: value.audience,
             scope,
@@ -108,7 +108,7 @@ struct NewSessionGrantRow<'a> {
     applet_id: Option<&'a str>,
     effective_scope: Option<Value>,
     registration_epoch: Option<&'a str>,
-    service_did: Option<&'a str>,
+    service_id: Option<&'a str>,
     capability_grant_refs: Vec<String>,
     audience: &'a str,
     scope_list: Vec<String>,
@@ -160,8 +160,8 @@ macro_rules! apply_session_grant_filter {
             q = q.filter(oauth_session_grants::registration_epoch.eq(registration_epoch));
         }
 
-        if let Some(service_did) = $filter.service_did() {
-            q = q.filter(oauth_session_grants::service_did.eq(service_did));
+        if let Some(service_id) = $filter.service_id() {
+            q = q.filter(oauth_session_grants::service_id.eq(service_id));
         }
 
         if let Some(audience) = $filter.audience() {
@@ -207,7 +207,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
             applet_id: grant.applet_id,
             effective_scope: grant.effective_scope.clone(),
             registration_epoch: grant.registration_epoch,
-            service_did: grant.service_did,
+            service_id: grant.service_id,
             capability_grant_refs: grant.capability_grant_refs.clone(),
             audience: grant.audience,
             scope_list,
@@ -232,7 +232,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
             applet_id: grant.applet_id.map(ToOwned::to_owned),
             effective_scope: grant.effective_scope,
             registration_epoch: grant.registration_epoch.map(ToOwned::to_owned),
-            service_did: grant.service_did.map(ToOwned::to_owned),
+            service_id: grant.service_id.map(ToOwned::to_owned),
             capability_grant_refs: grant.capability_grant_refs,
             audience: grant.audience.to_owned(),
             scope: grant.scope,

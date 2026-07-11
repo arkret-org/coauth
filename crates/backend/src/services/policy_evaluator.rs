@@ -617,7 +617,7 @@ mod tests {
             action: action.to_owned(),
             request_canonical_digest: Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
             source: PolicyCheckSource {
-                service_did: Did::new("did:web:soland.example").unwrap(),
+                service_id: Did::new("did:web:soland.example").unwrap(),
                 service_type: "principal_server".into(),
                 source_ip_digest: Some(Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap()),
                 signed_transport: true,

@@ -17,9 +17,9 @@ pub struct NewAccountabilityGrant {
     /// Wire typed id: `ak:grant:<uuid7>`.
     pub accountability_grant_id: String,
     /// Agent principal id covered by this grant.
-    pub agent_principal_id: String,
+    pub agent_id: String,
     /// Controller DID that accepted accountability for the grant.
-    pub controller_did: String,
+    pub controller_id: String,
     /// Canonical capability/action set.
     pub capabilities: Vec<String>,
     /// Deterministic digest of controller, agent, and canonical capabilities.
@@ -67,8 +67,8 @@ pub trait AccountabilityGrantRepository: Send + Sync {
     /// Find an active grant for the same controller, agent, and capability set.
     async fn find_active_by_fingerprint(
         &mut self,
-        agent_principal_id: &str,
-        controller_did: &str,
+        agent_id: &str,
+        controller_id: &str,
         capabilities_digest: &str,
     ) -> Result<Option<AccountabilityGrant>, Self::Error>;
 
@@ -127,8 +127,8 @@ repository_impl!(AccountabilityGrantRepository:
     ) -> Result<Option<AccountabilityGrant>, Self::Error>;
     async fn find_active_by_fingerprint(
         &mut self,
-        agent_principal_id: &str,
-        controller_did: &str,
+        agent_id: &str,
+        controller_id: &str,
         capabilities_digest: &str,
     ) -> Result<Option<AccountabilityGrant>, Self::Error>;
     async fn list_active_for_subject(
