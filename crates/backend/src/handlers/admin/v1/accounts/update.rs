@@ -19,8 +19,14 @@ use crate::{AppError, JsonResult};
 
 #[derive(Deserialize, JsonSchema)]
 pub struct UpdateRequestBody {
+    #[serde(default, with = "serde_with::rust::double_option")]
+    #[schemars(with = "Option<Option<String>>")]
     display_name: Option<Option<String>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
+    #[schemars(with = "Option<Option<String>>")]
     avatar_url: Option<Option<String>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
+    #[schemars(with = "Option<Option<String>>")]
     preferred_locale: Option<Option<String>>,
     admin: Option<bool>,
     status: Option<String>,
@@ -145,5 +151,29 @@ pub(super) fn map_service_error(
         crate::services::user_admin::UserAdminServiceError::Repository(error) => {
             AppError::internal(error)
         }
+    }
+}
+
+#[cfg(test)]
+mod patch_deserialization_tests {
+    use super::*;
+
+    #[test]
+    fn admin_profile_patch_distinguishes_omitted_null_and_value() {
+        let omitted: UpdateRequestBody = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert_eq!(omitted.avatar_url, None);
+
+        let cleared: UpdateRequestBody =
+            serde_json::from_value(serde_json::json!({"avatar_url": null})).unwrap();
+        assert_eq!(cleared.avatar_url, Some(None));
+
+        let assigned: UpdateRequestBody = serde_json::from_value(serde_json::json!({
+            "avatar_url": "https://example.test/avatar.png"
+        }))
+        .unwrap();
+        assert_eq!(
+            assigned.avatar_url,
+            Some(Some("https://example.test/avatar.png".to_owned()))
+        );
     }
 }

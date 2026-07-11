@@ -342,11 +342,23 @@ pub enum SetDisplayNameStatus {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ProfilePatchRequestBody {
-    #[serde(default)]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "serde_with::rust::double_option"
+    )]
     pub display_name: Option<Option<String>>,
-    #[serde(default)]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "serde_with::rust::double_option"
+    )]
     pub avatar_url: Option<Option<String>>,
-    #[serde(default)]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "serde_with::rust::double_option"
+    )]
     pub preferred_locale: Option<Option<String>>,
 }
 
@@ -358,11 +370,23 @@ pub struct PatchViewerProfileOutcome {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct AdminUserPatchRequestBody {
-    #[serde(default)]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "serde_with::rust::double_option"
+    )]
     pub display_name: Option<Option<String>>,
-    #[serde(default)]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "serde_with::rust::double_option"
+    )]
     pub avatar_url: Option<Option<String>>,
-    #[serde(default)]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "serde_with::rust::double_option"
+    )]
     pub preferred_locale: Option<Option<String>>,
     #[serde(default)]
     pub admin: Option<bool>,

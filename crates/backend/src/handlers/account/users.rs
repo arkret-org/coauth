@@ -15,8 +15,11 @@ use crate::services::user_profile::{self, UserProfileServiceError};
 
 #[derive(Deserialize)]
 pub struct PatchViewerProfileInput {
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub display_name: Option<Option<String>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub avatar_url: Option<Option<String>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub preferred_locale: Option<Option<String>>,
 }
 
@@ -188,10 +191,31 @@ mod tests {
     use rand_core::SeedableRng;
     use ulid::Ulid;
 
+    use super::*;
     use crate::handlers::test_utils::{
         CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce,
     };
     use crate::salvo_utils::SessionInfoExt;
+
+    #[test]
+    fn profile_patch_distinguishes_omitted_null_and_value() {
+        let omitted: PatchViewerProfileInput =
+            serde_json::from_value(serde_json::json!({})).unwrap();
+        assert_eq!(omitted.avatar_url, None);
+
+        let cleared: PatchViewerProfileInput =
+            serde_json::from_value(serde_json::json!({"avatar_url": null})).unwrap();
+        assert_eq!(cleared.avatar_url, Some(None));
+
+        let assigned: PatchViewerProfileInput = serde_json::from_value(serde_json::json!({
+            "avatar_url": "https://example.test/avatar.png"
+        }))
+        .unwrap();
+        assert_eq!(
+            assigned.avatar_url,
+            Some(Some("https://example.test/avatar.png".to_owned()))
+        );
+    }
 
     #[tokio::test]
     async fn test_patch_profile_updates_user_and_principal_profile() {
@@ -252,6 +276,20 @@ mod tests {
             Some("mxc://example.com/alice")
         );
         assert_eq!(stored.preferred_locale.as_deref(), Some("zh-CN"));
+
+        let clear_request = cookies.with_cookies(
+            Request::patch("/_coauth/self/viewer/profile")
+                .json(serde_json::json!({"avatar_url": null})),
+        );
+        let clear_response = state.request(clear_request).await;
+        clear_response.assert_status(StatusCode::OK);
+        let clear_body: serde_json::Value = clear_response.json();
+        assert!(clear_body["profile"]["avatar_url"].is_null());
+
+        let mut repo = state.repository().await.unwrap();
+        let cleared = repo.user().lookup(user.id).await.unwrap().unwrap();
+        assert_eq!(cleared.display_name.as_deref(), Some("Alice Example"));
+        assert!(cleared.avatar_url.is_none());
 
         let principal_user = state
             .principal_server_admin

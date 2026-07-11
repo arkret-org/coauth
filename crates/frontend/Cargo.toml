@@ -20,6 +20,7 @@ gloo-timers = {workspace = true}
 js-sys = {workspace = true}
 reqwest = {workspace = true,features = ["json"]}
 serde = {workspace = true}
+serde_with = {workspace = true}
 serde_json = {workspace = true}
 tracing = {workspace = true}
 wasm-bindgen = {workspace = true}
