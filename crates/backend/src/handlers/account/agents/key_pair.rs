@@ -569,6 +569,16 @@ fn validate_controller_authorize_event<'a>(
     let approval = payload.get("approval_evidence").ok_or_else(|| {
         AppError::bad_request("authorize_event.payload.approval_evidence is required")
     })?;
+    if approval.get("kind").and_then(Value::as_str) != Some("pairing_request") {
+        return Err(AppError::bad_request(
+            "authorize_event.payload.approval_evidence.kind must be pairing_request",
+        ));
+    }
+    if approval.get("ref").is_some() {
+        return Err(AppError::bad_request(
+            "authorize_event.payload.approval_evidence.ref must be absent for pairing_request evidence",
+        ));
+    }
     if approval
         .get("request_canonical_digest")
         .and_then(Value::as_str)
@@ -902,8 +912,7 @@ mod tests {
                 "issued_at": "2026-07-06T00:00:00Z",
                 "expires_at": "2026-07-06T00:10:00Z",
                 "approval_evidence": {
-                    "kind": "approval_event",
-                    "ref": "ak:event:01999999-0000-7000-8000-000000000099",
+                    "kind": "pairing_request",
                     "request_canonical_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "pairing_request_id": pairing_request_id,
                     "approved_by": CONTROLLER
@@ -979,6 +988,26 @@ mod tests {
         .expect_err("authorize_event pairing id mismatch must reject");
 
         assert!(err.message().contains("pairing_request_id"));
+    }
+
+    #[test]
+    fn authorize_event_pairing_evidence_rejects_durable_ref() {
+        let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
+        event["payload"]["approval_evidence"]["ref"] =
+            json!("ak:event:01999999-0000-7000-8000-000000000099");
+
+        let err = validate_controller_authorize_event(
+            &event,
+            AGENT,
+            VM,
+            PUBLIC_KEY_DIGEST,
+            PAIRING_REQUEST_ID,
+            AUDIENCE,
+            test_now(),
+        )
+        .expect_err("pairing evidence must not masquerade as a durable object reference");
+
+        assert!(err.message().contains("ref must be absent"));
     }
 
     #[test]
