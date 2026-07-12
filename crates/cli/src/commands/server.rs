@@ -333,6 +333,7 @@ impl Options {
                 salvo::conn::SocketAddr::Unknown,
                 http::uri::Scheme::HTTP,
                 None,
+                salvo::ConnCtrl::new(),
                 None,
             );
             let handler = move |req: hyper::Request<hyper::body::Incoming>| {
