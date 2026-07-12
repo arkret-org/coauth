@@ -158,7 +158,13 @@ diesel-async = {version = "0.9",features = [
 ]}
 diesel_migrations = "2.3"
 digest = "0.10.7"
-dioxus = {version = "0.7.9",default-features = false,features = ["minimal", "web", "router"]}
+dioxus = {version = "0.7.9",default-features = false,features = [
+    "minimal",
+    "web",
+    "router",
+    "asset",
+    "document",
+]}
 dotenvy = "0.15.7"
 ecdsa = {version = "0.16.9",features = ["signing", "verifying"]}
 ed25519-dalek = {version = "2.2.0",features = ["rand_core", "pkcs8"]}
