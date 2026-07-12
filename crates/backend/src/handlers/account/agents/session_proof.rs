@@ -1187,6 +1187,66 @@ fn account_agent_scope_token_allowed(token: &str) -> bool {
         || realm_agent_scope_token_allowed(token)
 }
 
+/// Resolve the current reducer-stamped agent lifecycle state from a configured
+/// Principal Server. Missing or unreachable authority fails closed.
+pub async fn enforce_authoritative_agent_lifecycle(
+    http_client: &reqwest::Client,
+    arkret_config: &ArkretConfig,
+    agent_id: &str,
+) -> Result<(), AgentAuthRejection> {
+    let mut queried = false;
+    let mut saw_not_found = false;
+
+    for server in &arkret_config.principal_servers {
+        let Some(bearer) = server
+            .session_grant_introspection_bearer
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        else {
+            continue;
+        };
+        queried = true;
+        let mut endpoint = server.endpoint.clone();
+        endpoint.set_path("/");
+        endpoint.set_query(None);
+        endpoint.set_fragment(None);
+        endpoint
+            .path_segments_mut()
+            .map_err(|_| AgentAuthRejection::PolicyUnavailable)?
+            .extend(["_arkret", "self", "agents", agent_id]);
+
+        let response = http_client
+            .get(endpoint)
+            .bearer_auth(bearer)
+            .send()
+            .await
+            .map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            saw_not_found = true;
+            continue;
+        }
+        if !response.status().is_success() {
+            return Err(AgentAuthRejection::PolicyUnavailable);
+        }
+        let view = response
+            .json::<arkret_core::AgentView>()
+            .await
+            .map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
+        return match view.status.as_str() {
+            "active" => Ok(()),
+            "paused" => Err(AgentAuthRejection::AgentPaused),
+            "deactivated" => Err(AgentAuthRejection::AgentDeactivated),
+            _ => Err(AgentAuthRejection::ProofInvalid),
+        };
+    }
+
+    if queried && saw_not_found {
+        Err(AgentAuthRejection::ProofInvalid)
+    } else {
+        Err(AgentAuthRejection::PolicyUnavailable)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

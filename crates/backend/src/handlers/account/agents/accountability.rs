@@ -38,7 +38,6 @@ const ACCOUNTABILITY_GRANT_FANOUT_QUEUE: &str = "soland-accountability-grant-fan
 const AGENT_CAPABILITY_ACTIONS: &[&str] = &[
     "ak.agent.key.authorize",
     "ak.agent.key.revoke",
-    "ak.agent.key.rotate",
     "ak.self.agent.command.provision",
     "ak.self.agent.command.pause",
     "ak.self.agent.command.resume",
@@ -50,12 +49,6 @@ const AGENT_CAPABILITY_ACTIONS: &[&str] = &[
     "ak.self.agent.sidecar_thread.command.ensure",
     "ak.agent.sidecar_thread.write",
     "ak.agent.sidecar_thread.publish",
-    "ak.agent.protocol.discover",
-    "ak.agent.session.start",
-    "ak.agent.session.cancel",
-    "ak.agent.session.stream_status",
-    "ak.agent.session.attach_artifact",
-    "ak.agent.session.read_transcript",
 ];
 
 fn is_registered_agent_capability(action: &str) -> bool {
