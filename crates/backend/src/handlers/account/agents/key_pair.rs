@@ -574,9 +574,9 @@ fn validate_controller_authorize_event<'a>(
             "authorize_event.payload.approval_evidence.kind must be pairing_request",
         ));
     }
-    if approval.get("ref").is_some() {
+    if approval.get("evidence_ref").is_some() {
         return Err(AppError::bad_request(
-            "authorize_event.payload.approval_evidence.ref must be absent for pairing_request evidence",
+            "authorize_event.payload.approval_evidence.evidence_ref must be absent for pairing_request evidence",
         ));
     }
     if approval
@@ -993,7 +993,7 @@ mod tests {
     #[test]
     fn authorize_event_pairing_evidence_rejects_durable_ref() {
         let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
-        event["payload"]["approval_evidence"]["ref"] =
+        event["payload"]["approval_evidence"]["evidence_ref"] =
             json!("ak:event:01999999-0000-7000-8000-000000000099");
 
         let err = validate_controller_authorize_event(
