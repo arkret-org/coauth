@@ -103,7 +103,7 @@ diesel::table! {
         agent_key_scope -> Text,
         audience -> Array<Text>,
         issued_at -> Timestamptz,
-        expires_at -> Timestamptz,
+        expires_at -> Nullable<Timestamptz>,
         pairing_request_id -> Text,
         request_canonical_digest -> Text,
         revoked_at -> Nullable<Timestamptz>,

@@ -154,6 +154,21 @@ mod agent_auth_error_matrix_tests {
     }
 
     #[test]
+    fn agent_key_authorization_expired_is_distinct_from_proof_invalid() {
+        let err = AgentAuthRejection::AgentKeyAuthorizationExpired;
+        assert_eq!(
+            err.reason_code(),
+            Some(arkret_core::error::REASON_AGENT_KEY_AUTHORIZATION_EXPIRED)
+        );
+        assert_eq!(err.http_status(), http::StatusCode::UNAUTHORIZED);
+        assert_ne!(
+            err.reason_code(),
+            AgentAuthRejection::ProofInvalid.reason_code(),
+            "runtime must be able to tell controller re-authorization apart from proof bugs"
+        );
+    }
+
+    #[test]
     fn proof_signature_round_trips_over_canonical_signed_fields() {
         use base64ct::Encoding as _;
         use ed25519_dalek::Signer as _;

@@ -41,10 +41,12 @@ const AGENT_KEY_AUTHORIZE_FANOUT_QUEUE: &str = "soland-agent-key-authorize-fanou
 /// `ak.agent.key.authorize` event.
 const AGENT_KEY_AUTHORIZE_FANOUT_KIND: &str = "org.arkret.coauth.agent_key_authorize.fanout.v1";
 
-/// AKP-0008 agent runtime authorizations are short-lived; session grants minted
-/// from them are capped at 15 minutes, so the root key authorization uses the
-/// same hard ceiling rather than accepting effectively permanent keys.
-const AGENT_KEY_AUTHORIZATION_MAX_TTL: chrono::Duration = chrono::Duration::minutes(15);
+const AGENT_KEY_REVOKE_FANOUT_QUEUE: &str = "soland-agent-key-revoke-fanout";
+
+/// Internal coauth→soland fan-out envelope kind materializing the
+/// `ak.agent.key.revoke` event for a key superseded by runtime replacement
+/// re-pairing (key-management §3.6.1, reason `superseded_by_repairing`).
+const AGENT_KEY_REVOKE_FANOUT_KIND: &str = "org.arkret.coauth.agent_key_revoke.fanout.v1";
 
 #[derive(Debug)]
 struct ValidatedRuntimePublicKey {
@@ -76,7 +78,10 @@ struct RuntimeAttestationInput {
 ///
 /// Validates the runtime key pairing proof-of-possession and, on success,
 /// records a durable agent key authorization and queues the
-/// `ak.agent.key.authorize` soland fan-out. Returns the SDK
+/// `ak.agent.key.authorize` soland fan-out. Runtime replacement re-pairing
+/// (key-management §3.6.1) revokes every prior active key of the agent with
+/// reason `superseded_by_repairing` and queues one `ak.agent.key.revoke`
+/// fan-out per superseded key in the same transaction. Returns the SDK
 /// [`AgentKeyPairOutcome`] carrying the minted authorization event ref.
 #[handler]
 #[tracing::instrument(name = "handler.account.agents.agent_key_pair", skip_all)]
@@ -226,6 +231,27 @@ pub async fn post_agent_key_pair(
     let issued_at = authorize_event.issued_at;
     let expires_at = authorize_event.expires_at;
 
+    // Runtime replacement re-pairing (key-management §3.6.1): accepting a new
+    // runtime key supersedes every previously accepted active key of the
+    // agent in the same accepted transaction (reason
+    // `superseded_by_repairing`). Sessions already issued from a superseded
+    // key fail closed through the existing revocation freshness check — the
+    // session-grant branch re-reads `revoked_at` on every issuance. First
+    // pairing (no prior active key) is a no-op here.
+    let superseded_authorizations = repo
+        .agent_key_authorization()
+        .list_active_for_agent(&agent_id)
+        .await?;
+    if !superseded_authorizations.is_empty() {
+        repo.agent_key_authorization()
+            .revoke_for_agent(
+                &*clock,
+                &agent_id,
+                arkret_core::error::REASON_SUPERSEDED_BY_REPAIRING,
+            )
+            .await?;
+    }
+
     let service_id = service_id_for(&arkret_config);
     let outcome_event_id = arkret_core::EventId::new(authorized_event_id.clone())
         .map_err(|err| AppError::internal_box(Box::new(err)))?;
@@ -270,6 +296,17 @@ pub async fn post_agent_key_pair(
         )
         .await?;
 
+    let superseded_keys: Vec<_> = superseded_authorizations
+        .iter()
+        .map(|superseded| {
+            serde_json::json!({
+                "authorized_event_id": &superseded.authorized_event_id,
+                "key_id": &superseded.key_id,
+                "verification_method": &superseded.verification_method,
+                "revoked_reason": arkret_core::error::REASON_SUPERSEDED_BY_REPAIRING,
+            })
+        })
+        .collect();
     let audit_details = serde_json::json!({
         "actor": { "kind": "service", "service_id": &service_id },
         "operation": "agent_key_authorize_issued",
@@ -280,6 +317,7 @@ pub async fn post_agent_key_pair(
         "audience": &pop.audience,
         "issued_at": issued_at,
         "expires_at": expires_at,
+        "superseded_active_keys": superseded_keys,
         "raw_payload_digest": &raw_payload_digest,
         "soland_fanout": {
             "state": AccountabilityGrantFanoutState::Queued,
@@ -311,13 +349,46 @@ pub async fn post_agent_key_pair(
             fanout_payload,
             serde_json::json!({
                 "idempotency_key": idempotency_key,
-                "authorized_event_id": authorized_event_id,
+                "authorized_event_id": &authorized_event_id,
                 "raw_payload_digest": raw_payload_digest,
                 "next_retry_at": issued_at,
                 "attempt": 0,
             }),
         )
         .await?;
+
+    // Queue one `ak.agent.key.revoke` fan-out per superseded key inside the
+    // same transaction as the new authorization (state=Queued, same queuing
+    // mechanism as the authorize fan-out above).
+    for superseded in &superseded_authorizations {
+        let revoke_fanout_payload = build_agent_key_revoke_fanout_payload(
+            superseded,
+            &authorized_event_id,
+            &authorize_event.controller_id,
+            now,
+            &service_id,
+            &arkret_config,
+        );
+        let revoke_payload_digest = canonical_digest(&revoke_fanout_payload)?;
+        let revoke_idempotency_key =
+            format!("coauth:agent_key_revoke:{}", superseded.authorized_event_id);
+        repo.queue_job()
+            .schedule(
+                &mut *rng,
+                &*clock,
+                AGENT_KEY_REVOKE_FANOUT_QUEUE,
+                revoke_fanout_payload,
+                serde_json::json!({
+                    "idempotency_key": revoke_idempotency_key,
+                    "revoked_authorized_event_id": &superseded.authorized_event_id,
+                    "superseded_by_event_id": &authorized_event_id,
+                    "raw_payload_digest": revoke_payload_digest,
+                    "next_retry_at": now,
+                    "attempt": 0,
+                }),
+            )
+            .await?;
+    }
     repo.save().await?;
 
     Ok(CreatedJson(arkret_core::AgentKeyPairOutcome {
@@ -333,7 +404,10 @@ struct ValidatedAuthorizeEvent<'a> {
     key_id: String,
     agent_key_scope: &'a Value,
     issued_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
+    /// Optional authorization expiry (key-management §3.6.1): absent means
+    /// the key authorization never expires by time and is governed solely by
+    /// the revocation chain.
+    expires_at: Option<DateTime<Utc>>,
 }
 
 fn validate_runtime_public_key(
@@ -469,25 +543,28 @@ fn validate_controller_authorize_event<'a>(
         .ok_or_else(|| {
             AppError::bad_request("authorize_event.payload.issued_at must be rfc3339")
         })?;
-    let expires_at = payload
-        .get("expires_at")
-        .and_then(Value::as_str)
-        .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
-        .map(|timestamp| timestamp.with_timezone(&Utc))
-        .ok_or_else(|| {
-            AppError::bad_request("authorize_event.payload.expires_at must be rfc3339")
-        })?;
-    if expires_at <= now {
-        return Err(AgentAuthRejection::PairingRequestExpired.into_app_error());
-    }
-    let authorization_lifetime = expires_at.signed_duration_since(issued_at);
-    if authorization_lifetime <= chrono::Duration::zero()
-        || authorization_lifetime > AGENT_KEY_AUTHORIZATION_MAX_TTL
-    {
-        return Err(AppError::bad_request(format!(
-            "authorize_event.payload.expires_at must be after issued_at and within {} seconds",
-            AGENT_KEY_AUTHORIZATION_MAX_TTL.num_seconds()
-        )));
+    let expires_at = match payload.get("expires_at") {
+        None | Some(Value::Null) => None,
+        Some(value) => Some(
+            value
+                .as_str()
+                .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+                .map(|timestamp| timestamp.with_timezone(&Utc))
+                .ok_or_else(|| {
+                    AppError::bad_request("authorize_event.payload.expires_at must be rfc3339")
+                })?,
+        ),
+    };
+    if let Some(expires_at) = expires_at {
+        if expires_at <= now {
+            return Err(AgentAuthRejection::PairingRequestExpired.into_app_error());
+        }
+        let authorization_lifetime = expires_at.signed_duration_since(issued_at);
+        if authorization_lifetime <= chrono::Duration::zero() {
+            return Err(AppError::bad_request(
+                "authorize_event.payload.expires_at must be after issued_at",
+            ));
+        }
     }
     let approval = payload.get("approval_evidence").ok_or_else(|| {
         AppError::bad_request("authorize_event.payload.approval_evidence is required")
@@ -724,6 +801,49 @@ fn build_agent_key_authorize_fanout_payload(
     })
 }
 
+/// Build the canonical `ak.agent.key.revoke` fan-out payload for a key
+/// superseded by runtime replacement re-pairing. `revoke` carries the
+/// `agent_key_revoke_payload` bindings (agent_id / key_id / revoked_by /
+/// revoked_at / reason) soland materializes as the durable event; the
+/// wrapping envelope is coauth-internal queue metadata.
+fn build_agent_key_revoke_fanout_payload(
+    superseded: &coauth_data::agent_key::AgentKeyAuthorization,
+    superseded_by_event_id: &str,
+    revoked_by: &str,
+    revoked_at: DateTime<Utc>,
+    service_id: &str,
+    arkret_config: &ArkretConfig,
+) -> serde_json::Value {
+    let principal_servers: Vec<_> = arkret_config
+        .principal_servers
+        .iter()
+        .map(|server| {
+            serde_json::json!({
+                "name": server.name.as_str(),
+                "audience": server.audience.as_str(),
+                "endpoint": server.endpoint.as_str(),
+                "did": server.did.as_deref(),
+            })
+        })
+        .collect();
+
+    serde_json::json!({
+        "kind": AGENT_KEY_REVOKE_FANOUT_KIND,
+        "issuer_service_id": service_id,
+        "revoked_authorized_event_id": &superseded.authorized_event_id,
+        "superseded_by_event_id": superseded_by_event_id,
+        "revoke": {
+            "agent_id": &superseded.agent_id,
+            "key_id": &superseded.key_id,
+            "verification_method": &superseded.verification_method,
+            "revoked_by": revoked_by,
+            "revoked_at": revoked_at,
+            "reason": arkret_core::error::REASON_SUPERSEDED_BY_REPAIRING,
+        },
+        "principal_servers": principal_servers,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use base64ct::{Base64UrlUnpadded, Encoding as _};
@@ -862,9 +982,31 @@ mod tests {
     }
 
     #[test]
-    fn authorize_event_rejects_unbounded_authorization_lifetime() {
+    fn authorize_event_accepts_absent_expires_at_as_non_expiring() {
         let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
-        event["payload"]["expires_at"] = json!("2026-07-06T00:16:00Z");
+        event["payload"]
+            .as_object_mut()
+            .unwrap()
+            .remove("expires_at");
+
+        let validated = validate_controller_authorize_event(
+            &event,
+            AGENT,
+            VM,
+            PUBLIC_KEY_DIGEST,
+            PAIRING_REQUEST_ID,
+            AUDIENCE,
+            test_now(),
+        )
+        .expect("absent expires_at means a non-expiring durable key authorization");
+
+        assert!(validated.expires_at.is_none());
+    }
+
+    #[test]
+    fn authorize_event_rejects_malformed_expires_at() {
+        let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
+        event["payload"]["expires_at"] = json!("not-a-timestamp");
 
         let err = validate_controller_authorize_event(
             &event,
@@ -875,9 +1017,46 @@ mod tests {
             AUDIENCE,
             test_now(),
         )
-        .expect_err("agent key authorization lifetime must be bounded");
+        .expect_err("present but malformed expires_at must fail closed");
 
-        assert!(err.message().contains("within 900 seconds"));
+        assert!(err.message().contains("expires_at must be rfc3339"));
+    }
+
+    #[test]
+    fn authorize_event_accepts_lifetime_longer_than_session_ttl() {
+        let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
+        event["payload"]["expires_at"] = json!("2026-08-05T00:00:00Z");
+
+        validate_controller_authorize_event(
+            &event,
+            AGENT,
+            VM,
+            PUBLIC_KEY_DIGEST,
+            PAIRING_REQUEST_ID,
+            AUDIENCE,
+            test_now(),
+        )
+        .expect("durable key authorization must outlive individual session grants");
+    }
+
+    #[test]
+    fn authorize_event_rejects_non_positive_authorization_lifetime() {
+        let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
+        event["payload"]["issued_at"] = json!("2026-07-06T00:06:00Z");
+        event["payload"]["expires_at"] = json!("2026-07-06T00:06:00Z");
+
+        let err = validate_controller_authorize_event(
+            &event,
+            AGENT,
+            VM,
+            PUBLIC_KEY_DIGEST,
+            PAIRING_REQUEST_ID,
+            AUDIENCE,
+            test_now(),
+        )
+        .expect_err("key authorization must end after it is issued");
+
+        assert!(err.message().contains("must be after issued_at"));
     }
 
     #[test]

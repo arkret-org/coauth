@@ -7,7 +7,7 @@
 use arkret_core::error::{
     ERROR_CODE_CAPABILITY_DENIED, ERROR_CODE_FAILED_PRECONDITION, ERROR_CODE_INVALID_SIGNATURE,
     ERROR_CODE_POLICY_UNAVAILABLE, ERROR_CODE_POLICY_VIOLATION,
-    REASON_ACCOUNTABILITY_GRANT_MISSING,
+    REASON_ACCOUNTABILITY_GRANT_MISSING, REASON_AGENT_KEY_AUTHORIZATION_EXPIRED,
 };
 use chrono::{DateTime, Utc};
 
@@ -60,6 +60,14 @@ pub enum AgentAuthRejection {
     /// (which fires before the validator runs) so clients can tell a
     /// principal mismatch apart from a crypto failure.
     ProofInvalid,
+    /// `agent_key_authorization_expired` — the referenced
+    /// `ak.agent.key.authorize` declared an `expires_at` that has elapsed
+    /// (key-management §3.6.1). Strictly distinct from `proof_invalid`: the
+    /// proof itself was well-formed and the runtime must prompt the
+    /// controller for a same-key re-authorization instead of rebuilding the
+    /// proof. Never emitted for non-expiring (absent `expires_at`)
+    /// authorizations.
+    AgentKeyAuthorizationExpired,
     /// `agent_deactivated` — the target agent has been deactivated; the
     /// `ak.self.agent.deactivate` FSM transition is terminal so this rejection
     /// is permanent. Renders 403.
@@ -93,6 +101,7 @@ impl AgentAuthRejection {
         match self {
             Self::VerificationMethodPrincipalMismatch
             | Self::PairingRequestExpired
+            | Self::AgentKeyAuthorizationExpired
             | Self::AgentDeactivated
             | Self::AgentPaused => ERROR_CODE_FAILED_PRECONDITION,
             Self::ProofInvalid => ERROR_CODE_INVALID_SIGNATURE,
@@ -114,6 +123,7 @@ impl AgentAuthRejection {
         match self {
             Self::VerificationMethodPrincipalMismatch
             | Self::PairingRequestExpired
+            | Self::AgentKeyAuthorizationExpired
             | Self::ProofInvalid => http::StatusCode::UNAUTHORIZED,
             Self::AgentPaused
             | Self::AgentDeactivated
@@ -145,6 +155,7 @@ impl AgentAuthRejection {
                 Some("verification_method_principal_mismatch")
             }
             Self::PairingRequestExpired => Some("pairing_request_expired"),
+            Self::AgentKeyAuthorizationExpired => Some(REASON_AGENT_KEY_AUTHORIZATION_EXPIRED),
             Self::ProofInvalid => Some("proof_invalid"),
             Self::AgentDeactivated => Some("agent_deactivated"),
             Self::AgentPaused => Some("agent_paused"),

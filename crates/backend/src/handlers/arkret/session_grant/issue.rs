@@ -234,11 +234,14 @@ async fn issue_agent_key_proof_session_grant(
         Err(AgentSessionProofError::Rejection(rejection)) => {
             repo.cancel().await.ok();
             let status = rejection.http_status();
-            return Err(ArkretRouteError::coded(
-                status,
-                rejection.code(),
-                rejection.code(),
-            ));
+            // Surface the machine-readable reason next to the registry code
+            // (key-management §3.6.1: the runtime must be able to tell
+            // `agent_key_authorization_expired` apart from `proof_invalid`).
+            let message = match rejection.reason_code() {
+                Some(reason) => format!("reason_code={reason}; {}", rejection.code()),
+                None => rejection.code().to_owned(),
+            };
+            return Err(ArkretRouteError::coded(status, rejection.code(), message));
         }
         Err(AgentSessionProofError::HumanApprovalRequired(approval)) => {
             repo.cancel().await.ok();

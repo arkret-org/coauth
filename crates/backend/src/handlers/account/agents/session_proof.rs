@@ -194,7 +194,8 @@ pub async fn validate_agent_session_proof(
         .filter(|nonce| !nonce.trim().is_empty())
         .ok_or(AgentAuthRejection::ProofInvalid)?;
 
-    // The key MUST be authorized by an accepted, unexpired, unrevoked
+    // The key MUST be authorized by an accepted, unrevoked (and unexpired,
+    // when it declares an `expires_at`)
     // `ak.agent.key.authorize`. Resolve it by the request's
     // `agent_key_authorization_ref` (the minted authorize event id).
     let authorization_ref = body
@@ -374,6 +375,11 @@ pub async fn validate_agent_session_proof(
 
     let mut scope_details = serde_json::json!({
         "controller_id": &controller_id,
+        // Issuing key authorization, retained so introspection can fail the
+        // grant closed at use time once the key is revoked (pause /
+        // deactivate / superseded_by_repairing) instead of letting the token
+        // live out its natural TTL (key-management §3.6.1).
+        "agent_key_authorization_ref": authorization_ref,
         "realm_ids": &effective_scope.realm_ids,
         "strand_ids": &effective_scope.strand_ids,
         "resources": {
@@ -456,8 +462,15 @@ fn validate_agent_key_authorization_binding(
     if authorization.revoked_at.is_some() {
         return Err(AgentAuthRejection::AgentDeactivated);
     }
-    if authorization.expires_at <= now {
-        return Err(AgentAuthRejection::ProofInvalid);
+    // `expires_at` is optional: absent means the authorization never expires
+    // by time and stays valid until revoked (key-management §3.6.1). An
+    // elapsed declared expiry is a dedicated rejection so the runtime can
+    // tell "prompt the controller to re-authorize" apart from a proof
+    // construction failure (`proof_invalid`).
+    if let Some(expires_at) = authorization.expires_at
+        && expires_at <= now
+    {
+        return Err(AgentAuthRejection::AgentKeyAuthorizationExpired);
     }
     if !authorization
         .audience
@@ -1217,7 +1230,7 @@ mod tests {
             agent_key_scope: AGENT_KEY_SCOPE_LIMITED.to_owned(),
             audience: vec!["https://arkret.example/_arkret".to_owned()],
             issued_at: now,
-            expires_at: now + chrono::Duration::minutes(15),
+            expires_at: Some(now + chrono::Duration::minutes(15)),
             pairing_request_id: "ak:pairing:01970000-0000-7000-8000-000000000020".to_owned(),
             request_canonical_digest: format!("sha256:{}", "1".repeat(64)),
             revoked_at: None,
@@ -1272,7 +1285,7 @@ mod tests {
     fn authorization_binding_rejects_expired_authorization() {
         let now = chrono::Utc::now();
         let mut authorization = agent_key_authorization(now);
-        authorization.expires_at = now;
+        authorization.expires_at = Some(now);
 
         let err = validate_agent_key_authorization_binding(
             &authorization,
@@ -1283,7 +1296,44 @@ mod tests {
         )
         .expect_err("expired agent key authorization must fail closed");
 
-        assert_eq!(err, AgentAuthRejection::ProofInvalid);
+        assert_eq!(err, AgentAuthRejection::AgentKeyAuthorizationExpired);
+    }
+
+    #[test]
+    fn authorization_binding_accepts_non_expiring_authorization() {
+        let now = chrono::Utc::now();
+        let mut authorization = agent_key_authorization(now - chrono::Duration::days(365));
+        authorization.expires_at = None;
+
+        validate_agent_key_authorization_binding(
+            &authorization,
+            now,
+            "did:web:agent.example",
+            "did:web:agent.example#runtime-key-1",
+            "https://arkret.example/_arkret",
+        )
+        .expect("absent expires_at means the authorization never expires by time");
+    }
+
+    #[test]
+    fn authorization_binding_rejects_revoked_key_before_expiry_check() {
+        let now = chrono::Utc::now();
+        let mut authorization = agent_key_authorization(now);
+        authorization.expires_at = Some(now);
+        authorization.revoked_at = Some(now);
+        authorization.revoked_reason =
+            Some(arkret_core::error::REASON_SUPERSEDED_BY_REPAIRING.to_owned());
+
+        let err = validate_agent_key_authorization_binding(
+            &authorization,
+            now,
+            "did:web:agent.example",
+            "did:web:agent.example#runtime-key-1",
+            "https://arkret.example/_arkret",
+        )
+        .expect_err("revoked authorizations must fail closed regardless of expiry");
+
+        assert_eq!(err, AgentAuthRejection::AgentDeactivated);
     }
 
     #[test]

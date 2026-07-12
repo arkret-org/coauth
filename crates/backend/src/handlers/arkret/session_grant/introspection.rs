@@ -315,6 +315,50 @@ pub async fn introspect_session_grant(
         }
     }
 
+    // Agent session use-time gate (key-management §3.6.1): a grant issued
+    // from an agent key MUST fail closed once that key authorization is
+    // revoked (pause / deactivate / runtime replacement supersede) — it MUST
+    // NOT live out its natural TTL. Introspection is the per-request use-time
+    // check, so the revocation freshness window collapses to one lookup. The
+    // issuing authorization ref rides the signed grant payload's
+    // `scope_details`; an agent grant without it (or whose authorization row
+    // is gone) fails closed too.
+    if active {
+        let parsed_payload = Jwt::<SessionGrantPayload>::try_from(grant.grant_jwt.as_str())
+            .ok()
+            .map(|jwt| jwt.payload().clone());
+        let is_agent_grant = parsed_payload.as_ref().is_some_and(|payload| {
+            payload.proof_kind == Some(arkret_core::SessionGrantProofKind::AgentKeyProof)
+        });
+        if is_agent_grant {
+            let authorization_ref = parsed_payload.as_ref().and_then(|payload| {
+                payload
+                    .scope_details
+                    .get("agent_key_authorization_ref")
+                    .and_then(serde_json::Value::as_str)
+                    .map(ToOwned::to_owned)
+            });
+            let authorization = match authorization_ref.as_deref() {
+                Some(authorization_ref) => repo
+                    .agent_key_authorization()
+                    .lookup_by_event_id(authorization_ref)
+                    .await
+                    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+                None => None,
+            };
+            let key_alive = authorization.as_ref().is_some_and(|authorization| {
+                authorization.revoked_at.is_none()
+                    && authorization
+                        .expires_at
+                        .is_none_or(|expires_at| expires_at > clock.now())
+            });
+            if !key_alive {
+                status = SessionGrantIntrospectStatus::Revoked;
+                active = false;
+            }
+        }
+    }
+
     // Non-secret grant metadata (subject / device_id / audience / scopes /
     // expiry / session_public_key / cnf_jkt) is returned over this authenticated
     // S2S channel so the Principal Server can bind the request DPoP to `cnf_jkt`.

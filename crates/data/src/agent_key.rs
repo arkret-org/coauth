@@ -39,8 +39,9 @@ pub struct AgentKeyAuthorization {
     pub audience: Vec<String>,
     /// Authorization issuance timestamp.
     pub issued_at: DateTime<Utc>,
-    /// Authorization expiry.
-    pub expires_at: DateTime<Utc>,
+    /// Optional authorization expiry. `None` means the authorization never
+    /// expires by time and stays valid until revoked (key-management §3.6.1).
+    pub expires_at: Option<DateTime<Utc>>,
     /// Pairing request id consumed to produce this authorization.
     pub pairing_request_id: String,
     /// `sha256:<hex>` digest the pairing proof was bound to.
