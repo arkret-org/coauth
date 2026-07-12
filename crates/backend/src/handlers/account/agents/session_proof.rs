@@ -150,14 +150,23 @@ pub async fn validate_agent_session_proof(
         .verification_method
         .as_deref()
         .ok_or(AgentAuthRejection::VerificationMethodPrincipalMismatch)?;
-    enforce_verification_method_binding(verification_method, &agent_id)?;
+    if let Err(error) = enforce_verification_method_binding(verification_method, &agent_id) {
+        tracing::warn!(
+            agent_id,
+            verification_method,
+            "agent_key_proof rejected: verification method principal mismatch"
+        );
+        return Err(error.into());
+    }
 
     // expiry / audience.
     let expires_at = proof.expires_at.ok_or(AgentAuthRejection::ProofInvalid)?;
     if expires_at <= now {
+        tracing::warn!(agent_id, verification_method, %expires_at, %now, "agent_key_proof rejected: proof expired");
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
     if !is_allowed_session_grant_audience(url_builder, arkret_config, &proof.audience) {
+        tracing::warn!(agent_id, verification_method, audience = %proof.audience, "agent_key_proof rejected: audience is not configured");
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
     if !proof
@@ -165,10 +174,18 @@ pub async fn validate_agent_session_proof(
         .as_str()
         .starts_with("sha256:")
     {
+        tracing::warn!(agent_id, verification_method, request_canonical_digest = %proof.request_canonical_digest, "agent_key_proof rejected: malformed request digest");
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
     let request_digest = canonical_session_grant_request_digest_without_signature(body)?;
     if request_digest != proof.request_canonical_digest.as_str() {
+        tracing::warn!(
+            agent_id,
+            verification_method,
+            expected_request_digest = %request_digest,
+            presented_request_digest = %proof.request_canonical_digest,
+            "agent_key_proof rejected: request canonical digest mismatch"
+        );
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
     let nonce = proof
@@ -189,15 +206,26 @@ pub async fn validate_agent_session_proof(
         .lookup_by_event_id(authorization_ref)
         .await
         .map_err(|_| AgentAuthRejection::ProofInvalid)?
-        .ok_or(AgentAuthRejection::ProofInvalid)?;
+        .ok_or_else(|| {
+            tracing::warn!(
+                agent_id,
+                verification_method,
+                authorization_ref,
+                "agent_key_proof rejected: authorization event is absent from account authority"
+            );
+            AgentAuthRejection::ProofInvalid
+        })?;
 
-    validate_agent_key_authorization_binding(
+    if let Err(error) = validate_agent_key_authorization_binding(
         &authorization,
         now,
         &agent_id,
         verification_method,
         &proof.audience,
-    )?;
+    ) {
+        tracing::warn!(agent_id, verification_method, authorization_ref, audience = %proof.audience, "agent_key_proof rejected: authorization binding mismatch");
+        return Err(error.into());
+    }
     // Verify the proof signature over the same canonical signed-fields shape
     // the pairing PoP used, against the authorized public key.
     let signed_fields = ProofSignedFields {
@@ -210,7 +238,24 @@ pub async fn validate_agent_session_proof(
     };
     let verification_public_key =
         runtime_public_key_material_from_spec(&authorization.public_key, verification_method)?;
-    verify_proof_signature(&verification_public_key, &signed_fields, &proof.signature)?;
+    if let Err(error) =
+        verify_proof_signature(&verification_public_key, &signed_fields, &proof.signature)
+    {
+        tracing::warn!(
+            agent_id,
+            verification_method,
+            authorization_ref,
+            request_canonical_digest = %proof.request_canonical_digest,
+            "agent_key_proof rejected: detached runtime signature mismatch"
+        );
+        return Err(error.into());
+    }
+    tracing::debug!(
+        agent_id,
+        verification_method,
+        authorization_ref,
+        "agent_key_proof debug: detached runtime signature accepted"
+    );
 
     // Replay defense: consume the challenge exactly once. A replayed challenge
     // (or one already consumed within the grace window) fails closed.
@@ -275,6 +320,11 @@ pub async fn validate_agent_session_proof(
     if active_grants.is_empty() {
         return Err(AgentAuthRejection::AccountabilityGrantMissing.into());
     }
+    tracing::debug!(
+        agent_id,
+        active_accountability_grants = active_grants.len(),
+        "agent_key_proof debug: accountability grants resolved"
+    );
     let capability_scope = AgentSessionCapabilityScope::from_active_grants(&active_grants);
 
     let policy_snapshot = repo
@@ -300,7 +350,17 @@ pub async fn validate_agent_session_proof(
         realm_policy.as_ref(),
         policy_data,
         &agent_id,
-    )?;
+    )
+    .map_err(|error| {
+        tracing::warn!(
+            agent_id,
+            rejection_code = error.code(),
+            requested_scope = ?body.requested_scope,
+            agent_key_scope = %authorization.agent_key_scope,
+            "agent_key_proof rejected: effective scope intersection failed"
+        );
+        error
+    })?;
 
     let mut constraints = serde_json::json!({
         "allowed_tracks": effective_scope.allowed_tracks,
@@ -718,6 +778,9 @@ fn applet_service_scope_token(token: &str) -> bool {
 }
 
 fn content_capability_scope_token(token: &str) -> Result<bool, AgentAuthRejection> {
+    if LIMITED_AGENT_SCOPE_ACTIONS.contains(&token) && !service_surface_scope_token(token) {
+        return Ok(true);
+    }
     arkret_core::schema::embedded_capability_action(token)
         .map(|descriptor| descriptor.is_some())
         .map_err(|_| AgentAuthRejection::ProofInvalid)
