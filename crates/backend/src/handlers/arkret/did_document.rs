@@ -17,6 +17,7 @@
 
 use arkret_signatures::proof::PublicKeyMaterial;
 use coauth_jose::jwk::{JsonWebKeyPublicParameters, PublicJsonWebKey};
+use ed25519_dalek::VerifyingKey;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -129,11 +130,8 @@ impl VerificationMethod {
             .public_key_material()?
             .ed25519_bytes()
             .map_err(|error| format!("publicKeyMultibase is invalid: {error}"))?;
-        let bytes = bytes
-            .try_into()
-            .map_err(|_| "publicKeyMultibase Ed25519 key must contain 32 bytes".to_owned())?;
-        let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(&bytes)
-            .map_err(|error| format!("publicKeyMultibase Ed25519 key is invalid: {error}"))?;
+        let verifying_key = VerifyingKey::from_bytes(&bytes)
+            .map_err(|error| format!("publicKeyMultibase is invalid: {error}"))?;
         Ok(PublicJsonWebKey::new(JsonWebKeyPublicParameters::from(
             &verifying_key,
         )))
@@ -159,7 +157,9 @@ mod tests {
 
     #[test]
     fn did_webvh_multikey_document_deserializes_and_converts_to_jwk() {
-        let public_key = [7u8; 32];
+        let public_key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32])
+            .verifying_key()
+            .to_bytes();
         let multibase = arkret_core::ed25519_pubkey_to_did_key_multibase(&public_key);
         let did = "did:webvh:ztest:local.host:webvh:alice";
         let document: DidDocument = serde_json::from_value(json!({
@@ -193,6 +193,23 @@ mod tests {
         assert_eq!(jwk["kty"], "OKP");
         assert_eq!(jwk["crv"], "Ed25519");
         assert_eq!(jwk["x"], arkret_core::base64url_encode(public_key));
+    }
+
+    #[test]
+    fn invalid_ed25519_multikey_does_not_convert_to_jwk() {
+        let invalid_public_key = [7u8; 32];
+        let did = "did:webvh:ztest:local.host:webvh:alice";
+        let method: VerificationMethod = serde_json::from_value(json!({
+            "id": format!("{did}#device-1"),
+            "type": "Multikey",
+            "controller": did,
+            "publicKeyMultibase": arkret_core::ed25519_pubkey_to_did_key_multibase(
+                &invalid_public_key
+            ),
+        }))
+        .expect("wire document should parse before key validation");
+
+        assert!(method.public_jwk().is_err());
     }
 
     #[test]
