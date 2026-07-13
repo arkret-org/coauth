@@ -135,6 +135,7 @@ pub(crate) fn issue_handle_claim(
             created_at: now,
             domain: None,
             audience: Some(Audience::Single(audience.clone())),
+            proof_purpose: None,
             // Placeholder — overwritten with the detached JWS below.
             jws: String::new(),
         }],
@@ -151,6 +152,7 @@ pub(crate) fn issue_handle_claim(
             created_at: now,
             domain: None,
             audience: Some(Audience::Single(audience.clone())),
+            proof_purpose: None,
             jws: claim_jwt.clone(),
         }],
         ..payload_no_proofs

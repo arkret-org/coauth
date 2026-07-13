@@ -16,7 +16,11 @@
 //! a second general-purpose DID model.
 
 use arkret_signatures::proof::PublicKeyMaterial;
-use coauth_jose::jwk::PublicJsonWebKey;
+use coauth_iana::jose::JsonWebKeyOkpEllipticCurve;
+use coauth_jose::base64::Base64UrlNoPad;
+use coauth_jose::jwk::{
+    JsonWebKeyPublicParameters, OkpPublicParameters, PublicJsonWebKey,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -129,12 +133,12 @@ impl VerificationMethod {
             .public_key_material()?
             .ed25519_bytes()
             .map_err(|error| format!("publicKeyMultibase is invalid: {error}"))?;
-        serde_json::from_value(serde_json::json!({
-            "kty": "OKP",
-            "crv": "Ed25519",
-            "x": arkret_core::base64url_encode(bytes),
-        }))
-        .map_err(|error| format!("converted Ed25519 JWK is invalid: {error}"))
+        Ok(PublicJsonWebKey::new(JsonWebKeyPublicParameters::Okp(
+            OkpPublicParameters::new(
+                JsonWebKeyOkpEllipticCurve::Ed25519,
+                Base64UrlNoPad::new(bytes),
+            ),
+        )))
     }
 }
 
