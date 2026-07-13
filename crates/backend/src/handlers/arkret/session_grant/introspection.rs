@@ -206,6 +206,7 @@ pub async fn introspect_session_grant(
     let caller = require_session_grant_caller(req, depot).await?;
     let clock = crate::handlers::make_clock();
     let arkret_config = depot.arkret_config()?;
+    let http_client = depot.http_client()?;
     let mut repo = depot.repo().await?;
 
     let grant = if let Some(id) = body.id.as_ref() {
@@ -331,6 +332,14 @@ pub async fn introspect_session_grant(
             payload.proof_kind == Some(arkret_core::SessionGrantProofKind::AgentKeyProof)
         });
         if is_agent_grant {
+            let lifecycle_alive =
+                crate::handlers::account::agents::enforce_authoritative_agent_lifecycle(
+                    &http_client,
+                    &arkret_config,
+                    &grant.subject,
+                )
+                .await
+                .is_ok();
             let authorization_ref = parsed_payload.as_ref().and_then(|payload| {
                 payload
                     .scope_details
@@ -346,12 +355,13 @@ pub async fn introspect_session_grant(
                     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
                 None => None,
             };
-            let key_alive = authorization.as_ref().is_some_and(|authorization| {
-                authorization.revoked_at.is_none()
-                    && authorization
-                        .expires_at
-                        .is_none_or(|expires_at| expires_at > clock.now())
-            });
+            let key_alive = lifecycle_alive
+                && authorization.as_ref().is_some_and(|authorization| {
+                    authorization.revoked_at.is_none()
+                        && authorization
+                            .expires_at
+                            .is_none_or(|expires_at| expires_at > clock.now())
+                });
             if !key_alive {
                 status = SessionGrantIntrospectStatus::Revoked;
                 active = false;

@@ -597,12 +597,10 @@ pub struct PrincipalServerConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub did: Option<String>,
 
-    /// Optional static bearer token accepted when this Principal Server calls
-    /// coauth's session-grant introspection endpoint or Auth-side logout
-    /// sub-operation (`/_arkret/gate/account/session-grants/introspect`,
-    /// `/_arkret/gate/account/auth-sessions/logout`). This avoids requiring a
-    /// DB-backed PAT/OAuth-session for the server-to-server hop, which is
-    /// awkward in dev when the coauth DB is reset frequently.
+    /// Optional static bearer for the Account Authority / Principal Server
+    /// trust edge. The Principal Server presents it to coauth introspection and
+    /// Auth-side logout; coauth presents the same deployment credential when
+    /// reading the standard agent projection for lifecycle authorization.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_grant_introspection_bearer: Option<String>,
 

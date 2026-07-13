@@ -100,6 +100,22 @@ mod agent_auth_error_matrix_tests {
     }
 
     #[test]
+    fn removed_agent_actions_are_rejected() {
+        for action in [
+            "ak.agent.key.rotate",
+            "ak.agent.protocol.discover",
+            "ak.agent.session.start",
+            "ak.agent.session.cancel",
+            "ak.agent.session.stream_status",
+            "ak.agent.session.attach_artifact",
+            "ak.agent.session.read_transcript",
+        ] {
+            normalize_capabilities(vec![action.to_owned()])
+                .expect_err("removed v1 action must fail closed");
+        }
+    }
+
+    #[test]
     fn capability_set_is_trimmed_sorted_and_deduplicated() {
         let normalized = normalize_capabilities(vec![
             " ak.self.agent.command.resume ".to_owned(),

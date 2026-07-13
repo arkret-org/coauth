@@ -133,6 +133,16 @@ pub async fn post_agent_key_pair(
     let clock = make_clock();
     let now = clock.now();
 
+    super::enforce_authoritative_pairing_handle(
+        &http_client,
+        &arkret_config,
+        &agent_id,
+        &body.pairing_request_id,
+        now,
+    )
+    .await
+    .map_err(AgentAuthRejection::into_app_error)?;
+
     // Expiry: a stale pairing PoP is rejected as `pairing_request_expired`.
     if pop.expires_at <= now {
         return Err(AgentAuthRejection::PairingRequestExpired.into_app_error());

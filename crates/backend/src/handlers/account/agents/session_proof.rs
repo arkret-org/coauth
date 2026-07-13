@@ -1189,11 +1189,11 @@ fn account_agent_scope_token_allowed(token: &str) -> bool {
 
 /// Resolve the current reducer-stamped agent lifecycle state from a configured
 /// Principal Server. Missing or unreachable authority fails closed.
-pub async fn enforce_authoritative_agent_lifecycle(
+async fn fetch_authoritative_agent_view(
     http_client: &reqwest::Client,
     arkret_config: &ArkretConfig,
     agent_id: &str,
-) -> Result<(), AgentAuthRejection> {
+) -> Result<arkret_core::AgentView, AgentAuthRejection> {
     let mut queried = false;
     let mut saw_not_found = false;
 
@@ -1228,16 +1228,10 @@ pub async fn enforce_authoritative_agent_lifecycle(
         if !response.status().is_success() {
             return Err(AgentAuthRejection::PolicyUnavailable);
         }
-        let view = response
+        return response
             .json::<arkret_core::AgentView>()
             .await
-            .map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
-        return match view.status.as_str() {
-            "active" => Ok(()),
-            "paused" => Err(AgentAuthRejection::AgentPaused),
-            "deactivated" => Err(AgentAuthRejection::AgentDeactivated),
-            _ => Err(AgentAuthRejection::ProofInvalid),
-        };
+            .map_err(|_| AgentAuthRejection::PolicyUnavailable);
     }
 
     if queried && saw_not_found {
@@ -1245,6 +1239,54 @@ pub async fn enforce_authoritative_agent_lifecycle(
     } else {
         Err(AgentAuthRejection::PolicyUnavailable)
     }
+}
+
+pub async fn enforce_authoritative_agent_lifecycle(
+    http_client: &reqwest::Client,
+    arkret_config: &ArkretConfig,
+    agent_id: &str,
+) -> Result<(), AgentAuthRejection> {
+    let view = fetch_authoritative_agent_view(http_client, arkret_config, agent_id).await?;
+    match view.status.as_str() {
+        "active" => Ok(()),
+        "paused" => Err(AgentAuthRejection::AgentPaused),
+        "deactivated" => Err(AgentAuthRejection::AgentDeactivated),
+        _ => Err(AgentAuthRejection::ProofInvalid),
+    }
+}
+
+pub async fn enforce_authoritative_pairing_handle(
+    http_client: &reqwest::Client,
+    arkret_config: &ArkretConfig,
+    agent_id: &str,
+    pairing_request_id: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<(), AgentAuthRejection> {
+    let view = fetch_authoritative_agent_view(http_client, arkret_config, agent_id).await?;
+    match view.status.as_str() {
+        "pending_runtime_key" | "active" | "paused" => {}
+        "deactivated" => return Err(AgentAuthRejection::AgentDeactivated),
+        _ => return Err(AgentAuthRejection::PairingRequestExpired),
+    }
+    if view
+        .key_state
+        .get("pairing_request_id")
+        .and_then(serde_json::Value::as_str)
+        != Some(pairing_request_id)
+    {
+        return Err(AgentAuthRejection::PairingRequestExpired);
+    }
+    let expires_at = view
+        .key_state
+        .get("pairing_expires_at")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .map(|value| value.with_timezone(&chrono::Utc))
+        .ok_or(AgentAuthRejection::PolicyUnavailable)?;
+    if expires_at <= now {
+        return Err(AgentAuthRejection::PairingRequestExpired);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

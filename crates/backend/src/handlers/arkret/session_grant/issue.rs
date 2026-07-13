@@ -211,15 +211,43 @@ async fn issue_agent_key_proof_session_grant(
     dpop_binding: crate::handlers::account::auth::DpopSessionBinding,
     body: &arkret_core::SessionGrantRequestBody,
 ) -> Result<Json<arkret_core::SessionGrantOutcome>, ArkretRouteError> {
-    use crate::handlers::account::agents::{AgentSessionProofError, validate_agent_session_proof};
+    use crate::handlers::account::agents::{
+        AgentSessionProofError, enforce_authoritative_agent_lifecycle, validate_agent_session_proof,
+    };
 
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
+    let http_client = depot.http_client()?;
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
 
     let mut repo = depot.repo().await?;
+    let agent_id = body
+        .principal_id
+        .as_ref()
+        .map(arkret_core::Did::as_str)
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                REASON_PROOF_INVALID,
+                "reason_code=proof_invalid; agent principal_id is required",
+            )
+        })?;
+    if let Err(rejection) =
+        enforce_authoritative_agent_lifecycle(&http_client, &arkret_config, agent_id).await
+    {
+        repo.cancel().await.ok();
+        let message = match rejection.reason_code() {
+            Some(reason) => format!("reason_code={reason}; {}", rejection.code()),
+            None => rejection.code().to_owned(),
+        };
+        return Err(ArkretRouteError::coded(
+            rejection.http_status(),
+            rejection.code(),
+            message,
+        ));
+    }
     let authorization = match validate_agent_session_proof(
         &mut repo,
         &mut rng,
