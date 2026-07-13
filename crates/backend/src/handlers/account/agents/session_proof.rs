@@ -1291,7 +1291,89 @@ pub async fn enforce_authoritative_pairing_handle(
 
 #[cfg(test)]
 mod tests {
+    use wiremock::matchers::{header, method};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
     use super::*;
+
+    async fn lifecycle_config(
+        status: &str,
+        pairing_request_id: &str,
+    ) -> (MockServer, ArkretConfig) {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(header("authorization", "Bearer lifecycle-secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "agent": {},
+                "status": status,
+                "key_state": {
+                    "pairing_request_id": pairing_request_id,
+                    "pairing_expires_at": "2099-01-01T00:00:00Z"
+                }
+            })))
+            .mount(&server)
+            .await;
+        let mut config = ArkretConfig::default();
+        config
+            .principal_servers
+            .push(coauth_config::PrincipalServerConfig {
+                name: "soland-test".to_owned(),
+                audience: "did:web:soland.test".to_owned(),
+                endpoint: server.uri().parse().unwrap(),
+                did: Some("did:web:soland.test".to_owned()),
+                session_grant_introspection_bearer: Some("lifecycle-secret".to_owned()),
+                embedded_webvh_registration_bearer: None,
+            });
+        (server, config)
+    }
+
+    #[tokio::test]
+    async fn authoritative_lifecycle_and_pairing_fail_closed() {
+        let client = reqwest::Client::new();
+        let (_active_server, active) = lifecycle_config("active", "pair-current").await;
+        enforce_authoritative_agent_lifecycle(&client, &active, "did:web:agent.example")
+            .await
+            .expect("active agent accepts");
+        enforce_authoritative_pairing_handle(
+            &client,
+            &active,
+            "did:web:agent.example",
+            "pair-current",
+            chrono::Utc::now(),
+        )
+        .await
+        .expect("current pairing handle accepts");
+        assert_eq!(
+            enforce_authoritative_pairing_handle(
+                &client,
+                &active,
+                "did:web:agent.example",
+                "pair-old",
+                chrono::Utc::now(),
+            )
+            .await
+            .expect_err("old pairing handle rejects"),
+            AgentAuthRejection::PairingRequestExpired
+        );
+
+        let (_paused_server, paused) = lifecycle_config("paused", "pair-paused").await;
+        assert_eq!(
+            enforce_authoritative_agent_lifecycle(&client, &paused, "did:web:agent.example")
+                .await
+                .expect_err("paused agent rejects"),
+            AgentAuthRejection::AgentPaused
+        );
+        assert_eq!(
+            enforce_authoritative_agent_lifecycle(
+                &client,
+                &ArkretConfig::default(),
+                "did:web:agent.example",
+            )
+            .await
+            .expect_err("missing lifecycle authority rejects"),
+            AgentAuthRejection::PolicyUnavailable
+        );
+    }
 
     fn set(values: &[&str]) -> BTreeSet<String> {
         values.iter().map(|value| (*value).to_owned()).collect()
