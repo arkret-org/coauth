@@ -1194,7 +1194,7 @@ fn account_agent_scope_token_allowed(token: &str) -> bool {
 
 /// Resolve the current reducer-stamped agent lifecycle state from a configured
 /// Principal Server. Missing or unreachable authority fails closed.
-async fn fetch_authoritative_agent_view(
+pub(super) async fn fetch_authoritative_agent_view(
     http_client: &reqwest::Client,
     arkret_config: &ArkretConfig,
     agent_id: &str,
@@ -1253,10 +1253,10 @@ pub async fn enforce_authoritative_agent_lifecycle(
     agent_id: &str,
 ) -> Result<(), AgentAuthRejection> {
     let (view, _) = fetch_authoritative_agent_view(http_client, arkret_config, agent_id).await?;
-    match view.status.as_str() {
-        "active" => Ok(()),
-        "paused" => Err(AgentAuthRejection::AgentPaused),
-        "deactivated" => Err(AgentAuthRejection::AgentDeactivated),
+    match view.status {
+        arkret_core::AgentStatus::Active => Ok(()),
+        arkret_core::AgentStatus::Paused => Err(AgentAuthRejection::AgentPaused),
+        arkret_core::AgentStatus::Deactivated => Err(AgentAuthRejection::AgentDeactivated),
         _ => Err(AgentAuthRejection::ProofInvalid),
     }
 }
@@ -1270,28 +1270,30 @@ pub async fn enforce_authoritative_pairing_handle(
 ) -> Result<(arkret_core::AgentView, coauth_config::PrincipalServerConfig), AgentAuthRejection> {
     let (view, server) =
         fetch_authoritative_agent_view(http_client, arkret_config, agent_id).await?;
-    match view.status.as_str() {
-        "pending_runtime_key" | "active" | "paused" => {}
-        "deactivated" => return Err(AgentAuthRejection::AgentDeactivated),
+    match view.status {
+        arkret_core::AgentStatus::PendingRuntimeKey
+        | arkret_core::AgentStatus::Active
+        | arkret_core::AgentStatus::Paused => {}
+        arkret_core::AgentStatus::Deactivated => {
+            return Err(AgentAuthRejection::AgentDeactivated);
+        }
         _ => return Err(AgentAuthRejection::PairingRequestExpired),
     }
-    if view
+    let key_state = view
         .key_state
-        .get("pairing_request_id")
-        .and_then(serde_json::Value::as_str)
-        != Some(pairing_request_id)
-    {
+        .as_ref()
+        .ok_or(AgentAuthRejection::PolicyUnavailable)?;
+    if key_state.pairing_request_id.as_deref() != Some(pairing_request_id) {
         return Err(AgentAuthRejection::PairingRequestExpired);
     }
-    let expires_at = view
-        .key_state
-        .get("pairing_expires_at")
-        .and_then(serde_json::Value::as_str)
-        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
-        .map(|value| value.with_timezone(&chrono::Utc))
+    let expires_at = key_state
+        .pairing_expires_at
         .ok_or(AgentAuthRejection::PolicyUnavailable)?;
     if expires_at <= now {
         return Err(AgentAuthRejection::PairingRequestExpired);
+    }
+    if !key_state.pcr_recovery.is_ready() {
+        return Err(AgentAuthRejection::AgentPcrRecoveryNotReady);
     }
     Ok((view, server))
 }
@@ -1306,16 +1308,43 @@ mod tests {
     async fn lifecycle_config(
         status: &str,
         pairing_request_id: &str,
+        recovery_status: &str,
     ) -> (MockServer, ArkretConfig) {
         let server = MockServer::start().await;
+        let pcr_recovery = if recovery_status == "ready" {
+            serde_json::json!({
+                "status": "ready",
+                "backup_id": "ak:backup:01999999-0000-7000-8000-000000000020",
+                "series_id": "ak:backup_series:01999999-0000-7000-8000-000000000021",
+                "series_seq": 1,
+                "managed_frontier_ref": {
+                    "frontier_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "seal_ref": "ak:seal:01999999-0000-7000-8000-000000000022",
+                    "mls_epoch": 0
+                }
+            })
+        } else {
+            serde_json::json!({ "status": recovery_status })
+        };
         Mock::given(method("GET"))
             .and(header("authorization", "Bearer lifecycle-secret"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "agent": {},
+                "agent": {
+                    "agent_id": "did:web:agent.example",
+                    "slug": "agent",
+                    "status": status
+                },
                 "status": status,
                 "key_state": {
+                    "agent_id": "did:web:agent.example",
+                    "controller_id": "did:web:controller.example",
+                    "principal_control_realm_id": "ak:realm:01999999-0000-7000-8000-000000000010",
+                    "controller_authorization_ref": "did:web:agent.example#managed-controller",
+                    "status": status,
+                    "pcr_recovery": pcr_recovery,
                     "pairing_request_id": pairing_request_id,
-                    "pairing_expires_at": "2099-01-01T00:00:00Z"
+                    "pairing_expires_at": "2099-01-01T00:00:00Z",
+                    "active_authorizations": []
                 }
             })))
             .mount(&server)
@@ -1337,7 +1366,7 @@ mod tests {
     #[tokio::test]
     async fn authoritative_lifecycle_and_pairing_fail_closed() {
         let client = reqwest::Client::new();
-        let (_active_server, active) = lifecycle_config("active", "pair-current").await;
+        let (_active_server, active) = lifecycle_config("active", "pair-current", "ready").await;
         enforce_authoritative_agent_lifecycle(&client, &active, "did:web:agent.example")
             .await
             .expect("active agent accepts");
@@ -1363,7 +1392,7 @@ mod tests {
             AgentAuthRejection::PairingRequestExpired
         );
 
-        let (_paused_server, paused) = lifecycle_config("paused", "pair-paused").await;
+        let (_paused_server, paused) = lifecycle_config("paused", "pair-paused", "ready").await;
         assert_eq!(
             enforce_authoritative_agent_lifecycle(&client, &paused, "did:web:agent.example")
                 .await
@@ -1379,6 +1408,21 @@ mod tests {
             .await
             .expect_err("missing lifecycle authority rejects"),
             AgentAuthRejection::PolicyUnavailable
+        );
+
+        let (_pending_recovery_server, pending_recovery) =
+            lifecycle_config("active", "pair-current", "pending").await;
+        assert_eq!(
+            enforce_authoritative_pairing_handle(
+                &client,
+                &pending_recovery,
+                "did:web:agent.example",
+                "pair-current",
+                chrono::Utc::now(),
+            )
+            .await
+            .expect_err("pairing must not commit before managed PCR recovery is current"),
+            AgentAuthRejection::AgentPcrRecoveryNotReady
         );
     }
 

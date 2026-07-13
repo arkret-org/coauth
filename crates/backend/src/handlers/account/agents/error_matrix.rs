@@ -68,6 +68,10 @@ pub enum AgentAuthRejection {
     /// proof. Never emitted for non-expiring (absent `expires_at`)
     /// authorizations.
     AgentKeyAuthorizationExpired,
+    /// `agent_pcr_recovery_not_ready` — pairing cannot commit until the
+    /// controller-owned managed-PCR recovery tail covers the current Agent
+    /// PCR frontier and MLS epoch.
+    AgentPcrRecoveryNotReady,
     /// `agent_deactivated` — the target agent has been deactivated; the
     /// `ak.self.agent.deactivate` FSM transition is terminal so this rejection
     /// is permanent. Renders 403.
@@ -105,6 +109,7 @@ impl AgentAuthRejection {
             Self::VerificationMethodPrincipalMismatch
             | Self::PairingRequestExpired
             | Self::AgentKeyAuthorizationExpired
+            | Self::AgentPcrRecoveryNotReady
             | Self::AgentDeactivated
             | Self::AgentPaused => ERROR_CODE_FAILED_PRECONDITION,
             Self::ProofInvalid => ERROR_CODE_INVALID_SIGNATURE,
@@ -128,6 +133,7 @@ impl AgentAuthRejection {
             | Self::PairingRequestExpired
             | Self::AgentKeyAuthorizationExpired
             | Self::ProofInvalid => http::StatusCode::UNAUTHORIZED,
+            Self::AgentPcrRecoveryNotReady => http::StatusCode::PRECONDITION_FAILED,
             Self::AgentPaused
             | Self::AgentDeactivated
             | Self::CapabilityDenied
@@ -159,6 +165,7 @@ impl AgentAuthRejection {
             }
             Self::PairingRequestExpired => Some("pairing_request_expired"),
             Self::AgentKeyAuthorizationExpired => Some(REASON_AGENT_KEY_AUTHORIZATION_EXPIRED),
+            Self::AgentPcrRecoveryNotReady => Some("agent_pcr_recovery_not_ready"),
             Self::ProofInvalid => Some("proof_invalid"),
             Self::AgentDeactivated => Some("agent_deactivated"),
             Self::AgentPaused => Some("agent_paused"),

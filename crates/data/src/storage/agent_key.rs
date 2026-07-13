@@ -96,12 +96,6 @@ pub trait AgentKeyAuthorizationRepository: Send + Sync {
         authorized_event_id: &str,
     ) -> Result<Option<AgentKeyAuthorization>, Self::Error>;
 
-    /// Look up an authorization by its stable runtime key id.
-    async fn lookup_by_key_id(
-        &mut self,
-        key_id: &str,
-    ) -> Result<Option<AgentKeyAuthorization>, Self::Error>;
-
     /// List active (not revoked) authorizations for an agent principal.
     async fn list_active_for_agent(
         &mut self,
@@ -151,10 +145,6 @@ repository_impl!(AgentKeyAuthorizationRepository:
     async fn lookup_by_event_id(
         &mut self,
         authorized_event_id: &str,
-    ) -> Result<Option<AgentKeyAuthorization>, Self::Error>;
-    async fn lookup_by_key_id(
-        &mut self,
-        key_id: &str,
     ) -> Result<Option<AgentKeyAuthorization>, Self::Error>;
     async fn list_active_for_agent(
         &mut self,

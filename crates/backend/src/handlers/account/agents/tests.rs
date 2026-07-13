@@ -184,6 +184,13 @@ mod agent_auth_error_matrix_tests {
     }
 
     #[test]
+    fn agent_pcr_recovery_not_ready_is_a_distinct_precondition() {
+        let err = AgentAuthRejection::AgentPcrRecoveryNotReady;
+        assert_eq!(err.reason_code(), Some("agent_pcr_recovery_not_ready"));
+        assert_eq!(err.http_status(), http::StatusCode::PRECONDITION_FAILED);
+    }
+
+    #[test]
     fn agent_key_authorization_expired_is_distinct_from_proof_invalid() {
         let err = AgentAuthRejection::AgentKeyAuthorizationExpired;
         assert_eq!(

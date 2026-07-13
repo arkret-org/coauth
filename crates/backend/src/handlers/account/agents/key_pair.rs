@@ -34,10 +34,8 @@ use crate::services::did_binding_proof::normalize_did_for_binding;
 use crate::services::did_resolver::DidResolverService;
 use crate::{AppError, JsonResult};
 
-/// AKP-0008 §4.5 baseline runtime attestation kind. v1 only accepts
-/// `self_asserted`; any other kind MUST fail closed.
-const RUNTIME_ATTESTATION_SELF_ASSERTED: &str = "self_asserted";
-
+/// Durable retry queue used when the authoritative Principal Server cannot be
+/// reached after the exact pairing request has been persisted locally.
 const AGENT_KEY_PAIR_COMMIT_QUEUE: &str = "principal-agent-key-pair-commit";
 
 #[derive(Debug)]
@@ -56,13 +54,6 @@ struct ProofOfPossessionInput {
     request_canonical_digest: String,
     expires_at: DateTime<Utc>,
     signature: String,
-}
-
-/// Optional runtime attestation (AKP-0008 §4.5 `runtime_attestation`). Only the
-/// `kind` is interpreted at v1 baseline; an unknown kind fails closed.
-#[derive(Debug, Clone, Deserialize)]
-struct RuntimeAttestationInput {
-    kind: String,
 }
 
 /// `POST /_arkret/gate/account/agent-key-pair`
@@ -119,20 +110,73 @@ pub async fn post_agent_key_pair(
         return Err(AgentAuthRejection::ProofInvalid.into_app_error());
     }
 
-    // runtime_attestation: v1 baseline accepts only `kind=self_asserted`. Any
-    // present-but-unknown kind fails closed.
-    if let Some(attestation_value) = body.runtime_attestation.clone() {
-        let attestation: RuntimeAttestationInput = serde_json::from_value(attestation_value)
-            .map_err(|error| {
-                AppError::bad_request(format!("runtime_attestation invalid: {error}"))
-            })?;
-        if attestation.kind != RUNTIME_ATTESTATION_SELF_ASSERTED {
-            return Err(AppError::bad_request(format!(
-                "runtime_attestation.kind {:?} is not supported (v1 baseline is self_asserted)",
-                attestation.kind
-            )));
+    // The SDK DTO closes runtime_attestation to the v1 `self_asserted` branch;
+    // unknown kinds and fields already fail during request decoding.
+    let runtime_attestation_value = body
+        .runtime_attestation
+        .as_ref()
+        .map(serde_json::to_value)
+        .transpose()
+        .map_err(|error| AppError::bad_request(format!("runtime_attestation invalid: {error}")))?;
+
+    // Final pairing idempotency is the controller-minted authorize Event id,
+    // not the one-time pairing handle. Resolve an exact persisted retry before
+    // current-handle/recovery gates: a successful first commit consumes the
+    // handle and advances the Agent PCR frontier to stale, but the identical
+    // request must still return the original outcome after a lost response.
+    let authorized_event_id = body.authorize_event.event_id.to_string();
+    let request_digest = canonical_digest(&body)?;
+    let mut idempotency_repo = depot.repo().await?;
+    let existing_authorization = idempotency_repo
+        .agent_key_authorization()
+        .lookup_by_event_id(&authorized_event_id)
+        .await?;
+    if let Some(existing) = existing_authorization {
+        let same_request = existing.agent_id == agent_id
+            && existing.verification_method == body.verification_method
+            && existing.public_key == public_key.public_key
+            && existing.pairing_request_id == body.pairing_request_id
+            && existing.request_canonical_digest == pop.request_canonical_digest
+            && existing.authorized_event_id == authorized_event_id
+            && existing.raw_payload_digest == request_digest;
+        if !same_request {
+            idempotency_repo.cancel().await?;
+            return Err(AppError::conflict(
+                "authorize Event id is already bound to a different Agent authorization",
+            ));
         }
+        let stored_body: arkret_core::AgentKeyPairRequestBody =
+            serde_json::from_value(existing.soland_fanout_payload.clone()).map_err(|error| {
+                AppError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("stored Agent key-pair request is invalid: {error}"),
+                )
+            })?;
+        idempotency_repo.cancel().await?;
+        let (_, authoritative_server) = super::fetch_authoritative_agent_view(
+            &http_client,
+            &arkret_config,
+            &agent_id,
+        )
+        .await
+        .map_err(AgentAuthRejection::into_app_error)?;
+        commit_and_mark_agent_key_authorization(
+            depot,
+            &existing.authorized_event_id,
+            &existing.soland_fanout_idempotency_key,
+            &existing.raw_payload_digest,
+            &authoritative_server.name,
+            stored_body,
+        )
+        .await?;
+        let authorized_event_ref = arkret_core::EventId::new(existing.authorized_event_id)
+            .map_err(|error| AppError::internal_box(Box::new(error)))?;
+        return Ok(Json(arkret_core::AgentKeyPairOutcome {
+            ok: true,
+            authorized_event_ref,
+        }));
     }
+    idempotency_repo.cancel().await?;
 
     let clock = make_clock();
     let now = clock.now();
@@ -171,7 +215,7 @@ pub async fn post_agent_key_pair(
         &agent_did,
         &body.verification_method,
         &body.public_key,
-        body.runtime_attestation.as_ref(),
+        runtime_attestation_value.as_ref(),
     )
     .map_err(|error| {
         AppError::bad_request(format!(
@@ -203,6 +247,10 @@ pub async fn post_agent_key_pair(
         runtime_public_key_digest(&body.public_key, &body.verification_method)?;
     let authorize_event_value = serde_json::to_value(&body.authorize_event)
         .map_err(|error| AppError::internal_box(Box::new(error)))?;
+    let authoritative_key_state = authoritative_view
+        .key_state
+        .as_ref()
+        .ok_or_else(|| AppError::forbidden("authoritative Agent key state is missing"))?;
     let authorize_event = validate_controller_authorize_event(
         &authorize_event_value,
         &agent_id,
@@ -210,7 +258,7 @@ pub async fn post_agent_key_pair(
         &runtime_public_key_digest,
         &body.pairing_request_id,
         &pop.audience,
-        &authoritative_view.key_state,
+        authoritative_key_state,
         now,
     )?;
 
@@ -244,52 +292,8 @@ pub async fn post_agent_key_pair(
 
     let mut rng = make_rng();
     let key_id = authorize_event.key_id.clone();
-    let authorized_event_id = authorize_event.event_id.clone();
     let issued_at = authorize_event.issued_at;
     let expires_at = authorize_event.expires_at;
-    let request_digest = canonical_digest(&body)?;
-
-    let existing_authorization = {
-        let mut authorizations = repo.agent_key_authorization();
-        authorizations.lookup_by_key_id(&key_id).await?
-    };
-    if let Some(existing) = existing_authorization {
-        let same_request = existing.agent_id == agent_id
-            && existing.verification_method == body.verification_method
-            && existing.public_key == public_key.public_key
-            && existing.pairing_request_id == body.pairing_request_id
-            && existing.request_canonical_digest == pop.request_canonical_digest
-            && existing.authorized_event_id == authorized_event_id
-            && existing.raw_payload_digest == request_digest;
-        if !same_request {
-            return Err(AppError::conflict(
-                "runtime key id is already bound to a different Agent authorization",
-            ));
-        }
-        let stored_body: arkret_core::AgentKeyPairRequestBody =
-            serde_json::from_value(existing.soland_fanout_payload.clone()).map_err(|error| {
-                AppError::new(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("stored Agent key-pair request is invalid: {error}"),
-                )
-            })?;
-        repo.cancel().await?;
-        commit_and_mark_agent_key_authorization(
-            depot,
-            &existing.authorized_event_id,
-            &existing.soland_fanout_idempotency_key,
-            &existing.raw_payload_digest,
-            &authoritative_server.name,
-            stored_body,
-        )
-        .await?;
-        let authorized_event_ref = arkret_core::EventId::new(existing.authorized_event_id)
-            .map_err(|error| AppError::internal_box(Box::new(error)))?;
-        return Ok(Json(arkret_core::AgentKeyPairOutcome {
-            ok: true,
-            authorized_event_ref,
-        }));
-    }
 
     // Runtime replacement re-pairing (key-management §3.6.1): accepting a new
     // runtime key supersedes every previously accepted active key of the
@@ -478,7 +482,7 @@ fn validate_controller_authorize_event<'a>(
     runtime_public_key_digest: &str,
     pairing_request_id: &str,
     audience: &str,
-    authoritative_key_state: &Value,
+    authoritative_key_state: &arkret_core::KeyState,
     now: DateTime<Utc>,
 ) -> Result<ValidatedAuthorizeEvent<'a>, AppError> {
     if !envelope.is_object() {
@@ -512,32 +516,22 @@ fn validate_controller_authorize_event<'a>(
     arkret_core::Did::new(controller_id.to_owned()).map_err(|err| {
         AppError::bad_request(format!("authorize_event.executed_by invalid: {err}"))
     })?;
-    if authoritative_key_state
-        .get("agent_id")
-        .and_then(Value::as_str)
-        != Some(agent_id)
-        || authoritative_key_state
-            .get("controller_id")
-            .and_then(Value::as_str)
-            != Some(controller_id)
+    if authoritative_key_state.agent_id.as_str() != agent_id
+        || authoritative_key_state.controller_id.as_str() != controller_id
     {
         return Err(AppError::forbidden(
             "authorize_event controller does not match the authoritative Agent binding",
         ));
     }
-    let expected_realm = authoritative_key_state
-        .get("principal_control_realm_id")
-        .and_then(Value::as_str)
-        .ok_or_else(|| AppError::forbidden("authoritative Agent PCR binding is missing"))?;
+    let expected_realm = authoritative_key_state.principal_control_realm_id.as_str();
     if envelope.get("realm_id").and_then(Value::as_str) != Some(expected_realm) {
         return Err(AppError::forbidden(
             "authorize_event.realm_id must equal the authoritative Agent PCR",
         ));
     }
     let expected_authorization_ref = authoritative_key_state
-        .get("controller_authorization_ref")
-        .and_then(Value::as_str)
-        .ok_or_else(|| AppError::forbidden("authoritative controller delegation is missing"))?;
+        .controller_authorization_ref
+        .as_str();
     if envelope.get("authorization_ref").and_then(Value::as_str) != Some(expected_authorization_ref)
     {
         return Err(AppError::forbidden(
@@ -591,7 +585,7 @@ fn validate_controller_authorize_event<'a>(
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| AppError::bad_request("authorize_event.payload.key_id is required"))?;
-    validate_authorize_event_supersedes(payload, authoritative_key_state, key_id)?;
+    validate_authorize_event_supersedes(payload, authoritative_key_state)?;
     let agent_key_scope = payload.get("agent_key_scope").ok_or_else(|| {
         AppError::bad_request("authorize_event.payload.agent_key_scope is required")
     })?;
@@ -654,9 +648,7 @@ fn validate_controller_authorize_event<'a>(
             "authorize_event.payload.approval_evidence.pairing_request_id must match the request",
         ));
     }
-    if let Some(approved_by) = approval.get("approved_by").and_then(Value::as_str)
-        && approved_by != controller_id
-    {
+    if approval.get("approved_by").and_then(Value::as_str) != Some(controller_id) {
         return Err(AppError::forbidden(
             "authorize_event.payload.approval_evidence.approved_by must match executed_by",
         ));
@@ -674,24 +666,23 @@ fn validate_controller_authorize_event<'a>(
 
 fn validate_authorize_event_supersedes(
     payload: &Value,
-    authoritative_key_state: &Value,
-    new_key_id: &str,
+    authoritative_key_state: &arkret_core::KeyState,
 ) -> Result<(), AppError> {
-    let expected: std::collections::BTreeSet<(String, String)> = authoritative_key_state
-        .get("active_authorizations")
-        .and_then(Value::as_array)
-        .ok_or_else(|| {
-            AppError::forbidden(
-                "authoritative Agent key state does not expose active_authorizations",
-            )
-        })?
+    let active_authorizations = &authoritative_key_state.active_authorizations;
+    let expected: std::collections::BTreeSet<(String, String)> = active_authorizations
         .iter()
-        .filter_map(|authorization| {
-            let key_id = authorization.get("key_id")?.as_str()?;
-            let event_ref = authorization.get("authorized_event_ref")?.as_str()?;
-            (key_id != new_key_id).then(|| (key_id.to_owned(), event_ref.to_owned()))
+        .map(|authorization| {
+            (
+                authorization.key_id.clone(),
+                authorization.authorized_event_ref.to_string(),
+            )
         })
         .collect();
+    if expected.len() != active_authorizations.len() {
+        return Err(AppError::forbidden(
+            "authoritative Agent active authorization set contains duplicates",
+        ));
+    }
     let values = match payload.get("supersedes") {
         None => &[][..],
         Some(Value::Array(values)) => values.as_slice(),
@@ -1063,14 +1054,27 @@ mod tests {
             .with_timezone(&Utc)
     }
 
-    fn authoritative_key_state() -> Value {
-        json!({
+    fn authoritative_key_state() -> arkret_core::KeyState {
+        serde_json::from_value(json!({
             "agent_id": AGENT,
             "controller_id": CONTROLLER,
             "principal_control_realm_id": "ak:realm:01999999-0000-7000-8000-000000000010",
             "controller_authorization_ref": format!("{AGENT}#managed-controller"),
+            "status": "pending_runtime_key",
+            "pcr_recovery": {
+                "status": "ready",
+                "backup_id": "ak:backup:01999999-0000-7000-8000-000000000020",
+                "series_id": "ak:backup_series:01999999-0000-7000-8000-000000000021",
+                "series_seq": 1,
+                "managed_frontier_ref": {
+                    "frontier_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "seal_ref": "ak:seal:01999999-0000-7000-8000-000000000022",
+                    "mls_epoch": 0
+                }
+            },
             "active_authorizations": [],
-        })
+        }))
+        .unwrap()
     }
 
     fn valid_authorize_event(pairing_request_id: &str) -> Value {
@@ -1181,6 +1185,48 @@ mod tests {
         .expect_err("authorize_event pairing id mismatch must reject");
 
         assert!(err.message().contains("pairing_request_id"));
+    }
+
+    #[test]
+    fn replacement_pairing_supersedes_same_key_authorization_dot() {
+        let old_event = "ak:event:01999999-0000-7000-8000-000000000099";
+        let mut key_state = authoritative_key_state();
+        key_state.active_authorizations.push(
+            serde_json::from_value(json!({
+                "key_id": "runtime-key-1",
+                "verification_method": VM,
+                "authorized_event_ref": old_event,
+            }))
+            .unwrap(),
+        );
+        let payload = json!({
+            "supersedes": [{
+                "key_id": "runtime-key-1",
+                "authorized_event_ref": old_event,
+            }],
+        });
+
+        validate_authorize_event_supersedes(&payload, &key_state)
+            .expect("same key_id replacement must observe-remove the old authorization dot");
+    }
+
+    #[test]
+    fn replacement_pairing_rejects_omitted_same_key_authorization_dot() {
+        let mut key_state = authoritative_key_state();
+        key_state.active_authorizations.push(
+            serde_json::from_value(json!({
+                "key_id": "runtime-key-1",
+                "verification_method": VM,
+                "authorized_event_ref": "ak:event:01999999-0000-7000-8000-000000000099",
+            }))
+            .unwrap(),
+        );
+
+        let err = validate_authorize_event_supersedes(&json!({}), &key_state)
+            .expect_err("omitting the old same-key authorization dot must fail closed");
+
+        assert_eq!(err.status(), http::StatusCode::CONFLICT);
+        assert!(err.message().contains("active key set"));
     }
 
     #[test]

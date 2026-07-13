@@ -915,9 +915,6 @@ ALTER TABLE ONLY public.agent_key_authorizations
     ADD CONSTRAINT agent_key_authorizations_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.agent_key_authorizations
-    ADD CONSTRAINT agent_key_authorizations_key_id_key UNIQUE (key_id);
-
-ALTER TABLE ONLY public.agent_key_authorizations
     ADD CONSTRAINT agent_key_authorizations_authorized_event_id_key UNIQUE (authorized_event_id);
 
 ALTER TABLE ONLY public.agent_key_authorizations

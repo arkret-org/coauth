@@ -41,6 +41,7 @@ mod tests {
 
     use super::*;
     use crate::PgRepositoryFactory;
+    use crate::accountability::AccountabilityGrantFanoutState;
 
     fn unique_label(name: &str) -> String {
         let nanos = SystemTime::now()
@@ -61,6 +62,36 @@ mod tests {
             audience: "https://arkret.example/_arkret".to_owned(),
             proof_expires_at: now + chrono::Duration::minutes(5),
             prune_after: now + chrono::Duration::minutes(10),
+        }
+    }
+
+    fn authorization(
+        label: &str,
+        event_suffix: &str,
+        clock: &dyn Clock,
+    ) -> NewAgentKeyAuthorization {
+        let agent_id = format!("did:web:{label}-agent.example");
+        NewAgentKeyAuthorization {
+            authorized_event_id: format!("ak:event:{event_suffix}"),
+            agent_id: agent_id.clone(),
+            key_id: "runtime-key-1".to_owned(),
+            verification_method: format!("{agent_id}#runtime-key-1"),
+            public_key: serde_json::json!({ "kty": "OKP", "key": "fixture" }),
+            accountable_principal_id: format!("did:web:{label}-controller.example"),
+            agent_key_scope: r#"{"actions":["ak.self.events.stream.subscribe"],"resources":[]}"#
+                .to_owned(),
+            audience: vec!["did:web:soland.test".to_owned()],
+            issued_at: clock.now(),
+            expires_at: None,
+            pairing_request_id: format!("pair-{event_suffix}"),
+            request_canonical_digest: format!("sha256:{}", "1".repeat(64)),
+            raw_payload_digest: format!("sha256:{}", "2".repeat(64)),
+            soland_fanout_state: AccountabilityGrantFanoutState::Queued,
+            soland_fanout_idempotency_key: format!("ak:event:{event_suffix}"),
+            soland_fanout_payload: serde_json::json!({}),
+            soland_fanout_attempt: 0,
+            soland_fanout_next_retry_at: Some(clock.now()),
+            soland_fanout_dead_letter_reason: None,
         }
     }
 
@@ -88,6 +119,44 @@ mod tests {
         assert!(first, "first challenge consumption must win");
         assert!(!second, "replayed challenge must fail closed");
 
+        repo.cancel().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn same_key_id_can_record_successive_authorization_dots() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let clock = MockClock::default();
+        let mut rng = ChaChaRng::seed_from_u64(0xa92e);
+        let label = unique_label("agent-same-key-replacement");
+
+        repo.agent_key_authorization()
+            .add(
+                &mut rng,
+                &clock,
+                authorization(&label, "01999999-0000-7000-8000-000000000091", &clock),
+            )
+            .await
+            .unwrap();
+        repo.agent_key_authorization()
+            .add(
+                &mut rng,
+                &clock,
+                authorization(&label, "01999999-0000-7000-8000-000000000092", &clock),
+            )
+            .await
+            .expect("replacement authorization is a new dot even when key_id is unchanged");
+
+        assert_eq!(
+            repo.agent_key_authorization()
+                .list_active_for_agent(&format!("did:web:{label}-agent.example"))
+                .await
+                .unwrap()
+                .len(),
+            2
+        );
         repo.cancel().await.unwrap();
     }
 }
@@ -290,22 +359,6 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
     ) -> Result<Option<AgentKeyAuthorization>, Self::Error> {
         agent_key_authorizations::table
             .filter(agent_key_authorizations::authorized_event_id.eq(authorized_event_id))
-            .select(AgentKeyAuthorizationRow::as_select())
-            .first::<AgentKeyAuthorizationRow>(self.conn)
-            .await
-            .optional()?
-            .map(TryInto::try_into)
-            .transpose()
-            .map_err(Into::into)
-    }
-
-    #[tracing::instrument(name = "db.agent_key_authorization.lookup_by_key_id", skip_all, err)]
-    async fn lookup_by_key_id(
-        &mut self,
-        key_id: &str,
-    ) -> Result<Option<AgentKeyAuthorization>, Self::Error> {
-        agent_key_authorizations::table
-            .filter(agent_key_authorizations::key_id.eq(key_id))
             .select(AgentKeyAuthorizationRow::as_select())
             .first::<AgentKeyAuthorizationRow>(self.conn)
             .await
