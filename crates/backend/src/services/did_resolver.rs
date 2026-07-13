@@ -321,14 +321,8 @@ impl DidResolverService for DefaultDidResolverService {
             // authority boundary.
             Some(_) => match self.delegated_resolver(arkret_config) {
                 Some(resolver) => {
-                    let url = delegated_resolver_url(&resolver, did)?;
-                    resolve_http_did(
-                        http_client,
-                        did,
-                        url,
-                        DidResolutionSource::DelegatedResolver,
-                    )
-                    .await
+                    let url = delegated_resolver_url(&resolver)?;
+                    resolve_delegated_did(http_client, did, url).await
                 }
                 None => Err(DidResolveError::UnsupportedMethod),
             },
@@ -430,6 +424,15 @@ async fn resolve_http_did(
         .await?
         .error_for_status()?;
 
+    parse_resolution_http_response(response, did, &url, source).await
+}
+
+async fn parse_resolution_http_response(
+    response: reqwest::Response,
+    did: &str,
+    url: &Url,
+    source: DidResolutionSource,
+) -> Result<DidResolution, DidResolveError> {
     // Reject responses that declare an oversized payload before we ever
     // start streaming bytes. Servers that omit `Content-Length` still
     // get hit by the streaming guard below.
@@ -473,6 +476,43 @@ async fn resolve_http_did(
         method_evidence,
         identity_fact_rejection,
     })
+}
+
+async fn resolve_delegated_did(
+    http_client: &reqwest::Client,
+    did: &str,
+    url: Url,
+) -> Result<DidResolution, DidResolveError> {
+    enforce_resolver_url_policy(&url)?;
+    let pinned_resolution = enforce_resolver_dns_policy(&url).await?;
+    let pinned_http_client;
+    let request_client = if let Some((host, addrs)) = pinned_resolution.as_ref() {
+        pinned_http_client =
+            crate::outbound_http::reqwest_client_with_static_resolution(host, addrs);
+        &pinned_http_client
+    } else {
+        http_client
+    };
+    let response = delegated_resolver_request(request_client, &url, did)?
+        .send_traced()
+        .await?
+        .error_for_status()?;
+    parse_resolution_http_response(response, did, &url, DidResolutionSource::DelegatedResolver)
+        .await
+}
+
+fn delegated_resolver_request(
+    http_client: &reqwest::Client,
+    url: &Url,
+    did: &str,
+) -> Result<reqwest::RequestBuilder, DidResolveError> {
+    let typed_did = arkret_core::Did::new(did.to_owned())
+        .map_err(|error| DidResolveError::InvalidDid(error.to_string()))?;
+    let body = arkret_core::IdentityResolveRequestBody {
+        did: typed_did,
+        requested_evidence_kinds: Vec::new(),
+    };
+    Ok(http_client.post(url.clone()).json(&body))
 }
 
 fn parse_resolution_response(
@@ -827,13 +867,10 @@ fn blocked_resolver_ipv6_reason(addr: Ipv6Addr, allow_loopback: bool) -> Option<
     None
 }
 
-fn delegated_resolver_url(resolver: &str, did: &str) -> Result<Url, DidResolveError> {
-    let mut url = Url::parse(resolver)?;
-    // Reject the URL before we even build the query so an
-    // operator-supplied `http://localhost/...` resolver is caught at
-    // config-load + first-use time rather than executed.
+fn delegated_resolver_url(resolver: &str) -> Result<Url, DidResolveError> {
+    let url = Url::parse(resolver)?;
+    // Reject the operator-supplied endpoint before the request is built.
     enforce_resolver_url_policy(&url)?;
-    url.query_pairs_mut().append_pair("did", did);
     Ok(url)
 }
 
@@ -978,6 +1015,28 @@ mod tests {
             identity_fact_rejection_for(did, &evidence),
             Some(DidResolutionIdentityFactRejection::DegradedResolverState)
         );
+    }
+
+    #[test]
+    fn delegated_resolver_uses_canonical_post_body() {
+        let did = "did:webvh:ztest:resolver.example:users:alice";
+        let url = delegated_resolver_url("https://resolver.example/_arkret/root/identity/resolve")
+            .expect("resolver URL should parse");
+        let request = delegated_resolver_request(&reqwest::Client::new(), &url, did)
+            .expect("request should build")
+            .build()
+            .expect("request should be valid");
+
+        assert_eq!(request.method(), reqwest::Method::POST);
+        assert_eq!(request.url(), &url);
+        let body: Value = serde_json::from_slice(
+            request
+                .body()
+                .and_then(reqwest::Body::as_bytes)
+                .expect("JSON request body should be buffered"),
+        )
+        .expect("request body should be JSON");
+        assert_eq!(body, serde_json::json!({"did": did}));
     }
 
     #[test]

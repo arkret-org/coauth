@@ -5,7 +5,10 @@ use camino::{Utf8Path, Utf8PathBuf};
 use chrono::{DateTime, SecondsFormat, Utc};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use coauth_backend::util::{database_url_from_config, diesel_pool_from_config};
-use coauth_config::{ConfigurationSection, PrincipalServerConfig, RootConfig, SyncConfig};
+use coauth_config::{
+    ConfigurationSection, IdentityRegistryConfig, IdentityRegistryKind, PrincipalServerConfig,
+    RootConfig, SyncConfig,
+};
 use coauth_data::SystemClock;
 use ed25519_dalek::{Signer, SigningKey};
 use figment::Figment;
@@ -22,6 +25,7 @@ const DEV_PUBLIC_BASE: &str = "https://auth.local.host/";
 const DEV_SERVICE_ID: &str =
     "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:auth.local.host:webvh:service";
 const DEV_SOLAND_URL: &str = "https://local.host/";
+const DEV_SOLAND_IDENTITY_RESOLVER_URL: &str = "https://local.host/_arkret/root/identity/resolve";
 const DEV_SOLAND_SERVICE_ID: &str =
     "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service";
 const DEV_SOLAND_SESSION_GRANT_BEARER: &str = "local-coauth-session-grant-introspection";
@@ -278,6 +282,13 @@ fn apply_generated_config_options(
                 DEV_SOLAND_WEBVH_REGISTRATION_BEARER.to_owned(),
             ),
         }];
+        config.arkret.identity_registry = Some(IdentityRegistryConfig {
+            kind: IdentityRegistryKind::PublicDidResolver,
+            resolver: DEV_SOLAND_IDENTITY_RESOLVER_URL
+                .parse()
+                .expect("valid dev identity resolver URL"),
+            proof_required_for_pairwise: false,
+        });
     } else {
         config.arkret.service_id = options.service_id.clone();
         if let Some(public_base) = options.public_base.clone() {
@@ -679,4 +690,34 @@ async fn write_output(content: &str, dest: Option<&Utf8Path>) -> anyhow::Result<
         tokio::io::stdout().write_all(content.as_bytes()).await?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated_dev_config_delegates_did_resolution_to_soland() {
+        let mut config = RootConfig::test();
+        let options = GenerateOptions {
+            output: None,
+            dev: true,
+            service_id: None,
+            public_base: None,
+            database_uri: None,
+        };
+
+        apply_generated_config_options(&mut config, &options)
+            .expect("dev config options should apply");
+
+        let registry = config
+            .arkret
+            .identity_registry
+            .expect("dev config should include an identity resolver");
+        assert!(matches!(
+            registry.kind,
+            IdentityRegistryKind::PublicDidResolver
+        ));
+        assert_eq!(registry.resolver.as_str(), DEV_SOLAND_IDENTITY_RESOLVER_URL);
+    }
 }

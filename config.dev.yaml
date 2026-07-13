@@ -147,3 +147,7 @@ arkret:
     did: did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service
     session_grant_introspection_bearer: local-coauth-session-grant-introspection
     embedded_webvh_registration_bearer: local-soland-webvh-registration
+  identity_registry:
+    kind: public_did_resolver
+    resolver: https://local.host/_arkret/root/identity/resolve
+    proof_required_for_pairwise: false
