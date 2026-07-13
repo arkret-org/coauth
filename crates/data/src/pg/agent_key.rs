@@ -131,6 +131,9 @@ mod tests {
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(0xa92e);
         let label = unique_label("agent-same-key-replacement");
+        let first_event = "ak:event:01999999-0000-7000-8000-000000000091";
+        let replacement_event = "ak:event:01999999-0000-7000-8000-000000000092";
+        let newer_event = "ak:event:01999999-0000-7000-8000-000000000093";
 
         repo.agent_key_authorization()
             .add(
@@ -148,14 +151,39 @@ mod tests {
             )
             .await
             .expect("replacement authorization is a new dot even when key_id is unchanged");
+        repo.agent_key_authorization()
+            .add(
+                &mut rng,
+                &clock,
+                authorization(&label, "01999999-0000-7000-8000-000000000093", &clock),
+            )
+            .await
+            .unwrap();
 
+        repo.agent_key_authorization()
+            .mark_fanout_delivered_and_revoke(
+                &clock,
+                replacement_event,
+                &[first_event.to_owned()],
+                arkret_core::error::REASON_SUPERSEDED_BY_REPAIRING,
+            )
+            .await
+            .unwrap();
+
+        let active_event_ids = repo
+            .agent_key_authorization()
+            .list_active_for_agent(&format!("did:web:{label}-agent.example"))
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|authorization| authorization.authorized_event_id)
+            .collect::<std::collections::BTreeSet<_>>();
         assert_eq!(
-            repo.agent_key_authorization()
-                .list_active_for_agent(&format!("did:web:{label}-agent.example"))
-                .await
-                .unwrap()
-                .len(),
-            2
+            active_event_ids,
+            [replacement_event.to_owned(), newer_event.to_owned()]
+                .into_iter()
+                .collect(),
+            "a delayed older reconciliation must not revoke a newer authorization"
         );
         repo.cancel().await.unwrap();
     }
@@ -414,14 +442,15 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.agent_key_authorization.mark_fanout_delivered_and_revoke_others",
+        name = "db.agent_key_authorization.mark_fanout_delivered_and_revoke",
         skip_all,
         err
     )]
-    async fn mark_fanout_delivered_and_revoke_others(
+    async fn mark_fanout_delivered_and_revoke(
         &mut self,
         clock: &dyn Clock,
         authorized_event_id: &str,
+        superseded_event_ids: &[String],
         revoked_reason: &str,
     ) -> Result<bool, Self::Error> {
         let Some(current) = self.lookup_by_event_id(authorized_event_id).await? else {
@@ -443,19 +472,23 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
         if delivered != 1 {
             return Ok(false);
         }
-        diesel::update(
-            agent_key_authorizations::table
-                .filter(agent_key_authorizations::agent_id.eq(&current.agent_id))
-                .filter(agent_key_authorizations::authorized_event_id.ne(authorized_event_id))
-                .filter(agent_key_authorizations::revoked_at.is_null()),
-        )
-        .set((
-            agent_key_authorizations::revoked_at.eq(Some(now)),
-            agent_key_authorizations::revoked_reason.eq(Some(revoked_reason.to_owned())),
-            agent_key_authorizations::updated_at.eq(now),
-        ))
-        .execute(self.conn)
-        .await?;
+        if !superseded_event_ids.is_empty() {
+            diesel::update(
+                agent_key_authorizations::table
+                    .filter(agent_key_authorizations::agent_id.eq(&current.agent_id))
+                    .filter(
+                        agent_key_authorizations::authorized_event_id.eq_any(superseded_event_ids),
+                    )
+                    .filter(agent_key_authorizations::revoked_at.is_null()),
+            )
+            .set((
+                agent_key_authorizations::revoked_at.eq(Some(now)),
+                agent_key_authorizations::revoked_reason.eq(Some(revoked_reason.to_owned())),
+                agent_key_authorizations::updated_at.eq(now),
+            ))
+            .execute(self.conn)
+            .await?;
+        }
         Ok(true)
     }
 

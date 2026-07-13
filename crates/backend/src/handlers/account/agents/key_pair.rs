@@ -153,7 +153,15 @@ pub async fn post_agent_key_pair(
                 )
             })?;
         idempotency_repo.cancel().await?;
-        let (_, authoritative_server) = super::fetch_authoritative_agent_view(
+        let authorized_event_ref = arkret_core::EventId::new(existing.authorized_event_id.clone())
+            .map_err(|error| AppError::internal_box(Box::new(error)))?;
+        if existing.soland_fanout_state == AccountabilityGrantFanoutState::Delivered {
+            return Ok(Json(arkret_core::AgentKeyPairOutcome {
+                ok: true,
+                authorized_event_ref,
+            }));
+        }
+        let (_, authoritative_server) = super::session_proof::fetch_authoritative_agent_view(
             &http_client,
             &arkret_config,
             &agent_id,
@@ -169,8 +177,6 @@ pub async fn post_agent_key_pair(
             stored_body,
         )
         .await?;
-        let authorized_event_ref = arkret_core::EventId::new(existing.authorized_event_id)
-            .map_err(|error| AppError::internal_box(Box::new(error)))?;
         return Ok(Json(arkret_core::AgentKeyPairOutcome {
             ok: true,
             authorized_event_ref,
@@ -424,7 +430,6 @@ pub async fn post_agent_key_pair(
 
 #[derive(Debug)]
 struct ValidatedAuthorizeEvent<'a> {
-    event_id: String,
     controller_id: String,
     key_id: String,
     agent_key_scope: &'a Value,
@@ -655,7 +660,6 @@ fn validate_controller_authorize_event<'a>(
     }
 
     Ok(ValidatedAuthorizeEvent {
-        event_id: event_id.to_owned(),
         controller_id: controller_id.to_owned(),
         key_id: key_id.to_owned(),
         agent_key_scope,
@@ -979,6 +983,7 @@ async fn commit_and_mark_agent_key_authorization(
     principal_server_name: &str,
     body: arkret_core::AgentKeyPairRequestBody,
 ) -> Result<(), AppError> {
+    let superseded_event_refs = pairing_superseded_event_refs(&body)?;
     let http_client = depot.http_client()?;
     let arkret_config = depot.arkret_config()?;
     let request = PrincipalAgentKeyPairCommitRequest::new(
@@ -1007,9 +1012,10 @@ async fn commit_and_mark_agent_key_authorization(
     let mut repo = depot.repo().await?;
     let updated = repo
         .agent_key_authorization()
-        .mark_fanout_delivered_and_revoke_others(
+        .mark_fanout_delivered_and_revoke(
             &*clock,
             authorized_event_id,
+            &superseded_event_refs,
             arkret_core::error::REASON_SUPERSEDED_BY_REPAIRING,
         )
         .await?;
@@ -1021,6 +1027,32 @@ async fn commit_and_mark_agent_key_authorization(
     }
     repo.save().await?;
     Ok(())
+}
+
+fn pairing_superseded_event_refs(
+    body: &arkret_core::AgentKeyPairRequestBody,
+) -> Result<Vec<String>, AppError> {
+    match body.authorize_event.payload.get("supersedes") {
+        None => Ok(Vec::new()),
+        Some(Value::Array(values)) => values
+            .iter()
+            .map(|value| {
+                value
+                    .get("authorized_event_ref")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.is_empty())
+                    .map(ToOwned::to_owned)
+                    .ok_or_else(|| {
+                        AppError::bad_request(
+                            "authorize_event.payload.supersedes[].authorized_event_ref is required",
+                        )
+                    })
+            })
+            .collect(),
+        Some(_) => Err(AppError::bad_request(
+            "authorize_event.payload.supersedes must be an array",
+        )),
+    }
 }
 
 #[cfg(test)]

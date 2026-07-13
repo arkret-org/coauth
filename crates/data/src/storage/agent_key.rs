@@ -111,11 +111,12 @@ pub trait AgentKeyAuthorizationRepository: Send + Sync {
     ) -> Result<usize, Self::Error>;
 
     /// Mark one authorization as delivered to Soland and atomically revoke
-    /// every other active authorization for the same Agent.
-    async fn mark_fanout_delivered_and_revoke_others(
+    /// only the authorization Event ids observed in its signed supersedes set.
+    async fn mark_fanout_delivered_and_revoke(
         &mut self,
         clock: &dyn Clock,
         authorized_event_id: &str,
+        superseded_event_ids: &[String],
         revoked_reason: &str,
     ) -> Result<bool, Self::Error>;
 
@@ -156,10 +157,11 @@ repository_impl!(AgentKeyAuthorizationRepository:
         agent_id: &str,
         reason: &str,
     ) -> Result<usize, Self::Error>;
-    async fn mark_fanout_delivered_and_revoke_others(
+    async fn mark_fanout_delivered_and_revoke(
         &mut self,
         clock: &dyn Clock,
         authorized_event_id: &str,
+        superseded_event_ids: &[String],
         revoked_reason: &str,
     ) -> Result<bool, Self::Error>;
     async fn consume_proof_challenge(

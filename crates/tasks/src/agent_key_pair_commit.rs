@@ -43,12 +43,37 @@ impl RunnableJob for AgentKeyPairCommitJob {
             .await
             .map_err(JobError::retry)?;
 
+        let superseded_event_ids = match self.body().authorize_event.payload.get("supersedes") {
+            None => Vec::new(),
+            Some(serde_json::Value::Array(values)) => values
+                .iter()
+                .map(|value| {
+                    value
+                        .get("authorized_event_ref")
+                        .and_then(serde_json::Value::as_str)
+                        .filter(|value| !value.is_empty())
+                        .map(ToOwned::to_owned)
+                        .ok_or_else(|| {
+                            JobError::fail(anyhow::anyhow!(
+                                "queued Agent pairing supersedes entry omitted authorized_event_ref"
+                            ))
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            Some(_) => {
+                return Err(JobError::fail(anyhow::anyhow!(
+                    "queued Agent pairing supersedes must be an array"
+                )));
+            }
+        };
+
         let mut repo = state.repository().await.map_err(JobError::retry)?;
         let updated = repo
             .agent_key_authorization()
-            .mark_fanout_delivered_and_revoke_others(
+            .mark_fanout_delivered_and_revoke(
                 state.clock(),
                 self.authorized_event_id(),
+                &superseded_event_ids,
                 arkret_core::error::REASON_SUPERSEDED_BY_REPAIRING,
             )
             .await
