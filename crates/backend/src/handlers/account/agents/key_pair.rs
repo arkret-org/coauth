@@ -10,7 +10,7 @@ use arkret_signatures::proof::{PublicKeyMaterial, verify_eddsa_detached_jws_proo
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
-use coauth_data::accountability::{AccountabilityGrantFanoutState, AccountabilitySubjectKind};
+use coauth_data::accountability::AccountabilityGrantFanoutState;
 use coauth_data::agent_key::NewAgentKeyAuthorization;
 use coauth_data::audit::AdminOperation;
 use coauth_data::{BoxRepository, RepositoryAccess, UrlBuilder};
@@ -225,17 +225,15 @@ pub async fn post_agent_key_pair(
         return Err(error);
     }
 
-    let accountable_grants = repo
-        .accountability_grant()
-        .list_active_for_subject(AccountabilitySubjectKind::AgentId, &agent_id)
-        .await?;
-    if !accountable_grants
-        .iter()
-        .any(|grant| grant.controller_id == authorize_event.controller_id)
-    {
-        repo.cancel().await.ok();
-        return Err(AgentAuthRejection::AccountabilityGrantMissing.into_app_error());
-    };
+    // `pair_agent_key` validates the current Principal-Server pairing handle
+    // above and the controller-signed authorization here. Accountability-grant
+    // issuance is a precondition of the aggregate `provision` operation, not
+    // an operation-specific precondition of runtime-key pairing. In
+    // particular, Coauth's local grant table is not the protocol truth source
+    // for the controller-authored `ak.identity.accountability_grant` already
+    // accepted by Soland. Requiring a duplicate row here makes every normal
+    // Soland-orchestrated pairing fail with `accountability_grant_missing`.
+    // Agent session issuance still performs its required accountability gate.
 
     let mut rng = make_rng();
     let key_id = authorize_event.key_id.clone();

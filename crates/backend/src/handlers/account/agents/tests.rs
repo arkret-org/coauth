@@ -89,6 +89,20 @@ mod agent_auth_error_matrix_tests {
     }
 
     #[test]
+    fn pair_agent_key_error_contract_excludes_accountability_grant_missing() {
+        let pair_agent_key_rejections = [
+            AgentAuthRejection::VerificationMethodPrincipalMismatch,
+            AgentAuthRejection::PairingRequestExpired,
+            AgentAuthRejection::ProofInvalid,
+            AgentAuthRejection::AgentDeactivated,
+        ];
+
+        assert!(
+            !pair_agent_key_rejections.contains(&AgentAuthRejection::AccountabilityGrantMissing)
+        );
+    }
+
+    #[test]
     fn unknown_accountability_grant_action_is_rejected() {
         let err = normalize_capabilities(vec!["ak.agent.unregistered".to_owned()])
             .expect_err("unknown action must fail closed");

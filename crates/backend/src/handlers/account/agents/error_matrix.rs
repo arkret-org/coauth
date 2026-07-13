@@ -81,7 +81,10 @@ pub enum AgentAuthRejection {
     /// grant covering the requested capability set is absent or expired.
     /// Used on `ak.gate.account.command.issue_session_grant` (agent branch) and
     /// `ak.self.agent.command.provision` / `ak.self.agent.command.resume` per
-    /// `operations↔error mapping` §0.8.
+    /// `operations↔error mapping` §0.8. It is deliberately not a
+    /// `ak.gate.account.command.pair_agent_key` rejection: provisioning already
+    /// established the durable accountability event before issuing a pairing
+    /// handle.
     AccountabilityGrantMissing,
     /// `capability_denied` — an active capability/accountability grant did not
     /// cover the requested agent session scope or resource selector.
