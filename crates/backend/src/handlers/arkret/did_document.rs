@@ -16,11 +16,7 @@
 //! a second general-purpose DID model.
 
 use arkret_signatures::proof::PublicKeyMaterial;
-use coauth_iana::jose::JsonWebKeyOkpEllipticCurve;
-use coauth_jose::base64::Base64UrlNoPad;
-use coauth_jose::jwk::{
-    JsonWebKeyPublicParameters, OkpPublicParameters, PublicJsonWebKey,
-};
+use coauth_jose::jwk::{JsonWebKeyPublicParameters, PublicJsonWebKey};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,11 +129,13 @@ impl VerificationMethod {
             .public_key_material()?
             .ed25519_bytes()
             .map_err(|error| format!("publicKeyMultibase is invalid: {error}"))?;
-        Ok(PublicJsonWebKey::new(JsonWebKeyPublicParameters::Okp(
-            OkpPublicParameters::new(
-                JsonWebKeyOkpEllipticCurve::Ed25519,
-                Base64UrlNoPad::new(bytes),
-            ),
+        let bytes = bytes
+            .try_into()
+            .map_err(|_| "publicKeyMultibase Ed25519 key must contain 32 bytes".to_owned())?;
+        let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(&bytes)
+            .map_err(|error| format!("publicKeyMultibase Ed25519 key is invalid: {error}"))?;
+        Ok(PublicJsonWebKey::new(JsonWebKeyPublicParameters::from(
+            &verifying_key,
         )))
     }
 }
