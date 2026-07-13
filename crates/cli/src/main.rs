@@ -58,8 +58,29 @@ fn main() -> anyhow::Result<ExitCode> {
     // the AppVersion depot entry, etc.
     coauth_backend::set_version(VERSION);
 
+    let cli_opts = self::commands::Options::parse();
+    let dotenv_result: Result<Option<_>, _> = if cli_opts.has_explicit_config() {
+        Ok(None)
+    } else {
+        dotenvy::dotenv()
+            .map(Some)
+            .or_else(|e| if e.not_found() { Ok(None) } else { Err(e) })
+    };
+    if cli_opts.has_explicit_config() && cli_opts.ignores_env_overrides() {
+        clear_coauth_environment();
+    }
+    cli_opts.apply_runtime_cli_overrides();
+    let figment = cli_opts.figment();
+
     let runtime = build_tokio_runtime()?;
-    runtime.block_on(run_async())
+    runtime.block_on(run_async(cli_opts, figment, dotenv_result))
+}
+
+fn clear_coauth_environment() {
+    for (key, _) in std::env::vars().filter(|(key, _)| key.starts_with("COAUTH_")) {
+        // SAFETY: this runs before the Tokio runtime creates worker threads.
+        unsafe { std::env::remove_var(key) };
+    }
 }
 
 /// Construct the Tokio runtime with all features enabled.
@@ -79,8 +100,12 @@ fn build_tokio_runtime() -> anyhow::Result<tokio::runtime::Runtime> {
 
 /// Top-level async wrapper that ensures telemetry is shut down regardless
 /// of whether the command succeeded.
-async fn run_async() -> anyhow::Result<ExitCode> {
-    let outcome = execute_command().await;
+async fn run_async(
+    cli_opts: self::commands::Options,
+    figment: figment::Figment,
+    dotenv_result: Result<Option<std::path::PathBuf>, dotenvy::Error>,
+) -> anyhow::Result<ExitCode> {
+    let outcome = execute_command(cli_opts, figment, dotenv_result).await;
 
     if let Err(err) = coauth_backend::telemetry::shutdown() {
         eprintln!("Failed to shutdown telemetry exporters: {err}");
@@ -90,12 +115,11 @@ async fn run_async() -> anyhow::Result<ExitCode> {
 }
 
 /// The core async logic: env loading, logging, tracing, and command dispatch.
-async fn execute_command() -> anyhow::Result<ExitCode> {
-    // Attempt to load environment variables from .env files
-    let dotenv_result: Result<Option<_>, _> = dotenvy::dotenv()
-        .map(Some)
-        .or_else(|e| if e.not_found() { Ok(None) } else { Err(e) });
-
+async fn execute_command(
+    cli_opts: self::commands::Options,
+    figment: figment::Figment,
+    dotenv_result: Result<Option<std::path::PathBuf>, dotenvy::Error>,
+) -> anyhow::Result<ExitCode> {
     // Logging setup -- writes to stderr
     let stderr = std::io::stderr();
     let use_ansi = stderr.is_terminal();
@@ -114,10 +138,6 @@ async fn execute_command() -> anyhow::Result<ExitCode> {
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
         .map_err(|_| anyhow::anyhow!("could not install the AWS LC crypto provider"))?;
-
-    // Parse CLI arguments and load configuration
-    let cli_opts = self::commands::Options::parse();
-    let figment = cli_opts.figment();
 
     let mut tel_cfg = TelemetryConfig::extract_or_default(&figment)
         .map_err(anyhow::Error::from_boxed)

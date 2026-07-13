@@ -56,11 +56,56 @@ pub struct Options {
     #[arg(short, long, global = true, action = clap::ArgAction::Append)]
     config: Vec<Utf8PathBuf>,
 
+    /// Ignore ambient COAUTH_* variables when explicit config files are used
+    #[arg(long, global = true)]
+    no_env_overrides: bool,
+
+    /// Enable debug-only cotest endpoints
+    #[arg(long, global = true)]
+    enable_test_endpoints: bool,
+
+    /// Confirm that the configured in-band email verification bypass is intentional
+    #[arg(long, global = true)]
+    allow_insecure_dev_email_bypass: bool,
+
+    /// Confirm that the configured password bootstrap flow is intentional
+    #[arg(long, global = true)]
+    allow_insecure_password_bootstrap: bool,
+
     #[command(subcommand)]
     subcommand: Option<Subcommand>,
 }
 
 impl Options {
+    pub(super) fn has_explicit_config(&self) -> bool {
+        !self.config.is_empty()
+    }
+
+    pub(super) fn ignores_env_overrides(&self) -> bool {
+        self.no_env_overrides
+    }
+
+    pub(super) fn apply_runtime_cli_overrides(&self) {
+        let overrides = [
+            ("COAUTH_ENABLE_TEST_ENDPOINTS", self.enable_test_endpoints),
+            (
+                "COAUTH_ALLOW_INSECURE_DEV_EMAIL_BYPASS",
+                self.allow_insecure_dev_email_bypass,
+            ),
+            (
+                "COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP",
+                self.allow_insecure_password_bootstrap,
+            ),
+        ];
+        for (key, enabled) in overrides {
+            if enabled {
+                // SAFETY: `main` applies CLI overrides before creating the
+                // Tokio runtime or any other worker thread.
+                unsafe { std::env::set_var(key, "1") };
+            }
+        }
+    }
+
     pub(super) fn runs_server(&self) -> bool {
         matches!(&self.subcommand, Some(Subcommand::Server(_)) | None)
     }
@@ -95,10 +140,20 @@ impl Options {
             self.config.clone()
         };
 
-        let base = Figment::new().merge(Env::prefixed("COAUTH_").split("__"));
-
-        configs
+        let explicit_config = self.has_explicit_config();
+        let base = if explicit_config {
+            Figment::new()
+        } else {
+            Figment::new().merge(Env::prefixed("COAUTH_").split("__"))
+        };
+        let figment = configs
             .into_iter()
-            .fold(base, |f, path| f.admerge(Yaml::file(path)))
+            .fold(base, |f, path| f.admerge(Yaml::file(path)));
+
+        if explicit_config && !self.no_env_overrides {
+            figment.merge(Env::prefixed("COAUTH_").split("__"))
+        } else {
+            figment
+        }
     }
 }
