@@ -10,11 +10,12 @@
 //! NOTE (CAU-DRY-02, kept by ruling): this is intentionally NOT the SDK
 //! `arkret_core::identity::DidDocument`. The SDK type is a simplified product
 //! contract (verification methods collapsed to a map); this one is the
-//! full-document wire shape consumed from external resolvers (JWK
+//! full-document wire shape consumed from external resolvers (JWK and Multikey
 //! verification methods, `service` entries, holder-preference metadata).
 //! Reach for the SDK type for product contracts — do not grow this one into
 //! a second general-purpose DID model.
 
+use arkret_signatures::proof::PublicKeyMaterial;
 use coauth_jose::jwk::PublicJsonWebKey;
 use serde::{Deserialize, Serialize};
 
@@ -91,7 +92,50 @@ pub struct VerificationMethod {
     pub controller: String,
 
     #[serde(rename = "publicKeyJwk")]
-    pub public_key_jwk: PublicJsonWebKey,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_key_jwk: Option<PublicJsonWebKey>,
+
+    #[serde(rename = "publicKeyMultibase")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_key_multibase: Option<String>,
+}
+
+impl VerificationMethod {
+    pub fn public_key_material(&self) -> Result<PublicKeyMaterial, String> {
+        match (&self.public_key_jwk, &self.public_key_multibase) {
+            (Some(jwk), None) => {
+                let value = serde_json::to_value(jwk)
+                    .map_err(|error| format!("publicKeyJwk is invalid: {error}"))?;
+                Ok(PublicKeyMaterial::Jwk { value })
+            }
+            (None, Some(value)) => Ok(PublicKeyMaterial::Ed25519Multibase {
+                value: value.clone(),
+            }),
+            (Some(_), Some(_)) => Err(
+                "verification method must not contain both publicKeyJwk and publicKeyMultibase"
+                    .to_owned(),
+            ),
+            (None, None) => Err(
+                "verification method must contain publicKeyJwk or publicKeyMultibase".to_owned(),
+            ),
+        }
+    }
+
+    pub fn public_jwk(&self) -> Result<PublicJsonWebKey, String> {
+        if let Some(jwk) = self.public_key_jwk.as_ref() {
+            return Ok(jwk.clone());
+        }
+        let bytes = self
+            .public_key_material()?
+            .ed25519_bytes()
+            .map_err(|error| format!("publicKeyMultibase is invalid: {error}"))?;
+        serde_json::from_value(serde_json::json!({
+            "kty": "OKP",
+            "crv": "Ed25519",
+            "x": arkret_core::base64url_encode(bytes),
+        }))
+        .map_err(|error| format!("converted Ed25519 JWK is invalid: {error}"))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,4 +147,67 @@ pub struct DidService {
 
     #[serde(rename = "serviceEndpoint")]
     pub service_endpoint: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn did_webvh_multikey_document_deserializes_and_converts_to_jwk() {
+        let public_key = [7u8; 32];
+        let multibase = arkret_core::ed25519_pubkey_to_did_key_multibase(&public_key);
+        let did = "did:webvh:ztest:local.host:webvh:alice";
+        let document: DidDocument = serde_json::from_value(json!({
+            "id": did,
+            "verificationMethod": [{
+                "id": format!("{did}#device-1"),
+                "type": "Multikey",
+                "controller": did,
+                "publicKeyMultibase": multibase,
+            }],
+            "authentication": [format!("{did}#device-1")],
+            "assertionMethod": [format!("{did}#device-1")],
+        }))
+        .expect("soland did:webvh Multikey document should deserialize");
+
+        let method = &document.verification_method[0];
+        assert_eq!(
+            method
+                .public_key_material()
+                .expect("Multikey material should be supported")
+                .ed25519_bytes()
+                .expect("Multikey should decode"),
+            public_key
+        );
+        let jwk = serde_json::to_value(
+            method
+                .public_jwk()
+                .expect("Multikey should convert to Ed25519 JWK"),
+        )
+        .expect("JWK should serialize");
+        assert_eq!(jwk["kty"], "OKP");
+        assert_eq!(jwk["crv"], "Ed25519");
+        assert_eq!(jwk["x"], arkret_core::base64url_encode(public_key));
+    }
+
+    #[test]
+    fn verification_method_rejects_ambiguous_key_material() {
+        let method: VerificationMethod = serde_json::from_value(json!({
+            "id": "did:web:example.test#key-1",
+            "type": "Multikey",
+            "controller": "did:web:example.test",
+            "publicKeyJwk": {
+                "kty": "OKP",
+                "crv": "Ed25519",
+                "x": arkret_core::base64url_encode([7u8; 32]),
+            },
+            "publicKeyMultibase": arkret_core::ed25519_pubkey_to_did_key_multibase(&[7u8; 32]),
+        }))
+        .expect("wire document should parse before use-time validation");
+
+        assert!(method.public_key_material().is_err());
+    }
 }

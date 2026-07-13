@@ -688,8 +688,13 @@ async fn verify_subject_proof(
         .document
         .verification_method
         .iter()
-        .map(|vm| vm.public_key_jwk.clone())
-        .collect();
+        .map(|method| method.public_jwk())
+        .collect::<Result<_, _>>()
+        .map_err(|error| {
+            InviteVerificationError::SubjectProofInvalid(format!(
+                "inviter DID document verificationMethod is invalid: {error}"
+            ))
+        })?;
     if keys.is_empty() {
         return Err(InviteVerificationError::SubjectProofInvalid(
             "inviter DID document has no verificationMethod entries".into(),

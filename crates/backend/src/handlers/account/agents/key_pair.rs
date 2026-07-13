@@ -27,6 +27,7 @@ use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
 use crate::handlers::arkret::{
     VerificationMethod, is_allowed_session_grant_audience, service_id_for,
 };
+use crate::services::device_signing_directory::resolve_authorized_device_signing_key;
 use crate::services::did_binding_proof::normalize_did_for_binding;
 use crate::services::did_resolver::DidResolverService;
 use crate::{AppError, CreatedJsonResult};
@@ -210,6 +211,7 @@ pub async fn post_agent_key_pair(
     if let Err(error) = verify_authorize_event_controller_signature(
         &body.authorize_event,
         &authorize_event.controller_id,
+        &pop.audience,
         &http_client,
         &url_builder,
         &arkret_config,
@@ -663,6 +665,7 @@ fn ensure_authorize_event_has_controller_signature(
 async fn verify_authorize_event_controller_signature(
     envelope: &Value,
     controller_id: &str,
+    audience: &str,
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
@@ -670,6 +673,58 @@ async fn verify_authorize_event_controller_signature(
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
 ) -> Result<(), AppError> {
+    let (event, canonical_bytes) = authorize_event_signature_input(envelope, controller_id)?;
+    let mut has_controller_key_proof = false;
+    let mut saw_controller_proof = false;
+
+    for proof in &event.proofs {
+        if verification_method_controller(&proof.verification_method) != controller_id {
+            continue;
+        }
+        saw_controller_proof = true;
+        let Some(device_id) = verification_method_device_id(&proof.verification_method) else {
+            has_controller_key_proof = true;
+            continue;
+        };
+        let resolved = match resolve_authorized_device_signing_key(
+            http_client,
+            arkret_config,
+            audience,
+            controller_id,
+            &device_id,
+        )
+        .await
+        {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                tracing::warn!(
+                    %controller_id,
+                    %device_id,
+                    %error,
+                    "authorize_event controller device key resolution failed"
+                );
+                continue;
+            }
+        };
+        let public_key = PublicKeyMaterial::Ed25519Multibase {
+            value: resolved.multibase,
+        };
+        if verify_eddsa_detached_jws_proof(proof, &canonical_bytes, &event.actor_id, &public_key)
+            .is_ok()
+        {
+            return Ok(());
+        }
+    }
+
+    if !saw_controller_proof {
+        return Err(AppError::bad_request(
+            "authorize_event proof verification_method must be controlled by actor_id",
+        ));
+    }
+    if !has_controller_key_proof {
+        return Err(AgentAuthRejection::ProofInvalid.into_app_error());
+    }
+
     let resolution = did_resolver
         .resolve_did_document(
             http_client,
@@ -703,6 +758,45 @@ fn verify_authorize_event_controller_signature_with_methods(
     controller_id: &str,
     verification_methods: &[VerificationMethod],
 ) -> Result<(), AppError> {
+    let (event, canonical_bytes) = authorize_event_signature_input(envelope, controller_id)?;
+
+    let mut saw_controller_proof = false;
+    for proof in &event.proofs {
+        if verification_method_controller(&proof.verification_method) != controller_id {
+            continue;
+        }
+        saw_controller_proof = true;
+        let Some(method) = verification_methods
+            .iter()
+            .find(|method| method.id == proof.verification_method)
+        else {
+            continue;
+        };
+        let public_key = method.public_key_material().map_err(|error| {
+            AppError::bad_request(format!(
+                "authorize_event controller verification method invalid: {error}"
+            ))
+        })?;
+        if verify_eddsa_detached_jws_proof(proof, &canonical_bytes, &event.actor_id, &public_key)
+            .is_ok()
+        {
+            return Ok(());
+        }
+    }
+
+    if saw_controller_proof {
+        Err(AgentAuthRejection::ProofInvalid.into_app_error())
+    } else {
+        Err(AppError::bad_request(
+            "authorize_event proof verification_method must be controlled by actor_id",
+        ))
+    }
+}
+
+fn authorize_event_signature_input(
+    envelope: &Value,
+    controller_id: &str,
+) -> Result<(arkret_core::Event, Vec<u8>), AppError> {
     let event: arkret_core::Event = serde_json::from_value(envelope.clone()).map_err(|error| {
         AppError::bad_request(format!(
             "authorize_event must be a complete signed Event envelope: {error}"
@@ -727,37 +821,7 @@ fn verify_authorize_event_controller_signature_with_methods(
                 "authorize_event canonical payload could not be encoded: {error}"
             ))
         })?;
-
-    let mut saw_controller_proof = false;
-    for proof in &event.proofs {
-        if verification_method_controller(&proof.verification_method) != controller_id {
-            continue;
-        }
-        saw_controller_proof = true;
-        let Some(method) = verification_methods
-            .iter()
-            .find(|method| method.id == proof.verification_method)
-        else {
-            continue;
-        };
-        let jwk_value = serde_json::to_value(&method.public_key_jwk).map_err(|error| {
-            AppError::bad_request(format!("authorize_event controller JWK invalid: {error}"))
-        })?;
-        let public_key = PublicKeyMaterial::Jwk { value: jwk_value };
-        if verify_eddsa_detached_jws_proof(proof, &canonical_bytes, &event.actor_id, &public_key)
-            .is_ok()
-        {
-            return Ok(());
-        }
-    }
-
-    if saw_controller_proof {
-        Err(AgentAuthRejection::ProofInvalid.into_app_error())
-    } else {
-        Err(AppError::bad_request(
-            "authorize_event proof verification_method must be controlled by actor_id",
-        ))
-    }
+    Ok((event, canonical_bytes))
 }
 
 fn verification_method_controller(verification_method: &str) -> &str {
@@ -768,6 +832,14 @@ fn verification_method_controller(verification_method: &str) -> &str {
         .split('?')
         .next()
         .unwrap_or("")
+}
+
+fn verification_method_device_id(verification_method: &str) -> Option<String> {
+    let (_, fragment) = verification_method.split_once('#')?;
+    let fragment = fragment.split('?').next().unwrap_or("").trim();
+    arkret_core::DeviceId::new(fragment.to_owned())
+        .ok()
+        .map(|device_id| device_id.to_string())
 }
 
 fn ensure_authorize_event_scope_is_action_object(scope: &Value) -> Result<(), AppError> {
@@ -1113,6 +1185,64 @@ mod tests {
         assert_eq!(err.status(), http::StatusCode::UNAUTHORIZED);
     }
 
+    #[test]
+    fn controller_device_verification_method_uses_device_directory_identity() {
+        let device_id = "ak:device:01999999-0000-7000-8000-000000000042";
+        let verification_method = format!("{CONTROLLER}#{device_id}");
+
+        assert_eq!(
+            verification_method_device_id(&verification_method).as_deref(),
+            Some(device_id)
+        );
+        assert!(verification_method_device_id(&format!("{CONTROLLER}#key-1")).is_none());
+    }
+
+    #[test]
+    fn authorize_event_accepts_controller_device_multibase_signature() {
+        let device_id = "ak:device:01999999-0000-7000-8000-000000000042";
+        let verification_method = format!("{CONTROLLER}#{device_id}");
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+        let multibase = arkret_core::ed25519_pubkey_to_did_key_multibase(
+            &signing_key.verifying_key().to_bytes(),
+        );
+        let mut unsigned_event = valid_authorize_event(PAIRING_REQUEST_ID);
+        unsigned_event["proofs"] = json!([]);
+        let mut event: arkret_core::Event = serde_json::from_value(unsigned_event).unwrap();
+        let canonical_bytes =
+            arkret_core::canonical::canonical_json_bytes(&event.digest_payload().unwrap()).unwrap();
+        let mut proof = arkret_core::Proof {
+            kind: "detached_jws".to_owned(),
+            alg: "EdDSA".to_owned(),
+            verification_method: verification_method.clone(),
+            event_digest: arkret_core::Hash::new(arkret_core::canonical::sha256_digest(
+                &canonical_bytes,
+            ))
+            .unwrap(),
+            created_at: "2026-07-06T00:01:00Z".parse().unwrap(),
+            domain: None,
+            audience: None,
+            jws: String::new(),
+        };
+        let binding_bytes = proof.canonical_binding_bytes(&event.actor_id).unwrap();
+        proof.jws = arkret_signatures::proof::sign_eddsa_detached_jws(&signing_key, &binding_bytes)
+            .unwrap();
+        event.proofs.push(proof);
+        let method = VerificationMethod {
+            id: verification_method,
+            kind: "Multikey".to_owned(),
+            controller: CONTROLLER.to_owned(),
+            public_key_jwk: None,
+            public_key_multibase: Some(multibase),
+        };
+
+        verify_authorize_event_controller_signature_with_methods(
+            &serde_json::to_value(event).unwrap(),
+            CONTROLLER,
+            &[method],
+        )
+        .expect("authorized controller device signature accepts");
+    }
+
     fn full_fake_signed_authorize_event() -> Value {
         let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
         event["proofs"] = json!([{
@@ -1134,12 +1264,15 @@ mod tests {
             id: "did:web:controller.example#key-1".to_owned(),
             kind: "JsonWebKey2020".to_owned(),
             controller: CONTROLLER.to_owned(),
-            public_key_jwk: serde_json::from_value(json!({
-                "kty": "OKP",
-                "crv": "Ed25519",
-                "x": x,
-            }))
-            .unwrap(),
+            public_key_jwk: Some(
+                serde_json::from_value(json!({
+                    "kty": "OKP",
+                    "crv": "Ed25519",
+                    "x": x,
+                }))
+                .unwrap(),
+            ),
+            public_key_multibase: None,
         }
     }
 }

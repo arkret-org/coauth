@@ -71,7 +71,7 @@
 //! service's resolved DID document JWKS.
 
 use arkret_core::canonical::canonical_json_bytes;
-use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
+use arkret_signatures::proof::verify_detached_ed25519_signature;
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
@@ -470,10 +470,9 @@ pub(crate) fn verify_compact_jws_with_sdk(
     signing_input.push('.');
     signing_input.push_str(payload_b64u);
 
-    // SDK helper: bridge JWK → raw 32-byte Ed25519 verifying key.
-    let jwk_value = serde_json::to_value(&method.public_key_jwk)
-        .map_err(|err| SdkJwsVerifyError::UnsupportedJwk(format!("jwk serialize: {err}")))?;
-    let material = PublicKeyMaterial::Jwk { value: jwk_value };
+    let material = method
+        .public_key_material()
+        .map_err(SdkJwsVerifyError::UnsupportedJwk)?;
     if verify_detached_ed25519_signature(&material, signing_input.as_bytes(), signature_b64u) {
         Ok(())
     } else {
@@ -1232,7 +1231,8 @@ mod tests {
             id: vector.did_document_fragment.id.clone(),
             kind: vector.did_document_fragment.kind.clone(),
             controller: vector.did_document_fragment.controller.clone(),
-            public_key_jwk: vector.did_document_fragment.public_key_jwk.clone(),
+            public_key_jwk: Some(vector.did_document_fragment.public_key_jwk.clone()),
+            public_key_multibase: None,
         };
         // AKP-0007 P2B.3.1: verify through the SDK-mediated pure-Rust path.
         verify_compact_jws_with_sdk(&compact, std::slice::from_ref(&method), kid)

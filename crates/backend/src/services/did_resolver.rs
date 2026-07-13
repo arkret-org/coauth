@@ -351,7 +351,8 @@ fn local_primary_account_did_document(
             id: key_id.clone(),
             kind: "JsonWebKey2020".to_owned(),
             controller: did.to_owned(),
-            public_key_jwk: public_key,
+            public_key_jwk: Some(public_key),
+            public_key_multibase: None,
         });
         authentication.push(key_id.clone());
         assertion_method.push(key_id);
