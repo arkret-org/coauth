@@ -27,7 +27,7 @@ use coauth_config::{ArkretConfig, PrincipalServerConfig};
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess};
 use coauth_principal::{
     ConnectorAccountProfile, ConnectorAdmin, ConnectorProvisionRequest,
-    PrincipalCapabilityFanoutRequest,
+    PrincipalAgentKeyPairCommitRequest, PrincipalCapabilityFanoutRequest,
 };
 use soland_core::capability_fanout::{CapabilityFanoutBody, CapabilityFanoutResponse};
 use url::Url;
@@ -84,6 +84,67 @@ pub(crate) async fn submit_collaboration_capability_fanout_to_principal_servers(
     for target in targets {
         submit_collaboration_capability_fanout_to_target(http_client, &target, request).await?;
     }
+    Ok(())
+}
+
+pub(crate) async fn commit_agent_key_pair_to_principal_server(
+    http_client: &reqwest::Client,
+    arkret_config: &ArkretConfig,
+    request: &PrincipalAgentKeyPairCommitRequest,
+) -> Result<(), anyhow::Error> {
+    let server = arkret_config
+        .principal_servers
+        .iter()
+        .find(|server| server.name == request.principal_server_name())
+        .ok_or_else(|| anyhow::anyhow!("authoritative Principal Server is no longer configured"))?;
+    let bearer = server
+        .session_grant_introspection_bearer
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| anyhow::anyhow!("authoritative Principal Server has no S2S bearer"))?;
+    submit_agent_key_pair_to_target(http_client, server, bearer, request).await
+}
+
+async fn submit_agent_key_pair_to_target(
+    http_client: &reqwest::Client,
+    target: &PrincipalServerConfig,
+    bearer: &str,
+    request: &PrincipalAgentKeyPairCommitRequest,
+) -> Result<(), anyhow::Error> {
+    let url = agent_key_pair_url(&target.endpoint);
+    let response = http_client
+        .post(url.clone())
+        .bearer_auth(bearer)
+        .header("idempotency-key", request.idempotency_key())
+        .json(request.body())
+        .send()
+        .await
+        .with_context(|| format!("send Agent key-pair commit to {}", target.name))?;
+    let status = response.status();
+    let bytes = response
+        .bytes()
+        .await
+        .with_context(|| format!("read Agent key-pair response from {}", target.name))?;
+    if !status.is_success() {
+        let body = String::from_utf8_lossy(&bytes);
+        anyhow::bail!(
+            "Principal Server {} rejected Agent key-pair commit {} with status {}: {}",
+            target.name,
+            request.authorized_event_id(),
+            status,
+            truncate_response_body(&body)
+        );
+    }
+    let response: arkret_core::AgentKeyPairOutcome = serde_json::from_slice(&bytes)
+        .with_context(|| format!("decode Agent key-pair response from {}", target.name))?;
+    validate_agent_key_pair_response(request, &response)
+        .with_context(|| format!("validate Agent key-pair response from {}", target.name))?;
+    tracing::info!(
+        principal_server = target.name,
+        endpoint = %url,
+        authorized_event_id = request.authorized_event_id(),
+        "committed Agent key pair at authoritative Principal Server"
+    );
     Ok(())
 }
 
@@ -171,7 +232,13 @@ fn capability_fanout_targets(
     arkret_config: &ArkretConfig,
     body: &CapabilityFanoutBody,
 ) -> Result<Vec<CapabilityFanoutTarget>, anyhow::Error> {
-    let entries = &body.principal_servers;
+    principal_server_targets(arkret_config, &body.principal_servers)
+}
+
+fn principal_server_targets(
+    arkret_config: &ArkretConfig,
+    entries: &[serde_json::Value],
+) -> Result<Vec<CapabilityFanoutTarget>, anyhow::Error> {
     if entries.is_empty() {
         return Ok(Vec::new());
     }
@@ -251,6 +318,29 @@ fn capability_fanout_url(endpoint: &Url) -> Url {
     url.set_query(None);
     url.set_fragment(None);
     url
+}
+
+fn agent_key_pair_url(endpoint: &Url) -> Url {
+    let mut url = endpoint.clone();
+    url.set_path("/_arkret/gate/account/agent-key-pair");
+    url.set_query(None);
+    url.set_fragment(None);
+    url
+}
+
+fn validate_agent_key_pair_response(
+    request: &PrincipalAgentKeyPairCommitRequest,
+    response: &arkret_core::AgentKeyPairOutcome,
+) -> Result<(), anyhow::Error> {
+    anyhow::ensure!(
+        response.ok,
+        "Agent key-pair commit response is not successful"
+    );
+    anyhow::ensure!(
+        response.authorized_event_ref.as_str() == request.authorized_event_id(),
+        "response authorized_event_ref mismatch"
+    );
+    Ok(())
 }
 
 fn validate_capability_fanout_response(
@@ -496,6 +586,14 @@ impl ConnectorAdmin for DbConnectorAdmin {
             "submitted collaboration capability fanout through local principal facade"
         );
         Ok(())
+    }
+
+    async fn commit_agent_key_pair(
+        &self,
+        request: &PrincipalAgentKeyPairCommitRequest,
+    ) -> Result<(), anyhow::Error> {
+        commit_agent_key_pair_to_principal_server(&self.http_client, &self.arkret_config, request)
+            .await
     }
 
     async fn delete_user(&self, _handle: &str, _erase: bool) -> Result<(), anyhow::Error> {

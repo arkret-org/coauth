@@ -299,6 +299,22 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
             .map_err(Into::into)
     }
 
+    #[tracing::instrument(name = "db.agent_key_authorization.lookup_by_key_id", skip_all, err)]
+    async fn lookup_by_key_id(
+        &mut self,
+        key_id: &str,
+    ) -> Result<Option<AgentKeyAuthorization>, Self::Error> {
+        agent_key_authorizations::table
+            .filter(agent_key_authorizations::key_id.eq(key_id))
+            .select(AgentKeyAuthorizationRow::as_select())
+            .first::<AgentKeyAuthorizationRow>(self.conn)
+            .await
+            .optional()?
+            .map(TryInto::try_into)
+            .transpose()
+            .map_err(Into::into)
+    }
+
     #[tracing::instrument(
         name = "db.agent_key_authorization.list_active_for_agent",
         skip_all,
@@ -342,6 +358,52 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
         .execute(self.conn)
         .await?;
         Ok(count)
+    }
+
+    #[tracing::instrument(
+        name = "db.agent_key_authorization.mark_fanout_delivered_and_revoke_others",
+        skip_all,
+        err
+    )]
+    async fn mark_fanout_delivered_and_revoke_others(
+        &mut self,
+        clock: &dyn Clock,
+        authorized_event_id: &str,
+        revoked_reason: &str,
+    ) -> Result<bool, Self::Error> {
+        let Some(current) = self.lookup_by_event_id(authorized_event_id).await? else {
+            return Ok(false);
+        };
+        let now = clock.now();
+        let delivered = diesel::update(
+            agent_key_authorizations::table
+                .filter(agent_key_authorizations::authorized_event_id.eq(authorized_event_id)),
+        )
+        .set((
+            agent_key_authorizations::soland_fanout_state.eq("delivered"),
+            agent_key_authorizations::soland_fanout_next_retry_at.eq(Option::<DateTime<Utc>>::None),
+            agent_key_authorizations::soland_fanout_dead_letter_reason.eq(Option::<String>::None),
+            agent_key_authorizations::updated_at.eq(now),
+        ))
+        .execute(self.conn)
+        .await?;
+        if delivered != 1 {
+            return Ok(false);
+        }
+        diesel::update(
+            agent_key_authorizations::table
+                .filter(agent_key_authorizations::agent_id.eq(&current.agent_id))
+                .filter(agent_key_authorizations::authorized_event_id.ne(authorized_event_id))
+                .filter(agent_key_authorizations::revoked_at.is_null()),
+        )
+        .set((
+            agent_key_authorizations::revoked_at.eq(Some(now)),
+            agent_key_authorizations::revoked_reason.eq(Some(revoked_reason.to_owned())),
+            agent_key_authorizations::updated_at.eq(now),
+        ))
+        .execute(self.conn)
+        .await?;
+        Ok(true)
     }
 
     #[tracing::instrument(

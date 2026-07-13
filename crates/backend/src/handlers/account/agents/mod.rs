@@ -14,7 +14,8 @@
 //! Browser sessions and end-user OAuth tokens are NOT accepted.
 //!
 //! Persistence: coauth stores the accountability grant, writes a signed
-//! audit row, and queues soland fan-out. soland remains the reducer-side
+//! audit row, and commits the same standard request to the authoritative
+//! Principal Server. The Principal Server remains the reducer-side
 //! authority for agent lifecycle state.
 //!
 //! Wire shape: see [`AccountabilityGrantRequestBody`] and

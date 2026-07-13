@@ -459,6 +459,11 @@ fn validate_agent_key_authorization_binding(
     verification_method: &str,
     audience: &str,
 ) -> Result<(), AgentAuthRejection> {
+    if authorization.soland_fanout_state
+        != coauth_data::accountability::AccountabilityGrantFanoutState::Delivered
+    {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
     if authorization.revoked_at.is_some() {
         return Err(AgentAuthRejection::AgentDeactivated);
     }
@@ -1193,7 +1198,7 @@ async fn fetch_authoritative_agent_view(
     http_client: &reqwest::Client,
     arkret_config: &ArkretConfig,
     agent_id: &str,
-) -> Result<arkret_core::AgentView, AgentAuthRejection> {
+) -> Result<(arkret_core::AgentView, coauth_config::PrincipalServerConfig), AgentAuthRejection> {
     let mut queried = false;
     let mut saw_not_found = false;
 
@@ -1228,10 +1233,11 @@ async fn fetch_authoritative_agent_view(
         if !response.status().is_success() {
             return Err(AgentAuthRejection::PolicyUnavailable);
         }
-        return response
+        let view = response
             .json::<arkret_core::AgentView>()
             .await
-            .map_err(|_| AgentAuthRejection::PolicyUnavailable);
+            .map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
+        return Ok((view, server.clone()));
     }
 
     if queried && saw_not_found {
@@ -1246,7 +1252,7 @@ pub async fn enforce_authoritative_agent_lifecycle(
     arkret_config: &ArkretConfig,
     agent_id: &str,
 ) -> Result<(), AgentAuthRejection> {
-    let view = fetch_authoritative_agent_view(http_client, arkret_config, agent_id).await?;
+    let (view, _) = fetch_authoritative_agent_view(http_client, arkret_config, agent_id).await?;
     match view.status.as_str() {
         "active" => Ok(()),
         "paused" => Err(AgentAuthRejection::AgentPaused),
@@ -1261,8 +1267,9 @@ pub async fn enforce_authoritative_pairing_handle(
     agent_id: &str,
     pairing_request_id: &str,
     now: chrono::DateTime<chrono::Utc>,
-) -> Result<(), AgentAuthRejection> {
-    let view = fetch_authoritative_agent_view(http_client, arkret_config, agent_id).await?;
+) -> Result<(arkret_core::AgentView, coauth_config::PrincipalServerConfig), AgentAuthRejection> {
+    let (view, server) =
+        fetch_authoritative_agent_view(http_client, arkret_config, agent_id).await?;
     match view.status.as_str() {
         "pending_runtime_key" | "active" | "paused" => {}
         "deactivated" => return Err(AgentAuthRejection::AgentDeactivated),
@@ -1286,7 +1293,7 @@ pub async fn enforce_authoritative_pairing_handle(
     if expires_at <= now {
         return Err(AgentAuthRejection::PairingRequestExpired);
     }
-    Ok(())
+    Ok((view, server))
 }
 
 #[cfg(test)]
@@ -1421,7 +1428,7 @@ mod tests {
             revoked_reason: None,
             raw_payload_digest: format!("sha256:{}", "2".repeat(64)),
             soland_fanout_state:
-                coauth_data::accountability::AccountabilityGrantFanoutState::Queued,
+                coauth_data::accountability::AccountabilityGrantFanoutState::Delivered,
             soland_fanout_idempotency_key: "coauth:agent_key_authorize:test".to_owned(),
             soland_fanout_payload: serde_json::json!({}),
             soland_fanout_attempt: 0,
@@ -1463,6 +1470,25 @@ mod tests {
         .expect_err("revoked runtime keys must fail closed");
 
         assert_eq!(err, AgentAuthRejection::AgentDeactivated);
+    }
+
+    #[test]
+    fn authorization_binding_rejects_key_before_soland_acceptance() {
+        let now = chrono::Utc::now();
+        let mut authorization = agent_key_authorization(now);
+        authorization.soland_fanout_state =
+            coauth_data::accountability::AccountabilityGrantFanoutState::Queued;
+
+        let err = validate_agent_key_authorization_binding(
+            &authorization,
+            now,
+            "did:web:agent.example",
+            "did:web:agent.example#runtime-key-1",
+            "https://arkret.example/_arkret",
+        )
+        .expect_err("queued Agent key authorization must not issue sessions");
+
+        assert_eq!(err, AgentAuthRejection::ProofInvalid);
     }
 
     #[test]

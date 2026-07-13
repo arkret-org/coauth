@@ -1825,6 +1825,7 @@ name = "coauth-principal"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "arkret-core",
  "async-trait",
  "soland-core",
  "tokio",

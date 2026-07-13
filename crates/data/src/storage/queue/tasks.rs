@@ -1,3 +1,4 @@
+use arkret_core::AgentKeyPairRequestBody;
 use chrono::{DateTime, Utc};
 use coauth_data::{
     BrowserSession, Session, User, UserEmailAuthentication, UserPhoneAuthentication,
@@ -313,6 +314,72 @@ impl CollaborationCapabilityFanoutJob {
 
 impl InsertableJob for CollaborationCapabilityFanoutJob {
     const QUEUE_NAME: &'static str = "soland-collaboration-capability-fanout";
+}
+
+/// A durable job that delivers one controller-approved Agent key
+/// authorization to the configured Principal Server.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AgentKeyPairCommitJob {
+    idempotency_key: String,
+    authorized_event_id: String,
+    request_digest: String,
+    principal_server_name: String,
+    body: AgentKeyPairRequestBody,
+}
+
+impl AgentKeyPairCommitJob {
+    /// Create a durable retry of the canonical Agent key-pair operation.
+    #[must_use]
+    pub fn new(
+        idempotency_key: String,
+        authorized_event_id: String,
+        request_digest: String,
+        principal_server_name: String,
+        body: AgentKeyPairRequestBody,
+    ) -> Self {
+        Self {
+            idempotency_key,
+            authorized_event_id,
+            request_digest,
+            principal_server_name,
+            body,
+        }
+    }
+
+    /// Stable downstream idempotency key.
+    #[must_use]
+    pub fn idempotency_key(&self) -> &str {
+        &self.idempotency_key
+    }
+
+    /// Controller-signed authorization Event id.
+    #[must_use]
+    pub fn authorized_event_id(&self) -> &str {
+        &self.authorized_event_id
+    }
+
+    /// Canonical digest of the fan-out body.
+    #[must_use]
+    pub fn request_digest(&self) -> &str {
+        &self.request_digest
+    }
+
+    #[must_use]
+    /// Configured name of the authoritative Principal Server selected during
+    /// the pre-commit Agent lookup.
+    pub fn principal_server_name(&self) -> &str {
+        &self.principal_server_name
+    }
+
+    /// Exact standard operation request received from the client.
+    #[must_use]
+    pub fn body(&self) -> &AgentKeyPairRequestBody {
+        &self.body
+    }
+}
+
+impl InsertableJob for AgentKeyPairCommitJob {
+    const QUEUE_NAME: &'static str = "principal-agent-key-pair-commit";
 }
 
 /// A job to provision the user on the `PrincipalServer`.

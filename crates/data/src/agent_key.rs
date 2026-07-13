@@ -11,16 +11,17 @@ pub use crate::storage::agent_key::*;
 /// Durable record of an accepted `ak.agent.key.authorize` (AKP-0008 §4.5).
 ///
 /// coauth validates the runtime key pairing proof-of-possession, persists this
-/// row as the local authority for the agent-key-proof session branch, and
-/// queues a soland fan-out that materializes the durable `ak.agent.key.authorize`
-/// event. Column order tracks
+/// row for the agent-key-proof session branch, and commits the unchanged
+/// standard key-pair request to the authoritative Principal Server. The row is
+/// usable only after that server durably accepts the supplied
+/// `ak.agent.key.authorize` Event. Column order tracks
 /// `event-payload.schema.json#/$defs/agent_key_authorize_payload`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentKeyAuthorization {
     /// Storage row id.
     pub id: Ulid,
-    /// Minted `ak:event:<uuid7>` id the soland fan-out materializes as the
-    /// durable `ak.agent.key.authorize` event. The session-grant agent branch
+    /// Controller-minted `ak:event:<uuid7>` id the Principal Server accepts as
+    /// the durable `ak.agent.key.authorize` Event. The session-grant agent branch
     /// resolves `agent_key_authorization_ref` against this id.
     pub authorized_event_id: String,
     /// Agent principal DID the authorized key belongs to.

@@ -32,6 +32,7 @@ use tokio_util::task::TaskTracker;
 pub use crate::new_queue::QueueWorker;
 
 // ── Sub-modules ─────────────────────────────────────────────────────────
+mod agent_key_pair_commit;
 mod cleanup;
 mod collaboration_capability;
 mod email;
@@ -178,6 +179,9 @@ fn register_all_handlers(w: &mut QueueWorker) {
 
     // Collaboration capability fanout
     w.register_handler::<queue::CollaborationCapabilityFanoutJob>();
+
+    // Agent key authorization fanout
+    w.register_handler::<queue::AgentKeyPairCommitJob>();
 
     // Notifications & messaging
     w.register_handler::<queue::ProcessNotificationDeliveriesJob>();

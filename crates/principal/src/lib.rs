@@ -267,6 +267,58 @@ impl PrincipalCapabilityFanoutRequest {
     }
 }
 
+/// Request to deliver a controller-approved Agent key authorization to the
+/// configured Principal Server.
+#[derive(Debug, Clone)]
+pub struct PrincipalAgentKeyPairCommitRequest {
+    idempotency_key: String,
+    request_digest: String,
+    principal_server_name: String,
+    body: arkret_core::AgentKeyPairRequestBody,
+}
+
+impl PrincipalAgentKeyPairCommitRequest {
+    #[must_use]
+    pub fn new(
+        idempotency_key: String,
+        request_digest: String,
+        principal_server_name: String,
+        body: arkret_core::AgentKeyPairRequestBody,
+    ) -> Self {
+        Self {
+            idempotency_key,
+            request_digest,
+            principal_server_name,
+            body,
+        }
+    }
+
+    #[must_use]
+    pub fn idempotency_key(&self) -> &str {
+        &self.idempotency_key
+    }
+
+    #[must_use]
+    pub fn request_digest(&self) -> &str {
+        &self.request_digest
+    }
+
+    #[must_use]
+    pub fn principal_server_name(&self) -> &str {
+        &self.principal_server_name
+    }
+
+    #[must_use]
+    pub fn body(&self) -> &arkret_core::AgentKeyPairRequestBody {
+        &self.body
+    }
+
+    #[must_use]
+    pub fn authorized_event_id(&self) -> &str {
+        self.body.authorize_event.event_id.as_str()
+    }
+}
+
 /// Trait defining account and device synchronization hooks for a downstream
 /// Arkret principal system.
 ///
@@ -419,6 +471,17 @@ pub trait ConnectorAdmin: Send + Sync {
         ))
     }
 
+    /// Deliver a controller-approved Agent key authorization to the
+    /// downstream principal system.
+    async fn commit_agent_key_pair(
+        &self,
+        _request: &PrincipalAgentKeyPairCommitRequest,
+    ) -> Result<(), anyhow::Error> {
+        Err(anyhow::anyhow!(
+            "Agent key-pair commit is not implemented by this principal connector"
+        ))
+    }
+
     /// Delete a user in the downstream principal system.
     ///
     /// # Parameters
@@ -563,6 +626,13 @@ where
         self.as_admin()
             .submit_collaboration_capability_fanout(request)
             .await
+    }
+
+    async fn commit_agent_key_pair(
+        &self,
+        request: &PrincipalAgentKeyPairCommitRequest,
+    ) -> Result<(), anyhow::Error> {
+        self.as_admin().commit_agent_key_pair(request).await
     }
 
     async fn delete_user(&self, handle: &str, erase: bool) -> Result<(), anyhow::Error> {

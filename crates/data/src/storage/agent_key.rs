@@ -96,6 +96,12 @@ pub trait AgentKeyAuthorizationRepository: Send + Sync {
         authorized_event_id: &str,
     ) -> Result<Option<AgentKeyAuthorization>, Self::Error>;
 
+    /// Look up an authorization by its stable runtime key id.
+    async fn lookup_by_key_id(
+        &mut self,
+        key_id: &str,
+    ) -> Result<Option<AgentKeyAuthorization>, Self::Error>;
+
     /// List active (not revoked) authorizations for an agent principal.
     async fn list_active_for_agent(
         &mut self,
@@ -109,6 +115,15 @@ pub trait AgentKeyAuthorizationRepository: Send + Sync {
         agent_id: &str,
         reason: &str,
     ) -> Result<usize, Self::Error>;
+
+    /// Mark one authorization as delivered to Soland and atomically revoke
+    /// every other active authorization for the same Agent.
+    async fn mark_fanout_delivered_and_revoke_others(
+        &mut self,
+        clock: &dyn Clock,
+        authorized_event_id: &str,
+        revoked_reason: &str,
+    ) -> Result<bool, Self::Error>;
 
     /// Atomically consume an agent-key-proof challenge. Returns `true` when
     /// this call won the single-use insert (the proof has not been seen before
@@ -137,6 +152,10 @@ repository_impl!(AgentKeyAuthorizationRepository:
         &mut self,
         authorized_event_id: &str,
     ) -> Result<Option<AgentKeyAuthorization>, Self::Error>;
+    async fn lookup_by_key_id(
+        &mut self,
+        key_id: &str,
+    ) -> Result<Option<AgentKeyAuthorization>, Self::Error>;
     async fn list_active_for_agent(
         &mut self,
         agent_id: &str,
@@ -147,6 +166,12 @@ repository_impl!(AgentKeyAuthorizationRepository:
         agent_id: &str,
         reason: &str,
     ) -> Result<usize, Self::Error>;
+    async fn mark_fanout_delivered_and_revoke_others(
+        &mut self,
+        clock: &dyn Clock,
+        authorized_event_id: &str,
+        revoked_reason: &str,
+    ) -> Result<bool, Self::Error>;
     async fn consume_proof_challenge(
         &mut self,
         rng: &mut (dyn RngCore + Send),
