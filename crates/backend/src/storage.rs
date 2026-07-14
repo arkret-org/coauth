@@ -114,9 +114,7 @@ fn build_operator(config: &StorageConfig) -> anyhow::Result<Operator> {
 
 fn build_fs_operator(root: &str) -> anyhow::Result<Operator> {
     let builder = opendal::services::Fs::default().root(root);
-    let op = Operator::new(builder)?
-        .layer(LoggingLayer::default())
-        .finish();
+    let op = Operator::new(builder)?.layer(LoggingLayer::default());
     tracing::info!("Storage backend initialized: fs (root={})", root);
     Ok(op)
 }
@@ -150,9 +148,7 @@ fn build_s3_operator(
         builder = builder.root(prefix);
     }
 
-    let op = Operator::new(builder)?
-        .layer(LoggingLayer::default())
-        .finish();
+    let op = Operator::new(builder)?.layer(LoggingLayer::default());
     tracing::info!(
         "Storage backend initialized: s3 (bucket={}, region={})",
         bucket,

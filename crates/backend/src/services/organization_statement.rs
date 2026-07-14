@@ -32,7 +32,7 @@ use arkret_core::models::{
     SignatureMaterial, realm_organization_statement_signing_bytes,
     verify_realm_organization_statement,
 };
-use arkret_core::{Did, RealmId};
+use arkret_core::{Did, DidUrl, NonEmptyString, RealmId};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::organization_control::OrganizationDelegation;
 use coauth_jose::constraints::Constrainable as _;
@@ -122,7 +122,8 @@ where
     let (alg, key) =
         preferred_service_signing_key(key_store).ok_or(OrganizationStatementError::NoSigningKey)?;
     let key_id = key.kid().ok_or(OrganizationStatementError::NoSigningKey)?;
-    let verification_method = format!("{service_id}#{key_id}");
+    let verification_method = DidUrl::new(format!("{service_id}#{key_id}"))
+        .map_err(|error| OrganizationStatementError::Canonical(error.to_owned()))?;
 
     // Build the statement with a placeholder proof. The canonical signing bytes
     // are produced by the SDK (shared with soland's verifier) and exclude
@@ -149,7 +150,10 @@ where
             delegation_ref: request.delegation_ref,
             executed_by: request.executed_by,
             signed_at: now,
-            proof: SignatureMaterial::NonEmptyString(String::new()),
+            proof: SignatureMaterial::NonEmptyString(
+                NonEmptyString::new("pending-signature")
+                    .map_err(|error| OrganizationStatementError::Canonical(error.to_owned()))?,
+            ),
         },
     };
 
@@ -165,8 +169,10 @@ where
         .try_sign_with_rng(&mut rng, &canonical)
         .map_err(|_| OrganizationStatementError::Sign)?;
     let sig_bytes: Box<[u8]> = raw.into();
-    payload.authorization.proof =
-        SignatureMaterial::NonEmptyString(Base64UrlUnpadded::encode_string(&sig_bytes));
+    payload.authorization.proof = SignatureMaterial::NonEmptyString(
+        NonEmptyString::new(Base64UrlUnpadded::encode_string(&sig_bytes))
+            .map_err(|error| OrganizationStatementError::Canonical(error.to_owned()))?,
+    );
 
     // COA-ORG-03 acceptance: the statement we sign is exactly the statement
     // soland's SDK verifier accepts. Self-verify before returning.

@@ -12,6 +12,12 @@ use tracing::{Instrument, info_span};
 
 use crate::salvo_utils::InternalError;
 
+/// Process liveness must not depend on PostgreSQL or signing-key readiness.
+#[handler]
+pub async fn livez() -> &'static str {
+    "ok"
+}
+
 #[handler]
 pub async fn get(depot: &Depot) -> Result<String, InternalError> {
     check_postgres(depot).await?;

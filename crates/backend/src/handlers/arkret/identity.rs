@@ -159,7 +159,7 @@ pub async fn directory_describe(
         ],
         supported_features: supported_features.clone(),
         auth_metadata: arkret_core::AuthMetadata::minimal("public_no_auth"),
-        limits: json!({}),
+        limits: arkret_core::ServerLimits::default(),
         plaintext_visibility: arkret_core::PlaintextVisibility::none(),
         privacy_derivation: None,
         receive_policy_constraints: None,

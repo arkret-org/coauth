@@ -102,11 +102,17 @@ pub async fn post_agent_key_pair(
     enforce_verification_method_binding(&body.verification_method, &agent_id)
         .map_err(AgentAuthRejection::into_app_error)?;
 
-    let public_key = validate_runtime_public_key(&body.public_key, &body.verification_method)?;
+    let public_key_value = serde_json::to_value(&body.public_key)
+        .map_err(|error| AppError::bad_request(format!("public_key invalid: {error}")))?;
+    let public_key =
+        validate_runtime_public_key(&public_key_value, body.verification_method.as_str())?;
 
-    let pop: ProofOfPossessionInput = serde_json::from_value(body.proof_of_possession.clone())
+    let pop: ProofOfPossessionInput =
+        serde_json::from_value(serde_json::to_value(&body.proof_of_possession).map_err(
+            |error| AppError::bad_request(format!("proof_of_possession invalid: {error}")),
+        )?)
         .map_err(|error| AppError::bad_request(format!("proof_of_possession invalid: {error}")))?;
-    if pop.challenge != body.pairing_request_id {
+    if pop.challenge != body.pairing_request_id.as_str() {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error());
     }
 
@@ -133,9 +139,9 @@ pub async fn post_agent_key_pair(
         .await?;
     if let Some(existing) = existing_authorization {
         let same_request = existing.agent_id == agent_id
-            && existing.verification_method == body.verification_method
+            && existing.verification_method == body.verification_method.as_str()
             && existing.public_key == public_key.public_key
-            && existing.pairing_request_id == body.pairing_request_id
+            && existing.pairing_request_id == body.pairing_request_id.as_str()
             && existing.request_canonical_digest == pop.request_canonical_digest
             && existing.authorized_event_id == authorized_event_id
             && existing.raw_payload_digest == request_digest;
@@ -220,7 +226,7 @@ pub async fn post_agent_key_pair(
         &body.pairing_request_id,
         &agent_did,
         &body.verification_method,
-        &body.public_key,
+        &public_key.public_key,
         runtime_attestation_value.as_ref(),
     )
     .map_err(|error| {
@@ -250,7 +256,7 @@ pub async fn post_agent_key_pair(
     let mut repo = depot.repo().await?;
 
     let runtime_public_key_digest =
-        runtime_public_key_digest(&body.public_key, &body.verification_method)?;
+        runtime_public_key_digest(&public_key.public_key, body.verification_method.as_str())?;
     let authorize_event_value = serde_json::to_value(&body.authorize_event)
         .map_err(|error| AppError::internal_box(Box::new(error)))?;
     let authoritative_key_state = authoritative_view
@@ -331,14 +337,14 @@ pub async fn post_agent_key_pair(
                 authorized_event_id: authorized_event_id.clone(),
                 agent_id: agent_id.clone(),
                 key_id: key_id.clone(),
-                verification_method: body.verification_method.clone(),
+                verification_method: body.verification_method.to_string(),
                 public_key: public_key.public_key.clone(),
                 accountable_principal_id: authorize_event.controller_id.clone(),
                 agent_key_scope,
                 audience: vec![pop.audience.clone()],
                 issued_at,
                 expires_at,
-                pairing_request_id: body.pairing_request_id.clone(),
+                pairing_request_id: body.pairing_request_id.to_string(),
                 request_canonical_digest: pop.request_canonical_digest.clone(),
                 raw_payload_digest: raw_payload_digest.clone(),
                 soland_fanout_state: AccountabilityGrantFanoutState::Queued,
@@ -446,20 +452,20 @@ fn validate_runtime_public_key(
 ) -> Result<ValidatedRuntimePublicKey, AppError> {
     let key: arkret_core::PublicKey = serde_json::from_value(public_key.clone())
         .map_err(|error| AppError::bad_request(format!("public_key invalid: {error}")))?;
-    if key.kty != "OKP" {
+    if key.kty.as_str() != "OKP" {
         return Err(AppError::bad_request("public_key.kty must be OKP"));
     }
-    if key.kid != verification_method {
+    if key.kid.as_str() != verification_method {
         return Err(AppError::bad_request(
             "public_key.kid must match verification_method",
         ));
     }
-    if key.alg != "Ed25519" && key.alg != "EdDSA" {
+    if key.alg.as_str() != "Ed25519" && key.alg.as_str() != "EdDSA" {
         return Err(AppError::bad_request(
             "public_key.alg must be Ed25519 or EdDSA",
         ));
     }
-    let raw = Base64UrlUnpadded::decode_vec(&key.key)
+    let raw = Base64UrlUnpadded::decode_vec(key.key.as_str())
         .map_err(|_| AppError::bad_request("public_key.key must be base64url"))?;
     let raw: [u8; 32] = raw
         .try_into()

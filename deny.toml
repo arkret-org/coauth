@@ -26,6 +26,8 @@ ignore = [
     # RE-EVALUATE this ignore if any rsa PKCS#1 v1.5 *encryption* usage is
     # ever introduced (signing/verification with the `rsa` crate is not
     # affected); the timing side-channel only applies to RSA decryption.
+    # Owner: security maintainers. Last reviewed: 2026-07-14.
+    # Re-review by: 2026-10-14, or immediately when a patched rsa release lands.
     "RUSTSEC-2023-0071",
 ]
 

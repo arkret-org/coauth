@@ -249,7 +249,7 @@ minijinja = {version = "2.20.0",features = [
 minijinja-contrib = {version = "2.20.0",features = ["pycompat"]}
 nonzero_ext = "0.3.0"
 coauth-oauth-types = {version = "=0.3.0",path = "crates/oauth-types"}
-opendal = {version = "0.57",features = ["services-fs", "services-s3"]}
+opendal = {version = "0.58",features = ["services-fs", "services-s3"]}
 opentelemetry = {version = "0.31.0",features = ["trace", "metrics"]}
 opentelemetry-http = {version = "0.31.0",features = ["reqwest"]}
 opentelemetry-instrumentation-process = "0.1.2"

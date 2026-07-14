@@ -418,6 +418,7 @@ impl TestState {
             .hoop(InjectTestState(self.clone()))
             // Health
             .push(Router::with_path("/health").get(crate::handlers::health::get))
+            .push(Router::with_path("/livez").get(crate::handlers::health::livez))
             .push(Router::with_path("/healthz").get(crate::handlers::health::get))
             .push(Router::with_path("/readyz").get(crate::handlers::health::readyz))
             .push(

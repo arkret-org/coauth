@@ -58,14 +58,14 @@ pub(super) fn runtime_public_key_material_from_spec(
 ) -> Result<String, AgentAuthRejection> {
     let key: arkret_core::PublicKey =
         serde_json::from_value(public_key.clone()).map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    if key.kty != "OKP"
-        || key.kid != verification_method
-        || (key.alg != "Ed25519" && key.alg != "EdDSA")
+    if key.kty.as_str() != "OKP"
+        || key.kid.as_str() != verification_method
+        || (key.alg.as_str() != "Ed25519" && key.alg.as_str() != "EdDSA")
     {
         return Err(AgentAuthRejection::ProofInvalid);
     }
-    let raw =
-        Base64UrlUnpadded::decode_vec(&key.key).map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let raw = Base64UrlUnpadded::decode_vec(key.key.as_str())
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
     let raw: [u8; 32] = raw
         .try_into()
         .map_err(|_| AgentAuthRejection::ProofInvalid)?;

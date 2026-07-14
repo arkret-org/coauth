@@ -137,3 +137,49 @@ impl ErrorOutcome {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error as _;
+    use std::fmt;
+
+    use super::*;
+
+    #[derive(Debug)]
+    struct Inner;
+
+    impl fmt::Display for Inner {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("sensitive database detail")
+        }
+    }
+
+    impl std::error::Error for Inner {}
+
+    #[derive(Debug)]
+    struct Outer(Inner);
+
+    impl fmt::Display for Outer {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("public rejection")
+        }
+    }
+
+    impl std::error::Error for Outer {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            Some(&self.0)
+        }
+    }
+
+    #[test]
+    fn error_outcome_does_not_serialize_source_chain() {
+        let error = Outer(Inner);
+        assert!(error.source().is_some());
+
+        let json = serde_json::to_value(ErrorOutcome::from_error(&error)).unwrap();
+        let errors = json["errors"].as_array().unwrap();
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0]["title"], "public rejection");
+        assert!(!json.to_string().contains("sensitive database detail"));
+    }
+}
