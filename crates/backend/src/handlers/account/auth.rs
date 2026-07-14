@@ -348,6 +348,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 let grant_target = match arkret::password_login_session_grant_target(
                     &url_builder,
                     &arkret_config,
+                    crate::services::resolved_principal_audiences::shared(),
                     requested_audience.as_deref(),
                 ) {
                     Ok(target) => target,

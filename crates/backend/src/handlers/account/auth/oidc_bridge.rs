@@ -198,7 +198,11 @@ pub(crate) fn principal_server_operation_bearer<'a>(
     arkret_config
         .principal_servers
         .iter()
-        .find(|server| server.audience == audience)
+        .find(|server| {
+            crate::services::resolved_principal_audiences::effective_audience_shared(server)
+                .as_deref()
+                == Some(audience)
+        })
         .and_then(|server| server.embedded_webvh_registration_bearer.as_deref())
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -405,11 +409,10 @@ pub(super) async fn ensure_principal_did_for_user(
     user: &User,
     audience: &str,
 ) -> Result<String, String> {
-    let Some(principal_server) = arkret_config
-        .principal_servers
-        .iter()
-        .find(|server| server.audience == audience)
-    else {
+    let Some(principal_server) = arkret_config.principal_servers.iter().find(|server| {
+        crate::services::resolved_principal_audiences::effective_audience_shared(server).as_deref()
+            == Some(audience)
+    }) else {
         return Err(format!(
             "no principal-server config matches audience {audience}"
         ));
@@ -431,7 +434,9 @@ pub(super) async fn ensure_principal_did_for_user(
         encrypter,
         http_client,
         user,
-        &principal_server.audience,
+        // `audience` is the effective (resolved or pinned) value the caller
+        // matched this server on — `principal_server.audience` may be unset.
+        audience,
         &principal_server.endpoint,
         operation_bearer,
         &also_known_as,
@@ -866,6 +871,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
             .session_grant_target_for_requested_audience(
                 &url_builder,
                 &arkret_config,
+                crate::services::resolved_principal_audiences::shared(),
                 input.requested_audience.as_deref(),
             )
             .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
@@ -1360,6 +1366,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         .session_grant_target_for_requested_audience(
             &url_builder,
             &arkret_config,
+            crate::services::resolved_principal_audiences::shared(),
             input.requested_audience.as_deref(),
         )
         .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;

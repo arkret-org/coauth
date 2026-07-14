@@ -274,7 +274,7 @@ fn apply_generated_config_options(
             Some(DEV_SOLAND_URL.parse().expect("valid dev soland URL"));
         config.arkret.principal_servers = vec![PrincipalServerConfig {
             name: "soland-dev".to_owned(),
-            audience: DEV_SOLAND_SERVICE_ID.to_owned(),
+            audience: Some(DEV_SOLAND_SERVICE_ID.to_owned()),
             endpoint: DEV_SOLAND_URL.parse().expect("valid dev soland URL"),
             did: Some(DEV_SOLAND_SERVICE_ID.to_owned()),
             session_grant_introspection_bearer: Some(DEV_SOLAND_SESSION_GRANT_BEARER.to_owned()),

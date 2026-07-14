@@ -36,6 +36,9 @@ use thiserror::Error;
 use ulid::Ulid;
 
 use crate::handlers::common::{DepotExt, RouteError};
+use crate::services::resolved_principal_audiences::{
+    self, ResolvedPrincipalAudiences, effective_audience,
+};
 
 const ARKRET_PROTOCOL_VERSION: &str = "1.0";
 
@@ -411,7 +414,7 @@ pub(crate) async fn require_session_grant_caller(
         let allowed_audiences = arkret_config
             .principal_servers
             .iter()
-            .map(|server| server.audience.clone())
+            .filter_map(|server| effective_audience(server, resolved_principal_audiences::shared()))
             .collect();
         Ok(SessionGrantCaller::principal_server(allowed_audiences))
     } else {
@@ -448,7 +451,7 @@ fn principal_server_static_session_grant_bearer_audience(
                 .as_deref()
                 .is_some_and(|configured| crate::util::constant_time_token_eq(configured, token))
         })
-        .map(|server| server.audience.clone())
+        .and_then(|server| effective_audience(server, resolved_principal_audiences::shared()))
 }
 
 impl Scribe for ArkretRouteError {
@@ -587,14 +590,18 @@ where
     R: RepositoryAccess,
 {
     for server in &arkret_config.principal_servers {
+        let Some(audience) = effective_audience(server, resolved_principal_audiences::shared())
+        else {
+            continue;
+        };
         if let Some(row) = repo
             .principal_did()
-            .get_for_user_and_audience(user, &server.audience)
+            .get_for_user_and_audience(user, &audience)
             .await?
         {
             return Ok(Some(PrincipalDidBinding {
                 did: row.did,
-                audience: server.audience.clone(),
+                audience,
                 principal_server_did: server.did.clone(),
             }));
         }
@@ -737,6 +744,7 @@ pub(crate) fn required_audience_for(
 pub(crate) fn is_allowed_session_grant_audience(
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
+    resolved: &ResolvedPrincipalAudiences,
     audience: &str,
 ) -> bool {
     let audience = audience.trim();
@@ -748,7 +756,7 @@ pub(crate) fn is_allowed_session_grant_audience(
         || arkret_config
             .principal_servers
             .iter()
-            .any(|server| server.audience == audience)
+            .any(|server| effective_audience(server, resolved).as_deref() == Some(audience))
 }
 
 /// Reasons why a caller-supplied principal-server audience could not be
@@ -779,16 +787,19 @@ pub(crate) enum SessionGrantTargetError {
 pub(crate) fn password_login_session_grant_target(
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
+    resolved: &ResolvedPrincipalAudiences,
     requested_audience: Option<&str>,
 ) -> Result<SessionGrantTarget, SessionGrantTargetError> {
     if let Some(audience) = requested_audience.map(str::trim).filter(|a| !a.is_empty()) {
-        if let Some(server) = arkret_config
-            .principal_servers
-            .iter()
-            .find(|server| server.audience == audience)
+        if let Some((server, effective)) =
+            arkret_config.principal_servers.iter().find_map(|server| {
+                effective_audience(server, resolved)
+                    .filter(|effective| effective == audience)
+                    .map(|effective| (server, effective))
+            })
         {
             return Ok(SessionGrantTarget {
-                audience: server.audience.clone(),
+                audience: effective,
                 principal_server_name: Some(server.name.clone()),
                 principal_server_endpoint: Some(server.endpoint.to_string()),
             });
@@ -805,8 +816,14 @@ pub(crate) fn password_login_session_grant_target(
     }
 
     match arkret_config.principal_servers.as_slice() {
+        // A sole principal server with no explicit audience whose describe
+        // probe has not yet landed fails closed (UnknownAudience) rather than
+        // minting a grant with no bindable audience.
+        // 此 fail-closed 是有意设计（见 services::resolved_principal_audiences
+        // §设计定位），非缺陷：宁可启动初期短暂拒绝，也不盖一个无法绑定的 audience。
         [server] => Ok(SessionGrantTarget {
-            audience: server.audience.clone(),
+            audience: effective_audience(server, resolved)
+                .ok_or(SessionGrantTargetError::UnknownAudience)?,
             principal_server_name: Some(server.name.clone()),
             principal_server_endpoint: Some(server.endpoint.to_string()),
         }),
@@ -978,9 +995,13 @@ pub async fn debug_issue_dpop_grant(
         .audience
         .clone()
         .unwrap_or_else(|| required_audience_for(&url_builder, &arkret_config));
-    let grant_target =
-        password_login_session_grant_target(&url_builder, &arkret_config, Some(&audience))
-            .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    let grant_target = password_login_session_grant_target(
+        &url_builder,
+        &arkret_config,
+        resolved_principal_audiences::shared(),
+        Some(&audience),
+    )
+    .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
     let scopes = body.scopes.clone().unwrap_or_else(|| {
         vec![
             format!("urn:arkret:client:device:{}", body.device_id),

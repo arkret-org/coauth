@@ -346,7 +346,7 @@ fn build_soland_fanout_payload(
         .map(|server| {
             serde_json::json!({
                 "name": server.name.as_str(),
-                "audience": server.audience.as_str(),
+                "audience": crate::services::resolved_principal_audiences::effective_audience_shared(server),
                 "endpoint": server.endpoint.as_str(),
                 "did": server.did.as_deref(),
             })

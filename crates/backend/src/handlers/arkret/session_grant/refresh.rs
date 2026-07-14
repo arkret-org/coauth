@@ -19,6 +19,7 @@ use sha2::Digest as _;
 use super::*;
 use crate::handlers::arkret::*;
 use crate::services::device_signing_directory::resolve_authorized_device_signing_key;
+use crate::services::resolved_principal_audiences;
 use crate::services::third_party_invite::NonceStore;
 
 const SOFT_LOGOUT_RESTORE_OPERATION: &str = "resume_soft_logged_out_session";
@@ -347,6 +348,7 @@ async fn verify_soft_logout_did_proof(
     let resolved = resolve_authorized_device_signing_key(
         http_client,
         arkret_config,
+        resolved_principal_audiences::shared(),
         &prior_grant.audience,
         &prior_grant.subject,
         device_id,

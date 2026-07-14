@@ -187,7 +187,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         admin_audience: Some("https://auth.example.com/api/admin".to_owned()),
         principal_servers: vec![PrincipalServerConfig {
             name: "soland-prod".to_owned(),
-            audience: "https://soland.example.com/api".to_owned(),
+            audience: Some("https://soland.example.com/api".to_owned()),
             endpoint: "https://soland.example.com/arkret".parse().unwrap(),
             did: Some("did:web:soland.example.com".to_owned()),
             session_grant_introspection_bearer: None,
@@ -371,7 +371,7 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
         ),
         principal_servers: vec![PrincipalServerConfig {
             name: "soland-dev".to_owned(),
-            audience: "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service".to_owned(),
+            audience: Some("did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service".to_owned()),
             endpoint: "https://local.host/".parse().unwrap(),
             did: Some("did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service".to_owned()),
             session_grant_introspection_bearer: Some(bearer.to_owned()),

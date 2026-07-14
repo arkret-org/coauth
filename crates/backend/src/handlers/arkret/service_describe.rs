@@ -528,7 +528,10 @@ pub(crate) fn service_describe_response(
         .iter()
         .map(|server| PrincipalServerDescriptor {
             name: server.name.clone(),
-            audience: server.audience.clone(),
+            audience: crate::services::resolved_principal_audiences::effective_audience_shared(
+                server,
+            )
+            .unwrap_or_default(),
             endpoint: server.endpoint.to_string(),
             did: server.did.clone(),
         })

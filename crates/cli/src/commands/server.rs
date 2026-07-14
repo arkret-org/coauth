@@ -294,6 +294,15 @@ impl Options {
             };
             s.init_metrics();
             s.init_metadata_cache();
+            // Resolve the current service DID of any principal_servers[] entry
+            // that omits an explicit `audience`, refreshing on a background
+            // interval. Keeps the session-grant audience whitelist in sync with
+            // a Principal Server whose did:webvh SCID rotates on data resets.
+            coauth_backend::services::resolved_principal_audiences::shared().warm_up_and_spawn(
+                s.http_client.clone(),
+                s.arkret_config.clone(),
+                coauth_backend::services::resolved_principal_audiences::DEFAULT_REFRESH_INTERVAL,
+            );
             s
         };
 

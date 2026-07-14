@@ -14,6 +14,9 @@ use serde::Deserialize;
 use url::Url;
 
 use crate::handlers::arkret;
+use crate::services::resolved_principal_audiences::{
+    ResolvedPrincipalAudiences, effective_audience,
+};
 use crate::oidc_client::requests::jose::{
     JwtVerificationData, fetch_jwks, verify_id_token, verify_signed_jwt,
 };
@@ -92,6 +95,7 @@ pub trait UpstreamOidcService: Send + Sync {
         &self,
         url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
+        resolved: &ResolvedPrincipalAudiences,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String>;
 
@@ -252,26 +256,35 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
         &self,
         url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
+        resolved: &ResolvedPrincipalAudiences,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String> {
         if let Some(requested_audience) = requested_audience
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
-            if let Some(server) = arkret_config.principal_servers.iter().find(|server| {
-                server.audience == requested_audience
-                    || principal_endpoint_matches_audience(&server.endpoint, requested_audience)
-            }) {
-                return Ok(UpstreamOidcSessionGrantTarget {
-                    audience: server.audience.clone(),
-                    principal_server_name: Some(server.name.clone()),
-                    principal_server_endpoint: Some(server.endpoint.to_string()),
-                });
+            for server in &arkret_config.principal_servers {
+                let effective = effective_audience(server, resolved);
+                let matches = effective.as_deref() == Some(requested_audience)
+                    || principal_endpoint_matches_audience(&server.endpoint, requested_audience);
+                if matches {
+                    return Ok(UpstreamOidcSessionGrantTarget {
+                        // Prefer the resolved/pinned service DID so the grant is
+                        // stamped with the Principal Server's CURRENT audience —
+                        // soland verifies `aud == its live service_id`. Fall back
+                        // to the requested value only for the legacy
+                        // endpoint-URL-as-audience match with no resolved value.
+                        audience: effective.unwrap_or_else(|| requested_audience.to_owned()),
+                        principal_server_name: Some(server.name.clone()),
+                        principal_server_endpoint: Some(server.endpoint.to_string()),
+                    });
+                }
             }
 
             if arkret::is_allowed_session_grant_audience(
                 url_builder,
                 arkret_config,
+                resolved,
                 requested_audience,
             ) {
                 let local_audience = arkret::required_audience_for(url_builder, arkret_config);
@@ -290,6 +303,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
         let grant_target = arkret::password_login_session_grant_target(
             url_builder,
             arkret_config,
+            resolved,
             None,
         )
         .map_err(|error| {

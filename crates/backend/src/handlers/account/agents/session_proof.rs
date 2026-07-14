@@ -165,7 +165,12 @@ pub async fn validate_agent_session_proof(
         tracing::warn!(agent_id, verification_method, %expires_at, %now, "agent_key_proof rejected: proof expired");
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
-    if !is_allowed_session_grant_audience(url_builder, arkret_config, &proof.audience) {
+    if !is_allowed_session_grant_audience(
+        url_builder,
+        arkret_config,
+        crate::services::resolved_principal_audiences::shared(),
+        &proof.audience,
+    ) {
         tracing::warn!(agent_id, verification_method, audience = %proof.audience, "agent_key_proof rejected: audience is not configured");
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
