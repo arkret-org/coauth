@@ -150,7 +150,7 @@ impl ConfigurationSection for AccountConfig {
         // mis-configured production deployment refuses to start instead of
         // silently shipping a code-bypassed registration flow.
         if self.registration_email_delivery_bypass_allowed
-            && std::env::var_os(DEV_EMAIL_BYPASS_ESCAPE_HATCH).is_none()
+            && crate::runtime_var_os(DEV_EMAIL_BYPASS_ESCAPE_HATCH).is_none()
         {
             return Err(format!(
                 "account.registration_email_delivery_bypass_allowed is enabled but the \

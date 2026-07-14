@@ -66,21 +66,14 @@ fn main() -> anyhow::Result<ExitCode> {
             .map(Some)
             .or_else(|e| if e.not_found() { Ok(None) } else { Err(e) })
     };
-    if cli_opts.has_explicit_config() && cli_opts.ignores_env_overrides() {
-        clear_coauth_environment();
-    }
-    cli_opts.apply_runtime_cli_overrides();
+    cli_opts
+        .runtime_environment_policy()
+        .install()
+        .map_err(|_| anyhow::anyhow!("runtime environment policy was already installed"))?;
     let figment = cli_opts.figment();
 
     let runtime = build_tokio_runtime()?;
     runtime.block_on(run_async(cli_opts, figment, dotenv_result))
-}
-
-fn clear_coauth_environment() {
-    for (key, _) in std::env::vars().filter(|(key, _)| key.starts_with("COAUTH_")) {
-        // SAFETY: this runs before the Tokio runtime creates worker threads.
-        unsafe { std::env::remove_var(key) };
-    }
 }
 
 /// Construct the Tokio runtime with all features enabled.
@@ -143,7 +136,7 @@ async fn execute_command(
         .map_err(anyhow::Error::from_boxed)
         .context("Failed to load telemetry config")?;
     if cli_opts.runs_server()
-        && std::env::var(self::commands::METRICS_BIND_ENV)
+        && coauth_config::runtime_var(self::commands::METRICS_BIND_ENV)
             .is_ok_and(|value| !value.trim().is_empty())
     {
         tel_cfg.metrics.exporter = MetricsExporterKind::Prometheus;

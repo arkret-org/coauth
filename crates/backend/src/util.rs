@@ -792,7 +792,7 @@ mod tests {
     async fn test_diesel_pool_recycles_connections_back_to_a_clean_session() {
         // Postgres-only path: skip cleanly when DATABASE_URL is not configured
         // (matches the workspace-wide gate added in C32.4).
-        let Ok(database_url) = std::env::var("DATABASE_URL") else {
+        let Ok(database_url) = coauth_config::runtime_var("DATABASE_URL") else {
             return;
         };
         let config = DatabaseConfig {

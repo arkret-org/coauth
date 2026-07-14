@@ -81,12 +81,11 @@ impl Options {
         !self.config.is_empty()
     }
 
-    pub(super) fn ignores_env_overrides(&self) -> bool {
-        self.no_env_overrides
-    }
-
-    pub(super) fn apply_runtime_cli_overrides(&self) {
-        let overrides = [
+    pub(super) fn runtime_environment_policy(&self) -> coauth_config::RuntimeEnvironmentPolicy {
+        let mut policy = coauth_config::RuntimeEnvironmentPolicy::new(
+            self.has_explicit_config() && self.no_env_overrides,
+        );
+        for (key, enabled) in [
             ("COAUTH_ENABLE_TEST_ENDPOINTS", self.enable_test_endpoints),
             (
                 "COAUTH_ALLOW_INSECURE_DEV_EMAIL_BYPASS",
@@ -96,14 +95,12 @@ impl Options {
                 "COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP",
                 self.allow_insecure_password_bootstrap,
             ),
-        ];
-        for (key, enabled) in overrides {
+        ] {
             if enabled {
-                // SAFETY: `main` applies CLI overrides before creating the
-                // Tokio runtime or any other worker thread.
-                unsafe { std::env::set_var(key, "1") };
+                policy = policy.with_override(key, "1");
             }
         }
+        policy
     }
 
     pub(super) fn runs_server(&self) -> bool {
@@ -131,7 +128,7 @@ impl Options {
     /// Get a [`Figment`] instance with the configuration loaded
     pub fn figment(&self) -> Figment {
         let configs = if self.config.is_empty() {
-            std::env::var("COAUTH_CONFIG")
+            coauth_config::runtime_var("COAUTH_CONFIG")
                 .unwrap_or_else(|_| "config.yaml".to_owned())
                 .split(':')
                 .map(Utf8PathBuf::from)

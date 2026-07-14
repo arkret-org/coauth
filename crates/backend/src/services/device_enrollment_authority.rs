@@ -118,7 +118,7 @@ static AUTHORITY: OnceLock<EnrollmentAuthority> = OnceLock::new();
 fn load_authority() -> EnrollmentAuthority {
     use base64ct::{Base64, Encoding as _};
 
-    if let Ok(raw) = std::env::var(ENROLLMENT_KEY_SEED_ENV) {
+    if let Ok(raw) = coauth_config::runtime_var(ENROLLMENT_KEY_SEED_ENV) {
         let trimmed = raw.trim();
         let mut buf = [0u8; 48];
         match Base64::decode(trimmed, &mut buf) {

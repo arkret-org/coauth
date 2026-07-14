@@ -208,7 +208,7 @@ fn non_standard_provider_kind(
 
 fn non_standard_upstream_oauth_allowed() -> bool {
     non_standard_upstream_oauth_allowed_from_env(
-        std::env::var(ALLOW_NON_STANDARD_UPSTREAM_OAUTH_ENV)
+        coauth_config::runtime_var(ALLOW_NON_STANDARD_UPSTREAM_OAUTH_ENV)
             .ok()
             .as_deref(),
     )

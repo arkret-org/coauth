@@ -587,7 +587,7 @@ fn service_id_admin_token(inline: Option<&str>, env_name: &str) -> Option<String
         .filter(|token| !token.is_empty())
         .map(ToOwned::to_owned)
         .or_else(|| {
-            std::env::var(env_name)
+            coauth_config::runtime_var(env_name)
                 .ok()
                 .map(|token| token.trim().to_owned())
                 .filter(|token| !token.is_empty())

@@ -884,7 +884,7 @@ pub struct DebugIssueDpopGrantOutcome {
 #[must_use]
 pub fn test_endpoints_enabled() -> bool {
     matches!(
-        std::env::var("COAUTH_ENABLE_TEST_ENDPOINTS")
+        coauth_config::runtime_var("COAUTH_ENABLE_TEST_ENDPOINTS")
             .ok()
             .as_deref(),
         Some("1" | "true" | "yes")

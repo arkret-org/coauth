@@ -559,7 +559,7 @@ impl ConfigurationSection for ArkretConfig {
         // deployment refuses to start instead of silently trusting these
         // grants. Mirrors `account.registration_email_delivery_bypass_allowed`.
         if self.password_login_session_grants_enabled
-            && std::env::var_os(PASSWORD_BOOTSTRAP_ESCAPE_HATCH).is_none()
+            && crate::runtime_var_os(PASSWORD_BOOTSTRAP_ESCAPE_HATCH).is_none()
         {
             return Err(std::io::Error::other(format!(
                 "arkret.password_login_session_grants_enabled is enabled but the dev-only escape \

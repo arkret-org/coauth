@@ -700,7 +700,8 @@ fn enforce_resolver_url_policy(url: &Url) -> Result<(), DidResolveError> {
             url.scheme()
         )));
     }
-    let allow_loopback = std::env::var_os("COAUTH_DID_RESOLVER_ALLOW_LOOPBACK").is_some();
+    let allow_loopback =
+        coauth_config::runtime_var_os("COAUTH_DID_RESOLVER_ALLOW_LOOPBACK").is_some();
     let Some(host) = url.host() else {
         return Err(DidResolveError::ForbiddenResolverUrl(
             "missing host".to_owned(),
@@ -778,7 +779,8 @@ fn enforce_resolved_resolver_ip_policy(
         )));
     }
 
-    let allow_loopback = std::env::var_os("COAUTH_DID_RESOLVER_ALLOW_LOOPBACK").is_some();
+    let allow_loopback =
+        coauth_config::runtime_var_os("COAUTH_DID_RESOLVER_ALLOW_LOOPBACK").is_some();
     for addr in addrs {
         if let Some(reason) = blocked_resolver_ip_reason(addr.ip(), allow_loopback) {
             return Err(DidResolveError::ForbiddenResolverUrl(format!(

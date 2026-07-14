@@ -303,7 +303,7 @@ fn private_networks_allowed() -> bool {
 }
 
 fn env_flag_enabled(name: &str) -> bool {
-    std::env::var(name).is_ok_and(|value| {
+    coauth_config::runtime_var(name).is_ok_and(|value| {
         let value = value.trim();
         !(value.is_empty()
             || value.eq_ignore_ascii_case("0")
@@ -313,7 +313,7 @@ fn env_flag_enabled(name: &str) -> bool {
 }
 
 fn private_egress_target_allowed(host: &str) -> bool {
-    std::env::var(COAUTH_OUTBOUND_HTTP_PRIVATE_ALLOWLIST)
+    coauth_config::runtime_var(COAUTH_OUTBOUND_HTTP_PRIVATE_ALLOWLIST)
         .ok()
         .is_some_and(|raw| target_allowed_by_private_allowlist(host, &raw))
 }

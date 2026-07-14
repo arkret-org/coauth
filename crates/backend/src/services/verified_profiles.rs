@@ -97,7 +97,7 @@ pub struct VerifiedProfileDescriptor {
 /// [`COAUTH_SERVICE_ROLE`]. The function never panics and never returns
 /// `Err`; on any failure path it logs and returns an empty Vec.
 pub fn load_from_env() -> Arc<Vec<VerifiedProfileDescriptor>> {
-    let path = match std::env::var(VERIFIED_PROFILES_ARTIFACT_ENV) {
+    let path = match coauth_config::runtime_var(VERIFIED_PROFILES_ARTIFACT_ENV) {
         Ok(v) if !v.is_empty() => v,
         _ => {
             tracing::debug!(

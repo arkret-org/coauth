@@ -8,9 +8,11 @@
 #[cfg(all(feature = "docker", feature = "dist"))]
 compile_error!("Only one of the `docker` and `dist` features can be enabled at once");
 
+mod environment;
 pub(crate) mod schema;
 mod sections;
 pub(crate) mod util;
 
+pub use self::environment::{RuntimeEnvironmentPolicy, runtime_var, runtime_var_os};
 pub use self::sections::*;
 pub use self::util::{ConfigurationSection, ConfigurationSectionExt};

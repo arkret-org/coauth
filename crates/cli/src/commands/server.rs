@@ -406,7 +406,7 @@ impl Options {
 }
 
 fn metrics_listener_from_env() -> anyhow::Result<Option<HttpListenerConfig>> {
-    let Ok(raw) = std::env::var(super::METRICS_BIND_ENV) else {
+    let Ok(raw) = coauth_config::runtime_var(super::METRICS_BIND_ENV) else {
         return Ok(None);
     };
     let raw = raw.trim();
