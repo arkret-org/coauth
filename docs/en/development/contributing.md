@@ -4,11 +4,11 @@ This document aims to get you started with contributing to the coauth!
 
 ## 1. Who can contribute to coauth?
 
-Everyone is welcome to contribute code to [coauth](https://github.com/arkret/coauth), provided that they are willing to license their contributions under the project's contributor terms. This ensures that their contribution will be made available under an OSI-approved open-source license, currently Affero General Public License v3 (AGPLv3).
+Everyone is welcome to contribute code to [coauth](https://github.com/arkret-org/coauth), provided that they are willing to license their contributions under the project's contributor terms. This ensures that their contribution will be made available under an OSI-approved open-source license, currently Affero General Public License v3 (AGPLv3).
 
 ## 2. What can I contribute?
 
-You can contribute code to coauth and help improve its documentation by submitting pull requests to the [GitHub repository](https://github.com/arkret/coauth).
+You can contribute code to coauth and help improve its documentation by submitting pull requests to the [GitHub repository](https://github.com/arkret-org/coauth).
 
 ## 3. What do I need?
 

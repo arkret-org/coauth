@@ -4,8 +4,8 @@
 
 Pre-built binaries can be found attached on each release, for Linux on both `x86_64` and `aarch64` architectures.
 
-- [`coauth-aarch64-linux.tar.gz`](https://github.com/arkret/coauth/releases/latest/download/coauth-aarch64-linux.tar.gz)
-- [`coauth-x86_64-linux.tar.gz`](https://github.com/arkret/coauth/releases/latest/download/coauth-x86_64-linux.tar.gz)
+- [`coauth-aarch64-linux.tar.gz`](https://github.com/arkret-org/coauth/releases/latest/download/coauth-aarch64-linux.tar.gz)
+- [`coauth-x86_64-linux.tar.gz`](https://github.com/arkret-org/coauth/releases/latest/download/coauth-x86_64-linux.tar.gz)
 
 Each archive contains:
 
@@ -29,7 +29,7 @@ OS=linux
 VERSION=latest # or a specific version, like "v0.1.0"
 
 # URL to the right archive
-URL="https://github.com/arkret/coauth/releases/${VERSION}/download/coauth-${ARCH}-${OS}.tar.gz"
+URL="https://github.com/arkret-org/coauth/releases/${VERSION}/download/coauth-${ARCH}-${OS}.tar.gz"
 
 # Create a directory and extract the archive in it
 mkdir -p /path/to/mas
@@ -51,7 +51,7 @@ The image can also be built from the source:
 
 1. Get the source
    ```sh
-   git clone https://github.com/arkret/coauth.git
+   git clone https://github.com/arkret-org/coauth.git
    cd coauth
    ```
 1. Build the image
@@ -68,7 +68,7 @@ Building from the source requires:
 
 1. Get the source
    ```sh
-   git clone https://github.com/arkret/coauth.git
+   git clone https://github.com/arkret-org/coauth.git
    cd coauth
    ```
 1. Build the frontend

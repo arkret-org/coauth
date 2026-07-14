@@ -62,5 +62,5 @@ Per the R3.2 issuer hardening:
 > claims surface already covers operator audit needs; add it only if a
 > concrete operator workflow requires it.
 
-[op]: https://github.com/arkret/arkret-spec
+[op]: https://github.com/arkret-org/arkret-spec
 [src]: ../../../crates/backend/src/handlers/arkret.rs

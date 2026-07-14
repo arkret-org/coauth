@@ -14,7 +14,7 @@
 ### 克隆和构建
 
 ```bash
-git clone https://github.com/arkret/coauth.git
+git clone https://github.com/arkret-org/coauth.git
 cd coauth
 
 # 编译前端资源

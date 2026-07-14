@@ -4,7 +4,7 @@
 //!
 //! [OAuth]: https://oauth.net/2/
 //! [OpenID Connect]: https://openid.net/connect/
-//! [coauth]: https://github.com/arkret/coauth
+//! [coauth]: https://github.com/arkret-org/coauth
 
 #![deny(missing_docs)]
 #![allow(clippy::module_name_repetitions)]

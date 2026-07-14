@@ -424,7 +424,7 @@ DELETE /_coauth/admin/circles/capabilities/{grant_id}
 ```
 
 Request / response shapes are defined in
-[`coauth_admin_types::circle_capability_admin`](https://github.com/arkret/coauth/blob/main/crates/admin-types/src/circle_capability_admin.rs).
+[`coauth_admin_types::circle_capability_admin`](https://github.com/arkret-org/coauth/blob/main/crates/admin-types/src/circle_capability_admin.rs).
 See `_todos_all.md` (P2B.2) for the persistence backlog.
 
 [authorization code]: ../topics/authorization.md#authorization-code-grant

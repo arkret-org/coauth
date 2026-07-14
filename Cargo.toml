@@ -12,7 +12,7 @@ authors = ["Arkret Team"]
 edition = "2024"
 rust-version = "1.96"
 homepage = "https://arkret.dev/docs/"
-repository = "https://github.com/arkret/coauth/"
+repository = "https://github.com/arkret-org/coauth/"
 license = "AGPL-3.0-only"
 publish = false
 

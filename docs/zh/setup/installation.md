@@ -7,13 +7,13 @@
 ### x86_64 (amd64)
 
 ```bash
-curl -sL https://github.com/arkret/coauth/releases/latest/download/coauth-x86_64-linux.tar.gz | tar xz
+curl -sL https://github.com/arkret-org/coauth/releases/latest/download/coauth-x86_64-linux.tar.gz | tar xz
 ```
 
 ### aarch64 (arm64)
 
 ```bash
-curl -sL https://github.com/arkret/coauth/releases/latest/download/coauth-aarch64-linux.tar.gz | tar xz
+curl -sL https://github.com/arkret-org/coauth/releases/latest/download/coauth-aarch64-linux.tar.gz | tar xz
 ```
 
 解压后会得到 `coauth` 可执行文件。建议将其移动到 `/usr/local/bin/` 或其他在 `PATH` 中的目录。
@@ -44,7 +44,7 @@ docker run -v $(pwd)/config.yaml:/config.yaml ghcr.io/arkret/coauth:latest \
 ### 编译步骤
 
 ```bash
-git clone https://github.com/arkret/coauth.git
+git clone https://github.com/arkret-org/coauth.git
 cd coauth
 
 # 编译前端资源
