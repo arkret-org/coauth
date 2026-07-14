@@ -125,14 +125,15 @@ pub struct ErrorOutcome {
 }
 
 impl ErrorOutcome {
-    /// Create a new error response from any Rust error
+    /// Create a client-safe error response from any Rust error.
+    ///
+    /// Error sources frequently contain database statements, filesystem paths
+    /// or upstream response bodies. They belong in structured server logs, not
+    /// in the public JSON:API response, so only the top-level message crosses
+    /// the HTTP trust boundary.
     pub fn from_error(error: &(dyn std::error::Error + 'static)) -> Self {
-        let mut errors = Vec::new();
-        let mut head = Some(error);
-        while let Some(error) = head {
-            errors.push(Error::from_error(error));
-            head = error.source();
+        Self {
+            errors: vec![Error::from_error(error)],
         }
-        Self { errors }
     }
 }

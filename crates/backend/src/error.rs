@@ -50,10 +50,9 @@ impl AppError {
     where
         E: StdError + Send + Sync + 'static,
     {
-        let message = error.to_string();
         Self::with_source(
             StatusCode::INTERNAL_SERVER_ERROR,
-            message,
+            "Internal server error",
             Box::new(error),
             true,
         )
@@ -61,8 +60,12 @@ impl AppError {
 
     #[must_use]
     pub fn internal_box(error: BoxError) -> Self {
-        let message = error.to_string();
-        Self::with_source(StatusCode::INTERNAL_SERVER_ERROR, message, error, true)
+        Self::with_source(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal server error",
+            error,
+            true,
+        )
     }
 
     pub fn bad_request(message: impl Into<String>) -> Self {
