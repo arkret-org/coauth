@@ -382,7 +382,7 @@ pub async fn device_enroll_endpoint(
 
     let payload = DeviceAuthorizePayload {
         principal_id: principal_id.clone(),
-        device_id,
+        device_id: device_id.clone(),
         device_public_key: NonEmptyString::new(device_public_key_multibase)
             .expect("encoded Ed25519 public key is non-empty"),
         hpke_key: NonEmptyString::new(body.hpke_key.clone())

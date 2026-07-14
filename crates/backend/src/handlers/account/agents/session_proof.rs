@@ -2046,8 +2046,13 @@ mod tests {
             agent_key_authorization_ref: Some(
                 "ak:event:01970000-0000-7000-8000-000000000021".to_owned(),
             ),
-            agent_scope_request: serde_json::json!({
-                "realm_ids": ["ak:realm:01970000-0000-7000-8000-000000000000"]
+            agent_scope_request: Some(arkret_core::SessionGrantAgentScopeRequest {
+                realm_ids: vec![
+                    arkret_core::RealmId::new("ak:realm:01970000-0000-7000-8000-000000000000")
+                        .unwrap(),
+                ],
+                strand_ids: Vec::new(),
+                track_names: Vec::new(),
             }),
             dpop_binding_proof: None,
             applet_delegation: None,
