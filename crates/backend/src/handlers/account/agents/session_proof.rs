@@ -285,12 +285,28 @@ pub async fn validate_agent_session_proof(
 
     // Parse the `agent_scope_request` overlay. An `act_on_behalf` participation
     // selection routes to the human-approval path (§4.10).
-    let scope_request: AgentScopeRequestInput = if body.agent_scope_request.is_null() {
-        AgentScopeRequestInput::default()
-    } else {
-        serde_json::from_value(body.agent_scope_request.clone())
-            .map_err(|_| AgentAuthRejection::ProofInvalid)?
-    };
+    let scope_request = body
+        .agent_scope_request
+        .as_ref()
+        .map(|scope| AgentScopeRequestInput {
+            realm_ids: scope
+                .realm_ids
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+            strand_ids: scope
+                .strand_ids
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+            track_names: scope
+                .track_names
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+            participation: Vec::new(),
+        })
+        .unwrap_or_default();
 
     let requests_act_on_behalf = scope_request
         .participation
