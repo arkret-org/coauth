@@ -60,7 +60,7 @@ policy + `/_arkret/describe` document via soland's config API.
 **Rotation is wire-breaking for existing cross-signing reset proofs.**
 The `trust_domain` value enters the canonical transcript of every
 `ak.cross_signing.reset` proof (see
-`arkret_core::round23::CrossSigningResetPayload`). Changing it
+`arkret_core::CrossSigningResetPayload`). Changing it
 invalidates all previously-issued `principal_signing` /
 `recovery_unlock` / `device_quorum` / `trusted_recovery_service`
 proofs. Operators MUST roll fresh proofs through the device-lifecycle
