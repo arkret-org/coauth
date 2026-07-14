@@ -3,6 +3,8 @@
 mod agent_auth_error_matrix_tests {
     use arkret_core::canonical::canonical_json_bytes;
     use chrono::Utc;
+    use salvo::prelude::Router;
+    use salvo::test::{ResponseExt as _, TestClient};
 
     fn derive_ed25519_from_seed(seed: &[u8; 32]) -> ed25519_dalek::SigningKey {
         ed25519_dalek::SigningKey::from_bytes(seed)
@@ -21,6 +23,38 @@ mod agent_auth_error_matrix_tests {
     };
     use super::super::proof::{ProofSignedFields, verify_proof_signature};
     use super::super::session_proof::AGENT_SESSION_MAX_TTL;
+
+    #[salvo::handler]
+    async fn agent_pcr_recovery_not_ready_fixture()
+    -> Result<(), crate::handlers::arkret::ArkretRouteError> {
+        Err(AgentAuthRejection::AgentPcrRecoveryNotReady
+            .into_app_error()
+            .into())
+    }
+
+    #[tokio::test]
+    async fn agent_pcr_recovery_not_ready_renders_arkret_error_envelope() {
+        let service = salvo::Service::new(
+            Router::with_path("agent-pcr-recovery-not-ready")
+                .post(agent_pcr_recovery_not_ready_fixture),
+        );
+        let mut response = TestClient::post("http://127.0.0.1:8698/agent-pcr-recovery-not-ready")
+            .send(&service)
+            .await;
+
+        assert_eq!(
+            response.status_code,
+            Some(http::StatusCode::PRECONDITION_FAILED)
+        );
+        let body: serde_json::Value =
+            serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
+        assert_eq!(body["ok"], false);
+        assert_eq!(
+            body["error"]["code"],
+            arkret_core::error::REASON_AGENT_PCR_RECOVERY_NOT_READY
+        );
+        assert!(body.get("errors").is_none());
+    }
 
     #[test]
     fn verification_method_mismatch_fires_before_proof_validator() {

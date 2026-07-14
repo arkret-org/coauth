@@ -18,6 +18,7 @@ type BoxError = Box<dyn StdError + Send + Sync + 'static>;
 pub struct AppError {
     status: StatusCode,
     message: String,
+    protocol_code: Option<&'static str>,
     source: Option<BoxError>,
     capture: bool,
 }
@@ -27,6 +28,7 @@ impl AppError {
         Self {
             status,
             message: message.into(),
+            protocol_code: None,
             source: None,
             capture: false,
         }
@@ -41,6 +43,7 @@ impl AppError {
         Self {
             status,
             message: message.into(),
+            protocol_code: None,
             source: Some(source),
             capture,
         }
@@ -104,6 +107,15 @@ impl AppError {
         Self::new(StatusCode::TOO_MANY_REQUESTS, message)
     }
 
+    /// Preserve a canonical Arkret error code while an error crosses shared
+    /// account-handler helpers. Product/admin routes ignore this metadata;
+    /// protocol routes convert it into the standard [`arkret_core::ErrorEnvelope`].
+    #[must_use]
+    pub fn with_protocol_code(mut self, code: &'static str) -> Self {
+        self.protocol_code = Some(code);
+        self
+    }
+
     #[must_use]
     pub fn status(&self) -> StatusCode {
         self.status
@@ -112,6 +124,11 @@ impl AppError {
     #[must_use]
     pub fn message(&self) -> &str {
         &self.message
+    }
+
+    #[must_use]
+    pub fn protocol_code(&self) -> Option<&'static str> {
+        self.protocol_code
     }
 }
 

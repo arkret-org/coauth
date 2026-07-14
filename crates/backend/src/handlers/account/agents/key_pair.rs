@@ -24,15 +24,15 @@ use serde_json::Value;
 
 use super::error_matrix::{AgentAuthRejection, enforce_verification_method_binding};
 use super::proof::{ProofSignedFields, canonical_digest, verify_proof_signature};
+use crate::AppError;
 use crate::handlers::account::{DepotExt, make_clock, make_rng};
 use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
 use crate::handlers::arkret::{
-    VerificationMethod, is_allowed_session_grant_audience, service_id_for,
+    ArkretRouteError, VerificationMethod, is_allowed_session_grant_audience, service_id_for,
 };
 use crate::services::device_signing_directory::resolve_authorized_device_signing_key;
 use crate::services::did_binding_proof::normalize_did_for_binding;
 use crate::services::did_resolver::DidResolverService;
-use crate::{AppError, JsonResult};
 
 /// Durable retry queue used when the authoritative Principal Server cannot be
 /// reached after the exact pairing request has been persisted locally.
@@ -72,7 +72,7 @@ struct ProofOfPossessionInput {
 pub async fn post_agent_key_pair(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<arkret_core::AgentKeyPairOutcome> {
+) -> Result<Json<arkret_core::AgentKeyPairOutcome>, ArkretRouteError> {
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
@@ -90,9 +90,9 @@ pub async fn post_agent_key_pair(
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| AppError::bad_request("Idempotency-Key is required"))?;
     if idempotency_key != body.authorize_event.event_id.as_str() {
-        return Err(AppError::bad_request(
-            "Idempotency-Key must equal authorize_event.event_id",
-        ));
+        return Err(
+            AppError::bad_request("Idempotency-Key must equal authorize_event.event_id").into(),
+        );
     }
 
     let agent_id = normalize_did_for_binding(body.agent_id.as_str())
@@ -113,7 +113,7 @@ pub async fn post_agent_key_pair(
         )?)
         .map_err(|error| AppError::bad_request(format!("proof_of_possession invalid: {error}")))?;
     if pop.challenge != body.pairing_request_id.as_str() {
-        return Err(AgentAuthRejection::ProofInvalid.into_app_error());
+        return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
     }
 
     // The SDK DTO closes runtime_attestation to the v1 `self_asserted` branch;
@@ -149,7 +149,8 @@ pub async fn post_agent_key_pair(
             idempotency_repo.cancel().await?;
             return Err(AppError::conflict(
                 "authorize Event id is already bound to a different Agent authorization",
-            ));
+            )
+            .into());
         }
         let stored_body: arkret_core::AgentKeyPairRequestBody =
             serde_json::from_value(existing.soland_fanout_payload.clone()).map_err(|error| {
@@ -205,20 +206,22 @@ pub async fn post_agent_key_pair(
 
     // Expiry: a stale pairing PoP is rejected as `pairing_request_expired`.
     if pop.expires_at <= now {
-        return Err(AgentAuthRejection::PairingRequestExpired.into_app_error());
+        return Err(AgentAuthRejection::PairingRequestExpired
+            .into_app_error()
+            .into());
     }
 
     // Audience MUST be this service (the coauth issuer audience or a configured
     // principal-server audience).
     if !is_allowed_session_grant_audience(&url_builder, &arkret_config, &pop.audience) {
-        return Err(AgentAuthRejection::ProofInvalid.into_app_error());
+        return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
     }
 
     // The PoP MUST bind the request canonical digest (AKP-0008 §4.5). It is an
     // opaque `sha256:<hex>` the client computed over the pairing request body;
     // we re-bind it into the signed-fields so the signature covers it.
     if !pop.request_canonical_digest.starts_with("sha256:") {
-        return Err(AgentAuthRejection::ProofInvalid.into_app_error());
+        return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
     }
     let agent_did = arkret_core::Did::new(agent_id.clone())
         .map_err(|error| AppError::bad_request(format!("agent_id invalid: {error}")))?;
@@ -235,7 +238,7 @@ pub async fn post_agent_key_pair(
         ))
     })?;
     if pop.request_canonical_digest != expected_pop_digest.as_str() {
-        return Err(AgentAuthRejection::ProofInvalid.into_app_error());
+        return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
     }
 
     let signed_fields = ProofSignedFields {
@@ -289,7 +292,7 @@ pub async fn post_agent_key_pair(
     .await
     {
         repo.cancel().await.ok();
-        return Err(error);
+        return Err(error.into());
     }
 
     // `pair_agent_key` validates the current Principal-Server pairing handle

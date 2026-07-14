@@ -18,8 +18,10 @@ mod tests;
 use anyhow::Error as AnyhowError;
 use arkret_core::ErrorEnvelope;
 use arkret_core::error::{
-    ERROR_CODE_BAD_JSON, ERROR_CODE_CAPABILITY_DENIED, ERROR_CODE_INTERNAL_ERROR,
-    ERROR_CODE_INVALID_PARAM, ERROR_CODE_NOT_FOUND, ERROR_CODE_UNAUTHENTICATED,
+    ERROR_CODE_BAD_JSON, ERROR_CODE_CAPABILITY_DENIED, ERROR_CODE_CONFLICT,
+    ERROR_CODE_FAILED_PRECONDITION, ERROR_CODE_INTERNAL_ERROR, ERROR_CODE_INVALID_PARAM,
+    ERROR_CODE_NOT_FOUND, ERROR_CODE_RATE_LIMITED, ERROR_CODE_SCHEMA_VIOLATION,
+    ERROR_CODE_UNAUTHENTICATED, ERROR_CODE_UNSUPPORTED_FEATURE,
 };
 use coauth_config::ArkretConfig;
 use coauth_data::{RepositoryAccess, UrlBuilder, User};
@@ -168,6 +170,35 @@ impl From<RouteError> for ArkretRouteError {
 impl From<coauth_data::RepositoryError> for ArkretRouteError {
     fn from(value: coauth_data::RepositoryError) -> Self {
         Self::Internal(Box::new(value))
+    }
+}
+
+impl From<crate::AppError> for ArkretRouteError {
+    fn from(value: crate::AppError) -> Self {
+        let status = value.status();
+        let message = value.message().to_owned();
+        if let Some(code) = value.protocol_code() {
+            return Self::coded(status, code, message);
+        }
+        match status {
+            StatusCode::BAD_REQUEST => Self::coded(status, ERROR_CODE_INVALID_PARAM, message),
+            StatusCode::UNAUTHORIZED => Self::Unauthorized(message),
+            StatusCode::FORBIDDEN => Self::Forbidden(message),
+            StatusCode::NOT_FOUND => Self::coded(status, ERROR_CODE_NOT_FOUND, message),
+            StatusCode::CONFLICT => Self::coded(status, ERROR_CODE_CONFLICT, message),
+            StatusCode::GONE | StatusCode::PRECONDITION_FAILED => {
+                Self::coded(status, ERROR_CODE_FAILED_PRECONDITION, message)
+            }
+            StatusCode::UNPROCESSABLE_ENTITY => {
+                Self::coded(status, ERROR_CODE_SCHEMA_VIOLATION, message)
+            }
+            StatusCode::TOO_MANY_REQUESTS => Self::coded(status, ERROR_CODE_RATE_LIMITED, message),
+            StatusCode::NOT_IMPLEMENTED => {
+                Self::coded(status, ERROR_CODE_UNSUPPORTED_FEATURE, message)
+            }
+            StatusCode::INTERNAL_SERVER_ERROR => Self::Internal(Box::new(value)),
+            _ => Self::coded(status, ERROR_CODE_INTERNAL_ERROR, message),
+        }
     }
 }
 

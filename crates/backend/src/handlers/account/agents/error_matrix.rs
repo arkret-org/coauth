@@ -149,12 +149,13 @@ impl AgentAuthRejection {
     #[must_use]
     pub fn into_app_error(self) -> AppError {
         let code = self.code();
-        match self.http_status() {
+        let error = match self.http_status() {
             http::StatusCode::UNAUTHORIZED => AppError::unauthorized(code),
             http::StatusCode::FORBIDDEN => AppError::forbidden(code),
             http::StatusCode::BAD_REQUEST => AppError::bad_request(code),
             other => AppError::new(other, code),
-        }
+        };
+        error.with_protocol_code(self.reason_code().unwrap_or(code))
     }
 
     #[must_use]
