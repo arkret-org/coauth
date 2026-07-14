@@ -142,9 +142,9 @@ arkret:
   principal_server_url: https://local.host/
   principal_servers:
   - name: soland-dev
-    audience: did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service
+    audience: did:webvh:QmSh4wSNG1YsPKPbctD8PP1hy6rK5aHKH139wHpHn3VCNN:local.host:webvh:service
     endpoint: https://local.host/
-    did: did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service
+    did: did:webvh:QmSh4wSNG1YsPKPbctD8PP1hy6rK5aHKH139wHpHn3VCNN:local.host:webvh:service
     session_grant_introspection_bearer: local-coauth-session-grant-introspection
     embedded_webvh_registration_bearer: local-soland-webvh-registration
   identity_registry:
