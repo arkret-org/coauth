@@ -213,7 +213,12 @@ pub async fn post_agent_key_pair(
 
     // Audience MUST be this service (the coauth issuer audience or a configured
     // principal-server audience).
-    if !is_allowed_session_grant_audience(&url_builder, &arkret_config, &pop.audience) {
+    if !is_allowed_session_grant_audience(
+        &url_builder,
+        &arkret_config,
+        crate::services::resolved_principal_audiences::shared(),
+        &pop.audience,
+    ) {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
     }
 
@@ -803,6 +808,7 @@ async fn verify_authorize_event_controller_signature(
         let resolved = match resolve_authorized_device_signing_key(
             http_client,
             arkret_config,
+            crate::services::resolved_principal_audiences::shared(),
             audience,
             controller_id,
             &device_id,

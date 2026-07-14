@@ -25,6 +25,7 @@ pub mod policy_signer;
 pub mod principal_facade;
 pub mod recovery_policy_proof;
 pub mod refresh_token_rotation;
+pub mod resolved_principal_audiences;
 pub mod risk_action_proposals;
 pub mod risk_action_state;
 pub mod soland_webvh;

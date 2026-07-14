@@ -38,6 +38,9 @@ use salvo::prelude::*;
 
 use super::{ArkretRouteError, SessionGrantPayload};
 use crate::handlers::common::DepotExt;
+use crate::services::resolved_principal_audiences::{
+    self, ResolvedPrincipalAudiences, effective_audience,
+};
 use crate::services::device_enrollment_authority::enrollment_authority;
 
 const DEVICE_AUTHORIZE_KIND: &str = "ak.device.authorize";
@@ -185,9 +188,21 @@ fn service_attested_provenance_error(message: impl std::fmt::Display) -> ArkretR
 /// disambiguation is impossible — fail closed).
 fn sole_principal_audience(
     arkret_config: &coauth_config::ArkretConfig,
+    resolved: &ResolvedPrincipalAudiences,
 ) -> Result<String, ArkretRouteError> {
     match arkret_config.principal_servers.as_slice() {
-        [server] => Ok(server.audience.clone()),
+        // Fail closed when the sole server omits `audience` and its describe
+        // probe has not yet landed, rather than enrolling against an unknown
+        // principal-server audience.
+        // 有意的 fail-closed（见 services::resolved_principal_audiences
+        // §设计定位），非缺陷,请勿改成用某种默认 audience 兜底。
+        [server] => effective_audience(server, resolved).ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ERROR_CODE_SERVICE_UNAVAILABLE,
+                "principal server audience is not yet resolved from /_arkret/describe",
+            )
+        }),
         [] => Err(ArkretRouteError::coded(
             StatusCode::SERVICE_UNAVAILABLE,
             ERROR_CODE_SERVICE_UNAVAILABLE,
@@ -343,7 +358,7 @@ pub async fn device_enroll_endpoint(
             "grant subject is not a valid principal DID: {error}"
         )))
     })?;
-    let audience = sole_principal_audience(&arkret_config)?;
+    let audience = sole_principal_audience(&arkret_config, resolved_principal_audiences::shared())?;
     if grant_payload.audience != audience {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,

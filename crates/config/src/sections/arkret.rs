@@ -588,7 +588,17 @@ pub struct PrincipalServerConfig {
 
     /// Service DID audience used when validating tokens or session grants for
     /// this Principal Server.
-    pub audience: String,
+    ///
+    /// When omitted, coauth resolves the Principal Server's *current* service
+    /// DID dynamically from `<endpoint>/_arkret/describe` (see
+    /// `backend::services::resolved_principal_audiences`). Configure it
+    /// explicitly to pin the `did:webvh` SCID — a high-security choice that
+    /// rejects the audience the moment the Principal Server's signing key /
+    /// genesis changes. Omit it for self-hosted / dev deployments where the
+    /// Principal Server's DID legitimately rotates on data resets and you
+    /// trust the configured `endpoint` host (+ TLS) as the anchor instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audience: Option<String>,
 
     /// Base URL of the Principal Server integration point.
     pub endpoint: Url,

@@ -280,7 +280,10 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
         .iter()
         .map(|server| PrincipalServerMetadata {
             name: server.name.clone(),
-            audience: server.audience.clone(),
+            audience: crate::services::resolved_principal_audiences::effective_audience_shared(
+                server,
+            )
+            .unwrap_or_default(),
             endpoint: server.endpoint.to_string(),
             did: server.did.clone(),
         })

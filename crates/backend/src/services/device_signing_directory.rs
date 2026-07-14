@@ -21,6 +21,9 @@ use coauth_config::ArkretConfig;
 use thiserror::Error;
 
 use crate::outbound_http;
+use crate::services::resolved_principal_audiences::{
+    ResolvedPrincipalAudiences, effective_audience,
+};
 
 // RULING: this read is a
 // deployment-internal server-to-server directory lookup, NOT a protocol
@@ -100,6 +103,7 @@ pub struct ResolvedDeviceSigningKey {
 pub async fn resolve_authorized_device_signing_key(
     http_client: &reqwest::Client,
     arkret_config: &ArkretConfig,
+    resolved: &ResolvedPrincipalAudiences,
     audience: &str,
     principal_id: &str,
     device_id: &str,
@@ -107,7 +111,7 @@ pub async fn resolve_authorized_device_signing_key(
     let server = arkret_config
         .principal_servers
         .iter()
-        .find(|server| server.audience == audience)
+        .find(|server| effective_audience(server, resolved).as_deref() == Some(audience))
         .ok_or_else(|| DeviceSigningDirectoryError::PrincipalServerUnknown {
             audience: audience.to_owned(),
         })?;
