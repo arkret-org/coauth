@@ -12,8 +12,8 @@ use coauth_data::{
     AdminUserPatch, BoxRepository, Clock, RepositoryAccess, RepositoryError, UpstreamOAuthLink,
     UpstreamOAuthLinkPatch, User, UserEmail, UserEmailPatch,
 };
+use coauth_email_types::{Address, AddressError};
 use coauth_principal::ConnectorAdmin;
-use lettre::address::AddressError;
 use rand_core::RngCore;
 use thiserror::Error;
 use ulid::Ulid;
@@ -208,7 +208,7 @@ pub async fn patch_user_email(
     }
 
     if let Some(email) = patch.email.as_ref() {
-        if let Err(source) = lettre::Address::from_str(email) {
+        if let Err(source) = Address::from_str(email) {
             return Err(UserAdminServiceError::InvalidEmail {
                 email: email.clone(),
                 source,

@@ -101,6 +101,7 @@ coauth-admin-types = {version = "=0.3.0",path = "crates/admin-types"}
 coauth-backend = {version = "=0.3.0",path = "crates/backend"}
 coauth-config = {version = "=0.3.0",path = "crates/config"}
 coauth-data = {version = "=0.3.0",path = "crates/data"}
+coauth-email-types = {version = "=0.3.0",path = "crates/email-types"}
 coauth-frontend = {version = "=0.3.0",path = "crates/frontend"}
 coauth-i18n = {version = "=0.3.0",path = "crates/i18n"}
 coauth-i18n-scan = {version = "=0.3.0",path = "crates/i18n-scan"}
@@ -226,18 +227,14 @@ itertools = "0.14.0"
 js-sys = "0.3"
 k256 = {version = "0.13.4",features = ["std"]}
 language-tags = {version = "0.3.2",features = ["serde"]}
-lettre = {version = "0.11.22",default-features = false,features = [
-    "tokio1-rustls",
-    "rustls-platform-verifier",
-    "aws-lc-rs",
-    "hostname",
-    "builder",
-    "tracing",
-    "pool",
-    "smtp-transport",
-    "sendmail-transport",
-]}
+email_address = {version = "0.2.9",default-features = false}
 listenfd = "1.0.2"
+mail-builder = {version = "0.4.4",default-features = false}
+mail-send = {version = "0.6.1",default-features = false,features = [
+    "builder",
+    "aws-lc-rs",
+    "tls12",
+]}
 mime = "0.3.17"
 minijinja = {version = "2.20.0",features = [
     "urlencode",

@@ -25,6 +25,7 @@ anyhow = {workspace = true}
 async-trait = {workspace = true}
 base64ct = {workspace = true}
 chrono = {workspace = true}
+coauth-email-types = {workspace = true}
 coauth-iana = {workspace = true}
 coauth-jose = {workspace = true}
 arkret-core = {workspace = true}
@@ -35,7 +36,6 @@ diesel_migrations = {workspace = true}
 futures-util = {workspace = true}
 ipnetwork = {workspace = true}
 language-tags = {workspace = true}
-lettre = {workspace = true}
 coauth-oauth-types = {workspace = true}
 opentelemetry = {workspace = true}
 opentelemetry-semantic-conventions = {workspace = true}

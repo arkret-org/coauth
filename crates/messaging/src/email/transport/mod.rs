@@ -10,21 +10,22 @@ mod http_providers;
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
+use std::fmt;
 use std::num::NonZeroU16;
+use std::process::{ExitStatus, Stdio};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use lettre::message::Mailbox;
-use lettre::transport::sendmail::AsyncSendmailTransport;
-use lettre::transport::smtp::AsyncSmtpTransport;
-use lettre::transport::smtp::authentication::Credentials;
-use lettre::{AsyncTransport, Tokio1Executor};
+use coauth_email_types::Mailbox;
+use mail_send::SmtpClientBuilder;
 use reqwest::Client;
 use thiserror::Error;
+use tokio::io::AsyncWriteExt;
+use tokio::process::Command;
 use url::Url;
 
 use self::aws_ses::AwsSesProvider;
-use self::common::build_lettre_message;
+use self::common::{build_message, build_raw_message};
 #[cfg(test)]
 use self::common::{extract_provider_error_code, extract_provider_message_id, provider_error};
 use self::http_providers::{
@@ -41,6 +42,34 @@ pub enum SmtpMode {
     StartTls,
     /// TLS
     Tls,
+}
+
+/// Username and password used to authenticate to an SMTP server.
+#[derive(Clone)]
+pub struct SmtpCredentials {
+    username: String,
+    password: String,
+}
+
+impl SmtpCredentials {
+    /// Construct SMTP credentials.
+    #[must_use]
+    pub fn new(username: impl Into<String>, password: impl Into<String>) -> Self {
+        Self {
+            username: username.into(),
+            password: password.into(),
+        }
+    }
+}
+
+impl fmt::Debug for SmtpCredentials {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SmtpCredentials")
+            .field("username", &self.username)
+            .field("password", &"[REDACTED]")
+            .finish()
+    }
 }
 
 /// Provider-agnostic outbound email payload.
@@ -120,37 +149,24 @@ impl Transport {
         mode: SmtpMode,
         hostname: &str,
         port: Option<NonZeroU16>,
-        credentials: Option<Credentials>,
-    ) -> Result<Self, lettre::transport::smtp::Error> {
-        let mut builder = match mode {
-            SmtpMode::Plain => AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(hostname),
-            SmtpMode::StartTls => AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(hostname)?,
-            SmtpMode::Tls => AsyncSmtpTransport::<Tokio1Executor>::relay(hostname)?,
+        credentials: Option<SmtpCredentials>,
+    ) -> Result<Self, SmtpError> {
+        let provider = SmtpProvider {
+            mode,
+            hostname: hostname.to_owned(),
+            port: port.map_or_else(|| default_smtp_port(mode), NonZeroU16::get),
+            credentials,
         };
-
-        if let Some(credentials) = credentials {
-            builder = builder.credentials(credentials);
-        }
-
-        if let Some(port) = port {
-            builder = builder.port(port.into());
-        }
-
-        Ok(Self::new(SmtpProvider {
-            transport: builder.build(),
-        }))
+        provider.builder()?;
+        Ok(Self::new(provider))
     }
 
     /// Construct a Sendmail transport.
     #[must_use]
     pub fn sendmail(command: Option<impl Into<OsString>>) -> Self {
-        let transport = if let Some(command) = command {
-            AsyncSendmailTransport::new_with_command(command)
-        } else {
-            AsyncSendmailTransport::new()
-        };
-
-        Self::new(SendmailProvider { transport })
+        Self::new(SendmailProvider {
+            command: command.map_or_else(|| OsString::from("sendmail"), Into::into),
+        })
     }
 
     /// Construct a generic HTTP webhook email transport.
@@ -277,16 +293,16 @@ impl Transport {
 /// Errors that can occur while handing an email to a delivery provider.
 pub enum Error {
     /// The payload could not be converted into a provider-specific message.
-    #[error(transparent)]
-    Message(#[from] lettre::error::Error),
+    #[error("failed to build email message: {0}")]
+    Message(#[source] std::io::Error),
 
     /// The SMTP transport failed.
     #[error(transparent)]
-    Smtp(#[from] lettre::transport::smtp::Error),
+    Smtp(#[from] SmtpError),
 
     /// The sendmail transport failed.
     #[error(transparent)]
-    Sendmail(#[from] lettre::transport::sendmail::Error),
+    Sendmail(#[from] SendmailError),
 
     /// The email payload could not be serialized for the provider.
     #[error("failed to serialize email payload: {0}")]
@@ -308,6 +324,31 @@ pub enum Error {
         /// Whether the provider failure is safe to retry.
         retryable: bool,
     },
+}
+
+/// Errors produced while configuring or communicating with an SMTP server.
+#[derive(Debug, Error)]
+pub enum SmtpError {
+    /// The SMTP client configuration is invalid.
+    #[error("invalid SMTP configuration: {0}")]
+    Configuration(String),
+    /// The SMTP connection or delivery failed.
+    #[error(transparent)]
+    Delivery(#[from] mail_send::Error),
+}
+
+/// Errors produced while invoking a local sendmail-compatible command.
+#[derive(Debug, Error)]
+pub enum SendmailError {
+    /// The sendmail process could not be spawned or communicated with.
+    #[error("sendmail I/O failed: {0}")]
+    Io(#[from] std::io::Error),
+    /// The spawned process did not expose its standard input pipe.
+    #[error("sendmail process did not expose stdin")]
+    MissingStdin,
+    /// The sendmail process rejected the message.
+    #[error("sendmail exited unsuccessfully: {0}")]
+    Exit(ExitStatus),
 }
 
 struct BlackholeProvider;
@@ -333,7 +374,22 @@ impl EmailProvider for BlackholeProvider {
 }
 
 struct SmtpProvider {
-    transport: AsyncSmtpTransport<Tokio1Executor>,
+    mode: SmtpMode,
+    hostname: String,
+    port: u16,
+    credentials: Option<SmtpCredentials>,
+}
+
+impl SmtpProvider {
+    fn builder(&self) -> Result<SmtpClientBuilder<String>, SmtpError> {
+        let mut builder = SmtpClientBuilder::new(self.hostname.clone(), self.port)
+            .map_err(SmtpError::Configuration)?;
+        if let Some(credentials) = &self.credentials {
+            builder =
+                builder.credentials((credentials.username.clone(), credentials.password.clone()));
+        }
+        Ok(builder.implicit_tls(matches!(self.mode, SmtpMode::Tls)))
+    }
 }
 
 #[async_trait]
@@ -343,19 +399,50 @@ impl EmailProvider for SmtpProvider {
     }
 
     async fn send(&self, email: &OutboundEmail) -> Result<SendResult, Error> {
-        let message = build_lettre_message(email)?;
-        self.transport.send(message).await?;
+        let builder = self.builder()?;
+        if matches!(self.mode, SmtpMode::Plain) {
+            let mut client = builder.connect_plain().await.map_err(SmtpError::Delivery)?;
+            client
+                .send(build_message(email)?)
+                .await
+                .map_err(SmtpError::Delivery)?;
+            client.quit().await.map_err(SmtpError::Delivery)?;
+        } else {
+            let mut client = builder.connect().await.map_err(SmtpError::Delivery)?;
+            client
+                .send(build_message(email)?)
+                .await
+                .map_err(SmtpError::Delivery)?;
+            client.quit().await.map_err(SmtpError::Delivery)?;
+        }
         Ok(SendResult::default())
     }
 
     async fn test_connection(&self, _from: &Mailbox) -> Result<(), Error> {
-        self.transport.test_connection().await?;
+        let builder = self.builder()?;
+        if matches!(self.mode, SmtpMode::Plain) {
+            builder
+                .connect_plain()
+                .await
+                .map_err(SmtpError::Delivery)?
+                .quit()
+                .await
+                .map_err(SmtpError::Delivery)?;
+        } else {
+            builder
+                .connect()
+                .await
+                .map_err(SmtpError::Delivery)?
+                .quit()
+                .await
+                .map_err(SmtpError::Delivery)?;
+        }
         Ok(())
     }
 }
 
 struct SendmailProvider {
-    transport: AsyncSendmailTransport<Tokio1Executor>,
+    command: OsString,
 }
 
 #[async_trait]
@@ -365,13 +452,41 @@ impl EmailProvider for SendmailProvider {
     }
 
     async fn send(&self, email: &OutboundEmail) -> Result<SendResult, Error> {
-        let message = build_lettre_message(email)?;
-        self.transport.send(message).await?;
+        let message = build_raw_message(email)?;
+        let mut command = Command::new(&self.command);
+        command
+            .kill_on_drop(true)
+            .arg("-i")
+            .arg("-f")
+            .arg(email.from.email.as_ref())
+            .arg("--")
+            .args(email.to.iter().map(|mailbox| mailbox.email.as_ref()))
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+
+        let mut child = command.spawn().map_err(SendmailError::Io)?;
+        let mut stdin = child.stdin.take().ok_or(SendmailError::MissingStdin)?;
+        stdin.write_all(&message).await.map_err(SendmailError::Io)?;
+        drop(stdin);
+
+        let status = child.wait().await.map_err(SendmailError::Io)?;
+        if !status.success() {
+            return Err(SendmailError::Exit(status).into());
+        }
         Ok(SendResult::default())
     }
 
     async fn test_connection(&self, _from: &Mailbox) -> Result<(), Error> {
         Ok(())
+    }
+}
+
+const fn default_smtp_port(mode: SmtpMode) -> u16 {
+    match mode {
+        SmtpMode::Plain => 25,
+        SmtpMode::StartTls => 587,
+        SmtpMode::Tls => 465,
     }
 }
 

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use lettre::message::Mailbox;
+use coauth_email_types::Mailbox;
 use reqwest::{Client, Method, StatusCode};
 use serde::{Deserialize, Serialize};
 use url::Url;

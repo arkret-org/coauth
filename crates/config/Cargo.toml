@@ -32,6 +32,7 @@ workspace = true
 anyhow = {workspace = true}
 camino = {workspace = true}
 chrono = {workspace = true}
+coauth-email-types = {workspace = true}
 coauth-iana = {workspace = true}
 coauth-jose = {workspace = true}
 coauth-keystore = {workspace = true}
@@ -41,7 +42,6 @@ futures-util = {workspace = true}
 hex = {workspace = true}
 indoc = {workspace = true}
 ipnetwork = {workspace = true}
-lettre = {workspace = true}
 pem-rfc7468 = {workspace = true}
 rand = {workspace = true}
 rand_chacha = {workspace = true}

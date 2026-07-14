@@ -1,6 +1,7 @@
 use std::str::FromStr as _;
 
 use chrono::{DateTime, Utc};
+use coauth_email_types::Address;
 use coauth_iana::oauth::PkceCodeChallengeMethod;
 use coauth_oauth_types::pkce::{CodeChallengeError, CodeChallengeMethodExt};
 use coauth_oauth_types::requests::ResponseMode;
@@ -151,7 +152,7 @@ impl AuthorizationGrantStage {
 /// Parsed login hint for the authorization grant.
 pub enum LoginHint<'a> {
     Username(&'a str),
-    Email(lettre::Address),
+    Email(Address),
     None,
 }
 
@@ -194,7 +195,7 @@ impl AuthorizationGrant {
             return LoginHint::None;
         };
 
-        if let Ok(email) = lettre::Address::from_str(login_hint) {
+        if let Ok(email) = Address::from_str(login_hint) {
             LoginHint::Email(email)
         } else if !login_hint.trim().is_empty()
             && !login_hint.contains(':')

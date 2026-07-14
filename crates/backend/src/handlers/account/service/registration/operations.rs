@@ -5,9 +5,9 @@ use coauth_data::user::{
     UserEmailFilter, UserEmailRepository, UserPhoneRepository, UserRepository,
 };
 use coauth_data::{BoxRepository, Clock, RepositoryAccess, UserRegistration};
+use coauth_email_types::Address;
 use coauth_policy::PolicyFactory;
 use coauth_principal::ConnectorAdmin;
-use lettre::Address;
 use rand_chacha::rand_core::CryptoRngCore;
 use ulid::Ulid;
 use zeroize::Zeroizing;

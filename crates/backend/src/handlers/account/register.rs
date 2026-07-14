@@ -12,7 +12,7 @@ use coauth_data::RepositoryAccess as _;
 use coauth_data::user::{
     UserEmailRepository as _, UserRegistrationRepository as _, UserRepository as _,
 };
-use lettre::Address;
+use coauth_email_types::Address;
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};

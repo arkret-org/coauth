@@ -17,7 +17,7 @@ use coauth_data::{
     BoxRepository, Clock, RepositoryAccess, RepositoryError, UserRecoverySession,
     UserRecoveryTicket,
 };
-use lettre::Address;
+use coauth_email_types::Address;
 use rand_chacha::rand_core::CryptoRngCore;
 use rand_core::RngCore;
 use thiserror::Error;

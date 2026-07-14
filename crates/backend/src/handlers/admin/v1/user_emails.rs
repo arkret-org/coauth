@@ -60,7 +60,7 @@ pub async fn add_email(
         .ok_or_else(|| AppError::not_found(format!("User ID {} not found", body.user_id)))?;
 
     // Ensure the provided address is syntactically valid
-    if let Err(source) = lettre::Address::from_str(&body.email) {
+    if let Err(source) = coauth_email_types::Address::from_str(&body.email) {
         return Err(AppError::with_source(
             StatusCode::BAD_REQUEST,
             format!("Email {:?} is not valid", body.email),

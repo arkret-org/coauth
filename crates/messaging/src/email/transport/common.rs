@@ -3,9 +3,11 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use lettre::Message;
-use lettre::message::header::{HeaderName, HeaderValue};
-use lettre::message::{Mailbox, MultiPart, SinglePart};
+use coauth_email_types::Mailbox;
+use mail_builder::MessageBuilder;
+use mail_builder::headers::address::Address as HeaderAddress;
+use mail_builder::headers::raw::Raw;
+use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::{RequestBuilder, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -31,17 +33,17 @@ pub(crate) struct ProviderTag<'a> {
     pub(crate) value: &'a str,
 }
 
-pub(crate) fn build_lettre_message(email: &OutboundEmail) -> Result<Message, Error> {
-    let mut builder = Message::builder()
-        .from(email.from.clone())
-        .subject(email.subject.trim());
+pub(crate) fn build_message(email: &OutboundEmail) -> Result<MessageBuilder<'static>, Error> {
+    let mut builder = MessageBuilder::new()
+        .from(header_address(&email.from))
+        .subject(email.subject.trim().to_owned());
 
     if let Some(reply_to) = &email.reply_to {
-        builder = builder.reply_to(reply_to.clone());
+        builder = builder.reply_to(header_address(reply_to));
     }
 
     for mailbox in &email.to {
-        builder = builder.to(mailbox.clone());
+        builder = builder.to(header_address(mailbox));
     }
 
     for (name, value) in &email.headers {
@@ -52,24 +54,36 @@ pub(crate) fn build_lettre_message(email: &OutboundEmail) -> Result<Message, Err
             ));
         }
 
-        let header_name = HeaderName::new_from_ascii(name.clone()).map_err(|_| {
+        HeaderName::from_bytes(name.as_bytes()).map_err(|_| {
             provider_client_error(
                 "invalid_header_name",
                 format!("header {name} is not a valid RFC 5322 header name"),
             )
         })?;
+        HeaderValue::try_from(value).map_err(|_| {
+            provider_client_error(
+                "invalid_header_value",
+                format!("header {name} contains invalid control characters"),
+            )
+        })?;
 
-        builder = builder.raw_header(HeaderValue::new(header_name, value.clone()));
+        builder = builder.header(name.clone(), Raw::new(value.clone()));
     }
 
-    match &email.html_body {
-        Some(html) => builder.multipart(MultiPart::alternative_plain_html(
-            email.text_body.clone(),
-            html.clone(),
-        )),
-        None => builder.singlepart(SinglePart::plain(email.text_body.clone())),
+    builder = builder.text_body(email.text_body.clone());
+    if let Some(html) = &email.html_body {
+        builder = builder.html_body(html.clone());
     }
-    .map_err(Error::from)
+
+    Ok(builder)
+}
+
+pub(crate) fn build_raw_message(email: &OutboundEmail) -> Result<Vec<u8>, Error> {
+    build_message(email).and_then(|message| message.write_to_vec().map_err(Error::Message))
+}
+
+fn header_address(mailbox: &Mailbox) -> HeaderAddress<'static> {
+    HeaderAddress::new_address(mailbox.name.clone(), mailbox.email.to_string())
 }
 
 pub(crate) async fn execute_provider_request(request: RequestBuilder) -> Result<SendResult, Error> {

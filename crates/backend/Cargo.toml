@@ -25,6 +25,7 @@ coauth-account-types = {workspace = true,features = ["schema"]}
 coauth-admin-types = {workspace = true,features = ["schema"]}
 coauth-config = {workspace = true}
 coauth-data = {workspace = true}
+coauth-email-types = {workspace = true}
 coauth-i18n = {workspace = true}
 coauth-iana = {workspace = true}
 coauth-jose = {workspace = true}
@@ -62,7 +63,6 @@ icu_normalizer = {workspace = true}
 indexmap = {workspace = true}
 ipnetwork = {workspace = true}
 language-tags = {workspace = true}
-lettre = {workspace = true}
 listenfd = {workspace = true}
 mime = {workspace = true}
 minijinja = {workspace = true}

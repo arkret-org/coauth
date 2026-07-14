@@ -335,7 +335,7 @@ async fn aws_ses_send_signs_and_embeds_raw_mime_message() {
                         "Value": "auth"
                     }])
                 && message.contains("Subject: Production check")
-                && message.contains("Reply-To: Support <support@example.com>")
+                && message.contains("Reply-To: \"Support\" <support@example.com>")
                 && message.contains("X-Test: 1")
                 && message.contains("Plain body")
         })

@@ -6,13 +6,13 @@ use async_trait::async_trait;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use chrono::Utc;
-use lettre::message::Mailbox;
+use coauth_email_types::Mailbox;
 use reqwest::{Client, Method, RequestBuilder, StatusCode};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 use super::common::{
-    build_lettre_message, execute_optional_provider_json_request, execute_provider_json_request,
+    build_raw_message, execute_optional_provider_json_request, execute_provider_json_request,
     execute_provider_request, provider_client_error, provider_url, sender_domain,
 };
 use super::{EmailProvider, Error, OutboundEmail, SendResult};
@@ -94,7 +94,7 @@ impl EmailProvider for AwsSesProvider {
     }
 
     async fn send(&self, email: &OutboundEmail) -> Result<SendResult, Error> {
-        let raw_message = build_lettre_message(email)?.formatted();
+        let raw_message = build_raw_message(email)?;
         let payload = AwsSesRequest {
             from_email_address: email.from.email.to_string(),
             destination: AwsSesDestination {

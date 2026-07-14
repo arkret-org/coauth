@@ -2,8 +2,8 @@
 
 use std::collections::BTreeMap;
 
+use coauth_email_types::Mailbox;
 use coauth_templates::{EmailRecoveryContext, EmailVerificationContext, Templates, WithLanguage};
-use lettre::message::Mailbox;
 use thiserror::Error;
 
 use super::transport::{Error as TransportError, Transport as MailTransport};

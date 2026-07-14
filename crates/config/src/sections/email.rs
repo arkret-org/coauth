@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU16;
 use std::str::FromStr;
 
-use lettre::message::Mailbox;
+use coauth_email_types::Mailbox;
 use schemars::JsonSchema;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
