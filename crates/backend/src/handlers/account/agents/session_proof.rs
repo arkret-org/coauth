@@ -289,21 +289,9 @@ pub async fn validate_agent_session_proof(
         .agent_scope_request
         .as_ref()
         .map(|scope| AgentScopeRequestInput {
-            realm_ids: scope
-                .realm_ids
-                .iter()
-                .map(ToString::to_string)
-                .collect(),
-            strand_ids: scope
-                .strand_ids
-                .iter()
-                .map(ToString::to_string)
-                .collect(),
-            track_names: scope
-                .track_names
-                .iter()
-                .map(ToString::to_string)
-                .collect(),
+            realm_ids: scope.realm_ids.iter().map(ToString::to_string).collect(),
+            strand_ids: scope.strand_ids.iter().map(ToString::to_string).collect(),
+            track_names: scope.track_names.iter().map(ToString::to_string).collect(),
             participation: Vec::new(),
         })
         .unwrap_or_default();

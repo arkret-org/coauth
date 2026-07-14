@@ -17,8 +17,8 @@
 //! or initialise a principal's cross-signing keys it MUST:
 //!   1. Read the principal's current accepted generation (from the principal-server
 //!      `ak.self.account.query.describe` or local cache),
-//!   2. Build a [`CrossSigningPublishContent`] with `expected_previous_generation =
-//!      current_accepted` and `generation = current_accepted + 1`,
+//!   2. Build a [`CrossSigningPublish`] with `expected_previous_generation = current_accepted` and
+//!      `generation = current_accepted + 1`,
 //!   3. Use [`cross_signing_publish_cell_subject(principal_id, expected_previous_generation)`] for
 //!      the lattice cell key.
 //!
@@ -26,11 +26,10 @@
 //! current generation MUST fetch it first; the engine returns
 //! [`CrossSigningPublishError::GenerationUnknown`] rather than guess.
 
-use arkret_core::{Did, TypedTrustDomainId};
-use arkret_crypto::{
-    CrossSigningKeyRecord, CrossSigningPublishContent, SignedCrossSigningKey,
-    cross_signing_publish_cell_subject,
+use arkret_core::{
+    CrossSigningPublish, Did, PublishedKey, SubordinateSignedKey, TypedTrustDomainId,
 };
+use arkret_crypto::cross_signing_publish_cell_subject;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
@@ -47,7 +46,7 @@ pub enum CrossSigningPublishError {
     SdkValidation(String),
 }
 
-/// Build a round-4 `CrossSigningPublishContent` with CAS bookkeeping
+/// Build a round-4 `CrossSigningPublish` with CAS bookkeeping
 /// pre-filled. Callers supply the **currently accepted** generation
 /// (`current_accepted_generation`); the helper sets
 /// `expected_previous_generation = current` and
@@ -61,20 +60,24 @@ pub enum CrossSigningPublishError {
 pub fn build_publish_content(
     principal_id: Did,
     trust_domain: TypedTrustDomainId,
-    principal_signing_key: CrossSigningKeyRecord,
-    self_signing_key: SignedCrossSigningKey,
-    user_signing_key: SignedCrossSigningKey,
+    principal_signing_key: PublishedKey,
+    self_signing_key: SubordinateSignedKey,
+    user_signing_key: SubordinateSignedKey,
     current_accepted_generation: u64,
     issued_at: DateTime<Utc>,
-) -> Result<CrossSigningPublishContent, CrossSigningPublishError> {
-    let content = CrossSigningPublishContent {
+) -> Result<CrossSigningPublish, CrossSigningPublishError> {
+    let generation = current_accepted_generation.checked_add(1).ok_or_else(|| {
+        CrossSigningPublishError::SdkValidation("cross-signing generation overflow".to_owned())
+    })?;
+    let content = CrossSigningPublish {
         principal_id,
         trust_domain,
         principal_signing_key,
         self_signing_key,
         user_signing_key,
         expected_previous_generation: current_accepted_generation,
-        generation: current_accepted_generation + 1,
+        generation: std::num::NonZeroU64::new(generation)
+            .expect("incremented generation is non-zero"),
         issued_at,
     };
     content
@@ -93,7 +96,7 @@ pub fn publish_cell_subject(principal_id: &Did, expected_previous_generation: u6
 
 #[cfg(test)]
 mod tests {
-    use arkret_crypto::CrossSigningBinding;
+    use arkret_core::{KeyFormat, NonEmptyString, SubordinateSignedKeyBinding};
 
     use super::*;
 
@@ -105,27 +108,25 @@ mod tests {
         TypedTrustDomainId::new("ak:trust_domain:example.net").unwrap()
     }
 
-    fn psk(kid: &str) -> CrossSigningKeyRecord {
-        CrossSigningKeyRecord {
-            kid: kid.to_owned(),
-            alg: "Ed25519".to_owned(),
-            public_key: format!("pubkey-{kid}"),
-            key_format: "raw_base64url".to_owned(),
+    fn psk(kid: &str) -> PublishedKey {
+        PublishedKey {
+            kid: NonEmptyString::new(kid).unwrap(),
+            alg: NonEmptyString::new("Ed25519").unwrap(),
+            public_key: NonEmptyString::new(format!("pubkey-{kid}")).unwrap(),
+            key_format: KeyFormat::RawBase64url,
         }
     }
 
-    fn ssk(kid: &str, psk_kid: &str, pub_suffix: &str) -> SignedCrossSigningKey {
-        SignedCrossSigningKey {
-            key: CrossSigningKeyRecord {
-                kid: kid.to_owned(),
-                alg: "Ed25519".to_owned(),
-                public_key: format!("pubkey-{pub_suffix}"),
-                key_format: "raw_base64url".to_owned(),
-            },
-            binding: CrossSigningBinding {
-                verification_method: psk_kid.to_owned(),
-                alg: "Ed25519".to_owned(),
-                signature: "sig".to_owned(),
+    fn ssk(kid: &str, psk_kid: &str, pub_suffix: &str) -> SubordinateSignedKey {
+        SubordinateSignedKey {
+            kid: NonEmptyString::new(kid).unwrap(),
+            alg: NonEmptyString::new("Ed25519").unwrap(),
+            public_key: NonEmptyString::new(format!("pubkey-{pub_suffix}")).unwrap(),
+            key_format: KeyFormat::RawBase64url,
+            binding: SubordinateSignedKeyBinding {
+                verification_method: NonEmptyString::new(psk_kid).unwrap(),
+                alg: NonEmptyString::new("Ed25519").unwrap(),
+                signature: NonEmptyString::new("sig").unwrap(),
             },
         }
     }
@@ -144,7 +145,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(content.expected_previous_generation, 0);
-        assert_eq!(content.generation, 1);
+        assert_eq!(content.generation.get(), 1);
     }
 
     #[test]
@@ -161,7 +162,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(content.expected_previous_generation, 5);
-        assert_eq!(content.generation, 6);
+        assert_eq!(content.generation.get(), 6);
     }
 
     #[test]

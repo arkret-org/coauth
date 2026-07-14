@@ -28,8 +28,9 @@ use arkret_core::error::{
 };
 use arkret_core::{
     AccountDeviceEnrollOutcome, AccountDeviceEnrollRequestBody, Audience, DeviceAuthorizePayload,
-    DeviceEnrollmentAuthorityBinding, DeviceOrPrincipalRef, Did, Event, EventId, EventRequirements,
-    Hlc, RealmId, ed25519_pubkey_to_did_key_multibase,
+    DeviceEnrollmentAuthorityBinding, DeviceEnrollmentAuthorityBindingKind, DeviceOrPrincipalRef,
+    Did, Event, EventId, EventRequirements, Hlc, NonEmptyString, RealmId,
+    ed25519_pubkey_to_did_key_multibase,
 };
 use arkret_signatures::{SignEventOptions, sign_event};
 use chrono::{DateTime, Utc};
@@ -41,7 +42,6 @@ use crate::services::device_enrollment_authority::enrollment_authority;
 
 const DEVICE_AUTHORIZE_KIND: &str = "ak.device.authorize";
 const ENROLLMENT_AUTHORITY_SERVICE_FRAGMENT: &str = "#enrollment-authority";
-const ENROLLMENT_BINDING_KIND: &str = "service_attested";
 
 /// Extract the `Authorization: Bearer <token>` value (the caller's
 /// `ak.session.grant`), or a 401.
@@ -382,10 +382,18 @@ pub async fn device_enroll_endpoint(
 
     let payload = DeviceAuthorizePayload {
         principal_id: principal_id.clone(),
-        device_id: device_id.as_str().to_owned(),
-        device_public_key: device_public_key_multibase,
-        hpke_key: body.hpke_key.clone(),
-        algorithms: body.algorithms.clone(),
+        device_id,
+        device_public_key: NonEmptyString::new(device_public_key_multibase)
+            .expect("encoded Ed25519 public key is non-empty"),
+        hpke_key: NonEmptyString::new(body.hpke_key.clone())
+            .map_err(|error| ArkretRouteError::BadRequest(format!("invalid hpke_key: {error}")))?,
+        algorithms: body
+            .algorithms
+            .iter()
+            .cloned()
+            .map(NonEmptyString::new)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| ArkretRouteError::BadRequest(format!("invalid algorithm: {error}")))?,
         device_key_algorithm: None,
         authorized_by: DeviceOrPrincipalRef::Did(authority_did.clone()),
         scopes: None,
@@ -396,9 +404,10 @@ pub async fn device_enroll_endpoint(
         cross_signing_binding: None,
         bootstrap_binding: None,
         enrollment_authority_binding: Some(DeviceEnrollmentAuthorityBinding {
-            kind: ENROLLMENT_BINDING_KIND.to_owned(),
+            kind: DeviceEnrollmentAuthorityBindingKind::ServiceAttested,
             authority_did: authority_did.clone(),
-            authorization_ref: authorization_ref.clone(),
+            authorization_ref: NonEmptyString::new(authorization_ref.clone())
+                .expect("principal enrollment authority reference is non-empty"),
         }),
         recovery_session_id: None,
     };
