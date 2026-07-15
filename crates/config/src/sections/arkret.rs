@@ -814,7 +814,7 @@ mod tests {
     }
 
     #[test]
-    fn stale_operator_did_fields_are_rejected() {
+    fn stale_service_identity_fields_are_rejected() {
         assert!(
             serde_json::from_value::<ArkretConfig>(serde_json::json!({
                 "service_id": "did:webvh:zold:auth.example:webvh:service"
@@ -831,6 +831,33 @@ mod tests {
             }))
             .is_err()
         );
+        assert!(
+            serde_json::from_value::<ArkretConfig>(serde_json::json!({
+                "principal_servers": [{
+                    "name": "principal-a",
+                    "endpoint": "https://principal.example/",
+                    "did": "did:webvh:zold:principal.example:webvh:service"
+                }]
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn principal_server_config_persists_endpoint_without_runtime_identity() {
+        let config: ArkretConfig = serde_json::from_value(serde_json::json!({
+            "principal_servers": [{
+                "name": "principal-a",
+                "endpoint": "https://principal.example/"
+            }]
+        }))
+        .unwrap();
+
+        let serialized = serde_json::to_value(&config.principal_servers[0]).unwrap();
+        assert_eq!(serialized["name"], "principal-a");
+        assert_eq!(serialized["endpoint"], "https://principal.example/");
+        assert!(serialized.get("audience").is_none());
+        assert!(serialized.get("did").is_none());
     }
 
     #[test]
@@ -908,39 +935,5 @@ mod tests {
             ..ArkretConfig::default()
         };
         assert!(config.validate(&figment).is_err());
-    }
-
-    #[test]
-    fn principal_server_audience_normalizes_non_empty_values() {
-        let server = PrincipalServerConfig {
-            name: "soland".to_owned(),
-            audience: Some("  did:webvh:scid:soland.example:webvh:service  ".to_owned()),
-            endpoint: Url::parse("https://soland.example").unwrap(),
-            did: None,
-            session_grant_introspection_bearer: None,
-            embedded_webvh_registration_bearer: None,
-        };
-
-        assert_eq!(
-            server.normalized_audience(),
-            Some("did:webvh:scid:soland.example:webvh:service")
-        );
-    }
-
-    #[test]
-    fn principal_server_audience_rejects_empty_and_whitespace_values() {
-        for audience in ["", " \t\r\n "] {
-            let mut config = valid_service_config();
-            config.principal_servers.push(PrincipalServerConfig {
-                name: "soland".to_owned(),
-                audience: Some(audience.to_owned()),
-                endpoint: Url::parse("https://soland.example").unwrap(),
-                did: None,
-                session_grant_introspection_bearer: None,
-                embedded_webvh_registration_bearer: None,
-            });
-
-            assert!(config.validate(&figment::Figment::new()).is_err());
-        }
     }
 }
