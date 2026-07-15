@@ -1,6 +1,6 @@
 use arkret_core::error::ERROR_CODE_SCHEMA_VIOLATION;
 use arkret_core::{
-    DeviceId, SessionGrantIntrospectGrant, SessionGrantIntrospectOutcome,
+    DeviceId, Did, SessionGrantIntrospectGrant, SessionGrantIntrospectOutcome,
     SessionGrantIntrospectRequestBody, SessionGrantIntrospectStatus,
     SessionGrantIntrospectionProof, SessionGrantScopeDetails,
 };
@@ -60,6 +60,11 @@ fn introspection_grant_record(
                 "stored session grant device_id is invalid: {error}"
             )))
         })?;
+    let audience = Did::new(grant.audience.clone()).map_err(|error| {
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "stored session grant audience is not a DID: {error}"
+        )))
+    })?;
 
     Ok(SessionGrantIntrospectGrant {
         id: grant.grant_id.clone(),
@@ -67,7 +72,7 @@ fn introspection_grant_record(
         subject: grant.subject.clone(),
         service_account_id,
         device_id,
-        audience: grant.audience.clone(),
+        audience,
         scopes: grant
             .scope
             .iter()
@@ -287,8 +292,12 @@ pub async fn introspect_session_grant(
     } else {
         None
     };
-    let mut status =
-        introspection_status(&grant, user.as_ref(), clock.now(), body.audience.as_deref());
+    let mut status = introspection_status(
+        &grant,
+        user.as_ref(),
+        clock.now(),
+        body.audience.as_ref().map(Did::as_str),
+    );
     let mut proof_required = false;
     if status == SessionGrantIntrospectStatus::Active {
         match body.proof.as_ref() {

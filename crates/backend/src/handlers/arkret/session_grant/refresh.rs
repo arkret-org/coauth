@@ -7,8 +7,8 @@ use arkret_core::error::{
     ERROR_CODE_SESSION_LOGGED_OUT, REASON_PROOF_INVALID,
 };
 use arkret_core::{
-    DeviceId, Hash, SessionGrantProofKind, SessionGrantRefreshOutcome, SessionGrantRefreshProof,
-    SessionGrantRefreshRequestBody,
+    DeviceId, Did, Hash, SessionGrantProofKind, SessionGrantRefreshOutcome,
+    SessionGrantRefreshProof, SessionGrantRefreshRequestBody,
 };
 use chrono::{DateTime, Utc};
 use coauth_jose::jwt::Jwt;
@@ -96,6 +96,16 @@ fn required_proof_str<'a>(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
+        .ok_or_else(|| did_proof_required(format!("soft logout DID proof requires {field}")))
+}
+
+fn required_proof_did<'a>(
+    value: &'a Option<Did>,
+    field: &str,
+) -> Result<&'a str, ArkretRouteError> {
+    value
+        .as_ref()
+        .map(Did::as_str)
         .ok_or_else(|| did_proof_required(format!("soft logout DID proof requires {field}")))
 }
 
@@ -305,7 +315,7 @@ async fn verify_soft_logout_did_proof(
     validate_soft_logout_proof_kind(proof.proof_kind)?;
 
     let challenge = required_proof_str(&proof.challenge, "challenge")?;
-    let proof_audience = required_proof_str(&proof.audience, "audience")?;
+    let proof_audience = required_proof_did(&proof.audience, "audience")?;
     let request_canonical_digest =
         required_proof_hash(&proof.request_canonical_digest, "request_canonical_digest")?;
     let proof_jws = required_proof_str(&proof.signature, "signature")?;
@@ -586,8 +596,8 @@ pub async fn refresh_session_grant(
     // one Principal Server must not be able to rotate it into a grant for a
     // different audience (which it could then exchange there). Ignore any
     // client-supplied audience; reject an explicit mismatch defensively.
-    if let Some(requested) = body.audience.as_deref()
-        && requested != prior_grant.audience
+    if let Some(requested) = body.audience.as_ref()
+        && requested.as_str() != prior_grant.audience
     {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
@@ -670,12 +680,18 @@ pub async fn refresh_session_grant(
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
+    let response_audience = Did::new(new_material.audience.clone()).map_err(|error| {
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "refreshed grant carried a non-DID audience: {error}"
+        )))
+    })?;
+
     Ok(Json(SessionGrantRefreshOutcome {
         grant_id: persisted.grant_id,
         grant_jwt: new_material.grant_jwt,
         session_public_key: new_material.session_public_key,
         expires_at: new_material.expires_at_timestamp,
-        audience: new_material.audience,
+        audience: response_audience,
         scopes: new_material.scopes,
         dpop_jkt: verification.jkt,
         // The prior grant was atomically consumed by the CAS above.

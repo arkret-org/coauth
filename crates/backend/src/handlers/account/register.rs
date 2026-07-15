@@ -596,7 +596,12 @@ pub async fn post_webvh_finish(
         != "webvh"
         || input.did_operation.seq != Some(1)
         || input.did_operation.prev_event_digest.is_some()
-        || input.did_operation.proofs.is_empty()
+        || input
+            .did_operation
+            .operation
+            .get("proof")
+            .and_then(serde_json::Value::as_array)
+            .is_none_or(Vec::is_empty)
     {
         return Ok(Json(webvh_finish_error(
             "client_signed_webvh_inception_required",

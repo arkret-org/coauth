@@ -76,7 +76,7 @@ pub async fn issue_session_grant_endpoint(
                 expected_principal_id,
                 // The proof carries the requested audience; the grant target
                 // resolver intersects it with the configured principal servers.
-                requested_audience: Some(proof.audience.clone()),
+                requested_audience: Some(proof.audience.to_string()),
             };
 
             let success = exchange_oidc_code_for_session_grant(req, depot, dpop_binding, input)
@@ -107,6 +107,12 @@ pub async fn issue_session_grant_endpoint(
                         format!("issued grant carried a non-protocol grant_id: {e}"),
                     ))
                 })?;
+            let audience =
+                arkret_core::Did::new(success.session_grant.audience.clone()).map_err(|e| {
+                    ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                        format!("issued grant carried a non-DID audience: {e}"),
+                    ))
+                })?;
 
             Ok(Json(arkret_core::SessionGrantOutcome {
                 principal_id,
@@ -115,7 +121,7 @@ pub async fn issue_session_grant_endpoint(
                 expires_at: success.session_grant.expires_at_timestamp,
                 grant_id: Some(grant_id),
                 session_public_key: Some(success.session_grant.session_public_key.clone()),
-                audience: Some(success.session_grant.audience.clone()),
+                audience: Some(audience),
                 granted_scope: success.session_grant.scopes.clone(),
                 scope_details: None,
             }))
@@ -244,7 +250,7 @@ async fn issue_agent_key_proof_session_grant(
     // value so the sub-repo borrow is released before `repo.cancel()`.
     let controller_binding = repo
         .principal_did()
-        .get_by_did_and_audience(&authorization.controller_id, &audience)
+        .get_by_did_and_audience(&authorization.controller_id, audience.as_str())
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let controller_blocked = if let Some(binding) = controller_binding {
@@ -283,7 +289,7 @@ async fn issue_agent_key_proof_session_grant(
         &arkret_config,
         &key_store,
         &authorization.agent_id,
-        audience,
+        audience.to_string(),
         authorization.granted_scope.clone(),
         dpop_binding.jkt.clone(),
         session_public_key,
@@ -317,6 +323,11 @@ async fn issue_agent_key_proof_session_grant(
             "issued agent grant carried a non-protocol grant_id: {e}"
         )))
     })?;
+    let wire_audience = arkret_core::Did::new(material.audience.clone()).map_err(|e| {
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "issued agent grant carried a non-DID audience: {e}"
+        )))
+    })?;
 
     Ok(Json(arkret_core::SessionGrantOutcome {
         principal_id,
@@ -325,7 +336,7 @@ async fn issue_agent_key_proof_session_grant(
         expires_at: material.expires_at_timestamp,
         grant_id: Some(grant_id),
         session_public_key: Some(material.session_public_key.clone()),
-        audience: Some(material.audience.clone()),
+        audience: Some(wire_audience),
         granted_scope: material.scopes,
         scope_details: Some(authorization.wire_scope_details),
     }))

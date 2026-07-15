@@ -164,7 +164,7 @@ pub async fn validate_agent_session_proof(
         url_builder,
         arkret_config,
         crate::services::resolved_principal_audiences::shared(),
-        &proof.audience,
+        proof.audience.as_str(),
     ) {
         tracing::warn!(agent_id, verification_method, audience = %proof.audience, "agent_key_proof rejected: audience is not configured");
         return Err(AgentAuthRejection::ProofInvalid.into());
@@ -222,7 +222,7 @@ pub async fn validate_agent_session_proof(
         now,
         &agent_id,
         verification_method,
-        &proof.audience,
+        proof.audience.as_str(),
     ) {
         tracing::warn!(agent_id, verification_method, authorization_ref, audience = %proof.audience, "agent_key_proof rejected: authorization binding mismatch");
         return Err(error.into());
@@ -230,7 +230,7 @@ pub async fn validate_agent_session_proof(
     // Verify the proof signature over the same canonical signed-fields shape
     // the pairing PoP used, against the authorized public key.
     let signed_fields = ProofSignedFields {
-        audience: &proof.audience,
+        audience: proof.audience.as_str(),
         challenge: &proof.challenge,
         nonce: Some(nonce),
         expires_at,
@@ -272,7 +272,7 @@ pub async fn validate_agent_session_proof(
                 challenge: proof.challenge.clone(),
                 nonce: nonce.to_owned(),
                 request_canonical_digest: proof.request_canonical_digest.as_str().to_owned(),
-                audience: proof.audience.clone(),
+                audience: proof.audience.to_string(),
                 proof_expires_at: expires_at,
                 prune_after,
             },
@@ -2068,7 +2068,7 @@ mod tests {
                     "0".repeat(64)
                 ))
                 .unwrap(),
-                audience: "https://arkret.example/_arkret".to_owned(),
+                audience: arkret_core::Did::new("did:web:soland.example").unwrap(),
                 expires_at: Some(chrono::Utc::now() + chrono::Duration::minutes(5)),
                 signature: "sig-a".to_owned(),
                 verification_method: Some("did:web:agent.example#runtime-key-1".to_owned()),
