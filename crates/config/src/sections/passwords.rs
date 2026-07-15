@@ -105,6 +105,7 @@ pub struct PasswordsConfig {
     /// Minimum zxcvbn complexity score (0-4):
     ///   0 = <100 guesses, 1 = <10k, 2 = <1M, 3 = <100M, 4 = beyond
     #[serde(default = "default_min_complexity")]
+    #[schemars(range(min = 0, max = 4))]
     minimum_complexity: u8,
 }
 
@@ -196,6 +197,12 @@ impl ConfigurationSection for PasswordsConfig {
             err
         };
 
+        if self.minimum_complexity > 4 {
+            return Err(
+                make_err("Minimum password complexity must be between 0 and 4".into()).into(),
+            );
+        }
+
         // Nothing to validate when password auth is off
         if !self.enabled {
             return Ok(());
@@ -216,5 +223,25 @@ impl ConfigurationSection for PasswordsConfig {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use figment::Figment;
+
+    use super::PasswordsConfig;
+    use crate::ConfigurationSection;
+
+    #[test]
+    fn rejects_password_complexity_above_zxcvbn_range() {
+        let mut config = PasswordsConfig::default();
+        config.minimum_complexity = 5;
+
+        let error = config
+            .validate(&Figment::new())
+            .expect_err("out-of-range complexity must be rejected");
+
+        assert!(error.to_string().contains("between 0 and 4"));
     }
 }

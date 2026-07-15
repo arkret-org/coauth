@@ -269,7 +269,7 @@ pub struct SiteConfig {
     #[serde(default)]
     pub bootstrap_admin_token_enabled: bool,
     #[serde(default)]
-    pub minimum_password_complexity: i32,
+    pub minimum_password_complexity: u8,
     #[serde(default)]
     pub imprint: Option<String>,
     #[serde(default)]

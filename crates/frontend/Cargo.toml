@@ -16,6 +16,7 @@ workspace = true
 chrono = {workspace = true,features = ["wasmbind"]}
 coauth-account-types = {workspace = true}
 dioxus = {workspace = true}
+fluent-bundle = {workspace = true}
 gloo-timers = {workspace = true}
 js-sys = {workspace = true}
 reqwest = {workspace = true,features = ["json"]}
@@ -25,4 +26,6 @@ serde_json = {workspace = true}
 tracing = {workspace = true}
 wasm-bindgen = {workspace = true}
 wasm-bindgen-futures = {workspace = true}
-web-sys = {workspace = true}
+unic-langid = {workspace = true}
+web-sys = {workspace = true,features = ["Navigator", "NodeList"]}
+zxcvbn = {workspace = true}

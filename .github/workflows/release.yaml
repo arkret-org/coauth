@@ -41,7 +41,7 @@ jobs:
 
     steps:
       - name: Fetch repository with full history
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           # Full clone required for accurate git describe output
           fetch-depth: 0
@@ -142,7 +142,7 @@ jobs:
 
     steps:
       - name: Fetch repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           path: coauth
 
@@ -152,7 +152,7 @@ jobs:
         run: bash coauth/.ci/checkout-sibling.sh arkret-rust-sdk arkret-rust-sdk
 
       - name: Configure Docker Buildx
-        uses: docker/setup-buildx-action@v3.11.1
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
         with:
           buildkitd-config-inline: |
             [registry."docker.io"]
@@ -160,7 +160,7 @@ jobs:
 
       - name: Authenticate with GitHub Container Registry
         if: github.server_url == 'https://github.com'
-        uses: docker/login-action@v3.6.0
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -193,7 +193,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Build release image for ${{ matrix.arch }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: coauth/Dockerfile
@@ -201,8 +201,8 @@ jobs:
           pull: true
           push: ${{ github.server_url == 'https://github.com' }}
           load: ${{ github.server_url != 'https://github.com' }}
-          provenance: false
-          sbom: false
+          provenance: ${{ github.server_url == 'https://github.com' && 'mode=max' || 'false' }}
+          sbom: ${{ github.server_url == 'https://github.com' && 'true' || 'false' }}
           build-args: |
             VERGEN_GIT_DESCRIBE=${{ needs.compute-version.outputs.describe }}
           tags: ${{ steps.arch-tags.outputs.release }}
@@ -228,7 +228,7 @@ jobs:
           docker run --rm "$image" --version
 
       - name: Scan release image with Trivy for ${{ matrix.arch }}
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.arch-tags.outputs.primary }}
           scan-type: image
@@ -257,17 +257,17 @@ jobs:
 
     steps:
       - name: Set up Cosign
-        uses: sigstore/cosign-installer@v4.0.0
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
 
       - name: Configure Docker Buildx
-        uses: docker/setup-buildx-action@v3.11.1
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
         with:
           buildkitd-config-inline: |
             [registry."docker.io"]
               mirrors = ["mirror.gcr.io"]
 
       - name: Authenticate with GitHub Container Registry
-        uses: docker/login-action@v3.6.0
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -332,7 +332,7 @@ jobs:
     steps:
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2.5.0
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
           draft: true
           generate_release_notes: true

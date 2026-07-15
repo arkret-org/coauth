@@ -223,7 +223,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
     rsx! {
         div { class: "login-page",
             div { class: "login-container",
-                h1 { class: "heading-md login-title", "Sign in" }
+                h1 { class: "heading-md login-title", {crate::translations::t("coauth-login-headline")} }
 
                 if let Some(err) = error_text.as_ref() {
                     div {
@@ -258,7 +258,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                             }
                         }
                         div { class: "login-divider",
-                            span { "or" }
+                            span { {crate::translations::t("coauth-login-separator")} }
                         }
                     }
 
@@ -272,7 +272,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                 let user = handle.to_string();
 
                                 if user.trim().is_empty() {
-                                    error.set(Some("Please enter your username or email.".to_owned()));
+                                    error.set(Some(crate::translations::t("coauth-errors-identifier-required")));
                                     return;
                                 }
 
@@ -282,7 +282,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                             },
 
                             div { class: "form-field",
-                                label { class: "form-label", r#for: LOGIN_HANDLE_ID, "Username" }
+                                label { class: "form-label", r#for: LOGIN_HANDLE_ID, {crate::translations::t("common-handle")} }
                                 input {
                                     id: LOGIN_HANDLE_ID,
                                     class: "form-input",
@@ -291,7 +291,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                     required: true,
                                     "aria-invalid": if has_error { "true" } else { "false" },
                                     "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
-                                    placeholder: "Username or email",
+                                    placeholder: crate::translations::t("coauth-login-handle-or-email"),
                                     value: "{handle}",
                                     autofocus: true,
                                     oninput: move |e| handle.set(e.value()),
@@ -302,7 +302,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                 class: "btn btn-primary btn-block",
                                 r#type: "submit",
                                 "data-testid": "coauth-login-identifier-submit",
-                                "Next"
+                                {crate::translations::t("action-continue")}
                             }
                         }
                     } else {
@@ -316,13 +316,13 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                 let pass = password.to_string();
 
                                 if user.trim().is_empty() {
-                                    error.set(Some("Please enter your username or email.".to_owned()));
+                                    error.set(Some(crate::translations::t("coauth-errors-identifier-required")));
                                     step.set(LoginStep::Identifier);
                                     return;
                                 }
 
                                 if pass.is_empty() {
-                                    error.set(Some("Please enter your password.".to_owned()));
+                                    error.set(Some(crate::translations::t("coauth-errors-password-required")));
                                     return;
                                 }
 
@@ -356,15 +356,15 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                         }
                                         Ok(resp) => {
                                             let msg = match resp.error.as_deref() {
-                                                Some("invalid_credentials") => "Invalid username or password.",
-                                                Some("rate_limited") => "Too many attempts. Please try again later.",
-                                                Some("account_deactivated") => "This account has been deactivated.",
-                                                Some("account_locked") => "This account has been locked.",
-                                                Some("password_login_disabled") => "Password login is not available.",
-                                                Some(other) => other,
-                                                None => "Login failed.",
+                                                Some("invalid_credentials") => crate::translations::t("coauth-errors-invalid-credentials"),
+                                                Some("rate_limited") => crate::translations::t("coauth-errors-rate-limit-exceeded"),
+                                                Some("account_deactivated") => crate::translations::t("coauth-errors-account-deactivated"),
+                                                Some("account_locked") => crate::translations::t("coauth-errors-account-locked"),
+                                                Some("password_login_disabled") => crate::translations::t("coauth-errors-password-login-disabled"),
+                                                Some(other) => other.to_owned(),
+                                                None => crate::translations::t("coauth-errors-login-failed"),
                                             };
-                                            error.set(Some(msg.to_owned()));
+                                            error.set(Some(msg));
                                         }
                                         Err(e) => {
                                             error.set(Some(e));
@@ -384,7 +384,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                             }
 
                             div { class: "form-field",
-                                label { class: "form-label", r#for: LOGIN_PASSWORD_ID, "Password" }
+                                label { class: "form-label", r#for: LOGIN_PASSWORD_ID, {crate::translations::t("common-password")} }
                                 div { class: "password-input-wrapper",
                                     input {
                                         id: LOGIN_PASSWORD_ID,
@@ -394,7 +394,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                         required: true,
                                         "aria-invalid": if has_error { "true" } else { "false" },
                                         "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
-                                        placeholder: "Password",
+                                        placeholder: crate::translations::t("common-password"),
                                         value: "{password}",
                                         autofocus: true,
                                         oninput: move |e| password.set(e.value()),
@@ -414,7 +414,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                 if submitting() {
                                     LoadingSpinner { inline: true }
                                 }
-                                "Sign in"
+                                {crate::translations::t("action-sign-in")}
                             }
 
                             if !has_login_hint {
@@ -428,7 +428,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                         error.set(None);
                                         step.set(LoginStep::Identifier);
                                     },
-                                    "Use another account"
+                                    {crate::translations::t("coauth-approval-use-another-account")}
                                 }
                             }
                         }
@@ -436,7 +436,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                         if recovery_enabled {
                             div { class: "login-links",
                                 Link { class: "link", to: Route::RecoveryStart {},
-                                    "Forgot password?"
+                                    {crate::translations::t("coauth-login-forgot-password")}
                                 }
                             }
                         }
@@ -445,7 +445,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
 
                 if has_providers && password_enabled {
                     div { class: "login-divider",
-                        span { "or" }
+                        span { {crate::translations::t("coauth-login-separator")} }
                     }
                 }
 
@@ -468,7 +468,11 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                 let label = provider
                                     .human_name
                                     .clone()
-                                    .unwrap_or_else(|| format!("Sign in with {}", provider.id));
+                                    .unwrap_or_else(|| provider.id.clone());
+                                let label = crate::translations::t_with(
+                                    "coauth-login-continue-with-provider",
+                                    &[("provider", &label)],
+                                );
                                 rsx! {
                                     a {
                                         key: "{provider.id}",
@@ -485,13 +489,16 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
 
                 if !password_enabled && !has_providers {
                     div { class: "alert alert-warning",
-                        p { "No login methods are currently available." }
+                        p { {crate::translations::t("coauth-login-no-login-methods")} }
                     }
                 }
 
                 if registration_enabled && step() == LoginStep::Identifier {
                     div { class: "login-register",
-                        span { "Don't have an account? " }
+                        span {
+                            {crate::translations::t("coauth-login-call-to-register")}
+                            " "
+                        }
                         Link {
                             class: "link",
                             to: Route::Register {},
@@ -506,7 +513,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                     store_post_auth_continuation(&kind, &id);
                                 }
                             },
-                            "Create account"
+                            {crate::translations::t("action-create-account")}
                         }
                     }
                 }

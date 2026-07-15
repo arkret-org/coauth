@@ -39,6 +39,13 @@ common-account-id = Account ID
 common-password = Password
 common-password-confirm = Confirm password
 common-handle = Username
+coauth-password-strength-very-weak = Very weak
+coauth-password-strength-weak = Weak
+coauth-password-strength-fair = Fair
+coauth-password-strength-good = Good
+coauth-password-strength-strong = Strong
+coauth-password-strength-meets-requirement = meets this site's requirement
+coauth-password-strength-too-weak = too weak for this site
 
 ## error
 
@@ -130,6 +137,12 @@ coauth-errors-email-domain-not-allowed = Email domain is not allowed by the serv
 coauth-errors-email-not-allowed = Email is not allowed by the server policy
 coauth-errors-field-required = This field is required
 coauth-errors-invalid-credentials = Invalid credentials
+coauth-errors-account-deactivated = This account has been deactivated.
+coauth-errors-account-locked = This account has been locked.
+coauth-errors-login-failed = Login failed.
+coauth-errors-password-login-disabled = Password login is not available.
+coauth-errors-identifier-required = Please enter your username or email.
+coauth-errors-password-required = Please enter your password.
 coauth-errors-password-mismatch = Password fields don't match
 coauth-errors-rate-limit-exceeded = You've made too many requests in a short period. Please wait a few minutes and try again.
 coauth-errors-handle-all-numeric = Username cannot consist solely of numbers

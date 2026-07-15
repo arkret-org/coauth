@@ -17,6 +17,28 @@ pub fn Dialog(
     #[props(default)] title: Option<String>,
     children: Element,
 ) -> Element {
+    const FOCUS_TRAP_SELECTOR: &str = ".dialog-content[data-focus-trap='dialog']";
+    let mut was_open = use_signal(|| false);
+    use_effect(move || {
+        let is_open = open();
+        if is_open == was_open() {
+            return;
+        }
+        if is_open {
+            super::focus_trap::activate(FOCUS_TRAP_SELECTOR);
+        } else {
+            super::focus_trap::restore();
+        }
+        was_open.set(is_open);
+    });
+    use_drop(move || {
+        if was_open() {
+            super::focus_trap::restore();
+        }
+    });
+
+    let aria_label = title.clone().unwrap_or_else(|| "Dialog".to_owned());
+
     rsx! {
         // Optional trigger element
         if let Some(trigger) = trigger {
@@ -33,6 +55,22 @@ pub fn Dialog(
                 onclick: move |_| open.set(false),
                 div {
                     class: "dialog-content",
+                    role: "dialog",
+                    aria_modal: "true",
+                    aria_label: aria_label,
+                    "data-focus-trap": "dialog",
+                    tabindex: "-1",
+                    onkeydown: move |event| {
+                        match event.key() {
+                            Key::Escape => open.set(false),
+                            Key::Tab => {
+                                event.prevent_default();
+                                let reverse = event.modifiers().contains(Modifiers::SHIFT);
+                                super::focus_trap::cycle(FOCUS_TRAP_SELECTOR, reverse);
+                            }
+                            _ => {}
+                        }
+                    },
                     onclick: move |e| e.stop_propagation(),
                     if let Some(title) = title {
                         h3 { class: "dialog-title", "{title}" }

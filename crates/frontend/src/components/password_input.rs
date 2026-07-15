@@ -3,7 +3,7 @@ use dioxus::prelude::*;
 /// Password strength level.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum PasswordStrength {
-    Empty,
+    VeryWeak,
     Weak,
     Fair,
     Good,
@@ -11,22 +11,22 @@ enum PasswordStrength {
 }
 
 impl PasswordStrength {
-    fn label(&self) -> &'static str {
+    fn label_key(&self) -> &'static str {
         match self {
-            PasswordStrength::Empty => "",
-            PasswordStrength::Weak => "Weak",
-            PasswordStrength::Fair => "Fair",
-            PasswordStrength::Good => "Good",
-            PasswordStrength::Strong => "Strong",
+            PasswordStrength::VeryWeak => "coauth-password-strength-very-weak",
+            PasswordStrength::Weak => "coauth-password-strength-weak",
+            PasswordStrength::Fair => "coauth-password-strength-fair",
+            PasswordStrength::Good => "coauth-password-strength-good",
+            PasswordStrength::Strong => "coauth-password-strength-strong",
         }
     }
 
     fn color(&self) -> &'static str {
         match self {
-            PasswordStrength::Empty => "transparent",
+            PasswordStrength::VeryWeak => "#c53030",
             PasswordStrength::Weak => "#e53e3e",
             PasswordStrength::Fair => "#dd6b20",
-            PasswordStrength::Good => "#38a169",
+            PasswordStrength::Good => "#2f855a",
             PasswordStrength::Strong => "#2b6cb0",
         }
     }
@@ -34,55 +34,32 @@ impl PasswordStrength {
     /// Width percentage of the strength bar.
     fn width_percent(&self) -> u8 {
         match self {
-            PasswordStrength::Empty => 0,
-            PasswordStrength::Weak => 25,
-            PasswordStrength::Fair => 50,
-            PasswordStrength::Good => 75,
+            PasswordStrength::VeryWeak => 20,
+            PasswordStrength::Weak => 40,
+            PasswordStrength::Fair => 60,
+            PasswordStrength::Good => 80,
             PasswordStrength::Strong => 100,
+        }
+    }
+
+    fn from_score(score: u8) -> Self {
+        match score {
+            0 => Self::VeryWeak,
+            1 => Self::Weak,
+            2 => Self::Fair,
+            3 => Self::Good,
+            _ => Self::Strong,
         }
     }
 }
 
-/// Estimate password strength based on length and character variety.
-fn estimate_strength(password: &str) -> PasswordStrength {
+/// Score a password with the same zxcvbn algorithm used by the backend.
+fn password_score(password: &str) -> Option<u8> {
     if password.is_empty() {
-        return PasswordStrength::Empty;
+        return None;
     }
 
-    let len = password.len();
-    let has_lower = password.chars().any(|c| c.is_ascii_lowercase());
-    let has_upper = password.chars().any(|c| c.is_ascii_uppercase());
-    let has_digit = password.chars().any(|c| c.is_ascii_digit());
-    let has_special = password.chars().any(|c| !c.is_alphanumeric());
-
-    let variety_count = [has_lower, has_upper, has_digit, has_special]
-        .iter()
-        .filter(|&&v| v)
-        .count();
-
-    // Score based on length and variety
-    if len < 8 {
-        PasswordStrength::Weak
-    } else if len < 12 {
-        if variety_count >= 3 {
-            PasswordStrength::Good
-        } else {
-            PasswordStrength::Fair
-        }
-    } else if len < 16 {
-        if variety_count >= 3 {
-            PasswordStrength::Strong
-        } else {
-            PasswordStrength::Good
-        }
-    } else {
-        // 16+ characters
-        if variety_count >= 2 {
-            PasswordStrength::Strong
-        } else {
-            PasswordStrength::Good
-        }
-    }
+    Some(u8::from(zxcvbn::zxcvbn(password, &[]).score()))
 }
 
 #[component]
@@ -91,6 +68,9 @@ pub fn PasswordCreationDoubleInput(
     new_password_again: Signal<String>,
     force_invalid: Option<bool>,
 ) -> Element {
+    let password_policy = use_resource(|| async {
+        crate::api::api_get::<crate::api::types::SiteConfig>("/self/site-config").await
+    });
     let show_new_password = use_signal(|| false);
     let show_confirm_password = use_signal(|| false);
     let passwords_match =
@@ -99,13 +79,31 @@ pub fn PasswordCreationDoubleInput(
     let force_invalid = force_invalid.unwrap_or(false);
 
     let password_val = new_password.read().clone();
-    let strength = estimate_strength(&password_val);
+    let score = password_score(&password_val);
+    let strength = score.map(PasswordStrength::from_score);
+    let policy_binding = password_policy.read();
+    let minimum_complexity = policy_binding
+        .as_ref()
+        .and_then(|result| result.as_ref().ok())
+        .map(|config| config.minimum_password_complexity);
+    let meets_requirement = score
+        .zip(minimum_complexity)
+        .map(|(score, minimum)| score >= minimum);
+    let strength_label = strength.map(|value| crate::translations::t(value.label_key()));
+    let requirement_label = meets_requirement.map(|meets| {
+        if meets {
+            crate::translations::t("coauth-password-strength-meets-requirement")
+        } else {
+            crate::translations::t("coauth-password-strength-too-weak")
+        }
+    });
 
     rsx! {
         div { class: "form-field",
-            label { class: "form-label", "New password" }
+            label { class: "form-label", r#for: "new-password", {crate::translations::t("coauth-change-password-new")} }
             div { class: "password-input-wrapper",
                 input {
+                    id: "new-password",
                     class: if force_invalid { "form-input invalid" } else { "form-input" },
                     r#type: if show_new_password() { "text" } else { "password" },
                     autocomplete: "new-password",
@@ -120,10 +118,16 @@ pub fn PasswordCreationDoubleInput(
             }
 
             // Password strength indicator
-            if strength != PasswordStrength::Empty {
+            if let (Some(strength), Some(strength_label), Some(score)) = (strength, strength_label, score) {
                 div { class: "password-strength",
                     // Strength bar background
-                    div { class: "password-strength-track",
+                    div {
+                        class: "password-strength-track",
+                        role: "progressbar",
+                        "aria-label": "Password strength",
+                        "aria-valuemin": "0",
+                        "aria-valuemax": "4",
+                        "aria-valuenow": "{score}",
                         // Filled portion — width and color are data-driven.
                         div {
                             class: "password-strength-fill",
@@ -134,15 +138,20 @@ pub fn PasswordCreationDoubleInput(
                     span {
                         class: "password-strength-label",
                         style: "color: {strength.color()};",
-                        "{strength.label()}"
+                        "aria-live": "polite",
+                        "{strength_label}"
+                        if let Some(requirement_label) = requirement_label {
+                            " — {requirement_label}"
+                        }
                     }
                 }
             }
         }
         div { class: "form-field",
-            label { class: "form-label", "Confirm new password" }
+            label { class: "form-label", r#for: "confirm-new-password", {crate::translations::t("coauth-change-password-confirm")} }
             div { class: "password-input-wrapper",
                 input {
+                    id: "confirm-new-password",
                     class: if show_mismatch { "form-input invalid" } else { "form-input" },
                     r#type: if show_confirm_password() { "text" } else { "password" },
                     autocomplete: "new-password",
@@ -156,6 +165,44 @@ pub fn PasswordCreationDoubleInput(
                 span { class: "form-error", "Passwords do not match." }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PasswordStrength, password_score};
+
+    #[test]
+    fn uses_zxcvbn_score_for_unicode_passphrases() {
+        let password = "correct 马 battery staple";
+        let expected = u8::from(zxcvbn::zxcvbn(password, &[]).score());
+
+        assert_eq!(password_score(password), Some(expected));
+        assert_eq!(password_score(""), None);
+    }
+
+    #[test]
+    fn maps_all_zxcvbn_scores_to_strength_labels() {
+        assert_eq!(
+            PasswordStrength::from_score(0).label_key(),
+            "coauth-password-strength-very-weak"
+        );
+        assert_eq!(
+            PasswordStrength::from_score(1).label_key(),
+            "coauth-password-strength-weak"
+        );
+        assert_eq!(
+            PasswordStrength::from_score(2).label_key(),
+            "coauth-password-strength-fair"
+        );
+        assert_eq!(
+            PasswordStrength::from_score(3).label_key(),
+            "coauth-password-strength-good"
+        );
+        assert_eq!(
+            PasswordStrength::from_score(4).label_key(),
+            "coauth-password-strength-strong"
+        );
     }
 }
 

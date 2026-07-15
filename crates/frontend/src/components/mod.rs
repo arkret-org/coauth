@@ -5,6 +5,7 @@ pub mod empty_state;
 pub mod error;
 pub mod external_link;
 pub mod filter;
+mod focus_trap;
 pub mod footer;
 pub mod form_error;
 pub mod last_active;

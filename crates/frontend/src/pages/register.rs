@@ -71,7 +71,7 @@ fn RegisterPage(providers: ProvidersOutcome) -> Element {
     rsx! {
         div { class: "login-page",
             div { class: "login-container",
-                h1 { class: "heading-md login-title", "Create account" }
+                h1 { class: "heading-md login-title", {crate::translations::t("coauth-register-create-account-heading")} }
 
                 if let Some(ref err) = *error.read() {
                     FormError { message: err.clone() }
@@ -146,7 +146,7 @@ fn RegisterPage(providers: ProvidersOutcome) -> Element {
                         },
 
                         div { class: "form-field",
-                            label { class: "form-label", "Username" }
+                            label { class: "form-label", {crate::translations::t("common-handle")} }
                             input {
                                 class: "form-input",
                                 r#type: "text",
@@ -159,7 +159,7 @@ fn RegisterPage(providers: ProvidersOutcome) -> Element {
                         }
 
                         div { class: "form-field",
-                            label { class: "form-label", "Email (optional)" }
+                            label { class: "form-label", {crate::translations::t("common-email-address")} }
                             input {
                                 class: "form-input",
                                 r#type: "email",
@@ -194,14 +194,14 @@ fn RegisterPage(providers: ProvidersOutcome) -> Element {
                             if submitting() {
                                 LoadingSpinner { inline: true }
                             }
-                            "Create account"
+                            {crate::translations::t("action-create-account")}
                         }
                     }
                 }
 
                 if has_providers && reg_enabled {
                     div { class: "login-divider",
-                        span { "or" }
+                        span { {crate::translations::t("coauth-login-separator")} }
                     }
                 }
 
@@ -212,16 +212,22 @@ fn RegisterPage(providers: ProvidersOutcome) -> Element {
                                 key: "{provider.id}",
                                 class: "btn btn-secondary btn-block",
                                 href: "{provider.authorize_url}",
-                                {provider.human_name.clone().unwrap_or_else(|| format!("Sign up with {}", provider.id))}
+                                {crate::translations::t_with(
+                                    "coauth-login-continue-with-provider",
+                                    &[("provider", provider.human_name.as_deref().unwrap_or(&provider.id))],
+                                )}
                             }
                         }
                     }
                 }
 
                 div { class: "login-register",
-                    span { "Already have an account? " }
+                    span {
+                        {crate::translations::t("coauth-register-call-to-login")}
+                        " "
+                    }
                     Link { class: "link", to: Route::Login {},
-                        "Sign in"
+                        {crate::translations::t("action-sign-in")}
                     }
                 }
             }

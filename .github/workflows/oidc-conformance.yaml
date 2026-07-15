@@ -42,13 +42,15 @@ jobs:
 
     steps:
       - name: Fetch repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up stable Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: stable
 
       - name: Cache cargo registry
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           shared-key: oidc-conformance
 
@@ -110,7 +112,7 @@ jobs:
 
       - name: Upload conformance results
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: conformance-results
           path: target/conformance-results/
@@ -125,7 +127,7 @@ jobs:
 
       - name: Upload diagnostic logs
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v7.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: conformance-diagnostic-logs
           path: target/conformance-logs/

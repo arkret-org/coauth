@@ -1500,6 +1500,7 @@ dependencies = [
  "chrono",
  "coauth-account-types",
  "dioxus",
+ "fluent-bundle",
  "gloo-timers 0.4.0",
  "js-sys",
  "reqwest 0.13.4",
@@ -1507,9 +1508,11 @@ dependencies = [
  "serde_json",
  "serde_with",
  "tracing",
+ "unic-langid",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+ "zxcvbn",
 ]
 
 [[package]]

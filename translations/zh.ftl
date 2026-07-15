@@ -36,6 +36,13 @@ common-account-id = 账号标识
 common-password = 密码
 common-password-confirm = 确认密码
 common-handle = 用户名
+coauth-password-strength-very-weak = 非常弱
+coauth-password-strength-weak = 弱
+coauth-password-strength-fair = 一般
+coauth-password-strength-good = 良好
+coauth-password-strength-strong = 强
+coauth-password-strength-meets-requirement = 符合本站要求
+coauth-password-strength-too-weak = 未达到本站要求
 
 ## error
 
@@ -108,6 +115,12 @@ coauth-errors-email-domain-not-allowed = 由于服务器策略，邮件域不被
 coauth-errors-email-not-allowed = 由于服务器策略，邮件不被允许
 coauth-errors-field-required = 此字段为必填项
 coauth-errors-invalid-credentials = 无效的凭据
+coauth-errors-account-deactivated = 此账户已停用。
+coauth-errors-account-locked = 此账户已锁定。
+coauth-errors-login-failed = 登录失败。
+coauth-errors-password-login-disabled = 密码登录不可用。
+coauth-errors-identifier-required = 请输入用户名或邮箱地址。
+coauth-errors-password-required = 请输入密码。
 coauth-errors-password-mismatch = 密码字段不匹配
 coauth-errors-rate-limit-exceeded = 你在短时间内发出了过多请求。请于几分钟后重试。
 coauth-errors-handle-all-numeric = 用户名不能仅由数字组成

@@ -52,10 +52,10 @@ fn PasswordChangeForm(user_id: String) -> Element {
 
     rsx! {
         div { class: "flex flex-col gap-10",
-            PageHeading {
-                icon: "🔒".to_owned(),
-                title: "Change password".to_owned(),
-                subtitle: "Choose a new password for your account.".to_owned(),
+                PageHeading {
+                    icon: "🔒".to_owned(),
+                    title: crate::translations::t("coauth-change-password-heading"),
+                    subtitle: crate::translations::t("coauth-change-password-description"),
             }
 
             form {
@@ -117,7 +117,7 @@ fn PasswordChangeForm(user_id: String) -> Element {
                 }
 
                 div { class: "form-field",
-                    label { class: "form-label", "Current password" }
+                    label { class: "form-label", {crate::translations::t("coauth-change-password-current")} }
                     input {
                         class: if wrong_password() { "form-input invalid" } else { "form-input" },
                         r#type: "password",
@@ -146,11 +146,11 @@ fn PasswordChangeForm(user_id: String) -> Element {
                     if submitting() {
                         LoadingSpinner { inline: true }
                     }
-                    "Save"
+                    {crate::translations::t("coauth-change-password-change")}
                 }
 
                 Link { class: "btn btn-tertiary", to: Route::AccountSettings {},
-                    "Cancel"
+                    {crate::translations::t("action-cancel")}
                 }
             }
         }

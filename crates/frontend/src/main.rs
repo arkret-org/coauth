@@ -22,21 +22,16 @@ const MAIN_CSS: Asset = asset!("/assets/main.css");
 
 fn main() {
     crate::pages::login::preserve_login_query();
+    crate::translations::init_document_language();
     init_theme();
     dioxus::launch(app);
 }
 
 fn app() -> Element {
     let cfg = get_config();
-    let bundled_fluent_json = crate::translations::bundled_fluent_json();
 
     rsx! {
         document::Link { rel: "stylesheet", href: MAIN_CSS }
-        document::Script {
-            id: "coauth-fluent-bundles",
-            r#type: "application/json",
-            "{bundled_fluent_json}"
-        }
         ThemeToggle {}
 
         if let Some(error) = cfg.error {
