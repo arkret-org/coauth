@@ -25,6 +25,7 @@ pub mod refresh_token_rotation;
 pub mod resolved_principal_audiences;
 pub mod risk_action_proposals;
 pub mod risk_action_state;
+pub mod service_identity;
 pub mod soland_webvh;
 pub mod third_party_invite;
 pub mod upstream_oidc;

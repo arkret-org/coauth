@@ -695,6 +695,23 @@ pub struct Keystore {
     >,
 }
 
+/// Stable key identifier reserved for Coauth's service-identity signing key.
+///
+/// Selecting by `kid` keeps service-identity custody independent from the
+/// order of OIDC/JWT keys and permits unrelated Ed25519 keys to coexist.
+pub const SERVICE_IDENTITY_KEY_ID: &str = "coauth-service-identity-v1";
+
+/// Invalid service-identity key selection from the configured key backend.
+#[derive(Debug, Error)]
+pub enum ServiceIdentityKeyError {
+    #[error("no key with kid `{SERVICE_IDENTITY_KEY_ID}` is configured")]
+    Missing,
+    #[error("more than one key with kid `{SERVICE_IDENTITY_KEY_ID}` is configured")]
+    Ambiguous,
+    #[error("key `{SERVICE_IDENTITY_KEY_ID}` must be Ed25519")]
+    WrongKeyType,
+}
+
 impl Keystore {
     /// Create a keystore out of a JSON Web Key Set
     #[must_use]
@@ -719,6 +736,26 @@ impl Keystore {
     #[must_use]
     pub fn public_jwks(&self) -> PublicJsonWebKeySet {
         (*self.public_jwks).clone()
+    }
+
+    /// Return the explicitly designated Ed25519 seed for service identity.
+    ///
+    /// Deriving the WebVH control key from this stable key keeps Provider
+    /// recovery deterministic when the business database is rebuilt while
+    /// the configured key backend is retained.
+    pub fn service_identity_seed(&self) -> Result<[u8; 32], ServiceIdentityKeyError> {
+        let mut candidates = self
+            .inner
+            .iter()
+            .filter(|jwk| jwk.kid() == Some(SERVICE_IDENTITY_KEY_ID));
+        let candidate = candidates.next().ok_or(ServiceIdentityKeyError::Missing)?;
+        if candidates.next().is_some() {
+            return Err(ServiceIdentityKeyError::Ambiguous);
+        }
+        match candidate.params() {
+            PrivateKey::OkpEd25519(key) => Ok(key.to_bytes()),
+            _ => Err(ServiceIdentityKeyError::WrongKeyType),
+        }
     }
 
     /// Get a signer for the given algorithm, reusing a previously built signer

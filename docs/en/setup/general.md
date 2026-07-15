@@ -20,8 +20,6 @@ sections you override and remove the untouched defaults.
 - `database`
 - `arkret.principal_servers`
 - `arkret.identity_registry`
-- `arkret.service_id`
-- `arkret.issuer_did`
 - `arkret.admin_audience`
 - `secrets`
 - `passwords`

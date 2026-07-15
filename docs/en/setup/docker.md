@@ -73,9 +73,11 @@ database:
   uri: postgresql://coauth:change-me@postgres/coauth
 
 arkret:
-  service_id: did:webvh:<scid>:auth.example.com:webvh:service
-  issuer_did: did:webvh:<scid>:auth.example.com:webvh:service
   admin_audience: http://localhost:7080/_arkret
+  principal_servers:
+    - name: soland
+      endpoint: https://soland.example.com/
+      embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 
 secrets:
   encryption: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef

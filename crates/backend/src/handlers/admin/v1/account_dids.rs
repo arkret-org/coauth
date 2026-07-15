@@ -235,7 +235,7 @@ pub async fn add_account_did(
         &did,
         body.make_primary.unwrap_or(false),
         body.continuity_proof.as_ref(),
-        &expected_audience,
+        expected_audience.as_str(),
         &expected_trust_domain,
         now,
     )?;
@@ -251,7 +251,7 @@ pub async fn add_account_did(
         body.control_proof.jws.as_str(),
         &did,
         body.control_proof.nonce.as_str(),
-        &expected_audience,
+        expected_audience.as_str(),
         &expected_trust_domain,
         now,
     )
@@ -312,6 +312,7 @@ pub async fn add_account_did(
         .principal_servers
         .iter()
         .filter_map(crate::services::resolved_principal_audiences::effective_audience_shared)
+        .map(|audience| audience.to_string())
         .collect();
     if audiences.is_empty() {
         repo.cancel().await?;

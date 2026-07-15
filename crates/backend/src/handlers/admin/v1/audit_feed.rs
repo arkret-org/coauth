@@ -153,7 +153,8 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<AuditFeedOu
     let data: Vec<AuditEntry> = logs
         .into_iter()
         .map(|log| {
-            let signature_status = verify_admin_operation_signature(&log, &key_store, &service_id);
+            let signature_status =
+                verify_admin_operation_signature(&log, &key_store, service_id.as_str());
             AuditEntry::from_log(log, signature_status)
         })
         .collect();

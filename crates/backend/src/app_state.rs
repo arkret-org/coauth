@@ -278,6 +278,25 @@ pub async fn inject_app_state(
         depot.insert("email_webhook_service", email_webhook_service);
     }
 
+    let path = req.uri().path();
+    let operational_probe = matches!(
+        path,
+        "/health" | "/healthz" | "/livez" | "/readyz" | "/metrics"
+    );
+    if !operational_probe && !state.arkret_config.runtime_service_identity.is_ready() {
+        res.status_code(StatusCode::SERVICE_UNAVAILABLE);
+        res.headers_mut().insert(
+            salvo::http::header::RETRY_AFTER,
+            salvo::http::HeaderValue::from_static("5"),
+        );
+        res.render(Json(serde_json::json!({
+            "errcode": "service_identity_unavailable",
+            "error": "service identity is not ready; retry after the Provider recovers",
+        })));
+        ctrl.skip_rest();
+        return;
+    }
+
     ctrl.call_next(req, depot, res).await;
 }
 

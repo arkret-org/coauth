@@ -137,7 +137,7 @@ pub struct SolandFrontierSource {
 }
 
 impl SolandFrontierSource {
-    /// `base_url` is `arkret_config.principal_server_url`; when `None`
+    /// `base_url` is the primary configured Principal Server endpoint; when `None`
     /// (single-host dev deployments) every fetch returns
     /// [`Frontier::empty`] so the policy-check pipeline still produces
     /// a signed response.

@@ -164,11 +164,11 @@ pub struct DefaultDidResolverService;
 #[async_trait]
 impl DidResolverService for DefaultDidResolverService {
     fn service_id(&self, arkret_config: &ArkretConfig) -> String {
-        service_id_for(arkret_config)
+        service_id_for(arkret_config).to_string()
     }
 
     fn issuer_did(&self, arkret_config: &ArkretConfig) -> String {
-        issuer_did_for(arkret_config)
+        issuer_did_for(arkret_config).to_string()
     }
 
     async fn primary_did_for_user(
@@ -185,7 +185,7 @@ impl DidResolverService for DefaultDidResolverService {
             };
             if let Some(binding) = repo
                 .principal_did()
-                .get_for_user_and_audience(user, &audience)
+                .get_for_user_and_audience(user, audience.as_str())
                 .await
                 .map_err(|error| SessionGrantError::Other(error.into()))?
             {

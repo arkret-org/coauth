@@ -171,7 +171,7 @@ pub struct BatchInviteConsentGate {
     #[serde(default = "default_invite_scope")]
     pub scope: String,
 
-    /// Override `ArkretConfig::principal_server_url` per request. Useful
+    /// Override the first configured Principal Server endpoint per request. Useful
     /// when a deployment fans out across multiple `server_names` and
     /// the global config points at a different one.
     #[serde(default)]
@@ -248,7 +248,7 @@ pub enum BatchInviteGateOutcome {
 /// I/O so unit tests can inject a wiremock-backed `reqwest::Client`.
 ///
 /// `gate_url_override` lets the caller supply a per-request URL that wins
-/// over the global `ArkretConfig::principal_server_url`. Both `None` →
+/// over the primary configured Principal Server endpoint. Both `None` →
 /// gate is skipped (returns `Allow`) — same behaviour as omitting
 /// `peer_did` entirely. This keeps the no-config / no-peer paths
 /// indistinguishable, which matches the spec note that the gate is
@@ -265,7 +265,7 @@ pub async fn evaluate_batch_invite_gate(
     let principal_url = gate
         .target_principal_url
         .as_ref()
-        .or(arkret_config.principal_server_url.as_ref());
+        .or_else(|| arkret_config.primary_principal_server_url());
 
     let Some(principal_url) = principal_url else {
         // Gate metadata supplied, but no server to query. Mirror the

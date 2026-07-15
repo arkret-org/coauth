@@ -1,3 +1,9 @@
+use std::sync::{Arc, RwLock};
+
+use arkret_core::{
+    CanonicalServiceUrl, Did, LocalServiceIdentity, ServiceIdentityDiagnostic,
+    ServiceIdentityKeyRef, ServiceIdentityState, ServiceRegistrationKey, ServiceType,
+};
 use chrono::Duration;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -23,13 +29,6 @@ const TRUST_DOMAIN_PREFIX: &str = "ak:trust_domain:";
 const SESSION_GRANT_TTL_MICROS: i64 = 8 * 60 * 60 * 1_000_000;
 const SESSION_GRANT_TTL_MIN_SECONDS: i64 = 60;
 const SESSION_GRANT_TTL_MAX_SECONDS: i64 = 86_400;
-const SERVICE_ID_BOOTSTRAP_HELP: &str = concat!(
-    "Local development: run `coauth config generate --dev -o config.dev.yaml`. ",
-    "Production: run `coauth config service-id init --starid-url <https://starid.example> ",
-    "--host <auth.example.com> --key-output <service-id-keys.yaml>` and copy the emitted ",
-    "`arkret.service_id` into your config."
-);
-
 fn default_session_grant_ttl() -> Duration {
     Duration::microseconds(SESSION_GRANT_TTL_MICROS)
 }
@@ -92,15 +91,110 @@ impl PrincipalMethodConfig {
     }
 }
 
+/// Shared runtime lifecycle state for the deployment service identity.
+///
+/// This handle is skipped by serde and schema generation because the DID is
+/// resolved from a trusted Provider and never belongs in configuration.
+#[derive(Clone)]
+pub struct RuntimeServiceIdentity(Arc<RwLock<ServiceIdentityState>>);
+
+impl std::fmt::Debug for RuntimeServiceIdentity {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_tuple("RuntimeServiceIdentity")
+            .field(&self.state())
+            .finish()
+    }
+}
+
+impl Default for RuntimeServiceIdentity {
+    fn default() -> Self {
+        Self(Arc::new(RwLock::new(ServiceIdentityState::Faulted {
+            diagnostic: ServiceIdentityDiagnostic::ProviderNotConfigured,
+            next_action: "configure one trusted service-registration Provider endpoint and bearer"
+                .to_owned(),
+        })))
+    }
+}
+
+impl RuntimeServiceIdentity {
+    /// Returns a snapshot of the current lifecycle state.
+    #[must_use]
+    pub fn state(&self) -> ServiceIdentityState {
+        self.0
+            .read()
+            .expect("service identity lock poisoned")
+            .clone()
+    }
+
+    /// Replaces the current state after validating its invariants.
+    pub fn store(&self, state: ServiceIdentityState) {
+        state.validate().expect("valid service identity state");
+        *self.0.write().expect("service identity lock poisoned") = state;
+    }
+
+    /// Returns the resolved service DID when the state carries an identity.
+    #[must_use]
+    pub fn service_id(&self) -> Option<Did> {
+        self.state()
+            .identity()
+            .map(|identity| identity.service_id.clone())
+    }
+
+    /// Returns whether normal request handling may proceed.
+    #[must_use]
+    pub fn is_ready(&self) -> bool {
+        self.state().is_ready()
+    }
+
+    #[doc(hidden)]
+    #[must_use]
+    pub fn fixture(service_id: &str) -> Self {
+        let signing_key_ref =
+            ServiceIdentityKeyRef::new("fixture:coauth:signing").expect("fixture key ref");
+        let handle = Self::default();
+        handle.store(ServiceIdentityState::Ready {
+            identity: LocalServiceIdentity {
+                service_id: Did::new(service_id.to_owned()).expect("fixture service DID"),
+                registration_key: ServiceRegistrationKey::new(
+                    ServiceType::AuthServer,
+                    CanonicalServiceUrl::canonicalize("https://auth.test/")
+                        .expect("fixture public base"),
+                )
+                .expect("fixture registration key"),
+                provider: None,
+                signing_key_refs: vec![signing_key_ref.clone()],
+                active_signing_key_ref: signing_key_ref,
+                control_key_ref: ServiceIdentityKeyRef::new("fixture:coauth:control")
+                    .expect("fixture control key ref"),
+                version_id: "fixture-v1".to_owned(),
+                last_verified_at: chrono::Utc::now(),
+            },
+        });
+        handle
+    }
+}
+
 /// Arkret-specific deployment settings layered on top of the generic OIDC
 /// and account-management configuration.
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ArkretConfig {
     /// Principal Server audiences trusted to consume session grants and admin
     /// tokens emitted by coauth.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub principal_servers: Vec<PrincipalServerConfig>,
+
+    /// Trusted services that provide the standard service-registration role
+    /// without also acting as a Principal Server.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub identity_services: Vec<IdentityServiceConfig>,
+
+    /// Provider name used only to disambiguate multiple registration-capable
+    /// entries. A single candidate is selected automatically.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_provider: Option<String>,
 
     /// Deployment profile that gates principal DID method choices.
     ///
@@ -123,20 +217,10 @@ pub struct ArkretConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity_registry: Option<IdentityRegistryConfig>,
 
-    /// Explicit service DID for the coauth deployment.
-    ///
-    /// Required: startup validation fails fast when omitted — there is no
-    /// host-derived `did:web` fallback. Deployments MUST configure a
-    /// `did:webvh` service DID; the only `did:web` exception is the explicit
-    /// personal-node no-history profile selected by
-    /// `deployment_profile=personal_node` and `principal_method=did:web`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub service_id: Option<String>,
-
-    /// Optional issuer DID to embed in Arkret session grants and discovery
-    /// documents. Defaults to `service_id`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub issuer_did: Option<String>,
+    /// Runtime-only Provider resolution result. Never serialized.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub runtime_service_identity: RuntimeServiceIdentity,
 
     /// Lifetime of Arkret session grants, in seconds.
     ///
@@ -159,15 +243,6 @@ pub struct ArkretConfig {
     /// When omitted, the backend falls back to the local `/_arkret` endpoint.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admin_audience: Option<String>,
-
-    /// Base URL of the principal server (`soland`) used for cross-service
-    /// consent-cell queries (Move/Anchor/Lattice model — see consent-model
-    /// spec §3-§9). When omitted, the consent gate degrades to a
-    /// `consent_unknown` result and the caller decides the policy outcome.
-    ///
-    /// Override at runtime via `COAUTH_PRINCIPAL_SERVER_URL`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub principal_server_url: Option<Url>,
 
     /// Minimum number of distinct admin DID approvals required to execute a
     /// high-risk risk-action proposal. Defaults to `2`.
@@ -277,14 +352,14 @@ impl Default for ArkretConfig {
     fn default() -> Self {
         Self {
             principal_servers: Vec::new(),
+            identity_services: Vec::new(),
+            identity_provider: None,
             deployment_profile: DeploymentProfileConfig::default(),
             principal_method: PrincipalMethodConfig::default(),
             identity_registry: None,
-            service_id: None,
-            issuer_did: None,
+            runtime_service_identity: RuntimeServiceIdentity::default(),
             session_grant_ttl: default_session_grant_ttl(),
             admin_audience: None,
-            principal_server_url: None,
             high_risk_threshold: default_high_risk_threshold(),
             trust_domain: None,
             oob_code_kind: OobCodeKindConfig::default(),
@@ -302,14 +377,13 @@ impl ArkretConfig {
     #[must_use]
     pub fn is_default(&self) -> bool {
         self.principal_servers.is_empty()
+            && self.identity_services.is_empty()
+            && self.identity_provider.is_none()
             && DeploymentProfileConfig::is_default(&self.deployment_profile)
             && PrincipalMethodConfig::is_default(&self.principal_method)
             && self.identity_registry.is_none()
-            && self.service_id.is_none()
-            && self.issuer_did.is_none()
             && session_grant_ttl_is_default(&self.session_grant_ttl)
             && self.admin_audience.is_none()
-            && self.principal_server_url.is_none()
             && self.high_risk_threshold == default_high_risk_threshold()
             && self.trust_domain.is_none()
             && matches!(self.oob_code_kind, OobCodeKindConfig::OfflineVerifiable)
@@ -345,8 +419,8 @@ impl ArkretConfig {
     /// Set of host names this deployment trusts as outbound
     /// principal-server / identity-resolver targets.
     ///
-    /// Built from every configured `principal_servers[].endpoint`, the
-    /// global `principal_server_url`, and the `identity_registry.resolver`.
+    /// Built from every configured `principal_servers[].endpoint` and the
+    /// `identity_registry.resolver`.
     /// Hosts are lower-cased so comparison is
     /// case-insensitive. Used by outbound relays (e.g. the consent-gated
     /// invite relay) to reject caller-supplied URLs that do not resolve to a
@@ -365,8 +439,8 @@ impl ArkretConfig {
         for server in &self.principal_servers {
             push(&server.endpoint);
         }
-        if let Some(url) = self.principal_server_url.as_ref() {
-            push(url);
+        for service in &self.identity_services {
+            push(&service.endpoint);
         }
         if let Some(registry) = self.identity_registry.as_ref() {
             push(&registry.resolver);
@@ -388,6 +462,16 @@ impl ArkretConfig {
             .any(|trusted| trusted == &host)
     }
 
+    /// Primary Principal Server endpoint for call sites that operate on a
+    /// single server. The endpoint is topology configuration only; its
+    /// service DID is always resolved at runtime.
+    #[must_use]
+    pub fn primary_principal_server_url(&self) -> Option<&Url> {
+        self.principal_servers
+            .first()
+            .map(|server| &server.endpoint)
+    }
+
     /// Returns whether this deployment explicitly opts into `did:web` as a
     /// principal method. Both fields must match the spec's personal-node
     /// exception; an omitted `principal_method` still means `did:webvh`.
@@ -397,13 +481,6 @@ impl ArkretConfig {
             self.deployment_profile,
             DeploymentProfileConfig::PersonalNode
         ) && matches!(self.principal_method, PrincipalMethodConfig::DidWeb)
-    }
-
-    /// Returns whether this deployment explicitly opts into the no-history
-    /// `did:web` service DID exception.
-    #[must_use]
-    pub const fn did_web_service_id_allowed(&self) -> bool {
-        self.did_web_principal_allowed()
     }
 
     /// Validate the configured `trust_domain` (if any) against the SDK
@@ -474,50 +551,6 @@ impl ConfigurationSection for ArkretConfig {
             .into());
         }
 
-        match self.service_id.as_deref().map(str::trim) {
-            Some("") => {
-                return Err(std::io::Error::other(format!(
-                    "arkret.service_id must not be empty. {SERVICE_ID_BOOTSTRAP_HELP}"
-                ))
-                .into());
-            }
-            Some(service_id) if service_id.starts_with("did:webvh:") => {}
-            Some(service_id)
-                if service_id.starts_with("did:web:") && self.did_web_service_id_allowed() => {}
-            Some(service_id) if service_id.starts_with("did:web:") => {
-                return Err(std::io::Error::other(format!(
-                    "arkret.service_id=did:web requires the explicit personal-node no-history profile. {SERVICE_ID_BOOTSTRAP_HELP}"
-                ))
-                .into());
-            }
-            Some(_) => {
-                return Err(std::io::Error::other(format!(
-                    "arkret.service_id must use did:webvh, except explicit personal-node no-history did:web. {SERVICE_ID_BOOTSTRAP_HELP}"
-                ))
-                .into());
-            }
-            // No implicit host-derived `did:web` fallback exists anywhere:
-            // even the personal-node no-history profile must configure its
-            // service DID explicitly, so startup fails fast here instead of
-            // a request path silently minting a downgraded identity.
-            None => {
-                return Err(std::io::Error::other(format!(
-                    "arkret.service_id is required (did:webvh by default; explicit did:web only for the personal-node no-history profile). {SERVICE_ID_BOOTSTRAP_HELP}"
-                ))
-                .into());
-            }
-        }
-
-        if let Some(issuer_did) = self.issuer_did.as_deref().map(str::trim)
-            && issuer_did.starts_with("did:web:")
-            && !self.did_web_service_id_allowed()
-        {
-            return Err(std::io::Error::other(
-                "arkret.issuer_did=did:web requires the explicit personal-node no-history profile",
-            )
-            .into());
-        }
-
         if let Some(trust_domain) = self.trust_domain.as_deref() {
             Self::validate_trust_domain(trust_domain).map_err(std::io::Error::other)?;
         }
@@ -535,11 +568,52 @@ impl ConfigurationSection for ArkretConfig {
             return Err(std::io::Error::other("arkret.admin_org_id must not be empty").into());
         }
 
-        for (index, server) in self.principal_servers.iter().enumerate() {
-            if server.audience.is_some() && server.normalized_audience().is_none() {
-                return Err(std::io::Error::other(format!(
-                    "arkret.principal_servers[{index}].audience must not be empty or whitespace"
-                ))
+        let mut provider_names = std::collections::BTreeSet::new();
+        for server in &self.principal_servers {
+            if server.name.trim().is_empty() {
+                return Err(std::io::Error::other(
+                    "arkret.principal_servers[].name must not be empty",
+                )
+                .into());
+            }
+            if server
+                .embedded_webvh_registration_bearer
+                .as_deref()
+                .is_some_and(|bearer| bearer.trim().is_empty())
+            {
+                return Err(std::io::Error::other(
+                    "arkret.principal_servers[].embedded_webvh_registration_bearer must not be empty",
+                )
+                .into());
+            }
+            if server.embedded_webvh_registration_bearer.is_some()
+                && !provider_names.insert(server.name.as_str())
+            {
+                return Err(std::io::Error::other(
+                    "service-registration Provider names must be unique",
+                )
+                .into());
+            }
+        }
+        for service in &self.identity_services {
+            if service.name.trim().is_empty() || service.registration_bearer.trim().is_empty() {
+                return Err(std::io::Error::other(
+                    "arkret.identity_services[] requires non-empty name and registration_bearer",
+                )
+                .into());
+            }
+            if !provider_names.insert(service.name.as_str()) {
+                return Err(std::io::Error::other(
+                    "service-registration Provider names must be unique",
+                )
+                .into());
+            }
+        }
+        if let Some(selected) = self.identity_provider.as_deref() {
+            if selected.trim().is_empty() || !provider_names.contains(selected) {
+                return Err(std::io::Error::other(
+                    "arkret.identity_provider must name a configured registration-capable service entry",
+                )
                 .into());
             }
         }
@@ -577,30 +651,13 @@ const PASSWORD_BOOTSTRAP_ESCAPE_HATCH: &str = "COAUTH_ALLOW_INSECURE_PASSWORD_BO
 
 /// Trusted Principal Server metadata published through Arkret discovery.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct PrincipalServerConfig {
     /// Human-readable identifier for the consumer, such as `soland-prod`.
     pub name: String,
 
-    /// Service DID audience used when validating tokens or session grants for
-    /// this Principal Server.
-    ///
-    /// When omitted, coauth resolves the Principal Server's *current* service
-    /// DID dynamically from `<endpoint>/_arkret/describe` (see
-    /// `backend::services::resolved_principal_audiences`). Configure it
-    /// explicitly to pin the `did:webvh` SCID — a high-security choice that
-    /// rejects the audience the moment the Principal Server's signing key /
-    /// genesis changes. Omit it for self-hosted / dev deployments where the
-    /// Principal Server's DID legitimately rotates on data resets and you
-    /// trust the configured `endpoint` host (+ TLS) as the anchor instead.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub audience: Option<String>,
-
     /// Base URL of the Principal Server integration point.
     pub endpoint: Url,
-
-    /// Optional DID advertised for this Principal Server.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub did: Option<String>,
 
     /// Optional static bearer for the Account Authority / Principal Server
     /// trust edge. The Principal Server presents it to coauth introspection and
@@ -615,26 +672,24 @@ pub struct PrincipalServerConfig {
     pub embedded_webvh_registration_bearer: Option<String>,
 }
 
-impl PrincipalServerConfig {
-    /// Explicit audience after applying the configuration's canonical
-    /// whitespace normalization. An empty or all-whitespace value is not an
-    /// explicit pin and is rejected by [`ArkretConfig::validate`].
-    #[must_use]
-    pub fn normalized_audience(&self) -> Option<&str> {
-        self.audience
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-    }
+/// Trusted standalone service-identity Provider metadata.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct IdentityServiceConfig {
+    /// Operator-facing stable name used for ambiguity resolution.
+    pub name: String,
+
+    /// Base URL serving the standard service-registration operations.
+    pub endpoint: Url,
+
+    /// Deployment credential authorizing service-registration calls.
+    pub registration_bearer: String,
 }
 
 /// External identity-registry resolver configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct IdentityRegistryConfig {
-    /// Resolver flavour used by the deployment.
-    #[serde(default)]
-    pub kind: IdentityRegistryKind,
-
     /// Base URL of the resolver, for example a public DID resolver deployment.
     pub resolver: Url,
 
@@ -644,26 +699,12 @@ pub struct IdentityRegistryConfig {
     pub proof_required_for_pairwise: bool,
 }
 
-/// Supported identity-registry resolver flavours.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum IdentityRegistryKind {
-    /// Resolver backed by public DID methods or delegated DID services.
-    #[default]
-    PublicDidResolver,
-    /// Generic external resolver.
-    External,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn valid_service_config() -> ArkretConfig {
-        ArkretConfig {
-            service_id: Some("did:webvh:ztest:auth.example:webvh:service".to_owned()),
-            ..ArkretConfig::default()
-        }
+        ArkretConfig::default()
     }
 
     #[test]
@@ -734,9 +775,6 @@ mod tests {
         let personal_web = ArkretConfig {
             deployment_profile: DeploymentProfileConfig::PersonalNode,
             principal_method: PrincipalMethodConfig::DidWeb,
-            // Even the personal-node no-history profile must configure its
-            // service DID explicitly — omitting it fails validation.
-            service_id: Some("did:web:personal.example".to_owned()),
             ..ArkretConfig::default()
         };
         assert!(personal_web.did_web_principal_allowed());
@@ -750,7 +788,7 @@ mod tests {
         assert!(
             personal_web_unconfigured
                 .validate(&figment::Figment::new())
-                .is_err()
+                .is_ok()
         );
 
         let personal_default = ArkretConfig {
@@ -768,31 +806,45 @@ mod tests {
     }
 
     #[test]
-    fn service_id_requires_webvh_or_explicit_no_history_web() {
+    fn service_identity_is_runtime_only() {
+        let config = ArkretConfig::default();
+        let serialized = serde_json::to_value(&config).unwrap();
+        assert!(serialized.get("service_id").is_none());
+        assert!(serialized.get("runtime_service_identity").is_none());
+    }
+
+    #[test]
+    fn stale_operator_did_fields_are_rejected() {
         assert!(
-            ArkretConfig::default()
-                .validate(&figment::Figment::new())
-                .is_err()
+            serde_json::from_value::<ArkretConfig>(serde_json::json!({
+                "service_id": "did:webvh:zold:auth.example:webvh:service"
+            }))
+            .is_err()
         );
         assert!(
-            valid_service_config()
-                .validate(&figment::Figment::new())
-                .is_ok()
+            serde_json::from_value::<ArkretConfig>(serde_json::json!({
+                "principal_servers": [{
+                    "name": "principal-a",
+                    "endpoint": "https://principal.example/",
+                    "audience": "did:webvh:zold:principal.example:webvh:service"
+                }]
+            }))
+            .is_err()
         );
+    }
 
-        let organization_web = ArkretConfig {
-            service_id: Some("did:web:auth.example".to_owned()),
-            ..ArkretConfig::default()
-        };
-        assert!(organization_web.validate(&figment::Figment::new()).is_err());
-
-        let personal_web = ArkretConfig {
-            deployment_profile: DeploymentProfileConfig::PersonalNode,
-            principal_method: PrincipalMethodConfig::DidWeb,
-            service_id: Some("did:web:auth.example".to_owned()),
-            ..ArkretConfig::default()
-        };
-        assert!(personal_web.validate(&figment::Figment::new()).is_ok());
+    #[test]
+    fn standalone_identity_provider_uses_role_shaped_config() {
+        let config: ArkretConfig = serde_json::from_value(serde_json::json!({
+            "identity_services": [{
+                "name": "identity-a",
+                "endpoint": "https://identity.example/",
+                "registration_bearer": "secret"
+            }]
+        }))
+        .unwrap();
+        assert_eq!(config.identity_services[0].name, "identity-a");
+        assert!(config.validate(&figment::Figment::new()).is_ok());
     }
 
     #[test]

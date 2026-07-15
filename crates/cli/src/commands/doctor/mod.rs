@@ -46,10 +46,7 @@ impl Options {
             for server in &config.arkret.principal_servers {
                 info!(
                     name = %server.name,
-                    audience = %server
-                        .audience
-                        .as_deref()
-                        .unwrap_or("<resolved dynamically from /_arkret/describe>"),
+                    audience = "<resolved dynamically from /_arkret/describe>",
                     endpoint = %server.endpoint,
                     "Configured Arkret principal server"
                 );

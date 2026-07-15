@@ -1316,6 +1316,20 @@
             "$ref": "#/definitions/PrincipalServerConfig"
           }
         },
+        "identity_services": {
+          "description": "Trusted services that provide the standard service-registration role\nwithout also acting as a Principal Server.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IdentityServiceConfig"
+          }
+        },
+        "identity_provider": {
+          "description": "Provider name used only to disambiguate multiple registration-capable\nentries. A single candidate is selected automatically.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "deployment_profile": {
           "description": "Deployment profile that gates principal DID method choices.\n\n`did:web` is only valid for principal DIDs when this is\n`personal_node` and `principal_method` is explicitly `did:web`.\nOther built-in profiles use `did:webvh` for coauth-managed\nprincipal issuance.",
           "allOf": [
@@ -1343,20 +1357,6 @@
             }
           ]
         },
-        "service_id": {
-          "description": "Explicit service DID for the coauth deployment.\n\nRequired: startup validation fails fast when omitted — there is no\nhost-derived `did:web` fallback. Deployments MUST configure a\n`did:webvh` service DID; the only `did:web` exception is the explicit\npersonal-node no-history profile selected by\n`deployment_profile=personal_node` and `principal_method=did:web`.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "issuer_did": {
-          "description": "Optional issuer DID to embed in Arkret session grants and discovery\ndocuments. Defaults to `service_id`.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "session_grant_ttl": {
           "description": "Lifetime of Arkret session grants, in seconds.\n\nThese are the DPoP-bound JWT grants returned by the REST auth bridge\nlogin/exchange paths and rotated through\n`/_arkret/gate/account/session-grants/refresh`. Default: 28800 (8h) —\naccess bearers minted from a grant are short-lived (capped Principal-Server\nside), so a multi-hour grant gives a normal working session without\nlong-lived bearers, within the spec ceiling (minutes-to-hours).",
           "type": "integer",
@@ -1371,14 +1371,6 @@
             "null"
           ]
         },
-        "principal_server_url": {
-          "description": "Base URL of the principal server (`soland`) used for cross-service\nconsent-cell queries (Move/Anchor/Lattice model — see consent-model\nspec §3-§9). When omitted, the consent gate degrades to a\n`consent_unknown` result and the caller decides the policy outcome.\n\nOverride at runtime via `COAUTH_PRINCIPAL_SERVER_URL`.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "uri"
-        },
         "high_risk_threshold": {
           "description": "Minimum number of distinct admin DID approvals required to execute a\nhigh-risk risk-action proposal. Defaults to `2`.\n\n\"High-risk\" actions today are `disable`, `erase`, and `reset_recovery`;\nthe action `lock` is treated as low-risk and only needs the proposer's\nown approval.",
           "type": "integer",
@@ -1387,7 +1379,7 @@
           "default": 2
         },
         "trust_domain": {
-          "description": "Round R2/R3 (2026-05-20) — deployment trust-domain identifier\ninjected into Realm policy and the server-describe document.\n\nWire form: `ak:trust_domain:<scope>` where `<scope>` matches\n`[a-z0-9._:-]{1,128}`. This value enters the canonical transcript\nof every `ak.cross_signing.reset` proof; **changing\n`trust_domain` invalidates existing cross-signing reset proofs**\n— see the README \"Trust domain rotation\" note.\n\nWhen omitted, callers expected to honour cross-deployment replay\nprotection (`Realm` policy, principal-server describe) MUST be\ntold the trust domain is unset and fail closed.",
+          "description": "Round R2/R3 (2026-05-20) — deployment trust-domain identifier\ninjected into Realm policy and the server-describe document.\n\nWire form: `ak:trust_domain:<scope>` where `<scope>` matches\n`[a-z0-9._:-]{1,128}`. This value enters the canonical transcript\nof every `ak.cross_signing.reset` proof; **changing\n`trust_domain` invalidates existing cross-signing reset proofs**\n— see the README \"Trust domain rotation\" note.\n\nWhen omitted, callers expected to honour cross-deployment replay\nprotection (`Realm` policy, principal-server describe) MUST be\ntold the trust domain is unset and fail closed.\n\nTypically provisioned consistently across the deployment.",
           "type": [
             "string",
             "null"
@@ -1431,7 +1423,8 @@
           "description": "Require signed admin-audit writes to succeed before committing\nsecurity-sensitive admin mutations. Defaults to `false` so existing\ndeployments tolerate missing service signing keys during rollout; set\nto `true` in production once JWKS publication and key rotation are\noperational.",
           "type": "boolean"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "PrincipalServerConfig": {
       "description": "Trusted Principal Server metadata published through Arkret discovery.",
@@ -1441,24 +1434,13 @@
           "description": "Human-readable identifier for the consumer, such as `soland-prod`.",
           "type": "string"
         },
-        "audience": {
-          "description": "Service DID audience used when validating tokens or session grants for\nthis Principal Server.",
-          "type": "string"
-        },
         "endpoint": {
           "description": "Base URL of the Principal Server integration point.",
           "type": "string",
           "format": "uri"
         },
-        "did": {
-          "description": "Optional DID advertised for this Principal Server.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "session_grant_introspection_bearer": {
-          "description": "Optional static bearer token accepted when this Principal Server calls\ncoauth's session-grant introspection endpoint or Auth-side logout\nsub-operation (`/_arkret/gate/account/session-grants/introspect`,\n`/_arkret/gate/account/auth-sessions/logout`). This avoids requiring a\nDB-backed PAT/OAuth-session for the server-to-server hop, which is\nawkward in dev when the coauth DB is reset frequently.",
+          "description": "Optional static bearer for the Account Authority / Principal Server\ntrust edge. The Principal Server presents it to coauth introspection and\nAuth-side logout; coauth presents the same deployment credential when\nreading the standard agent projection for lifecycle authorization.",
           "type": [
             "string",
             "null"
@@ -1472,10 +1454,35 @@
           ]
         }
       },
+      "additionalProperties": false,
       "required": [
         "name",
-        "audience",
         "endpoint"
+      ]
+    },
+    "IdentityServiceConfig": {
+      "description": "Trusted standalone service-identity Provider metadata.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Operator-facing stable name used for ambiguity resolution.",
+          "type": "string"
+        },
+        "endpoint": {
+          "description": "Base URL serving the standard service-registration operations.",
+          "type": "string",
+          "format": "uri"
+        },
+        "registration_bearer": {
+          "description": "Deployment credential authorizing service-registration calls.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "endpoint",
+        "registration_bearer"
       ]
     },
     "DeploymentProfileConfig": {
@@ -1527,15 +1534,6 @@
       "description": "External identity-registry resolver configuration.",
       "type": "object",
       "properties": {
-        "kind": {
-          "description": "Resolver flavour used by the deployment.",
-          "default": "public_did_resolver",
-          "allOf": [
-            {
-              "$ref": "#/definitions/IdentityRegistryKind"
-            }
-          ]
-        },
         "resolver": {
           "description": "Base URL of the resolver, for example a public DID resolver deployment.",
           "type": "string",
@@ -1547,23 +1545,9 @@
           "default": false
         }
       },
+      "additionalProperties": false,
       "required": [
         "resolver"
-      ]
-    },
-    "IdentityRegistryKind": {
-      "description": "Supported identity-registry resolver flavours.",
-      "oneOf": [
-        {
-          "description": "Resolver backed by public DID methods or delegated DID services.",
-          "type": "string",
-          "const": "public_did_resolver"
-        },
-        {
-          "description": "Generic external resolver.",
-          "type": "string",
-          "const": "external"
-        }
       ]
     },
     "OobCodeKindConfig": {
@@ -2785,7 +2769,7 @@
           "type": "integer",
           "format": "uint8",
           "minimum": 0,
-          "maximum": 255,
+          "maximum": 4,
           "default": 3
         }
       }

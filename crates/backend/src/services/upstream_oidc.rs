@@ -267,7 +267,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
                 let Some(effective) = effective_audience(server, resolved) else {
                     continue;
                 };
-                let matches = effective == requested_audience
+                let matches = effective.as_str() == requested_audience
                     || principal_endpoint_matches_audience(&server.endpoint, requested_audience);
                 if matches {
                     return Ok(UpstreamOidcSessionGrantTarget {
@@ -277,7 +277,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
                         // endpoint URL remains a legacy request alias only while
                         // an authoritative audience is available; an unresolved
                         // or expired dynamic audience fails closed.
-                        audience: effective,
+                        audience: effective.to_string(),
                         principal_server_name: Some(server.name.clone()),
                         principal_server_endpoint: Some(server.endpoint.to_string()),
                     });
@@ -574,9 +574,7 @@ mod tests {
         let config = ArkretConfig {
             principal_servers: vec![PrincipalServerConfig {
                 name: "soland".to_owned(),
-                audience: None,
                 endpoint: endpoint.clone(),
-                did: None,
                 session_grant_introspection_bearer: None,
                 embedded_webvh_registration_bearer: None,
             }],

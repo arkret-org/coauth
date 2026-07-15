@@ -55,7 +55,7 @@ pub async fn update_account(
     let service_id = service_id_for(&arkret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
-        service_id: &service_id,
+        service_id: service_id.as_str(),
         fail_closed: arkret_config.audit_signature_fail_closed,
     };
     let mut rng = crate::handlers::account::make_rng();

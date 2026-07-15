@@ -66,7 +66,7 @@ pub struct InviteRelayRequestBody {
     /// Base URL of the target's `server_name` (`soland`).
     ///
     /// Optional in the body; when omitted, falls back to
-    /// `ArkretConfig::principal_server_url`. If neither is present the
+    /// the first configured `principal_servers[].endpoint`. If neither is present the
     /// handler returns 400 `config_required` because there's nowhere to
     /// query the consent cell.
     #[serde(default)]
@@ -288,12 +288,12 @@ pub async fn post_invite_relay(
     let principal_url = params
         .target_principal_url
         .clone()
-        .or_else(|| arkret_config.principal_server_url.clone());
+        .or_else(|| arkret_config.primary_principal_server_url().cloned());
 
     // Deny-by-default for the federation hop: the relay forwards a request
     // signed under coauth's service DID, so the destination MUST resolve to
-    // a configured trust anchor (a `principal_servers` endpoint, the global
-    // `principal_server_url`, the identity registry resolver, or starid).
+    // a configured trust anchor (a `principal_servers` endpoint, the identity
+    // registry resolver, or starid).
     // This blocks the SSRF / signing-oracle vector where a caller supplies
     // an arbitrary `target_principal_url`.
     if let Some(target) = principal_url.as_ref()
@@ -321,17 +321,11 @@ pub async fn post_invite_relay(
     let trust_domain = arkret::trust_domain_for(&url_builder, &arkret_config);
     let destination_service_id = params.invite_delivery.as_ref().map_or_else(
         || service_id.clone(),
-        |delivery| {
-            delivery
-                .invite_address
-                .recipient_service_id
-                .as_str()
-                .to_owned()
-        },
+        |delivery| delivery.invite_address.recipient_service_id.clone(),
     );
     let identity = PeerProtocolIdentity {
-        source_service_id: service_id,
-        destination_service_id,
+        source_service_id: service_id.to_string(),
+        destination_service_id: destination_service_id.to_string(),
         source_trust_domain: trust_domain.clone(),
         destination_trust_domain: trust_domain,
     };

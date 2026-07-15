@@ -1,8 +1,8 @@
 use arkret_core::SessionGrantIntrospectStatus;
 use chrono::{Duration, Utc};
 use coauth_config::{
-    ArkretConfig, DeploymentProfileConfig, IdentityRegistryConfig, IdentityRegistryKind,
-    PrincipalMethodConfig, PrincipalServerConfig,
+    ArkretConfig, DeploymentProfileConfig, IdentityRegistryConfig, PrincipalMethodConfig,
+    PrincipalServerConfig,
 };
 use coauth_data::{BrowserSession, Clock, RepositoryAccess, SessionGrant, SystemClock, User};
 use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
@@ -121,7 +121,9 @@ fn personal_node_did_web_config() -> ArkretConfig {
     ArkretConfig {
         // Personal-node no-history profile legitimately advertises a did:web
         // service DID (spec identity-did.md §3.1 personal_node exception).
-        service_id: Some("did:web:auth.example.com".to_owned()),
+        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+            "did:web:auth.example.com",
+        ),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
         ..ArkretConfig::default()
@@ -132,7 +134,9 @@ fn personal_node_did_web_config() -> ArkretConfig {
 /// derives a did:web default; startup validation enforces it in production).
 fn test_arkret_config() -> ArkretConfig {
     ArkretConfig {
-        service_id: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
+        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+            "did:webvh:ztest:auth.example.com:webvh:service",
+        ),
         ..ArkretConfig::default()
     }
 }
@@ -152,11 +156,13 @@ fn service_and_user_identifiers_follow_arkret_shape() {
     // is always the explicitly configured one (did:webvh by default; startup
     // validation fails fast when it is missing).
     let arkret_config = ArkretConfig {
-        service_id: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
+        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+            "did:webvh:ztest:auth.example.com:webvh:service",
+        ),
         ..ArkretConfig::default()
     };
     assert_eq!(
-        service_id_for(&arkret_config),
+        service_id_for(&arkret_config).as_str(),
         "did:webvh:ztest:auth.example.com:webvh:service"
     );
     assert_eq!(oidc_subject_for_user(&arkret_config, &user), user.sub);
@@ -177,26 +183,25 @@ fn service_and_user_identifiers_follow_arkret_shape() {
 fn service_describe_exposes_auth_account_boundary_profile() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
     let arkret_config = ArkretConfig {
-        service_id: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
-        issuer_did: Some("did:webvh:ztest:issuer.example.com:webvh:issuer".to_owned()),
+        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+            "did:webvh:ztest:auth.example.com:webvh:service",
+        ),
         admin_audience: Some("https://auth.example.com/api/admin".to_owned()),
         principal_servers: vec![PrincipalServerConfig {
             name: "soland-prod".to_owned(),
-            audience: Some("https://soland.example.com/api".to_owned()),
             endpoint: "https://soland.example.com/arkret".parse().unwrap(),
-            did: Some("did:web:soland.example.com".to_owned()),
             session_grant_introspection_bearer: None,
             embedded_webvh_registration_bearer: None,
         }],
+        identity_services: Vec::new(),
+        identity_provider: None,
         deployment_profile: DeploymentProfileConfig::default(),
         principal_method: PrincipalMethodConfig::default(),
         identity_registry: Some(IdentityRegistryConfig {
-            kind: IdentityRegistryKind::PublicDidResolver,
             resolver: "https://resolver.example.com/resolve".parse().unwrap(),
             proof_required_for_pairwise: true,
         }),
         session_grant_ttl: Duration::try_minutes(5).unwrap(),
-        principal_server_url: None,
         high_risk_threshold: 2,
         trust_domain: None,
         oob_code_kind: ArkretConfig::default().oob_code_kind,
@@ -222,7 +227,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     );
     assert_eq!(
         body["auth_metadata"]["issuer_did"],
-        "did:webvh:ztest:issuer.example.com:webvh:issuer"
+        "did:webvh:ztest:auth.example.com:webvh:service"
     );
     assert_eq!(
         body["auth_metadata"]["session_grant_scope"],
@@ -338,7 +343,9 @@ fn service_describe_exposes_auth_account_boundary_profile() {
 fn service_describe_marks_personal_node_did_web_service_as_no_history() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
     let arkret_config = ArkretConfig {
-        service_id: Some("did:web:auth.example.com".to_owned()),
+        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+            "did:web:auth.example.com",
+        ),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
         ..ArkretConfig::default()
@@ -359,15 +366,12 @@ fn service_describe_marks_personal_node_did_web_service_as_no_history() {
 
 fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
     ArkretConfig {
-        service_id: Some(
-            "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:coauth"
-                .to_owned(),
+        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+            "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:coauth",
         ),
         principal_servers: vec![PrincipalServerConfig {
             name: "soland-dev".to_owned(),
-            audience: Some("did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service".to_owned()),
             endpoint: "https://local.host/".parse().unwrap(),
-            did: Some("did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service".to_owned()),
             session_grant_introspection_bearer: Some(bearer.to_owned()),
             embedded_webvh_registration_bearer: None,
         }],
@@ -543,7 +547,9 @@ fn service_describe_emits_trust_domain_when_configured() {
         None,
     );
     let config = ArkretConfig {
-        service_id: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
+        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+            "did:webvh:ztest:auth.example.com:webvh:service",
+        ),
         trust_domain: Some("ak:trust_domain:example.net".to_owned()),
         ..Default::default()
     };
@@ -615,7 +621,9 @@ fn service_describe_advertises_configured_session_grant_ttl() {
         None,
     );
     let config = ArkretConfig {
-        service_id: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
+        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+            "did:webvh:ztest:auth.example.com:webvh:service",
+        ),
         session_grant_ttl: Duration::try_minutes(15).unwrap(),
         ..ArkretConfig::default()
     };
@@ -706,7 +714,9 @@ fn session_grant_rejects_implicit_did_web_fallback() {
     // explicit `did_web_principal_allowed` opt-in the grant MUST be rejected
     // with `DidWebPrincipalNotExplicit`.
     let arkret_config = ArkretConfig {
-        service_id: Some("did:web:auth.example.com".to_owned()),
+        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+            "did:web:auth.example.com",
+        ),
         ..ArkretConfig::default()
     };
     let key_store = test_keystore();
@@ -747,7 +757,9 @@ fn session_grant_uses_configured_ttl() {
     let arkret_config = ArkretConfig {
         // Personal-node no-history profile legitimately advertises a did:web
         // service DID (spec identity-did.md §3.1 personal_node exception).
-        service_id: Some("did:web:auth.example.com".to_owned()),
+        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+            "did:web:auth.example.com",
+        ),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
         session_grant_ttl: Duration::try_minutes(15).unwrap(),

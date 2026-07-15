@@ -193,8 +193,8 @@ pub(crate) fn principal_server_operation_bearer<'a>(
         .iter()
         .find(|server| {
             crate::services::resolved_principal_audiences::effective_audience_shared(server)
-                .as_deref()
-                == Some(audience)
+                .as_ref()
+                .is_some_and(|effective| effective.as_str() == audience)
         })
         .and_then(|server| server.embedded_webvh_registration_bearer.as_deref())
         .map(str::trim)

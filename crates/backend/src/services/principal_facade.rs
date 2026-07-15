@@ -548,9 +548,7 @@ mod tests {
         ArkretConfig {
             principal_servers: vec![PrincipalServerConfig {
                 name: "soland-dev".to_owned(),
-                audience: Some("soland".to_owned()),
                 endpoint: Url::parse("http://127.0.0.1:3322").unwrap(),
-                did: Some("did:web:soland.example".to_owned()),
                 session_grant_introspection_bearer: None,
                 embedded_webvh_registration_bearer: Some("secret".to_owned()),
             }],

@@ -439,9 +439,15 @@ pub async fn issue_statement_handler(
     // delegation row; direct statements use the offline resolver.
     let payload = if body.delegation_ref.is_some() {
         let resolver = RepositoryDelegationResolver::new(delegation, now);
-        issue_organization_statement(&key_store, &service_id, request, now, &resolver)
+        issue_organization_statement(&key_store, service_id.as_str(), request, now, &resolver)
     } else {
-        issue_organization_statement(&key_store, &service_id, request, now, &offline_resolver())
+        issue_organization_statement(
+            &key_store,
+            service_id.as_str(),
+            request,
+            now,
+            &offline_resolver(),
+        )
     }
     .map_err(|e| AppError::bad_request(format!("organization statement issuance failed: {e}")))?;
 

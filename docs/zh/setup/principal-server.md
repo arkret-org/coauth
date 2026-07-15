@@ -12,15 +12,15 @@ adapter。
 arkret:
   principal_servers:
     - name: soland
-      audience: did:webvh:<scid>:soland.example.com:webvh:service
       endpoint: https://soland.example.com/
-      did: did:webvh:<scid>:soland.example.com:webvh:service
+      embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 ```
 
 - `name`：面向运维的 Principal Server 标识。
-- `audience`：该服务器验证 token/session grant 时使用的 service DID audience。
 - `endpoint`：通过 Arkret/OIDC discovery 发布的基础 URL。
-- `did`：可选的 Principal Server DID。
+- `embedded_webvh_registration_bearer`：Coauth 向该 Provider 查询或幂等注册自身
+  service identity 的部署级凭据。Principal Server 的 DID/audience 始终从
+  `/_arkret/describe` 动态解析，不能手工配置。
 
 ## 服务间信任边界（部署内 S2S）
 

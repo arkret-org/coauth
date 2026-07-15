@@ -1362,12 +1362,12 @@ mod tests {
             .principal_servers
             .push(coauth_config::PrincipalServerConfig {
                 name: "soland-test".to_owned(),
-                audience: Some("did:web:soland.test".to_owned()),
                 endpoint: server.uri().parse().unwrap(),
-                did: Some("did:web:soland.test".to_owned()),
                 session_grant_introspection_bearer: Some("lifecycle-secret".to_owned()),
                 embedded_webvh_registration_bearer: None,
             });
+        crate::services::resolved_principal_audiences::shared()
+            .insert_for_test(&config.principal_servers[0].endpoint, "did:web:soland.test");
         (server, config)
     }
 

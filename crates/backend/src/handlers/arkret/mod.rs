@@ -398,6 +398,7 @@ pub(crate) async fn require_session_grant_caller(
             .principal_servers
             .iter()
             .filter_map(|server| effective_audience(server, resolved_principal_audiences::shared()))
+            .map(|audience| audience.to_string())
             .collect();
         Ok(SessionGrantCaller::principal_server(allowed_audiences))
     } else {
@@ -435,6 +436,7 @@ fn principal_server_static_session_grant_bearer_audience(
                 .is_some_and(|configured| crate::util::constant_time_token_eq(configured, token))
         })
         .and_then(|server| effective_audience(server, resolved_principal_audiences::shared()))
+        .map(|audience| audience.to_string())
 }
 
 impl Scribe for ArkretRouteError {
@@ -509,25 +511,16 @@ fn map_did_resolve_error(
     }
 }
 
-/// The deployment's configured service DID.
-///
-/// There is deliberately NO host-derived `did:web` fallback here:
-/// `identity-did.md` §3 makes `did:webvh` the default service DID method and
-/// any `did:web` downgrade an explicit no-history choice, so an unconfigured
-/// `arkret.service_id` fails startup validation instead of silently minting
-/// a `did:web` identity (see `ArkretConfig::validate`).
-pub(crate) fn service_id_for(arkret_config: &ArkretConfig) -> String {
+/// The deployment's Provider-resolved runtime service DID.
+pub(crate) fn service_id_for(arkret_config: &ArkretConfig) -> arkret_core::Did {
     arkret_config
-        .service_id
-        .clone()
-        .expect("arkret.service_id is enforced by startup configuration validation")
+        .runtime_service_identity
+        .service_id()
+        .expect("identity readiness gate prevents handlers from running without a service DID")
 }
 
-pub(crate) fn issuer_did_for(arkret_config: &ArkretConfig) -> String {
-    arkret_config
-        .issuer_did
-        .clone()
-        .unwrap_or_else(|| service_id_for(arkret_config))
+pub(crate) fn issuer_did_for(arkret_config: &ArkretConfig) -> arkret_core::Did {
+    service_id_for(arkret_config)
 }
 
 #[must_use]
@@ -575,13 +568,13 @@ where
         };
         if let Some(row) = repo
             .principal_did()
-            .get_for_user_and_audience(user, &audience)
+            .get_for_user_and_audience(user, audience.as_str())
             .await?
         {
             return Ok(Some(PrincipalDidBinding {
                 did: row.principal_id,
-                audience,
-                principal_server_did: server.did.clone(),
+                principal_server_did: Some(audience.to_string()),
+                audience: audience.to_string(),
             }));
         }
     }
@@ -732,10 +725,11 @@ pub(crate) fn is_allowed_session_grant_audience(
     }
 
     audience == required_audience_for(url_builder, arkret_config)
-        || arkret_config
-            .principal_servers
-            .iter()
-            .any(|server| effective_audience(server, resolved).as_deref() == Some(audience))
+        || arkret_config.principal_servers.iter().any(|server| {
+            effective_audience(server, resolved)
+                .as_ref()
+                .is_some_and(|effective| effective.as_str() == audience)
+        })
 }
 
 /// Reasons why a caller-supplied principal-server audience could not be
@@ -773,12 +767,12 @@ pub(crate) fn password_login_session_grant_target(
         if let Some((server, effective)) =
             arkret_config.principal_servers.iter().find_map(|server| {
                 effective_audience(server, resolved)
-                    .filter(|effective| effective == audience)
+                    .filter(|effective| effective.as_str() == audience)
                     .map(|effective| (server, effective))
             })
         {
             return Ok(SessionGrantTarget {
-                audience: effective,
+                audience: effective.to_string(),
                 principal_server_name: Some(server.name.clone()),
                 principal_server_endpoint: Some(server.endpoint.to_string()),
             });
@@ -803,7 +797,8 @@ pub(crate) fn password_login_session_grant_target(
         // rather than minting a grant with an audience that cannot be bound.
         [server] => Ok(SessionGrantTarget {
             audience: effective_audience(server, resolved)
-                .ok_or(SessionGrantTargetError::UnknownAudience)?,
+                .ok_or(SessionGrantTargetError::UnknownAudience)?
+                .to_string(),
             principal_server_name: Some(server.name.clone()),
             principal_server_endpoint: Some(server.endpoint.to_string()),
         }),

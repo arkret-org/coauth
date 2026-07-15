@@ -1,20 +1,14 @@
-//! Dynamic resolution of a Principal Server's *current* service DID for
-//! `arkret.principal_servers[]` entries that omit an explicit `audience`.
+//! Dynamic resolution of each configured Principal Server's current service
+//! DID.
 //!
 //! ## Why
 //!
-//! A Principal Server's `service_id` is a `did:webvh:<SCID>:<domain>:webvh:service`
-//! where `<SCID>` is the content hash of the DID genesis (its signing key). A
-//! data / key reset rotates the SCID. When coauth pins `audience` statically,
-//! the reset silently invalidates the whitelist and every session-grant
-//! exchange fails with `audience_mismatch`.
-//!
-//! When a `principal_servers[]` entry omits `audience`, coauth instead resolves
-//! the Principal Server's current `service_id` from `<endpoint>/_arkret/describe`
-//! and refreshes it on a background interval. The trust anchor moves from "the
-//! pinned SCID" down to "the configured `endpoint` host (+ TLS)" — the
-//! deliberate self-hosted / dev trade-off. Entries that DO pin `audience` keep
-//! the strict SCID check.
+//! A Principal Server's `service_id` is a stable
+//! `did:webvh:<SCID>:<domain>:webvh:service`. Coauth resolves it from
+//! `<endpoint>/_arkret/describe` because operators must not copy or pin a DID
+//! in configuration. The configured endpoint host and TLS establish the first
+//! observation; a later DID change is treated as an identity conflict and
+//! never silently replaces the cached identity.
 //!
 //! ## Concurrency
 //!
@@ -27,6 +21,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
 use std::time::{Duration, Instant};
 
+use arkret_core::Did;
 use coauth_config::{ArkretConfig, PrincipalServerConfig};
 use url::Url;
 
@@ -64,9 +59,8 @@ pub fn shared() -> &'static ResolvedPrincipalAudiences {
 }
 
 /// Endpoint (normalized string) → current resolved `service_id` and the time
-/// it was observed for principal servers whose `audience` is not explicitly
-/// pinned. Cheap to clone (the map is behind an `Arc`); all clones share the
-/// same underlying cache.
+/// it was observed. Cheap to clone (the map is behind an `Arc`); all clones
+/// share the same underlying cache.
 #[derive(Debug, Clone)]
 pub struct ResolvedPrincipalAudiences {
     inner: Arc<RwLock<HashMap<String, ResolvedAudience>>>,
@@ -75,7 +69,7 @@ pub struct ResolvedPrincipalAudiences {
 
 #[derive(Debug, Clone)]
 struct ResolvedAudience {
-    value: String,
+    value: Did,
     resolved_at: Instant,
 }
 
@@ -108,11 +102,11 @@ impl ResolvedPrincipalAudiences {
     /// first successful probe and after expiry, so callers MUST fail closed on
     /// `None`.
     #[must_use]
-    pub fn resolve(&self, endpoint: &Url) -> Option<String> {
+    pub fn resolve(&self, endpoint: &Url) -> Option<Did> {
         self.resolve_at(endpoint, Instant::now())
     }
 
-    fn resolve_at(&self, endpoint: &Url, now: Instant) -> Option<String> {
+    fn resolve_at(&self, endpoint: &Url, now: Instant) -> Option<Did> {
         let key = endpoint_key(endpoint);
         let map = self.inner.read().ok()?;
         let resolved = map.get(&key)?;
@@ -123,34 +117,30 @@ impl ResolvedPrincipalAudiences {
     /// Test/seed helper: insert a resolved value directly without a probe.
     #[cfg(test)]
     pub fn insert_for_test(&self, endpoint: &Url, service_id: impl Into<String>) {
+        let service_id = Did::new(service_id.into()).expect("valid test service DID");
         self.insert_at_for_test(endpoint, service_id, Instant::now());
     }
 
     #[cfg(test)]
-    fn insert_at_for_test(
-        &self,
-        endpoint: &Url,
-        service_id: impl Into<String>,
-        resolved_at: Instant,
-    ) {
+    fn insert_at_for_test(&self, endpoint: &Url, service_id: Did, resolved_at: Instant) {
         self.inner
             .write()
             .expect("resolved-audience lock poisoned")
             .insert(
                 endpoint_key(endpoint),
                 ResolvedAudience {
-                    value: service_id.into(),
+                    value: service_id,
                     resolved_at,
                 },
             );
     }
 
-    /// Probe every principal server that omits an explicit `audience` once
-    /// (synchronously awaited), then spawn a background task that re-probes at
-    /// `interval` (clamped into `[MIN, MAX]`). The initial probe remains
-    /// synchronously awaited before the refresh task is spawned. Probe
-    /// failures retain a still-trusted last-known value, but an expired value
-    /// fails closed and produces a high-visibility error.
+    /// Probe every principal server once (synchronously awaited), then spawn a
+    /// background task that re-probes at `interval` (clamped into `[MIN,
+    /// MAX]`). The initial probe remains synchronously awaited before the
+    /// refresh task is spawned. Probe failures retain a still-trusted
+    /// last-known value, but an expired value fails closed and produces a
+    /// high-visibility error.
     pub async fn warm_up_and_spawn(
         &self,
         http_client: reqwest::Client,
@@ -171,11 +161,6 @@ impl ResolvedPrincipalAudiences {
 
     async fn refresh_all(&self, http_client: &reqwest::Client, arkret_config: &ArkretConfig) {
         for server in &arkret_config.principal_servers {
-            // Explicitly-pinned entries keep their strict SCID check; never
-            // override them from the (mutable) describe document.
-            if server.normalized_audience().is_some() {
-                continue;
-            }
             let result = fetch_service_id(http_client, &server.endpoint).await;
             self.apply_refresh_result(server, result, Instant::now());
         }
@@ -184,20 +169,36 @@ impl ResolvedPrincipalAudiences {
     fn apply_refresh_result(
         &self,
         server: &PrincipalServerConfig,
-        result: Result<String, String>,
+        result: Result<Did, String>,
         now: Instant,
     ) {
         let key = endpoint_key(&server.endpoint);
         match result {
             Ok(service_id) => {
                 if let Ok(mut map) = self.inner.write() {
-                    map.insert(
-                        key,
-                        ResolvedAudience {
-                            value: service_id,
-                            resolved_at: now,
-                        },
-                    );
+                    match map.get_mut(&key) {
+                        Some(existing) if existing.value != service_id => {
+                            tracing::error!(
+                                endpoint = %server.endpoint,
+                                name = %server.name,
+                                stored_service_id = %existing.value,
+                                provider_service_id = %service_id,
+                                "principal-server service identity changed; keeping the last verified DID",
+                            );
+                        }
+                        Some(existing) => {
+                            existing.resolved_at = now;
+                        }
+                        None => {
+                            map.insert(
+                                key,
+                                ResolvedAudience {
+                                    value: service_id,
+                                    resolved_at: now,
+                                },
+                            );
+                        }
+                    }
                 }
             }
             Err(error) => match self.cached_age(&key, now) {
@@ -240,26 +241,21 @@ impl ResolvedPrincipalAudiences {
     }
 }
 
-/// The audience to enforce for `server`: the explicit pin when configured,
-/// else the dynamically-resolved current `service_id`. Returns `None` for an
-/// unpinned server whose describe probe has not yet succeeded or whose cached
-/// value expired — callers MUST fail closed (do not admit an unknown or stale
-/// audience).
+/// The dynamically resolved audience to enforce for `server`. Returns `None`
+/// until the describe probe has succeeded or after the cached value expires;
+/// callers MUST fail closed.
 #[must_use]
 pub fn effective_audience(
     server: &PrincipalServerConfig,
     resolved: &ResolvedPrincipalAudiences,
-) -> Option<String> {
-    match server.normalized_audience() {
-        Some(explicit) => Some(explicit.to_owned()),
-        None => resolved.resolve(&server.endpoint),
-    }
+) -> Option<Did> {
+    resolved.resolve(&server.endpoint)
 }
 
 /// [`effective_audience`] against the process-wide [`shared`] cache — the
 /// common form for call sites that don't thread a cache handle.
 #[must_use]
-pub fn effective_audience_shared(server: &PrincipalServerConfig) -> Option<String> {
+pub fn effective_audience_shared(server: &PrincipalServerConfig) -> Option<Did> {
     effective_audience(server, shared())
 }
 
@@ -269,7 +265,7 @@ fn endpoint_key(endpoint: &Url) -> String {
     endpoint.as_str().trim_end_matches('/').to_owned()
 }
 
-async fn fetch_service_id(http_client: &reqwest::Client, endpoint: &Url) -> Result<String, String> {
+async fn fetch_service_id(http_client: &reqwest::Client, endpoint: &Url) -> Result<Did, String> {
     let describe_url = endpoint
         .join(DESCRIBE_PATH)
         .map_err(|error| format!("invalid principal-server endpoint: {error}"))?;
@@ -296,41 +292,20 @@ async fn fetch_service_id(http_client: &reqwest::Client, endpoint: &Url) -> Resu
     let description: arkret_core::ServiceDescribe =
         serde_json::from_str(&text).map_err(|error| format!("invalid describe body: {error}"))?;
 
-    let service_id = description.service_id.as_str().trim().to_owned();
-    if service_id.is_empty() {
-        return Err("describe published an empty service_id".to_owned());
-    }
-    Ok(service_id)
+    Ok(description.service_id)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn server(audience: Option<&str>, endpoint: &str) -> PrincipalServerConfig {
+    fn server(endpoint: &str) -> PrincipalServerConfig {
         PrincipalServerConfig {
             name: "soland".to_owned(),
-            audience: audience.map(ToOwned::to_owned),
             endpoint: Url::parse(endpoint).unwrap(),
-            did: None,
             session_grant_introspection_bearer: None,
             embedded_webvh_registration_bearer: None,
         }
-    }
-
-    #[test]
-    fn explicit_audience_wins_and_ignores_resolved() {
-        let resolved = ResolvedPrincipalAudiences::new();
-        let endpoint = "https://local.host/";
-        resolved.insert_for_test(
-            &Url::parse(endpoint).unwrap(),
-            "did:webvh:new:local.host:webvh:service",
-        );
-        let server = server(Some("did:webvh:pinned:local.host:webvh:service"), endpoint);
-        assert_eq!(
-            effective_audience(&server, &resolved).as_deref(),
-            Some("did:webvh:pinned:local.host:webvh:service"),
-        );
     }
 
     #[test]
@@ -341,9 +316,11 @@ mod tests {
             &Url::parse(endpoint).unwrap(),
             "did:webvh:current:local.host:webvh:service",
         );
-        let server = server(None, endpoint);
+        let server = server(endpoint);
         assert_eq!(
-            effective_audience(&server, &resolved).as_deref(),
+            effective_audience(&server, &resolved)
+                .as_ref()
+                .map(arkret_core::Did::as_str),
             Some("did:webvh:current:local.host:webvh:service"),
         );
     }
@@ -351,7 +328,7 @@ mod tests {
     #[test]
     fn unpinned_without_probe_is_none() {
         let resolved = ResolvedPrincipalAudiences::new();
-        let server = server(None, "https://local.host/");
+        let server = server("https://local.host/");
         assert_eq!(effective_audience(&server, &resolved), None);
     }
 
@@ -370,7 +347,7 @@ mod tests {
         let resolved_at = Instant::now();
         resolved.insert_at_for_test(
             &endpoint,
-            "did:webvh:current:local.host:webvh:service",
+            Did::new("did:webvh:current:local.host:webvh:service").unwrap(),
             resolved_at,
         );
 
@@ -391,11 +368,11 @@ mod tests {
     #[test]
     fn refresh_failures_retain_fresh_value_then_fail_closed_after_expiry() {
         let resolved = ResolvedPrincipalAudiences::new();
-        let server = server(None, "https://local.host/");
+        let server = server("https://local.host/");
         let resolved_at = Instant::now();
         resolved.apply_refresh_result(
             &server,
-            Ok("did:webvh:current:local.host:webvh:service".to_owned()),
+            Ok(Did::new("did:webvh:current:local.host:webvh:service").unwrap()),
             resolved_at,
         );
 
@@ -414,5 +391,25 @@ mod tests {
         let at_expiry = resolved_at + MAX_TRUSTED_AUDIENCE_AGE;
         resolved.apply_refresh_result(&server, Err("describe unavailable".to_owned()), at_expiry);
         assert_eq!(resolved.resolve_at(&server.endpoint, at_expiry), None);
+    }
+
+    #[test]
+    fn identity_change_keeps_last_verified_did() {
+        let resolved = ResolvedPrincipalAudiences::new();
+        let server = server("https://local.host/");
+        let resolved_at = Instant::now();
+        let original = Did::new("did:webvh:original:local.host:webvh:service").unwrap();
+        resolved.apply_refresh_result(&server, Ok(original.clone()), resolved_at);
+
+        resolved.apply_refresh_result(
+            &server,
+            Ok(Did::new("did:webvh:changed:local.host:webvh:service").unwrap()),
+            resolved_at + Duration::from_secs(1),
+        );
+
+        assert_eq!(
+            resolved.resolve_at(&server.endpoint, resolved_at),
+            Some(original)
+        );
     }
 }

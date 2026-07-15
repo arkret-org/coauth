@@ -111,7 +111,11 @@ pub async fn resolve_authorized_device_signing_key(
     let server = arkret_config
         .principal_servers
         .iter()
-        .find(|server| effective_audience(server, resolved).as_deref() == Some(audience))
+        .find(|server| {
+            effective_audience(server, resolved)
+                .as_ref()
+                .is_some_and(|effective| effective.as_str() == audience)
+        })
         .ok_or_else(|| DeviceSigningDirectoryError::PrincipalServerUnknown {
             audience: audience.to_owned(),
         })?;

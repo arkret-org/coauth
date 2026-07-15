@@ -163,13 +163,15 @@ fn sole_principal_audience(
         // This is deliberate fail-closed behavior; see
         // `services::resolved_principal_audiences`. Do not substitute an
         // unverified default audience.
-        [server] => effective_audience(server, resolved).ok_or_else(|| {
-            ArkretRouteError::coded(
-                StatusCode::SERVICE_UNAVAILABLE,
-                ERROR_CODE_SERVICE_UNAVAILABLE,
-                "principal server audience is not yet resolved from /_arkret/describe",
-            )
-        }),
+        [server] => effective_audience(server, resolved)
+            .map(|audience| audience.to_string())
+            .ok_or_else(|| {
+                ArkretRouteError::coded(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    ERROR_CODE_SERVICE_UNAVAILABLE,
+                    "principal server audience is not yet resolved from /_arkret/describe",
+                )
+            }),
         [] => Err(ArkretRouteError::coded(
             StatusCode::SERVICE_UNAVAILABLE,
             ERROR_CODE_SERVICE_UNAVAILABLE,

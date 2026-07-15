@@ -458,13 +458,7 @@ pub async fn revoke_session_grant_endpoint(
     let body = parse_session_revoke_body(req).await?;
     let selector = revoke_selector(&body)?;
 
-    let service_id = Did::new(service_id_for(&arkret_config)).map_err(|error| {
-        ArkretRouteError::coded(
-            StatusCode::BAD_REQUEST,
-            ERROR_CODE_INVALID_PARAM,
-            format!("configured service_id is invalid: {error}"),
-        )
-    })?;
+    let service_id = service_id_for(&arkret_config);
 
     let mut repo = depot.repo().await?;
     let current_grant = repo
@@ -585,7 +579,9 @@ mod tests {
         ArkretConfig {
             deployment_profile: DeploymentProfileConfig::PersonalNode,
             principal_method: PrincipalMethodConfig::DidWeb,
-            service_id: Some("did:web:auth.example".to_owned()),
+            runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+                "did:web:auth.example",
+            ),
             ..ArkretConfig::default()
         }
     }

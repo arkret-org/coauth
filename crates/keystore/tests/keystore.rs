@@ -7,7 +7,10 @@
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::jwk::{ParametersInfo, Thumbprint};
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
-use coauth_keystore::{JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
+use coauth_keystore::{
+    JsonWebKey, JsonWebKeySet, Keystore, PrivateKey, SERVICE_IDENTITY_KEY_ID,
+    ServiceIdentityKeyError,
+};
 use der::pem::LineEnding;
 use rand_core::SeedableRng;
 
@@ -311,4 +314,41 @@ fn generated_private_key_thumbprints_match_public_jwks() {
         assert_eq!(pub_jwks.len(), 1, "JWKS should contain exactly one key");
         assert_eq!(pub_jwks[0].thumbprint_sha256_base64(), expected);
     }
+}
+
+#[test]
+fn service_identity_key_is_selected_by_reserved_kid() {
+    let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(2027);
+    let unrelated = PrivateKey::generate_ed25519(&mut rng);
+    let expected = PrivateKey::generate_ed25519(&mut rng);
+    let expected_seed = match &expected {
+        PrivateKey::OkpEd25519(key) => key.to_bytes(),
+        _ => unreachable!(),
+    };
+    let store = Keystore::new(JsonWebKeySet::new(vec![
+        JsonWebKey::new(unrelated).with_kid("unrelated-ed25519"),
+        JsonWebKey::new(expected).with_kid(SERVICE_IDENTITY_KEY_ID),
+    ]));
+
+    assert_eq!(store.service_identity_seed().unwrap(), expected_seed);
+}
+
+#[test]
+fn service_identity_key_rejects_missing_and_wrong_type() {
+    let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(2028);
+    let missing = Keystore::new(JsonWebKeySet::new(vec![JsonWebKey::new(
+        PrivateKey::generate_ed25519(&mut rng),
+    )]));
+    assert!(matches!(
+        missing.service_identity_seed(),
+        Err(ServiceIdentityKeyError::Missing)
+    ));
+
+    let wrong_type = Keystore::new(JsonWebKeySet::new(vec![
+        JsonWebKey::new(PrivateKey::generate_ec_p256(&mut rng)).with_kid(SERVICE_IDENTITY_KEY_ID),
+    ]));
+    assert!(matches!(
+        wrong_type.service_identity_seed(),
+        Err(ServiceIdentityKeyError::WrongKeyType)
+    ));
 }

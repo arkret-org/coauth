@@ -494,7 +494,7 @@ async fn patch_account(
     let service_id = service_id_for(&arkret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
-        service_id: &service_id,
+        service_id: service_id.as_str(),
         fail_closed: arkret_config.audit_signature_fail_closed,
     };
     let mut rng = crate::handlers::account::make_rng();
@@ -1127,7 +1127,8 @@ mod tests {
 
         let recovery_did = crate::handlers::arkret::service_id_for(&state.arkret_config);
         let nonce = "did-binding-add-nonce";
-        let control_proof = sign_did_binding_control_proof(&state, &recovery_did, user.id, nonce);
+        let control_proof =
+            sign_did_binding_control_proof(&state, recovery_did.as_str(), user.id, nonce);
         let response = state
             .request(
                 Request::post(format!("/_coauth/admin/accounts/{}/dids", user.id))
@@ -1146,15 +1147,19 @@ mod tests {
             .await;
         response.assert_status(StatusCode::CREATED);
         let body: serde_json::Value = response.json();
-        let added = binding_for_did(&body, &recovery_did);
+        let added = binding_for_did(&body, recovery_did.as_str());
         assert_eq!(added["kind"], "recovery");
         assert_eq!(added["state"], "active");
         assert_eq!(added["active"], true);
         assert_eq!(added["verification_status"], "verified");
         assert!(added["last_resolver_receipt_id"].is_string());
 
-        let duplicate_proof =
-            sign_did_binding_control_proof(&state, &recovery_did, user.id, "duplicate-nonce");
+        let duplicate_proof = sign_did_binding_control_proof(
+            &state,
+            recovery_did.as_str(),
+            user.id,
+            "duplicate-nonce",
+        );
         let response = state
             .request(
                 Request::post(format!("/_coauth/admin/accounts/{}/dids", user.id))
@@ -1186,7 +1191,7 @@ mod tests {
             .await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        let revoked = binding_for_did(&body, &recovery_did);
+        let revoked = binding_for_did(&body, recovery_did.as_str());
         assert_eq!(revoked["state"], "revoked");
         assert_eq!(revoked["active"], false);
         assert!(revoked["revoked_at"].is_string());
@@ -1217,7 +1222,7 @@ mod tests {
         let primary = binding_for_did(&body, &did);
         assert_eq!(primary["state"], "active");
         assert_eq!(primary["active"], true);
-        let revoked = binding_for_did(&body, &recovery_did);
+        let revoked = binding_for_did(&body, recovery_did.as_str());
         assert_eq!(revoked["state"], "revoked");
         assert_eq!(revoked["active"], false);
     }
@@ -1266,7 +1271,7 @@ mod tests {
             schema: DID_BINDING_CONTROL_PROOF_SCHEMA.to_owned(),
             account_did: did.to_owned(),
             verification_method,
-            audience,
+            audience: audience.to_string(),
             trust_domain,
             nonce: nonce.to_owned(),
             iat,

@@ -1,4 +1,4 @@
-use coauth_config::{ArkretConfig, IdentityRegistryKind};
+use coauth_config::ArkretConfig;
 use coauth_data::{SiteConfig, UrlBuilder};
 use coauth_iana::oauth::{
     OAuthAuthorizationEndpointResponseType, OAuthClientAuthenticationMethod,
@@ -30,7 +30,7 @@ struct DiscoveryDocument {
     arkret_server_describe: String,
 
     #[serde(rename = "org.arkret.service_id")]
-    arkret_service_id: String,
+    arkret_service_id: arkret_core::Did,
 
     #[serde(rename = "org.arkret.did_binding_methods")]
     arkret_did_binding_methods: Vec<String>,
@@ -52,9 +52,9 @@ struct DiscoveryDocument {
 #[derive(Debug, Serialize)]
 struct PrincipalServerMetadata {
     name: String,
-    audience: String,
+    audience: Option<arkret_core::Did>,
     endpoint: String,
-    did: Option<String>,
+    did: Option<arkret_core::Did>,
 }
 
 #[derive(Debug, Serialize)]
@@ -278,14 +278,15 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
     let arkret_principal_servers = arkret_config
         .principal_servers
         .iter()
-        .map(|server| PrincipalServerMetadata {
-            name: server.name.clone(),
-            audience: crate::services::resolved_principal_audiences::effective_audience_shared(
-                server,
-            )
-            .unwrap_or_default(),
-            endpoint: server.endpoint.to_string(),
-            did: server.did.clone(),
+        .map(|server| {
+            let service_id =
+                crate::services::resolved_principal_audiences::effective_audience_shared(server);
+            PrincipalServerMetadata {
+                name: server.name.clone(),
+                audience: service_id.clone(),
+                endpoint: server.endpoint.to_string(),
+                did: service_id,
+            }
         })
         .collect();
     let arkret_identity_registry =
@@ -293,10 +294,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
             .identity_registry
             .as_ref()
             .map(|registry| IdentityRegistryMetadata {
-                kind: match registry.kind {
-                    IdentityRegistryKind::PublicDidResolver => "public_did_resolver",
-                    IdentityRegistryKind::External => "external",
-                },
+                kind: "public_did_resolver",
                 resolver: registry.resolver.to_string(),
                 proof_required_for_pairwise: registry.proof_required_for_pairwise,
             });
@@ -357,7 +355,9 @@ mod tests {
         depot.insert(
             "arkret_config",
             ArkretConfig {
-                service_id: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
+                runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+                    "did:webvh:ztest:auth.example.com:webvh:service",
+                ),
                 ..ArkretConfig::default()
             },
         );

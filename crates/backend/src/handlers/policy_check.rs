@@ -34,8 +34,10 @@
 
 use std::time::Duration;
 
+#[cfg(test)]
+use arkret_core::Did;
 use arkret_core::{
-    Did, PolicyCheckBoundTo, PolicyCheckOutcome, PolicyCheckRequestBody, PolicyCheckSignature,
+    PolicyCheckBoundTo, PolicyCheckOutcome, PolicyCheckRequestBody, PolicyCheckSignature,
 };
 use chrono::Utc;
 use coauth_config::ArkretConfig;
@@ -115,7 +117,7 @@ pub async fn post_policy_check(
     // stable means parallel agents working on other handlers don't have
     // to rebase.
     let frontier_source = SolandFrontierSource::new(
-        arkret_config.principal_server_url.clone(),
+        arkret_config.primary_principal_server_url().cloned(),
         http_client.clone(),
     );
     let evaluator = RuleEvaluator::new(repo_factory);
@@ -169,11 +171,7 @@ pub(crate) async fn build_policy_check_response(
     // Policy server identity: coauth's own service DID (signs the
     // response with its preferred signing key).
     let policy_server_did = arkret::service_id_for(arkret_config);
-    let policy_server_id = Did::new(policy_server_did.clone()).map_err(|e| {
-        ArkretRouteError::Internal(Box::new(std::io::Error::other(format!(
-            "policy server DID failed SDK validation: {e}"
-        ))))
-    })?;
+    let policy_server_id = policy_server_did.clone();
 
     // Step 1 — frontier. On any frontier error we fall back to the
     // "unknown frontier" sentinel and let the evaluator produce a
@@ -274,7 +272,7 @@ pub(crate) async fn build_policy_check_response(
         expires_at: expires_at_str.as_str(),
         obligations: &obligations_wire,
     };
-    let signer = PolicySigner::new(key_store, policy_server_did);
+    let signer = PolicySigner::new(key_store, policy_server_did.to_string());
     let signature = match signer.sign_decision(&transcript) {
         Ok(sig) => sig,
         Err(e) => {
@@ -325,7 +323,7 @@ pub(crate) async fn build_policy_check_response_with_defaults(
     repository_factory: BoxRepositoryFactory,
 ) -> Result<PolicyCheckOutcome, ArkretRouteError> {
     let frontier_source = SolandFrontierSource::new(
-        arkret_config.principal_server_url.clone(),
+        arkret_config.primary_principal_server_url().cloned(),
         http_client.clone(),
     );
     let evaluator = RuleEvaluator::new(repository_factory);
@@ -494,7 +492,9 @@ mod tests {
         // `service_id` is mandatory (no derived fallback): pin the value the
         // old host derivation produced for this test base URL.
         let arkret_config = ArkretConfig {
-            service_id: Some("did:web:coauth.example".to_owned()),
+            runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+                "did:web:coauth.example",
+            ),
             ..ArkretConfig::default()
         };
         let frontier_source = StaticFrontierSource::new(Frontier::empty());

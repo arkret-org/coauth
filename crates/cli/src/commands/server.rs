@@ -152,11 +152,21 @@ impl Options {
         shutdown.register_reloadable(&templates);
 
         let http_client = coauth_backend::reqwest_client();
+        let arkret_config = config.arkret.clone();
+        coauth_backend::services::service_identity::initialize_and_spawn(
+            PgRepositoryFactory::new(pool.clone()),
+            &arkret_config,
+            &config.http.public_base,
+            &key_store,
+            http_client.clone(),
+        )
+        .await
+        .context("could not initialize Provider-backed service identity")?;
 
         let (principal_server_admin, connector_registry) = principal_server_connection_from_config(
             &site_config,
             PgRepositoryFactory::new(pool.clone()).boxed(),
-            config.arkret.clone(),
+            arkret_config.clone(),
             http_client.clone(),
         );
 
@@ -256,8 +266,6 @@ impl Options {
         let email_webhook_service =
             EmailWebhookService::from_email_config(&config.email, http_client.clone())
                 .context("invalid email webhook configuration")?;
-        let arkret_config = config.arkret.clone();
-
         // Explicitly the config to properly zeroize secret keys
         drop(config);
 
@@ -294,10 +302,9 @@ impl Options {
             };
             s.init_metrics();
             s.init_metadata_cache();
-            // Resolve the current service DID of any principal_servers[] entry
-            // that omits an explicit `audience`, refreshing on a background
-            // interval. Keeps the session-grant audience whitelist in sync with
-            // a Principal Server whose did:webvh SCID rotates on data resets.
+            // Resolve every Principal Server service DID from its standard
+            // describe endpoint and refresh it in the background. Operator-
+            // supplied audience/DID pins are deliberately unsupported.
             coauth_backend::services::resolved_principal_audiences::shared().warm_up_and_spawn(
                 s.http_client.clone(),
                 s.arkret_config.clone(),

@@ -256,11 +256,12 @@ impl TestState {
 
         let url_builder = UrlBuilder::new("https://example.com/".parse()?, None, None);
 
-        // `arkret.service_id` is required (the backend no longer derives a
-        // `did:web` fallback from the host); pin the value the old host
-        // derivation used to produce so DID-shaped assertions stay stable.
+        // Seed the runtime identity fixture so DID-shaped assertions stay
+        // stable without introducing a configuration-level service DID.
         let arkret_config = ArkretConfig {
-            service_id: Some("did:web:example.com".to_owned()),
+            runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+                "did:web:example.com",
+            ),
             ..ArkretConfig::default()
         };
 

@@ -32,8 +32,8 @@ arkret:
   trust_domain: ak:trust_domain:acme.example
   principal_servers:
   - name: soland
-    audience: did:webvh:<scid>:soland.acme.example:webvh:service
     endpoint: https://soland.acme.example/
+    embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 ```
 
 Secrets (OIDC client secret, signing keys, DB password) MUST come from environment variables, sealed secrets, or a secrets manager — NEVER committed `.env`.

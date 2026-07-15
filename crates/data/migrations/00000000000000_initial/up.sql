@@ -562,6 +562,13 @@ CREATE TABLE public.risk_action_proposals (
     CONSTRAINT risk_action_proposals_state_valid CHECK ((state = ANY (ARRAY['draft'::text, 'approved'::text, 'executed'::text, 'cancelled'::text, 'rejected'::text])))
 );
 
+CREATE TABLE public.service_identity (
+    id smallint PRIMARY KEY,
+    identity jsonb NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT service_identity_singleton CHECK ((id = 1))
+);
+
 CREATE TABLE public.upstream_oauth_authorization_sessions (
     id uuid NOT NULL,
     upstream_oauth_provider_id uuid CONSTRAINT upstream_oauth_authorizatio_upstream_oauth_provider_id_not_null NOT NULL,

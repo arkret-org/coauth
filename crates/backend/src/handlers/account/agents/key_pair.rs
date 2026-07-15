@@ -402,7 +402,7 @@ pub async fn post_agent_key_pair(
         &mut *rng,
         &*clock,
         &key_store,
-        &service_id,
+        service_id.as_str(),
         arkret_config.audit_signature_fail_closed,
         AdminOperation::Other("agent_key_authorize_issued".to_owned()),
         "agent",

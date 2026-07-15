@@ -13,15 +13,16 @@ section:
 arkret:
   principal_servers:
     - name: soland
-      audience: did:webvh:<scid>:soland.example.com:webvh:service
       endpoint: https://soland.example.com/
-      did: did:webvh:<scid>:soland.example.com:webvh:service
+      embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 ```
 
 - `name`: operator-facing identifier for the Principal Server.
-- `audience`: service DID audience expected by that server.
 - `endpoint`: base URL advertised through Arkret/OIDC discovery.
-- `did`: optional DID advertised for the Principal Server.
+- `embedded_webvh_registration_bearer`: deployment credential used by Coauth
+  to query or idempotently register its service identity with this Provider.
+  The Principal Server DID/audience is always resolved from `/_arkret/describe`
+  and cannot be configured manually.
 
 ## Server-to-server trust boundary (deployment-internal)
 

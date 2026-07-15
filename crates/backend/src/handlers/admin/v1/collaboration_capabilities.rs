@@ -150,7 +150,7 @@ pub async fn create_handler(
         body.expires_at,
         body.approval_evidence_ref.as_deref(),
         issued_at,
-        &service_id,
+        service_id.as_str(),
         &arkret_config,
         &key_store,
     );
@@ -261,7 +261,7 @@ pub async fn revoke_handler(
                 &revoked.capability_grant_id,
                 &revoked.realm_id,
                 revoked.revoked_at.unwrap_or_else(|| clock.now()),
-                &service_id,
+                service_id.as_str(),
                 &arkret_config,
                 &key_store,
             )?;
@@ -507,11 +507,13 @@ fn principal_servers(arkret_config: &ArkretConfig) -> Vec<Value> {
         .principal_servers
         .iter()
         .map(|server| {
+            let service_id =
+                crate::services::resolved_principal_audiences::effective_audience_shared(server);
             json!({
                 "name": server.name.as_str(),
-                "audience": crate::services::resolved_principal_audiences::effective_audience_shared(server),
+                "audience": service_id.clone(),
                 "endpoint": server.endpoint.as_str(),
-                "did": server.did.as_deref(),
+                "did": service_id,
             })
         })
         .collect()
@@ -544,9 +546,7 @@ mod tests {
         ArkretConfig {
             principal_servers: vec![PrincipalServerConfig {
                 name: "soland-dev".to_owned(),
-                audience: Some("http://soland.test".to_owned()),
                 endpoint: "http://soland.test".parse().unwrap(),
-                did: Some("did:web:soland.test".to_owned()),
                 session_grant_introspection_bearer: None,
                 embedded_webvh_registration_bearer: None,
             }],

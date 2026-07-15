@@ -36,6 +36,7 @@ DROP TABLE IF EXISTS queue_leader CASCADE;
 DROP TABLE IF EXISTS queue_schedules CASCADE;
 DROP TABLE IF EXISTS queue_workers CASCADE;
 DROP TABLE IF EXISTS risk_action_proposals CASCADE;
+DROP TABLE IF EXISTS service_identity CASCADE;
 DROP TABLE IF EXISTS upstream_oauth_authorization_sessions CASCADE;
 DROP TABLE IF EXISTS upstream_oauth_links CASCADE;
 DROP TABLE IF EXISTS upstream_oauth_providers CASCADE;

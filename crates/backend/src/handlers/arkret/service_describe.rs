@@ -10,7 +10,7 @@ use arkret_core::{
     AccountAuthority, AuthGrantExchange, AuthMetadata, AuthMethod, AuthMethodKind,
     SessionGrantProofKind,
 };
-use coauth_config::{ArkretConfig, IdentityRegistryKind};
+use coauth_config::ArkretConfig;
 use coauth_data::{RepositoryAccess, UrlBuilder};
 use salvo::prelude::*;
 use serde::Serialize;
@@ -52,9 +52,9 @@ struct SupportedBinding {
 #[derive(Debug, Clone, Serialize)]
 struct PrincipalServerDescriptor {
     name: String,
-    audience: String,
+    audience: Option<arkret_core::Did>,
     endpoint: String,
-    did: Option<String>,
+    did: Option<arkret_core::Did>,
 }
 
 #[derive(Debug, Serialize)]
@@ -144,7 +144,7 @@ struct PlaintextVisibilityDescriptor {
 pub(crate) struct ServiceDescribeOutcome {
     // --- canonical `ak.schema.service_describe.v1` fields, in the schema's
     //     property order (see service-describe.schema.json). ---
-    service_id: String,
+    service_id: arkret_core::Did,
     /// Round 4 (spec a77b995) — deployment-scope trust domain (wire
     /// form `ak:trust_domain:<scope>`). Explicit configuration wins;
     /// otherwise coauth derives a stable deployment-local value from the
@@ -261,13 +261,6 @@ struct CompatSurfaceDescriptor {
     notes: Option<&'static str>,
 }
 
-fn identity_registry_kind(kind: &IdentityRegistryKind) -> &'static str {
-    match kind {
-        IdentityRegistryKind::PublicDidResolver => "public_did_resolver",
-        IdentityRegistryKind::External => "external",
-    }
-}
-
 pub(crate) fn delegated_identity_registry_descriptor(
     arkret_config: &ArkretConfig,
 ) -> Option<IdentityRegistryDescriptor> {
@@ -275,7 +268,7 @@ pub(crate) fn delegated_identity_registry_descriptor(
         .identity_registry
         .as_ref()
         .map(|registry| IdentityRegistryDescriptor {
-            kind: identity_registry_kind(&registry.kind),
+            kind: "public_did_resolver",
             resolver: registry.resolver.to_string(),
             proof_required_for_pairwise: registry.proof_required_for_pairwise,
         })
@@ -442,7 +435,7 @@ fn build_auth_metadata(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -
         "session_grant_scope".to_owned(),
         json!(PRINCIPAL_SERVER_SESSION_BIND_SCOPE),
     );
-    if service_id.starts_with("did:web:") {
+    if service_id.method() == "web" {
         extra.insert("service_id_history_evidence_kind".to_owned(), json!("none"));
         extra.insert(
             "service_id_trust_profile".to_owned(),
@@ -526,14 +519,15 @@ pub(crate) fn service_describe_response(
     let principal_servers: Vec<PrincipalServerDescriptor> = arkret_config
         .principal_servers
         .iter()
-        .map(|server| PrincipalServerDescriptor {
-            name: server.name.clone(),
-            audience: crate::services::resolved_principal_audiences::effective_audience_shared(
-                server,
-            )
-            .unwrap_or_default(),
-            endpoint: server.endpoint.to_string(),
-            did: server.did.clone(),
+        .map(|server| {
+            let service_id =
+                crate::services::resolved_principal_audiences::effective_audience_shared(server);
+            PrincipalServerDescriptor {
+                name: server.name.clone(),
+                audience: service_id.clone(),
+                endpoint: server.endpoint.to_string(),
+                did: service_id,
+            }
         })
         .collect();
     let admin_audience = required_audience_for(url_builder, arkret_config);

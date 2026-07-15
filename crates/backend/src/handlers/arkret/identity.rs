@@ -31,7 +31,7 @@ pub async fn identity_describe(
     };
 
     Ok(Json(IdentityDescribeOutcome(IdentityDescription {
-        service_id: parse_did_field("service_id", service_id_for(&arkret_config))?,
+        service_id: service_id_for(&arkret_config),
         registry_mode: registry_mode.to_owned(),
         supported_receipts: Vec::new(),
         protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
@@ -127,7 +127,7 @@ pub async fn directory_describe(
 ) -> Result<Json<DirectoryDescribeOutcome>, ArkretRouteError> {
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
-    let service_id = parse_did_field("service_id", service_id_for(&arkret_config))?;
+    let service_id = service_id_for(&arkret_config);
     let trust_domain =
         arkret_core::TypedTrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
             .map_err(|error| {
@@ -352,7 +352,7 @@ fn directory_handle_delivery_binding(
         .as_ref()
         .and_then(|did| arkret_core::Did::new(did.clone()).ok())
         .or_else(|| arkret_core::Did::new(principal_binding.audience.clone()).ok())
-        .or_else(|| arkret_core::Did::new(service_id_for(arkret_config)).ok())
+        .or_else(|| Some(service_id_for(arkret_config)))
         .ok_or_else(|| {
             ArkretRouteError::Internal(Box::new(std::io::Error::other(
                 "no valid DID available for handle claim delivery binding",

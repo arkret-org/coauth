@@ -30,6 +30,7 @@ workspace = true
 
 # coauth workspace crates
 anyhow = {workspace = true}
+arkret-core = {workspace = true}
 camino = {workspace = true}
 chrono = {workspace = true}
 coauth-email-types = {workspace = true}

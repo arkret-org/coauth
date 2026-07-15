@@ -171,8 +171,12 @@ pub async fn post_accountability_grant(
         accountability_capabilities_digest(&agent_id, &controller_id, &capabilities)?;
     let idempotency_key = accountability_grant_idempotency_key(&accountability_grant_id);
     let service_id = service_id_for(&arkret_config);
-    let fanout_payload =
-        build_soland_fanout_payload(&response, &raw_payload_digest, &service_id, &arkret_config)?;
+    let fanout_payload = build_soland_fanout_payload(
+        &response,
+        &raw_payload_digest,
+        service_id.as_str(),
+        &arkret_config,
+    )?;
 
     let mut repo = depot.repo().await?;
     if repo
@@ -254,7 +258,7 @@ pub async fn post_accountability_grant(
         &mut *rng,
         &*clock,
         &key_store,
-        &service_id,
+        service_id.as_str(),
         arkret_config.audit_signature_fail_closed,
         AdminOperation::Other("accountability_grant_issued".to_owned()),
         "agent",
@@ -344,11 +348,13 @@ fn build_soland_fanout_payload(
         .principal_servers
         .iter()
         .map(|server| {
+            let service_id =
+                crate::services::resolved_principal_audiences::effective_audience_shared(server);
             serde_json::json!({
                 "name": server.name.as_str(),
-                "audience": crate::services::resolved_principal_audiences::effective_audience_shared(server),
+                "audience": service_id.clone(),
                 "endpoint": server.endpoint.as_str(),
-                "did": server.did.as_deref(),
+                "did": service_id,
             })
         })
         .collect();

@@ -95,6 +95,11 @@ secrets:
       oUQDQgAEeibK9H46/WG0q0u+AhrnALVQeK4ny5XDhEiEQG5iNbewL8Vkzbl/w9xQ
       VBcGmfUG9zJBQYztKW5Eqc7M+62eBQ==
       -----END EC PRIVATE KEY-----
+  - kid: coauth-service-identity-v1
+    key: |
+      -----BEGIN PRIVATE KEY-----
+      MC4CAQAwBQYDK2VwBCIEIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH
+      -----END PRIVATE KEY-----
 sms:
   transport: blackhole
   # transport: twilio
@@ -138,14 +143,11 @@ rate_limiting:
       burst: 100000
       per_second: 100000
 arkret:
-  service_id: did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:auth.local.host:webvh:service
-  principal_server_url: https://local.host/
   principal_servers:
   - name: soland-dev
     endpoint: https://local.host/
     session_grant_introspection_bearer: local-coauth-session-grant-introspection
     embedded_webvh_registration_bearer: local-soland-webvh-registration
   identity_registry:
-    kind: public_did_resolver
     resolver: https://local.host/_arkret/root/identity/resolve
     proof_required_for_pairwise: false

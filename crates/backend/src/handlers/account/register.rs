@@ -924,7 +924,7 @@ fn resolve_webvh_provider(
     Ok(WebvhProviderTarget {
         endpoint: server.endpoint.clone(),
         bearer,
-        audience,
+        audience: audience.to_string(),
     })
 }
 

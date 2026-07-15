@@ -125,7 +125,7 @@ fn audit_signing_context(
     let service_id = service_id_for(&arkret_config);
     Ok((
         key_store,
-        service_id,
+        service_id.to_string(),
         arkret_config.audit_signature_fail_closed,
     ))
 }

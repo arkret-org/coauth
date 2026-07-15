@@ -64,7 +64,7 @@ impl SecretsConfig {
                 into_key_config(ec_p384_key)?,
                 into_key_config(ec_p521_key)?,
                 into_key_config(ec_k256_key)?,
-                into_key_config(ed25519_key)?,
+                into_key_config_with_kid(ed25519_key, coauth_keystore::SERVICE_IDENTITY_KEY_ID)?,
             ]),
             keys_dir: None,
         })
@@ -141,6 +141,14 @@ where
 fn into_key_config(pk: PrivateKey) -> anyhow::Result<KeyConfig> {
     Ok(KeyConfig {
         kid: None,
+        password: None,
+        key: Key::Value(pk.to_pem(pem_rfc7468::LineEnding::LF)?.to_string()),
+    })
+}
+
+fn into_key_config_with_kid(pk: PrivateKey, kid: &str) -> anyhow::Result<KeyConfig> {
+    Ok(KeyConfig {
+        kid: Some(kid.to_owned()),
         password: None,
         key: Key::Value(pk.to_pem(pem_rfc7468::LineEnding::LF)?.to_string()),
     })

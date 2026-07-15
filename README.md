@@ -173,15 +173,11 @@ database:
 arkret:
   principal_servers:
     - name: soland
-      audience: did:webvh:<scid>:soland.example.com:webvh:service
       endpoint: https://soland.example.com/
-      did: did:webvh:<scid>:soland.example.com:webvh:service
+      embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
   identity_registry:
-    kind: public_did_resolver
     resolver: https://resolver.example.com/
     proof_required_for_pairwise: true
-  service_id: did:webvh:<scid>:auth.example.com:webvh:service
-  issuer_did: did:webvh:<scid>:auth.example.com:webvh:service
   admin_audience: https://auth.example.com/_arkret
 
 secrets:
@@ -192,6 +188,12 @@ secrets:
 passwords:
   enabled: true
 ```
+
+Coauth resolves and persists its service DID through the one configured
+registration-capable entry. A standalone Provider uses the product-neutral
+`identity_services[]` shape (`name`, `endpoint`, `registration_bearer`). If
+more than one entry can register identities, set `arkret.identity_provider` to
+the selected entry name.
 
 ### 3. Start the server
 

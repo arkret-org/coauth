@@ -220,7 +220,9 @@ impl TlsConfig {
         };
 
         let chain: Vec<CertificateDer<'static>> =
-            CertificateDer::pem_slice_iter(cert_pem.as_bytes()).collect::<Result<Vec<_>, _>>()?;
+            CertificateDer::pem_slice_iter(cert_pem.as_bytes())
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| anyhow::anyhow!("invalid TLS certificate PEM: {error}"))?;
 
         if chain.is_empty() {
             bail!("TLS certificate chain is empty (or invalid)");

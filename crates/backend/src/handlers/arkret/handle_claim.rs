@@ -69,7 +69,7 @@ pub(crate) fn issue_handle_claim(
     ensure_subject_is_principal_did(&subject_id)?;
     ensure_principal_did_method_allowed(arkret_config, &subject_id)?;
     let subject = did_for_handle_claim(subject_id.clone())?;
-    let issuer_service = did_for_handle_claim(issuer_service_id.clone())?;
+    let issuer_service = issuer_service_id.clone();
 
     // Spec 7157ee8 §3.1 — canonical handle wire form is
     // `<localpart>:<domain>`.
@@ -91,7 +91,7 @@ pub(crate) fn issue_handle_claim(
         handle: Some(handle),
         handle_aliases: aliases.clone(),
         subject: Some(subject),
-        issuer: Some(issuer_service_id.clone()),
+        issuer: Some(issuer_service_id.to_string()),
         issuer_service_id: Some(issuer_service),
         binding_state: Some(HandleBindingState::Verified),
         claim_kind: Some(claim_kind),
