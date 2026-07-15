@@ -23,44 +23,17 @@ clap = {workspace = true}
 coauth-backend = {workspace = true}
 coauth-config = {workspace = true}
 coauth-data = {workspace = true}
-coauth-i18n = {workspace = true}
-coauth-keystore = {workspace = true}
 coauth-messaging = {workspace = true}
-coauth-policy = {workspace = true}
-coauth-principal = {workspace = true}
 coauth-tasks = {workspace = true}
-coauth-templates = {workspace = true}
 console = {workspace = true}
-arkret-core = {workspace = true}
-crc = {workspace = true}
-deadpool = {workspace = true}
 dialoguer = {workspace = true}
-diesel = {workspace = true}
-diesel-async = {workspace = true}
-diesel_migrations = {workspace = true}
 dotenvy = {workspace = true}
-ed25519-dalek = {workspace = true}
 figment = {workspace = true}
-futures-util = {workspace = true}
-headers = {workspace = true}
 http = {workspace = true}
-http-body-util = {workspace = true}
 hyper = {workspace = true}
-ipnetwork = {workspace = true}
 itertools = {workspace = true}
 listenfd = {workspace = true}
 opentelemetry = {workspace = true}
-opentelemetry-http = {workspace = true}
-opentelemetry-instrumentation-process = {workspace = true}
-opentelemetry-instrumentation-tokio = {workspace = true}
-opentelemetry-jaeger-propagator = {workspace = true}
-opentelemetry-otlp = {workspace = true}
-opentelemetry-prometheus-text-exporter = {workspace = true}
-opentelemetry-resource-detectors = {workspace = true}
-opentelemetry-semantic-conventions = {workspace = true}
-opentelemetry-stdout = {workspace = true}
-opentelemetry_sdk = {workspace = true}
-rand = {workspace = true}
 rand_chacha = {workspace = true}
 rand_core = {workspace = true}
 reqwest = {workspace = true}
@@ -70,26 +43,13 @@ sentry = {workspace = true}
 sentry-tracing = {workspace = true}
 serde_json = {workspace = true}
 serde_yaml_ng = {workspace = true}
-sha2 = {workspace = true}
 tokio = {workspace = true}
-tokio-postgres = {workspace = true}
-tokio-util = {workspace = true}
 tracing = {workspace = true}
 tracing-appender = {workspace = true}
 tracing-opentelemetry = {workspace = true}
 tracing-subscriber = {workspace = true}
 url = {workspace = true}
-uuid = {workspace = true}
 zeroize = {workspace = true}
-
-
-
-
-[target.'cfg(unix)'.dependencies]
-sd-notify = {workspace = true}
-
-[build-dependencies]
-anyhow = {workspace = true}
 
 [features]
 default = ["cedar"]

@@ -23,7 +23,6 @@ reqwest = {workspace = true,features = ["json"]}
 serde = {workspace = true}
 serde_with = {workspace = true}
 serde_json = {workspace = true}
-tracing = {workspace = true}
 wasm-bindgen = {workspace = true}
 wasm-bindgen-futures = {workspace = true}
 unic-langid = {workspace = true}

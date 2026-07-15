@@ -45,7 +45,6 @@ diesel-async = {workspace = true}
 coauth-oauth-types = {workspace = true}
 opentelemetry = {workspace = true}
 opentelemetry-semantic-conventions = {workspace = true}
-rand = {workspace = true}
 rand_chacha = {workspace = true}
 rand_core = {workspace = true}
 serde = {workspace = true}

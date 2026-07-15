@@ -23,7 +23,6 @@ base64ct = {workspace = true}
 chrono = {workspace = true}
 coauth-iana = {workspace = true}
 coauth-jose = {workspace = true}
-indexmap = {workspace = true}
 language-tags = {workspace = true}
 serde = {workspace = true}
 serde_json = {workspace = true}

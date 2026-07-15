@@ -23,7 +23,6 @@ schema = ["dep:schemars", "dep:salvo"]
 [dependencies]
 anyhow = {workspace = true}
 async-trait = {workspace = true}
-base64ct = {workspace = true}
 chrono = {workspace = true}
 coauth-email-types = {workspace = true}
 coauth-iana = {workspace = true}
@@ -39,7 +38,6 @@ language-tags = {workspace = true}
 coauth-oauth-types = {workspace = true}
 opentelemetry = {workspace = true}
 opentelemetry-semantic-conventions = {workspace = true}
-rand = {workspace = true}
 rand_chacha = {workspace = true}
 rand_core = {workspace = true}
 regex = {workspace = true}
@@ -47,7 +45,6 @@ salvo = {workspace = true,optional = true}
 schemars = {workspace = true,optional = true}
 serde = {workspace = true}
 serde_json = {workspace = true}
-serde_urlencoded = {workspace = true}
 sha2 = {workspace = true}
 subtle = {workspace = true}
 thiserror = {workspace = true}

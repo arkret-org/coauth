@@ -46,7 +46,6 @@ deadpool = {workspace = true}
 der = {workspace = true}
 diesel = {workspace = true}
 diesel-async = {workspace = true}
-diesel_migrations = {workspace = true}
 ed25519-dalek = {workspace = true}
 elliptic-curve = {workspace = true}
 form_urlencoded = {workspace = true}
@@ -56,12 +55,10 @@ hex = {workspace = true}
 hmac = {workspace = true}
 http = {workspace = true}
 http-body = {workspace = true}
-http-body-util = {workspace = true}
 hyper = {workspace = true}
 hyper-util = {workspace = true}
 icu_locid = {workspace = true}
 icu_normalizer = {workspace = true}
-indexmap = {workspace = true}
 ipnetwork = {workspace = true}
 language-tags = {workspace = true}
 listenfd = {workspace = true}
@@ -96,7 +93,6 @@ rustls-platform-verifier = {workspace = true}
 salvo = {workspace = true}
 schemars = {workspace = true}
 sentry = {workspace = true}
-sentry-tracing = {workspace = true}
 serde = {workspace = true}
 serde_json = {workspace = true}
 serde_urlencoded = {workspace = true}
@@ -111,7 +107,6 @@ subtle = {workspace = true}
 thiserror = {workspace = true}
 time = {workspace = true}
 tokio = {workspace = true}
-tokio-postgres = {workspace = true}
 tokio-rustls = {workspace = true}
 tokio-util = {workspace = true}
 tower-service = {workspace = true}
@@ -121,7 +116,6 @@ ulid = {workspace = true}
 url = {workspace = true}
 uuid = {workspace = true}
 webauthn-rs = {workspace = true}
-webauthn-rs-proto = {workspace = true}
 woothee = {workspace = true}
 x509-cert = {workspace = true}
 zeroize = {workspace = true}

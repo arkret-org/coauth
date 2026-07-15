@@ -308,35 +308,6 @@ pub(crate) async fn build_policy_check_response(
     })
 }
 
-/// Synchronous helper used by handler internals + tests to drive a
-/// build_policy_check_response when the caller has the
-/// [`BoxRepositoryFactory`] but doesn't want to thread the four
-/// optional service handles. Today it constructs the production
-/// soland source + rule evaluator; tests typically call
-/// [`build_policy_check_response`] directly with fakes.
-#[allow(dead_code)]
-pub(crate) async fn build_policy_check_response_with_defaults(
-    request: &PolicyCheckRequestBody,
-    arkret_config: &ArkretConfig,
-    key_store: &Keystore,
-    http_client: &reqwest::Client,
-    repository_factory: BoxRepositoryFactory,
-) -> Result<PolicyCheckOutcome, ArkretRouteError> {
-    let frontier_source = SolandFrontierSource::new(
-        arkret_config.primary_principal_server_url().cloned(),
-        http_client.clone(),
-    );
-    let evaluator = RuleEvaluator::new(repository_factory);
-    build_policy_check_response(
-        request,
-        arkret_config,
-        key_store,
-        &frontier_source,
-        &evaluator,
-    )
-    .await
-}
-
 fn format_canonical_rfc3339(ts: chrono::DateTime<Utc>) -> String {
     // Canonical form per `arkret_core::canonical::validate_timestamp_canonical`:
     // `YYYY-MM-DDTHH:MM:SSZ` — no fractional seconds, uppercase `T` / `Z`.

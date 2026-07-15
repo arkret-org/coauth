@@ -44,7 +44,6 @@ hex = {workspace = true}
 indoc = {workspace = true}
 ipnetwork = {workspace = true}
 pem-rfc7468 = {workspace = true}
-rand = {workspace = true}
 rand_chacha = {workspace = true}
 rand_core = {workspace = true}
 rustls-pki-types = {workspace = true}

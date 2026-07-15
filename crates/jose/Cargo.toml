@@ -36,7 +36,6 @@ k256 = {workspace = true}
 p256 = {workspace = true}
 p384 = {workspace = true}
 p521 = {workspace = true}
-rand = {workspace = true}
 rsa = {workspace = true}
 schemars = {workspace = true}
 sec1 = {workspace = true}
