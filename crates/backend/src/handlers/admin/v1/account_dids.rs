@@ -78,7 +78,6 @@ pub struct AddAccountDidBindingRequestBody {
 
     /// Optional delegated resolver submission payload or receipt seed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[allow(dead_code)]
     pub resolver_submission: Option<serde_json::Value>,
 
     /// Optional operator note for audit and admin UI surfaces.
@@ -107,7 +106,6 @@ pub struct ControlProofPayload {
 
 #[derive(Default, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename = "RemoveAccountDidBindingRequestBody")]
-#[allow(dead_code)]
 pub struct RemoveAccountDidBindingRequestBody {
     /// Operator-supplied reason for revoking the binding.
     reason: Option<String>,

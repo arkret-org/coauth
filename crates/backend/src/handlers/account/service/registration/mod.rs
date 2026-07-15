@@ -30,7 +30,7 @@ pub use types::{
     CheckRegistrationFinishEligibilityError, CompleteRegistrationRequestBody,
     CompletedRegistration, EmailAvailabilityCheck, LoadRegistrationFinishPreparationError,
     LoadRegistrationProgressError, PrepareRegistrationCompletionError,
-    PreparedRegistrationCompletion, PrincipalServerCheckMode, RegistrationDisplayNameOutcome,
+    PreparedRegistrationCompletion, RegistrationDisplayNameOutcome,
     RegistrationDisplayNameWorkflowError, RegistrationEmailChangeError,
     RegistrationEmailChangeOutcome, RegistrationFinishError, RegistrationFinishOutcome,
     RegistrationProgress, RegistrationResendError, RegistrationResendOutcome,

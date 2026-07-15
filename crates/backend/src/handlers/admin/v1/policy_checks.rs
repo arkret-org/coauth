@@ -14,7 +14,6 @@ use crate::{AppError, CreatedJsonResult, JsonResult};
 
 #[derive(Deserialize, JsonSchema, ToSchema)]
 #[serde(rename = "PolicyDryRunRequestBody")]
-#[allow(dead_code)]
 pub struct PolicyDryRunRequestBody {
     /// Principal DID or account subject.
     subject: String,

@@ -45,10 +45,6 @@ pub struct BeginPasswordRegistrationRequestBody {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EmailAvailabilityCheck {
     Precheck,
-    // Only the orphaned SSR register views (handlers/views/, not part of the
-    // module tree) selected Deferred; kept pending the ruling on that tree.
-    #[allow(dead_code)]
-    Deferred,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -439,15 +435,6 @@ pub enum RegistrationFinishError {
     Internal(#[from] AnyhowError),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PrincipalServerCheckMode {
-    // Only the orphaned SSR register views (handlers/views/, not part of the
-    // module tree) selected Strict; kept pending the ruling on that tree.
-    #[allow(dead_code)]
-    Strict,
-    BestEffort,
-}
-
 #[derive(Debug, Error)]
 pub enum CheckRegistrationFinishEligibilityError {
     #[error("registration session has expired")]
@@ -461,9 +448,6 @@ pub enum CheckRegistrationFinishEligibilityError {
 
     #[error("handle is not available")]
     HandleNotAvailable,
-
-    #[error("failed to verify handle availability")]
-    PrincipalServerUnavailable(#[source] AnyhowError),
 
     #[error(transparent)]
     Repository(#[from] RepositoryError),

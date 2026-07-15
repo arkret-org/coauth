@@ -20,7 +20,6 @@ pub async fn check_registration_finish_eligibility(
     principal_server: &dyn ConnectorAdmin,
     registration: &UserRegistration,
     browser_session_present: Option<bool>,
-    principal_server_check_mode: PrincipalServerCheckMode,
 ) -> Result<(), CheckRegistrationFinishEligibilityError> {
     if clock.now() - registration.created_at > Duration::hours(1) {
         return Err(CheckRegistrationFinishEligibilityError::RegistrationExpired);
@@ -40,18 +39,13 @@ pub async fn check_registration_finish_eligibility(
     {
         Ok(true) => Ok(()),
         Ok(false) => Err(CheckRegistrationFinishEligibilityError::HandleNotAvailable),
-        Err(error) => match principal_server_check_mode {
-            PrincipalServerCheckMode::Strict => {
-                Err(CheckRegistrationFinishEligibilityError::PrincipalServerUnavailable(error))
-            }
-            PrincipalServerCheckMode::BestEffort => {
-                tracing::warn!(
-                    error = %error,
-                    "Failed to check username availability during finish, skipping PrincipalServer check"
-                );
-                Ok(())
-            }
-        },
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "Failed to check username availability during finish, skipping PrincipalServer check"
+            );
+            Ok(())
+        }
     }
 }
 
@@ -61,7 +55,6 @@ pub async fn load_registration_finish_preparation(
     principal_server: &dyn ConnectorAdmin,
     registration_id: Ulid,
     browser_session_present: Option<bool>,
-    principal_server_check_mode: PrincipalServerCheckMode,
     registration_token_required: bool,
 ) -> Result<PreparedRegistrationCompletion, LoadRegistrationFinishPreparationError> {
     let progress = load_registration_progress(repo, registration_id)
@@ -89,7 +82,6 @@ pub async fn load_registration_finish_preparation(
         principal_server,
         &registration,
         browser_session_present,
-        principal_server_check_mode,
     )
     .await
     .map_err(
@@ -367,7 +359,6 @@ pub async fn finish_registration(
     principal_server: &dyn ConnectorAdmin,
     registration_id: Ulid,
     browser_session_present: Option<bool>,
-    principal_server_check_mode: PrincipalServerCheckMode,
     registration_token_required: bool,
     configured_bootstrap_admin_token: Option<&str>,
     requested_bootstrap_admin_token: Option<String>,
@@ -380,7 +371,6 @@ pub async fn finish_registration(
         principal_server,
         registration_id,
         browser_session_present,
-        principal_server_check_mode,
         registration_token_required,
     )
     .await
@@ -414,14 +404,6 @@ pub async fn finish_registration(
                 return Err(RegistrationFinishError::Internal(AnyhowError::msg(
                     "Registration browser session is required",
                 )));
-            }
-            CheckRegistrationFinishEligibilityError::PrincipalServerUnavailable(error) => {
-                // Reachable in `PrincipalServerCheckMode::Strict`: the
-                // eligibility check propagates the principal-server error rather
-                // than swallowing it. Fail closed with an internal error instead
-                // of panicking so the registration is not completed while the
-                // handle's availability could not be confirmed.
-                return Err(RegistrationFinishError::Internal(error));
             }
             CheckRegistrationFinishEligibilityError::Repository(error) => {
                 return Err(RegistrationFinishError::Repository(error));

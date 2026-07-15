@@ -27,15 +27,15 @@ use crate::handlers::RequesterFingerprint;
 use crate::handlers::account::service::registration::{
     BeginPasswordRegistrationError, BeginPasswordRegistrationRequestBody,
     BeginPasswordRegistrationResult, CheckRegistrationFinishEligibilityError,
-    EmailAvailabilityCheck, LoadRegistrationProgressError, PrincipalServerCheckMode,
-    RegistrationDisplayNameOutcome, RegistrationDisplayNameWorkflowError,
-    RegistrationEmailChangeError, RegistrationEmailChangeOutcome, RegistrationFinishError,
-    RegistrationFinishOutcome, RegistrationResendError, RegistrationResendOutcome,
-    RegistrationVerificationError, RegistrationVerificationOutcome, VerifiedPrincipalBinding,
-    begin_password_registration, change_registration_email, check_registration_finish_eligibility,
-    finish_registration, load_registration_status, next_registration_step,
-    resend_registration_verification, submit_registration_display_name,
-    submit_registration_email_code, submit_registration_phone_code,
+    EmailAvailabilityCheck, LoadRegistrationProgressError, RegistrationDisplayNameOutcome,
+    RegistrationDisplayNameWorkflowError, RegistrationEmailChangeError,
+    RegistrationEmailChangeOutcome, RegistrationFinishError, RegistrationFinishOutcome,
+    RegistrationResendError, RegistrationResendOutcome, RegistrationVerificationError,
+    RegistrationVerificationOutcome, VerifiedPrincipalBinding, begin_password_registration,
+    change_registration_email, check_registration_finish_eligibility, finish_registration,
+    load_registration_status, next_registration_step, resend_registration_verification,
+    submit_registration_display_name, submit_registration_email_code,
+    submit_registration_phone_code,
 };
 use crate::handlers::notification_dispatch::{NotificationIntent, schedule_notification};
 use crate::salvo_utils::SessionInfoExt;
@@ -686,7 +686,6 @@ pub async fn post_webvh_finish(
             principal_server.as_ref(),
             &registration,
             None,
-            PrincipalServerCheckMode::BestEffort,
         )
         .await
         {
@@ -700,12 +699,8 @@ pub async fn post_webvh_finish(
             Err(CheckRegistrationFinishEligibilityError::HandleNotAvailable) => {
                 return Ok(Json(webvh_finish_error("handle_not_available")));
             }
-            // BestEffort mode never surfaces these, but fail closed regardless.
             Err(CheckRegistrationFinishEligibilityError::BrowserSessionMissing) => {
                 return Ok(Json(webvh_finish_error("browser_session_required")));
-            }
-            Err(CheckRegistrationFinishEligibilityError::PrincipalServerUnavailable(error)) => {
-                return Err(RouteError::Internal(error.into()));
             }
             Err(CheckRegistrationFinishEligibilityError::Repository(error)) => {
                 return Err(error.into());
@@ -774,7 +769,6 @@ pub async fn post_webvh_finish(
         principal_server.as_ref(),
         id,
         None,
-        PrincipalServerCheckMode::BestEffort,
         site_config.registration_token_required,
         site_config.bootstrap_admin_token.as_deref(),
         None,
@@ -1414,7 +1408,6 @@ pub async fn post_finish(
         principal_server.as_ref(),
         id,
         None,
-        PrincipalServerCheckMode::BestEffort,
         site_config.registration_token_required,
         site_config.bootstrap_admin_token.as_deref(),
         input.bootstrap_admin_token,
