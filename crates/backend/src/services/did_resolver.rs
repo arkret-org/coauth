@@ -359,7 +359,7 @@ async fn parse_resolution_http_response(
 
     let body: Value = serde_json::from_slice(&bytes)?;
     let key_log_head = parse_key_log_head(&body)?;
-    let (document, method_evidence) = parse_resolution_response(did, &url, source, body)?;
+    let (document, method_evidence) = parse_resolution_response(did, url, source, body)?;
     if document.id != did {
         return Err(DidResolveError::DocumentIdMismatch {
             expected: did.to_owned(),
@@ -380,17 +380,13 @@ async fn parse_resolution_http_response(
 
 fn parse_key_log_head(body: &Value) -> Result<Option<arkret_core::Hash>, DidResolveError> {
     match body.get("key_log_head") {
-        Some(Value::String(value)) => {
-            Some(arkret_core::Hash::new(value.clone()).map_err(|error| {
-                DidResolveError::BadResolverResponse(format!("invalid key_log_head: {error}"))
-            })?)
-        }
-        Some(_) => {
-            return Err(DidResolveError::BadResolverResponse(
-                "key_log_head must be a string".to_owned(),
-            ));
-        }
-        None => None,
+        Some(Value::String(value)) => Ok(Some(arkret_core::Hash::new(value.clone()).map_err(
+            |error| DidResolveError::BadResolverResponse(format!("invalid key_log_head: {error}")),
+        )?)),
+        Some(_) => Err(DidResolveError::BadResolverResponse(
+            "key_log_head must be a string".to_owned(),
+        )),
+        None => Ok(None),
     }
 }
 
@@ -832,18 +828,6 @@ fn did_plc_document_url(did: &str) -> Result<Url, DidResolveError> {
         return Err(DidResolveError::InvalidDid(did.to_owned()));
     }
     Ok(Url::parse(&format!("https://plc.directory/{did}"))?)
-}
-
-fn binding_slug(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for ch in value.chars() {
-        if ch.is_ascii_alphanumeric() {
-            out.push(ch.to_ascii_lowercase());
-        } else {
-            out.push('-');
-        }
-    }
-    out.trim_matches('-').to_owned()
 }
 
 #[cfg(test)]

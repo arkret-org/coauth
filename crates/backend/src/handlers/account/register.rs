@@ -23,6 +23,7 @@ use url::Url;
 use zeroize::Zeroizing;
 
 use super::{DepotExt, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
+use crate::handlers::RequesterFingerprint;
 use crate::handlers::account::service::registration::{
     BeginPasswordRegistrationError, BeginPasswordRegistrationRequestBody,
     BeginPasswordRegistrationResult, CheckRegistrationFinishEligibilityError,
@@ -37,7 +38,6 @@ use crate::handlers::account::service::registration::{
     submit_registration_email_code, submit_registration_phone_code,
 };
 use crate::handlers::notification_dispatch::{NotificationIntent, schedule_notification};
-use crate::handlers::{RequesterFingerprint, arkret};
 use crate::salvo_utils::SessionInfoExt;
 use crate::services::soland_webvh;
 
@@ -553,6 +553,7 @@ pub async fn post_webvh_verify_email(
 
 #[derive(Deserialize, ToSchema)]
 pub struct WebvhRegistrationFinishInput {
+    #[salvo(schema(value_type = Object))]
     pub did_operation: arkret_core::DidOperationSubmitRequestBody,
     pub password: String,
     pub password_confirm: String,
@@ -566,6 +567,7 @@ pub struct WebvhRegistrationFinishOutcome {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub handle: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[salvo(schema(value_type = Object))]
     pub did_operation: Option<arkret_core::DidOperationSubmitOutcome>,
 }
 
@@ -1374,7 +1376,6 @@ pub async fn post_finish(
     let site_config = depot.site_config()?;
     let principal_server = depot.principal_server()?;
     let repo_factory = depot.repo_factory()?;
-    let arkret_config = depot.arkret_config()?;
     let input = if req
         .payload()
         .await

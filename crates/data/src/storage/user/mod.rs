@@ -24,7 +24,7 @@ pub use self::email::{UserEmailFilter, UserEmailRepository};
 pub use self::password::UserPasswordRepository;
 pub use self::phone::UserPhoneRepository;
 pub use self::primary_handle::UserPrimaryHandlePreferenceRepository;
-pub use self::principal_did::PrincipalDidRepository;
+pub use self::principal_did::{PrincipalDidRepository, VerifiedPrincipalDidBindingInput};
 pub use self::recovery::UserRecoveryRepository;
 pub use self::registration::UserRegistrationRepository;
 pub use self::registration_token::{UserRegistrationTokenFilter, UserRegistrationTokenRepository};

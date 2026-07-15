@@ -123,8 +123,7 @@ fn account_initial(label: &str) -> String {
     label
         .chars()
         .next()
-        .map(|c| c.to_uppercase().to_string())
-        .unwrap_or_else(|| "?".to_owned())
+        .map_or_else(|| "?".to_owned(), |c| c.to_uppercase().to_string())
 }
 
 fn account_matches_login_hint(account: &CurrentAccountInfo, login_hint: &str) -> bool {

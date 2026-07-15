@@ -34,7 +34,6 @@ use coauth_oauth_types::scope::Scope;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use ulid::Ulid;
 
 use crate::handlers::common::{DepotExt, RouteError};
 use crate::services::resolved_principal_audiences::{

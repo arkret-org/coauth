@@ -41,7 +41,6 @@ use crate::handlers::common::DepotExt;
 use crate::services::account_claims::{
     AccountClaimFilter, AccountClaimRecord as StoredAccountClaimRecord,
 };
-use crate::services::did_resolver::DidResolverService;
 use crate::{AppError, JsonResult};
 
 // `AdminBridgeDescribeResponse` (and the nested `AdminBridgeRiskAction*Example`

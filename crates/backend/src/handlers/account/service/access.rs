@@ -60,7 +60,7 @@ pub async fn login_with_password(
     limiter: &Limiter,
     principal_server: &dyn ConnectorAdmin,
     url_builder: &UrlBuilder,
-    _arkret_config: &ArkretConfig,
+    arkret_config: &ArkretConfig,
     site_config: &SiteConfig,
     request: PasswordLoginRequestBody,
 ) -> Result<PasswordLoginOutcome, PasswordLoginError> {
@@ -216,7 +216,7 @@ async fn find_user_by_login_identifier(
     site_config: &SiteConfig,
     principal_server: &dyn ConnectorAdmin,
     url_builder: &UrlBuilder,
-    arkret_config: &ArkretConfig,
+    _arkret_config: &ArkretConfig,
     repo: &mut BoxRepository,
     identifier: &str,
 ) -> Result<Option<User>, RepositoryError> {

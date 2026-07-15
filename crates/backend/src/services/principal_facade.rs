@@ -389,90 +389,6 @@ fn truncate_response_body(body: &str) -> String {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use coauth_config::PrincipalServerConfig;
-    use serde_json::json;
-    use soland_core::capability_fanout::CapabilityFanoutAuthzState;
-
-    use super::*;
-
-    const EVENT: &str = "ak:event:01970000-0000-7000-8000-000000000001";
-    const GRANT: &str = "ak:grant:01970000-0000-7000-8000-000000000002";
-
-    fn arkret_config() -> ArkretConfig {
-        ArkretConfig {
-            principal_servers: vec![PrincipalServerConfig {
-                name: "soland-dev".to_owned(),
-                audience: Some("soland".to_owned()),
-                endpoint: Url::parse("http://127.0.0.1:3322").unwrap(),
-                did: Some("did:web:soland.example".to_owned()),
-                session_grant_introspection_bearer: None,
-                embedded_webvh_registration_bearer: Some("secret".to_owned()),
-            }],
-            ..ArkretConfig::default()
-        }
-    }
-
-    fn body() -> CapabilityFanoutBody {
-        CapabilityFanoutBody {
-            kind: "ak.coauth.collaboration_capability.fanout.v1".to_owned(),
-            operation: "grant".to_owned(),
-            issuer_service_id: "did:web:coauth.example".to_owned(),
-            event_kind: "ak.capability.grant".to_owned(),
-            event_id: EVENT.to_owned(),
-            capability_grant_id: GRANT.to_owned(),
-            payload: json!({}),
-            principal_servers: vec![json!({
-                "name": "soland-dev",
-                "audience": "soland",
-                "endpoint": "http://127.0.0.1:3322/",
-                "did": "did:web:soland.example"
-            })],
-        }
-    }
-
-    fn request() -> PrincipalCapabilityFanoutRequest {
-        PrincipalCapabilityFanoutRequest::new(
-            "capability-fanout:test".to_owned(),
-            "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned(),
-            body(),
-        )
-    }
-
-    #[test]
-    fn fanout_targets_resolve_payload_principal_servers_to_configured_bearer() {
-        let targets = capability_fanout_targets(&arkret_config(), &body()).unwrap();
-
-        assert_eq!(targets.len(), 1);
-        assert_eq!(targets[0].name, "soland-dev");
-        assert_eq!(
-            capability_fanout_url(&targets[0].endpoint).as_str(),
-            "http://127.0.0.1:3322/_soland/root/authz/capability-fanout"
-        );
-        assert_eq!(targets[0].bearer, "secret");
-    }
-
-    #[test]
-    fn grant_response_must_confirm_effective_authz_state() {
-        let response = CapabilityFanoutResponse {
-            accepted: vec![EVENT.to_owned()],
-            duplicate: Vec::new(),
-            event_id: EVENT.to_owned(),
-            capability_grant_id: GRANT.to_owned(),
-            operation: "grant".to_owned(),
-            authz_state: CapabilityFanoutAuthzState {
-                projected: true,
-                effective: false,
-                revoked: false,
-                grant_present: true,
-            },
-        };
-
-        assert!(validate_capability_fanout_response(&request(), &response).is_err());
-    }
-}
-
 #[async_trait]
 impl ConnectorAdmin for DbConnectorAdmin {
     fn principal_authority(&self) -> &str {
@@ -614,5 +530,89 @@ impl ConnectorAdmin for DbConnectorAdmin {
 
     async fn unset_displayname(&self, _handle: &str) -> Result<(), anyhow::Error> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use coauth_config::PrincipalServerConfig;
+    use serde_json::json;
+    use soland_core::capability_fanout::CapabilityFanoutAuthzState;
+
+    use super::*;
+
+    const EVENT: &str = "ak:event:01970000-0000-7000-8000-000000000001";
+    const GRANT: &str = "ak:grant:01970000-0000-7000-8000-000000000002";
+
+    fn arkret_config() -> ArkretConfig {
+        ArkretConfig {
+            principal_servers: vec![PrincipalServerConfig {
+                name: "soland-dev".to_owned(),
+                audience: Some("soland".to_owned()),
+                endpoint: Url::parse("http://127.0.0.1:3322").unwrap(),
+                did: Some("did:web:soland.example".to_owned()),
+                session_grant_introspection_bearer: None,
+                embedded_webvh_registration_bearer: Some("secret".to_owned()),
+            }],
+            ..ArkretConfig::default()
+        }
+    }
+
+    fn body() -> CapabilityFanoutBody {
+        CapabilityFanoutBody {
+            kind: "ak.coauth.collaboration_capability.fanout.v1".to_owned(),
+            operation: "grant".to_owned(),
+            issuer_service_id: "did:web:coauth.example".to_owned(),
+            event_kind: "ak.capability.grant".to_owned(),
+            event_id: EVENT.to_owned(),
+            capability_grant_id: GRANT.to_owned(),
+            payload: json!({}),
+            principal_servers: vec![json!({
+                "name": "soland-dev",
+                "audience": "soland",
+                "endpoint": "http://127.0.0.1:3322/",
+                "did": "did:web:soland.example"
+            })],
+        }
+    }
+
+    fn request() -> PrincipalCapabilityFanoutRequest {
+        PrincipalCapabilityFanoutRequest::new(
+            "capability-fanout:test".to_owned(),
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned(),
+            body(),
+        )
+    }
+
+    #[test]
+    fn fanout_targets_resolve_payload_principal_servers_to_configured_bearer() {
+        let targets = capability_fanout_targets(&arkret_config(), &body()).unwrap();
+
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].name, "soland-dev");
+        assert_eq!(
+            capability_fanout_url(&targets[0].endpoint).as_str(),
+            "http://127.0.0.1:3322/_soland/root/authz/capability-fanout"
+        );
+        assert_eq!(targets[0].bearer, "secret");
+    }
+
+    #[test]
+    fn grant_response_must_confirm_effective_authz_state() {
+        let response = CapabilityFanoutResponse {
+            accepted: vec![EVENT.to_owned()],
+            duplicate: Vec::new(),
+            event_id: EVENT.to_owned(),
+            capability_grant_id: GRANT.to_owned(),
+            operation: "grant".to_owned(),
+            authz_state: CapabilityFanoutAuthzState {
+                projected: true,
+                effective: false,
+                revoked: false,
+                grant_present: true,
+            },
+        };
+
+        assert!(validate_capability_fanout_response(&request(), &response).is_err());
     }
 }

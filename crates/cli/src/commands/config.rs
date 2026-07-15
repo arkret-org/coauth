@@ -4,12 +4,13 @@ use anyhow::{Context, anyhow, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use chrono::{DateTime, SecondsFormat, Utc};
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use coauth_backend::RequestBuilderExt as _;
 use coauth_backend::util::{database_url_from_config, diesel_pool_from_config};
 use coauth_config::{
     ConfigurationSection, IdentityRegistryConfig, IdentityRegistryKind, PrincipalServerConfig,
     RootConfig, SyncConfig,
 };
-use coauth_data::SystemClock;
+use coauth_data::{Clock, SystemClock};
 use ed25519_dalek::{Signer, SigningKey};
 use figment::Figment;
 use rand::rngs::OsRng;
@@ -290,7 +291,7 @@ fn apply_generated_config_options(
             proof_required_for_pairwise: false,
         });
     } else {
-        config.arkret.service_id = options.service_id.clone();
+        config.arkret.service_id.clone_from(&options.service_id);
         if let Some(public_base) = options.public_base.clone() {
             config.http.public_base = public_base.clone();
             config.http.issuer = Some(public_base);
@@ -321,7 +322,7 @@ async fn handle_service_id_init(options: ServiceIdInitOptions) -> anyhow::Result
     let update_public_key_multibase = arkret_core::ed25519_pubkey_to_did_key_multibase(
         &update_signing.verifying_key().to_bytes(),
     );
-    let version_time = Utc::now();
+    let version_time = SystemClock::default().now();
 
     let body = signed_starid_create_body(
         host,
@@ -350,7 +351,7 @@ async fn handle_service_id_init(options: ServiceIdInitOptions) -> anyhow::Result
     }
 
     let response = request
-        .send()
+        .send_traced()
         .await
         .with_context(|| format!("could not call starid service DID endpoint {endpoint}"))?;
     let status = response.status();

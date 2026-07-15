@@ -325,11 +325,13 @@ pub async fn add_account_did(
                 &mut rng,
                 &*clock,
                 &account,
-                audience,
-                did.clone(),
-                key_log_head.clone(),
-                enrollment_authority_did.clone(),
-                enrollment_authority_ref.clone(),
+                coauth_data::user::VerifiedPrincipalDidBindingInput {
+                    audience,
+                    principal_id: did.clone(),
+                    key_log_head: key_log_head.clone(),
+                    enrollment_authority_did: enrollment_authority_did.clone(),
+                    enrollment_authority_ref: enrollment_authority_ref.clone(),
+                },
             )
             .await?;
     }

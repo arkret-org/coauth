@@ -407,7 +407,15 @@ mod tests {
 
     fn invite_delivery() -> arkret_core::InviteDeliveryRequest {
         arkret_core::InviteDeliveryRequest::new(
-            payload(),
+            arkret_core::Event::new(
+                arkret_core::events::INVITE_CREATE,
+                arkret_core::RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000001").unwrap(),
+                arkret_core::Did::new("did:web:inviter").unwrap(),
+                1,
+                arkret_core::Hlc::new("01970e589d21-0001-a13f9c2e").unwrap(),
+                payload(),
+            )
+            .unwrap(),
             arkret_core::InviteAddress::principal_server(
                 arkret_core::Did::new("did:web:holder").unwrap(),
                 arkret_core::Did::new("did:web:auth.example").unwrap(),

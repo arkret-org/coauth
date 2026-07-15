@@ -358,7 +358,8 @@ fn match_rules_with_grants(
         && action_str.starts_with("ak.actor.profile.")
         && request
             .event_preview
-            .get("accountable_principal_ids_unverified")
+            .as_ref()
+            .and_then(|preview| preview.get("accountable_principal_ids_unverified"))
             .and_then(Value::as_bool)
             .unwrap_or(false)
     {
@@ -381,7 +382,8 @@ fn match_rules_with_grants(
 
     let circle_scope: Option<&Value> = request
         .auth_context
-        .get("circle_id")
+        .as_ref()
+        .and_then(|context| context.get("circle_id"))
         .and_then(Value::as_str)
         .filter(|c| is_circle_selector(c))
         .and_then(|c| realm_scope.get("circles").and_then(|m| m.get(c)));
@@ -622,8 +624,8 @@ mod tests {
                 source_ip_digest: Some(Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap()),
                 signed_transport: true,
             },
-            event_preview: Value::Null,
-            auth_context: Value::Null,
+            event_preview: None,
+            auth_context: None,
         }
     }
 
@@ -891,7 +893,8 @@ mod tests {
             }
         });
         let mut r = req("did:web:alice.example", "ak.call.record");
-        r.auth_context = serde_json::json!({ "circle_id": circle_id });
+        r.auth_context =
+            Some(serde_json::from_value(serde_json::json!({ "circle_id": circle_id })).unwrap());
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
     }
@@ -902,7 +905,12 @@ mod tests {
             "strict_reject_profile": true,
         });
         let mut r = req("did:web:alice.example", "ak.actor.profile.update");
-        r.event_preview = serde_json::json!({ "accountable_principal_ids_unverified": true });
+        r.event_preview = Some(
+            serde_json::from_value(
+                serde_json::json!({ "accountable_principal_ids_unverified": true }),
+            )
+            .unwrap(),
+        );
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code, "failed_precondition");
@@ -914,7 +922,12 @@ mod tests {
     fn policy1_strict_reject_inert_when_profile_off() {
         let data = serde_json::json!({});
         let mut r = req("did:web:alice.example", "ak.actor.profile.update");
-        r.event_preview = serde_json::json!({ "accountable_principal_ids_unverified": true });
+        r.event_preview = Some(
+            serde_json::from_value(
+                serde_json::json!({ "accountable_principal_ids_unverified": true }),
+            )
+            .unwrap(),
+        );
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
     }

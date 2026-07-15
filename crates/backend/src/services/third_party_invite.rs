@@ -81,6 +81,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use zeroize::Zeroize;
 
+use crate::handlers::arkret::VerificationMethod;
 use crate::services::did_binding_proof::verify_verification_service_proof;
 use crate::services::did_resolver::DidResolverService;
 
@@ -688,7 +689,7 @@ async fn verify_subject_proof(
         .document
         .verification_method
         .iter()
-        .map(|method| method.public_jwk())
+        .map(VerificationMethod::public_jwk)
         .collect::<Result<_, _>>()
         .map_err(|error| {
             InviteVerificationError::SubjectProofInvalid(format!(

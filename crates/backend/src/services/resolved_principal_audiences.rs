@@ -37,14 +37,14 @@ const DESCRIBE_PATH: &str = "/_arkret/describe";
 
 /// Refresh-interval floor: faster than this just hammers the Principal
 /// Server's describe surface.
-const MIN_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
+const MIN_REFRESH_INTERVAL: Duration = Duration::from_mins(1);
 
 /// Refresh-interval ceiling: a rotated / poisoned describe document MUST NOT
 /// stay live indefinitely (mirrors `MetadataCache::MAX_REFRESH_INTERVAL`).
-const MAX_REFRESH_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+const MAX_REFRESH_INTERVAL: Duration = Duration::from_hours(24);
 
 /// Default refresh cadence used at server startup.
-pub const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
+pub const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_mins(5);
 
 /// Process-wide shared cache. Populated by [`ResolvedPrincipalAudiences::warm_up_and_spawn`]
 /// at server startup and read by the request-path audience checks via
@@ -193,10 +193,10 @@ async fn fetch_service_id(http_client: &reqwest::Client, endpoint: &Url) -> Resu
         ));
     }
 
-    // `/_arkret/describe` returns `ServerDescribeOutcome(ServerDescription)`,
+    // `/_arkret/describe` returns `ServerDescribeOutcome(ServiceDescribe)`,
     // a transparent newtype, so the wire body deserializes straight into
-    // `ServerDescription`.
-    let description: arkret_core::ServerDescription =
+    // `ServiceDescribe`.
+    let description: arkret_core::ServiceDescribe =
         serde_json::from_str(&text).map_err(|error| format!("invalid describe body: {error}"))?;
 
     let service_id = description.service_id.as_str().trim().to_owned();

@@ -413,8 +413,8 @@ mod tests {
                 source_ip_digest: Some(Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap()),
                 signed_transport: true,
             },
-            event_preview: serde_json::Value::Null,
-            auth_context: serde_json::Value::Null,
+            event_preview: None,
+            auth_context: None,
         }
     }
 

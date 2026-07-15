@@ -34,6 +34,7 @@ pub(crate) fn issue_session_grant(
     key_store: &Keystore,
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
+    subject: &str,
     scopes: Vec<String>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     issue_session_grant_for_audience(
@@ -44,7 +45,7 @@ pub(crate) fn issue_session_grant(
         session_public_key,
         required_audience_for(url_builder, arkret_config),
         scopes,
-        None,
+        Some(subject),
         None,
     )
 }

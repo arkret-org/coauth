@@ -44,7 +44,7 @@ pub mod handlers;
 use std::sync::OnceLock;
 
 pub use crate::error::{AppError, AppResult, CreatedJsonResult, JsonResult};
-pub use crate::outbound_http::reqwest_client;
+pub use crate::outbound_http::{RequestBuilderExt, reqwest_client};
 
 /// Application version string, set once at startup by the binary crate.
 static VERSION: OnceLock<&'static str> = OnceLock::new();

@@ -257,11 +257,13 @@ pub async fn complete_registration(
                 rng,
                 clock,
                 &user,
-                binding.audience,
-                binding.principal_id,
-                binding.key_log_head,
-                binding.enrollment_authority_did,
-                binding.enrollment_authority_ref,
+                coauth_data::user::VerifiedPrincipalDidBindingInput {
+                    audience: binding.audience,
+                    principal_id: binding.principal_id,
+                    key_log_head: binding.key_log_head,
+                    enrollment_authority_did: binding.enrollment_authority_did,
+                    enrollment_authority_ref: binding.enrollment_authority_ref,
+                },
             )
             .await?;
     }

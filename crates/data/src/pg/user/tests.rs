@@ -5,6 +5,7 @@ use coauth_data::upstream_oauth::{UpstreamOAuthProviderParams, UpstreamOAuthSess
 use coauth_data::user::{
     BrowserSessionFilter, BrowserSessionRepository, PrincipalDidRepository, UserEmailFilter,
     UserEmailRepository, UserFilter, UserPasswordRepository, UserRepository,
+    VerifiedPrincipalDidBindingInput,
 };
 use coauth_data::{
     Clock, NewUserPrimaryHandlePreference, Pagination, RepositoryAccess as _,
@@ -31,6 +32,22 @@ fn principal_binding_test_material(
         enrollment_authority_did,
         enrollment_authority_ref,
     )
+}
+
+fn verified_principal_binding_input(
+    audience: impl Into<String>,
+    principal_id: String,
+    key_log_head: arkret_core::Hash,
+    enrollment_authority_did: arkret_core::Did,
+    enrollment_authority_ref: String,
+) -> VerifiedPrincipalDidBindingInput {
+    VerifiedPrincipalDidBindingInput {
+        audience: audience.into(),
+        principal_id,
+        key_log_head,
+        enrollment_authority_did,
+        enrollment_authority_ref,
+    }
 }
 
 /// Test the user repository, by adding and looking up a user
@@ -1343,11 +1360,13 @@ async fn principal_did_has_one_global_owner_under_concurrent_binding() {
                 &mut rng,
                 &MockClock::default(),
                 &alice,
-                "https://ps-a.example".to_owned(),
-                first_principal_id,
-                first_head,
-                first_authority,
-                first_ref,
+                verified_principal_binding_input(
+                    "https://ps-a.example",
+                    first_principal_id,
+                    first_head,
+                    first_authority,
+                    first_ref,
+                ),
             )
             .await;
         if result.is_ok() {
@@ -1370,11 +1389,13 @@ async fn principal_did_has_one_global_owner_under_concurrent_binding() {
                 &mut rng,
                 &MockClock::default(),
                 &bob,
-                "https://ps-b.example".to_owned(),
-                second_principal_id,
-                key_log_head,
-                enrollment_authority_did,
-                authority_ref,
+                verified_principal_binding_input(
+                    "https://ps-b.example",
+                    second_principal_id,
+                    key_log_head,
+                    enrollment_authority_did,
+                    authority_ref,
+                ),
             )
             .await;
         if result.is_ok() {
@@ -1430,11 +1451,13 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
             &mut rng,
             &clock,
             &alice,
-            audience.to_owned(),
-            first_did.clone(),
-            first_head,
-            first_authority,
-            first_ref,
+            verified_principal_binding_input(
+                audience,
+                first_did.clone(),
+                first_head,
+                first_authority,
+                first_ref,
+            ),
         )
         .await
         .unwrap();
@@ -1449,11 +1472,13 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
             &mut rng,
             &clock,
             &alice,
-            audience.to_owned(),
-            second_did.clone(),
-            second_head,
-            second_authority,
-            second_ref,
+            verified_principal_binding_input(
+                audience,
+                second_did.clone(),
+                second_head,
+                second_authority,
+                second_ref,
+            ),
         )
         .await;
     assert!(conflict.is_err());
@@ -1500,11 +1525,13 @@ async fn principal_did_binding_does_not_overwrite_the_verified_enrollment_author
             &mut rng,
             &clock,
             &alice,
-            "https://ps-a.example".to_owned(),
-            principal_id.clone(),
-            key_log_head.clone(),
-            enrollment_authority_did.clone(),
-            authority_ref.clone(),
+            verified_principal_binding_input(
+                "https://ps-a.example",
+                principal_id.clone(),
+                key_log_head.clone(),
+                enrollment_authority_did.clone(),
+                authority_ref.clone(),
+            ),
         )
         .await
         .unwrap();
@@ -1517,11 +1544,13 @@ async fn principal_did_binding_does_not_overwrite_the_verified_enrollment_author
             &mut rng,
             &clock,
             &alice,
-            "https://ps-b.example".to_owned(),
-            principal_id.clone(),
-            key_log_head,
-            arkret_core::Did::new("did:key:z6Mkreplacement").unwrap(),
-            authority_ref,
+            verified_principal_binding_input(
+                "https://ps-b.example",
+                principal_id.clone(),
+                key_log_head,
+                arkret_core::Did::new("did:key:z6Mkreplacement").unwrap(),
+                authority_ref,
+            ),
         )
         .await;
     assert!(replacement.is_err());

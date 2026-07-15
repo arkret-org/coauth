@@ -347,8 +347,15 @@ async fn derive_account_id_from_subject(
         return ensure_subject_account_exists(repo, id).await;
     }
 
-    if let Some(binding) = repo.principal_did().get_by_did(subject).await? {
-        return ensure_subject_account_exists(repo, binding.user_id).await;
+    let bound_user_id = {
+        let mut principal_dids = repo.principal_did();
+        principal_dids
+            .get_by_did(subject)
+            .await?
+            .map(|binding| binding.user_id)
+    };
+    if let Some(user_id) = bound_user_id {
+        return ensure_subject_account_exists(repo, user_id).await;
     }
 
     Ok(repo

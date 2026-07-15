@@ -544,7 +544,7 @@ mod tests {
         ArkretConfig {
             principal_servers: vec![PrincipalServerConfig {
                 name: "soland-dev".to_owned(),
-                audience: "http://soland.test".to_owned(),
+                audience: Some("http://soland.test".to_owned()),
                 endpoint: "http://soland.test".parse().unwrap(),
                 did: Some("did:web:soland.test".to_owned()),
                 session_grant_introspection_bearer: None,

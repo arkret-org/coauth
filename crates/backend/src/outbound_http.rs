@@ -712,7 +712,8 @@ fn record_terminal_error(
     );
 }
 
-pub(crate) trait RequestBuilderExt {
+/// Adds the standard outbound tracing instrumentation to a request builder.
+pub trait RequestBuilderExt {
     fn send_traced(self) -> impl Future<Output = Result<reqwest::Response, reqwest::Error>> + Send;
 }
 

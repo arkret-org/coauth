@@ -464,7 +464,6 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
     use coauth_data::clock::MockClock;
     use coauth_data::{RepositoryAccess as _, RepositoryFactory as _};
     use rand_chacha::ChaChaRng;
@@ -486,7 +485,11 @@ mod tests {
         }
     }
 
-    fn delegation(org: &str, reference: &str) -> NewOrganizationDelegation {
+    fn delegation(
+        org: &str,
+        reference: &str,
+        valid_from: DateTime<Utc>,
+    ) -> NewOrganizationDelegation {
         NewOrganizationDelegation {
             delegation_ref: reference.to_owned(),
             organization_did: org.to_owned(),
@@ -495,7 +498,7 @@ mod tests {
             purposes: vec!["principal_control_realm_bootstrap".to_owned()],
             covered_relationships: vec![RealmOrganizationRelationship::Owner],
             covered_control_scopes: vec![RealmOrganizationControlScope::RealmAdmin],
-            valid_from: Utc::now(),
+            valid_from,
             valid_until: None,
             created_by: "did:web:admin.example".to_owned(),
         }
@@ -518,7 +521,7 @@ mod tests {
             .await
             .unwrap();
         repo.organization_control()
-            .add_delegation(&mut rng, &clock, delegation(&did, &reference))
+            .add_delegation(&mut rng, &clock, delegation(&did, &reference, clock.now()))
             .await
             .unwrap();
         repo.save().await.unwrap();
@@ -542,7 +545,7 @@ mod tests {
             .await
             .unwrap()
             .expect("delegation persisted");
-        assert!(resolved.is_live(Utc::now()));
+        assert!(resolved.is_live(clock.now()));
         assert!(resolved.covers_pcr_bootstrap());
 
         let revoked = repo
@@ -551,7 +554,7 @@ mod tests {
             .await
             .unwrap()
             .expect("active delegation revocable");
-        assert!(!revoked.is_live(Utc::now()));
+        assert!(!revoked.is_live(clock.now()));
         repo.save().await.unwrap();
     }
 }

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::user::PrincipalDidRepository;
+use coauth_data::user::{PrincipalDidRepository, VerifiedPrincipalDidBindingInput};
 use coauth_data::{Clock, PrincipalDidBinding, User, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -182,12 +182,15 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
         user: &User,
-        audience: String,
-        principal_id: String,
-        key_log_head: arkret_core::Hash,
-        enrollment_authority_did: arkret_core::Did,
-        enrollment_authority_ref: String,
+        input: VerifiedPrincipalDidBindingInput,
     ) -> Result<PrincipalDidBinding, Self::Error> {
+        let VerifiedPrincipalDidBindingInput {
+            audience,
+            principal_id,
+            key_log_head,
+            enrollment_authority_did,
+            enrollment_authority_ref,
+        } = input;
         if audience.trim().is_empty()
             || principal_id.trim() != principal_id
             || arkret_core::Did::new(principal_id.clone()).is_err()

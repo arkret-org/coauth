@@ -118,7 +118,7 @@ coauth-templates = {version = "=0.3.0",path = "crates/templates"}
 # identifiers + the `MoveSigner` trait + `UnsignedMove` builder, while
 # `arkret-signatures` (with the `signer` feature) provides the production
 # Ed25519 backend used by `anchor_pending_move`.
-arkret-core = {version = "0.3.0",path = "../arkret-rust-sdk/crates/core",default-features = false}
+arkret-core = {version = "0.3.0",path = "../arkret-rust-sdk/crates/core",default-features = false,features = ["embedded-artifacts"]}
 arkret-crypto = {version = "0.3.0",path = "../arkret-rust-sdk/crates/crypto",default-features = false}
 # Lightweight typed-identifier validators (no heavy transitive deps beyond
 # what `arkret-core` already pulls in). Used by `coauth-config` for the

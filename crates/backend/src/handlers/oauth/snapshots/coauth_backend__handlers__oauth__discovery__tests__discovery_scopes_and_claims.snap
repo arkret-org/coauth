@@ -6,11 +6,11 @@ expression: snapshot
   "scopes_supported": [
     "openid",
     "profile",
-    "urn:coauth:admin",
     "urn:arkret:admin:*",
     "urn:arkret:client:*",
     "urn:arkret:principal-server:*",
-    "urn:arkret:principal-server:session.bind"
+    "urn:arkret:principal-server:session.bind",
+    "urn:coauth:admin"
   ],
   "claims_supported": [
     "at_hash",

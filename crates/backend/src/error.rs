@@ -194,21 +194,6 @@ impl EndpointOutRegister for AppError {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn internal_error_keeps_source_but_masks_public_message() {
-        let error = AppError::internal(std::io::Error::other(
-            "database password appeared in a diagnostic",
-        ));
-
-        assert_eq!(error.message(), "Internal server error");
-        assert!(StdError::source(&error).is_some());
-    }
-}
-
 impl From<coauth_data::RepositoryError> for AppError {
     fn from(error: coauth_data::RepositoryError) -> Self {
         Self::internal(error)
@@ -277,3 +262,18 @@ impl From<RestRouteError> for AppError {
 pub type AppResult<T> = Result<T, AppError>;
 pub type JsonResult<T> = Result<Json<T>, AppError>;
 pub type CreatedJsonResult<T> = Result<CreatedJson<T>, AppError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn internal_error_keeps_source_but_masks_public_message() {
+        let error = AppError::internal(std::io::Error::other(
+            "database password appeared in a diagnostic",
+        ));
+
+        assert_eq!(error.message(), "Internal server error");
+        assert!(StdError::source(&error).is_some());
+    }
+}

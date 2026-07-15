@@ -356,7 +356,7 @@ pub async fn validate_agent_session_proof(
         policy_data,
         &agent_id,
     )
-    .map_err(|error| {
+    .inspect_err(|error| {
         tracing::warn!(
             agent_id,
             rejection_code = error.code(),
@@ -364,7 +364,6 @@ pub async fn validate_agent_session_proof(
             agent_key_scope = %authorization.agent_key_scope,
             "agent_key_proof rejected: effective scope intersection failed"
         );
-        error
     })?;
 
     let mut constraints = serde_json::json!({
@@ -1346,6 +1345,11 @@ mod tests {
                     "controller_authorization_ref": "did:web:agent.example#managed-controller",
                     "status": status,
                     "pcr_recovery": pcr_recovery,
+                    "requested_scope": {
+                        "actions": ["ak.message.create"],
+                        "resources": []
+                    },
+                    "requested_scope_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "pairing_request_id": pairing_request_id,
                     "pairing_expires_at": "2099-01-01T00:00:00Z",
                     "active_authorizations": []
@@ -1358,7 +1362,7 @@ mod tests {
             .principal_servers
             .push(coauth_config::PrincipalServerConfig {
                 name: "soland-test".to_owned(),
-                audience: "did:web:soland.test".to_owned(),
+                audience: Some("did:web:soland.test".to_owned()),
                 endpoint: server.uri().parse().unwrap(),
                 did: Some("did:web:soland.test".to_owned()),
                 session_grant_introspection_bearer: Some("lifecycle-secret".to_owned()),

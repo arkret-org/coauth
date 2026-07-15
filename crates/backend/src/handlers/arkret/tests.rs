@@ -13,6 +13,7 @@ use hyper::{Request, StatusCode};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use salvo::test::{ResponseExt as SalvoResponseExt, TestClient};
+use ulid::Ulid;
 
 use super::*;
 use crate::handlers::test_utils::{
@@ -625,7 +626,7 @@ fn service_describe_advertises_configured_session_grant_ttl() {
 }
 
 #[test]
-fn session_grant_is_signed_for_the_user_did() {
+fn session_grant_is_signed_for_the_bound_principal_did() {
     let clock = SystemClock::default();
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
     let arkret_config = personal_node_did_web_config();
@@ -639,6 +640,7 @@ fn session_grant_is_signed_for_the_user_did() {
     let mut signing_rng = ChaChaRng::seed_from_u64(11);
     let session_key = PrivateKey::generate_ed25519(&mut signing_rng);
     let session_public_key = test_session_public_jwk(&session_key, "test-session-key");
+    let principal_did = format!("did:web:auth.example.com:users:{}", browser_session.user.id);
 
     let device_scope = "urn:arkret:client:device:ak:device:01964137-0000-7000-8000-000000000001";
     let grant = issue_session_grant(
@@ -649,6 +651,7 @@ fn session_grant_is_signed_for_the_user_did() {
         &key_store,
         &browser_session,
         session_public_key,
+        &principal_did,
         vec![
             PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
             device_scope.to_owned(),
@@ -662,7 +665,7 @@ fn session_grant_is_signed_for_the_user_did() {
     let payload = jwt.payload();
     assert_eq!(payload.kind, "ak.session.grant");
     assert_eq!(payload.grant_id, grant.grant_id);
-    assert_eq!(payload.subject, browser_session.user.sub);
+    assert_eq!(payload.subject, principal_did);
     assert_eq!(
         payload.audience,
         required_audience_for(&url_builder, &arkret_config)
@@ -716,6 +719,7 @@ fn session_grant_rejects_implicit_did_web_fallback() {
     let mut signing_rng = ChaChaRng::seed_from_u64(11);
     let session_key = PrivateKey::generate_ed25519(&mut signing_rng);
     let session_public_key = test_session_public_jwk(&session_key, "test-session-key");
+    let principal_did = format!("did:web:auth.example.com:users:{}", browser_session.user.id);
 
     let error = issue_session_grant(
         &mut signing_rng,
@@ -725,6 +729,7 @@ fn session_grant_rejects_implicit_did_web_fallback() {
         &key_store,
         &browser_session,
         session_public_key,
+        &principal_did,
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
     )
     .unwrap_err();
@@ -758,6 +763,7 @@ fn session_grant_uses_configured_ttl() {
     let mut signing_rng = ChaChaRng::seed_from_u64(11);
     let session_key = PrivateKey::generate_ed25519(&mut signing_rng);
     let session_public_key = test_session_public_jwk(&session_key, "ttl-session-key");
+    let principal_did = format!("did:web:auth.example.com:users:{}", browser_session.user.id);
 
     let grant = issue_session_grant(
         &mut signing_rng,
@@ -767,6 +773,7 @@ fn session_grant_uses_configured_ttl() {
         &key_store,
         &browser_session,
         session_public_key,
+        &principal_did,
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
     )
     .unwrap();
@@ -914,6 +921,7 @@ async fn seed_persisted_session_grant(
         .unwrap();
     let session_key = PrivateKey::generate_ed25519(&mut rng);
     let grant_config = personal_node_did_web_config();
+    let principal_did = format!("did:web:auth.example.com:users:{}", user.id);
     let material = issue_session_grant(
         &mut rng,
         &*state.clock,
@@ -922,6 +930,7 @@ async fn seed_persisted_session_grant(
         &state.key_store,
         &browser_session,
         test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
+        &principal_did,
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
     )
     .unwrap();

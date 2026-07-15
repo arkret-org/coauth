@@ -201,7 +201,7 @@ mod tests {
         assert!(req.validate().unwrap_err().contains("expires_at"));
 
         let req = CreateCollaborationCapabilityGrant {
-            expires_at: Some(Utc::now()),
+            expires_at: Some("2099-01-01T00:00:00Z".parse().unwrap()),
             ..req
         };
         assert!(

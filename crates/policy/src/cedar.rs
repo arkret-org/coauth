@@ -42,8 +42,8 @@ use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use cedar_policy::{Authorizer, Context, Decision, Entities, EntityUid, PolicySet, Request};
-use chrono::{Datelike, Timelike, Utc};
-use coauth_data::PolicyData;
+use chrono::{Datelike, Timelike};
+use coauth_data::{Clock, PolicyData, SystemClock};
 
 use crate::model::{
     AuthorizationGrantInput, ClientRegistrationInput, EmailInput, EvaluationResult, RegisterInput,
@@ -136,7 +136,7 @@ impl CedarEvaluator {
             serde_json::to_value(input).map_err(EvaluationError::Serialization)?;
 
         // Inject time context fields for time-based policy evaluation.
-        let now = Utc::now();
+        let now = SystemClock::default().now();
         let day_of_week = match now.weekday() {
             chrono::Weekday::Mon => "monday",
             chrono::Weekday::Tue => "tuesday",

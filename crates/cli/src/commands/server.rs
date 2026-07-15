@@ -370,7 +370,7 @@ impl Options {
                     }
                 })
                 .join(", ");
-            let resources = format!("{:?}", &config.resources);
+            let resources = format!("{:?}", config.resources);
             let announcement = if config.proxy_protocol {
                 format!("Listening on {addresses} with resources {resources} (with Proxy Protocol)")
             } else {

@@ -1119,6 +1119,14 @@ mod tests {
                     "mls_epoch": 0
                 }
             },
+            "requested_scope": {
+                "actions": [
+                    "ak.self.events.stream.subscribe",
+                    "ak.event.read"
+                ],
+                "resources": []
+            },
+            "requested_scope_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "active_authorizations": [],
         }))
         .unwrap()

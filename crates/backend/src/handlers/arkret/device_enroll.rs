@@ -411,6 +411,11 @@ pub async fn device_enroll_endpoint(
             "failed to serialize device-enroll payload: {error}"
         )))
     })?;
+    let content = serde_json::from_value(content).map_err(|error| {
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "device-enroll payload must serialize as an object: {error}"
+        )))
+    })?;
 
     let mut event = Event {
         event_id: EventId::new(arkret_core::identifiers::new_prefixed_uuid7("ak:event:")).map_err(

@@ -1,8 +1,7 @@
-use arkret_core::ErasureReceipt;
+use arkret_core::{ErasureReceipt, VerificationStub};
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_keystore::Keystore;
-use serde_json::Value;
 use thiserror::Error;
 
 use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
@@ -35,7 +34,7 @@ fn verification_method_did(verification_method: &str) -> &str {
 
 fn validate_retained_stub(
     receipt: &ErasureReceipt,
-    retained_stub: Option<&Value>,
+    retained_stub: Option<&VerificationStub>,
 ) -> Result<(), ErasureReceiptVerificationError> {
     if let Some(retained_stub) = retained_stub {
         receipt.validate_with_retained_stub(retained_stub)?;
@@ -60,7 +59,7 @@ pub async fn verify_erasure_receipt(
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
     receipt: &ErasureReceipt,
-    retained_stub: Option<&Value>,
+    retained_stub: Option<&VerificationStub>,
 ) -> Result<(), ErasureReceiptVerificationError> {
     validate_retained_stub(receipt, retained_stub)?;
     let expected_digest = receipt.canonical_payload_digest()?;

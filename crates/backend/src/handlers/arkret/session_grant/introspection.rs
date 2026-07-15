@@ -2,7 +2,7 @@ use arkret_core::error::ERROR_CODE_SCHEMA_VIOLATION;
 use arkret_core::{
     DeviceId, SessionGrantIntrospectGrant, SessionGrantIntrospectOutcome,
     SessionGrantIntrospectRequestBody, SessionGrantIntrospectStatus,
-    SessionGrantIntrospectionProof,
+    SessionGrantIntrospectionProof, SessionGrantScopeDetails,
 };
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::user::PrincipalDidRepository as _;
@@ -33,15 +33,22 @@ fn introspection_grant_record(
         .map(|session| session.user.id.to_string())
         .or_else(|| grant.browser_session_id.map(|id| id.to_string()))
         .unwrap_or_else(|| grant.subject.clone());
-    let revocation_ref = grant
-        .browser_session_id
-        .map(|id| format!("ak:session:{id}"))
-        .unwrap_or_else(|| format!("ak:session-grant:{}", grant.grant_id));
+    let revocation_ref = grant.browser_session_id.map_or_else(
+        || format!("ak:session-grant:{}", grant.grant_id),
+        |id| format!("ak:session:{id}"),
+    );
     let scope_details = parsed_payload
         .as_ref()
-        .map_or(serde_json::Value::Null, |payload| {
-            payload.scope_details.clone()
-        });
+        .filter(|payload| !payload.scope_details.is_null())
+        .map(|payload| {
+            serde_json::from_value::<SessionGrantScopeDetails>(payload.scope_details.clone())
+        })
+        .transpose()
+        .map_err(|error| {
+            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                "stored session grant scope_details is invalid: {error}"
+            )))
+        })?;
 
     let device_id = grant
         .device_id
@@ -235,19 +242,19 @@ pub async fn introspect_session_grant(
     // audience it is authorized for. A grant minted for any other audience is
     // reported as an audience mismatch (with no grant metadata) so a Principal
     // Server cannot probe grants belonging to other audiences.
-    if let Some(allowed) = caller.allowed_audiences.as_deref() {
-        if !allowed.iter().any(|audience| audience == &grant.audience) {
-            repo.cancel()
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-            return Ok(Json(SessionGrantIntrospectOutcome {
-                active: false,
-                status: SessionGrantIntrospectStatus::AudienceMismatch,
-                proof_required: false,
-                one_time_use_consumed: false,
-                grant: None,
-            }));
-        }
+    if let Some(allowed) = caller.allowed_audiences.as_deref()
+        && !allowed.iter().any(|audience| audience == &grant.audience)
+    {
+        repo.cancel()
+            .await
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        return Ok(Json(SessionGrantIntrospectOutcome {
+            active: false,
+            status: SessionGrantIntrospectStatus::AudienceMismatch,
+            proof_required: false,
+            one_time_use_consumed: false,
+            grant: None,
+        }));
     }
 
     let browser_session = if let Some(browser_session_id) = grant.browser_session_id {
@@ -259,16 +266,22 @@ pub async fn introspect_session_grant(
         None
     };
 
+    let bound_user_id = if browser_session.is_none() {
+        let mut principal_dids = repo.principal_did();
+        principal_dids
+            .get_by_did_and_audience(&grant.subject, &grant.audience)
+            .await
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+            .map(|binding| binding.user_id)
+    } else {
+        None
+    };
+
     let user = if let Some(browser_session) = browser_session.as_ref() {
         Some(browser_session.user.clone())
-    } else if let Some(binding) = repo
-        .principal_did()
-        .get_by_did_and_audience(&grant.subject, &grant.audience)
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
-    {
+    } else if let Some(user_id) = bound_user_id {
         repo.user()
-            .lookup(binding.user_id)
+            .lookup(user_id)
             .await
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
     } else {

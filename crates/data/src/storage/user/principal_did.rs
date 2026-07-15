@@ -6,6 +6,21 @@ use rand_core::RngCore;
 
 use crate::repository_impl;
 
+/// Typed input for persisting one authority-verified principal DID binding.
+#[derive(Clone, Debug)]
+pub struct VerifiedPrincipalDidBindingInput {
+    /// Principal Server audience for which this binding was verified.
+    pub audience: String,
+    /// Principal DID controlled by the account holder.
+    pub principal_id: String,
+    /// Verified head of the principal DID's WebVH history.
+    pub key_log_head: arkret_core::Hash,
+    /// DID of the authority that attested the enrollment delegation.
+    pub enrollment_authority_did: arkret_core::Did,
+    /// DID URL of the delegated enrollment authority service.
+    pub enrollment_authority_ref: String,
+}
+
 /// Persistence boundary for principal DIDs verified by an authoritative host.
 #[async_trait]
 pub trait PrincipalDidRepository: Send + Sync {
@@ -36,11 +51,7 @@ pub trait PrincipalDidRepository: Send + Sync {
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
         user: &User,
-        audience: String,
-        principal_id: String,
-        key_log_head: arkret_core::Hash,
-        enrollment_authority_did: arkret_core::Did,
-        enrollment_authority_ref: String,
+        input: VerifiedPrincipalDidBindingInput,
     ) -> Result<PrincipalDidBinding, Self::Error>;
 
     /// Remove every audience binding for this account and principal DID.
@@ -71,11 +82,7 @@ repository_impl!(PrincipalDidRepository:
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
         user: &User,
-        audience: String,
-        principal_id: String,
-        key_log_head: arkret_core::Hash,
-        enrollment_authority_did: arkret_core::Did,
-        enrollment_authority_ref: String,
+        input: VerifiedPrincipalDidBindingInput,
     ) -> Result<PrincipalDidBinding, Self::Error>;
     async fn remove_for_user_and_did(
         &mut self,

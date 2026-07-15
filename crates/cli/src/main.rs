@@ -59,11 +59,11 @@ fn main() -> anyhow::Result<ExitCode> {
     coauth_backend::set_version(VERSION);
 
     let cli_opts = self::commands::Options::parse();
-    let dotenv_result: Result<Option<_>, _> = if cli_opts.has_explicit_config() {
+    let dotenv_result: Result<Option<String>, _> = if cli_opts.has_explicit_config() {
         Ok(None)
     } else {
         dotenvy::dotenv()
-            .map(Some)
+            .map(|path| Some(path.display().to_string()))
             .or_else(|e| if e.not_found() { Ok(None) } else { Err(e) })
     };
     cli_opts
@@ -96,7 +96,7 @@ fn build_tokio_runtime() -> anyhow::Result<tokio::runtime::Runtime> {
 async fn run_async(
     cli_opts: self::commands::Options,
     figment: figment::Figment,
-    dotenv_result: Result<Option<std::path::PathBuf>, dotenvy::Error>,
+    dotenv_result: Result<Option<String>, dotenvy::Error>,
 ) -> anyhow::Result<ExitCode> {
     let outcome = execute_command(cli_opts, figment, dotenv_result).await;
 
@@ -111,7 +111,7 @@ async fn run_async(
 async fn execute_command(
     cli_opts: self::commands::Options,
     figment: figment::Figment,
-    dotenv_result: Result<Option<std::path::PathBuf>, dotenvy::Error>,
+    dotenv_result: Result<Option<String>, dotenvy::Error>,
 ) -> anyhow::Result<ExitCode> {
     // Logging setup -- writes to stderr
     let stderr = std::io::stderr();
