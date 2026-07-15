@@ -184,6 +184,15 @@ pub struct CompleteRegistrationRequestBody {
     pub phone_authentication: Option<UserPhoneAuthentication>,
     pub user_agent: Option<String>,
     pub upstream_oauth: Option<(UpstreamOAuthAuthorizationSession, UpstreamOAuthLink)>,
+    pub verified_principal_binding: Option<VerifiedPrincipalBinding>,
+}
+
+pub struct VerifiedPrincipalBinding {
+    pub audience: String,
+    pub principal_id: String,
+    pub key_log_head: arkret_core::Hash,
+    pub enrollment_authority_did: arkret_core::Did,
+    pub enrollment_authority_ref: String,
 }
 
 #[derive(Debug)]
@@ -203,7 +212,11 @@ pub struct PreparedRegistrationCompletion {
 
 impl PreparedRegistrationCompletion {
     #[must_use]
-    pub fn into_request(self, user_agent: Option<String>) -> CompleteRegistrationRequestBody {
+    pub fn into_request(
+        self,
+        user_agent: Option<String>,
+        verified_principal_binding: Option<VerifiedPrincipalBinding>,
+    ) -> CompleteRegistrationRequestBody {
         CompleteRegistrationRequestBody {
             registration: self.registration,
             registration_token: self.registration_token,
@@ -211,6 +224,7 @@ impl PreparedRegistrationCompletion {
             phone_authentication: self.phone_authentication,
             user_agent,
             upstream_oauth: self.upstream_oauth,
+            verified_principal_binding,
         }
     }
 }

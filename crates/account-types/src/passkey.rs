@@ -61,22 +61,15 @@ pub struct PasskeyRegisterStartOutcome {
     pub challenge: serde_json::Value,
 }
 
-/// Outcome of `passkey/register/finish`: the persisted credential plus any
-/// first-credential StarID mint details.
+/// Outcome of `passkey/register/finish`: the persisted credential.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 pub struct PasskeyRegisterFinishOutcome {
     pub account_id: String,
     pub id: String,
     pub credential_id_b64: String,
-    // Preserve the original wire shape: `label` is always serialized (emits
-    // `null` when absent), only the StarID fields skip when empty.
     #[serde(default)]
     pub label: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub starid_did: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub starid_version_id: Option<String>,
 }
 
 /// Outcome of `passkey/auth/start`: the resolved account plus the

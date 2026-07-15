@@ -61,8 +61,6 @@ pub async fn add_account(
     } = call_context;
     let mut rng = crate::handlers::account::make_rng();
     let principal_server = depot.principal_server()?;
-    let arkret_config = depot.arkret_config()?;
-    let did_resolver = depot.did_resolver_service()?;
     let params: AddRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     if repo.user().exists(&params.handle).await? {
@@ -96,12 +94,8 @@ pub async fn add_account(
 
     let user = repo.user().add(&mut rng, &clock, params.handle).await?;
 
-    // Round 37.4: the starid wire-in is deferred to the first passkey
-    // enrolment (see `services::onboarding_starid` +
-    // `passkeys::register_finish`). At admin-create time we only
-    // persist the local user record; `starid_backend` stays false
-    // until the device-bound `update_key` is derived from the first
-    // attested credential.
+    // Admin creation persists only the service account. Principal identity
+    // onboarding remains a separate client-signed flow.
 
     principal_server
         .provision_user(&ConnectorProvisionRequest::new(&user.localpart, &user.sub))
@@ -123,9 +117,7 @@ pub async fn add_account(
     repo.save().await?;
 
     Ok(crate::handlers::admin::CreatedJson(
-        SingleOutcome::new_canonical(
-            AccountRecord::from_user(user, &arkret_config, did_resolver.as_ref()).await?,
-        ),
+        SingleOutcome::new_canonical(AccountRecord::from_user(user, depot).await?),
     ))
 }
 

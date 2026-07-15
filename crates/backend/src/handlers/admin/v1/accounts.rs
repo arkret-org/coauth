@@ -89,19 +89,19 @@ pub struct AccountRecord {
 }
 
 impl AccountRecord {
-    /// Build an `AccountRecord` from a freshly-fetched `User` row. Async
-    /// because the primary-DID derivation goes through the
-    /// `DidResolverService` trait, whose `primary_did_for_user` is
-    /// `async` so a starid-backed deployment can route through the
-    /// configured registry without blocking the runtime.
+    /// Build an `AccountRecord` from a freshly-fetched `User` row and its
+    /// persisted principal binding.
     pub(crate) async fn from_user(
         user: coauth_data::User,
-        arkret_config: &coauth_config::ArkretConfig,
-        did_resolver: &dyn DidResolverService,
+        depot: &Depot,
     ) -> Result<Self, AppError> {
+        let arkret_config = depot.arkret_config()?;
+        let did_resolver = depot.did_resolver_service()?;
+        let mut repo = depot.repo().await?;
         let status = admin_account_status(user.status);
         let principal_id_bindings =
-            preview_bindings_for_user(&user, arkret_config, did_resolver).await;
+            preview_bindings_for_user(&mut repo, &user, &arkret_config, did_resolver.as_ref())
+                .await;
         let primary_principal_binding = principal_id_bindings
             .iter()
             .find(|binding| binding.primary)
@@ -110,10 +110,12 @@ impl AccountRecord {
             .iter()
             .map(|binding| binding.did.clone())
             .collect();
-        let primary_principal_id = primary_did_for_user(&user, arkret_config, did_resolver)
-            .await
-            .ok()
-            .flatten();
+        let primary_principal_id =
+            primary_did_for_user(&mut repo, &user, &arkret_config, did_resolver.as_ref())
+                .await
+                .ok()
+                .flatten();
+        repo.cancel().await?;
 
         Ok(Self {
             id: user.id,
@@ -224,8 +226,6 @@ pub async fn list_accounts(
 ) -> JsonResult<PaginatedOutcome<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
-    let arkret_config = depot.arkret_config()?;
-    let did_resolver = depot.did_resolver_service()?;
     let (pagination, include_count) = extract_pagination(req)?;
     let params: AccountFilterParams = req.parse_queries().unwrap_or_default();
 
@@ -256,12 +256,12 @@ pub async fn list_accounts(
         IncludeCount::True => {
             let page = repo.user().list(filter, pagination).await?;
             let count = repo.user().count(filter).await?;
-            let page = map_page_async(page, &arkret_config, did_resolver.as_ref()).await?;
+            let page = map_page_async(page, depot).await?;
             paginated_response_for_page(page, pagination, Some(count), &base)
         }
         IncludeCount::False => {
             let page = repo.user().list(filter, pagination).await?;
-            let page = map_page_async(page, &arkret_config, did_resolver.as_ref()).await?;
+            let page = map_page_async(page, depot).await?;
             paginated_response_for_page(page, pagination, None, &base)
         }
         IncludeCount::Only => {
@@ -304,8 +304,6 @@ pub async fn get_account_by_username(
 ) -> JsonResult<SingleOutcome<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
-    let arkret_config = depot.arkret_config()?;
-    let did_resolver = depot.did_resolver_service()?;
     let username: String = req
         .param::<String>("username")
         .ok_or_else(|| AppError::not_found(r#"Account with username "unknown" not found"#))?;
@@ -320,7 +318,7 @@ pub async fn get_account_by_username(
         })?;
 
     Ok(Json(SingleOutcome::new(
-        AccountRecord::from_user(account, &arkret_config, did_resolver.as_ref()).await?,
+        AccountRecord::from_user(account, depot).await?,
         self_path,
     )))
 }
@@ -333,8 +331,6 @@ pub async fn get_account(
 ) -> JsonResult<SingleOutcome<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
-    let arkret_config = depot.arkret_config()?;
-    let did_resolver = depot.did_resolver_service()?;
     let id = extract_ulid_param(req)?;
 
     let account = repo
@@ -344,7 +340,7 @@ pub async fn get_account(
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
 
     Ok(Json(SingleOutcome::new_canonical(
-        AccountRecord::from_user(account, &arkret_config, did_resolver.as_ref()).await?,
+        AccountRecord::from_user(account, depot).await?,
     )))
 }
 
@@ -386,15 +382,13 @@ pub async fn list_account_session_grants(
 ) -> JsonResult<AccountSessionGrantsOutcome> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
-    let arkret_config = depot.arkret_config()?;
-    let did_resolver = depot.did_resolver_service()?;
     let id = extract_ulid_param(req)?;
     let account = repo
         .user()
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
-    let record = AccountRecord::from_user(account, &arkret_config, did_resolver.as_ref()).await?;
+    let record = AccountRecord::from_user(account, depot).await?;
     Ok(Json(AccountSessionGrantsOutcome {
         data: admin_session_grant_records(&record),
     }))
@@ -495,7 +489,6 @@ async fn patch_account(
         ..
     } = call_context;
     let arkret_config = depot.arkret_config()?;
-    let did_resolver = depot.did_resolver_service()?;
     let id = extract_ulid_param(req)?;
     let principal_server = depot.principal_server()?;
     let key_store = depot.key_store()?;
@@ -607,7 +600,7 @@ async fn patch_account(
     repo.save().await?;
 
     Ok(Json(SingleOutcome::new_canonical(
-        AccountRecord::from_user(account, &arkret_config, did_resolver.as_ref()).await?,
+        AccountRecord::from_user(account, depot).await?,
     )))
 }
 
@@ -616,8 +609,7 @@ async fn patch_account(
 /// drive an async closure, so we walk the edges by hand.
 async fn map_page_async(
     page: coauth_data::Page<coauth_data::User>,
-    arkret_config: &coauth_config::ArkretConfig,
-    did_resolver: &dyn DidResolverService,
+    depot: &Depot,
 ) -> Result<coauth_data::Page<AccountRecord>, AppError> {
     let coauth_data::Page {
         has_next_page,
@@ -627,7 +619,7 @@ async fn map_page_async(
     let mut mapped_edges = Vec::with_capacity(edges.len());
     for edge in edges {
         let cursor = edge.cursor;
-        let node = AccountRecord::from_user(edge.node, arkret_config, did_resolver).await?;
+        let node = AccountRecord::from_user(edge.node, depot).await?;
         mapped_edges.push(coauth_data::pagination::Edge { cursor, node });
     }
     Ok(coauth_data::Page {

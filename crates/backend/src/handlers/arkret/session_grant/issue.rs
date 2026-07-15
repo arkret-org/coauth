@@ -1,9 +1,10 @@
 use arkret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_CLAIM_REQUIRED, ERROR_CODE_FAILED_PRECONDITION,
     ERROR_CODE_INTERNAL_ERROR, ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE,
-    ERROR_CODE_POLICY_DENIED, ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_SERVICE_UNAVAILABLE,
-    ERROR_CODE_UNSUPPORTED_FEATURE, REASON_PROOF_INVALID,
+    ERROR_CODE_POLICY_DENIED, ERROR_CODE_PRINCIPAL_UNKNOWN, ERROR_CODE_SCHEMA_VIOLATION,
+    ERROR_CODE_SERVICE_UNAVAILABLE, ERROR_CODE_UNSUPPORTED_FEATURE, REASON_PROOF_INVALID,
 };
+use coauth_data::user::PrincipalDidRepository as _;
 use salvo::prelude::*;
 
 use super::*;
@@ -52,12 +53,13 @@ pub async fn issue_session_grant_endpoint(
         .parse_json()
         .await
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
+    require_principal_id(&raw_body)?;
     let body: arkret_core::SessionGrantRequestBody = serde_json::from_value(raw_body.clone())
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
-    enforce_session_grant_inception_key_window(&body, &raw_body)?;
     match body.proof.proof_kind {
         arkret_core::SessionGrantProofKind::OidcCodeExchange => {
             let proof = &body.proof;
+            let expected_principal_id = body.principal_id.as_str().to_owned();
             let input = OidcCodeExchangeInput {
                 authorization_code: proof.authorization_code.clone().unwrap_or_default(),
                 code_verifier: proof.code_verifier.clone().unwrap_or_default(),
@@ -71,11 +73,7 @@ pub async fn issue_session_grant_endpoint(
                     .as_ref()
                     .map(|id| id.as_str().to_owned())
                     .unwrap_or_default(),
-                // Optional at first sign-in (② contract D5): the client may
-                // omit `principal_id`; the AA derives the DID and returns it in
-                // `SessionGrantOutcome.principal_id`. When present it is the
-                // binding the exchange must match exactly.
-                expected_principal_id: body.principal_id.as_ref().map(|id| id.as_str().to_owned()),
+                expected_principal_id,
                 // The proof carries the requested audience; the grant target
                 // resolver intersects it with the configured principal servers.
                 requested_audience: Some(proof.audience.clone()),
@@ -176,35 +174,6 @@ fn require_agent_key_proof_dpop_binding(
 /// session grant. Returns the SDK `SessionGrantOutcome` with the
 /// `scope_details` overlay. Human-approval and fail-closed rejections surface
 /// as structured errors.
-fn enforce_session_grant_inception_key_window(
-    body: &arkret_core::SessionGrantRequestBody,
-    raw_body: &serde_json::Value,
-) -> Result<(), ArkretRouteError> {
-    if !matches!(
-        body.proof.proof_kind,
-        arkret_core::SessionGrantProofKind::DidBoundSignature
-            | arkret_core::SessionGrantProofKind::PairedDeviceProof
-    ) {
-        return Ok(());
-    }
-    let clock = crate::handlers::make_clock();
-    crate::services::inception_key_window::enforce_inception_key_window_rfc3339(
-        crate::services::inception_key_window::session_grant_request_anchor(raw_body),
-        clock.now(),
-    )
-    .map_err(inception_key_window_error)
-}
-
-fn inception_key_window_error(
-    error: crate::services::inception_key_window::InceptionKeyWindowError,
-) -> ArkretRouteError {
-    ArkretRouteError::coded(
-        StatusCode::FORBIDDEN,
-        ERROR_CODE_FAILED_PRECONDITION,
-        format!("reason_code={}; {error}", error.reason_code()),
-    )
-}
-
 async fn issue_agent_key_proof_session_grant(
     _req: &mut Request,
     depot: &Depot,
@@ -223,17 +192,7 @@ async fn issue_agent_key_proof_session_grant(
     let mut rng = crate::handlers::make_rng();
 
     let mut repo = depot.repo().await?;
-    let agent_id = body
-        .principal_id
-        .as_ref()
-        .map(arkret_core::Did::as_str)
-        .ok_or_else(|| {
-            ArkretRouteError::coded(
-                StatusCode::UNAUTHORIZED,
-                REASON_PROOF_INVALID,
-                "reason_code=proof_invalid; agent principal_id is required",
-            )
-        })?;
+    let agent_id = body.principal_id.as_str();
     if let Err(rejection) =
         enforce_authoritative_agent_lifecycle(&http_client, &arkret_config, agent_id).await
     {
@@ -277,16 +236,21 @@ async fn issue_agent_key_proof_session_grant(
         }
     };
 
+    let audience = body.proof.audience.clone();
+
     // Controller lifecycle gate: a deactivated / suspended controller fails
     // closed (AKP-0008 §4.6). Resolve the controller's local user record when
     // the DID maps to a coauth-hosted account. Bind the lookup to an owned
     // value so the sub-repo borrow is released before `repo.cancel()`.
-    let controller_blocked = if let Some(user_id) =
-        parse_local_user_did_for(&arkret_config, &authorization.controller_id)
-    {
+    let controller_binding = repo
+        .principal_did()
+        .get_by_did_and_audience(&authorization.controller_id, &audience)
+        .await
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let controller_blocked = if let Some(binding) = controller_binding {
         let user = repo
             .user()
-            .lookup(user_id)
+            .lookup(binding.user_id)
             .await
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
         user.is_some_and(|user| user.locked_at.is_some() || user.deactivated_at.is_some())
@@ -309,7 +273,6 @@ async fn issue_agent_key_proof_session_grant(
     // issuer signature and rechecks agent status inside the revocation
     // freshness window (AKP-0008 §4.11 natural-expiry path), bounded by the
     // ≤ 15-minute TTL.
-    let audience = body.proof.audience.clone();
     let now = clock.now();
     let expires_at = now + authorization.ttl;
 
@@ -368,6 +331,21 @@ async fn issue_agent_key_proof_session_grant(
     }))
 }
 
+fn require_principal_id(raw_body: &serde_json::Value) -> Result<(), ArkretRouteError> {
+    if raw_body
+        .get("principal_id")
+        .and_then(serde_json::Value::as_str)
+        .is_none_or(|principal_id| principal_id.trim().is_empty())
+    {
+        return Err(ArkretRouteError::coded(
+            StatusCode::NOT_FOUND,
+            ERROR_CODE_PRINCIPAL_UNKNOWN,
+            "principal_unknown",
+        ));
+    }
+    Ok(())
+}
+
 fn map_session_grant_material_error(error: SessionGrantError) -> ArkretRouteError {
     match error {
         error @ SessionGrantError::DidWebPrincipalNotExplicit => ArkretRouteError::coded(
@@ -375,7 +353,11 @@ fn map_session_grant_material_error(error: SessionGrantError) -> ArkretRouteErro
             ERROR_CODE_INVALID_PARAM,
             error.to_string(),
         ),
-        SessionGrantError::InceptionKeyWindowExceeded(error) => inception_key_window_error(error),
+        SessionGrantError::PrincipalUnknown => ArkretRouteError::coded(
+            StatusCode::NOT_FOUND,
+            ERROR_CODE_PRINCIPAL_UNKNOWN,
+            "principal_unknown",
+        ),
         other => ArkretRouteError::Internal(Box::new(other)),
     }
 }
@@ -395,9 +377,8 @@ fn map_oidc_exchange_error(
         ),
         "invalid_discovery_binding" => (StatusCode::CONFLICT, ERROR_CODE_FAILED_PRECONDITION),
         "upstream_link_required" => (StatusCode::FORBIDDEN, ERROR_CODE_CLAIM_REQUIRED),
-        "account_unavailable"
-        | "principal_did_minting_failed"
-        | "principal_account_registration_failed" => (
+        "principal_unknown" => (StatusCode::NOT_FOUND, ERROR_CODE_PRINCIPAL_UNKNOWN),
+        "account_unavailable" | "principal_account_registration_failed" => (
             StatusCode::SERVICE_UNAVAILABLE,
             ERROR_CODE_SERVICE_UNAVAILABLE,
         ),
@@ -475,6 +456,32 @@ mod tests {
                 assert!(message.contains("reason_code=invalid_authorization_code"));
             }
             other => panic!("expected coded error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn missing_principal_binding_is_exact_principal_unknown_not_found() {
+        for error in [
+            require_principal_id(&serde_json::json!({}))
+                .expect_err("missing principal_id must fail"),
+            map_session_grant_material_error(SessionGrantError::PrincipalUnknown),
+            map_oidc_exchange_error(OidcExchangeError {
+                code: "principal_unknown",
+                message: "principal_unknown".to_owned(),
+            }),
+        ] {
+            match error {
+                ArkretRouteError::Coded {
+                    status,
+                    code,
+                    message,
+                } => {
+                    assert_eq!(status, StatusCode::NOT_FOUND);
+                    assert_eq!(code, ERROR_CODE_PRINCIPAL_UNKNOWN);
+                    assert_eq!(message, "principal_unknown");
+                }
+                other => panic!("expected coded principal_unknown error, got {other:?}"),
+            }
         }
     }
 

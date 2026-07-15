@@ -4,26 +4,18 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, RepositoryAccess, UrlBuilder, User};
-use coauth_iana::jose::JsonWebSignatureAlg;
-use coauth_jose::jwk::PublicJsonWebKey;
 use coauth_keystore::Keystore;
 use serde_json::Value;
 use thiserror::Error;
-use ulid::Ulid;
 use url::Url;
 
-use crate::handlers::arkret::{
-    DidDocument, SessionGrantError, VerificationMethod, issuer_did_for, service_id_for,
-    user_did_for,
-};
+use crate::handlers::arkret::{DidDocument, SessionGrantError, issuer_did_for, service_id_for};
 use crate::outbound_http::RequestBuilderExt as _;
 
 pub type DidResolverServiceHandle = Arc<dyn DidResolverService>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DidResolutionSource {
-    LocalService,
-    LocalUser,
     DidWeb,
     DidPlc,
     DidKey,
@@ -34,8 +26,6 @@ impl DidResolutionSource {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::LocalService => "local_service",
-            Self::LocalUser => "local_user",
             Self::DidWeb => "did_web",
             Self::DidPlc => "did_plc",
             Self::DidKey => "did_key",
@@ -49,6 +39,7 @@ pub struct DidResolution {
     pub document: DidDocument,
     pub source: DidResolutionSource,
     pub verified_local_binding: bool,
+    pub key_log_head: Option<arkret_core::Hash>,
     pub method_evidence: Value,
     pub identity_fact_rejection: Option<DidResolutionIdentityFactRejection>,
 }
@@ -144,16 +135,12 @@ pub const DID_DOCUMENT_MAX_BYTES: usize = 10 * 1024 * 1024;
 pub trait DidResolverService: Send + Sync {
     fn service_id(&self, arkret_config: &ArkretConfig) -> String;
     fn issuer_did(&self, arkret_config: &ArkretConfig) -> String;
-    fn user_did(&self, arkret_config: &ArkretConfig, user: &User) -> String;
-    fn parse_local_user_did(&self, arkret_config: &ArkretConfig, did: &str) -> Option<Ulid>;
     /// Resolve the primary principal DID for a user.
     ///
-    /// This only returns the local/starid `did:web` forms when the deployment
-    /// explicitly selects the `personal_node` + `principal_method=did:web`
-    /// exception. Other profiles must use persisted `did:webvh` principal
-    /// rows instead of deriving a fallback DID here.
+    /// This returns only a persisted, verified principal binding.
     async fn primary_did_for_user(
         &self,
+        repo: &mut BoxRepository,
         arkret_config: &ArkretConfig,
         user: &User,
     ) -> Result<String, SessionGrantError>;
@@ -163,9 +150,9 @@ pub trait DidResolverService: Send + Sync {
     async fn resolve_did_document(
         &self,
         http_client: &reqwest::Client,
-        url_builder: &UrlBuilder,
+        _url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
-        key_store: &Keystore,
+        _key_store: &Keystore,
         repo: &mut BoxRepository,
         did: &str,
     ) -> Result<DidResolution, DidResolveError>;
@@ -184,52 +171,28 @@ impl DidResolverService for DefaultDidResolverService {
         issuer_did_for(arkret_config)
     }
 
-    fn user_did(&self, arkret_config: &ArkretConfig, user: &User) -> String {
-        user_did_for(arkret_config, user)
-    }
-
-    fn parse_local_user_did(&self, arkret_config: &ArkretConfig, did: &str) -> Option<Ulid> {
-        let prefix = format!("{}:users:", self.service_id(arkret_config));
-        did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
-    }
-
     async fn primary_did_for_user(
         &self,
+        repo: &mut BoxRepository,
         arkret_config: &ArkretConfig,
         user: &User,
     ) -> Result<String, SessionGrantError> {
-        if !arkret_config.did_web_principal_allowed() {
-            return Err(SessionGrantError::DidWebPrincipalNotExplicit);
-        }
-
-        // The following `did:web` forms are only the personal-node explicit
-        // principal method. Organization-style deployments must use the
-        // persisted `did:webvh` rows minted by the principal-server bridge.
-        //
-        // For personal-node accounts without `starid_backend`, keep the
-        // historical local derivation. Non-personal profiles fail before this
-        // point and never use this value as a principal DID.
-        if user.starid_backend
-            && let Some(starid) = arkret_config.starid.as_ref()
-        {
-            let host = starid
-                .did_host
-                .clone()
-                .or_else(|| starid.base_url.host_str().map(ToOwned::to_owned))
-                .unwrap_or_else(|| "starid.local".to_owned());
-            let path_prefix = starid.path_prefix.trim_matches('/');
-            let slug = binding_slug(&user.id.to_string());
-            let did = if path_prefix.is_empty() {
-                format!("did:web:{host}:{slug}")
-            } else {
-                format!("did:web:{host}:{path_prefix}:{slug}")
+        for server in &arkret_config.principal_servers {
+            let Some(audience) =
+                crate::services::resolved_principal_audiences::effective_audience_shared(server)
+            else {
+                continue;
             };
-            return Ok(did);
+            if let Some(binding) = repo
+                .principal_did()
+                .get_for_user_and_audience(user, &audience)
+                .await
+                .map_err(|error| SessionGrantError::Other(error.into()))?
+            {
+                return Ok(binding.principal_id);
+            }
         }
-        Ok(format!(
-            "did:web:coauth.invalid:accounts:{}",
-            binding_slug(&user.id.to_string())
-        ))
+        Err(SessionGrantError::PrincipalUnknown)
     }
 
     fn delegated_resolver(&self, arkret_config: &ArkretConfig) -> Option<String> {
@@ -249,34 +212,12 @@ impl DidResolverService for DefaultDidResolverService {
     async fn resolve_did_document(
         &self,
         http_client: &reqwest::Client,
-        url_builder: &UrlBuilder,
+        _url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
-        key_store: &Keystore,
-        repo: &mut BoxRepository,
+        _key_store: &Keystore,
+        _repo: &mut BoxRepository,
         did: &str,
     ) -> Result<DidResolution, DidResolveError> {
-        // coauth no longer fabricates DID documents for its own service DID
-        // or unhosted user forms. There is no DID hosting on coauth, so a
-        // locally-built document would describe an identifier nothing serves.
-        // Both now resolve
-        // through the regular method chain below (and 404 like any other
-        // unhosted `did:web`). The `did:web:coauth.invalid:accounts:…`
-        // branch stays: that is an internal alias under an RFC2606
-        // non-resolvable TLD, never a hosted document.
-        if let Some(user_id) = parse_local_primary_account_did(did) {
-            if !arkret_config.did_web_principal_allowed() {
-                return Err(DidResolveError::DidWebPrincipalNotExplicit);
-            }
-            let Some(user) = repo.user().lookup(user_id).await? else {
-                return Err(DidResolveError::NotFound);
-            };
-            return Ok(local_resolution(
-                local_primary_account_did_document(url_builder, did, &user, key_store),
-                DidResolutionSource::LocalUser,
-                true,
-            ));
-        }
-
         match did_method(did).as_deref() {
             Some("web") => {
                 resolve_http_did(
@@ -303,6 +244,7 @@ impl DidResolverService for DefaultDidResolverService {
                     verification_method: Vec::new(),
                     authentication: Vec::new(),
                     assertion_method: Vec::new(),
+                    capability_delegation: Vec::new(),
                     service: Vec::new(),
                     // External `did:key` — coauth does not own its metadata.
                     metadata: None,
@@ -331,52 +273,6 @@ impl DidResolverService for DefaultDidResolverService {
     }
 }
 
-fn parse_local_primary_account_did(did: &str) -> Option<Ulid> {
-    let slug = did.strip_prefix("did:web:coauth.invalid:accounts:")?;
-    Ulid::from_string(&slug.to_ascii_uppercase()).ok()
-}
-
-fn local_primary_account_did_document(
-    url_builder: &UrlBuilder,
-    did: &str,
-    user: &User,
-    key_store: &Keystore,
-) -> DidDocument {
-    let mut verification_method = Vec::new();
-    let mut authentication = Vec::new();
-    let mut assertion_method = Vec::new();
-    if let Some(public_key) = preferred_public_eddsa_key(key_store) {
-        let key_id = format!("{did}#key-1");
-        verification_method.push(VerificationMethod {
-            id: key_id.clone(),
-            kind: "JsonWebKey2020".to_owned(),
-            controller: did.to_owned(),
-            public_key_jwk: Some(public_key),
-            public_key_multibase: None,
-        });
-        authentication.push(key_id.clone());
-        assertion_method.push(key_id);
-    }
-
-    DidDocument {
-        id: did.to_owned(),
-        also_known_as: vec![crate::handlers::arkret::user_handle(url_builder, user)],
-        verification_method,
-        authentication,
-        assertion_method,
-        service: Vec::new(),
-        metadata: Some(crate::handlers::arkret::DidDocumentMetadata::current_for_holder(None)),
-    }
-}
-
-fn preferred_public_eddsa_key(key_store: &Keystore) -> Option<PublicJsonWebKey> {
-    key_store
-        .public_jwks()
-        .iter()
-        .find(|candidate| candidate.alg() == Some(&JsonWebSignatureAlg::EdDsa))
-        .cloned()
-}
-
 #[must_use]
 pub fn default_did_resolver_service() -> DidResolverServiceHandle {
     Arc::new(DefaultDidResolverService)
@@ -391,6 +287,7 @@ fn local_resolution(
         document,
         source,
         verified_local_binding,
+        key_log_head: None,
         method_evidence: serde_json::json!({
             "resolver": source.as_str(),
             "verified_local_binding": verified_local_binding,
@@ -461,6 +358,7 @@ async fn parse_resolution_http_response(
     }
 
     let body: Value = serde_json::from_slice(&bytes)?;
+    let key_log_head = parse_key_log_head(&body)?;
     let (document, method_evidence) = parse_resolution_response(did, &url, source, body)?;
     if document.id != did {
         return Err(DidResolveError::DocumentIdMismatch {
@@ -474,9 +372,26 @@ async fn parse_resolution_http_response(
         document,
         source,
         verified_local_binding: false,
+        key_log_head,
         method_evidence,
         identity_fact_rejection,
     })
+}
+
+fn parse_key_log_head(body: &Value) -> Result<Option<arkret_core::Hash>, DidResolveError> {
+    match body.get("key_log_head") {
+        Some(Value::String(value)) => {
+            Some(arkret_core::Hash::new(value.clone()).map_err(|error| {
+                DidResolveError::BadResolverResponse(format!("invalid key_log_head: {error}"))
+            })?)
+        }
+        Some(_) => {
+            return Err(DidResolveError::BadResolverResponse(
+                "key_log_head must be a string".to_owned(),
+            ));
+        }
+        None => None,
+    }
 }
 
 async fn resolve_delegated_did(
@@ -1090,5 +1005,24 @@ mod tests {
         });
 
         assert_eq!(identity_fact_rejection_for(did, &evidence), None);
+    }
+
+    #[test]
+    fn resolver_history_head_is_typed_and_invalid_values_fail_closed() {
+        let digest = format!("sha256:{}", "a".repeat(64));
+        let parsed = parse_key_log_head(&serde_json::json!({"key_log_head": digest}))
+            .expect("canonical history head should parse")
+            .expect("history head should be present");
+        assert_eq!(parsed.to_string(), format!("sha256:{}", "a".repeat(64)));
+
+        for body in [
+            serde_json::json!({"key_log_head": ""}),
+            serde_json::json!({"key_log_head": 1}),
+        ] {
+            assert!(matches!(
+                parse_key_log_head(&body),
+                Err(DidResolveError::BadResolverResponse(_))
+            ));
+        }
     }
 }

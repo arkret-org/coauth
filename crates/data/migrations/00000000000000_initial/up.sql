@@ -482,15 +482,22 @@ CREATE TABLE public.policy_data (
     data jsonb NOT NULL
 );
 
-CREATE TABLE public.principal_did_update_keys (
+CREATE TABLE public.principal_did_owners (
     id uuid NOT NULL,
     user_id uuid NOT NULL,
+    principal_id text NOT NULL,
+    key_log_head text NOT NULL,
+    enrollment_authority_did text NOT NULL,
+    enrollment_authority_ref text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL
+);
+
+CREATE TABLE public.principal_did_bindings (
+    id uuid NOT NULL,
+    principal_did_owner_id uuid NOT NULL,
+    user_id uuid NOT NULL,
     audience text NOT NULL,
-    did text NOT NULL,
-    did_public_key_multibase text NOT NULL,
-    update_public_key_multibase text NOT NULL,
-    update_secret_b64 text NOT NULL,
-    key_log_head text,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
 );
@@ -796,7 +803,6 @@ CREATE TABLE public.users (
     display_name text,
     avatar_url text,
     preferred_locale text,
-    starid_backend boolean DEFAULT false NOT NULL,
     handle_aliases text[] DEFAULT ARRAY[]::text[] NOT NULL
 );
 
@@ -1022,14 +1028,35 @@ ALTER TABLE ONLY public.personal_sessions
 ALTER TABLE ONLY public.policy_data
     ADD CONSTRAINT policy_data_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.principal_did_update_keys
-    ADD CONSTRAINT principal_did_update_keys_did_unique UNIQUE (did);
+ALTER TABLE ONLY public.principal_did_bindings
+    ADD CONSTRAINT principal_did_bindings_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.principal_did_update_keys
-    ADD CONSTRAINT principal_did_update_keys_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.principal_did_bindings
+    ADD CONSTRAINT principal_did_bindings_owner_audience_unique UNIQUE (principal_did_owner_id, audience);
 
-ALTER TABLE ONLY public.principal_did_update_keys
-    ADD CONSTRAINT principal_did_update_keys_user_audience_unique UNIQUE (user_id, audience);
+ALTER TABLE ONLY public.principal_did_bindings
+    ADD CONSTRAINT principal_did_bindings_user_audience_unique UNIQUE (user_id, audience);
+
+ALTER TABLE ONLY public.principal_did_bindings
+    ADD CONSTRAINT principal_did_bindings_audience_nonempty CHECK (btrim(audience) <> '');
+
+ALTER TABLE ONLY public.principal_did_owners
+    ADD CONSTRAINT principal_did_owners_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.principal_did_owners
+    ADD CONSTRAINT principal_did_owners_id_user_unique UNIQUE (id, user_id);
+
+ALTER TABLE ONLY public.principal_did_owners
+    ADD CONSTRAINT principal_did_owners_principal_id_unique UNIQUE (principal_id);
+
+ALTER TABLE ONLY public.principal_did_owners
+    ADD CONSTRAINT principal_did_owners_fields_nonempty CHECK (
+        btrim(principal_id) <> '' AND
+        btrim(key_log_head) <> '' AND
+        btrim(enrollment_authority_did) <> '' AND
+        left(enrollment_authority_ref, length(principal_id) + 1) = principal_id || '#' AND
+        length(enrollment_authority_ref) > length(principal_id) + 1
+    );
 
 ALTER TABLE ONLY public.queue_jobs
     ADD CONSTRAINT queue_jobs_pkey PRIMARY KEY (id);
@@ -1216,7 +1243,9 @@ CREATE INDEX handle_audit_log_event_idx ON public.handle_audit_log USING btree (
 
 CREATE INDEX handle_audit_log_user_idx ON public.handle_audit_log USING btree (user_id, created_at DESC);
 
-CREATE INDEX idx_principal_did_update_keys_user_id ON public.principal_did_update_keys USING btree (user_id);
+CREATE INDEX idx_principal_did_bindings_user_id ON public.principal_did_bindings USING btree (user_id);
+
+CREATE INDEX idx_principal_did_owners_user_id ON public.principal_did_owners USING btree (user_id);
 
 CREATE INDEX idx_user_totp_configs_user_id ON public.user_totp_configs USING btree (user_id);
 
@@ -1383,8 +1412,11 @@ ALTER TABLE ONLY public.personal_sessions
 ALTER TABLE ONLY public.personal_sessions
     ADD CONSTRAINT personal_sessions_owner_user_id_fkey FOREIGN KEY (owner_user_id) REFERENCES public.users(id);
 
-ALTER TABLE ONLY public.principal_did_update_keys
-    ADD CONSTRAINT principal_did_update_keys_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.principal_did_bindings
+    ADD CONSTRAINT principal_did_bindings_owner_user_fkey FOREIGN KEY (principal_did_owner_id, user_id) REFERENCES public.principal_did_owners(id, user_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.principal_did_owners
+    ADD CONSTRAINT principal_did_owners_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.queue_jobs
     ADD CONSTRAINT queue_jobs_next_attempt_id_fkey FOREIGN KEY (next_attempt_id) REFERENCES public.queue_jobs(id);

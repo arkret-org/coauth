@@ -20,7 +20,6 @@ use rand_core::RngCore;
 use thiserror::Error;
 
 use crate::handlers::Limiter;
-use crate::services::starid_adapter::StaridRegistryHandle;
 
 /// Errors that can occur during stage side-effect execution.
 #[derive(Debug, Error)]
@@ -62,7 +61,6 @@ pub async fn execute_stage(
     response: &StageSubmission,
     context: &mut serde_json::Value,
     limiter: Option<&Limiter>,
-    starid_registry: Option<&StaridRegistryHandle>,
 ) -> Result<StageOutcome, StageExecutionError> {
     match (stage, response) {
         (
@@ -113,7 +111,6 @@ pub async fn execute_stage(
                 *create_users_as_inactive,
                 handle,
                 display_name.as_deref(),
-                starid_registry,
                 context,
             )
             .await

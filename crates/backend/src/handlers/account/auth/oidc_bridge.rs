@@ -34,7 +34,6 @@ use crate::handlers::arkret::{self, SessionGrantMaterial};
 use crate::oidc_client::requests::discovery;
 use crate::oidc_client::types::client_credentials::ClientCredentials;
 use crate::outbound_http::{self, RequestBuilderExt as _};
-use crate::services::soland_webvh;
 use crate::services::upstream_oidc::UpstreamOidcExchangeMode;
 use crate::services::upstream_oidc_mapping::{TrustedIssuerPolicySet, map_upstream_id_token};
 
@@ -62,14 +61,8 @@ pub(crate) struct OidcCodeExchangeInput {
     /// `body.device_id` — the protocol device id (`ak:device:<uuidv7>`) the
     /// grant is bound to via `cnf.jkt`.
     pub device_id: String,
-    /// `body.principal_id` — the principal DID the client expects the grant
-    /// to be bound to. Optional for first sign-in (② contract D5): when the
-    /// client does not yet know its principal DID it omits this, and the
-    /// Account Authority derives + returns the DID it minted/resolved. When
-    /// present, the exchange independently mints / resolves the principal DID
-    /// for the authenticated user and rejects a mismatch with `proof_invalid`
-    /// (principal binding failure).
-    pub expected_principal_id: Option<String>,
+    /// Existing principal DID the grant request is bound to.
+    pub expected_principal_id: String,
     /// `proof.audience` — the requested principal-server audience.
     pub requested_audience: Option<String>,
 }
@@ -392,74 +385,23 @@ async fn ensure_soland_account_localpart_bound(
     send_soland_account_localpart_sync(http_client, &endpoint, bearer, localpart).await
 }
 
-/// Resolve the `principal_did` for `user` against the targeted principal
-/// server. The audience must correspond to a `PrincipalServerConfig` with
-/// an embedded webvh provider; this mints (or re-uses) a
-/// `did:webvh:<scid>:<principal_host>:webvh:<user_ulid>` through soland's
-/// protocol DID operation endpoint so the DID's authority matches the host
-/// that owns the identity registry.
-pub(super) async fn ensure_principal_did_for_user(
+/// Load the verified principal binding for `user` and `audience`.
+pub(super) async fn load_verified_principal_did(
     repo: &mut coauth_data::BoxRepository,
-    rng: &mut coauth_data::BoxRng,
-    clock: &coauth_data::BoxClock,
-    encrypter: &coauth_keystore::Encrypter,
-    http_client: &reqwest::Client,
-    url_builder: &coauth_data::UrlBuilder,
-    arkret_config: &coauth_config::ArkretConfig,
     user: &User,
     audience: &str,
 ) -> Result<String, String> {
-    let Some(principal_server) = arkret_config.principal_servers.iter().find(|server| {
-        crate::services::resolved_principal_audiences::effective_audience_shared(server).as_deref()
-            == Some(audience)
-    }) else {
-        return Err(format!(
-            "no principal-server config matches audience {audience}"
-        ));
-    };
-    let operation_bearer = principal_server
-        .embedded_webvh_registration_bearer
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    let also_known_as = vec![arkret::user_handle(url_builder, user)];
-    let enrollment_authority_did =
-        crate::services::device_enrollment_authority::enrollment_authority()
-            .did()
-            .to_owned();
-    soland_webvh::ensure_principal_did_minted(
-        repo,
-        &mut **rng,
-        &**clock,
-        encrypter,
-        http_client,
-        user,
-        // `audience` is the effective (resolved or pinned) value the caller
-        // matched this server on — `principal_server.audience` may be unset.
-        audience,
-        &principal_server.endpoint,
-        operation_bearer,
-        &also_known_as,
-        &enrollment_authority_did,
-    )
-    .await
-    .map_err(|error| format!("principal DID minting failed: {error}"))
+    repo.principal_did()
+        .get_for_user_and_audience(user, audience)
+        .await
+        .map_err(|error| format!("principal binding lookup failed: {error}"))?
+        .map(|binding| binding.principal_id)
+        .ok_or_else(|| "principal_unknown".to_owned())
 }
 
-/// Mint or load the principal DID in its own transaction.
-///
-/// DID issuance has an external side effect on the principal server. Keep the
-/// local update-key row durable as soon as that side effect succeeds so a later
-/// account-registration or session-grant failure cannot make the next retry
-/// mint a second principal DID for the same user/audience.
-pub(crate) async fn ensure_principal_did_for_user_committed(
+/// Load a verified principal DID in an isolated read transaction.
+pub(crate) async fn load_verified_principal_did_committed(
     depot: &Depot,
-    rng: &mut coauth_data::BoxRng,
-    clock: &coauth_data::BoxClock,
-    encrypter: &coauth_keystore::Encrypter,
-    http_client: &reqwest::Client,
-    url_builder: &coauth_data::UrlBuilder,
-    arkret_config: &coauth_config::ArkretConfig,
     user: &User,
     audience: &str,
 ) -> Result<String, String> {
@@ -467,29 +409,14 @@ pub(crate) async fn ensure_principal_did_for_user_committed(
         .repo()
         .await
         .map_err(|error| format!("principal DID repository unavailable: {error}"))?;
-    let principal_did = match ensure_principal_did_for_user(
-        &mut did_repo,
-        rng,
-        clock,
-        encrypter,
-        http_client,
-        url_builder,
-        arkret_config,
-        user,
-        audience,
-    )
-    .await
-    {
+    let principal_did = match load_verified_principal_did(&mut did_repo, user, audience).await {
         Ok(principal_did) => principal_did,
         Err(error) => {
             did_repo.cancel().await.ok();
             return Err(error);
         }
     };
-    did_repo
-        .save()
-        .await
-        .map_err(|error| format!("principal DID repository commit failed: {error}"))?;
+    did_repo.cancel().await.ok();
     Ok(principal_did)
 }
 
@@ -875,21 +802,12 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
                 input.requested_audience.as_deref(),
             )
             .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
-        let principal_did = ensure_principal_did_for_user_committed(
-            depot,
-            &mut rng,
-            &clock,
-            &encrypter,
-            &http_client,
-            &url_builder,
-            &arkret_config,
-            &user,
-            &grant_target.audience,
-        )
-        .await
-        .map_err(|message| OidcExchangeError::new("principal_did_minting_failed", message))?;
+        let principal_did =
+            load_verified_principal_did_committed(depot, &user, &grant_target.audience)
+                .await
+                .map_err(|message| OidcExchangeError::new("principal_unknown", message))?;
 
-        validate_expected_principal(&principal_did, input.expected_principal_id.as_deref())?;
+        validate_expected_principal(&principal_did, &input.expected_principal_id)?;
 
         let account_handle = registration_handle_for_principal_endpoint(
             grant_target.principal_server_endpoint.as_deref(),
@@ -1217,7 +1135,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
                 format!("authorization_code references missing browser_session={user_session_id}"),
             )
         })?;
-    let expected_subject = arkret::user_did_for(&arkret_config, &browser_session.user);
+    let expected_subject = arkret::oidc_subject_for_user(&arkret_config, &browser_session.user);
     let expected_issuer = url_builder.oidc_issuer();
     let oauth_introspection = match crate::handlers::oauth::introspection_service::introspect_token(
         &mut repo,
@@ -1349,8 +1267,8 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
     }
     // `org.arkret.principal_did` is optional and only carries a persisted,
     // method-allowed principal DID. The local OAuth proof binds the account
-    // with `sub` + session id; the audience-specific principal DID is minted
-    // or loaded below before issuing the session grant.
+    // with `sub` + session id; the audience-specific principal DID must already
+    // have a verified binding before session-grant issuance.
     if oauth_userinfo.session_id.as_deref() != Some(expected_oauth_session_id.as_str()) {
         return Err(OidcExchangeError::new(
             "invalid_authorization_code",
@@ -1371,21 +1289,11 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         )
         .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
     let user = &browser_session.user;
-    let principal_did = ensure_principal_did_for_user_committed(
-        depot,
-        &mut rng,
-        &clock,
-        &encrypter,
-        &http_client,
-        &url_builder,
-        &arkret_config,
-        user,
-        &grant_target.audience,
-    )
-    .await
-    .map_err(|message| OidcExchangeError::new("principal_did_minting_failed", message))?;
+    let principal_did = load_verified_principal_did_committed(depot, user, &grant_target.audience)
+        .await
+        .map_err(|message| OidcExchangeError::new("principal_unknown", message))?;
 
-    validate_expected_principal(&principal_did, input.expected_principal_id.as_deref())?;
+    validate_expected_principal(&principal_did, &input.expected_principal_id)?;
 
     let account_handle = registration_handle_for_principal_endpoint(
         grant_target.principal_server_endpoint.as_deref(),
@@ -1440,27 +1348,18 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
     })
 }
 
-/// Principal binding check: when the client asserts a `principal_id` in the
-/// request body, the principal DID the Account Authority resolved / minted for
-/// the authenticated user MUST equal it. A mismatch is a `proof_invalid`
-/// binding failure — the client tried to bind the OIDC authentication to a DID
-/// it does not actually own.
-///
-/// First sign-in (② contract D5) omits `principal_id` because the client does
-/// not yet know its DID; in that case there is nothing to bind against and the
-/// caller uses the AA-derived DID returned in `SessionGrantOutcome.principal_id`.
+/// The request principal DID must equal the verified service-account binding.
 fn validate_expected_principal(
     resolved_principal_did: &str,
-    expected_principal_id: Option<&str>,
+    expected_principal_id: &str,
 ) -> Result<(), OidcExchangeError> {
-    // Treat a present-but-blank `principal_id` the same as omitted: the client
-    // has nothing to bind, so the AA-derived DID stands.
-    let Some(expected) = expected_principal_id
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        return Ok(());
-    };
+    let expected = expected_principal_id.trim();
+    if expected.is_empty() {
+        return Err(OidcExchangeError::new(
+            "principal_unknown",
+            "principal_id must name an existing verified principal binding",
+        ));
+    }
     if expected != resolved_principal_did {
         // Do not echo the resolved principal DID back to the client: it is an
         // internal binding value the caller does not necessarily own.
@@ -1679,17 +1578,17 @@ mod tests {
         assert!(
             validate_expected_principal(
                 "did:webvh:scid:host:webvh:01k",
-                Some("did:webvh:scid:host:webvh:01k")
+                "did:webvh:scid:host:webvh:01k"
             )
             .is_ok()
         );
-        // First sign-in (② D5): omitted / blank principal_id is allowed — the
-        // AA-derived DID stands, nothing to bind against.
-        assert!(validate_expected_principal("did:webvh:scid:host:webvh:01k", None).is_ok());
-        assert!(validate_expected_principal("did:webvh:scid:host:webvh:01k", Some("")).is_ok());
-        assert!(validate_expected_principal("did:webvh:scid:host:webvh:01k", Some("   ")).is_ok());
+        let error = validate_expected_principal("did:webvh:scid:host:webvh:01k", "").unwrap_err();
+        assert_eq!(error.code, "principal_unknown");
+        let error =
+            validate_expected_principal("did:webvh:scid:host:webvh:01k", "   ").unwrap_err();
+        assert_eq!(error.code, "principal_unknown");
         // A present-but-mismatched assertion is still a hard binding failure.
-        let error = validate_expected_principal("did:webvh:a", Some("did:webvh:b"))
+        let error = validate_expected_principal("did:webvh:a", "did:webvh:b")
             .err()
             .unwrap();
         assert_eq!(error.code, "proof_invalid");

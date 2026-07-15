@@ -296,23 +296,6 @@ pub trait UserRepository: Send + Sync {
         can_request_admin: bool,
     ) -> Result<User, Self::Error>;
 
-    /// Mark a [`User`] as having (or not having) a `did:webvh` minted by
-    /// `starid` as their primary principal DID. Onboarding flips this to
-    /// `true` immediately after
-    /// [`crate::services::starid_adapter::StaridRegistry::create_principal_did`]
-    /// returns successfully. The resolver only exposes starid/local
-    /// `did:web` forms when the deployment explicitly selects the
-    /// personal-node principal method.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails.
-    async fn set_starid_backend(
-        &mut self,
-        user: User,
-        starid_backend: bool,
-    ) -> Result<User, Self::Error>;
-
     /// List [`User`] with the given filter and pagination
     ///
     /// # Parameters
@@ -401,11 +384,6 @@ repository_impl!(UserRepository:
         &mut self,
         user: User,
         can_request_admin: bool,
-    ) -> Result<User, Self::Error>;
-    async fn set_starid_backend(
-        &mut self,
-        user: User,
-        starid_backend: bool,
     ) -> Result<User, Self::Error>;
     async fn list(
         &mut self,

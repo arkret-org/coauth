@@ -60,7 +60,7 @@ pub async fn login_with_password(
     limiter: &Limiter,
     principal_server: &dyn ConnectorAdmin,
     url_builder: &UrlBuilder,
-    arkret_config: &ArkretConfig,
+    _arkret_config: &ArkretConfig,
     site_config: &SiteConfig,
     request: PasswordLoginRequestBody,
 ) -> Result<PasswordLoginOutcome, PasswordLoginError> {
@@ -220,10 +220,6 @@ async fn find_user_by_login_identifier(
     repo: &mut BoxRepository,
     identifier: &str,
 ) -> Result<Option<User>, RepositoryError> {
-    if let Some(user_id) = arkret::parse_local_user_did_for(arkret_config, identifier) {
-        return repo.user().lookup(user_id).await;
-    }
-
     if let Some(username) = arkret::parse_local_handle(url_builder, identifier)
         && let Some(user) = repo.user().find_by_handle(&username).await?
     {

@@ -195,10 +195,10 @@ pub use self::url_builder::UrlBuilder;
 pub use self::user_agent::{DeviceType, UserAgent};
 pub use self::users::{
     AdminUserPatch, Authentication, AuthenticationMethod, BrowserSession,
-    NewUserPrimaryHandlePreference, Password, PrincipalDidUpdateKey, PrincipalUser, User,
-    UserEmail, UserEmailAuthentication, UserEmailAuthenticationCode, UserEmailPatch, UserPatch,
-    UserPhone, UserPhoneAuthentication, UserPhoneAuthenticationCode, UserPrimaryHandlePreference,
-    UserProfile, UserProfilePatch, UserRecoverySession, UserRecoveryTicket, UserRegistration,
+    NewUserPrimaryHandlePreference, Password, PrincipalDidBinding, PrincipalUser, User, UserEmail,
+    UserEmailAuthentication, UserEmailAuthenticationCode, UserEmailPatch, UserPatch, UserPhone,
+    UserPhoneAuthentication, UserPhoneAuthenticationCode, UserPrimaryHandlePreference, UserProfile,
+    UserProfilePatch, UserRecoverySession, UserRecoveryTicket, UserRegistration,
     UserRegistrationPassword, UserRegistrationToken, UserTotpConfig, VerifiedUserHandleClaim,
 };
 pub use self::utils::{BoxClock, BoxRng};

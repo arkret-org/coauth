@@ -52,7 +52,6 @@ pub async fn update_account(
     let principal_server = depot.principal_server()?;
     let key_store = depot.key_store()?;
     let arkret_config = depot.arkret_config()?;
-    let did_resolver = depot.did_resolver_service()?;
     let service_id = service_id_for(&arkret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
@@ -101,7 +100,7 @@ pub async fn update_account(
     repo.save().await?;
 
     Ok(Json(SingleOutcome::new_canonical(
-        AccountRecord::from_user(user, &arkret_config, did_resolver.as_ref()).await?,
+        AccountRecord::from_user(user, depot).await?,
     )))
 }
 

@@ -10,7 +10,8 @@ use std::str::FromStr;
 use chrono::Duration;
 use coauth_data::RepositoryAccess as _;
 use coauth_data::user::{
-    UserEmailRepository as _, UserRegistrationRepository as _, UserRepository as _,
+    PrincipalDidRepository as _, UserEmailRepository as _, UserRegistrationRepository as _,
+    UserRepository as _,
 };
 use coauth_email_types::Address;
 use salvo::oapi::ToSchema;
@@ -29,16 +30,16 @@ use crate::handlers::account::service::registration::{
     RegistrationDisplayNameOutcome, RegistrationDisplayNameWorkflowError,
     RegistrationEmailChangeError, RegistrationEmailChangeOutcome, RegistrationFinishError,
     RegistrationFinishOutcome, RegistrationResendError, RegistrationResendOutcome,
-    RegistrationVerificationError, RegistrationVerificationOutcome, begin_password_registration,
-    change_registration_email, check_registration_finish_eligibility, finish_registration,
-    load_registration_status, next_registration_step, resend_registration_verification,
-    submit_registration_display_name, submit_registration_email_code,
-    submit_registration_phone_code,
+    RegistrationVerificationError, RegistrationVerificationOutcome, VerifiedPrincipalBinding,
+    begin_password_registration, change_registration_email, check_registration_finish_eligibility,
+    finish_registration, load_registration_status, next_registration_step,
+    resend_registration_verification, submit_registration_display_name,
+    submit_registration_email_code, submit_registration_phone_code,
 };
 use crate::handlers::notification_dispatch::{NotificationIntent, schedule_notification};
 use crate::handlers::{RequesterFingerprint, arkret};
 use crate::salvo_utils::SessionInfoExt;
-use crate::services::soland_webvh::{self, SuppliedInceptionInput};
+use crate::services::soland_webvh;
 
 // ── POST /_coauth/account/auth/register ─────────────────────────────────
 
@@ -552,18 +553,7 @@ pub async fn post_webvh_verify_email(
 
 #[derive(Deserialize, ToSchema)]
 pub struct WebvhRegistrationFinishInput {
-    pub did_public_key_multibase: String,
-    pub update_public_key_multibase: String,
-    #[serde(default)]
-    pub did_key_id: Option<String>,
-    #[serde(default)]
-    pub update_key_id: Option<String>,
-    #[serde(default)]
-    pub webvh_version_time: Option<String>,
-    #[serde(default)]
-    pub webvh_proof: Option<Value>,
-    #[serde(default)]
-    pub device_id: Option<String>,
+    pub did_operation: arkret_core::DidOperationSubmitRequestBody,
     pub password: String,
     pub password_confirm: String,
 }
@@ -575,27 +565,8 @@ pub struct WebvhRegistrationFinishOutcome {
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub handle: Option<String>,
-    pub did: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub did_key_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub update_key_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub did_public_key_multibase: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub update_public_key_multibase: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub key_log_head: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub document_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub log_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider_id: Option<String>,
-    #[serde(default)]
-    pub did_document: Value,
-    #[serde(default)]
-    pub did_log: Vec<Value>,
+    pub did_operation: Option<arkret_core::DidOperationSubmitOutcome>,
 }
 
 #[endpoint]
@@ -615,26 +586,20 @@ pub async fn post_webvh_finish(
     if input.password != input.password_confirm {
         return Ok(Json(webvh_finish_error("password_mismatch")));
     }
-    if input.did_public_key_multibase.trim().is_empty() {
-        return Ok(Json(webvh_finish_error("did_public_key_required")));
+    if input
+        .did_operation
+        .did_method
+        .trim()
+        .trim_start_matches("did:")
+        != "webvh"
+        || input.did_operation.seq != Some(1)
+        || input.did_operation.prev_event_digest.is_some()
+        || input.did_operation.proofs.is_empty()
+    {
+        return Ok(Json(webvh_finish_error(
+            "client_signed_webvh_inception_required",
+        )));
     }
-    if input.update_public_key_multibase.trim().is_empty() {
-        return Ok(Json(webvh_finish_error("update_public_key_required")));
-    }
-    if input.did_public_key_multibase.trim() == input.update_public_key_multibase.trim() {
-        return Ok(Json(webvh_finish_error("webvh_keys_must_be_separate")));
-    }
-    let Some(webvh_version_time) = input
-        .webvh_version_time
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        return Ok(Json(webvh_finish_error("webvh_version_time_required")));
-    };
-    let Some(webvh_proof) = input.webvh_proof.clone() else {
-        return Ok(Json(webvh_finish_error("webvh_proof_required")));
-    };
 
     let site_config = depot.site_config()?;
     let password_manager = depot.password_manager()?;
@@ -664,106 +629,136 @@ pub async fn post_webvh_finish(
     let Some(registration) = repo.user_registration().lookup(id).await? else {
         return Err(RouteError::NotFound);
     };
-    let principal_url = registration_webvh_principal_url(&registration.post_auth_action);
+    let principal_url = registration_webvh_principal_url(&registration.post_auth_action)
+        .ok_or_else(|| RouteError::BadRequest("not_a_webvh_registration".to_owned()))?;
     let target = resolve_webvh_provider(&arkret_config, principal_url.as_deref())
         .map_err(RouteError::BadRequest)?;
-
-    // Pre-flight the registration-finish eligibility *before* writing the
-    // password and submitting the (non-reversible) DID operation. This moves
-    // the common rejection cases (handle already taken, registration expired)
-    // ahead of the irreversible side effects so a doomed finish does not leave
-    // an orphaned password row and a submitted DID with no backing user.
-    match check_registration_finish_eligibility(
-        &mut repo,
-        &clock,
-        principal_server.as_ref(),
-        &registration,
-        None,
-        PrincipalServerCheckMode::BestEffort,
+    let enrollment_authority_ref = inception_enrollment_authority_ref(&input.did_operation)
+        .ok_or_else(|| {
+            RouteError::BadRequest("enrollment_authority_delegation_required".to_owned())
+        })?;
+    let enrollment_authority_did = arkret_core::Did::new(
+        crate::services::device_enrollment_authority::enrollment_authority()
+            .did()
+            .to_owned(),
     )
-    .await
-    {
-        Ok(()) => {}
-        Err(CheckRegistrationFinishEligibilityError::RegistrationExpired) => {
-            return Ok(Json(webvh_finish_error("registration_expired")));
-        }
-        Err(CheckRegistrationFinishEligibilityError::HandleTaken) => {
-            return Ok(Json(webvh_finish_error("handle_taken")));
-        }
-        Err(CheckRegistrationFinishEligibilityError::HandleNotAvailable) => {
-            return Ok(Json(webvh_finish_error("handle_not_available")));
-        }
-        // BestEffort mode never surfaces these, but fail closed regardless.
-        Err(CheckRegistrationFinishEligibilityError::BrowserSessionMissing) => {
-            return Ok(Json(webvh_finish_error("browser_session_required")));
-        }
-        Err(CheckRegistrationFinishEligibilityError::PrincipalServerUnavailable(error)) => {
-            return Err(RouteError::Internal(error.into()));
-        }
-        Err(CheckRegistrationFinishEligibilityError::Repository(error)) => {
-            return Err(error.into());
-        }
-    }
-
-    let (version, password_hash) = password_manager
-        .hash(&mut *rng, Zeroizing::new(input.password))
-        .await
-        .map_err(|error| RouteError::Internal(error.into()))?;
-    let registration = repo
-        .user_registration()
-        .set_password(registration, password_hash, version)
-        .await?;
-    repo.save().await?;
+    .map_err(|error| RouteError::Internal(error.into()))?;
 
     let local_id = registration
         .localpart
         .trim()
         .trim_start_matches('@')
         .to_ascii_lowercase();
-    let also_known_as = [format!("acct:{local_id}")];
-    // The minted principal DID document MUST designate coauth as the
-    // ArkretDeviceEnrollmentAuthority; without it soland rejects every device
-    // authorization event with `device_enrollment_authority_not_designated`, so
-    // the account can never enroll a device or publish an MLS KeyPackage. The
-    // OIDC login path already injects this (auth/oidc_bridge.rs); the password
-    // registration path previously hardcoded `None`, silently minting accounts
-    // that could authenticate but never participate in MLS. Mirror the OIDC path.
-    let enrollment_authority_did =
-        crate::services::device_enrollment_authority::enrollment_authority()
-            .did()
-            .to_owned();
-    let webvh = soland_webvh::prepare_supplied_inception(&SuppliedInceptionInput {
-        principal_endpoint: &target.endpoint,
-        local_id: registration.localpart.as_str(),
-        also_known_as: &also_known_as,
-        version_time: webvh_version_time,
-        did_public_key_multibase: input.did_public_key_multibase.trim(),
-        update_public_key_multibase: input.update_public_key_multibase.trim(),
-        did_key_fragment: input.did_key_id.as_deref(),
-        update_key_fragment: input.update_key_id.as_deref(),
-        proof: webvh_proof,
-        enrollment_authority_did: Some(enrollment_authority_did.as_str()),
-    })
-    .map_err(|error| RouteError::BadRequest(format!("embedded_webvh_provider_invalid:{error}")))?;
-    soland_webvh::submit_did_operation(
+
+    let completed_user = if registration.completed_at.is_some() {
+        let user = repo
+            .user()
+            .find_by_handle(&registration.localpart)
+            .await?
+            .ok_or(RouteError::NotFound)?;
+        let binding = repo
+            .principal_did()
+            .get_for_user_and_audience(&user, &target.audience)
+            .await?
+            .ok_or_else(|| RouteError::BadRequest("principal_unknown".to_owned()))?;
+        if binding.principal_id != input.did_operation.did.as_str() {
+            return Err(RouteError::BadRequest(
+                "principal_binding_mismatch".to_owned(),
+            ));
+        }
+        Some((user, binding))
+    } else {
+        // Pre-flight the registration-finish eligibility *before* writing the
+        // password and submitting the (non-reversible) DID operation. This moves
+        // the common rejection cases (handle already taken, registration expired)
+        // ahead of the irreversible side effects so a doomed finish does not leave
+        // an orphaned password row and a submitted DID with no backing user.
+        match check_registration_finish_eligibility(
+            &mut repo,
+            &clock,
+            principal_server.as_ref(),
+            &registration,
+            None,
+            PrincipalServerCheckMode::BestEffort,
+        )
+        .await
+        {
+            Ok(()) => {}
+            Err(CheckRegistrationFinishEligibilityError::RegistrationExpired) => {
+                return Ok(Json(webvh_finish_error("registration_expired")));
+            }
+            Err(CheckRegistrationFinishEligibilityError::HandleTaken) => {
+                return Ok(Json(webvh_finish_error("handle_taken")));
+            }
+            Err(CheckRegistrationFinishEligibilityError::HandleNotAvailable) => {
+                return Ok(Json(webvh_finish_error("handle_not_available")));
+            }
+            // BestEffort mode never surfaces these, but fail closed regardless.
+            Err(CheckRegistrationFinishEligibilityError::BrowserSessionMissing) => {
+                return Ok(Json(webvh_finish_error("browser_session_required")));
+            }
+            Err(CheckRegistrationFinishEligibilityError::PrincipalServerUnavailable(error)) => {
+                return Err(RouteError::Internal(error.into()));
+            }
+            Err(CheckRegistrationFinishEligibilityError::Repository(error)) => {
+                return Err(error.into());
+            }
+        }
+
+        let (version, password_hash) = password_manager
+            .hash(&mut *rng, Zeroizing::new(input.password))
+            .await
+            .map_err(|error| RouteError::Internal(error.into()))?;
+        let _registration = repo
+            .user_registration()
+            .set_password(registration, password_hash, version)
+            .await?;
+        repo.save().await?;
+        None
+    };
+
+    let did_operation = soland_webvh::submit_did_operation(
         &http_client,
         &target.endpoint,
         target.bearer.as_deref(),
-        &webvh.submit_body,
+        &input.did_operation,
     )
     .await
     .map_err(|error| RouteError::BadRequest(format!("embedded_webvh_provider_error:{error}")))?;
+    if did_operation.did != input.did_operation.did {
+        return Err(RouteError::BadRequest(
+            "did_operation_response_mismatch".to_owned(),
+        ));
+    }
+    if !matches!(did_operation.status.as_str(), "accepted" | "duplicate") {
+        return Ok(Json(webvh_finish_error("did_inception_not_accepted")));
+    }
+    let key_log_head = did_operation
+        .head_event_digest
+        .clone()
+        .ok_or_else(|| RouteError::BadRequest("did_inception_head_missing".to_owned()))?;
 
-    // At this point the password has been persisted and the (irreversible) DID
-    // operation has been submitted to the webvh provider. If the final finish
-    // step fails we have an orphaned password row + submitted DID with no
-    // backing user. We cannot transactionally roll back the remote DID
-    // submission, so emit a structured error with enough context for an
-    // operator (or a retry) to reconcile. The whole `finish` endpoint is
-    // idempotent — `set_password` overwrites, the webvh submission is
-    // idempotent on the provider side, and a second `finish_registration` for
-    // an already-created user returns `Rejected{registration_already_completed}`
-    // — so the client may safely retry this request.
+    if let Some((user, binding)) = completed_user {
+        if binding.key_log_head != key_log_head
+            || binding.enrollment_authority_did != enrollment_authority_did
+            || binding.enrollment_authority_ref != enrollment_authority_ref
+        {
+            return Err(RouteError::BadRequest(
+                "principal_binding_mismatch".to_owned(),
+            ));
+        }
+        return Ok(Json(WebvhRegistrationFinishOutcome {
+            status: "success",
+            error: None,
+            handle: Some(user.localpart),
+            did_operation: Some(did_operation),
+        }));
+    }
+
+    // The remote operation cannot participate in the database transaction.
+    // Keep user creation and the verified principal binding in one local
+    // transaction; if it fails, a retry replays the provider operation as a
+    // duplicate and retries the complete local transaction.
     let repo = repo_factory.create().await?;
     let outcome = finish_registration(
         repo,
@@ -777,17 +772,23 @@ pub async fn post_webvh_finish(
         site_config.bootstrap_admin_token.as_deref(),
         None,
         user_agent,
+        Some(VerifiedPrincipalBinding {
+            audience: target.audience,
+            principal_id: did_operation.did.as_str().to_owned(),
+            key_log_head,
+            enrollment_authority_did,
+            enrollment_authority_ref,
+        }),
     )
     .await
     .map_err(|error| {
         tracing::error!(
             registration.id = %id,
-            did = %webvh.did,
+            did = %did_operation.did,
             localpart = %local_id,
             error = %error,
-            "webvh registration finish failed AFTER DID submission; password and DID are \
-             orphaned without a backing user. The finish endpoint is idempotent and can be \
-             retried to reconcile."
+            "webvh registration finish failed after DID submission; the local user-and-binding \
+             transaction was rolled back and the request can be retried"
         );
         match error {
             RegistrationFinishError::NotFound => RouteError::NotFound,
@@ -807,73 +808,7 @@ pub async fn post_webvh_finish(
         status: "success",
         error: None,
         handle: Some(completed.user.localpart),
-        did: webvh.did,
-        did_key_id: Some(webvh.did_key_id),
-        update_key_id: Some(webvh.update_key_id),
-        did_public_key_multibase: Some(webvh.did_public_key_multibase),
-        update_public_key_multibase: Some(webvh.update_public_key_multibase),
-        key_log_head: Some(webvh.key_log_head),
-        document_url: Some(webvh.document_url),
-        log_url: Some(webvh.log_url),
-        provider_id: Some(webvh.provider_id),
-        did_document: webvh.did_document,
-        did_log: webvh.did_log,
-    }))
-}
-
-// ── POST /_coauth/account/auth/register/did/start ──────────────────────
-
-#[derive(Deserialize, ToSchema)]
-pub struct ExistingDidRegistrationInput {
-    pub did: String,
-    #[serde(default)]
-    pub handle: Option<String>,
-    #[serde(default)]
-    pub device_id: Option<String>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct ExistingDidRegistrationOutcome {
-    pub status: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub did: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub proof_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub next_step: Option<&'static str>,
-}
-
-#[endpoint]
-pub async fn post_existing_did_start(
-    req: &mut Request,
-    depot: &Depot,
-) -> Result<Json<ExistingDidRegistrationOutcome>, RouteError> {
-    let input: ExistingDidRegistrationInput = req
-        .parse_json()
-        .await
-        .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
-    let did = input.did.trim();
-    if !did.starts_with("did:") {
-        return Ok(Json(ExistingDidRegistrationOutcome {
-            status: "error",
-            error: Some("invalid_did".into()),
-            did: None,
-            proof_url: None,
-            next_step: None,
-        }));
-    }
-    let proof_url = depot
-        .url_builder()?
-        .absolute_url("/register/did/proof")
-        .to_string();
-    Ok(Json(ExistingDidRegistrationOutcome {
-        status: "proof_required",
-        error: None,
-        did: Some(did.to_owned()),
-        proof_url: Some(proof_url),
-        next_step: Some("did_proof"),
+        did_operation: Some(did_operation),
     }))
 }
 
@@ -882,41 +817,87 @@ fn webvh_finish_error(error: impl Into<String>) -> WebvhRegistrationFinishOutcom
         status: "error",
         error: Some(error.into()),
         handle: None,
-        did: String::new(),
-        did_key_id: None,
-        update_key_id: None,
-        did_public_key_multibase: None,
-        update_public_key_multibase: None,
-        key_log_head: None,
-        document_url: None,
-        log_url: None,
-        provider_id: None,
-        did_document: Value::Null,
-        did_log: Vec::new(),
+        did_operation: None,
     }
 }
 
-fn registration_webvh_principal_url(post_auth_action: &Option<Value>) -> Option<String> {
-    post_auth_action
-        .as_ref()
-        .and_then(|value| value.get("principal_server_url"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
+fn registration_webvh_principal_url(post_auth_action: &Option<Value>) -> Option<Option<String>> {
+    let value = post_auth_action.as_ref()?;
+    if value.get("kind").and_then(Value::as_str) != Some("coauth.webvh_registration.v1") {
+        return None;
+    }
+    Some(
+        value
+            .get("principal_server_url")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned),
+    )
+}
+
+fn inception_enrollment_authority_ref(
+    operation: &arkret_core::DidOperationSubmitRequestBody,
+) -> Option<String> {
+    inception_enrollment_authority_ref_from_operation(operation.did.as_str(), &operation.operation)
+}
+
+fn inception_enrollment_authority_ref_from_operation(
+    principal_id: &str,
+    operation: &std::collections::BTreeMap<String, Value>,
+) -> Option<String> {
+    let authority_did = crate::services::device_enrollment_authority::enrollment_authority().did();
+    let document = operation
+        .get("document_patch")
+        .or_else(|| operation.get("state"))?;
+    if document.get("capabilityDelegation").is_some() {
+        return None;
+    }
+    let mut designated = document
+        .get("service")?
+        .as_array()?
+        .iter()
+        .filter(|service| {
+            service.get("type").and_then(Value::as_str)
+                == Some(arkret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY)
+        });
+    let service = designated.next()?;
+    if designated.next().is_some()
+        || service.get("serviceEndpoint").and_then(Value::as_str) != Some(authority_did)
+    {
+        return None;
+    }
+    canonical_principal_did_url(principal_id, service.get("id").and_then(Value::as_str)?)
+}
+
+fn canonical_principal_did_url(principal_id: &str, reference: &str) -> Option<String> {
+    let reference = if reference.starts_with('#') {
+        format!("{principal_id}{reference}")
+    } else {
+        reference.to_owned()
+    };
+    arkret_core::DidUrl::new(reference.clone()).ok()?;
+    reference
+        .strip_prefix(principal_id)
+        .is_some_and(|fragment| fragment.starts_with('#') && fragment.len() > 1)
+        .then_some(reference)
 }
 
 #[derive(Clone)]
 struct WebvhProviderTarget {
     endpoint: Url,
     bearer: Option<String>,
+    audience: String,
 }
 
 fn resolve_webvh_provider(
     config: &coauth_config::ArkretConfig,
     requested: Option<&str>,
 ) -> Result<WebvhProviderTarget, String> {
-    let requested = requested.and_then(|value| Url::parse(value).ok());
+    let requested = requested
+        .map(Url::parse)
+        .transpose()
+        .map_err(|error| format!("invalid principal_server_url: {error}"))?;
     let candidate = config.principal_servers.iter().find(|server| {
         requested
             .as_ref()
@@ -931,9 +912,12 @@ fn resolve_webvh_provider(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned);
+    let audience = crate::services::resolved_principal_audiences::effective_audience_shared(server)
+        .ok_or_else(|| "principal_server_audience_unavailable".to_owned())?;
     Ok(WebvhProviderTarget {
         endpoint: server.endpoint.clone(),
         bearer,
+        audience,
     })
 }
 
@@ -1429,6 +1413,7 @@ pub async fn post_finish(
         site_config.bootstrap_admin_token.as_deref(),
         input.bootstrap_admin_token,
         user_agent,
+        None,
     )
     .await
     {
@@ -1462,12 +1447,70 @@ pub async fn post_finish(
     cookie_jar.write_to_response(res);
 
     let post_auth_action = completed.registration.post_auth_action.clone();
-    let did = arkret::user_did_for(&arkret_config, &completed.user);
-
     Ok(Json(FinishRegistrationOutcome {
         status: "success",
-        did: Some(did),
+        did: None,
         error: None,
         post_auth_action,
     }))
+}
+
+#[cfg(test)]
+mod webvh_registration_tests {
+    use super::*;
+
+    fn inception_operation(
+        services: Value,
+        capability_delegation: Option<Value>,
+    ) -> std::collections::BTreeMap<String, Value> {
+        let mut document_patch = serde_json::Map::from_iter([("service".to_owned(), services)]);
+        if let Some(capability_delegation) = capability_delegation {
+            document_patch.insert("capabilityDelegation".to_owned(), capability_delegation);
+        }
+        std::collections::BTreeMap::from_iter([(
+            "document_patch".to_owned(),
+            Value::Object(document_patch),
+        )])
+    }
+
+    #[test]
+    fn inception_uses_the_actual_unique_b_enrollment_service_reference() {
+        let principal_id = "did:webvh:ztest:example.com:users:alice";
+        let authority = crate::services::device_enrollment_authority::enrollment_authority().did();
+        let operation = inception_operation(
+            serde_json::json!([{
+                "id": "#arkret-device-enrollment-authority",
+                "type": arkret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY,
+                "serviceEndpoint": authority,
+            }]),
+            None,
+        );
+
+        assert_eq!(
+            inception_enrollment_authority_ref_from_operation(principal_id, &operation),
+            Some(format!("{principal_id}#arkret-device-enrollment-authority"))
+        );
+    }
+
+    #[test]
+    fn inception_rejects_ambiguous_or_mixed_enrollment_delegation() {
+        let principal_id = "did:webvh:ztest:example.com:users:alice";
+        let authority = crate::services::device_enrollment_authority::enrollment_authority().did();
+        let service = serde_json::json!({
+            "id": "#arkret-device-enrollment-authority",
+            "type": arkret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY,
+            "serviceEndpoint": authority,
+        });
+        let duplicate =
+            inception_operation(Value::Array(vec![service.clone(), service.clone()]), None);
+        let mixed = inception_operation(
+            Value::Array(vec![service]),
+            Some(serde_json::json!(["#local-enrollment-key"])),
+        );
+
+        assert!(
+            inception_enrollment_authority_ref_from_operation(principal_id, &duplicate).is_none()
+        );
+        assert!(inception_enrollment_authority_ref_from_operation(principal_id, &mixed).is_none());
+    }
 }

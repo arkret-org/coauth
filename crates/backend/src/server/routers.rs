@@ -341,9 +341,6 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                                         ),
                                 ),
                         )
-                        .push(Router::with_path("did").push(
-                            Router::with_path("start").post(register::post_existing_did_start),
-                        ))
                         .push(
                             Router::with_path("{id}")
                                 .get(register::get_registration)

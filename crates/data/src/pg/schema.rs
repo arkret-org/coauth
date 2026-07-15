@@ -17,7 +17,6 @@ diesel::table! {
         display_name -> Nullable<Text>,
         avatar_url -> Nullable<Text>,
         preferred_locale -> Nullable<Text>,
-        starid_backend -> Bool,
         handle_aliases -> Array<Text>,
     }
 }
@@ -942,15 +941,24 @@ diesel::table! {
 }
 
 diesel::table! {
-    principal_did_update_keys (id) {
+    principal_did_bindings (id) {
         id -> Uuid,
+        principal_did_owner_id -> Uuid,
         user_id -> Uuid,
         audience -> Text,
-        did -> Text,
-        did_public_key_multibase -> Text,
-        update_public_key_multibase -> Text,
-        update_secret_b64 -> Text,
-        key_log_head -> Nullable<Text>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    principal_did_owners (id) {
+        id -> Uuid,
+        user_id -> Uuid,
+        principal_id -> Text,
+        key_log_head -> Text,
+        enrollment_authority_did -> Text,
+        enrollment_authority_ref -> Text,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
     }
@@ -973,7 +981,8 @@ diesel::table! {
 // Foreign key relationships
 diesel::joinable!(user_totp_configs -> users (user_id));
 diesel::joinable!(user_primary_handle_preferences -> users (user_id));
-diesel::joinable!(principal_did_update_keys -> users (user_id));
+diesel::joinable!(principal_did_bindings -> principal_did_owners (principal_did_owner_id));
+diesel::joinable!(principal_did_owners -> users (user_id));
 diesel::joinable!(user_passwords -> users (user_id));
 diesel::joinable!(user_emails -> users (user_id));
 diesel::joinable!(user_sessions -> users (user_id));
@@ -1013,7 +1022,8 @@ diesel::allow_tables_to_appear_in_same_query!(
     invite_quarantine_queue,
     user_passwords,
     user_totp_configs,
-    principal_did_update_keys,
+    principal_did_bindings,
+    principal_did_owners,
     user_emails,
     user_email_authentications,
     user_email_authentication_codes,

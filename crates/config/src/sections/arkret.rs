@@ -123,14 +123,6 @@ pub struct ArkretConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity_registry: Option<IdentityRegistryConfig>,
 
-    /// `starid` registry endpoint used by onboarding / recovery strands to
-    /// mint and verify managed `did:webvh` identifiers for principals.
-    /// When omitted, coauth cannot mint default `did:webvh` principal DIDs.
-    /// The local `did:web` derivation is only allowed when the deployment
-    /// explicitly selects the personal-node exception.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub starid: Option<StaridConfig>,
-
     /// Explicit service DID for the coauth deployment.
     ///
     /// Required: startup validation fails fast when omitted — there is no
@@ -199,8 +191,7 @@ pub struct ArkretConfig {
     /// protection (`Realm` policy, principal-server describe) MUST be
     /// told the trust domain is unset and fail closed.
     ///
-    /// Typically injected into `soland` via its config API on first
-    /// boot; see `services::onboarding_starid` for the call site.
+    /// Typically provisioned consistently across the deployment.
     // TODO(round23-T08): once soland exposes a `PATCH /admin/v1/policy/
     //  trust_domain` mutation, propagate changes from coauth's runtime
     //  reload through that channel rather than requiring a soland
@@ -289,7 +280,6 @@ impl Default for ArkretConfig {
             deployment_profile: DeploymentProfileConfig::default(),
             principal_method: PrincipalMethodConfig::default(),
             identity_registry: None,
-            starid: None,
             service_id: None,
             issuer_did: None,
             session_grant_ttl: default_session_grant_ttl(),
@@ -315,7 +305,6 @@ impl ArkretConfig {
             && DeploymentProfileConfig::is_default(&self.deployment_profile)
             && PrincipalMethodConfig::is_default(&self.principal_method)
             && self.identity_registry.is_none()
-            && self.starid.is_none()
             && self.service_id.is_none()
             && self.issuer_did.is_none()
             && session_grant_ttl_is_default(&self.session_grant_ttl)
@@ -357,8 +346,8 @@ impl ArkretConfig {
     /// principal-server / identity-resolver targets.
     ///
     /// Built from every configured `principal_servers[].endpoint`, the
-    /// global `principal_server_url`, the `identity_registry.resolver`, and
-    /// the `starid.base_url`. Hosts are lower-cased so comparison is
+    /// global `principal_server_url`, and the `identity_registry.resolver`.
+    /// Hosts are lower-cased so comparison is
     /// case-insensitive. Used by outbound relays (e.g. the consent-gated
     /// invite relay) to reject caller-supplied URLs that do not resolve to a
     /// configured trust anchor (deny-by-default for the federation hop).
@@ -381,9 +370,6 @@ impl ArkretConfig {
         }
         if let Some(registry) = self.identity_registry.as_ref() {
             push(&registry.resolver);
-        }
-        if let Some(starid) = self.starid.as_ref() {
-            push(&starid.base_url);
         }
         out
     }
@@ -645,45 +631,6 @@ pub enum IdentityRegistryKind {
     PublicDidResolver,
     /// Generic external resolver.
     External,
-}
-
-/// `starid` registry endpoint configuration.
-///
-/// The principal-server (coauth) calls into starid during onboarding and
-/// recovery to mint a managed `did:webvh` for the principal and to
-/// verify control-proofs on subsequent privileged operations. The
-/// adapter implementation lives in
-/// [`crate::services::starid_adapter::StaridResolver`].
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct StaridConfig {
-    /// Base URL of the starid deployment, for example
-    /// `https://starid.example.com`. Path segments are ignored — the
-    /// adapter joins `/_starid/root/webvh/...` itself.
-    pub base_url: Url,
-
-    /// `host` value passed to starid's `POST /_starid/root/webvh/dids`.
-    /// Defaults to the host of `base_url` when omitted. Override when
-    /// starid is fronted by a different public-facing hostname than the URL
-    /// coauth reaches it on.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub did_host: Option<String>,
-
-    /// Path prefix for minted principal DIDs (e.g. `accounts`). The
-    /// adapter appends the account's stable id, so the final path is
-    /// `<path_prefix>/<account_id>`.
-    #[serde(default = "default_path_prefix")]
-    pub path_prefix: String,
-
-    /// Optional bearer token for starid's admin endpoints. When set,
-    /// the adapter prefers `POST /_starid/local/admin/dids` over the public
-    /// `POST /_starid/root/webvh/dids` — both produce the same DID but the
-    /// admin route bypasses public-rate-limits.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub admin_token: Option<String>,
-}
-
-fn default_path_prefix() -> String {
-    "accounts".to_owned()
 }
 
 #[cfg(test)]

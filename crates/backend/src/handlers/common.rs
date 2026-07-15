@@ -269,11 +269,6 @@ pub trait DepotExt {
         &self,
     ) -> Result<crate::services::did_resolver::DidResolverServiceHandle, RouteError>;
     fn dpop_verifier(&self) -> Result<DpopVerifier, RouteError>;
-    /// `Some(handle)` when `[arkret.starid]` is configured and the
-    /// adapter constructed cleanly during `inject_app_state`. `None`
-    /// otherwise — handlers should treat the absence as "starid
-    /// integration disabled" rather than an error.
-    fn starid_registry(&self) -> Option<crate::services::starid_adapter::StaridRegistryHandle>;
     fn webauthn_service(
         &self,
     ) -> Result<crate::services::webauthn::WebauthnServiceHandle, RouteError>;
@@ -413,12 +408,6 @@ impl DepotExt for Depot {
 
     fn dpop_verifier(&self) -> Result<DpopVerifier, RouteError> {
         depot_get(self, "dpop_verifier")
-    }
-
-    fn starid_registry(&self) -> Option<crate::services::starid_adapter::StaridRegistryHandle> {
-        self.get::<crate::services::starid_adapter::StaridRegistryHandle>("starid_registry")
-            .ok()
-            .cloned()
     }
 
     fn webauthn_service(

@@ -20,10 +20,11 @@ use arkret_core::ErrorEnvelope;
 use arkret_core::error::{
     ERROR_CODE_BAD_JSON, ERROR_CODE_CAPABILITY_DENIED, ERROR_CODE_CONFLICT,
     ERROR_CODE_FAILED_PRECONDITION, ERROR_CODE_INTERNAL_ERROR, ERROR_CODE_INVALID_PARAM,
-    ERROR_CODE_NOT_FOUND, ERROR_CODE_RATE_LIMITED, ERROR_CODE_SCHEMA_VIOLATION,
-    ERROR_CODE_UNAUTHENTICATED, ERROR_CODE_UNSUPPORTED_FEATURE,
+    ERROR_CODE_NOT_FOUND, ERROR_CODE_PRINCIPAL_UNKNOWN, ERROR_CODE_RATE_LIMITED,
+    ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_UNAUTHENTICATED, ERROR_CODE_UNSUPPORTED_FEATURE,
 };
 use coauth_config::ArkretConfig;
+use coauth_data::user::PrincipalDidRepository as _;
 use coauth_data::{RepositoryAccess, UrlBuilder, User};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable;
@@ -73,26 +74,6 @@ pub enum SessionGrantError {
     #[error(transparent)]
     Canonical(#[from] arkret_core::Error),
 
-    /// SEC-04 — the inception key that would sign this issuance is past its
-    /// 24h online window (or its bootstrap anchor was missing / unparseable,
-    /// which fails closed). Carries reason code
-    /// [`arkret_core::error::REASON_INCEPTION_KEY_WINDOW_EXCEEDED`]
-    /// (`inception_key_window_exceeded`). The receiver enforces this 24h hard
-    /// cap independently, regardless of any longer window the issuing
-    /// deployment self-reports.
-    ///
-    /// NOTE (honest boundary): coauth does not currently issue any
-    /// `ak.session.grant` signed by a client inception key (grants are signed
-    /// by the deployment service key over an authenticated browser session),
-    /// so this variant is not produced by the present issuance path. It exists
-    /// as the typed rejection surface for a future genuine inception-key-signed
-    /// path; the enforcement primitive lives in
-    /// [`crate::services::inception_key_window`].
-    #[error(transparent)]
-    InceptionKeyWindowExceeded(
-        #[from] crate::services::inception_key_window::InceptionKeyWindowError,
-    ),
-
     /// R3.2 (HC-COAUTH-1/2) — the handle-claim issuance request failed the
     /// `claim_kind` allow-list or subject (holder/principal DID)
     /// validation. Carries the SDK / shared wire reason code.
@@ -103,6 +84,9 @@ pub enum SessionGrantError {
         "did:web principal requires arkret.deployment_profile=personal_node and arkret.principal_method=did:web"
     )]
     DidWebPrincipalNotExplicit,
+
+    #[error("principal_unknown")]
+    PrincipalUnknown,
 
     #[error(transparent)]
     Other(#[from] AnyhowError),
@@ -547,10 +531,6 @@ pub(crate) fn issuer_did_for(arkret_config: &ArkretConfig) -> String {
         .unwrap_or_else(|| service_id_for(arkret_config))
 }
 
-pub(crate) fn user_did_for(arkret_config: &ArkretConfig, user: &User) -> String {
-    format!("{}:users:{}", service_id_for(arkret_config), user.id)
-}
-
 #[must_use]
 pub(crate) fn is_did_web_principal(did: &str) -> bool {
     did.starts_with("did:web:")
@@ -570,8 +550,8 @@ pub(crate) fn ensure_principal_did_method_allowed(
 ///
 /// This identifies the authenticated coauth account. Principal-server DIDs are
 /// resolved later by the `session-grants` bridge for the requested audience.
-pub(crate) fn oidc_subject_for_user(arkret_config: &ArkretConfig, user: &User) -> String {
-    user_did_for(arkret_config, user)
+pub(crate) fn oidc_subject_for_user(_arkret_config: &ArkretConfig, user: &User) -> String {
+    user.sub.clone()
 }
 
 #[derive(Debug, Clone)]
@@ -600,7 +580,7 @@ where
             .await?
         {
             return Ok(Some(PrincipalDidBinding {
-                did: row.did,
+                did: row.principal_id,
                 audience,
                 principal_server_did: server.did.clone(),
             }));
@@ -819,8 +799,9 @@ pub(crate) fn password_login_session_grant_target(
         // A sole principal server with no explicit audience whose describe
         // probe has not yet landed fails closed (UnknownAudience) rather than
         // minting a grant with no bindable audience.
-        // 此 fail-closed 是有意设计（见 services::resolved_principal_audiences
-        // §设计定位），非缺陷：宁可启动初期短暂拒绝，也不盖一个无法绑定的 audience。
+        // This deliberate fail-closed behavior is documented in
+        // `services::resolved_principal_audiences`: startup may reject briefly
+        // rather than minting a grant with an audience that cannot be bound.
         [server] => Ok(SessionGrantTarget {
             audience: effective_audience(server, resolved)
                 .ok_or(SessionGrantTargetError::UnknownAudience)?,
@@ -874,11 +855,6 @@ fn preferred_signing_key(
     })
 }
 
-pub(crate) fn parse_local_user_did_for(arkret_config: &ArkretConfig, did: &str) -> Option<Ulid> {
-    let prefix = format!("{}:users:", service_id_for(arkret_config));
-    did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
-}
-
 pub(crate) fn parse_local_handle(url_builder: &UrlBuilder, handle: &str) -> Option<String> {
     // Spec 7157ee8 §3.1 canonical form: `<localpart>:<domain>`.
     let trimmed = handle.trim();
@@ -917,12 +893,7 @@ pub struct DebugIssueDpopGrantOutcome {
     pub audience: String,
     pub scopes: Vec<String>,
     pub expires_at: String,
-    /// The minted `did:webvh:…:webvh:<ulid>` principal DID this grant's subject
-    /// is bound to (model B). The cotest harness MUST adopt this as the account
-    /// identity so device enrollment / MLS KeyPackage publish resolve the DID
-    /// document that designates coauth's enrollment authority — rather than the
-    /// coauth-local `user_did_for` fallback (`…:users:<ulid>`, model A) whose
-    /// soland document carries no such designation.
+    /// Verified principal DID this grant is bound to.
     pub principal_did: String,
 }
 
@@ -976,32 +947,30 @@ pub async fn debug_issue_dpop_grant(
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
 
-    // Resolve the user identified by `actor_id` (the coauth-local
-    // `user_did_for` form the harness passes). Scoped so its repo connection is
-    // released before the principal-DID mint below opens its own transaction.
-    let user_id = parse_local_user_did_for(&arkret_config, &body.actor_id).ok_or_else(|| {
-        ArkretRouteError::BadRequest("actor_id is not a local Arkret user DID".to_owned())
-    })?;
-    let user = {
-        let mut repo = depot.repo().await?;
-        repo.user()
-            .lookup(user_id)
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
-            .ok_or(ArkretRouteError::NotFound)?
-    };
-
     let audience = body
         .audience
         .clone()
         .unwrap_or_else(|| required_audience_for(&url_builder, &arkret_config));
-    let grant_target = password_login_session_grant_target(
-        &url_builder,
-        &arkret_config,
-        resolved_principal_audiences::shared(),
-        Some(&audience),
-    )
-    .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    let mut repo = depot.repo().await?;
+    let binding = repo
+        .principal_did()
+        .get_by_did_and_audience(body.actor_id.trim(), &audience)
+        .await
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::PRECONDITION_FAILED,
+                ERROR_CODE_PRINCIPAL_UNKNOWN,
+                "principal_unknown",
+            )
+        })?;
+    let user = repo
+        .user()
+        .lookup(binding.user_id)
+        .await
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .ok_or(ArkretRouteError::NotFound)?;
+    let principal_did = binding.principal_id;
     let scopes = body.scopes.clone().unwrap_or_else(|| {
         vec![
             format!("urn:arkret:client:device:{}", body.device_id),
@@ -1009,68 +978,7 @@ pub async fn debug_issue_dpop_grant(
         ]
     });
 
-    // Mint (or reuse) the model-B principal DID, whose document designates
-    // coauth's `ArkretDeviceEnrollmentAuthority`, BEFORE issuing the grant. The
-    // grant subject MUST be this minted `did:webvh:…:webvh:<ulid>` (mirroring the
-    // OIDC/password-login path, account/auth.rs), NOT the coauth-local
-    // `user_did_for` fallback (`…:users:<ulid>`) whose soland document carries no
-    // enrollment-authority designation. Binding the subject to the fallback is
-    // exactly why the cotest DPoP debug seam could authenticate but never enroll a
-    // device or publish an MLS KeyPackage.
-    let http_client = depot.http_client()?;
-    let encrypter = depot.encrypter()?;
-    let principal_did =
-        match crate::handlers::account::auth::oidc_bridge::ensure_principal_did_for_user_committed(
-            depot,
-            &mut rng,
-            &clock,
-            &encrypter,
-            &http_client,
-            &url_builder,
-            &arkret_config,
-            &user,
-            &audience,
-        )
-        .await
-        {
-            Ok(did) => did,
-            Err(message) => {
-                return Err(ArkretRouteError::Internal(
-                    format!("principal DID minting failed: {message}").into(),
-                ));
-            }
-        };
-
-    let account_handle =
-        crate::handlers::account::auth::oidc_bridge::registration_handle_for_principal_endpoint(
-            grant_target.principal_server_endpoint.as_deref(),
-            &user.localpart,
-        );
-    let localpart_sync_bearer =
-        crate::handlers::account::auth::oidc_bridge::principal_server_operation_bearer(
-            &arkret_config,
-            &grant_target.audience,
-        );
-    crate::handlers::account::auth::oidc_bridge::ensure_soland_account_registered(
-        &http_client,
-        grant_target.principal_server_endpoint.as_deref(),
-        &principal_did,
-        localpart_sync_bearer,
-        Some(&user.localpart),
-        account_handle.as_deref(),
-        user.display_name.as_deref(),
-        Some(body.device_id.as_str()),
-    )
-    .await
-    .map_err(|message| {
-        ArkretRouteError::Internal(
-            format!("principal account registration failed: {message}").into(),
-        )
-    })?;
-
-    // Issue + persist the grant against a fresh repo, binding the subject to the
-    // minted principal DID.
-    let mut repo = depot.repo().await?;
+    // Issue and persist a grant for the already-bound principal.
     let user_agent = Some(format!("coauth-test-harness/device:{}", body.device_id));
     let browser_session = repo
         .browser_session()

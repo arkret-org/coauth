@@ -14,14 +14,14 @@ use serde::Deserialize;
 use url::Url;
 
 use crate::handlers::arkret;
-use crate::services::resolved_principal_audiences::{
-    ResolvedPrincipalAudiences, effective_audience,
-};
 use crate::oidc_client::requests::jose::{
     JwtVerificationData, fetch_jwks, verify_id_token, verify_signed_jwt,
 };
 use crate::oidc_client::requests::token::request_access_token;
 use crate::outbound_http::RequestBuilderExt as _;
+use crate::services::resolved_principal_audiences::{
+    ResolvedPrincipalAudiences, effective_audience,
+};
 
 pub type UpstreamOidcServiceHandle = Arc<dyn UpstreamOidcService>;
 

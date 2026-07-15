@@ -2,7 +2,7 @@
 //!
 //! Device revocation (cascading every session grant) and account-DID
 //! binding removal are high-risk identity operations. `key-management.md`
-//! §7 ("SHOULD 使用 proposal / approval 约束执行高风险动作") and the account
+//! §7 ("SHOULD use proposal / approval constraints for high-risk actions") and the account
 //! risk-action workflow already require detached-JWS approval evidence for
 //! `disable` / `erase`. To keep the module's high-risk governance posture
 //! consistent, the optional `approval_proof` supplied to a revocation MUST
@@ -88,7 +88,7 @@ pub(super) async fn verify_revocation_approval_proof(
     let http_client = depot.http_client().map_err(AppError::internal)?;
 
     let approved_by = did_resolver
-        .primary_did_for_user(&arkret_config, admin_user)
+        .primary_did_for_user(repo, &arkret_config, admin_user)
         .await
         .map_err(|error| AppError::bad_request(format!("principal_did_policy: {error}")))?;
 

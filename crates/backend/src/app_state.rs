@@ -27,7 +27,6 @@ use crate::services::email_webhook::EmailWebhookService;
 use crate::services::invite_quarantine::invite_quarantine_service;
 use crate::services::risk_action_proposals::risk_action_proposals_service;
 use crate::services::risk_action_state::default_risk_action_state_service;
-use crate::services::starid_adapter::{StaridRegistryHandle, StaridResolver};
 use crate::services::upstream_oidc::default_upstream_oidc_service;
 use crate::services::upstream_oidc_mapping::TrustedIssuerPolicySet;
 use crate::services::webauthn::webauthn_service;
@@ -251,29 +250,6 @@ pub async fn inject_app_state(
         TrustedIssuerPolicySet::default(),
     );
     depot.insert("did_resolver_service", default_did_resolver_service());
-    // C35.0: when `[arkret.starid]` is configured, build a single
-    // `StaridResolver` per request from the shared http_client. The
-    // handle is `Option<StaridRegistryHandle>` in the depot — handlers
-    // that need it (today: the onboarding `user_write` strand stage) read
-    // via `DepotExt::starid_registry()` and skip the wire-up when it
-    // returns `None`. Missing starid wiring no longer enables a principal
-    // `did:web` fallback; that path is allowed only by the explicit
-    // personal-node principal-method config.
-    if let Some(starid_config) = state.arkret_config.starid.as_ref() {
-        match StaridResolver::with_http_client(starid_config, state.http_client.clone()) {
-            Ok(resolver) => {
-                let handle: StaridRegistryHandle = Arc::new(resolver);
-                depot.insert("starid_registry", handle);
-            }
-            Err(err) => {
-                tracing::warn!(
-                    %err,
-                    "starid registry unavailable (base_url={}); did:web principal fallback remains disabled unless explicitly configured",
-                    starid_config.base_url,
-                );
-            }
-        }
-    }
     // Build the WebAuthn service from the current URL builder. We only
     // insert the service if construction succeeds; a misconfigured RP
     // origin should not bring the rest of the request pipeline down.

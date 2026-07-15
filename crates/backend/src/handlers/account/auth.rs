@@ -386,24 +386,11 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 //   - enforce policy on scopes the caller may request.
                 //   (TODO scaffold — pre-production checklist above.)
                 //
-                // Subject parity with the OIDC bridge: the grant subject (and
-                // `viewer.did`) MUST be the soland-minted `did:webvh:…` principal
-                // DID, not the coauth-local `user_did_for` fallback. The fallback
-                // anchors the actor identity on coauth's own host
-                // (`did:web:<coauth-host>:users:<ulid>`), which diverges from the
-                // principal DID the bridge mints for the same user — every event
-                // the client then writes is attributed to a DID that no DID
-                // service resolves under the principal server's authority.
+                // A login may issue a grant only after client-owned principal
+                // onboarding has produced a verified service-account binding.
                 let http_client = depot.http_client()?;
-                let encrypter = depot.encrypter()?;
-                let principal_did = match oidc_bridge::ensure_principal_did_for_user_committed(
+                let principal_did = match oidc_bridge::load_verified_principal_did_committed(
                     depot,
-                    &mut rng,
-                    &clock,
-                    &encrypter,
-                    &http_client,
-                    &url_builder,
-                    &arkret_config,
                     &user,
                     &grant_target.audience,
                 )
@@ -413,8 +400,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     Err(message) => {
                         PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
                         res.render(Json(
-                            LoginOutcome::error("principal_did_minting_failed")
-                                .with_warnings(vec![message]),
+                            LoginOutcome::error("principal_unknown").with_warnings(vec![message]),
                         ));
                         return Ok(());
                     }

@@ -61,7 +61,6 @@ macro_rules! select_user_columns {
             users::display_name,
             users::avatar_url,
             users::preferred_locale,
-            users::starid_backend,
             users::handle_aliases,
         )
     };

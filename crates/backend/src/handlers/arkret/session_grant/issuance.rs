@@ -49,12 +49,9 @@ pub(crate) fn issue_session_grant(
     )
 }
 
-// `subject_override` lets callers bind the grant to a non-default DID — e.g.
-// an OIDC bridge that just minted a `did:webvh:…` for the user on the target
-// principal server, where falling back to `user_did_for` would diverge from
-// the `viewer.did` returned in the same response and the principal server
-// would reject the exchange with `session grant subject does not match
-// principal_did`.
+// `subject_override` binds the grant to the persisted principal DID verified
+// for the target Principal Server audience. Issuance never fabricates a
+// service-local DID when that binding is absent.
 pub(crate) fn issue_session_grant_for_audience(
     clock: &dyn Clock,
     arkret_config: &ArkretConfig,
@@ -119,10 +116,9 @@ fn issue_session_grant_for_audience_inner(
     dpop_jkt: Option<String>,
     enforce_principal_did_method: bool,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
-    let subject = subject_override.map_or_else(
-        || user_did_for(arkret_config, &browser_session.user),
-        ToOwned::to_owned,
-    );
+    let subject = subject_override
+        .map(ToOwned::to_owned)
+        .ok_or(SessionGrantError::PrincipalUnknown)?;
     if enforce_principal_did_method {
         ensure_principal_did_method_allowed(arkret_config, &subject)?;
     }

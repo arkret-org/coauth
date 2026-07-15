@@ -114,21 +114,6 @@ impl OutboundRequestPolicy {
 }
 
 #[must_use]
-pub(crate) const fn starid_mutation_policy(operation: &'static str) -> OutboundRequestPolicy {
-    OutboundRequestPolicy::new("starid", operation)
-        .with_timeout(Duration::from_secs(10))
-        .with_max_attempts(1)
-}
-
-#[must_use]
-pub(crate) const fn starid_verification_policy(operation: &'static str) -> OutboundRequestPolicy {
-    OutboundRequestPolicy::new("starid", operation)
-        .with_timeout(Duration::from_secs(10))
-        .with_max_attempts(2)
-        .with_backoff(Duration::from_millis(100))
-}
-
-#[must_use]
 pub(crate) const fn soland_policy(operation: &'static str) -> OutboundRequestPolicy {
     OutboundRequestPolicy::new("soland", operation)
         .with_timeout(Duration::from_secs(10))

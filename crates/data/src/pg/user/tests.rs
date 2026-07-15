@@ -3,8 +3,8 @@ use coauth_data::audit::{HandleAuditEventType, NewHandleAuditEvent};
 use coauth_data::clock::MockClock;
 use coauth_data::upstream_oauth::{UpstreamOAuthProviderParams, UpstreamOAuthSessionFilter};
 use coauth_data::user::{
-    BrowserSessionFilter, BrowserSessionRepository, UserEmailFilter, UserEmailRepository,
-    UserFilter, UserPasswordRepository, UserRepository,
+    BrowserSessionFilter, BrowserSessionRepository, PrincipalDidRepository, UserEmailFilter,
+    UserEmailRepository, UserFilter, UserPasswordRepository, UserRepository,
 };
 use coauth_data::{
     Clock, NewUserPrimaryHandlePreference, Pagination, RepositoryAccess as _,
@@ -17,6 +17,21 @@ use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 
 use crate::PgRepositoryFactory;
+
+fn principal_binding_test_material(
+    label: &str,
+) -> (String, arkret_core::Hash, arkret_core::Did, String) {
+    let principal_id = format!("did:webvh:z{label}:example.com:users:alice");
+    let key_log_head = arkret_core::Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();
+    let enrollment_authority_did = arkret_core::Did::new("did:key:z6Mkenrollment").unwrap();
+    let enrollment_authority_ref = format!("{principal_id}#arkret-device-enrollment-authority");
+    (
+        principal_id,
+        key_log_head,
+        enrollment_authority_did,
+        enrollment_authority_ref,
+    )
+}
 
 /// Test the user repository, by adding and looking up a user
 #[tokio::test]
@@ -1285,4 +1300,247 @@ async fn test_user_terms() {
         .unwrap()
         .count;
     assert_eq!(res, 2);
+}
+
+#[tokio::test]
+async fn principal_did_has_one_global_owner_under_concurrent_binding() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let factory = PgRepositoryFactory::new(pool);
+    let label = uuid::Uuid::now_v7().simple().to_string();
+    let clock = MockClock::default();
+    let mut rng = ChaChaRng::seed_from_u64(71);
+
+    let mut repo = factory.create().await.unwrap();
+    let alice = repo
+        .user()
+        .add(&mut rng, &clock, format!("alice-{label}"))
+        .await
+        .unwrap();
+    let bob = repo
+        .user()
+        .add(&mut rng, &clock, format!("bob-{label}"))
+        .await
+        .unwrap();
+    let alice_id = alice.id;
+    let bob_id = bob.id;
+    repo.save().await.unwrap();
+
+    let (principal_id, key_log_head, enrollment_authority_did, authority_ref) =
+        principal_binding_test_material(&label);
+    let first_factory = factory.clone();
+    let first_principal_id = principal_id.clone();
+    let first_head = key_log_head.clone();
+    let first_authority = enrollment_authority_did.clone();
+    let first_ref = authority_ref.clone();
+    let first = async move {
+        let mut repo = first_factory.create().await.unwrap();
+        let mut rng = ChaChaRng::seed_from_u64(72);
+        let result = repo
+            .principal_did()
+            .add_verified(
+                &mut rng,
+                &MockClock::default(),
+                &alice,
+                "https://ps-a.example".to_owned(),
+                first_principal_id,
+                first_head,
+                first_authority,
+                first_ref,
+            )
+            .await;
+        if result.is_ok() {
+            repo.save().await.unwrap();
+            true
+        } else {
+            repo.cancel().await.unwrap();
+            false
+        }
+    };
+
+    let second_factory = factory.clone();
+    let second_principal_id = principal_id.clone();
+    let second = async move {
+        let mut repo = second_factory.create().await.unwrap();
+        let mut rng = ChaChaRng::seed_from_u64(73);
+        let result = repo
+            .principal_did()
+            .add_verified(
+                &mut rng,
+                &MockClock::default(),
+                &bob,
+                "https://ps-b.example".to_owned(),
+                second_principal_id,
+                key_log_head,
+                enrollment_authority_did,
+                authority_ref,
+            )
+            .await;
+        if result.is_ok() {
+            repo.save().await.unwrap();
+            true
+        } else {
+            repo.cancel().await.unwrap();
+            false
+        }
+    };
+
+    let (first_won, second_won) = tokio::join!(first, second);
+    assert_ne!(
+        first_won, second_won,
+        "exactly one account must own the DID"
+    );
+
+    let mut repo = factory.create().await.unwrap();
+    let binding = repo
+        .principal_did()
+        .get_by_did(&principal_id)
+        .await
+        .unwrap()
+        .expect("winning DID owner must remain queryable");
+    assert_eq!(binding.user_id, if first_won { alice_id } else { bob_id });
+    repo.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let factory = PgRepositoryFactory::new(pool);
+    let label = uuid::Uuid::now_v7().simple().to_string();
+    let clock = MockClock::default();
+    let audience = "https://ps.example";
+    let mut rng = ChaChaRng::seed_from_u64(74);
+
+    let mut repo = factory.create().await.unwrap();
+    let alice = repo
+        .user()
+        .add(&mut rng, &clock, format!("alice-conflict-{label}"))
+        .await
+        .unwrap();
+    repo.save().await.unwrap();
+
+    let (first_did, first_head, first_authority, first_ref) =
+        principal_binding_test_material(&format!("first{label}"));
+    let mut repo = factory.create().await.unwrap();
+    repo.principal_did()
+        .add_verified(
+            &mut rng,
+            &clock,
+            &alice,
+            audience.to_owned(),
+            first_did.clone(),
+            first_head,
+            first_authority,
+            first_ref,
+        )
+        .await
+        .unwrap();
+    repo.save().await.unwrap();
+
+    let (second_did, second_head, second_authority, second_ref) =
+        principal_binding_test_material(&format!("second{label}"));
+    let mut repo = factory.create().await.unwrap();
+    let conflict = repo
+        .principal_did()
+        .add_verified(
+            &mut rng,
+            &clock,
+            &alice,
+            audience.to_owned(),
+            second_did.clone(),
+            second_head,
+            second_authority,
+            second_ref,
+        )
+        .await;
+    assert!(conflict.is_err());
+    repo.cancel().await.unwrap();
+
+    let mut repo = factory.create().await.unwrap();
+    let binding = repo
+        .principal_did()
+        .get_for_user_and_audience(&alice, audience)
+        .await
+        .unwrap()
+        .expect("the original audience binding must remain intact");
+    assert_eq!(binding.principal_id, first_did);
+    assert!(
+        repo.principal_did()
+            .get_by_did(&second_did)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    repo.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn principal_did_binding_does_not_overwrite_the_verified_enrollment_authority() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let factory = PgRepositoryFactory::new(pool);
+    let label = uuid::Uuid::now_v7().simple().to_string();
+    let clock = MockClock::default();
+    let mut rng = ChaChaRng::seed_from_u64(75);
+    let (principal_id, key_log_head, enrollment_authority_did, authority_ref) =
+        principal_binding_test_material(&format!("authority{label}"));
+
+    let mut repo = factory.create().await.unwrap();
+    let alice = repo
+        .user()
+        .add(&mut rng, &clock, format!("alice-authority-{label}"))
+        .await
+        .unwrap();
+    repo.principal_did()
+        .add_verified(
+            &mut rng,
+            &clock,
+            &alice,
+            "https://ps-a.example".to_owned(),
+            principal_id.clone(),
+            key_log_head.clone(),
+            enrollment_authority_did.clone(),
+            authority_ref.clone(),
+        )
+        .await
+        .unwrap();
+    repo.save().await.unwrap();
+
+    let mut repo = factory.create().await.unwrap();
+    let replacement = repo
+        .principal_did()
+        .add_verified(
+            &mut rng,
+            &clock,
+            &alice,
+            "https://ps-b.example".to_owned(),
+            principal_id.clone(),
+            key_log_head,
+            arkret_core::Did::new("did:key:z6Mkreplacement").unwrap(),
+            authority_ref,
+        )
+        .await;
+    assert!(replacement.is_err());
+    repo.cancel().await.unwrap();
+
+    let mut repo = factory.create().await.unwrap();
+    let persisted = repo
+        .principal_did()
+        .get_by_did(&principal_id)
+        .await
+        .unwrap()
+        .expect("original verified binding must remain");
+    assert_eq!(persisted.enrollment_authority_did, enrollment_authority_did);
+    assert!(
+        repo.principal_did()
+            .get_by_did_and_audience(&principal_id, "https://ps-b.example")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    repo.cancel().await.unwrap();
 }

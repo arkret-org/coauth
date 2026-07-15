@@ -3,8 +3,9 @@ use chrono::Duration;
 use coauth_data::queue::{ProvisionUserJob, QueueJobRepositoryExt as _};
 use coauth_data::upstream_oauth::{UpstreamOAuthLinkRepository, UpstreamOAuthSessionRepository};
 use coauth_data::user::{
-    BrowserSessionRepository, UserEmailFilter, UserEmailRepository, UserPasswordRepository,
-    UserPhoneRepository, UserRegistrationTokenRepository, UserRepository, UserTermsRepository,
+    BrowserSessionRepository, PrincipalDidRepository, UserEmailFilter, UserEmailRepository,
+    UserPasswordRepository, UserPhoneRepository, UserRegistrationTokenRepository, UserRepository,
+    UserTermsRepository,
 };
 use coauth_data::{BoxRepository, Clock, RepositoryAccess, RepositoryError, UserRegistration};
 use coauth_principal::ConnectorAdmin;
@@ -250,6 +251,21 @@ pub async fn complete_registration(
         user = repo.user().set_can_request_admin(user, true).await?;
     }
 
+    if let Some(binding) = request.verified_principal_binding {
+        repo.principal_did()
+            .add_verified(
+                rng,
+                clock,
+                &user,
+                binding.audience,
+                binding.principal_id,
+                binding.key_log_head,
+                binding.enrollment_authority_did,
+                binding.enrollment_authority_ref,
+            )
+            .await?;
+    }
+
     // Mirror the registration's display_name / avatar_url onto coauth's
     // local user record so the account UI ("Edit profile") shows them
     // immediately, before the async PrincipalServer-provision job runs.
@@ -354,6 +370,7 @@ pub async fn finish_registration(
     configured_bootstrap_admin_token: Option<&str>,
     requested_bootstrap_admin_token: Option<String>,
     user_agent: Option<String>,
+    verified_principal_binding: Option<VerifiedPrincipalBinding>,
 ) -> Result<RegistrationFinishOutcome, RegistrationFinishError> {
     let prepared = match load_registration_finish_preparation(
         &mut repo,
@@ -505,7 +522,7 @@ pub async fn finish_registration(
         repo,
         rng,
         clock,
-        prepared.into_request(user_agent),
+        prepared.into_request(user_agent, verified_principal_binding),
         grant_admin,
     )
     .await

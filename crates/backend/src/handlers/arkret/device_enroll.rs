@@ -15,16 +15,17 @@
 //! 3. Use the client-supplied `device_id` (this session's id) so the projected `device_public_key`
 //!    lands under the id the session and recovery look up.
 //! 4. Assemble the B-model `ak.device.authorize` envelope: `actor_id` = principal DID, `realm_id` =
-//!    principal-control realm, `executed_by` = enrollment authority DID, `authorization_ref` =
-//!    `"{principal}#enrollment-authority"`, payload carries the `enrollment_authority_binding`.
+//!    principal-control realm, `executed_by` = enrollment authority DID, `authorization_ref` = the
+//!    exact service DID URL verified at binding time, and payload carries the
+//!    `enrollment_authority_binding`.
 //! 5. Sign the proof with the persistent enrollment key (VM mapped to `executed_by`) and return the
 //!    full Event JSON.
 
 use arkret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_FAILED_PRECONDITION,
     ERROR_CODE_GRANT_ALREADY_CONSUMED, ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE,
-    ERROR_CODE_SERVICE_UNAVAILABLE, ERROR_CODE_SESSION_GRANT_NOT_FOUND,
-    ERROR_CODE_SESSION_LOGGED_OUT,
+    ERROR_CODE_PRINCIPAL_UNKNOWN, ERROR_CODE_SERVICE_UNAVAILABLE,
+    ERROR_CODE_SESSION_GRANT_NOT_FOUND, ERROR_CODE_SESSION_LOGGED_OUT,
 };
 use arkret_core::{
     AccountDeviceEnrollOutcome, AccountDeviceEnrollRequestBody, Audience, DeviceAuthorizePayload,
@@ -34,17 +35,17 @@ use arkret_core::{
 };
 use arkret_signatures::{SignEventOptions, sign_event};
 use chrono::{DateTime, Utc};
+use coauth_data::user::PrincipalDidRepository as _;
 use salvo::prelude::*;
 
 use super::{ArkretRouteError, SessionGrantPayload};
 use crate::handlers::common::DepotExt;
+use crate::services::device_enrollment_authority::enrollment_authority;
 use crate::services::resolved_principal_audiences::{
     self, ResolvedPrincipalAudiences, effective_audience,
 };
-use crate::services::device_enrollment_authority::enrollment_authority;
 
 const DEVICE_AUTHORIZE_KIND: &str = "ak.device.authorize";
-const ENROLLMENT_AUTHORITY_SERVICE_FRAGMENT: &str = "#enrollment-authority";
 
 /// Extract the `Authorization: Bearer <token>` value (the caller's
 /// `ak.session.grant`), or a 401.
@@ -127,41 +128,6 @@ fn fresh_hlc(now: DateTime<Utc>, rng: &mut (dyn rand_core::RngCore + Send)) -> H
     Hlc::new(value).expect("generated HLC is well-formed")
 }
 
-fn enforce_device_authorize_inception_key_window(
-    grant_payload: &SessionGrantPayload,
-    raw_body: &serde_json::Value,
-    now: DateTime<Utc>,
-) -> Result<(), ArkretRouteError> {
-    let request_anchor =
-        crate::services::inception_key_window::device_authorize_request_anchor(raw_body);
-    let grant_anchor =
-        crate::services::inception_key_window::scope_details_anchor(&grant_payload.scope_details);
-    let anchor = request_anchor.or(grant_anchor);
-    let requires_gate = anchor.is_some()
-        || matches!(
-            grant_payload.proof_kind,
-            Some(
-                arkret_core::SessionGrantProofKind::DidBoundSignature
-                    | arkret_core::SessionGrantProofKind::PairedDeviceProof
-            )
-        );
-    if !requires_gate {
-        return Ok(());
-    }
-    crate::services::inception_key_window::enforce_inception_key_window_rfc3339(anchor, now)
-        .map_err(inception_key_window_error)
-}
-
-fn inception_key_window_error(
-    error: crate::services::inception_key_window::InceptionKeyWindowError,
-) -> ArkretRouteError {
-    ArkretRouteError::coded(
-        StatusCode::FORBIDDEN,
-        ERROR_CODE_FAILED_PRECONDITION,
-        format!("reason_code={}; {error}", error.reason_code()),
-    )
-}
-
 fn enforce_service_attested_device_authorize_provenance(
     event: &Event,
     payload: &DeviceAuthorizePayload,
@@ -194,8 +160,9 @@ fn sole_principal_audience(
         // Fail closed when the sole server omits `audience` and its describe
         // probe has not yet landed, rather than enrolling against an unknown
         // principal-server audience.
-        // 有意的 fail-closed（见 services::resolved_principal_audiences
-        // §设计定位），非缺陷,请勿改成用某种默认 audience 兜底。
+        // This is deliberate fail-closed behavior; see
+        // `services::resolved_principal_audiences`. Do not substitute an
+        // unverified default audience.
         [server] => effective_audience(server, resolved).ok_or_else(|| {
             ArkretRouteError::coded(
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -261,7 +228,6 @@ pub async fn device_enroll_endpoint(
     let jwt: Jwt<'_, SessionGrantPayload> = Jwt::try_from(grant_jwt.as_str())
         .map_err(|_| ArkretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
     let grant_payload = jwt.payload().clone();
-    enforce_device_authorize_inception_key_window(&grant_payload, &raw_body, clock.now())?;
     let expected_jkt = grant_payload
         .cnf
         .as_ref()
@@ -325,6 +291,21 @@ pub async fn device_enroll_endpoint(
             "browser session is logged out",
         ));
     }
+    let principal_binding = repo
+        .principal_did()
+        .get_by_did_and_audience(&grant_payload.subject, &grant_payload.audience)
+        .await
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .filter(|binding| binding.user_id == browser_session.user.id)
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::NOT_FOUND,
+                ERROR_CODE_PRINCIPAL_UNKNOWN,
+                "principal_unknown",
+            )
+        })?;
+    let enrollment_authority_did = principal_binding.enrollment_authority_did;
+    let authorization_ref = principal_binding.enrollment_authority_ref;
     repo.cancel().await.ok();
 
     // 2. Proof-of-possession: the caller MUST hold the key the grant is bound to.
@@ -376,15 +357,14 @@ pub async fn device_enroll_endpoint(
 
     // 4. Assemble the B-model envelope.
     let authority = enrollment_authority();
-    let authority_did = Did::new(authority.did().to_owned()).map_err(|error| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "enrollment authority DID is invalid: {error}"
-        )))
-    })?;
-    let authorization_ref = format!(
-        "{}{ENROLLMENT_AUTHORITY_SERVICE_FRAGMENT}",
-        principal_id.as_str()
-    );
+    if authority.did() != enrollment_authority_did.as_str() {
+        return Err(ArkretRouteError::coded(
+            StatusCode::SERVICE_UNAVAILABLE,
+            ERROR_CODE_SERVICE_UNAVAILABLE,
+            "configured enrollment authority does not match the verified DID delegation",
+        ));
+    }
+    let authority_did = enrollment_authority_did;
     let realm_id_string = arkret_core::principal_control_realm_id(&principal_id);
     let realm_id = RealmId::new(realm_id_string).map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
@@ -417,7 +397,6 @@ pub async fn device_enroll_endpoint(
         device_signature: None,
         proof: None,
         cross_signing_binding: None,
-        bootstrap_binding: None,
         enrollment_authority_binding: Some(DeviceEnrollmentAuthorityBinding {
             kind: DeviceEnrollmentAuthorityBindingKind::ServiceAttested,
             authority_did: authority_did.clone(),

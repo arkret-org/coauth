@@ -1024,11 +1024,13 @@ mod tests {
                 verification_method: Vec::new(),
                 authentication: Vec::new(),
                 assertion_method: Vec::new(),
+                capability_delegation: Vec::new(),
                 service: Vec::new(),
                 metadata: None,
             },
             source: crate::services::did_resolver::DidResolutionSource::DelegatedResolver,
             verified_local_binding: false,
+            key_log_head: None,
             method_evidence: serde_json::json!({"resolver_state": "webvh_cache_only_degraded"}),
             identity_fact_rejection: Some(
                 crate::services::did_resolver::DidResolutionIdentityFactRejection::CacheOnlyDegraded,

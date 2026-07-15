@@ -5,6 +5,7 @@ use arkret_core::{
     SessionGrantIntrospectionProof,
 };
 use chrono::{DateTime, Duration, Utc};
+use coauth_data::user::PrincipalDidRepository as _;
 use coauth_data::{BrowserSession, SessionGrant, User};
 use coauth_jose::jwk::{PublicJsonWebKey, PublicJsonWebKeySet};
 use coauth_jose::jwt::Jwt;
@@ -30,12 +31,6 @@ fn introspection_grant_record(
         .and_then(|payload| payload.cnf.as_ref().map(|cnf| cnf.jkt.clone()));
     let service_account_id = browser_session
         .map(|session| session.user.id.to_string())
-        .or_else(|| {
-            grant
-                .subject
-                .rsplit_once(":users:")
-                .map(|(_, id)| id.to_owned())
-        })
         .or_else(|| grant.browser_session_id.map(|id| id.to_string()))
         .unwrap_or_else(|| grant.subject.clone());
     let revocation_ref = grant
@@ -266,9 +261,14 @@ pub async fn introspect_session_grant(
 
     let user = if let Some(browser_session) = browser_session.as_ref() {
         Some(browser_session.user.clone())
-    } else if let Some(user_id) = parse_local_user_did_for(&arkret_config, &grant.subject) {
+    } else if let Some(binding) = repo
+        .principal_did()
+        .get_by_did_and_audience(&grant.subject, &grant.audience)
+        .await
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+    {
         repo.user()
-            .lookup(user_id)
+            .lookup(binding.user_id)
             .await
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
     } else {

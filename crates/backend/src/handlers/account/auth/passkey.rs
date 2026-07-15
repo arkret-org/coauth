@@ -20,28 +20,8 @@ use webauthn_rs::prelude::{
 };
 
 use crate::handlers::common::DepotExt;
-use crate::services::onboarding_starid::{
-    OnboardingStaridError, mint_principal_did_for_first_credential,
-};
-use crate::services::starid_adapter::StaridError;
 use crate::services::webauthn::WebauthnError;
 use crate::{AppError, JsonResult};
-
-fn map_starid_error(err: OnboardingStaridError) -> AppError {
-    match err {
-        OnboardingStaridError::Starid(StaridError::Api {
-            status,
-            code,
-            message,
-        }) => AppError::bad_request(format!(
-            "starid_mint_failed: status={status} code={code} message={message}"
-        )),
-        OnboardingStaridError::Starid(other) => {
-            AppError::internal(std::io::Error::other(other.to_string()))
-        }
-        OnboardingStaridError::Repository(error) => AppError::internal(error),
-    }
-}
 
 fn map_webauthn_error(err: WebauthnError) -> AppError {
     match err {
@@ -73,9 +53,7 @@ fn parse_account_id(value: &str) -> Option<Ulid> {
     {
         return id.parse::<Ulid>().ok();
     }
-    value
-        .rsplit_once(":users:")
-        .and_then(|(_, id)| id.parse::<Ulid>().ok())
+    None
 }
 
 async fn resolve_user(
@@ -158,7 +136,7 @@ pub async fn register_finish(
         req.parse_json().await.map_err(AppError::internal)?;
     let attestation: RegisterPublicKeyCredential = serde_json::from_value(body.attestation)
         .map_err(|e| AppError::bad_request(format!("invalid attestation: {e}")))?;
-    let (mut repo, user) = resolve_user(depot, &body.hint).await?;
+    let (repo, user) = resolve_user(depot, &body.hint).await?;
     let now = chrono::Utc::now();
 
     let webauthn = depot.webauthn_service().map_err(AppError::from)?;
@@ -168,32 +146,13 @@ pub async fn register_finish(
         .map_err(map_webauthn_error)?;
     let credential_id_b64 = Base64UrlUnpadded::encode_string(&record.credential_id);
 
-    let starid_registry = depot.starid_registry();
-    let (starid_did, starid_version_id) = if !user.starid_backend {
-        match mint_principal_did_for_first_credential(
-            &mut repo,
-            starid_registry.as_ref(),
-            user.clone(),
-            &record.public_key,
-        )
-        .await
-        .map_err(map_starid_error)?
-        {
-            Some(update) => (Some(update.mint.did), Some(update.mint.version_id)),
-            None => (None, None),
-        }
-    } else {
-        (None, None)
-    };
-    repo.save().await?;
+    repo.cancel().await?;
 
     Ok(Json(PasskeyRegisterFinishOutcome {
         account_id: user.id.to_string(),
         id: record.id.to_string(),
         credential_id_b64,
         label: record.label,
-        starid_did,
-        starid_version_id,
     }))
 }
 

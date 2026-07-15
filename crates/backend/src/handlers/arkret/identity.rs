@@ -77,7 +77,7 @@ pub async fn identity_resolve(
 
     Ok(Json(IdentityResolveOutcome {
         did_document: did_document_ref(resolution.document)?,
-        key_log_head: None,
+        key_log_head: resolution.key_log_head,
         seq: None,
         receipts: Vec::new(),
         method_evidence: resolution.method_evidence,
@@ -118,7 +118,7 @@ pub async fn identity_document(
 
     Ok(Json(IdentityDocumentViewOutcome(IdentityDocumentView {
         did_document: did_document_ref(resolution.document)?,
-        head_event_digest: None,
+        head_event_digest: resolution.key_log_head,
         seq: None,
         receipts: Vec::new(),
     })))
@@ -262,13 +262,8 @@ pub async fn directory_resolve_handle(
         return Err(directory_resolve_not_found(started_at).await);
     };
 
-    // The handle resolves to the user's MINTED principal DID
-    // (`did:webvh:…` hosted by the principal server) — never a fabricated
-    // `did:web:<coauth-host>:users:<ulid>` form, which no DID service
-    // hosts. Principal DIDs are minted per audience; walk the configured
-    // principal servers in order and take the first minted one. A user
-    // who has never bound to a principal server has no resolvable DID
-    // yet — fail closed with 404 rather than synthesising an identifier.
+    // Resolve only a verified principal binding. Unbound accounts have no
+    // principal identity and remain undiscoverable.
     let principal_binding = principal_did_binding_for_user(&mut repo, &arkret_config, &user)
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
@@ -393,6 +388,11 @@ fn map_handle_claim_issue_error(error: SessionGrantError) -> ArkretRouteError {
             StatusCode::BAD_REQUEST,
             ERROR_CODE_INVALID_PARAM,
             error.to_string(),
+        ),
+        SessionGrantError::PrincipalUnknown => ArkretRouteError::coded(
+            StatusCode::NOT_FOUND,
+            ERROR_CODE_PRINCIPAL_UNKNOWN,
+            "principal_unknown",
         ),
         other => ArkretRouteError::Internal(Box::new(other)),
     }

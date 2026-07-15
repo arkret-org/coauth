@@ -118,6 +118,11 @@ pub struct BindingStatementClaims {
     pub exp: DateTime<Utc>,
 }
 
+pub struct ValidatedDidBindingControlProof {
+    pub claims: BindingStatementClaims,
+    pub resolution: DidResolution,
+}
+
 /// Validation errors. All variants are deterministic from the inputs and
 /// resolver response.
 #[derive(Debug, Error)]
@@ -270,7 +275,7 @@ pub async fn validate_control_proof(
     expected_audience: &str,
     expected_trust_domain: &str,
     now: DateTime<Utc>,
-) -> Result<BindingStatementClaims, DidBindingProofError> {
+) -> Result<ValidatedDidBindingControlProof, DidBindingProofError> {
     if proof_jws.trim().is_empty() {
         return Err(DidBindingProofError::EmptyProof);
     }
@@ -356,7 +361,10 @@ pub async fn validate_control_proof(
         .check_and_record(&replay_key, claims.exp, now)
         .map_err(|_| DidBindingProofError::NonceReplayed)?;
 
-    Ok(claims.clone())
+    Ok(ValidatedDidBindingControlProof {
+        claims: claims.clone(),
+        resolution,
+    })
 }
 
 fn decode_attached_jws_payload(proof_jws: &str) -> Result<Vec<u8>, DidBindingProofError> {
@@ -794,11 +802,13 @@ mod tests {
                 verification_method: Vec::new(),
                 authentication: Vec::new(),
                 assertion_method: Vec::new(),
+                capability_delegation: Vec::new(),
                 service: Vec::new(),
                 metadata: None,
             },
             source: crate::services::did_resolver::DidResolutionSource::DelegatedResolver,
             verified_local_binding: false,
+            key_log_head: None,
             method_evidence: serde_json::json!({"resolver_state": "webvh_cache_only_degraded"}),
             identity_fact_rejection: Some(rejection),
         }

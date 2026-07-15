@@ -137,12 +137,7 @@ pub async fn validate_agent_session_proof(
     let now = clock.now();
     let proof = &body.proof;
 
-    // The agent principal MUST be present for this branch.
-    let agent_id = body
-        .principal_id
-        .as_ref()
-        .map(|did| did.as_str().to_owned())
-        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    let agent_id = body.principal_id.as_str().to_owned();
 
     // `proof.verification_method` MUST be present and its DID part MUST equal
     // the agent principal (AUTH-1, fail closed before crypto).
@@ -2045,7 +2040,7 @@ mod tests {
     #[test]
     fn session_request_digest_ignores_signature_but_binds_scope() {
         let mut body = arkret_core::SessionGrantRequestBody {
-            principal_id: Some(arkret_core::Did::new("did:web:agent.example").unwrap()),
+            principal_id: arkret_core::Did::new("did:web:agent.example").unwrap(),
             device_id: None,
             requested_scope: vec!["ak.message.create".to_owned()],
             agent_key_authorization_ref: Some(

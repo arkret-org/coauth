@@ -39,6 +39,10 @@ pub struct DidDocument {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assertion_method: Vec<String>,
 
+    #[serde(rename = "capabilityDelegation")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capability_delegation: Vec<String>,
+
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub service: Vec<DidService>,
 
@@ -228,5 +232,20 @@ mod tests {
         .expect("wire document should parse before use-time validation");
 
         assert!(method.public_key_material().is_err());
+    }
+
+    #[test]
+    fn capability_delegation_is_preserved_for_model_exclusivity_checks() {
+        let did = "did:webvh:ztest:example.test:users:alice";
+        let document: DidDocument = serde_json::from_value(json!({
+            "id": did,
+            "capabilityDelegation": [format!("{did}#local-enrollment-key")],
+        }))
+        .expect("DID document should parse");
+
+        assert_eq!(
+            document.capability_delegation,
+            vec![format!("{did}#local-enrollment-key")]
+        );
     }
 }

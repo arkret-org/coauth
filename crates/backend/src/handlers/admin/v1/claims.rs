@@ -170,8 +170,7 @@ pub async fn issue_claim(req: &mut Request, depot: &Depot) -> CreatedJsonResult<
     let subject = require_non_empty(body.subject, "subject")?;
     let verifier_did = require_did(body.verifier_did, "verifier_did")?;
     let represented_org = require_non_empty(body.represented_org, "represented_org")?;
-    let account_id =
-        resolve_account_id_for_issue(&mut repo, depot, body.account_id, &subject).await?;
+    let account_id = resolve_account_id_for_issue(&mut repo, body.account_id, &subject).await?;
 
     let issuer = if let Some(value) = body.issuer {
         require_non_empty(value, "issuer")?
@@ -315,11 +314,10 @@ pub(crate) fn claim_record_from_service(record: StoredClaimRecord) -> ClaimRecor
 
 async fn resolve_account_id_for_issue(
     repo: &mut coauth_data::BoxRepository,
-    depot: &Depot,
     explicit_account_id: Option<Ulid>,
     subject: &str,
 ) -> Result<Option<Ulid>, AppError> {
-    let derived_account_id = derive_account_id_from_subject(repo, depot, subject).await?;
+    let derived_account_id = derive_account_id_from_subject(repo, subject).await?;
 
     if let Some(account_id) = explicit_account_id {
         let exists = repo.user().lookup(account_id).await?.is_some();
@@ -343,17 +341,14 @@ async fn resolve_account_id_for_issue(
 
 async fn derive_account_id_from_subject(
     repo: &mut coauth_data::BoxRepository,
-    depot: &Depot,
     subject: &str,
 ) -> Result<Option<Ulid>, AppError> {
     if let Ok(id) = subject.parse::<Ulid>() {
         return ensure_subject_account_exists(repo, id).await;
     }
 
-    let arkret_config = depot.arkret_config()?;
-    let did_resolver = depot.did_resolver_service()?;
-    if let Some(id) = did_resolver.parse_local_user_did(&arkret_config, subject) {
-        return ensure_subject_account_exists(repo, id).await;
+    if let Some(binding) = repo.principal_did().get_by_did(subject).await? {
+        return ensure_subject_account_exists(repo, binding.user_id).await;
     }
 
     Ok(repo

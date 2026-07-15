@@ -158,13 +158,7 @@ fn service_and_user_identifiers_follow_arkret_shape() {
         service_id_for(&arkret_config),
         "did:webvh:ztest:auth.example.com:webvh:service"
     );
-    assert_eq!(
-        user_did_for(&arkret_config, &user),
-        format!(
-            "did:webvh:ztest:auth.example.com:webvh:service:users:{}",
-            user.id
-        )
-    );
+    assert_eq!(oidc_subject_for_user(&arkret_config, &user), user.sub);
     // Spec 7157ee8 §3.1 — canonical handle form is
     // `<localpart>:<domain>` (was `<localpart>@<domain>` pre-R3.1).
     assert_eq!(
@@ -200,7 +194,6 @@ fn service_describe_exposes_auth_account_boundary_profile() {
             resolver: "https://resolver.example.com/resolve".parse().unwrap(),
             proof_required_for_pairwise: true,
         }),
-        starid: None,
         session_grant_ttl: Duration::try_minutes(5).unwrap(),
         principal_server_url: None,
         high_risk_threshold: 2,
@@ -669,10 +662,7 @@ fn session_grant_is_signed_for_the_user_did() {
     let payload = jwt.payload();
     assert_eq!(payload.kind, "ak.session.grant");
     assert_eq!(payload.grant_id, grant.grant_id);
-    assert_eq!(
-        payload.subject,
-        user_did_for(&arkret_config, &browser_session.user)
-    );
+    assert_eq!(payload.subject, browser_session.user.sub);
     assert_eq!(
         payload.audience,
         required_audience_for(&url_builder, &arkret_config)
@@ -1609,7 +1599,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
         policy_event_ref: None,
     };
 
-    // Subject is the soland-minted webvh principal DID, passed by the caller.
+    // Subject is the client-created webvh principal DID, passed by the caller.
     let subject_did = "did:webvh:zQmExampleScid:soland.example:webvh:01arz3ndektsv4rrffq69g5fav";
     let material = issue_handle_claim(
         &clock,

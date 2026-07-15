@@ -59,11 +59,7 @@ pub(crate) fn issue_handle_claim(
     use crate::services::handle_subject_validator::ensure_subject_is_principal_did;
 
     let issuer_service_id = service_id_for(arkret_config);
-    // The subject is the user's MINTED principal DID (`did:webvh:…` hosted
-    // by the principal server), supplied by the caller. coauth used to
-    // derive it via `user_did_for` (`did:web:<coauth-host>:users:<ulid>`),
-    // but coauth hosts no DID documents, so that form resolves nowhere and
-    // would also mismatch the session-grant subject minted at login.
+    // The subject is the verified principal DID supplied by the caller.
     let subject_id = subject_did.to_owned();
 
     // HC-COAUTH-2 — the subject MUST be a holder/principal DID, not a

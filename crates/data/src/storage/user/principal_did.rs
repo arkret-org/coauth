@@ -1,72 +1,54 @@
-//! Repository for `did:webvh` update-key material that coauth mints against
-//! an embedded principal-server provider (soland's
-//! soland private WebVH registration endpoint).
-//!
-//! Distinct from `crate::services::starid_adapter` — starid mints and retains
-//! the update key server-side; soland's embedded path requires coauth to
-//! construct + sign the inception entry locally, so we **must** retain the
-//! ed25519 update-key seed (encrypted) for future rotations.
+//! Repository for verified service-account to principal-DID bindings.
 
 use async_trait::async_trait;
-use coauth_data::{Clock, PrincipalDidUpdateKey, User};
+use coauth_data::{Clock, PrincipalDidBinding, User};
 use rand_core::RngCore;
 
 use crate::repository_impl;
 
-/// A [`PrincipalDidRepository`] persists [`PrincipalDidUpdateKey`] rows for
-/// users whose principal DID was minted through an embedded provider.
+/// Persistence boundary for principal DIDs verified by an authoritative host.
 #[async_trait]
 pub trait PrincipalDidRepository: Send + Sync {
     /// The error type returned by the repository.
     type Error;
 
-    /// Fetch the update-key material for `user` against `audience`. Returns
-    /// `None` if no DID has been minted for the pair yet.
-    ///
-    /// # Errors
-    /// Returns [`Self::Error`] if the underlying repository fails.
+    /// Fetch the binding for one account and Principal Server audience.
     async fn get_for_user_and_audience(
         &mut self,
         user: &User,
         audience: &str,
-    ) -> Result<Option<PrincipalDidUpdateKey>, Self::Error>;
+    ) -> Result<Option<PrincipalDidBinding>, Self::Error>;
 
-    /// Fetch the update-key material by DID. Useful when an inbound request
-    /// arrives with the DID but no user context (e.g. resolver lookup).
-    ///
-    /// # Errors
-    /// Returns [`Self::Error`] if the underlying repository fails.
-    async fn get_by_did(&mut self, did: &str)
-    -> Result<Option<PrincipalDidUpdateKey>, Self::Error>;
+    /// Fetch a binding by its principal DID.
+    async fn get_by_did(&mut self, did: &str) -> Result<Option<PrincipalDidBinding>, Self::Error>;
 
-    /// Acquire a transaction-scoped lock for the `(user, audience)` mint path.
-    /// Callers must take this before lookup-or-mint so only one external DID
-    /// inception can be in flight for the same account and principal server.
-    ///
-    /// # Errors
-    /// Returns [`Self::Error`] if the underlying repository fails.
-    async fn acquire_mint_lock(&mut self, user: &User, audience: &str) -> Result<(), Self::Error>;
+    /// Fetch a binding by principal DID and Principal Server audience.
+    async fn get_by_did_and_audience(
+        &mut self,
+        did: &str,
+        audience: &str,
+    ) -> Result<Option<PrincipalDidBinding>, Self::Error>;
 
-    /// Insert a freshly-minted DID. Concurrent inserts for the same
-    /// `(user_id, audience)` return the already-persisted row so lookup-or-mint
-    /// flows remain idempotent; unrelated uniqueness conflicts, such as a DID
-    /// collision, still surface as errors.
-    ///
-    /// # Errors
-    /// Returns [`Self::Error`] if the underlying repository fails.
-    #[allow(clippy::too_many_arguments)]
-    async fn add(
+    /// Persist a binding only after the caller has verified the client
+    /// submission with the authoritative DID host.
+    async fn add_verified(
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
         user: &User,
         audience: String,
-        did: String,
-        did_public_key_multibase: String,
-        update_public_key_multibase: String,
-        update_secret_b64: String,
-        key_log_head: Option<String>,
-    ) -> Result<PrincipalDidUpdateKey, Self::Error>;
+        principal_id: String,
+        key_log_head: arkret_core::Hash,
+        enrollment_authority_did: arkret_core::Did,
+        enrollment_authority_ref: String,
+    ) -> Result<PrincipalDidBinding, Self::Error>;
+
+    /// Remove every audience binding for this account and principal DID.
+    async fn remove_for_user_and_did(
+        &mut self,
+        user: &User,
+        principal_id: &str,
+    ) -> Result<(), Self::Error>;
 }
 
 repository_impl!(PrincipalDidRepository:
@@ -74,26 +56,30 @@ repository_impl!(PrincipalDidRepository:
         &mut self,
         user: &User,
         audience: &str,
-    ) -> Result<Option<PrincipalDidUpdateKey>, Self::Error>;
+    ) -> Result<Option<PrincipalDidBinding>, Self::Error>;
     async fn get_by_did(
         &mut self,
         did: &str,
-    ) -> Result<Option<PrincipalDidUpdateKey>, Self::Error>;
-    async fn acquire_mint_lock(
+    ) -> Result<Option<PrincipalDidBinding>, Self::Error>;
+    async fn get_by_did_and_audience(
         &mut self,
-        user: &User,
+        did: &str,
         audience: &str,
-    ) -> Result<(), Self::Error>;
-    async fn add(
+    ) -> Result<Option<PrincipalDidBinding>, Self::Error>;
+    async fn add_verified(
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
         user: &User,
         audience: String,
-        did: String,
-        did_public_key_multibase: String,
-        update_public_key_multibase: String,
-        update_secret_b64: String,
-        key_log_head: Option<String>,
-    ) -> Result<PrincipalDidUpdateKey, Self::Error>;
+        principal_id: String,
+        key_log_head: arkret_core::Hash,
+        enrollment_authority_did: arkret_core::Did,
+        enrollment_authority_ref: String,
+    ) -> Result<PrincipalDidBinding, Self::Error>;
+    async fn remove_for_user_and_did(
+        &mut self,
+        user: &User,
+        principal_id: &str,
+    ) -> Result<(), Self::Error>;
 );

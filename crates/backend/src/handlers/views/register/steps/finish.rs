@@ -1,27 +1,23 @@
 use std::sync::LazyLock;
 
-use opentelemetry::metrics::Counter;
 use coauth_data::PostAuthAction;
-use crate::salvo_utils::{
-    InternalError, SessionInfoExt as _,
-    cookies::TimedCookie,
-};
 use coauth_templates::{RegisterStepsEmailInUseContext, TemplateContext as _, Templates};
-use salvo::{prelude::*, writing::Text};
+use opentelemetry::metrics::Counter;
+use salvo::prelude::*;
+use salvo::writing::Text;
 use ulid::Ulid;
 
 use super::super::cookie::UserRegistrationSessions;
 use crate::handlers::account::DepotExt;
-use crate::handlers::{
-    METER,
-    account::service::registration::{
-        LoadRegistrationFinishPreparationError, complete_registration,
-        load_registration_finish_preparation,
-    },
-    rest,
-    views::context::ViewContext,
-    views::shared::OptionalPostAuthAction,
+use crate::handlers::account::service::registration::{
+    LoadRegistrationFinishPreparationError, complete_registration,
+    load_registration_finish_preparation,
 };
+use crate::handlers::views::context::ViewContext;
+use crate::handlers::views::shared::OptionalPostAuthAction;
+use crate::handlers::{METER, rest};
+use crate::salvo_utils::cookies::TimedCookie;
+use crate::salvo_utils::{InternalError, SessionInfoExt as _};
 
 static PASSWORD_REGISTER_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER
@@ -222,7 +218,7 @@ pub async fn get(
         repo,
         &mut rng,
         &clock,
-        prepared.into_request(user_agent),
+        prepared.into_request(user_agent, None),
         false,
     )
     .await?;

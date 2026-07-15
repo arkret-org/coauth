@@ -39,7 +39,7 @@ pub use types::{
     RegistrationWorkflowEventKind, RegistrationWorkflowSnapshot, RegistrationWorkflowState,
     ResendRegistrationVerificationError, ResendRegistrationVerificationStatus,
     SetRegistrationDisplayNameError, StartPasswordRegistrationError,
-    StartPasswordRegistrationRequestBody, StartedPasswordRegistration,
+    StartPasswordRegistrationRequestBody, StartedPasswordRegistration, VerifiedPrincipalBinding,
     VerifyRegistrationEmailCodeError, VerifyRegistrationPhoneCodeError,
 };
 pub(crate) use workflow::next_registration_step;

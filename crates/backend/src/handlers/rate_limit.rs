@@ -675,7 +675,6 @@ mod tests {
             display_name: Some("alice".to_owned()),
             avatar_url: None,
             preferred_locale: Some("en".to_owned()),
-            starid_backend: false,
             handle_aliases: Vec::new(),
         };
 
@@ -693,7 +692,6 @@ mod tests {
             display_name: Some("bob".to_owned()),
             avatar_url: None,
             preferred_locale: Some("en".to_owned()),
-            starid_backend: false,
             handle_aliases: Vec::new(),
         };
 

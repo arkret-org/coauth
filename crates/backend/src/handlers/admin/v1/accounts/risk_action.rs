@@ -246,6 +246,7 @@ fn map_risk_action_proposals_error(error: RiskActionProposalsError) -> AppError 
 }
 
 async fn admin_actor_id(
+    repo: &mut coauth_data::BoxRepository,
     admin_user: Option<&coauth_data::User>,
     arkret_config: &coauth_config::ArkretConfig,
     did_resolver: &dyn DidResolverService,
@@ -254,7 +255,7 @@ async fn admin_actor_id(
         AppError::forbidden("risk action workflow requires a user-bound admin token")
     })?;
     did_resolver
-        .primary_did_for_user(arkret_config, admin_user)
+        .primary_did_for_user(repo, arkret_config, admin_user)
         .await
         .map_err(|error| AppError::bad_request(format!("principal_did_policy: {error}")))
 }
@@ -467,8 +468,13 @@ pub async fn propose(
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
-    let proposer_did =
-        admin_actor_id(admin_user.as_ref(), &arkret_config, did_resolver.as_ref()).await?;
+    let proposer_did = admin_actor_id(
+        &mut repo,
+        admin_user.as_ref(),
+        &arkret_config,
+        did_resolver.as_ref(),
+    )
+    .await?;
     let proposal = risk_action_proposals
         .create(CreateProposal {
             account_id: account.id,
@@ -614,8 +620,13 @@ pub async fn approve(
         &params.action,
         params.ticket.as_deref(),
     )?;
-    let caller_admin_did =
-        admin_actor_id(admin_user.as_ref(), &arkret_config, did_resolver.as_ref()).await?;
+    let caller_admin_did = admin_actor_id(
+        &mut repo,
+        admin_user.as_ref(),
+        &arkret_config,
+        did_resolver.as_ref(),
+    )
+    .await?;
     let approved_by = bind_approval_admin_did(caller_admin_did, params.approved_by.as_deref())?;
     let approval_note = params.approval_note.as_deref().unwrap_or_default();
     let verification_method = verify_approval_proof_jws(
@@ -799,7 +810,6 @@ pub async fn execute(
         ..
     } = extract_call_context(req, depot).await?;
     let arkret_config = depot.arkret_config()?;
-    let did_resolver = depot.did_resolver_service()?;
     let principal_server = depot.principal_server()?;
     let key_store = depot.key_store()?;
     let service_id = service_id_for(&arkret_config);
@@ -908,8 +918,7 @@ pub async fn execute(
     repo.save().await?;
 
     let account_response = SingleOutcome::new_canonical(
-        super::AccountRecord::from_user(updated_account, &arkret_config, did_resolver.as_ref())
-            .await?,
+        super::AccountRecord::from_user(updated_account, depot).await?,
     );
 
     Ok(Json(AccountRiskActionExecuteOutcome {

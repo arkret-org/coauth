@@ -1,12 +1,12 @@
 //! Persistent device-enrollment-authority signing key (decision 0002, B model).
 //!
-//! Under the managed-DID (account-authority) profile, device enrollment is
-//! attested by a **persistent** service key — distinct from the inception
-//! `did_key_seed` which is consumed and discarded after minting
-//! (`zh/identity/key-management.md` §5.0.6 rule 2). coauth holds exactly one
-//! such key process-wide; it signs `service_attested` `ak.device.authorize`
-//! events on behalf of any principal whose DID document designates this
-//! authority via a `ArkretDeviceEnrollmentAuthority` service entry
+//! Under the B custody model, the identity root and recovery keys remain in
+//! client-controlled cold custody and never enter coauth. Device enrollment is
+//! instead attested by this **persistent**, narrowly delegated service key.
+//! coauth holds exactly one such key process-wide; it signs `service_attested`
+//! `ak.device.authorize` events on behalf of principals whose inception DID
+//! document designates this authority via an
+//! `ArkretDeviceEnrollmentAuthority` service entry
 //! (`zh/crypto-media/device-lifecycle.md` §5.4).
 //!
 //! The key is loaded from `COAUTH_DEVICE_ENROLLMENT_KEY_SEED` (base64 of a

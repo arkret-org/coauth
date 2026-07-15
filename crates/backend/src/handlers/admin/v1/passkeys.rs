@@ -32,10 +32,6 @@ use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::params::extract_ulid_param;
 use crate::handlers::arkret::service_id_for;
 use crate::handlers::common::DepotExt;
-use crate::services::onboarding_starid::{
-    OnboardingStaridError, mint_principal_did_for_first_credential,
-};
-use crate::services::starid_adapter::StaridError;
 use crate::services::webauthn::WebauthnError;
 use crate::{AppError, JsonResult};
 
@@ -105,22 +101,6 @@ pub struct PasskeyAuthFinishRequestBody {
 pub struct PasskeyAuthFinishOutcome {
     /// The credential id that was used to authenticate, base64url-encoded.
     pub credential_id_b64: String,
-}
-
-fn map_starid_error(err: OnboardingStaridError) -> AppError {
-    match err {
-        OnboardingStaridError::Starid(StaridError::Api {
-            status,
-            code,
-            message,
-        }) => AppError::bad_request(format!(
-            "starid_mint_failed: status={status} code={code} message={message}"
-        )),
-        OnboardingStaridError::Starid(other) => {
-            AppError::internal(std::io::Error::other(other.to_string()))
-        }
-        OnboardingStaridError::Repository(error) => AppError::internal(error),
-    }
 }
 
 fn map_webauthn_error(err: WebauthnError) -> AppError {
@@ -229,8 +209,7 @@ pub async fn register_finish(
     let mut rng = crate::handlers::account::make_rng();
     let now = clock.now();
 
-    let user = repo
-        .user()
+    repo.user()
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
@@ -242,37 +221,6 @@ pub async fn register_finish(
         .map_err(map_webauthn_error)?;
 
     let cred_b64 = Base64UrlUnpadded::encode_string(&record.credential_id);
-
-    // Round 37.4: derive a real, device-bound `update_key` from this
-    // passkey's COSE public key and hand it to starid. First-passkey
-    // path mints the DID; subsequent passkeys would rotate the key
-    // via `rotate_principal_did_for_credential` (driven by the
-    // device-rotation strand once the binding lookup lands — out of
-    // scope here, this handler only owns the *first* enrolment hook
-    // since the binding row write happens elsewhere).
-    let starid_registry = depot.starid_registry();
-    let (starid_did, starid_version) = if !user.starid_backend {
-        match mint_principal_did_for_first_credential(
-            &mut repo,
-            starid_registry.as_ref(),
-            user,
-            &record.public_key,
-        )
-        .await
-        .map_err(map_starid_error)?
-        {
-            Some(update) => (Some(update.mint.did), Some(update.mint.version_id)),
-            None => (None, None),
-        }
-    } else {
-        // Account already has a starid-minted DID; this enrolment is
-        // the rotation case. The rotation requires the prior
-        // `version_id` from `account_identity_binding`, which lands in
-        // a follow-up round — for now we record the credential without
-        // rotating, and the next privileged op will surface the
-        // version-id mismatch to the operator.
-        (None, None)
-    };
 
     let (key_store, service_id, audit_fail_closed) = audit_signing_context(depot)?;
     record_admin_operation_signed(
@@ -290,8 +238,6 @@ pub async fn register_finish(
             "account_id": id.to_string(),
             "credential_id_b64": cred_b64,
             "label": body.label,
-            "starid_did": starid_did,
-            "starid_version_id": starid_version,
         }),
     )
     .await?;

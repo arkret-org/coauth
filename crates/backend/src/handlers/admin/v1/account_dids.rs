@@ -22,7 +22,6 @@ use serde::Deserialize;
 use crate::handlers::admin::CreatedJson;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::params::extract_ulid_param;
-use crate::handlers::arkret::SessionGrantError;
 use crate::handlers::common::DepotExt;
 use crate::services::did_binding_proof::{
     DidBindingProofError, normalize_did_for_binding, validate_control_proof,
@@ -143,7 +142,8 @@ pub async fn list_account_dids(
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
     let events = did_binding_event_logs(&mut repo, id).await?;
-    let data = binding_records_for_user(&user, &arkret_config, did_resolver.as_ref()).await?;
+    let data =
+        binding_records_for_user(&mut repo, &user, &arkret_config, did_resolver.as_ref()).await?;
     let data = apply_did_binding_events(
         data,
         &events,
@@ -210,7 +210,8 @@ pub async fn add_account_did(
     let resolver = resolver_descriptor(&arkret_config, did_resolver.as_ref());
     let events = did_binding_event_logs(&mut repo, id).await?;
     let current_bindings = apply_did_binding_events(
-        binding_records_for_user(&account, &arkret_config, did_resolver.as_ref()).await?,
+        binding_records_for_user(&mut repo, &account, &arkret_config, did_resolver.as_ref())
+            .await?,
         &events,
         &resolver,
     );
@@ -239,7 +240,7 @@ pub async fn add_account_did(
         now,
     )?;
     let nonce_store = shared_did_binding_nonce_store();
-    validate_control_proof(
+    let validated_control = validate_control_proof(
         &http_client,
         &url_builder,
         &arkret_config,
@@ -256,8 +257,82 @@ pub async fn add_account_did(
     )
     .await
     .map_err(map_did_binding_proof_error)?;
+    let key_log_head = validated_control
+        .resolution
+        .key_log_head
+        .clone()
+        .ok_or_else(|| {
+            AppError::bad_request(
+                "control_proof_invalid: authoritative DID history head is required",
+            )
+        })?;
+    let authority = crate::services::device_enrollment_authority::enrollment_authority();
+    let enrollment_authority_did = arkret_core::Did::new(authority.did().to_owned())
+        .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
+    if !validated_control
+        .resolution
+        .document
+        .capability_delegation
+        .is_empty()
+    {
+        return Err(AppError::bad_request(
+            "control_proof_invalid: external enrollment authority and capabilityDelegation are mutually exclusive",
+        ));
+    }
+    let mut designated_services =
+        validated_control
+            .resolution
+            .document
+            .service
+            .iter()
+            .filter(|service| {
+                service.kind == arkret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY
+            });
+    let designated_service = designated_services.next().ok_or_else(|| {
+        AppError::bad_request(
+            "control_proof_invalid: DID does not delegate to this enrollment authority",
+        )
+    })?;
+    if designated_services.next().is_some()
+        || designated_service.service_endpoint != authority.did()
+        || !designated_service
+            .id
+            .strip_prefix(&did)
+            .is_some_and(|fragment| fragment.starts_with('#') && fragment.len() > 1)
+        || arkret_core::DidUrl::new(designated_service.id.clone()).is_err()
+    {
+        return Err(AppError::bad_request(
+            "control_proof_invalid: DID enrollment authority delegation is ambiguous or invalid",
+        ));
+    }
+    let enrollment_authority_ref = designated_service.id.clone();
 
     let mut rng = crate::handlers::account::make_rng();
+    let audiences: Vec<String> = arkret_config
+        .principal_servers
+        .iter()
+        .filter_map(crate::services::resolved_principal_audiences::effective_audience_shared)
+        .collect();
+    if audiences.is_empty() {
+        repo.cancel().await?;
+        return Err(AppError::bad_request(
+            "principal_unknown: no authoritative Principal Server audience is configured",
+        ));
+    }
+    for audience in audiences {
+        repo.principal_did()
+            .add_verified(
+                &mut rng,
+                &*clock,
+                &account,
+                audience,
+                did.clone(),
+                key_log_head.clone(),
+                enrollment_authority_did.clone(),
+                enrollment_authority_ref.clone(),
+            )
+            .await?;
+    }
     let audit_log = repo
         .audit()
         .add_admin_operation(
@@ -287,15 +362,15 @@ pub async fn add_account_did(
             .with_resource_id(account.id),
         )
         .await?;
-    repo.save().await?;
-
     let mut events = events;
     events.push(audit_log);
     let data = apply_did_binding_events(
-        binding_records_for_user(&account, &arkret_config, did_resolver.as_ref()).await?,
+        binding_records_for_user(&mut repo, &account, &arkret_config, did_resolver.as_ref())
+            .await?,
         &events,
         &resolver,
     );
+    repo.save().await?;
 
     Ok(CreatedJson(AccountDidBindingsOutcome {
         data,
@@ -458,7 +533,8 @@ pub async fn remove_account_did(
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
     let events = did_binding_event_logs(&mut repo, id).await?;
     let resolver = resolver_descriptor(&arkret_config, did_resolver.as_ref());
-    let data = binding_records_for_user(&user, &arkret_config, did_resolver.as_ref()).await?;
+    let data =
+        binding_records_for_user(&mut repo, &user, &arkret_config, did_resolver.as_ref()).await?;
     let mut data = apply_did_binding_events(data, &events, &resolver);
     let Some(binding) = data.iter_mut().find(|binding| binding.did == did) else {
         repo.cancel().await?;
@@ -492,6 +568,9 @@ pub async fn remove_account_did(
         .await?;
     let revoked_at = clock.now();
     let mut rng = crate::handlers::account::make_rng();
+    repo.principal_did()
+        .remove_for_user_and_did(&user, &did)
+        .await?;
     repo.audit()
         .add_admin_operation(
             &mut rng,
@@ -589,11 +668,12 @@ async fn enforce_did_binding_rate_limit(
 }
 
 pub(crate) async fn preview_bindings_for_user(
+    repo: &mut BoxRepository,
     user: &User,
     arkret_config: &ArkretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Vec<AccountDidBindingPreview> {
-    binding_records_for_user(user, arkret_config, did_resolver)
+    binding_records_for_user(repo, user, arkret_config, did_resolver)
         .await
         .unwrap_or_default()
         .into_iter()
@@ -608,13 +688,17 @@ pub(crate) async fn preview_bindings_for_user(
 }
 
 pub(crate) async fn primary_did_for_user(
+    repo: &mut BoxRepository,
     user: &User,
     arkret_config: &ArkretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Result<Option<String>, AppError> {
-    match did_resolver.primary_did_for_user(arkret_config, user).await {
+    match did_resolver
+        .primary_did_for_user(repo, arkret_config, user)
+        .await
+    {
         Ok(did) => Ok(Some(did)),
-        Err(SessionGrantError::DidWebPrincipalNotExplicit) => Ok(None),
+        Err(crate::handlers::arkret::SessionGrantError::PrincipalUnknown) => Ok(None),
         Err(error) => Err(AppError::bad_request(format!(
             "principal_did_policy: {error}"
         ))),
@@ -622,11 +706,13 @@ pub(crate) async fn primary_did_for_user(
 }
 
 async fn binding_records_for_user(
+    repo: &mut BoxRepository,
     user: &User,
     arkret_config: &ArkretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Result<Vec<AccountDidBinding>, AppError> {
-    let Some(primary_did) = primary_did_for_user(user, arkret_config, did_resolver).await? else {
+    let Some(primary_did) = primary_did_for_user(repo, user, arkret_config, did_resolver).await?
+    else {
         return Ok(Vec::new());
     };
     let created_at = Some(user.created_at);

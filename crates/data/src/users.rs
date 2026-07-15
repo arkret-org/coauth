@@ -24,7 +24,6 @@ type UserSqlType = (
     sql_types::Nullable<sql_types::Text>,
     sql_types::Nullable<sql_types::Text>,
     sql_types::Nullable<sql_types::Text>,
-    sql_types::Bool,
     sql_types::Array<sql_types::Text>,
 );
 
@@ -41,7 +40,6 @@ type UserSqlRow = (
     Option<String>,
     Option<String>,
     Option<String>,
-    bool,
     Vec<String>,
 );
 
@@ -73,19 +71,6 @@ pub struct User {
     pub display_name: Option<String>,
     pub avatar_url: Option<String>,
     pub preferred_locale: Option<String>,
-    /// True when this account's primary principal DID is a managed
-    /// `did:webvh:…` minted by `starid` during onboarding (see
-    /// [`crate::services::starid_adapter::StaridRegistry::create_principal_did`]).
-    /// False for accounts that pre-date the starid integration or were
-    /// created when `[arkret.starid]` config was absent. Those accounts only
-    /// use the local `did:web:coauth.invalid:…` derivation when the
-    /// deployment explicitly selects the personal-node `did:web` principal
-    /// method; other profiles must load a persisted `did:webvh` row.
-    ///
-    /// Backfill: migration `20260510000200_account_starid_backend_marker`
-    /// adds this column with `DEFAULT FALSE`; the resolver policy decides
-    /// whether the local derivation may be used.
-    pub starid_backend: bool,
     /// Interop alias handles for this user (e.g. `acct:<local>@<host>`).
     ///
     /// Spec 7157ee8 §3.1 — the canonical Arkret handle form is
@@ -174,7 +159,6 @@ impl Queryable<UserSqlType, Pg> for User {
             display_name,
             avatar_url,
             preferred_locale,
-            starid_backend,
             handle_aliases,
         ) = row;
         let id = Ulid::from(id);
@@ -199,7 +183,6 @@ impl Queryable<UserSqlType, Pg> for User {
             display_name,
             avatar_url,
             preferred_locale,
-            starid_backend,
             handle_aliases,
         })
     }
@@ -306,7 +289,6 @@ impl User {
             display_name: Some("John".to_owned()),
             avatar_url: None,
             preferred_locale: Some("en".to_owned()),
-            starid_backend: false,
             handle_aliases: Vec::new(),
         }]
     }
@@ -704,37 +686,23 @@ pub struct UserTotpConfig {
     pub created_at: DateTime<Utc>,
 }
 
-/// Per-user `did:webvh` update-key material minted against an embedded
-/// principal-server provider (e.g. soland's
-/// soland private WebVH registration endpoint).
+/// Verified binding between a coauth service account and a principal DID.
 ///
-/// `update_secret_b64` is the **encrypted** ed25519 seed for the update
-/// key — encryption is the caller's responsibility (use
-/// `coauth_keystore::Encrypter::encrypt_to_string`); this struct stores
-/// it as opaque base64 to keep the data layer agnostic to the key
-/// schedule.
+/// Coauth stores no principal root, recovery, or update private material.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct PrincipalDidUpdateKey {
+pub struct PrincipalDidBinding {
     pub id: Ulid,
     pub user_id: Ulid,
-    /// Audience string of the principal server this DID was minted for
-    /// (matches `PrincipalServerConfig::audience` / session-grant `aud`).
+    /// Audience string of the principal server that verified the submitted DID.
     pub audience: String,
-    /// The minted DID, e.g.
-    /// `did:webvh:zQm…:local.host%3A8080:webvh:01krmccd…`.
-    pub did: String,
-    /// Multibase ed25519 public key recorded in the DID document's
-    /// `verificationMethod[0]` — kept for cheap reads (e.g. introspection).
-    pub did_public_key_multibase: String,
-    /// Multibase ed25519 public key recorded in
-    /// `parameters.updateKeys[0]` of the DID's webvh log.
-    pub update_public_key_multibase: String,
-    /// Encrypted ed25519 seed for the update key — base64 wrapper around
-    /// `Encrypter::encrypt_to_string` output. Never log or expose.
-    pub update_secret_b64: String,
-    /// `versionId` of the latest log entry coauth has authored. Set to
-    /// `Some(version_id)` after the inception entry is accepted.
-    pub key_log_head: Option<String>,
+    /// Principal DID supplied by the client and verified by the authoritative host.
+    pub principal_id: String,
+    /// Verified DID history head returned by the authoritative host.
+    pub key_log_head: arkret_core::Hash,
+    /// Enrollment authority DID verified in the authoritative DID document.
+    pub enrollment_authority_did: arkret_core::Did,
+    /// Entry-0 delegation reference designating coauth's enrollment authority.
+    pub enrollment_authority_ref: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

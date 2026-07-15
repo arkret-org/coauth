@@ -1343,17 +1343,6 @@
             }
           ]
         },
-        "starid": {
-          "description": "`starid` registry endpoint used by onboarding / recovery strands to\nmint and verify managed `did:webvh` identifiers for principals.\nWhen omitted, coauth cannot mint default `did:webvh` principal DIDs.\nThe local `did:web` derivation is only allowed when the deployment\nexplicitly selects the personal-node exception.",
-          "anyOf": [
-            {
-              "$ref": "#/definitions/StaridConfig"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
         "service_id": {
           "description": "Explicit service DID for the coauth deployment.\n\nRequired: startup validation fails fast when omitted — there is no\nhost-derived `did:web` fallback. Deployments MUST configure a\n`did:webvh` service DID; the only `did:web` exception is the explicit\npersonal-node no-history profile selected by\n`deployment_profile=personal_node` and `principal_method=did:web`.",
           "type": [
@@ -1398,7 +1387,7 @@
           "default": 2
         },
         "trust_domain": {
-          "description": "Round R2/R3 (2026-05-20) — deployment trust-domain identifier\ninjected into Realm policy and the server-describe document.\n\nWire form: `ak:trust_domain:<scope>` where `<scope>` matches\n`[a-z0-9._:-]{1,128}`. This value enters the canonical transcript\nof every `ak.cross_signing.reset` proof; **changing\n`trust_domain` invalidates existing cross-signing reset proofs**\n— see the README \"Trust domain rotation\" note.\n\nWhen omitted, callers expected to honour cross-deployment replay\nprotection (`Realm` policy, principal-server describe) MUST be\ntold the trust domain is unset and fail closed.\n\nTypically injected into `soland` via its config API on first\nboot; see `services::onboarding_starid` for the call site.",
+          "description": "Round R2/R3 (2026-05-20) — deployment trust-domain identifier\ninjected into Realm policy and the server-describe document.\n\nWire form: `ak:trust_domain:<scope>` where `<scope>` matches\n`[a-z0-9._:-]{1,128}`. This value enters the canonical transcript\nof every `ak.cross_signing.reset` proof; **changing\n`trust_domain` invalidates existing cross-signing reset proofs**\n— see the README \"Trust domain rotation\" note.\n\nWhen omitted, callers expected to honour cross-deployment replay\nprotection (`Realm` policy, principal-server describe) MUST be\ntold the trust domain is unset and fail closed.",
           "type": [
             "string",
             "null"
@@ -1575,39 +1564,6 @@
           "type": "string",
           "const": "external"
         }
-      ]
-    },
-    "StaridConfig": {
-      "description": "`starid` registry endpoint configuration.\n\nThe principal-server (coauth) calls into starid during onboarding and\nrecovery to mint a managed `did:webvh` for the principal and to\nverify control-proofs on subsequent privileged operations. The\nadapter implementation lives in\n[`crate::services::starid_adapter::StaridResolver`].",
-      "type": "object",
-      "properties": {
-        "base_url": {
-          "description": "Base URL of the starid deployment, for example\n`https://starid.example.com`. Path segments are ignored — the\nadapter joins `/_starid/root/webvh/...` itself.",
-          "type": "string",
-          "format": "uri"
-        },
-        "did_host": {
-          "description": "`host` value passed to starid's `POST /_starid/root/webvh/dids`.\nDefaults to the host of `base_url` when omitted. Override when\nstarid is fronted by a different public-facing hostname than the URL\ncoauth reaches it on.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "path_prefix": {
-          "description": "Path prefix for minted principal DIDs (e.g. `accounts`). The\nadapter appends the account's stable id, so the final path is\n`<path_prefix>/<account_id>`.",
-          "type": "string",
-          "default": "accounts"
-        },
-        "admin_token": {
-          "description": "Optional bearer token for starid's admin endpoints. When set,\nthe adapter prefers `POST /_starid/local/admin/dids` over the public\n`POST /_starid/root/webvh/dids` — both produce the same DID but the\nadmin route bypasses public-rate-limits.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "base_url"
       ]
     },
     "OobCodeKindConfig": {
