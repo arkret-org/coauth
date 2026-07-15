@@ -27,8 +27,6 @@ const DEV_SERVICE_ID: &str =
     "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:auth.local.host:webvh:service";
 const DEV_SOLAND_URL: &str = "https://local.host/";
 const DEV_SOLAND_IDENTITY_RESOLVER_URL: &str = "https://local.host/_arkret/root/identity/resolve";
-const DEV_SOLAND_SERVICE_ID: &str =
-    "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service";
 const DEV_SOLAND_SESSION_GRANT_BEARER: &str = "local-coauth-session-grant-introspection";
 const DEV_SOLAND_WEBVH_REGISTRATION_BEARER: &str = "local-soland-webvh-registration";
 
@@ -275,9 +273,9 @@ fn apply_generated_config_options(
             Some(DEV_SOLAND_URL.parse().expect("valid dev soland URL"));
         config.arkret.principal_servers = vec![PrincipalServerConfig {
             name: "soland-dev".to_owned(),
-            audience: Some(DEV_SOLAND_SERVICE_ID.to_owned()),
+            audience: None,
             endpoint: DEV_SOLAND_URL.parse().expect("valid dev soland URL"),
-            did: Some(DEV_SOLAND_SERVICE_ID.to_owned()),
+            did: None,
             session_grant_introspection_bearer: Some(DEV_SOLAND_SESSION_GRANT_BEARER.to_owned()),
             embedded_webvh_registration_bearer: Some(
                 DEV_SOLAND_WEBVH_REGISTRATION_BEARER.to_owned(),
@@ -710,6 +708,19 @@ mod tests {
 
         apply_generated_config_options(&mut config, &options)
             .expect("dev config options should apply");
+
+        let principal_server = config
+            .arkret
+            .principal_servers
+            .first()
+            .expect("dev config should include Soland");
+        assert_eq!(principal_server.endpoint.as_str(), DEV_SOLAND_URL);
+        assert_eq!(principal_server.audience, None);
+        assert_eq!(principal_server.did, None);
+        let serialized = serde_json::to_value(&config).expect("dev config should serialize");
+        let serialized_server = &serialized["arkret"]["principal_servers"][0];
+        assert!(serialized_server.get("audience").is_none());
+        assert!(serialized_server.get("did").is_none());
 
         let registry = config
             .arkret

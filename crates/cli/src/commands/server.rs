@@ -302,7 +302,8 @@ impl Options {
                 s.http_client.clone(),
                 s.arkret_config.clone(),
                 coauth_backend::services::resolved_principal_audiences::DEFAULT_REFRESH_INTERVAL,
-            );
+            )
+            .await;
             s
         };
 

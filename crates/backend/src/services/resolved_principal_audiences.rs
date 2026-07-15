@@ -96,16 +96,17 @@ impl ResolvedPrincipalAudiences {
     /// `interval` (clamped into `[MIN, MAX]`). Probe failures keep the last
     /// known value and log a warning — fail-open to the previously resolved
     /// audience rather than dropping it.
-    pub fn warm_up_and_spawn(
+    pub async fn warm_up_and_spawn(
         &self,
         http_client: reqwest::Client,
         arkret_config: ArkretConfig,
         interval: Duration,
     ) {
         let interval = interval.clamp(MIN_REFRESH_INTERVAL, MAX_REFRESH_INTERVAL);
+        self.refresh_all(&http_client, &arkret_config).await;
+
         let this = self.clone();
         tokio::spawn(async move {
-            this.refresh_all(&http_client, &arkret_config).await;
             loop {
                 tokio::time::sleep(interval).await;
                 this.refresh_all(&http_client, &arkret_config).await;
