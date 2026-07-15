@@ -264,17 +264,20 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
             .filter(|value| !value.is_empty())
         {
             for server in &arkret_config.principal_servers {
-                let effective = effective_audience(server, resolved);
-                let matches = effective.as_deref() == Some(requested_audience)
+                let Some(effective) = effective_audience(server, resolved) else {
+                    continue;
+                };
+                let matches = effective == requested_audience
                     || principal_endpoint_matches_audience(&server.endpoint, requested_audience);
                 if matches {
                     return Ok(UpstreamOidcSessionGrantTarget {
                         // Prefer the resolved/pinned service DID so the grant is
                         // stamped with the Principal Server's CURRENT audience —
-                        // soland verifies `aud == its live service_id`. Fall back
-                        // to the requested value only for the legacy
-                        // endpoint-URL-as-audience match with no resolved value.
-                        audience: effective.unwrap_or_else(|| requested_audience.to_owned()),
+                        // soland verifies `aud == its live service_id`. The
+                        // endpoint URL remains a legacy request alias only while
+                        // an authoritative audience is available; an unresolved
+                        // or expired dynamic audience fails closed.
+                        audience: effective,
                         principal_server_name: Some(server.name.clone()),
                         principal_server_endpoint: Some(server.endpoint.to_string()),
                     });
@@ -556,4 +559,68 @@ async fn fetch_oidc_userinfo(
 #[must_use]
 pub fn default_upstream_oidc_service() -> UpstreamOidcServiceHandle {
     Arc::new(DefaultUpstreamOidcService)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use coauth_config::PrincipalServerConfig;
+
+    use super::*;
+
+    fn principal_server_config() -> (ArkretConfig, Url) {
+        let endpoint = Url::parse("https://soland.example/").unwrap();
+        let config = ArkretConfig {
+            principal_servers: vec![PrincipalServerConfig {
+                name: "soland".to_owned(),
+                audience: None,
+                endpoint: endpoint.clone(),
+                did: None,
+                session_grant_introspection_bearer: None,
+                embedded_webvh_registration_bearer: None,
+            }],
+            ..ArkretConfig::default()
+        };
+        (config, endpoint)
+    }
+
+    #[test]
+    fn endpoint_alias_uses_a_fresh_authoritative_audience() {
+        let (config, endpoint) = principal_server_config();
+        let resolved = ResolvedPrincipalAudiences::new();
+        resolved.insert_for_test(&endpoint, "did:webvh:current:soland.example:webvh:service");
+        let url_builder = UrlBuilder::new("https://auth.example/".parse().unwrap(), None, None);
+
+        let target = DefaultUpstreamOidcService
+            .session_grant_target_for_requested_audience(
+                &url_builder,
+                &config,
+                &resolved,
+                Some("https://soland.example/api"),
+            )
+            .unwrap();
+
+        assert_eq!(
+            target.audience,
+            "did:webvh:current:soland.example:webvh:service"
+        );
+    }
+
+    #[test]
+    fn endpoint_alias_fails_closed_when_dynamic_audience_is_expired() {
+        let (config, endpoint) = principal_server_config();
+        let resolved = ResolvedPrincipalAudiences::with_max_trusted_age_for_test(Duration::ZERO);
+        resolved.insert_for_test(&endpoint, "did:webvh:stale:soland.example:webvh:service");
+        let url_builder = UrlBuilder::new("https://auth.example/".parse().unwrap(), None, None);
+
+        let result = DefaultUpstreamOidcService.session_grant_target_for_requested_audience(
+            &url_builder,
+            &config,
+            &resolved,
+            Some("https://soland.example/api"),
+        );
+
+        assert!(result.is_err());
+    }
 }

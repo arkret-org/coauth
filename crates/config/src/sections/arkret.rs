@@ -535,6 +535,15 @@ impl ConfigurationSection for ArkretConfig {
             return Err(std::io::Error::other("arkret.admin_org_id must not be empty").into());
         }
 
+        for (index, server) in self.principal_servers.iter().enumerate() {
+            if server.audience.is_some() && server.normalized_audience().is_none() {
+                return Err(std::io::Error::other(format!(
+                    "arkret.principal_servers[{index}].audience must not be empty or whitespace"
+                ))
+                .into());
+            }
+        }
+
         // Fail closed: `password_login_session_grants_enabled` activates the
         // P0 password-bootstrap scaffold (auth.rs), which mints a
         // principal-server session grant directly from a password login,
@@ -604,6 +613,19 @@ pub struct PrincipalServerConfig {
     /// `did:webvh` registration records into this Principal Server.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub embedded_webvh_registration_bearer: Option<String>,
+}
+
+impl PrincipalServerConfig {
+    /// Explicit audience after applying the configuration's canonical
+    /// whitespace normalization. An empty or all-whitespace value is not an
+    /// explicit pin and is rejected by [`ArkretConfig::validate`].
+    #[must_use]
+    pub fn normalized_audience(&self) -> Option<&str> {
+        self.audience
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
 }
 
 /// External identity-registry resolver configuration.
@@ -834,5 +856,39 @@ mod tests {
             ..ArkretConfig::default()
         };
         assert!(config.validate(&figment).is_err());
+    }
+
+    #[test]
+    fn principal_server_audience_normalizes_non_empty_values() {
+        let server = PrincipalServerConfig {
+            name: "soland".to_owned(),
+            audience: Some("  did:webvh:scid:soland.example:webvh:service  ".to_owned()),
+            endpoint: Url::parse("https://soland.example").unwrap(),
+            did: None,
+            session_grant_introspection_bearer: None,
+            embedded_webvh_registration_bearer: None,
+        };
+
+        assert_eq!(
+            server.normalized_audience(),
+            Some("did:webvh:scid:soland.example:webvh:service")
+        );
+    }
+
+    #[test]
+    fn principal_server_audience_rejects_empty_and_whitespace_values() {
+        for audience in ["", " \t\r\n "] {
+            let mut config = valid_service_config();
+            config.principal_servers.push(PrincipalServerConfig {
+                name: "soland".to_owned(),
+                audience: Some(audience.to_owned()),
+                endpoint: Url::parse("https://soland.example").unwrap(),
+                did: None,
+                session_grant_introspection_bearer: None,
+                embedded_webvh_registration_bearer: None,
+            });
+
+            assert!(config.validate(&figment::Figment::new()).is_err());
+        }
     }
 }
