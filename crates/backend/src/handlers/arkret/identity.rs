@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
 use arkret_core::Did;
@@ -7,13 +7,11 @@ use arkret_core::http::{
     DirectoryDescribeOutcome, IdentityDescribeOutcome, IdentityDocumentViewOutcome,
 };
 use arkret_core::models::{
-    DidDocumentRef, DirectoryDescription, DirectoryHandleResolutionOutcome,
-    DirectoryResolveHandleRequestBody, IdentityDescription, IdentityDocumentView,
-    IdentityResolveOutcome, IdentityResolveRequestBody,
+    DirectoryHandleResolutionOutcome, DirectoryResolveHandleRequestBody, IdentityDescription,
+    IdentityDocumentView, IdentityResolveOutcome, IdentityResolveRequestBody, ServiceDescribe,
 };
 use coauth_data::RepositoryAccess;
 use salvo::prelude::*;
-use serde_json::json;
 
 use super::*;
 use crate::handlers::RequesterFingerprint;
@@ -76,11 +74,10 @@ pub async fn identity_resolve(
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(IdentityResolveOutcome {
-        did_document: did_document_ref(resolution.document)?,
+        did_document: did_document_object(resolution.document)?,
         key_log_head: None,
         seq: None,
         receipts: Vec::new(),
-        method_evidence: resolution.method_evidence,
     }))
 }
 
@@ -117,7 +114,7 @@ pub async fn identity_document(
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(IdentityDocumentViewOutcome(IdentityDocumentView {
-        did_document: did_document_ref(resolution.document)?,
+        did_document: did_document_object(resolution.document)?,
         head_event_digest: None,
         seq: None,
         receipts: Vec::new(),
@@ -143,7 +140,7 @@ pub async fn directory_describe(
         "directory.resolve".to_owned(),
         "directory.handle_lookup".to_owned(),
     ];
-    let description = DirectoryDescription {
+    let description = ServiceDescribe {
         service_id,
         trust_domain,
         service_type: "directory_service".to_owned(),
@@ -197,7 +194,7 @@ pub async fn directory_describe(
             "did:key".to_owned(),
         ],
         takedown_contact: None,
-        rate_limits: Some(json!({})),
+        rate_limits: Some(BTreeMap::new()),
         supported_reducer_profiles: Vec::new(),
         supported_schema_profiles: Vec::new(),
         frontier: Vec::new(),
@@ -327,7 +324,7 @@ pub async fn directory_resolve_handle(
         did: parse_did_field("did", did)?,
         handle: canonical_handle,
         verified,
-        claims: json!([claim_material.payload.clone()]),
+        claims: Some(vec![claim_material.payload.clone()]),
         audience: Some(handle_claim_audience),
         member_delivery_binding: claim_material.payload.member_delivery_binding.clone(),
         handle_claim: Some(claim_material.payload),
@@ -460,9 +457,13 @@ fn parse_did_field(field: &str, value: String) -> Result<Did, ArkretRouteError> 
         .map_err(|error| ArkretRouteError::BadRequest(format!("invalid {field}: {error}")))
 }
 
-fn did_document_ref(document: DidDocument) -> Result<DidDocumentRef, ArkretRouteError> {
-    let did = parse_did_field("did_document.id", document.id.clone())?;
-    let document = serde_json::to_value(document)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    Ok(DidDocumentRef { did, document })
+fn did_document_object(
+    document: DidDocument,
+) -> Result<BTreeMap<String, serde_json::Value>, ArkretRouteError> {
+    parse_did_field("did_document.id", document.id.clone())?;
+    serde_json::from_value(
+        serde_json::to_value(document)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+    )
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
 }

@@ -38,10 +38,10 @@ use salvo::prelude::*;
 
 use super::{ArkretRouteError, SessionGrantPayload};
 use crate::handlers::common::DepotExt;
+use crate::services::device_enrollment_authority::enrollment_authority;
 use crate::services::resolved_principal_audiences::{
     self, ResolvedPrincipalAudiences, effective_audience,
 };
-use crate::services::device_enrollment_authority::enrollment_authority;
 
 const DEVICE_AUTHORIZE_KIND: &str = "ak.device.authorize";
 const ENROLLMENT_AUTHORITY_SERVICE_FRAGMENT: &str = "#enrollment-authority";
@@ -430,6 +430,11 @@ pub async fn device_enroll_endpoint(
     let content = serde_json::to_value(&payload).map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "failed to serialize device-enroll payload: {error}"
+        )))
+    })?;
+    let content = serde_json::from_value(content).map_err(|error| {
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "device-enroll payload must serialize as an object: {error}"
         )))
     })?;
 

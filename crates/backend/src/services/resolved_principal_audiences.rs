@@ -172,20 +172,17 @@ fn endpoint_key(endpoint: &Url) -> String {
     endpoint.as_str().trim_end_matches('/').to_owned()
 }
 
-async fn fetch_service_id(
-    http_client: &reqwest::Client,
-    endpoint: &Url,
-) -> Result<String, String> {
+async fn fetch_service_id(http_client: &reqwest::Client, endpoint: &Url) -> Result<String, String> {
     let describe_url = endpoint
         .join(DESCRIBE_PATH)
         .map_err(|error| format!("invalid principal-server endpoint: {error}"))?;
 
-    let response = outbound_http::send_with_policy(
-        outbound_http::soland_policy("principal_describe"),
-        || http_client.get(describe_url.clone()),
-    )
-    .await
-    .map_err(|error| format!("transport error: {error}"))?;
+    let response =
+        outbound_http::send_with_policy(outbound_http::soland_policy("principal_describe"), || {
+            http_client.get(describe_url.clone())
+        })
+        .await
+        .map_err(|error| format!("transport error: {error}"))?;
 
     let status = response.status();
     let text = response.text().await.unwrap_or_default();
@@ -196,11 +193,11 @@ async fn fetch_service_id(
         ));
     }
 
-    // `/_arkret/describe` returns `ServerDescribeOutcome(ServerDescription)`,
+    // `/_arkret/describe` returns `ServerDescribeOutcome(ServiceDescribe)`,
     // a transparent newtype, so the wire body deserializes straight into
-    // `ServerDescription`.
-    let description: arkret_core::ServerDescription = serde_json::from_str(&text)
-        .map_err(|error| format!("invalid describe body: {error}"))?;
+    // `ServiceDescribe`.
+    let description: arkret_core::ServiceDescribe =
+        serde_json::from_str(&text).map_err(|error| format!("invalid describe body: {error}"))?;
 
     let service_id = description.service_id.as_str().trim().to_owned();
     if service_id.is_empty() {
@@ -228,7 +225,10 @@ mod tests {
     fn explicit_audience_wins_and_ignores_resolved() {
         let resolved = ResolvedPrincipalAudiences::new();
         let endpoint = "https://local.host/";
-        resolved.insert_for_test(&Url::parse(endpoint).unwrap(), "did:webvh:new:local.host:webvh:service");
+        resolved.insert_for_test(
+            &Url::parse(endpoint).unwrap(),
+            "did:webvh:new:local.host:webvh:service",
+        );
         let server = server(Some("did:webvh:pinned:local.host:webvh:service"), endpoint);
         assert_eq!(
             effective_audience(&server, &resolved).as_deref(),
@@ -240,7 +240,10 @@ mod tests {
     fn unpinned_uses_resolved_value() {
         let resolved = ResolvedPrincipalAudiences::new();
         let endpoint = "https://local.host/";
-        resolved.insert_for_test(&Url::parse(endpoint).unwrap(), "did:webvh:current:local.host:webvh:service");
+        resolved.insert_for_test(
+            &Url::parse(endpoint).unwrap(),
+            "did:webvh:current:local.host:webvh:service",
+        );
         let server = server(None, endpoint);
         assert_eq!(
             effective_audience(&server, &resolved).as_deref(),

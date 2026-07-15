@@ -358,7 +358,8 @@ fn match_rules_with_grants(
         && action_str.starts_with("ak.actor.profile.")
         && request
             .event_preview
-            .get("accountable_principal_ids_unverified")
+            .as_ref()
+            .and_then(|preview| preview.get("accountable_principal_ids_unverified"))
             .and_then(Value::as_bool)
             .unwrap_or(false)
     {
@@ -381,7 +382,8 @@ fn match_rules_with_grants(
 
     let circle_scope: Option<&Value> = request
         .auth_context
-        .get("circle_id")
+        .as_ref()
+        .and_then(|context| context.get("circle_id"))
         .and_then(Value::as_str)
         .filter(|c| is_circle_selector(c))
         .and_then(|c| realm_scope.get("circles").and_then(|m| m.get(c)));

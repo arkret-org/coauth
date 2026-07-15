@@ -2,7 +2,7 @@ use arkret_core::error::ERROR_CODE_SCHEMA_VIOLATION;
 use arkret_core::{
     DeviceId, SessionGrantIntrospectGrant, SessionGrantIntrospectOutcome,
     SessionGrantIntrospectRequestBody, SessionGrantIntrospectStatus,
-    SessionGrantIntrospectionProof,
+    SessionGrantIntrospectionProof, SessionGrantScopeDetails,
 };
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::{BrowserSession, SessionGrant, User};
@@ -44,9 +44,16 @@ fn introspection_grant_record(
         .unwrap_or_else(|| format!("ak:session-grant:{}", grant.grant_id));
     let scope_details = parsed_payload
         .as_ref()
-        .map_or(serde_json::Value::Null, |payload| {
-            payload.scope_details.clone()
-        });
+        .filter(|payload| !payload.scope_details.is_null())
+        .map(|payload| {
+            serde_json::from_value::<SessionGrantScopeDetails>(payload.scope_details.clone())
+        })
+        .transpose()
+        .map_err(|error| {
+            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                "stored session grant scope_details is invalid: {error}"
+            )))
+        })?;
 
     let device_id = grant
         .device_id
