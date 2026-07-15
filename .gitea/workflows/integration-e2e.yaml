@@ -43,7 +43,7 @@ jobs:
 
     steps:
       - name: Fetch repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install jq + curl
         run: |
@@ -90,7 +90,7 @@ jobs:
 
       - name: Upload integration diagnostic logs
         if: ${{ failure() }}
-        uses: christopherhx/gitea-upload-artifact@v4
+        uses: christopherhx/gitea-upload-artifact@81f940d004763f986ba3582c007fd842dd5cb0d7 # v4 branch
         with:
           name: integration-e2e-logs
           path: target/integration-logs/
@@ -99,4 +99,3 @@ jobs:
       - name: Tear down integration stack
         if: ${{ always() }}
         run: bash scripts/integration-up.sh --down
-

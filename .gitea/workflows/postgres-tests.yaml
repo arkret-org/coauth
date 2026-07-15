@@ -70,7 +70,7 @@ jobs:
 
     steps:
       - name: Fetch repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Check out Arkret Rust SDK
         env:
@@ -80,10 +80,12 @@ jobs:
         run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
 
       - name: Set up stable Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: stable
 
       - name: Restore Cargo dependency cache
-        uses: actions/cache@v3
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
         with:
           path: |
             ~/.cargo/registry/index/
@@ -95,7 +97,7 @@ jobs:
             gitea-cargo-stable-v1-${{ runner.os }}-
 
       - name: Restore Postgres target cache
-        uses: actions/cache@v3
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
         with:
           path: target/
           key: gitea-target-postgres-stable-v1-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}

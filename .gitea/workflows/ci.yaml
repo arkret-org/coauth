@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: Fetch repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Check out Arkret Rust SDK
         env:
@@ -43,8 +43,9 @@ jobs:
         run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
 
       - name: Set up nightly Rust for rustfmt
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
+          toolchain: nightly
           components: rustfmt
 
       - name: Verify formatting
@@ -59,7 +60,7 @@ jobs:
 
     steps:
       - name: Fetch repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Check out Arkret Rust SDK
         env:
@@ -69,12 +70,13 @@ jobs:
         run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
 
       - name: Set up Rust with Clippy
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
+          toolchain: stable
           components: clippy
 
       - name: Restore Cargo dependency cache
-        uses: actions/cache@v3
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
         with:
           path: |
             ~/.cargo/registry/index/
@@ -86,7 +88,7 @@ jobs:
             gitea-cargo-stable-v1-${{ runner.os }}-
 
       - name: Restore Clippy target cache
-        uses: actions/cache@v3
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
         with:
           path: target/
           key: gitea-target-clippy-stable-v1-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
@@ -105,10 +107,12 @@ jobs:
 
     steps:
       - name: Fetch repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up stable Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: stable
 
       - name: Install typos-cli
         run: cargo install typos-cli --locked
@@ -128,7 +132,7 @@ jobs:
 
     steps:
       - name: Fetch repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Check out Arkret Rust SDK
         env:
@@ -138,7 +142,7 @@ jobs:
         run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
 
       - name: Audit with cargo-deny
-        uses: EmbarkStudios/cargo-deny-action@v2.0.14
+        uses: EmbarkStudios/cargo-deny-action@76cd80eb775d7bbbd2d80292136d74d39e1b4918 # v2.0.14
         with:
           rust-version: stable
 
@@ -151,7 +155,7 @@ jobs:
 
     steps:
       - name: Fetch repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Check out Arkret Rust SDK
         env:
@@ -161,10 +165,12 @@ jobs:
         run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
 
       - name: Set up stable Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: stable
 
       - name: Restore Cargo dependency cache
-        uses: actions/cache@v3
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
         with:
           path: |
             ~/.cargo/registry/index/
@@ -176,7 +182,7 @@ jobs:
             gitea-cargo-stable-v1-${{ runner.os }}-
 
       - name: Restore nextest target cache
-        uses: actions/cache@v3
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
         with:
           path: target/
           key: gitea-target-nextest-stable-v1-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
@@ -184,7 +190,7 @@ jobs:
             gitea-target-nextest-stable-v1-${{ runner.os }}-
 
       - name: Set up nextest
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
         with:
           tool: cargo-nextest
 
@@ -192,7 +198,7 @@ jobs:
         run: cargo nextest archive --workspace --archive-file nextest-archive.tar.zst
 
       - name: Upload nextest archive
-        uses: christopherhx/gitea-upload-artifact@v4
+        uses: christopherhx/gitea-upload-artifact@81f940d004763f986ba3582c007fd842dd5cb0d7 # v4 branch
         with:
           name: nextest-archive
           path: nextest-archive.tar.zst
@@ -228,18 +234,20 @@ jobs:
 
     steps:
       - name: Fetch repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up stable Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: stable
 
       - name: Set up nextest
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
         with:
           tool: cargo-nextest
 
       - name: Download nextest archive
-        uses: christopherhx/gitea-download-artifact@v4
+        uses: christopherhx/gitea-download-artifact@75635f32b4c1c41c4b3d64e8f85210112ed4c9c7 # v4 branch
         with:
           name: nextest-archive
           path: .
@@ -266,6 +274,6 @@ jobs:
       - test
 
     steps:
-      - uses: matrix-org/done-action@v3
+      - uses: matrix-org/done-action@3409aa904e8a2aaf2220f09bc954d3d0b0a2ee67 # v3
         with:
           needs: ${{ toJSON(needs) }}
