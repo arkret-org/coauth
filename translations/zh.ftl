@@ -113,6 +113,7 @@ coauth-errors-email-banned = 由于服务器策略，邮件已被禁止
 coauth-errors-email-domain-banned = 由于服务器策略，邮件所属的域已被禁止
 coauth-errors-email-domain-not-allowed = 由于服务器策略，邮件域不被允许
 coauth-errors-email-not-allowed = 由于服务器策略，邮件不被允许
+coauth-errors-display-name-invalid = 显示名称不能为空或过长
 coauth-errors-field-required = 此字段为必填项
 coauth-errors-invalid-credentials = 无效的凭据
 coauth-errors-account-deactivated = 此账户已停用。

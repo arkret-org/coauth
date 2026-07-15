@@ -520,6 +520,9 @@ fn mask_email_address(email: &str) -> String {
 fn registration_error_message(code: &str) -> String {
     match code {
         "invalid_code" => "Incorrect code. Please try again.".to_owned(),
+        "invalid_display_name" => {
+            crate::translations::t("coauth-errors-display-name-invalid")
+        }
         "rate_limited" => "Please wait a moment and try again.".to_owned(),
         "registration_already_completed" => {
             "This registration has already been completed.".to_owned()
@@ -705,8 +708,8 @@ pub fn RegisterDisplayName(id: String) -> Element {
         Layout {
             div { class: "login-page",
                 div { class: "login-container",
-                    h1 { class: "heading-md login-title", "Choose a display name" }
-                    p { class: "text-secondary", "This is how others will see you. You can change it later." }
+                    h1 { class: "heading-md login-title", {crate::translations::t("coauth-choose-display-name-headline")} }
+                    p { class: "text-secondary", {crate::translations::t("coauth-choose-display-name-description")} }
 
                     if let Some(ref err) = *error.read() {
                         FormError { message: err.clone() }
@@ -733,7 +736,14 @@ pub fn RegisterDisplayName(id: String) -> Element {
                                         nav.push(Route::RegisterFinish { id: rid });
                                     }
                                     Ok(resp) => {
-                                        error.set(Some(resp.error.unwrap_or_else(|| "Failed.".to_owned())));
+                                        error.set(Some(
+                                            resp.error
+                                                .as_deref()
+                                                .map_or_else(
+                                                    || crate::translations::t("error-unexpected"),
+                                                    registration_error_message,
+                                                ),
+                                        ));
                                     }
                                     Err(e) => error.set(Some(e)),
                                 }
@@ -741,11 +751,14 @@ pub fn RegisterDisplayName(id: String) -> Element {
                         },
 
                         div { class: "form-field",
-                            label { class: "form-label", "Display name" }
+                            label { class: "form-label", {crate::translations::t("common-display-name")} }
                             input {
                                 class: "form-input",
                                 r#type: "text",
-                                placeholder: "Your name",
+                                autocomplete: "name",
+                                required: true,
+                                maxlength: 255,
+                                placeholder: crate::translations::t("common-display-name"),
                                 value: "{display_name}",
                                 oninput: move |e| display_name.set(e.value()),
                             }
@@ -758,7 +771,7 @@ pub fn RegisterDisplayName(id: String) -> Element {
                             if submitting() {
                                 LoadingSpinner { inline: true }
                             }
-                            "Continue"
+                            {crate::translations::t("action-continue")}
                         }
 
                         button {
@@ -782,7 +795,7 @@ pub fn RegisterDisplayName(id: String) -> Element {
                                     }
                                 });
                             },
-                            "Skip"
+                            {crate::translations::t("action-skip")}
                         }
                     }
                 }

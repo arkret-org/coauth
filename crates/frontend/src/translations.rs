@@ -132,4 +132,33 @@ mod tests {
             Some("Sign in")
         );
     }
+
+    #[test]
+    fn translates_display_name_registration_step() {
+        let expected = [
+            (
+                "coauth-choose-display-name-headline",
+                "Choose your display name",
+                "选择显示名称",
+            ),
+            (
+                "coauth-choose-display-name-description",
+                "This is the name other people will see. You can change this at any time.",
+                "这是能被其他人看到的名称，你可以随时更改。",
+            ),
+            ("common-display-name", "Display Name", "显示名称"),
+            ("action-continue", "Continue", "继续"),
+            ("action-skip", "Skip", "跳过"),
+            (
+                "coauth-errors-display-name-invalid",
+                "Display name cannot be empty or too long",
+                "显示名称不能为空或过长",
+            ),
+        ];
+
+        for (key, en, zh) in expected {
+            assert_eq!(format_for_locale("en", key, None).as_deref(), Some(en));
+            assert_eq!(format_for_locale("zh-CN", key, None).as_deref(), Some(zh));
+        }
+    }
 }

@@ -135,6 +135,7 @@ coauth-errors-email-banned = Email is banned by the server policy
 coauth-errors-email-domain-banned = Email domain is banned by the server policy
 coauth-errors-email-domain-not-allowed = Email domain is not allowed by the server policy
 coauth-errors-email-not-allowed = Email is not allowed by the server policy
+coauth-errors-display-name-invalid = Display name cannot be empty or too long
 coauth-errors-field-required = This field is required
 coauth-errors-invalid-credentials = Invalid credentials
 coauth-errors-account-deactivated = This account has been deactivated.
