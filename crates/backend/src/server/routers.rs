@@ -324,19 +324,26 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                         .post(register::post_register)
                         .push(
                             Router::with_path("webvh")
-                                .push(Router::with_path("start").post(register::post_webvh_start))
+                                .push(
+                                    Router::with_path("start")
+                                        .options(oidc_preflight_handler)
+                                        .post(register::post_webvh_start),
+                                )
                                 .push(
                                     Router::with_path("{id}")
                                         .push(
                                             Router::with_path("email")
+                                                .options(oidc_preflight_handler)
                                                 .post(register::post_webvh_email),
                                         )
                                         .push(
                                             Router::with_path("verify-email")
+                                                .options(oidc_preflight_handler)
                                                 .post(register::post_webvh_verify_email),
                                         )
                                         .push(
                                             Router::with_path("finish")
+                                                .options(oidc_preflight_handler)
                                                 .post(register::post_webvh_finish),
                                         ),
                                 ),
