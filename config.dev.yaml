@@ -148,6 +148,7 @@ rate_limiting:
       burst: 100000
       per_second: 100000
 arkret:
+  trust_domain: ak:trust_domain:local.host
   principal_servers:
   - name: soland-dev
     endpoint: https://local.host/

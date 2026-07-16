@@ -1,7 +1,7 @@
 //! Canonical account-first handoff, lease, and identity-binding operations.
 use arkret_core::{
     ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffAllowedOperation, AccountHandoffBinding,
-    AccountHandoffOutcome, AccountHandoffRequestBody, IdentityBindingChallengeRequestBody,
+    AccountHandoffOutcome, AccountHandoffRequestBody, Handle, IdentityBindingChallengeRequestBody,
 };
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::Duration;
@@ -13,7 +13,7 @@ use rand_core::RngCore;
 use salvo::prelude::*;
 
 use super::session_grant::map_oidc_exchange_error;
-use super::{ArkretRouteError, DepotExt};
+use super::{ArkretRouteError, DepotExt, trust_domain_for};
 use crate::handlers::account::auth::oidc_bridge::{
     OidcCodeExchangeInput, exchange_oidc_code_for_account_handoff,
 };
@@ -70,6 +70,15 @@ pub async fn create_account_handoff(
         .get_by_request_id(&body.request_id)
         .await?;
     if let Some(existing) = existing {
+        let account_handle = replay_repo
+            .user()
+            .lookup(existing.service_account_id)
+            .await?
+            .ok_or(ArkretRouteError::NotFound)
+            .and_then(|user| {
+                Handle::parse(&user.canonical_handle(url_builder.public_hostname()))
+                    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
+            })?;
         let creation =
             if existing.request_digest == request_digest && existing.cnf_jkt == dpop_binding.jkt {
                 replay_repo
@@ -80,7 +89,7 @@ pub async fn create_account_handoff(
                 AccountHandoffCreation::DuplicateConflict
             };
         replay_repo.cancel().await.ok();
-        return creation_to_outcome(creation).map(Json);
+        return creation_to_outcome(creation, account_handle).map(Json);
     }
     replay_repo.cancel().await.ok();
 
@@ -108,6 +117,12 @@ pub async fn create_account_handoff(
             "authenticated handoff audience does not match the request proof",
         ));
     }
+    let account_handle = Handle::parse(
+        &authenticated
+            .user
+            .canonical_handle(url_builder.public_hostname()),
+    )
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     let mut rng = make_rng();
     let mut repo = depot.repo().await?;
@@ -129,7 +144,7 @@ pub async fn create_account_handoff(
         })
         .await?;
     repo.save().await?;
-    creation_to_outcome(creation).map(Json)
+    creation_to_outcome(creation, account_handle).map(Json)
 }
 
 /// `POST /_arkret/gate/account/identity-binding-challenges`.
@@ -182,11 +197,9 @@ pub async fn issue_identity_binding_challenge(
     }
 
     let arkret_config = depot.arkret_config()?;
-    let trust_domain = arkret_config
-        .trust_domain
-        .as_deref()
-        .ok_or_else(|| failed_precondition("deployment trust_domain is not configured"))?;
-    let trust_domain = arkret_core::TypedTrustDomainId::new(trust_domain.to_owned())
+    let url_builder = depot.url_builder()?;
+    let trust_domain = trust_domain_for(&url_builder, &arkret_config);
+    let trust_domain = arkret_core::TypedTrustDomainId::new(trust_domain)
         .map_err(|error| failed_precondition(error.to_string()))?;
     let audience = arkret_core::Did::new(grant.audience.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
@@ -360,6 +373,7 @@ fn verify_handoff_holder_signature(
 
 fn creation_to_outcome(
     creation: AccountHandoffCreation,
+    account_handle: Handle,
 ) -> Result<AccountHandoffOutcome, ArkretRouteError> {
     let (grant, binding) = match creation {
         AccountHandoffCreation::Active { grant, lease } => (
@@ -396,6 +410,7 @@ fn creation_to_outcome(
     };
     let outcome = AccountHandoffOutcome {
         request_id: grant.request_id,
+        account_handle,
         account_handoff_grant: grant.account_handoff_grant,
         expires_at: grant.expires_at,
         allowed_operations: grant.allowed_operations,
