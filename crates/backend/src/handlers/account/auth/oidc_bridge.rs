@@ -1398,4 +1398,388 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 purpose: "principal_did_resolution".to_owned(),
                 required_contract: "did_method_resolution".to_owned(),
                 discovery_path: "deployment-configured identity_registry.resolver".to_owned(),
+                mode: "remote_public_resolver".to_owned(),
+            },
+        ],
+        surfaces: vec![
+            IntegrationManifestSurface {
+                name: "session_grants".to_owned(),
+                method: "POST".to_owned(),
+                path: "/_arkret/gate/account/session-grants".to_owned(),
+                contract: "ak.gate.account.command.issue_session_grant".to_owned(),
+                stability: "validated".to_owned(),
+                todo: "canonical Account Authority grant issuance; proof.proof_kind=oidc_code_exchange exchanges the OIDC authorization code, validates issuer/state/nonce/redirect_uri/principal/device/audience, and mints the device-bound ak.session.grant.".to_owned(),
+            },
+            IntegrationManifestSurface {
+                name: "passkey_auth".to_owned(),
+                method: "POST".to_owned(),
+                path: "/_coauth/account/auth/passkey/{register,auth}/{start,finish}".to_owned(),
+                contract: "arkret.rest.passkey_auth.v1".to_owned(),
+                stability: "preview".to_owned(),
+                todo: "WebAuthn challenge and finish use the production passkey service; finish currently returns credential identity and still relies on the session-grant follow-up path.".to_owned(),
+            },
+            IntegrationManifestSurface {
+                name: "admin_bridge".to_owned(),
+                method: "GET".to_owned(),
+                path: "/_coauth/admin/bridge/describe".to_owned(),
+                contract: "arkret.rest.coauth_admin_bridge.v1".to_owned(),
+                stability: "validated".to_owned(),
+                todo: "risk-action proposals and approvals are persisted with admin audit trail.".to_owned(),
+            },
+            IntegrationManifestSurface {
+                name: "account_claims".to_owned(),
+                method: "GET".to_owned(),
+                path: "/_coauth/admin/accounts/{account_id}/claims".to_owned(),
+                contract: "arkret.rest.coauth_account_claims.v1".to_owned(),
+                stability: "preview".to_owned(),
+                todo: "claim inventory is backed by account-claims service and subject to PG isolation coverage.".to_owned(),
+            },
+            IntegrationManifestSurface {
+                name: "account_session_grants".to_owned(),
+                method: "GET".to_owned(),
+                path: "/_coauth/admin/accounts/{account_id}/session-grants".to_owned(),
+                contract: "arkret.rest.coauth_account_session_grants.v1".to_owned(),
+                stability: "preview".to_owned(),
+                todo: "session-grant inventory exposes persisted grant metadata and will gain broader PG isolation coverage.".to_owned(),
+            },
+        ],
+        examples: serde_json::json!({
+            "compose_strand": {
+                "step_1": {
+                    "service": "principal_server",
+                    "path": "/_arkret/describe",
+                    "method": "GET",
+                    "note": "read auth_metadata.account_authority + methods[].oidc"
+                },
+                "step_2": {
+                    "service": "oidc_issuer",
+                    "path": "{methods[].oidc.openid_configuration}",
+                    "method": "GET",
+                    "note": "standard OIDC discovery -> PKCE authorize -> callback code"
+                },
+                "step_3": {
+                    "service": "account_authority",
+                    "path": "/_arkret/gate/account/session-grants",
+                    "method": "POST",
+                    "note": "proof.proof_kind=oidc_code_exchange"
+                },
+                "step_4": {
+                    "service": "principal_server",
+                    "path": "/_arkret/edge/push/register-device",
+                    "method": "POST"
+                }
+            }
+        }),
+        todos: vec![],
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use hyper::{Request, StatusCode};
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, Request as WiremockRequest, ResponseTemplate};
+
+    use super::*;
+    use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
+
+    const TEST_PRINCIPAL_DID: &str = "did:webvh:scid:local.host:webvh:01k";
+    const TEST_DEVICE_ID: &str = "ak:device:01964137-0000-7000-8000-000000000001";
+    const TEST_LOCALPARTS_BEARER: &str = "localparts-secret";
+    const ACCOUNT_REGISTER_PATH: &str = "/_arkret/gate/account/register";
+
+    fn account_localparts_path() -> String {
+        let account_did_path: String =
+            form_urlencoded::byte_serialize(TEST_PRINCIPAL_DID.as_bytes()).collect();
+        format!("/_soland/accounts/{account_did_path}/localparts")
+    }
+
+    fn wire_error(code: &str, message: &str) -> serde_json::Value {
+        serde_json::json!({
+            "ok": false,
+            "error": {
+                "code": code,
+                "message": message,
+            },
+            "request_id": "ak:request:01964137-0000-7000-8000-000000000001",
+        })
+    }
+
+    fn request_json(request: &WiremockRequest) -> serde_json::Value {
+        serde_json::from_slice(&request.body).unwrap_or(serde_json::Value::Null)
+    }
+
+    fn request_has_handle(expected: &'static str) -> impl Fn(&WiremockRequest) -> bool {
+        move |request| {
+            request_json(request)
+                .get("handle")
+                .and_then(|value| value.as_str())
+                == Some(expected)
+        }
+    }
+
+    fn request_has_localpart(expected: &'static str) -> impl Fn(&WiremockRequest) -> bool {
+        move |request| {
+            request_json(request)
+                .get("localpart")
+                .and_then(|value| value.as_str())
+                == Some(expected)
+        }
+    }
+
+    fn request_has_bearer(expected: &'static str) -> impl Fn(&WiremockRequest) -> bool {
+        move |request| {
+            request
+                .headers
+                .get("authorization")
+                .and_then(|value| value.to_str().ok())
+                .is_some_and(|value| value == format!("Bearer {expected}"))
+        }
+    }
+
+    #[test]
+    fn protocol_device_id_validation_matches_soland_boundary() {
+        assert!(is_protocol_device_id(
+            "ak:device:01964137-0000-7000-8000-000000000001"
+        ));
+        assert!(!is_protocol_device_id("dev_inkson"));
+        assert!(!is_protocol_device_id(
+            "ak:device:01964137-0000-6000-8000-000000000001"
+        ));
+    }
+
+    #[test]
+    fn principal_session_grant_scopes_include_device_binding() {
+        let scopes =
+            principal_session_grant_scopes("ak:device:01964137-0000-7000-8000-000000000001");
+
+        assert!(scopes.contains(&arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()));
+        assert!(scopes.contains(
+            &"urn:arkret:client:device:ak:device:01964137-0000-7000-8000-000000000001".to_owned()
+        ));
+    }
+
+    #[test]
+    fn returned_nonce_validation_is_exact() {
+        assert!(validate_returned_nonce(Some("nonce"), "nonce").is_ok());
+        // Mismatch and missing both reject with a generic message; the recorded
+        // nonce value is an internal binding secret (COA-SEC-04) and MUST NOT be
+        // echoed into the client-facing error (it is only logged at debug).
+        let error = validate_returned_nonce(Some("other"), "nonce").unwrap_err();
+        assert!(error.contains("nonce mismatch"));
+        assert!(!error.contains("other"));
+        let error = validate_returned_nonce(None, "nonce").unwrap_err();
+        assert!(error.contains("nonce mismatch"));
+    }
+
+    #[test]
+    fn expected_principal_binding_is_exact() {
+        // Matching client assertion → ok.
+        assert!(
+            validate_expected_principal(
+                "did:webvh:scid:host:webvh:01k",
+                "did:webvh:scid:host:webvh:01k"
+            )
+            .is_ok()
+        );
+        let error = validate_expected_principal("did:webvh:scid:host:webvh:01k", "").unwrap_err();
+        assert_eq!(error.code, "principal_unknown");
+        let error =
+            validate_expected_principal("did:webvh:scid:host:webvh:01k", "   ").unwrap_err();
+        assert_eq!(error.code, "principal_unknown");
+        // A present-but-mismatched assertion is still a hard binding failure.
+        let error = validate_expected_principal("did:webvh:a", "did:webvh:b")
+            .err()
+            .unwrap();
+        assert_eq!(error.code, "proof_invalid");
+        assert!(error.message.contains("principal binding mismatch"));
+    }
+
+    #[test]
+    fn soland_account_register_endpoint_uses_arkret_gate_path() {
+        let endpoint = soland_account_register_endpoint("https://local.host/base/path").unwrap();
+
+        // The standard account-register route lives at the service root;
+        // the join must also discard any base path on the endpoint URL.
+        assert_eq!(
+            endpoint.as_str(),
+            "https://local.host/_arkret/gate/account/register"
+        );
+    }
+
+    #[test]
+    fn registration_handle_uses_principal_endpoint_host() {
+        assert_eq!(
+            registration_handle_for_principal_endpoint(Some("https://local.host/"), "Alice")
+                .as_deref(),
+            Some("alice:local.host")
+        );
+        assert_eq!(
+            registration_handle_for_principal_endpoint(
+                Some("https://local.host/base/path"),
+                "Alice"
+            )
+            .as_deref(),
+            Some("alice:local.host")
+        );
+        assert_eq!(
+            registration_handle_for_principal_endpoint(None, "Alice"),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn soland_account_register_handle_conflict_blocks_grant() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(ACCOUNT_REGISTER_PATH))
+            .and(request_has_handle("alice:local.host"))
+            .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
+                arkret_core::error::ERROR_CODE_DUPLICATE_CONFLICT,
+                "handle localpart `alice` is already taken",
+            )))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let error = ensure_soland_account_registered(
+            &reqwest::Client::new(),
+            Some(&server.uri()),
+            TEST_PRINCIPAL_DID,
+            Some(TEST_LOCALPARTS_BEARER),
+            Some("alice"),
+            Some("alice:local.host"),
+            Some("Alice"),
+            Some(TEST_DEVICE_ID),
+        )
+        .await
+        .expect_err("handle/localpart conflicts must block grant issuance");
+
+        assert!(error.contains("handle localpart `alice` is already taken"));
+    }
+
+    #[tokio::test]
+    async fn soland_account_register_failed_precondition_is_not_swallowed() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(ACCOUNT_REGISTER_PATH))
+            .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
+                arkret_core::error::ERROR_CODE_FAILED_PRECONDITION,
+                "account registration is closed",
+            )))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let error = ensure_soland_account_registered(
+            &reqwest::Client::new(),
+            Some(&server.uri()),
+            TEST_PRINCIPAL_DID,
+            Some(TEST_LOCALPARTS_BEARER),
+            Some("alice"),
+            Some("alice:local.host"),
+            Some("Alice"),
+            Some(TEST_DEVICE_ID),
+        )
+        .await
+        .expect_err("registration policy failures must block grant issuance");
+
+        assert!(error.contains("account registration is closed"));
+    }
+
+    #[tokio::test]
+    async fn soland_account_register_existing_account_conflict_syncs_localpart() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(ACCOUNT_REGISTER_PATH))
+            .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
+                arkret_core::error::ERROR_CODE_DUPLICATE_CONFLICT,
+                "account already exists",
+            )))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(account_localparts_path()))
+            .and(request_has_bearer(TEST_LOCALPARTS_BEARER))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "account_did": TEST_PRINCIPAL_DID,
+                "primary_localpart": null,
+                "localparts": [],
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path(account_localparts_path()))
+            .and(request_has_bearer(TEST_LOCALPARTS_BEARER))
+            .and(request_has_localpart("alice"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "localpart": {
+                    "id": "ak:account_localpart:01964137-0000-7000-8000-000000000002",
+                    "localpart": "alice",
+                    "is_primary": true,
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "updated_at": "2026-01-01T00:00:00Z"
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        ensure_soland_account_registered(
+            &reqwest::Client::new(),
+            Some(&server.uri()),
+            TEST_PRINCIPAL_DID,
+            Some(TEST_LOCALPARTS_BEARER),
+            Some("alice"),
+            Some("alice:local.host"),
+            Some("Alice"),
+            Some(TEST_DEVICE_ID),
+        )
+        .await
+        .expect("existing account conflict still syncs localpart");
+    }
+
+    /// The canonical Account Authority grant endpoint rejects an
+    /// `oidc_code_exchange` proof that arrives without a grant-binding DPoP proof:
+    /// the grant has no device key to bind to (`proof_invalid`). Exercised
+    /// against the real router so the route wiring is covered too.
+    #[tokio::test]
+    async fn session_grant_oidc_exchange_requires_dpop_holder_proof() {
+        setup();
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let state = TestState::from_pool(pool.clone()).await.unwrap();
+
+        let response = state
+            .request(Request::post("/_arkret/gate/account/session-grants").json(
+                serde_json::json!({
+                    "principal_id": "did:webvh:scid:offline.invalid:webvh:01k",
+                    "device_id": "ak:device:01964137-0000-7000-8000-000000000001",
+                    "proof": {
+                        "proof_kind": "oidc_code_exchange",
+                        "challenge": "0123456789abcdef0123",
+                        "request_canonical_digest": format!("sha256:{}", "0".repeat(64)),
+                        "audience": "https://soland.example.com/api",
+                        "signature": "unused-for-oidc",
+                        "issuer": "https://offline.invalid",
+                        "client_id": "inkson",
+                        "redirect_uri": "http://localhost:8080/auth/callback",
+                        "state": "ak.state-0123456789abcdef",
+                        "nonce": "ak.nonce-0123456789abcdef",
+                        "authorization_code": "stale-code",
+                        "code_verifier": "0123456789012345678901234567890123456789012"
+                    }
+                }),
+            ))
+            .await;
+
+        // No DPoP header -> proof_invalid (device binding cannot be established).
+        response.assert_status(StatusCode::BAD_REQUEST);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["error"]["code"], "proof_invalid");
+    }
+}
 
