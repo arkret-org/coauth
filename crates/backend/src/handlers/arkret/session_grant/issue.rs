@@ -295,9 +295,40 @@ async fn issue_pre_registration_handoff_session_grant(
     } else {
         body.requested_scope.clone()
     };
+    let arkret_config = depot.arkret_config()?;
+    let principal_endpoint = arkret_config
+        .principal_servers
+        .iter()
+        .find(|server| {
+            crate::services::resolved_principal_audiences::effective_audience_shared(server)
+                .as_ref()
+                .is_some_and(|audience| audience.as_str() == handoff.audience)
+        })
+        .map(|server| server.endpoint.to_string());
+    let operation_bearer =
+        crate::handlers::account::auth::oidc_bridge::principal_server_operation_bearer(
+            &arkret_config,
+            &handoff.audience,
+        );
+    crate::handlers::account::auth::oidc_bridge::ensure_soland_account_registered(
+        &depot.http_client()?,
+        principal_endpoint.as_deref(),
+        &binding.principal_id,
+        operation_bearer,
+        user.display_name.as_deref(),
+        body.device_id.as_ref().map(arkret_core::DeviceId::as_str),
+    )
+    .await
+    .map_err(|message| {
+        ArkretRouteError::coded(
+            StatusCode::BAD_GATEWAY,
+            ERROR_CODE_SERVICE_UNAVAILABLE,
+            format!("principal account registration failed: {message}"),
+        )
+    })?;
     let material = issue_session_grant_for_audience(
         &*clock,
-        &depot.arkret_config()?,
+        &arkret_config,
         &depot.key_store()?,
         &browser_session,
         dpop.jwk,

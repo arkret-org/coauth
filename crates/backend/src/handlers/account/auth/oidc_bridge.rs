@@ -15,7 +15,7 @@
 // decodes them through the same typed shape. The `integration_describe`
 // endpoint below returns the shared `IntegrationManifest` directly.
 use arkret_core::error::REASON_PROOF_INVALID;
-use arkret_core::{AccountRegisterRequestBody, DeviceId, Did, ErrorEnvelope};
+use arkret_core::{AccountRegisterRequestBody, DeviceId, Did};
 use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
 };
@@ -28,6 +28,7 @@ use coauth_oauth_types::requests::{
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
 use salvo::prelude::*;
+use ulid::Ulid;
 
 use super::{DepotExt, DpopSessionBinding, RouteError, make_clock, make_rng};
 use crate::handlers::arkret::{self, SessionGrantMaterial};
@@ -74,6 +75,25 @@ pub(crate) struct OidcExchangeSuccess {
     pub device_id: String,
     pub session_grant: SessionGrantMaterial,
     pub persisted_grant_id: String,
+}
+
+/// Successful OIDC authentication used to create a short-lived account
+/// handoff. No principal binding or device-bound session grant exists yet.
+pub(crate) struct OidcHandoffExchangeSuccess {
+    pub user: User,
+    pub browser_session_id: Option<Ulid>,
+    pub audience: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OidcExchangeIntent {
+    SessionGrant,
+    AccountHandoff,
+}
+
+enum OidcExchangeResult {
+    SessionGrant(OidcExchangeSuccess),
+    AccountHandoff(OidcHandoffExchangeSuccess),
 }
 
 /// Typed failure of the OIDC exchange, carrying the registry error code the
@@ -159,31 +179,6 @@ fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url
         .map_err(|error| format!("invalid principal account register endpoint: {error}"))
 }
 
-/// Build the Principal Server localpart directory endpoint for `principal_did`.
-///
-/// RULING: DEPLOYMENT-INTERNAL S2S CONVENTION, NOT A PROTOCOL-FACE OPERATION.
-/// This `/_soland/accounts/{did}/
-/// localparts` edge is used during OIDC token exchange to *list and sync* the
-/// account's primary localpart binding on the Principal Server
-/// (`ensure_soland_account_localpart_bound`). It is intentionally NOT migrated
-/// to the protocol directory reads `ak.find.directory.query.list_handles_for_
-/// subject` / `resolve_handle`: those are read-only handle lookups and cannot
-/// perform the write/sync binding this provisioning flow requires. coauth and
-/// soland share this static-bearer-gated `/_soland/*` edge as a deployment-local
-/// account-provisioning convention; it is registered here as such rather than as
-/// a `/_arkret/*` protocol surface.
-fn soland_account_localparts_endpoint(
-    principal_endpoint: &str,
-    principal_did: &str,
-) -> Result<url::Url, String> {
-    let base = url::Url::parse(principal_endpoint)
-        .map_err(|error| format!("invalid principal server endpoint: {error}"))?;
-    let account_did_path: String =
-        form_urlencoded::byte_serialize(principal_did.as_bytes()).collect();
-    base.join(&format!("/_soland/accounts/{account_did_path}/localparts"))
-        .map_err(|error| format!("invalid principal account localparts endpoint: {error}"))
-}
-
 pub(crate) fn principal_server_operation_bearer<'a>(
     arkret_config: &'a coauth_config::ArkretConfig,
     audience: &str,
@@ -203,14 +198,12 @@ pub(crate) fn principal_server_operation_bearer<'a>(
 
 fn soland_account_register_body(
     principal_did: &str,
-    handle: Option<&str>,
     display_name: Option<&str>,
     device_id: Option<&str>,
 ) -> Result<AccountRegisterRequestBody, String> {
     Ok(AccountRegisterRequestBody {
         principal_id: Did::new(principal_did.to_owned())
             .map_err(|error| format!("principal DID is invalid: {error}"))?,
-        handle: handle.map(ToOwned::to_owned),
         display_name: display_name.map(ToOwned::to_owned),
         device_id: device_id
             .map(|value| {
@@ -220,17 +213,22 @@ fn soland_account_register_body(
             .transpose()?,
         policy_evidence: None,
         proof: None,
+        identity_creation: None,
     })
 }
 
 async fn send_soland_account_register(
     http_client: &reqwest::Client,
     endpoint: &url::Url,
+    bearer: &str,
     body: &AccountRegisterRequestBody,
 ) -> Result<(reqwest::StatusCode, String), String> {
     let response =
         outbound_http::send_with_policy(outbound_http::soland_policy("account_register"), || {
-            http_client.post(endpoint.clone()).json(body)
+            http_client
+                .post(endpoint.clone())
+                .bearer_auth(bearer)
+                .json(body)
         })
         .await
         .map_err(|error| format!("principal account register request failed: {error}"))?;
@@ -242,147 +240,11 @@ async fn send_soland_account_register(
     Ok((status, body))
 }
 
-#[derive(Debug, serde::Serialize)]
-struct AccountLocalpartSyncRequestBody<'a> {
-    localpart: &'a str,
-    is_primary: bool,
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct SolandAccountLocalpartListOutcome {
-    localparts: Vec<SolandAccountLocalpartView>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct SolandAccountLocalpartView {
-    localpart: String,
-    is_primary: bool,
-}
-
-async fn fetch_soland_account_localparts(
-    http_client: &reqwest::Client,
-    endpoint: &url::Url,
-    bearer: &str,
-) -> Result<SolandAccountLocalpartListOutcome, String> {
-    let response =
-        outbound_http::send_with_policy(outbound_http::soland_policy("account_localparts"), || {
-            http_client
-                .get(endpoint.clone())
-                .bearer_auth(bearer)
-                .header(ACCEPT, APPLICATION_JSON.as_ref())
-        })
-        .await
-        .map_err(|error| format!("principal account localparts request failed: {error}"))?;
-    let status = response.status();
-    let body = response.text().await.unwrap_or_default();
-    if !status.is_success() {
-        return Err(soland_account_localparts_failure("list", status, &body));
-    }
-    serde_json::from_str(&body)
-        .map_err(|error| format!("principal account localparts response was invalid: {error}"))
-}
-
-async fn send_soland_account_localpart_sync(
-    http_client: &reqwest::Client,
-    endpoint: &url::Url,
-    bearer: &str,
-    localpart: &str,
-) -> Result<(), String> {
-    let body = AccountLocalpartSyncRequestBody {
-        localpart,
-        is_primary: true,
-    };
-    let response =
-        outbound_http::send_with_policy(outbound_http::soland_policy("account_localparts"), || {
-            http_client
-                .post(endpoint.clone())
-                .bearer_auth(bearer)
-                .header(ACCEPT, APPLICATION_JSON.as_ref())
-                .json(&body)
-        })
-        .await
-        .map_err(|error| format!("principal account localpart sync request failed: {error}"))?;
-    let status = response.status();
-    if status.is_success() {
-        return Ok(());
-    }
-    let body = response.text().await.unwrap_or_default();
-    Err(soland_account_localparts_failure("sync", status, &body))
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum SolandAccountRegisterConflict {
-    AccountAlreadyExists,
-    HandleAlreadyTaken,
-}
-
-fn classify_soland_account_register_conflict(
-    status: reqwest::StatusCode,
-    body: &str,
-) -> Option<SolandAccountRegisterConflict> {
-    if status != reqwest::StatusCode::CONFLICT {
-        return None;
-    }
-    let envelope = serde_json::from_str::<ErrorEnvelope>(body).ok()?;
-    if envelope.code() != arkret_core::error::ERROR_CODE_DUPLICATE_CONFLICT {
-        return None;
-    }
-    match envelope.message() {
-        "account already exists" => Some(SolandAccountRegisterConflict::AccountAlreadyExists),
-        message
-            if message.starts_with("handle localpart ")
-                && message.ends_with("is already taken") =>
-        {
-            Some(SolandAccountRegisterConflict::HandleAlreadyTaken)
-        }
-        _ => None,
-    }
-}
-
 fn soland_account_register_failure(status: reqwest::StatusCode, body: &str) -> String {
     format!(
         "principal account register returned {status}: {}",
         body.chars().take(256).collect::<String>()
     )
-}
-
-fn soland_account_localparts_failure(
-    action: &str,
-    status: reqwest::StatusCode,
-    body: &str,
-) -> String {
-    format!(
-        "principal account localparts {action} returned {status}: {}",
-        body.chars().take(256).collect::<String>()
-    )
-}
-
-async fn ensure_soland_account_localpart_bound(
-    http_client: &reqwest::Client,
-    principal_endpoint: &str,
-    principal_did: &str,
-    bearer: Option<&str>,
-    localpart: Option<&str>,
-) -> Result<(), String> {
-    let Some(localpart) = localpart.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(());
-    };
-    let Some(bearer) = bearer else {
-        return Err(
-            "principal account localpart sync requires embedded_webvh_registration_bearer"
-                .to_owned(),
-        );
-    };
-    let endpoint = soland_account_localparts_endpoint(principal_endpoint, principal_did)?;
-    let current = fetch_soland_account_localparts(http_client, &endpoint, bearer).await?;
-    if current
-        .localparts
-        .iter()
-        .any(|record| record.localpart == localpart && record.is_primary)
-    {
-        return Ok(());
-    }
-    send_soland_account_localpart_sync(http_client, &endpoint, bearer, localpart).await
 }
 
 /// Load the verified principal binding for `user` and `audience`.
@@ -420,72 +282,32 @@ pub(crate) async fn load_verified_principal_did_committed(
     Ok(principal_did)
 }
 
-/// Canonical registration handle (`<localpart>:<domain>`) for the configured
-/// principal server endpoint. The handle domain MUST be the principal server's
-/// own host, not the OIDC issuer host (`auth.<domain>`) and not a domain
-/// inferred from a DID method-specific identifier. soland owns principal DID
-/// issuance, so coauth must not couple handle publication to `did:web`.
-pub(crate) fn registration_handle_for_principal_endpoint(
-    principal_endpoint: Option<&str>,
-    localpart: &str,
-) -> Option<String> {
-    let domain = principal_handle_domain_for_endpoint(principal_endpoint?)?;
-    Some(format!("{}:{}", localpart.to_ascii_lowercase(), domain))
-}
-
-fn principal_handle_domain_for_endpoint(principal_endpoint: &str) -> Option<String> {
-    let endpoint = url::Url::parse(principal_endpoint).ok()?;
-    let host = endpoint.host_str()?.trim().trim_end_matches('.');
-    if host.is_empty() {
-        return None;
-    }
-    Some(host.to_ascii_lowercase().replace(':', "."))
-}
-
 pub(crate) async fn ensure_soland_account_registered(
     http_client: &reqwest::Client,
     principal_endpoint: Option<&str>,
     principal_did: &str,
-    localpart_sync_bearer: Option<&str>,
-    localpart: Option<&str>,
-    handle: Option<&str>,
+    operation_bearer: Option<&str>,
     display_name: Option<&str>,
     device_id: Option<&str>,
 ) -> Result<(), String> {
     let Some(principal_endpoint) = principal_endpoint else {
         return Ok(());
     };
+    let bearer = operation_bearer
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            "canonical principal account registration requires embedded_webvh_registration_bearer"
+                .to_owned()
+        })?;
     let endpoint = soland_account_register_endpoint(principal_endpoint)?;
-    let request_body =
-        soland_account_register_body(principal_did, handle, display_name, device_id)?;
+    let request_body = soland_account_register_body(principal_did, display_name, device_id)?;
     let (status, response_body) =
-        send_soland_account_register(http_client, &endpoint, &request_body).await?;
+        send_soland_account_register(http_client, &endpoint, bearer, &request_body).await?;
     if status.is_success() {
-        return ensure_soland_account_localpart_bound(
-            http_client,
-            principal_endpoint,
-            principal_did,
-            localpart_sync_bearer,
-            localpart,
-        )
-        .await;
+        return Ok(());
     }
-    match classify_soland_account_register_conflict(status, &response_body) {
-        Some(SolandAccountRegisterConflict::AccountAlreadyExists) => {
-            ensure_soland_account_localpart_bound(
-                http_client,
-                principal_endpoint,
-                principal_did,
-                localpart_sync_bearer,
-                localpart,
-            )
-            .await
-        }
-        Some(SolandAccountRegisterConflict::HandleAlreadyTaken) => {
-            Err(soland_account_register_failure(status, &response_body))
-        }
-        _ => Err(soland_account_register_failure(status, &response_body)),
-    }
+    Err(soland_account_register_failure(status, &response_body))
 }
 
 /// Account Authority OIDC authorization-code → `ak.session.grant` exchange.
@@ -509,6 +331,49 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
     dpop_binding: Option<DpopSessionBinding>,
     input: OidcCodeExchangeInput,
 ) -> Result<OidcExchangeSuccess, OidcExchangeError> {
+    match exchange_oidc_code(
+        req,
+        depot,
+        dpop_binding,
+        input,
+        OidcExchangeIntent::SessionGrant,
+    )
+    .await?
+    {
+        OidcExchangeResult::SessionGrant(success) => Ok(success),
+        OidcExchangeResult::AccountHandoff(_) => unreachable!("session-grant exchange intent"),
+    }
+}
+
+/// Validate the same OIDC authorization-code proof for account-first
+/// registration without requiring a pre-existing principal or device.
+pub(crate) async fn exchange_oidc_code_for_account_handoff(
+    req: &mut Request,
+    depot: &Depot,
+    dpop_binding: DpopSessionBinding,
+    input: OidcCodeExchangeInput,
+) -> Result<OidcHandoffExchangeSuccess, OidcExchangeError> {
+    match exchange_oidc_code(
+        req,
+        depot,
+        Some(dpop_binding),
+        input,
+        OidcExchangeIntent::AccountHandoff,
+    )
+    .await?
+    {
+        OidcExchangeResult::AccountHandoff(success) => Ok(success),
+        OidcExchangeResult::SessionGrant(_) => unreachable!("account-handoff exchange intent"),
+    }
+}
+
+async fn exchange_oidc_code(
+    req: &mut Request,
+    depot: &Depot,
+    dpop_binding: Option<DpopSessionBinding>,
+    input: OidcCodeExchangeInput,
+    intent: OidcExchangeIntent,
+) -> Result<OidcExchangeResult, OidcExchangeError> {
     let mut rng = make_rng();
     let clock = make_clock();
     let url_builder = depot
@@ -541,12 +406,11 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         .await
         .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
 
-    // The grant-binding DPoP proof is what binds the issued grant to `cnf.jkt`
-    // (`cnf.jkt`). It is mandatory for an OIDC-issued session grant — without
-    // it there is no device binding to validate.
+    // The DPoP proof binds either the issued session grant or the handoff to
+    // `cnf.jkt`; both exchanges fail closed without it.
     let Some(dpop_binding) = dpop_binding else {
         return Err(OidcExchangeError::proof_invalid(
-            "OIDC session grants require a valid grant-binding DPoP proof for session binding",
+            "OIDC exchange requires a valid grant-binding DPoP proof",
         ));
     };
 
@@ -562,18 +426,23 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         || input.client_id.trim().is_empty()
         || input.state.trim().is_empty()
         || input.nonce.trim().is_empty()
-        || input.device_id.trim().is_empty()
     {
         return Err(OidcExchangeError::proof_invalid(
-            "authorization_code, redirect_uri, issuer, client_id, state, nonce, and device_id are required for oidc_code_exchange",
+            "authorization_code, redirect_uri, issuer, client_id, state, and nonce are required for oidc_code_exchange",
         ));
     }
-    let device_id = input.device_id.trim().to_owned();
-    if !is_protocol_device_id(&device_id) {
-        return Err(OidcExchangeError::proof_invalid(
-            "device_id must be a ak:device:<uuidv7> protocol identifier",
-        ));
-    }
+    let device_id = match intent {
+        OidcExchangeIntent::SessionGrant => {
+            let device_id = input.device_id.trim().to_owned();
+            if !is_protocol_device_id(&device_id) {
+                return Err(OidcExchangeError::proof_invalid(
+                    "device_id must be a ak:device:<uuidv7> protocol identifier",
+                ));
+            }
+            device_id
+        }
+        OidcExchangeIntent::AccountHandoff => String::new(),
+    };
 
     let redirect_uri = url::Url::parse(input.redirect_uri.trim()).map_err(|_| {
         OidcExchangeError::proof_invalid("redirect_uri must be a valid absolute URI")
@@ -802,6 +671,17 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
                 input.requested_audience.as_deref(),
             )
             .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
+        if intent == OidcExchangeIntent::AccountHandoff {
+            let success = OidcHandoffExchangeSuccess {
+                user,
+                browser_session_id: Some(browser_session.id),
+                audience: grant_target.audience,
+            };
+            repo.save()
+                .await
+                .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+            return Ok(OidcExchangeResult::AccountHandoff(success));
+        }
         let principal_did =
             load_verified_principal_did_committed(depot, &user, &grant_target.audience)
                 .await
@@ -809,19 +689,13 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
 
         validate_expected_principal(&principal_did, &input.expected_principal_id)?;
 
-        let account_handle = registration_handle_for_principal_endpoint(
-            grant_target.principal_server_endpoint.as_deref(),
-            &user.localpart,
-        );
-        let localpart_sync_bearer =
+        let operation_bearer =
             principal_server_operation_bearer(&arkret_config, &grant_target.audience);
         ensure_soland_account_registered(
             &http_client,
             grant_target.principal_server_endpoint.as_deref(),
             &principal_did,
-            localpart_sync_bearer,
-            Some(&user.localpart),
-            account_handle.as_deref(),
+            operation_bearer,
             user.display_name.as_deref(),
             Some(device_id.as_str()),
         )
@@ -857,12 +731,12 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
 
         let _ = &service_activity_tracker;
         let _ = &grant_target;
-        return Ok(OidcExchangeSuccess {
+        return Ok(OidcExchangeResult::SessionGrant(OidcExchangeSuccess {
             principal_did,
             device_id,
             session_grant,
             persisted_grant_id: persisted.grant_id.to_string(),
-        });
+        }));
     }
 
     // ─── Local coauth issuer branch ─────────────────────────────────────
@@ -1289,25 +1163,30 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         )
         .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
     let user = &browser_session.user;
+    if intent == OidcExchangeIntent::AccountHandoff {
+        let success = OidcHandoffExchangeSuccess {
+            user: user.clone(),
+            browser_session_id: Some(browser_session.id),
+            audience: grant_target.audience,
+        };
+        repo.cancel()
+            .await
+            .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+        return Ok(OidcExchangeResult::AccountHandoff(success));
+    }
     let principal_did = load_verified_principal_did_committed(depot, user, &grant_target.audience)
         .await
         .map_err(|message| OidcExchangeError::new("principal_unknown", message))?;
 
     validate_expected_principal(&principal_did, &input.expected_principal_id)?;
 
-    let account_handle = registration_handle_for_principal_endpoint(
-        grant_target.principal_server_endpoint.as_deref(),
-        &user.localpart,
-    );
-    let localpart_sync_bearer =
+    let operation_bearer =
         principal_server_operation_bearer(&arkret_config, &grant_target.audience);
     ensure_soland_account_registered(
         &http_client,
         grant_target.principal_server_endpoint.as_deref(),
         &principal_did,
-        localpart_sync_bearer,
-        Some(&user.localpart),
-        account_handle.as_deref(),
+        operation_bearer,
         user.display_name.as_deref(),
         Some(device_id.as_str()),
     )
@@ -1340,12 +1219,12 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
 
     let _ = &grant_target;
-    Ok(OidcExchangeSuccess {
+    Ok(OidcExchangeResult::SessionGrant(OidcExchangeSuccess {
         principal_did,
         device_id,
         session_grant,
         persisted_grant_id: persisted.grant_id.to_string(),
-    })
+    }))
 }
 
 /// The request principal DID must equal the verified service-account binding.
@@ -1782,4 +1661,3 @@ mod tests {
         assert_eq!(body["error"]["code"], "proof_invalid");
     }
 }
-

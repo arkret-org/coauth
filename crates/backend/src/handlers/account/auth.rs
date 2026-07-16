@@ -405,11 +405,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                         return Ok(());
                     }
                 };
-                let account_handle = oidc_bridge::registration_handle_for_principal_endpoint(
-                    grant_target.principal_server_endpoint.as_deref(),
-                    &user.localpart,
-                );
-                let localpart_sync_bearer = oidc_bridge::principal_server_operation_bearer(
+                let operation_bearer = oidc_bridge::principal_server_operation_bearer(
                     &arkret_config,
                     &grant_target.audience,
                 );
@@ -417,9 +413,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     &http_client,
                     grant_target.principal_server_endpoint.as_deref(),
                     &principal_did,
-                    localpart_sync_bearer,
-                    Some(&user.localpart),
-                    account_handle.as_deref(),
+                    operation_bearer,
                     display_name.as_deref(),
                     Some(device_id.as_str()),
                 )
