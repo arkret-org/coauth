@@ -1364,14 +1364,8 @@ mod tests {
 
     const TEST_PRINCIPAL_DID: &str = "did:webvh:scid:local.host:webvh:01k";
     const TEST_DEVICE_ID: &str = "ak:device:01964137-0000-7000-8000-000000000001";
-    const TEST_LOCALPARTS_BEARER: &str = "localparts-secret";
+    const TEST_OPERATION_BEARER: &str = "account-operation-secret";
     const ACCOUNT_REGISTER_PATH: &str = "/_arkret/gate/account/register";
-
-    fn account_localparts_path() -> String {
-        let account_did_path: String =
-            form_urlencoded::byte_serialize(TEST_PRINCIPAL_DID.as_bytes()).collect();
-        format!("/_soland/accounts/{account_did_path}/localparts")
-    }
 
     fn wire_error(code: &str, message: &str) -> serde_json::Value {
         serde_json::json!({
@@ -1386,24 +1380,6 @@ mod tests {
 
     fn request_json(request: &WiremockRequest) -> serde_json::Value {
         serde_json::from_slice(&request.body).unwrap_or(serde_json::Value::Null)
-    }
-
-    fn request_has_handle(expected: &'static str) -> impl Fn(&WiremockRequest) -> bool {
-        move |request| {
-            request_json(request)
-                .get("handle")
-                .and_then(|value| value.as_str())
-                == Some(expected)
-        }
-    }
-
-    fn request_has_localpart(expected: &'static str) -> impl Fn(&WiremockRequest) -> bool {
-        move |request| {
-            request_json(request)
-                .get("localpart")
-                .and_then(|value| value.as_str())
-                == Some(expected)
-        }
     }
 
     fn request_has_bearer(expected: &'static str) -> impl Fn(&WiremockRequest) -> bool {
@@ -1486,55 +1462,33 @@ mod tests {
         );
     }
 
-    #[test]
-    fn registration_handle_uses_principal_endpoint_host() {
-        assert_eq!(
-            registration_handle_for_principal_endpoint(Some("https://local.host/"), "Alice")
-                .as_deref(),
-            Some("alice:local.host")
-        );
-        assert_eq!(
-            registration_handle_for_principal_endpoint(
-                Some("https://local.host/base/path"),
-                "Alice"
-            )
-            .as_deref(),
-            Some("alice:local.host")
-        );
-        assert_eq!(
-            registration_handle_for_principal_endpoint(None, "Alice"),
-            None
-        );
-    }
-
     #[tokio::test]
-    async fn soland_account_register_handle_conflict_blocks_grant() {
+    async fn soland_account_register_uses_canonical_bearer_without_handle() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
-            .and(request_has_handle("alice:local.host"))
-            .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
-                arkret_core::error::ERROR_CODE_DUPLICATE_CONFLICT,
-                "handle localpart `alice` is already taken",
-            )))
+            .and(request_has_bearer(TEST_OPERATION_BEARER))
+            .and(|request: &WiremockRequest| request_json(request).get("handle").is_none())
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "principal_id": TEST_PRINCIPAL_DID,
+                "state": "active",
+                "devices": [],
+                "handle_claim_digests": []
+            })))
             .expect(1)
             .mount(&server)
             .await;
 
-        let error = ensure_soland_account_registered(
+        ensure_soland_account_registered(
             &reqwest::Client::new(),
             Some(&server.uri()),
             TEST_PRINCIPAL_DID,
-            Some(TEST_LOCALPARTS_BEARER),
-            Some("alice"),
-            Some("alice:local.host"),
+            Some(TEST_OPERATION_BEARER),
             Some("Alice"),
             Some(TEST_DEVICE_ID),
         )
         .await
-        .expect_err("handle/localpart conflicts must block grant issuance");
-
-        assert!(error.contains("handle localpart `alice` is already taken"));
+        .expect("canonical account projection should succeed");
     }
 
     #[tokio::test]
@@ -1554,9 +1508,7 @@ mod tests {
             &reqwest::Client::new(),
             Some(&server.uri()),
             TEST_PRINCIPAL_DID,
-            Some(TEST_LOCALPARTS_BEARER),
-            Some("alice"),
-            Some("alice:local.host"),
+            Some(TEST_OPERATION_BEARER),
             Some("Alice"),
             Some(TEST_DEVICE_ID),
         )
@@ -1567,57 +1519,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn soland_account_register_existing_account_conflict_syncs_localpart() {
+    async fn soland_account_register_requires_operation_bearer() {
         let server = MockServer::start().await;
-        Mock::given(method("POST"))
-            .and(path(ACCOUNT_REGISTER_PATH))
-            .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
-                arkret_core::error::ERROR_CODE_DUPLICATE_CONFLICT,
-                "account already exists",
-            )))
-            .expect(1)
-            .mount(&server)
-            .await;
-        Mock::given(method("GET"))
-            .and(path(account_localparts_path()))
-            .and(request_has_bearer(TEST_LOCALPARTS_BEARER))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "account_did": TEST_PRINCIPAL_DID,
-                "primary_localpart": null,
-                "localparts": [],
-            })))
-            .expect(1)
-            .mount(&server)
-            .await;
-        Mock::given(method("POST"))
-            .and(path(account_localparts_path()))
-            .and(request_has_bearer(TEST_LOCALPARTS_BEARER))
-            .and(request_has_localpart("alice"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "localpart": {
-                    "id": "ak:account_localpart:01964137-0000-7000-8000-000000000002",
-                    "localpart": "alice",
-                    "is_primary": true,
-                    "created_at": "2026-01-01T00:00:00Z",
-                    "updated_at": "2026-01-01T00:00:00Z"
-                }
-            })))
-            .expect(1)
-            .mount(&server)
-            .await;
-
-        ensure_soland_account_registered(
+        let error = ensure_soland_account_registered(
             &reqwest::Client::new(),
             Some(&server.uri()),
             TEST_PRINCIPAL_DID,
-            Some(TEST_LOCALPARTS_BEARER),
-            Some("alice"),
-            Some("alice:local.host"),
+            None,
             Some("Alice"),
             Some(TEST_DEVICE_ID),
         )
         .await
-        .expect("existing account conflict still syncs localpart");
+        .expect_err("missing deployment bearer must fail closed");
+
+        assert!(error.contains("embedded_webvh_registration_bearer"));
     }
 
     /// The canonical Account Authority grant endpoint rejects an
