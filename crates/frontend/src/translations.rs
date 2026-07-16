@@ -246,6 +246,18 @@ mod tests {
     }
 
     #[test]
+    fn translates_optional_phone_field_on_register_form() {
+        assert_eq!(
+            format_for_locale("en", "coauth-register-phone-optional", None).as_deref(),
+            Some("Phone (optional)")
+        );
+        assert_eq!(
+            format_for_locale("zh-CN", "coauth-register-phone-optional", None).as_deref(),
+            Some("手机号（可选）")
+        );
+    }
+
+    #[test]
     fn translates_display_name_registration_step() {
         let expected = [
             (

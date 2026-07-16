@@ -179,6 +179,7 @@ coauth-register-continue-with-email = 使用邮件地址继续
 coauth-register-continue-with-password = 使用密码继续
 coauth-register-create-account-description = 选择一个用户名以继续。
 coauth-register-create-account-heading = 创建账户
+coauth-register-phone-optional = 手机号（可选）
 coauth-register-sign-in-instead = 去登录
 coauth-register-terms-of-service = 我同意<a href="{ $tos_uri }" data-kind="primary" class="cpd-link">条款与条件 </a>
 coauth-registration-token-description = 输入由 coauth 管理员提供的注册 Token。

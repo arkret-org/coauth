@@ -229,6 +229,7 @@ coauth-register-continue-with-email = Continue with email address
 coauth-register-continue-with-password = Continue with password
 coauth-register-create-account-description = Choose a username to continue.
 coauth-register-create-account-heading = Create an account
+coauth-register-phone-optional = Phone (optional)
 coauth-register-sign-in-instead = Sign in instead
 coauth-register-terms-of-service = I agree to the <a href="{ $tos_uri }" data-kind="primary" class="cpd-link">Terms and Conditions</a>
 coauth-registration-token-description = Enter a registration token provided by your coauth administrator.

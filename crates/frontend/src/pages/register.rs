@@ -175,7 +175,7 @@ fn RegisterPage(providers: ProvidersOutcome) -> Element {
                         }
 
                         div { class: "form-field",
-                            label { class: "form-label", "Phone (optional)" }
+                            label { class: "form-label", {crate::translations::t("coauth-register-phone-optional")} }
                             input {
                                 class: "form-input",
                                 r#type: "tel",
