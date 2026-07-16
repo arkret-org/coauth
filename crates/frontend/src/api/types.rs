@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 
 // ── Viewer & User ──────────────────────────────────────────────
@@ -328,84 +326,9 @@ pub struct PasswordRecoveryTrustBoundary {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct SetDisplayNamePayload {
-    pub status: SetDisplayNameStatus,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum SetDisplayNameStatus {
-    Set,
-    Invalid,
-    NotFound,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ProfilePatchRequestBody {
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "serde_with::rust::double_option"
-    )]
-    pub display_name: Option<Option<String>>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "serde_with::rust::double_option"
-    )]
-    pub avatar_url: Option<Option<String>>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "serde_with::rust::double_option"
-    )]
-    pub preferred_locale: Option<Option<String>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct PatchViewerProfileOutcome {
     pub profile: UserProfile,
     pub principal: PrincipalUser,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct AdminUserPatchRequestBody {
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "serde_with::rust::double_option"
-    )]
-    pub display_name: Option<Option<String>>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "serde_with::rust::double_option"
-    )]
-    pub avatar_url: Option<Option<String>>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "serde_with::rust::double_option"
-    )]
-    pub preferred_locale: Option<Option<String>>,
-    #[serde(default)]
-    pub admin: Option<bool>,
-    #[serde(default)]
-    pub locked: Option<bool>,
-    #[serde(default)]
-    pub deactivated: Option<bool>,
-    #[serde(default)]
-    pub principal_erase: Option<bool>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct UserEmailPatchRequestBody {
-    #[serde(default)]
-    pub email: Option<String>,
-    #[serde(default)]
-    pub confirmed: Option<bool>,
-    #[serde(default)]
-    pub is_primary: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -484,12 +407,6 @@ pub struct ViewerOutcome {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-#[serde(tag = "__typename")]
-pub enum ClientNode {
-    OAuthClient(OAuthClientDetail),
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct OAuthClientDetail {
     pub id: String,
     pub client_id: String,
@@ -508,21 +425,10 @@ pub struct ResendRecoveryEmailPayload {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct SetSessionNamePayload {
-    pub status: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct UserEmailAuthentication {
     pub id: String,
     pub email: String,
     pub completed_at: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-#[serde(tag = "__typename")]
-pub enum EmailAuthNode {
-    UserEmailAuthentication(UserEmailAuthentication),
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -535,15 +441,6 @@ pub struct ResendEmailAuthCodePayload {
 pub use coauth_account_types::{CurrentAccountInfo, LoginOutcome, ProvidersOutcome};
 
 // ── Registration API types ────────────────────────────────────
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct RegisterRequestBody {
-    pub handle: String,
-    #[serde(default)]
-    pub email: Option<String>,
-    pub password: String,
-    pub password_confirm: String,
-}
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct RegisterOutcome {
@@ -567,18 +464,6 @@ pub struct RegisterStatusOutcome {
     pub next_step: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct VerifyEmailRequestBody {
-    pub code: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct DisplayNameRequestBody {
-    #[serde(default)]
-    pub display_name: Option<String>,
-    #[serde(default)]
-    pub skip: Option<bool>,
-}
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct StepOutcome {
@@ -602,11 +487,6 @@ pub struct ChangeRegistrationEmailOutcome {
 }
 
 // ── Recovery API types ────────────────────────────────────────
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct RecoveryStartRequestBody {
-    pub email: String,
-}
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct RecoveryStartOutcome {

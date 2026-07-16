@@ -13,9 +13,7 @@ pub struct AppError {
 
 /// Application configuration, loaded from the server-rendered JSON config.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct AppConfig {
-    pub root: String,
     pub api_endpoint: String,
     /// If set, the backend wants the frontend to display an error page
     /// instead of the normal router.
@@ -25,7 +23,6 @@ pub struct AppConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            root: "/".to_owned(),
             api_endpoint: "/_coauth".to_owned(),
             error: None,
         }
@@ -38,10 +35,6 @@ pub fn get_config() -> AppConfig {
     #[cfg(target_arch = "wasm32")]
     {
         if let Some(val) = read_config_value() {
-            let root = js_sys::Reflect::get(&val, &"root".into())
-                .ok()
-                .and_then(|v| v.as_string())
-                .unwrap_or_else(|| "/".to_string());
             let api_endpoint = js_sys::Reflect::get(&val, &"api_endpoint".into())
                 .ok()
                 .and_then(|v| v.as_string())
@@ -55,7 +48,6 @@ pub fn get_config() -> AppConfig {
             let error = read_error_from_js(&val);
 
             return AppConfig {
-                root,
                 api_endpoint,
                 error,
             };

@@ -111,13 +111,11 @@ fn visit_call_spanned<'a>(
     ctx: &mut Context,
     call: &'a Spanned<Call<'a>>,
 ) -> Result<(), minijinja::Error> {
-    let source_span = call.span();
-
     // Detect whether this call invokes the translation function.
     if let Expr::Var(v) = &call.expr
         && v.id == ctx.func()
     {
-        record_translation_key(ctx, &call.args, source_span)?;
+        record_translation_key(ctx, &call.args)?;
     }
 
     visit_expr(ctx, &call.expr)?;
@@ -129,7 +127,6 @@ fn visit_call_spanned<'a>(
 fn record_translation_key<'a>(
     ctx: &mut Context,
     args: &'a [CallArg<'a>],
-    span: minijinja::machinery::Span,
 ) -> Result<(), minijinja::Error> {
     let first_arg = args.first().and_then(extract_const_from_call_arg);
 
@@ -140,17 +137,7 @@ fn record_translation_key<'a>(
         )
     })?;
 
-    let is_plural = args.iter().any(|a| matches!(a, CallArg::Kwarg("count", _)));
-
-    let kind = if is_plural {
-        crate::key::Kind::Plural
-    } else {
-        crate::key::Kind::Message
-    };
-
-    let mut key = Key::new(kind, key_str.to_owned());
-    key = ctx.set_key_location(key, span);
-    ctx.record(key);
+    ctx.record(Key::new(key_str.to_owned()));
 
     Ok(())
 }

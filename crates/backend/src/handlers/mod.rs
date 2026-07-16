@@ -30,38 +30,6 @@ macro_rules! impl_from_error_for_route {
     };
 }
 
-/// Implement [`salvo::oapi::EndpointOutRegister`] for an admin `RouteError`.
-///
-/// Accepts a list of `(status_code, description)` tuples.  The generated
-/// implementation adds each pair as an error response with a JSON error
-/// body to the `OpenAPI` operation.
-#[allow(unused_macros)]
-macro_rules! impl_endpoint_out_register {
-    ($ty:ty, [ $(($status:expr, $desc:expr)),* $(,)? ]) => {
-        impl salvo::oapi::EndpointOutRegister for $ty {
-            fn register(
-                _components: &mut salvo::oapi::Components,
-                _operation: &mut salvo::oapi::Operation,
-            ) {
-                use salvo::oapi::*;
-
-                let error_schema = Object::new()
-                    .property("errors", Object::new()
-                        .property("title", Object::new().schema_type(BasicType::String))
-                        .required("title"));
-
-                $(
-                    {
-                        let response = Response::new($desc)
-                            .add_content("application/json", Content::new(error_schema.clone()));
-                        _operation.responses.insert($status, RefOr::Type(response));
-                    }
-                )*
-            }
-        }
-    };
-}
-
 use std::sync::LazyLock;
 
 use opentelemetry::metrics::Meter;

@@ -62,7 +62,6 @@ fn main() {
                 WhitespaceConfig::default(),
             ) {
                 Ok(ast) => {
-                    context.set_current_file(relative.as_str());
                     minijinja::find_in_stmt(&mut context, &ast).unwrap();
                 }
                 Err(err) => {

@@ -17,8 +17,6 @@ pub use icu_locid::{self, Locale, locale};
 #[derive(Debug)]
 pub struct FormatError {
     msg: &'static str,
-    #[allow(dead_code)]
-    source: Option<Box<dyn std::error::Error + Send + Sync>>,
 }
 
 impl std::fmt::Display for FormatError {
@@ -33,7 +31,7 @@ impl FormatError {
     /// Create a new `FormatError` with a static message.
     #[must_use]
     pub fn new(msg: &'static str) -> Self {
-        Self { msg, source: None }
+        Self { msg }
     }
 }
 

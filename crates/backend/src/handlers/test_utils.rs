@@ -30,8 +30,8 @@ use coauth_templates::{SiteConfigExt, Templates};
 use cookie_store::{CookieStore, RawCookie};
 use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
-use headers::{Authorization, ContentType, HeaderMapExt, HeaderName, HeaderValue};
-use hyper::header::{CONTENT_TYPE, COOKIE, SET_COOKIE};
+use headers::{Authorization, ContentType, HeaderMapExt, HeaderValue};
+use hyper::header::{CONTENT_TYPE, COOKIE};
 use hyper::{Request, Response, StatusCode};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
@@ -128,8 +128,8 @@ pub(crate) struct TestState {
     pub clock: Arc<MockClock>,
     pub rng: Arc<Mutex<ChaChaRng>>,
     pub http_client: reqwest::Client,
-    // Test-harness keep-alive + helper state: which helpers below are called
-    // varies with the DB-gated test set, so these stay even while unused.
+    // Keep-alive handles: never read, held so the spawned worker/tasks they
+    // own outlive the `TestState` that started them.
     #[allow(dead_code)]
     pub task_tracker: TaskTracker,
     #[allow(dead_code)]
@@ -371,38 +371,6 @@ impl TestState {
             queue_worker,
             cancellation_drop_guard: Arc::new(shutdown_token.drop_guard()),
         })
-    }
-
-    /// Run all the available jobs in the queue.
-    ///
-    /// Panics if it fails to run the jobs (but not on job failures!)
-    /// Test-harness surface: kept while unused because the DB-gated test set
-    /// moves helpers in and out of use.
-    #[allow(dead_code)]
-    pub async fn run_jobs_in_queue(&self) {
-        let mut queue = self.queue_worker.lock().await;
-        queue.process_all_jobs_in_tests().await.unwrap();
-    }
-
-    /// Reset the test utils to a fresh state, with the same configuration.
-    /// Test-harness surface: kept while unused because the DB-gated test set
-    /// moves helpers in and out of use.
-    #[allow(dead_code)]
-    pub async fn reset(self) -> Self {
-        let site_config = self.site_config.clone();
-        let pool = self.repository_factory.pool().clone();
-        let task_tracker = self.task_tracker.clone();
-
-        // This should trigger the cancellation drop guard
-        drop(self);
-
-        // Wait for tasks to complete
-        task_tracker.close();
-        task_tracker.wait().await;
-
-        Self::from_pool_with_site_config(pool, site_config)
-            .await
-            .unwrap()
     }
 
     /// Build a Salvo router with all test routes and state injection.
@@ -907,27 +875,6 @@ impl TestState {
         ChaChaRng::from_rng(&mut *parent_rng).unwrap()
     }
 
-    /// Do a call to the userinfo endpoint to check if the given token is valid.
-    /// Returns true if the token is valid.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the response status code is not 200 or 401.
-    /// Test-harness surface: kept while unused because the DB-gated test set
-    /// moves helpers in and out of use.
-    #[allow(dead_code)]
-    pub async fn is_access_token_valid(&self, token: &str) -> bool {
-        let request = Request::get("/oauth/userinfo").bearer(token).empty();
-
-        let response = self.request(request).await;
-
-        match response.status() {
-            StatusCode::OK => true,
-            StatusCode::UNAUTHORIZED => false,
-            _ => panic!("Unexpected status code: {}", response.status()),
-        }
-    }
-
     /// Get an empty cookie jar
     pub fn cookie_jar(&self) -> CookieJar {
         self.cookie_manager.cookie_jar()
@@ -943,12 +890,6 @@ pub(crate) trait RequestBuilderExt {
 
     /// Sets the request Authorization header to the given bearer token.
     fn bearer(self, token: &str) -> Self;
-
-    /// Sets the request Authorization header to the given basic auth
-    /// credentials.
-    /// Test-harness surface: kept while unused (see note on `TestState`).
-    #[allow(dead_code)]
-    fn basic_auth(self, username: &str, password: &str) -> Self;
 
     /// Builds the request with an empty body.
     fn empty(self) -> hyper::Request<String>;
@@ -979,13 +920,6 @@ impl RequestBuilderExt for hyper::http::request::Builder {
         self
     }
 
-    fn basic_auth(mut self, username: &str, password: &str) -> Self {
-        self.headers_mut()
-            .unwrap()
-            .typed_insert(Authorization::basic(username, password));
-        self
-    }
-
     fn empty(self) -> hyper::Request<String> {
         self.body(String::new()).unwrap()
     }
@@ -998,16 +932,6 @@ pub(crate) trait ResponseExt {
     ///
     /// Panics if the response has a different status code.
     fn assert_status(&self, status: StatusCode);
-
-    /// Asserts that the response has the given header value.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the response does not have the given header or if the header
-    /// value does not match.
-    /// Test-harness surface: kept while unused (see note on `TestState`).
-    #[allow(dead_code)]
-    fn assert_header_value(&self, header: HeaderName, value: &str);
 
     /// Get the response body as JSON.
     ///
@@ -1028,22 +952,6 @@ impl ResponseExt for Response<String> {
             self.status(),
             status,
             self.body()
-        );
-    }
-
-    #[track_caller]
-    fn assert_header_value(&self, header: HeaderName, value: &str) {
-        let actual_value = self
-            .headers()
-            .get(&header)
-            .unwrap_or_else(|| panic!("Missing header {header}"));
-
-        assert_eq!(
-            actual_value,
-            value,
-            "Header mismatch: got {:?}, expected {:?}",
-            self.headers().get(header),
-            value
         );
     }
 
@@ -1095,31 +1003,6 @@ impl CookieHelper {
             HeaderValue::from_str(&value).expect("Invalid cookie value"),
         );
         request
-    }
-
-    /// Save the cookies from the response into the store.
-    /// Test-harness surface: kept while unused because the DB-gated test set
-    /// moves helpers in and out of use.
-    #[allow(dead_code)]
-    pub fn save_cookies<B>(&self, response: &Response<B>) {
-        let url = "https://example.com/".parse().unwrap();
-        let mut store = self.store.write().unwrap();
-        store.store_response_cookies(
-            response
-                .headers()
-                .get_all(SET_COOKIE)
-                .iter()
-                .map(|set_cookie| {
-                    RawCookie::parse(
-                        set_cookie
-                            .to_str()
-                            .expect("Invalid set-cookie header")
-                            .to_owned(),
-                    )
-                    .expect("Invalid set-cookie header")
-                }),
-            &url,
-        );
     }
 
     /// Import cookies from a `CookieJar` into the store.
