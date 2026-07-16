@@ -1,4 +1,7 @@
-use arkret_core::SessionGrantIntrospectStatus;
+use arkret_core::{
+    Did, SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_TYPE, SessionGrantIntrospectStatus,
+    SessionGrantIntrospectionProofClaims,
+};
 use chrono::{Duration, Utc};
 use coauth_config::{
     ArkretConfig, DeploymentProfileConfig, IdentityRegistryConfig, PrincipalMethodConfig,
@@ -499,7 +502,7 @@ fn describe_separates_claim_levels() {
         .expect("verified_profiles array present");
     assert!(
         verified.is_empty(),
-        "coauth must not advertise cotest_verified profiles without a verifier"
+        "coauth must not advertise conformance_verified profiles without a verifier"
     );
 
     // claimed_profiles entries MUST carry claim_kind=self_claimed.
@@ -1031,10 +1034,10 @@ fn session_grant_introspection_proof(
         .unwrap();
     let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::EdDsa);
     let claims = SessionGrantIntrospectionProofClaims {
-        kind: "ak.session_grant.introspection_proof.v1".to_owned(),
+        kind: SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_TYPE.to_owned(),
         grant_id: grant.grant_id.to_string(),
         grant_jwt_hash: session_grant_jwt_hash(&material.grant_jwt),
-        audience: grant.audience.clone(),
+        audience: Did::new(grant.audience.clone()).unwrap(),
         challenge: challenge.to_owned(),
         issued_at: now,
         expires_at: now + Duration::try_minutes(1).unwrap(),

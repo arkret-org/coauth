@@ -77,18 +77,6 @@ pub(crate) struct SessionGrantRecord {
     revoked_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct SessionGrantIntrospectionProofClaims {
-    #[serde(rename = "type")]
-    pub(crate) kind: String,
-    pub(crate) grant_id: String,
-    pub(crate) grant_jwt_hash: String,
-    pub(crate) audience: String,
-    pub(crate) challenge: String,
-    pub(crate) issued_at: DateTime<Utc>,
-    pub(crate) expires_at: DateTime<Utc>,
-}
-
 impl From<SessionGrant> for SessionGrantRecord {
     fn from(value: SessionGrant) -> Self {
         Self {

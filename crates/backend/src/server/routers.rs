@@ -125,7 +125,6 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         .push(Router::with_path("root/identity/describe").get(arkret::identity_describe))
         .push(Router::with_path("root/identity/resolve").post(arkret::identity_resolve))
         .push(Router::with_path("root/identity/document").get(arkret::identity_document))
-        .push(Router::with_path("find/directory/describe").get(arkret::directory_describe))
         .push(
             Router::with_path("find/directory/resolve-handle")
                 .post(arkret::directory_resolve_handle),

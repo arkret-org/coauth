@@ -413,11 +413,13 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
     async fn revoke_delegation(
         &mut self,
         clock: &dyn Clock,
+        organization_did: &str,
         delegation_ref: &str,
     ) -> Result<Option<OrganizationDelegation>, Self::Error> {
         let now = clock.now();
         diesel::update(
             organization_delegations::table
+                .filter(organization_delegations::organization_did.eq(organization_did))
                 .filter(organization_delegations::delegation_ref.eq(delegation_ref))
                 .filter(organization_delegations::revoked_at.is_null()),
         )
@@ -439,12 +441,14 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
     async fn renew_delegation(
         &mut self,
         clock: &dyn Clock,
+        organization_did: &str,
         delegation_ref: &str,
         valid_until: Option<DateTime<Utc>>,
     ) -> Result<Option<OrganizationDelegation>, Self::Error> {
         let now = clock.now();
         diesel::update(
             organization_delegations::table
+                .filter(organization_delegations::organization_did.eq(organization_did))
                 .filter(organization_delegations::delegation_ref.eq(delegation_ref))
                 .filter(organization_delegations::revoked_at.is_null()),
         )
@@ -550,7 +554,7 @@ mod tests {
 
         let revoked = repo
             .organization_control()
-            .revoke_delegation(&clock, &reference)
+            .revoke_delegation(&clock, &did, &reference)
             .await
             .unwrap()
             .expect("active delegation revocable");

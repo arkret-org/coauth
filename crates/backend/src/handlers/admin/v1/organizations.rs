@@ -344,13 +344,13 @@ pub async fn revoke_delegation_handler(
     org_did: PathParam<String>,
     delegation_ref: PathParam<String>,
 ) -> JsonResult<OrganizationDelegation> {
-    let _organization_did = org_did.into_inner();
+    let organization_did = org_did.into_inner();
     let delegation_ref = delegation_ref.into_inner();
     let mut repo = extract_call_context(req, depot).await?.repo;
     let clock = make_clock();
     let revoked = repo
         .organization_control()
-        .revoke_delegation(&*clock, &delegation_ref)
+        .revoke_delegation(&*clock, &organization_did, &delegation_ref)
         .await?;
     match revoked {
         Some(delegation) => {
@@ -374,14 +374,22 @@ pub async fn renew_delegation_handler(
     org_did: PathParam<String>,
     delegation_ref: PathParam<String>,
 ) -> JsonResult<OrganizationDelegation> {
-    let _organization_did = org_did.into_inner();
+    let organization_did = org_did.into_inner();
     let delegation_ref = delegation_ref.into_inner();
-    let body: RenewOrganizationDelegationRequest = req.parse_json().await.unwrap_or_default();
+    let body: RenewOrganizationDelegationRequest = req
+        .parse_json()
+        .await
+        .map_err(|error| AppError::bad_request(format!("invalid request body: {error}")))?;
     let mut repo = extract_call_context(req, depot).await?.repo;
     let clock = make_clock();
     let renewed = repo
         .organization_control()
-        .renew_delegation(&*clock, &delegation_ref, body.valid_until)
+        .renew_delegation(
+            &*clock,
+            &organization_did,
+            &delegation_ref,
+            body.valid_until,
+        )
         .await?;
     match renewed {
         Some(delegation) => {

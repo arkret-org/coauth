@@ -1,4 +1,4 @@
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -10,7 +10,7 @@ use thiserror::Error;
 use url::Url;
 
 use crate::handlers::arkret::{DidDocument, SessionGrantError, issuer_did_for, service_id_for};
-use crate::outbound_http::RequestBuilderExt as _;
+use crate::outbound_http::{RequestBuilderExt as _, blocked_domain_reason, blocked_ip_reason};
 
 pub type DidResolverServiceHandle = Arc<dyn DidResolverService>;
 
@@ -625,25 +625,15 @@ fn enforce_resolver_url_policy(url: &Url) -> Result<(), DidResolveError> {
             // common case where a config typo (or a malicious admin
             // mutation) lets a `did:web` document URL point at
             // localhost.
-            let lower = name.to_ascii_lowercase();
-            // `ends_with(".local")` is ASCII-only by construction (we just
-            // lowercased the host above); the clippy lint that nudges toward
-            // `Path::extension` doesn't apply here.
-            #[allow(clippy::case_sensitive_file_extension_comparisons)]
-            let blocked = lower == "localhost"
-                || lower.ends_with(".localhost")
-                || lower.ends_with(".local")
-                || lower.ends_with(".internal")
-                || lower == "metadata.google.internal";
-            if blocked && !allow_loopback {
+            if let Some(reason) = blocked_domain_reason(name, allow_loopback) {
                 return Err(DidResolveError::ForbiddenResolverUrl(format!(
-                    "host {lower} is on the internal-name deny list"
+                    "host {name} is blocked: {reason}"
                 )));
             }
             Ok(())
         }
         url::Host::Ipv4(addr) => {
-            if blocked_resolver_ip_reason(IpAddr::V4(addr), allow_loopback).is_some() {
+            if blocked_ip_reason(addr.into(), allow_loopback).is_some() {
                 return Err(DidResolveError::ForbiddenResolverUrl(format!(
                     "IPv4 {addr} is in a blocked range"
                 )));
@@ -651,7 +641,7 @@ fn enforce_resolver_url_policy(url: &Url) -> Result<(), DidResolveError> {
             Ok(())
         }
         url::Host::Ipv6(addr) => {
-            if blocked_resolver_ip_reason(IpAddr::V6(addr), allow_loopback).is_some() {
+            if blocked_ip_reason(addr.into(), allow_loopback).is_some() {
                 return Err(DidResolveError::ForbiddenResolverUrl(format!(
                     "IPv6 {addr} is in a blocked range"
                 )));
@@ -693,7 +683,7 @@ fn enforce_resolved_resolver_ip_policy(
     let allow_loopback =
         coauth_config::runtime_var_os("COAUTH_DID_RESOLVER_ALLOW_LOOPBACK").is_some();
     for addr in addrs {
-        if let Some(reason) = blocked_resolver_ip_reason(addr.ip(), allow_loopback) {
+        if let Some(reason) = blocked_ip_reason(addr.ip(), allow_loopback) {
             return Err(DidResolveError::ForbiddenResolverUrl(format!(
                 "host {host} resolved to blocked address {} ({reason})",
                 addr.ip()
@@ -702,83 +692,6 @@ fn enforce_resolved_resolver_ip_policy(
     }
 
     Ok(())
-}
-
-fn blocked_resolver_ip_reason(ip: IpAddr, allow_loopback: bool) -> Option<&'static str> {
-    match ip {
-        IpAddr::V4(addr) => blocked_resolver_ipv4_reason(addr, allow_loopback),
-        IpAddr::V6(addr) => blocked_resolver_ipv6_reason(addr, allow_loopback),
-    }
-}
-
-fn blocked_resolver_ipv4_reason(addr: Ipv4Addr, allow_loopback: bool) -> Option<&'static str> {
-    let octets = addr.octets();
-    if octets[0] == 0 {
-        return Some("this-network IPv4 range");
-    }
-    if octets[0] == 10
-        || (octets[0] == 172 && (16..=31).contains(&octets[1]))
-        || (octets[0] == 192 && octets[1] == 168)
-    {
-        return Some("private IPv4 range");
-    }
-    if octets[0] == 127 && !allow_loopback {
-        return Some("loopback IPv4 range");
-    }
-    if octets[0] == 169 && octets[1] == 254 {
-        return Some("link-local IPv4 range");
-    }
-    if octets[0] == 100 && (64..=127).contains(&octets[1]) {
-        return Some("carrier-grade NAT IPv4 range");
-    }
-    if octets[0] == 192 && octets[1] == 0 && octets[2] == 0 {
-        return Some("IETF protocol-assignment IPv4 range");
-    }
-    if octets[0] == 192 && octets[1] == 0 && octets[2] == 2 {
-        return Some("documentation IPv4 range");
-    }
-    if octets[0] == 198 && (octets[1] == 18 || octets[1] == 19) {
-        return Some("benchmark IPv4 range");
-    }
-    if octets[0] == 198 && octets[1] == 51 && octets[2] == 100 {
-        return Some("documentation IPv4 range");
-    }
-    if octets[0] == 203 && octets[1] == 0 && octets[2] == 113 {
-        return Some("documentation IPv4 range");
-    }
-    if (224..=239).contains(&octets[0]) {
-        return Some("multicast IPv4 range");
-    }
-    if octets[0] >= 240 {
-        return Some("reserved IPv4 range");
-    }
-    if addr == Ipv4Addr::BROADCAST {
-        return Some("broadcast IPv4 address");
-    }
-    None
-}
-
-fn blocked_resolver_ipv6_reason(addr: Ipv6Addr, allow_loopback: bool) -> Option<&'static str> {
-    let segments = addr.segments();
-    if addr.is_unspecified() {
-        return Some("unspecified IPv6 address");
-    }
-    if addr.is_loopback() && !allow_loopback {
-        return Some("loopback IPv6 address");
-    }
-    if segments[0] & 0xfe00 == 0xfc00 {
-        return Some("unique-local IPv6 range");
-    }
-    if segments[0] & 0xffc0 == 0xfe80 {
-        return Some("link-local IPv6 range");
-    }
-    if segments[0] & 0xff00 == 0xff00 {
-        return Some("multicast IPv6 range");
-    }
-    if segments[0] == 0x2001 && segments[1] == 0x0db8 {
-        return Some("documentation IPv6 range");
-    }
-    None
 }
 
 fn delegated_resolver_url(resolver: &str) -> Result<Url, DidResolveError> {
@@ -794,10 +707,12 @@ fn did_method(did: &str) -> Option<String> {
     // MUST be lowercase ASCII alpha + digits only (no `.`/`-`/`_`/`:`);
     // any value the SDK validator rejects is wire-broken and MUST NOT
     // be routed by this resolver.
-    arkret_core::Did::new(did.to_owned()).ok()?;
-    let rest = did.strip_prefix("did:")?;
-    let (method, _method_id) = rest.split_once(':')?;
-    (!method.is_empty()).then(|| method.to_ascii_lowercase())
+    Some(
+        arkret_core::Did::new(did.to_owned())
+            .ok()?
+            .method()
+            .to_owned(),
+    )
 }
 
 fn did_web_document_url(did: &str) -> Result<Url, DidResolveError> {
