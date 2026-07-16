@@ -80,12 +80,10 @@ anyhow = "1.0.102"
 arc-swap = "1.9.1"
 argon2 = {version = "0.5.3",features = ["password-hash", "std"]}
 assert_matches = "1.5.0"
-async-stream = "0.3.6"
 async-trait = "0.1.89"
 base64 = "0.22.1"
 base64ct = {version = "1.8.3",features = ["std"]}
 bcrypt = "0.19.1"
-bitflags = "2.13.0"
 bytes = "1.11.1"
 camino = {version = "1.2.2",features = ["serde1"]}
 cedar-policy = "4"
@@ -127,7 +125,6 @@ arkret-crypto = {version = "0.3.0",path = "../arkret-rust-sdk/crates/crypto",def
 arkret-identifiers = {version = "0.3.0",path = "../arkret-rust-sdk/crates/identifiers",default-features = false}
 arkret-signatures = {version = "0.3.0",path = "../arkret-rust-sdk/crates/signatures",default-features = false,features = ["signer"]}
 arkret-state = {version = "0.3.0",path = "../arkret-rust-sdk/crates/state",default-features = false}
-compact_str = "0.9.1"
 console = "0.16.3"
 const-oid = {version = "0.9.6",features = ["std"]}
 convert_case = "0.11.0"
@@ -173,8 +170,6 @@ ed25519-dalek = {version = "2.2.0",features = ["rand_core", "pkcs8"]}
 elliptic-curve = {version = "0.13.8",features = ["std", "pem", "sec1"]}
 figment = {version = "0.10.19",features = ["env", "yaml", "test"]}
 fluent-bundle = "0.16"
-fluent-langneg = "0.14"
-fluent-syntax = "0.12"
 form_urlencoded = "1.2.2"
 futures-util = "0.3.32"
 # NOTE: pinned to 0.14 because the entire RustCrypto stack we depend on
@@ -195,12 +190,7 @@ hex = "0.4.3"
 hmac = "0.12.1"
 http = "1.4.2"
 http-body = "1.0.1"
-http-body-util = "0.1.3"
 hyper = {version = "1.10.1",features = ["client", "server", "http1", "http2"]}
-hyper-rustls = {version = "0.27.9",default-features = false,features = [
-    "http1",
-    "http2",
-]}
 hyper-util = {version = "0.1.20",features = [
     "client",
     "server",
@@ -216,13 +206,8 @@ icu_experimental = {version = "0.5.0",features = ["compiled_data"]}
 icu_locid = {package = "icu_locale_core",version = "2.2.0",features = ["alloc"]}
 icu_locid_transform = {package = "icu_locale",version = "2.2.0",features = ["compiled_data"]}
 icu_normalizer = {version = "2.2.0",features = ["compiled_data"]}
-icu_plurals = {version = "2.2.0",features = ["compiled_data"]}
-icu_provider = {version = "2.2.0",features = ["std", "sync"]}
-icu_provider_adapters = "2.2.0"
-indexmap = {version = "2.14.0",features = ["serde"]}
 indoc = "2.0.7"
 insta = {version = "1.47.2",features = ["yaml", "json"]}
-intl-memoizer = "0.5"
 ipnetwork = {version = "0.21",features = ["serde"]}
 itertools = "0.14.0"
 js-sys = "0.3"
@@ -245,7 +230,6 @@ minijinja = {version = "2.20.0",features = [
     "unstable_machinery",
 ]}
 minijinja-contrib = {version = "2.20.0",features = ["pycompat"]}
-nonzero_ext = "0.3.0"
 coauth-oauth-types = {version = "=0.3.0",path = "crates/oauth-types"}
 opendal = {version = "0.58",features = ["services-fs", "services-s3"]}
 opentelemetry = {version = "0.31.0",features = ["trace", "metrics"]}
@@ -272,7 +256,6 @@ opentelemetry_sdk = {version = "0.31.0",features = [
 p256 = {version = "0.13.2",features = ["std"]}
 p384 = {version = "0.13.1",features = ["std"]}
 p521 = {version = "0.13.3",features = ["std", "ecdsa"]}
-pad = "0.1.6"
 pbkdf2 = {version = "0.12.2",features = [
     "password-hash",
     "std",
@@ -280,13 +263,10 @@ pbkdf2 = {version = "0.12.2",features = [
     "parallel",
 ]}
 pem-rfc7468 = {version = "0.7.0",features = ["std"]}
-pest = "2.8.6"
-pest_derive = "2.8.6"
 pin-project-lite = "0.2.17"
 pkcs1 = {version = "0.7.5",features = ["std"]}
 pkcs8 = {version = "0.10.2",features = ["std", "pkcs5", "encryption", "pem"]}
 psl = "2.1.212"
-quanta = "0.12.6"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 rand_core = {version = "0.6.4",features = ["std"]}
@@ -300,7 +280,6 @@ reqwest = {version = "0.13.4",default-features = false,features = [
     "socks",
 ]}
 rsa = {version = "0.9.10",features = ["std", "pem"]}
-rustc-hash = "2.1.2"
 rustls = "0.23.40"
 rustls-pki-types = "1.14.1"
 rustls-platform-verifier = "0.7.0"
@@ -347,7 +326,6 @@ soland-core = {path = "../soland/crates/core"}
 spki = {version = "0.7.3",features = ["std"]}
 subtle = "2.6.1"
 thiserror = "2.0.18"
-thiserror-ext = "0.3.0"
 time = "0.3"
 tokio = {version = "1.52.3",default-features = false,features = [
     "fs",
@@ -367,7 +345,6 @@ tokio-postgres = {version = "0.7",features = [
     "with-serde_json-1",
 ]}
 tokio-rustls = "0.26.4"
-tokio-stream = "0.1.18"
 tokio-test = "0.4.5"
 tokio-util = {version = "0.7.18",features = ["rt"]}
 tower-service = "0.3.3"
@@ -378,7 +355,6 @@ tracing-subscriber = {version = "0.3.23",features = ["env-filter"]}
 ulid = {version = "1.2",features = ["serde", "uuid"]}
 unic-langid = "0.9"
 url = {version = "2.5.8",features = ["serde"]}
-urlencoding = "2.1.3"
 uuid = {version = "1.23.3",features = ["v5", "v7"]}
 v_htmlescape = "0.15.8"
 vergen-gitcl = {version = "9.1.0",features = ["rustc"]}
@@ -409,7 +385,6 @@ web-sys = {version = "0.3",features = [
     "MediaQueryList",
 ]}
 webauthn-rs = {version = "0.5",features = ["danger-allow-state-serialisation"]}
-webauthn-rs-proto = "0.5"
 wiremock = "0.6.5"
 woothee = "0.13.0"
 writeable = "0.6.3"
