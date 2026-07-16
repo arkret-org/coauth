@@ -214,7 +214,7 @@ impl<K: Clone + Eq + Hash + Send + Sync + 'static> KeyedLimiter<K> {
         // is full, drop the oldest entries first. Existing keys never trigger
         // this branch (they update in place).
         if map.len() >= MAX_KEYED_GUARDS && !map.contains_key(key) {
-            Self::evict_oldest(&mut map);
+            Self::evict_oldest(map);
         }
 
         let entry = map.entry(key.clone()).or_insert_with(|| GuardEntry {
