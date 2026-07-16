@@ -80,18 +80,11 @@ pub async fn post_register(
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
-    // A deployment connected to an Arkret Principal Server must not create an
-    // account that has no verified principal DID binding. The client-authored
-    // WebVH strand below is the only password-registration entry in this mode.
-    if !depot.arkret_config()?.principal_servers.is_empty() {
-        return Ok(Json(RegisterOutcome {
-            status: "error",
-            id: None,
-            next_step: None,
-            error: Some("client_signed_webvh_inception_required".into()),
-        }));
-    }
-
+    // Account-first onboarding (account-lifecycle.md 2.1.1): the account record
+    // is created without a principal DID. The client completes cold-root custody
+    // and its client-signed DID inception after sign-in, then binds the resulting
+    // principal_id. An unbound account can sign in but cannot issue a session
+    // grant (principal_unknown) and therefore cannot make any persistent write.
     let site_config = depot.site_config()?;
     let password_manager = depot.password_manager()?;
     let principal_server = depot.principal_server()?;
