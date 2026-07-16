@@ -41,11 +41,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use arkret_core::{
-    AuthzDecision, CAP_ACTION_CALL_JOIN, CAP_ACTION_CALL_MODERATE, CAP_ACTION_CALL_RECORD,
-    CAP_ACTION_CALL_SCREEN_SHARE, CAP_ACTION_CALL_TRANSCRIBE, FreshnessState,
-    PolicyCheckRequestBody,
-};
+use arkret_core::{AuthzDecision, CapabilityActionId, FreshnessState, PolicyCheckRequestBody};
 use chrono::{DateTime, Utc};
 use coauth_data::collaboration_capability::{
     CollaborationCapabilityAction, CollaborationCapabilityGrant,
@@ -62,7 +58,6 @@ use crate::services::policy_frontier::Frontier;
 /// they are kept as local constants rather than aliased to SDK symbols.
 const REASON_CODE_OK: &str = "ok";
 const REASON_CODE_POLICY_REVIEW_REQUIRED: &str = "policy_review_required";
-const CANDIDATE_JOIN_POLICY_REVIEW_ACTION: &str = "ak.realm.join.review";
 const CANDIDATE_JOIN_POLICY_PROFILE: &str = "ak.profile.candidate.join_policy.v1";
 
 /// AKP-0010 (R3 spec-sync 2026-05-27, arkret-spec b47ff6ec) — call /
@@ -71,11 +66,11 @@ const CANDIDATE_JOIN_POLICY_PROFILE: &str = "ak.profile.candidate.join_policy.v1
 /// recognise these five actions so deny/review/allow rules can target
 /// them by name. Mirrors `arkret_core::CALL_CAPABILITY_ACTIONS`.
 pub const RECOGNISED_CALL_CAPABILITY_ACTIONS: &[&str] = &[
-    CAP_ACTION_CALL_JOIN,
-    CAP_ACTION_CALL_SCREEN_SHARE,
-    CAP_ACTION_CALL_RECORD,
-    CAP_ACTION_CALL_TRANSCRIBE,
-    CAP_ACTION_CALL_MODERATE,
+    CapabilityActionId::CALL_JOIN,
+    CapabilityActionId::CALL_SCREEN_SHARE,
+    CapabilityActionId::CALL_RECORD,
+    CapabilityActionId::CALL_TRANSCRIBE,
+    CapabilityActionId::CALL_MODERATE,
 ];
 
 /// CAP-1: returns true when `action` is one of the five AKP-0010 call /
@@ -529,7 +524,7 @@ fn unsupported_feature(policy_version: &str) -> PolicyDecision {
 }
 
 fn is_candidate_join_policy_action(action: &str) -> bool {
-    action == CANDIDATE_JOIN_POLICY_REVIEW_ACTION
+    action == CapabilityActionId::REALM_JOIN_REVIEW
         || action == "realm.join_policy"
         || action.starts_with("realm.join_policy.")
         || action == "member.application"

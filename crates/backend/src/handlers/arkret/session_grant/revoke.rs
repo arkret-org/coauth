@@ -348,7 +348,7 @@ async fn verify_cross_session_lifecycle_proof(
 
     let replay_key = format!(
         "{}|{}|{}|{}|{}|{}",
-        arkret_core::SESSION_REVOKE_OPERATION_ID,
+        arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_REVOKE_SESSION,
         current_grant.subject,
         current_device_id,
         proof.audience,

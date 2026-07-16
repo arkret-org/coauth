@@ -1623,7 +1623,7 @@ fn require_canonical_handle_rejects_acct_aliases() {
     let err = require_canonical_handle("acct:alice@example.com").unwrap_err();
     match err {
         ArkretRouteError::Coded { code, message, .. } => {
-            assert_eq!(code, HANDLE_NOT_CANONICAL_CODE);
+            assert_eq!(code, arkret_core::ErrorCode::INVALID_PARAM);
             assert!(
                 message.contains("acct:"),
                 "expected acct: in reason, got {message}"

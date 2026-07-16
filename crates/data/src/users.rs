@@ -194,17 +194,14 @@ impl Node<Ulid> for User {
     }
 }
 
-/// Error code surfaced when callers supply a non-canonical handle string.
-pub const HANDLE_NOT_CANONICAL_CODE: &str = "invalid_param";
-
 /// Validate that an input string is already the SDK-canonical Arkret handle.
 pub fn validate_canonical_handle(value: &str) -> Result<&str, (&'static str, String)> {
     let trimmed = value.trim();
-    let handle =
-        Handle::parse(trimmed).map_err(|error| (HANDLE_NOT_CANONICAL_CODE, error.to_string()))?;
+    let handle = Handle::parse(trimmed)
+        .map_err(|error| (arkret_core::ErrorCode::INVALID_PARAM, error.to_string()))?;
     if handle.canonical() != trimmed {
         return Err((
-            HANDLE_NOT_CANONICAL_CODE,
+            arkret_core::ErrorCode::INVALID_PARAM,
             format!("handle must be canonical form {}", handle.canonical()),
         ));
     }

@@ -667,10 +667,6 @@ pub(crate) fn user_handle_acct_alias(url_builder: &UrlBuilder, user: &User) -> S
     )
 }
 
-/// Stable wire-level error code returned when a caller passes a non-canonical
-/// handle string (`arkret://` URI, `acct:` alias, or other malformed input).
-pub const HANDLE_NOT_CANONICAL_CODE: &str = arkret_core::error::ErrorCode::INVALID_PARAM;
-
 /// Reject any inbound `handle` that is not in the canonical
 /// `<localpart>:<domain>` shape (spec 7157ee8 §3.1). Returns a
 /// [`ArkretRouteError::Coded`] wrapping the standard error envelope
@@ -679,7 +675,7 @@ pub(crate) fn require_canonical_handle(input: &str) -> Result<&str, ArkretRouteE
     coauth_data::user::validate_canonical_handle(input).map_err(|(_code, message)| {
         ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            HANDLE_NOT_CANONICAL_CODE,
+            arkret_core::ErrorCode::INVALID_PARAM,
             format!("reason_code=handle_not_canonical; {message}"),
         )
     })

@@ -142,12 +142,12 @@ pub async fn directory_describe(
     let description = ServiceDescribe {
         service_id,
         trust_domain,
-        service_type: "directory_service".to_owned(),
+        service_type: arkret_core::ServiceType::DirectoryService,
         protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
         supported_profiles: supported_profiles.clone(),
         supported_operations: vec![
-            "ak.find.directory.query.describe".to_owned(),
-            "ak.find.directory.query.resolve_handle".to_owned(),
+            arkret_core::ServiceOperationId::FIND_DIRECTORY_QUERY_DESCRIBE.to_owned(),
+            arkret_core::ServiceOperationId::FIND_DIRECTORY_QUERY_RESOLVE_HANDLE.to_owned(),
         ],
         supported_bindings: vec![
             arkret_core::SupportedBinding::new("http_json")

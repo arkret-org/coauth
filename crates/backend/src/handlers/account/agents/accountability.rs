@@ -12,6 +12,7 @@
 
 use std::collections::BTreeSet;
 
+use arkret_core::CapabilityActionId;
 use arkret_core::identifiers::{GrantId, new_prefixed_uuid7};
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
@@ -35,24 +36,25 @@ use crate::{AppError, CreatedJsonResult};
 
 const ACCOUNTABILITY_GRANT_FANOUT_QUEUE: &str = "soland-accountability-grant-fanout";
 
-const AGENT_CAPABILITY_ACTIONS: &[&str] = &[
-    "ak.agent.key.authorize",
-    "ak.agent.key.revoke",
-    "ak.self.agent.command.provision",
-    "ak.self.agent.command.pause",
-    "ak.self.agent.command.resume",
-    "ak.self.agent.command.deactivate",
-    "ak.agent.draft.propose",
-    "ak.agent.action_request",
-    "ak.agent.action_approve",
-    "ak.agent.action_reject",
-    "ak.self.agent.sidecar_thread.command.ensure",
-    "ak.agent.sidecar_thread.write",
-    "ak.agent.sidecar_thread.publish",
-];
-
 fn is_registered_agent_capability(action: &str) -> bool {
-    AGENT_CAPABILITY_ACTIONS.contains(&action)
+    matches!(
+        CapabilityActionId::from_wire(action),
+        Some(
+            CapabilityActionId::AgentKeyAuthorize
+                | CapabilityActionId::AgentKeyRevoke
+                | CapabilityActionId::SelfAgentCommandProvision
+                | CapabilityActionId::SelfAgentCommandPause
+                | CapabilityActionId::SelfAgentCommandResume
+                | CapabilityActionId::SelfAgentCommandDeactivate
+                | CapabilityActionId::AgentDraftPropose
+                | CapabilityActionId::AgentActionRequest
+                | CapabilityActionId::AgentActionApprove
+                | CapabilityActionId::AgentActionReject
+                | CapabilityActionId::SelfAgentSidecarThreadCommandEnsure
+                | CapabilityActionId::AgentSidecarThreadWrite
+                | CapabilityActionId::AgentSidecarThreadPublish
+        )
+    )
 }
 
 /// Request body for `POST /_coauth/self/agents/{id}/accountability-grant`.
