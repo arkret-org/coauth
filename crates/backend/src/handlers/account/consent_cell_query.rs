@@ -18,13 +18,9 @@
 //! module performs that read; the per-cell tag-policy decision lives at the
 //! invite handler call-site.
 //!
-//! ## Scope of this scaffolding
-//!
-//! Cross-service wire integration is a separate item. soland does not yet
-//! expose an admin/cell read endpoint — see
-//! `TODO(soland-cell-query)` below. Until that endpoint exists, this module
-//! returns `ConsentLookup::Unknown` from the network call so callers can
-//! degrade safely.
+//! The helper calls soland's typed consent-cell endpoint. Transport failures,
+//! non-success responses, and response-key mismatches become
+//! [`ConsentLookup::Unknown`] so callers can degrade safely.
 
 use arkret_core::{ConsentCellView, ConsentState as SdkConsentState};
 use tracing::{debug, warn};

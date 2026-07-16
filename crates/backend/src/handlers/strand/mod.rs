@@ -33,8 +33,8 @@ pub use self::executor::{CaptchaVerifyContext, StrandExecutor, StrandPlan, Stran
 /// simple — a proper database-backed store will replace this once
 /// `StrandSession` gets a repository implementation.
 ///
-/// This is shared between `rest/strand.rs` (the strand API endpoints) and
-/// account-flow handlers (registration, recovery, password change).
+/// This is shared between [`crate::handlers::account::strand`] and account-flow
+/// handlers (registration, recovery, password change).
 static STRAND_SESSION_STORE: LazyLock<RwLock<HashMap<Ulid, (StrandPlan, StrandSession)>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 

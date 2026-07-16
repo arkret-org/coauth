@@ -21,9 +21,8 @@
 //!    bit into an `Allow / ConsentRequired / Quarantine` decision.
 //! 4. On `Allow`, coauth forwards the typed invite-delivery request to the target principal's
 //!    `/_arkret/peer/invites` endpoint and returns 200. On `ConsentRequired`, coauth returns 403
-//!    with `consent_required`. On `Quarantine`, coauth returns 202 with `quarantined`; the actual
-//!    holder-side queue management lives elsewhere (see `TODO(quarantine- inbox)` in
-//!    `users/create.rs`).
+//!    with `consent_required`. On `Quarantine`, coauth returns 202 with `quarantined`; callers
+//!    retain responsibility for deferred holder-side delivery.
 //!
 //! ## Why this is a "relay" and not a "Move-mint"
 //!
