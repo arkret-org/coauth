@@ -80,6 +80,18 @@ pub async fn post_register(
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
+    // A deployment connected to an Arkret Principal Server must not create an
+    // account that has no verified principal DID binding. The client-authored
+    // WebVH strand below is the only password-registration entry in this mode.
+    if !depot.arkret_config()?.principal_servers.is_empty() {
+        return Ok(Json(RegisterOutcome {
+            status: "error",
+            id: None,
+            next_step: None,
+            error: Some("client_signed_webvh_inception_required".into()),
+        }));
+    }
+
     let site_config = depot.site_config()?;
     let password_manager = depot.password_manager()?;
     let principal_server = depot.principal_server()?;
@@ -216,6 +228,8 @@ pub struct WebvhRegistrationStartOutcome {
     pub next_step: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_id: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enrollment_authority_did: Option<String>,
     pub email_verification_bypass_allowed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -238,6 +252,7 @@ pub async fn post_webvh_start(
             registration_id: None,
             next_step: None,
             provider_id: None,
+            enrollment_authority_did: None,
             email_verification_bypass_allowed: site_config
                 .registration_email_delivery_bypass_allowed,
             error: Some("registration_disabled".into()),
@@ -251,6 +266,7 @@ pub async fn post_webvh_start(
             registration_id: None,
             next_step: None,
             provider_id: None,
+            enrollment_authority_did: None,
             email_verification_bypass_allowed: site_config
                 .registration_email_delivery_bypass_allowed,
             error: Some("username_required".into()),
@@ -266,6 +282,7 @@ pub async fn post_webvh_start(
             registration_id: None,
             next_step: None,
             provider_id: None,
+            enrollment_authority_did: None,
             email_verification_bypass_allowed: site_config
                 .registration_email_delivery_bypass_allowed,
             error: Some("handle_homograph_forbidden".into()),
@@ -291,6 +308,7 @@ pub async fn post_webvh_start(
             registration_id: None,
             next_step: None,
             provider_id: None,
+            enrollment_authority_did: None,
             email_verification_bypass_allowed: site_config
                 .registration_email_delivery_bypass_allowed,
             error: Some("handle_exists".into()),
@@ -305,6 +323,7 @@ pub async fn post_webvh_start(
             registration_id: None,
             next_step: None,
             provider_id: None,
+            enrollment_authority_did: None,
             email_verification_bypass_allowed: site_config
                 .registration_email_delivery_bypass_allowed,
             error: Some("handle_exists".into()),
@@ -342,6 +361,11 @@ pub async fn post_webvh_start(
         registration_id: Some(registration.id.to_string()),
         next_step: Some("email"),
         provider_id: Some("soland.embedded"),
+        enrollment_authority_did: Some(
+            crate::services::device_enrollment_authority::enrollment_authority()
+                .did()
+                .to_owned(),
+        ),
         email_verification_bypass_allowed: site_config.registration_email_delivery_bypass_allowed,
         error: None,
     }))

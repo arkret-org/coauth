@@ -30,6 +30,11 @@ branding-terms-and-conditions-link = 条款与条件
 ## common
 
 common-display-name = 显示名称
+common-language = 语言
+
+coauth-theme-toggle = 切换浅色或深色主题
+coauth-theme-night = 深色
+coauth-theme-light = 浅色
 common-email-address = 邮箱地址
 common-loading = 加载中...
 common-account-id = 账号标识

@@ -8,6 +8,7 @@ pub mod filter;
 mod focus_trap;
 pub mod footer;
 pub mod form_error;
+pub mod language;
 pub mod last_active;
 pub mod layout;
 pub mod loading;

@@ -84,6 +84,20 @@ pub(crate) struct Params {
     pkce: Option<pkce::AuthorizationRequest>,
 }
 
+fn localized_post_auth_path(
+    route: &str,
+    action: &PostAuthAction,
+    locale: &coauth_i18n::Locale,
+) -> String {
+    let mut query = serde_urlencoded::to_string(action).unwrap_or_default();
+    if !query.is_empty() {
+        query.push('&');
+    }
+    query.push_str("ui_locales=");
+    query.push_str(&locale.to_string());
+    format!("{route}?{query}")
+}
+
 /// Given a list of response types and an optional user-defined response mode,
 /// figure out what response mode must be used, and emit an error if the
 /// suggested response mode isn't allowed for the given response types.
@@ -138,13 +152,20 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
         ChaChaRng::from_rng(rand_core::OsRng).map_err(|e| RouteError::Internal(Box::new(e)))?,
     );
 
-    // Extract preferred language
-    let locale = crate::handlers::preferred_language(req, depot);
-
     // Parse form parameters
     let params: Params = req
         .parse_queries()
         .map_err(|e| RouteError::Internal(Box::new(e)))?;
+
+    // OIDC `ui_locales` is the cross-application source of truth. Fall back
+    // to the request headers when the client did not provide it.
+    let requested_locales = params
+        .auth
+        .ui_locales
+        .iter()
+        .flatten()
+        .filter_map(|language| language.to_string().parse().ok());
+    let locale = crate::handlers::preferred_language_with_requested(req, depot, requested_locales);
 
     // Get cookie jar
     let cookie_jar = CookieJar::extract_from_request(req, depot)
@@ -332,13 +353,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                     repo.save().await?;
 
                     {
-                        let query_str =
-                            serde_urlencoded::to_string(&continue_grant).unwrap_or_default();
-                        let path = if query_str.is_empty() {
-                            "/register".to_owned()
-                        } else {
-                            format!("/register?{query_str}")
-                        };
+                        let path = localized_post_auth_path("/register", &continue_grant, &locale);
                         salvo::writing::Redirect::other(url_builder.relative_url(&path))
                     }
                 }
@@ -348,13 +363,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                     repo.save().await?;
 
                     {
-                        let query_str =
-                            serde_urlencoded::to_string(&continue_grant).unwrap_or_default();
-                        let path = if query_str.is_empty() {
-                            "/login".to_owned()
-                        } else {
-                            format!("/login?{query_str}")
-                        };
+                        let path = localized_post_auth_path("/login", &continue_grant, &locale);
                         salvo::writing::Redirect::other(url_builder.relative_url(&path))
                     }
                 }
@@ -365,13 +374,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                     repo.save().await?;
 
                     {
-                        let query_str =
-                            serde_urlencoded::to_string(&continue_grant).unwrap_or_default();
-                        let path = if query_str.is_empty() {
-                            "/register".to_owned()
-                        } else {
-                            format!("/register?{query_str}")
-                        };
+                        let path = localized_post_auth_path("/register", &continue_grant, &locale);
                         salvo::writing::Redirect::other(url_builder.relative_url(&path))
                     }
                 }
@@ -382,13 +385,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                     repo.save().await?;
 
                     {
-                        let query_str =
-                            serde_urlencoded::to_string(&continue_grant).unwrap_or_default();
-                        let path = if query_str.is_empty() {
-                            "/login".to_owned()
-                        } else {
-                            format!("/login?{query_str}")
-                        };
+                        let path = localized_post_auth_path("/login", &continue_grant, &locale);
                         salvo::writing::Redirect::other(url_builder.relative_url(&path))
                     }
                 }
@@ -408,13 +405,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                     if total > 0 && active == 0 {
                         // Every prior OAuth session was revoked/finished —
                         // the user has logged out; require fresh credentials.
-                        let query_str =
-                            serde_urlencoded::to_string(&continue_grant).unwrap_or_default();
-                        let path = if query_str.is_empty() {
-                            "/login".to_owned()
-                        } else {
-                            format!("/login?{query_str}")
-                        };
+                        let path = localized_post_auth_path("/login", &continue_grant, &locale);
                         salvo::writing::Redirect::other(url_builder.relative_url(&path))
                     } else {
                         activity_tracker

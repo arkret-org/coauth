@@ -13,6 +13,7 @@ mod utils;
 
 use dioxus::prelude::*;
 
+use crate::components::language::LanguageToggle;
 use crate::components::theme::{ThemeToggle, init_theme};
 use crate::config::get_config;
 use crate::pages::Route;
@@ -22,17 +23,23 @@ const MAIN_CSS: Asset = asset!("/assets/main.css");
 
 fn main() {
     crate::pages::login::preserve_login_query();
-    crate::translations::init_document_language();
     init_theme();
     dioxus::launch(app);
 }
 
 fn app() -> Element {
     let cfg = get_config();
+    let initial_locale = crate::translations::initial_locale();
+    let locale =
+        use_context_provider::<crate::translations::LocaleSignal>(|| Signal::new(initial_locale));
+    use_effect(move || crate::translations::apply_locale(*locale.read()));
 
     rsx! {
         document::Link { rel: "stylesheet", href: MAIN_CSS }
-        ThemeToggle {}
+        div { class: "display-preferences",
+            LanguageToggle {}
+            ThemeToggle {}
+        }
 
         if let Some(error) = cfg.error {
             // The backend injected an error state — show the error page

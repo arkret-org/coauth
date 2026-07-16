@@ -98,8 +98,8 @@ pub fn ThemeToggle() -> Element {
         button {
             class: "theme-toggle",
             r#type: "button",
-            title: "Toggle light or night theme",
-            "aria-label": "Toggle light or night theme",
+            title: crate::translations::t("coauth-theme-toggle"),
+            "aria-label": crate::translations::t("coauth-theme-toggle"),
             onclick: move |_| {
                 let next = theme().next();
                 apply_theme(next);
@@ -108,9 +108,9 @@ pub fn ThemeToggle() -> Element {
             span { class: "theme-toggle-mark" }
             span { class: "theme-toggle-label",
                 if theme() == ThemeMode::Dark {
-                    "Night"
+                    {crate::translations::t("coauth-theme-night")}
                 } else {
-                    "Light"
+                    {crate::translations::t("coauth-theme-light")}
                 }
             }
         }

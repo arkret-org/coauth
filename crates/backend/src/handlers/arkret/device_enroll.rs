@@ -149,6 +149,31 @@ fn service_attested_provenance_error(message: impl std::fmt::Display) -> ArkretR
     )
 }
 
+fn device_enroll_prev_refs(
+    actor_seq: u64,
+    bootstrap_create_event_id: Option<EventId>,
+) -> Result<Vec<EventId>, ArkretRouteError> {
+    match (actor_seq, bootstrap_create_event_id) {
+        (0, _) => Err(ArkretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            ERROR_CODE_INVALID_PARAM,
+            "actor_seq must be the next positive principal control sequence",
+        )),
+        (1, Some(create_event_id)) => Ok(vec![create_event_id]),
+        (1, None) => Err(ArkretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            ERROR_CODE_INVALID_PARAM,
+            "bootstrap_create_event_id is required for first-device enrollment",
+        )),
+        (_, Some(_)) => Err(ArkretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            ERROR_CODE_INVALID_PARAM,
+            "bootstrap_create_event_id is only valid for first-device enrollment",
+        )),
+        (_, None) => Ok(Vec::new()),
+    }
+}
+
 /// Single configured principal-server audience, or an error when the
 /// deployment has zero / multiple (the request body carries no audience, so
 /// disambiguation is impossible — fail closed).
@@ -376,6 +401,8 @@ pub async fn device_enroll_endpoint(
 
     let now = truncate_to_seconds(clock.now());
     let not_before = body.not_before.map_or_else(|| now, truncate_to_seconds);
+    let prev_refs =
+        device_enroll_prev_refs(body.actor_seq, body.bootstrap_create_event_id.clone())?;
 
     let payload = DeviceAuthorizePayload {
         principal_id: principal_id.clone(),
@@ -433,7 +460,7 @@ pub async fn device_enroll_endpoint(
         actor_seq: body.actor_seq,
         created_at: now,
         hlc: fresh_hlc(now, &mut *rng),
-        prev_refs: Vec::new(),
+        prev_refs,
         effective_scope: None,
         refs: Vec::new(),
         preconditions: Vec::new(),
@@ -481,4 +508,34 @@ pub async fn device_enroll_endpoint(
         authority_did,
         authorized_event: event,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn event_id(value: &str) -> EventId {
+        EventId::new(value).expect("valid event id")
+    }
+
+    #[test]
+    fn first_device_requires_and_uses_bootstrap_create_predecessor() {
+        let create = event_id("ak:event:01964137-0000-7000-8000-000000000001");
+        assert_eq!(
+            device_enroll_prev_refs(1, Some(create.clone())).expect("bootstrap refs"),
+            vec![create]
+        );
+        assert!(device_enroll_prev_refs(1, None).is_err());
+    }
+
+    #[test]
+    fn later_device_cannot_inject_bootstrap_predecessor() {
+        let create = event_id("ak:event:01964137-0000-7000-8000-000000000001");
+        assert!(device_enroll_prev_refs(2, Some(create)).is_err());
+        assert!(device_enroll_prev_refs(0, None).is_err());
+        assert_eq!(
+            device_enroll_prev_refs(2, None).expect("ordinary refs"),
+            Vec::<EventId>::new()
+        );
+    }
 }

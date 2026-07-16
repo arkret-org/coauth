@@ -33,6 +33,11 @@ branding-terms-and-conditions-link = Terms & Conditions
 ## common
 
 common-display-name = Display Name
+common-language = Language
+
+coauth-theme-toggle = Toggle light or night theme
+coauth-theme-night = Night
+coauth-theme-light = Light
 common-email-address = Email address
 common-loading = Loading…
 common-account-id = Account ID
