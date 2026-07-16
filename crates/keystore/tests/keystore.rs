@@ -79,7 +79,7 @@ macro_rules! pem_roundtrip {
             let original = include_str!(concat!("./keys/", $fixture, ".pem"));
             let pk = PrivateKey::load_pem(original).unwrap();
             let re_encoded = pk.to_pem(pem_rfc7468::LineEnding::LF).unwrap();
-            assert_eq!(original, re_encoded.as_str());
+            assert_eq!(original.replace("\r\n", "\n"), re_encoded.as_str());
         }
     };
 }

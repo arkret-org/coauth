@@ -24,7 +24,11 @@ fn private_jwks() -> coauth_jose::jwk::PrivateJsonWebKeySet {
 }
 
 fn oct_key() -> Vec<u8> {
-    OCT_KEY.to_vec()
+    let mut key = OCT_KEY.to_vec();
+    if key.ends_with(b"\r\n") {
+        key.remove(key.len() - 2);
+    }
+    key
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
