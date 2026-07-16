@@ -3,12 +3,6 @@
 //! The wire-level rejection codes and the fail-closed enforcement guards for
 //! the `ak.gate.account.command.pair_agent_key` operation and the agent branch
 //! of `ak.gate.account.command.issue_session_grant`.
-
-use arkret_core::error::{
-    ERROR_CODE_CAPABILITY_DENIED, ERROR_CODE_FAILED_PRECONDITION, ERROR_CODE_INVALID_SIGNATURE,
-    ERROR_CODE_POLICY_UNAVAILABLE, ERROR_CODE_POLICY_VIOLATION,
-    REASON_ACCOUNTABILITY_GRANT_MISSING, REASON_AGENT_KEY_AUTHORIZATION_EXPIRED,
-};
 use chrono::{DateTime, Utc};
 
 use crate::AppError;
@@ -111,15 +105,15 @@ impl AgentAuthRejection {
             | Self::AgentKeyAuthorizationExpired
             | Self::AgentPcrRecoveryNotReady
             | Self::AgentDeactivated
-            | Self::AgentPaused => ERROR_CODE_FAILED_PRECONDITION,
-            Self::ProofInvalid => ERROR_CODE_INVALID_SIGNATURE,
+            | Self::AgentPaused => arkret_core::error::ErrorCode::FAILED_PRECONDITION,
+            Self::ProofInvalid => arkret_core::error::ErrorCode::INVALID_SIGNATURE,
             // `accountability_grant_missing` is delivered as a
             // `failed_precondition` HTTP rejection with `reason` carrying
             // this canonical string (see operations↔error mapping §0.8).
-            Self::AccountabilityGrantMissing => ERROR_CODE_FAILED_PRECONDITION,
-            Self::CapabilityDenied => ERROR_CODE_CAPABILITY_DENIED,
-            Self::PolicyViolation => ERROR_CODE_POLICY_VIOLATION,
-            Self::PolicyUnavailable => ERROR_CODE_POLICY_UNAVAILABLE,
+            Self::AccountabilityGrantMissing => arkret_core::error::ErrorCode::FAILED_PRECONDITION,
+            Self::CapabilityDenied => arkret_core::error::ErrorCode::CAPABILITY_DENIED,
+            Self::PolicyViolation => arkret_core::error::ErrorCode::POLICY_VIOLATION,
+            Self::PolicyUnavailable => arkret_core::error::ErrorCode::POLICY_UNAVAILABLE,
         }
     }
 
@@ -165,12 +159,16 @@ impl AgentAuthRejection {
                 Some("verification_method_principal_mismatch")
             }
             Self::PairingRequestExpired => Some("pairing_request_expired"),
-            Self::AgentKeyAuthorizationExpired => Some(REASON_AGENT_KEY_AUTHORIZATION_EXPIRED),
+            Self::AgentKeyAuthorizationExpired => {
+                Some(arkret_core::error::ReasonCode::AGENT_KEY_AUTHORIZATION_EXPIRED)
+            }
             Self::AgentPcrRecoveryNotReady => Some("agent_pcr_recovery_not_ready"),
             Self::ProofInvalid => Some("proof_invalid"),
             Self::AgentDeactivated => Some("agent_deactivated"),
             Self::AgentPaused => Some("agent_paused"),
-            Self::AccountabilityGrantMissing => Some(REASON_ACCOUNTABILITY_GRANT_MISSING),
+            Self::AccountabilityGrantMissing => {
+                Some(arkret_core::error::ReasonCode::ACCOUNTABILITY_GRANT_MISSING)
+            }
             Self::CapabilityDenied | Self::PolicyViolation | Self::PolicyUnavailable => None,
         }
     }

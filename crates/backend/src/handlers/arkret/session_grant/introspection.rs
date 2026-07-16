@@ -1,4 +1,3 @@
-use arkret_core::error::ERROR_CODE_SCHEMA_VIOLATION;
 use arkret_core::{
     DeviceId, Did, SessionGrantIntrospectGrant, SessionGrantIntrospectOutcome,
     SessionGrantIntrospectRequestBody, SessionGrantIntrospectStatus,
@@ -196,14 +195,14 @@ pub async fn introspect_session_grant(
         (false, false) => {
             return Err(ArkretRouteError::coded(
                 StatusCode::BAD_REQUEST,
-                ERROR_CODE_SCHEMA_VIOLATION,
+                arkret_core::error::ErrorCode::SCHEMA_VIOLATION,
                 "exactly one of id or grant_jwt is required",
             ));
         }
         (true, true) => {
             return Err(ArkretRouteError::coded(
                 StatusCode::BAD_REQUEST,
-                ERROR_CODE_SCHEMA_VIOLATION,
+                arkret_core::error::ErrorCode::SCHEMA_VIOLATION,
                 "id and grant_jwt are mutually exclusive",
             ));
         }

@@ -21,12 +21,6 @@ mod tests;
 
 use anyhow::Error as AnyhowError;
 use arkret_core::ErrorEnvelope;
-use arkret_core::error::{
-    ERROR_CODE_BAD_JSON, ERROR_CODE_CAPABILITY_DENIED, ERROR_CODE_CONFLICT,
-    ERROR_CODE_FAILED_PRECONDITION, ERROR_CODE_INTERNAL_ERROR, ERROR_CODE_INVALID_PARAM,
-    ERROR_CODE_NOT_FOUND, ERROR_CODE_PRINCIPAL_UNKNOWN, ERROR_CODE_RATE_LIMITED,
-    ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_UNAUTHENTICATED, ERROR_CODE_UNSUPPORTED_FEATURE,
-};
 use coauth_config::ArkretConfig;
 use coauth_data::user::PrincipalDidRepository as _;
 use coauth_data::{RepositoryAccess, UrlBuilder, User};
@@ -171,23 +165,43 @@ impl From<crate::AppError> for ArkretRouteError {
             return Self::coded(status, code, message);
         }
         match status {
-            StatusCode::BAD_REQUEST => Self::coded(status, ERROR_CODE_INVALID_PARAM, message),
+            StatusCode::BAD_REQUEST => Self::coded(
+                status,
+                arkret_core::error::ErrorCode::INVALID_PARAM,
+                message,
+            ),
             StatusCode::UNAUTHORIZED => Self::Unauthorized(message),
             StatusCode::FORBIDDEN => Self::Forbidden(message),
-            StatusCode::NOT_FOUND => Self::coded(status, ERROR_CODE_NOT_FOUND, message),
-            StatusCode::CONFLICT => Self::coded(status, ERROR_CODE_CONFLICT, message),
-            StatusCode::GONE | StatusCode::PRECONDITION_FAILED => {
-                Self::coded(status, ERROR_CODE_FAILED_PRECONDITION, message)
+            StatusCode::NOT_FOUND => {
+                Self::coded(status, arkret_core::error::ErrorCode::NOT_FOUND, message)
             }
-            StatusCode::UNPROCESSABLE_ENTITY => {
-                Self::coded(status, ERROR_CODE_SCHEMA_VIOLATION, message)
+            StatusCode::CONFLICT => {
+                Self::coded(status, arkret_core::error::ErrorCode::CONFLICT, message)
             }
-            StatusCode::TOO_MANY_REQUESTS => Self::coded(status, ERROR_CODE_RATE_LIMITED, message),
-            StatusCode::NOT_IMPLEMENTED => {
-                Self::coded(status, ERROR_CODE_UNSUPPORTED_FEATURE, message)
+            StatusCode::GONE | StatusCode::PRECONDITION_FAILED => Self::coded(
+                status,
+                arkret_core::error::ErrorCode::FAILED_PRECONDITION,
+                message,
+            ),
+            StatusCode::UNPROCESSABLE_ENTITY => Self::coded(
+                status,
+                arkret_core::error::ErrorCode::SCHEMA_VIOLATION,
+                message,
+            ),
+            StatusCode::TOO_MANY_REQUESTS => {
+                Self::coded(status, arkret_core::error::ErrorCode::RATE_LIMITED, message)
             }
+            StatusCode::NOT_IMPLEMENTED => Self::coded(
+                status,
+                arkret_core::error::ErrorCode::UNSUPPORTED_FEATURE,
+                message,
+            ),
             StatusCode::INTERNAL_SERVER_ERROR => Self::Internal(Box::new(value)),
-            _ => Self::coded(status, ERROR_CODE_INTERNAL_ERROR, message),
+            _ => Self::coded(
+                status,
+                arkret_core::error::ErrorCode::INTERNAL_ERROR,
+                message,
+            ),
         }
     }
 }
@@ -448,15 +462,18 @@ impl Scribe for ArkretRouteError {
         let (status, envelope) = match self {
             Self::Internal(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                ErrorEnvelope::new(ERROR_CODE_INTERNAL_ERROR, "internal server error"),
+                ErrorEnvelope::new(
+                    arkret_core::error::ErrorCode::INTERNAL_ERROR,
+                    "internal server error",
+                ),
             ),
             Self::NotFound => (
                 StatusCode::NOT_FOUND,
-                ErrorEnvelope::new(ERROR_CODE_NOT_FOUND, "not found"),
+                ErrorEnvelope::new(arkret_core::error::ErrorCode::NOT_FOUND, "not found"),
             ),
             Self::BadRequest(message) => (
                 StatusCode::BAD_REQUEST,
-                ErrorEnvelope::new(ERROR_CODE_BAD_JSON, message),
+                ErrorEnvelope::new(arkret_core::error::ErrorCode::BAD_JSON, message),
             ),
             Self::Coded {
                 status,
@@ -472,11 +489,11 @@ impl Scribe for ArkretRouteError {
             ),
             Self::Unauthorized(message) => (
                 StatusCode::UNAUTHORIZED,
-                ErrorEnvelope::new(ERROR_CODE_UNAUTHENTICATED, message),
+                ErrorEnvelope::new(arkret_core::error::ErrorCode::UNAUTHENTICATED, message),
             ),
             Self::Forbidden(message) => (
                 StatusCode::FORBIDDEN,
-                ErrorEnvelope::new(ERROR_CODE_CAPABILITY_DENIED, message),
+                ErrorEnvelope::new(arkret_core::error::ErrorCode::CAPABILITY_DENIED, message),
             ),
         };
 
@@ -652,7 +669,7 @@ pub(crate) fn user_handle_acct_alias(url_builder: &UrlBuilder, user: &User) -> S
 
 /// Stable wire-level error code returned when a caller passes a non-canonical
 /// handle string (`arkret://` URI, `acct:` alias, or other malformed input).
-pub const HANDLE_NOT_CANONICAL_CODE: &str = ERROR_CODE_INVALID_PARAM;
+pub const HANDLE_NOT_CANONICAL_CODE: &str = arkret_core::error::ErrorCode::INVALID_PARAM;
 
 /// Reject any inbound `handle` that is not in the canonical
 /// `<localpart>:<domain>` shape (spec 7157ee8 §3.1). Returns a
@@ -958,7 +975,7 @@ pub async fn debug_issue_dpop_grant(
         .ok_or_else(|| {
             ArkretRouteError::coded(
                 StatusCode::PRECONDITION_FAILED,
-                ERROR_CODE_PRINCIPAL_UNKNOWN,
+                arkret_core::error::ErrorCode::PRINCIPAL_UNKNOWN,
                 "principal_unknown",
             )
         })?;

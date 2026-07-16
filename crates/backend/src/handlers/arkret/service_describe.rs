@@ -1,11 +1,6 @@
 use arkret_core::generated::profile_requirements::{
     requirements_for, validate_profile_requirements,
 };
-use arkret_core::models::{
-    OP_ACCOUNT_AGENT_KEY_PAIR, OP_ACCOUNT_DEVICE_ENROLL, OP_ACCOUNT_ISSUE_SESSION_GRANT,
-    OP_DIRECTORY_DESCRIBE, OP_DIRECTORY_RESOLVE_HANDLE, OP_IDENTITY_DESCRIBE_REGISTRY,
-    OP_IDENTITY_GET_DOCUMENT, OP_IDENTITY_RESOLVE, OP_POLICY_CHECK, OP_SERVER_DESCRIBE,
-};
 use arkret_core::{
     AccountAuthority, AuthGrantExchange, AuthMetadata, AuthMethod, AuthMethodKind,
     SessionGrantProofKind,
@@ -21,19 +16,19 @@ use crate::handlers::common::DepotExt;
 const CLAIMED_PROFILE_IDS: &[&str] = &["ak.profile.auth_server.v1"];
 
 const SUPPORTED_OPERATIONS: &[&str] = &[
-    OP_SERVER_DESCRIBE,
-    OP_IDENTITY_DESCRIBE_REGISTRY,
-    OP_IDENTITY_RESOLVE,
-    OP_IDENTITY_GET_DOCUMENT,
-    OP_DIRECTORY_DESCRIBE,
-    OP_DIRECTORY_RESOLVE_HANDLE,
-    OP_POLICY_CHECK,
-    OP_ACCOUNT_ISSUE_SESSION_GRANT,
+    arkret_core::ServiceOperationId::SERVER_QUERY_DESCRIBE,
+    arkret_core::ServiceOperationId::ROOT_IDENTITY_REGISTRY_QUERY_DESCRIBE,
+    arkret_core::ServiceOperationId::ROOT_IDENTITY_QUERY_RESOLVE,
+    arkret_core::ServiceOperationId::ROOT_IDENTITY_DOCUMENT_RESOURCE_GET,
+    arkret_core::ServiceOperationId::FIND_DIRECTORY_QUERY_DESCRIBE,
+    arkret_core::ServiceOperationId::FIND_DIRECTORY_QUERY_RESOLVE_HANDLE,
+    arkret_core::ServiceOperationId::SELF_POLICY_QUERY_CHECK,
+    arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT,
     "ak.gate.account.command.refresh_session_grant",
     "ak.gate.account.command.logout_auth_session",
     "ak.gate.account.command.introspect_session_grant",
-    OP_ACCOUNT_AGENT_KEY_PAIR,
-    OP_ACCOUNT_DEVICE_ENROLL,
+    arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
+    arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ENROLL_DEVICE,
 ];
 
 const IMPLEMENTED_PROFILE_EVENT_KINDS: &[&str] = &["ak.session.grant"];

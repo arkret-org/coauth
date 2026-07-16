@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
 use arkret_core::Did;
-use arkret_core::error::ERROR_CODE_RATE_LIMITED;
 use arkret_core::http::{
     DirectoryDescribeOutcome, IdentityDescribeOutcome, IdentityDocumentViewOutcome,
 };
@@ -237,7 +236,7 @@ pub async fn directory_resolve_handle(
         .map_err(|error| {
             ArkretRouteError::coded(
                 StatusCode::TOO_MANY_REQUESTS,
-                ERROR_CODE_RATE_LIMITED,
+                arkret_core::error::ErrorCode::RATE_LIMITED,
                 error.to_string(),
             )
         })?;
@@ -378,17 +377,17 @@ fn map_handle_claim_issue_error(error: SessionGrantError) -> ArkretRouteError {
     match error {
         SessionGrantError::HandleClaimSubject(error) => ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            ERROR_CODE_INVALID_PARAM,
+            arkret_core::error::ErrorCode::INVALID_PARAM,
             error.to_string(),
         ),
         error @ SessionGrantError::DidWebPrincipalNotExplicit => ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            ERROR_CODE_INVALID_PARAM,
+            arkret_core::error::ErrorCode::INVALID_PARAM,
             error.to_string(),
         ),
         SessionGrantError::PrincipalUnknown => ArkretRouteError::coded(
             StatusCode::NOT_FOUND,
-            ERROR_CODE_PRINCIPAL_UNKNOWN,
+            arkret_core::error::ErrorCode::PRINCIPAL_UNKNOWN,
             "principal_unknown",
         ),
         other => ArkretRouteError::Internal(Box::new(other)),

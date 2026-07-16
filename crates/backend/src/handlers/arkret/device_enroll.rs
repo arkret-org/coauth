@@ -20,13 +20,6 @@
 //!    `enrollment_authority_binding`.
 //! 5. Sign the proof with the persistent enrollment key (VM mapped to `executed_by`) and return the
 //!    full Event JSON.
-
-use arkret_core::error::{
-    ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_FAILED_PRECONDITION,
-    ERROR_CODE_GRANT_ALREADY_CONSUMED, ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE,
-    ERROR_CODE_PRINCIPAL_UNKNOWN, ERROR_CODE_SERVICE_UNAVAILABLE,
-    ERROR_CODE_SESSION_GRANT_NOT_FOUND, ERROR_CODE_SESSION_LOGGED_OUT,
-};
 use arkret_core::{
     AccountDeviceEnrollOutcome, AccountDeviceEnrollRequestBody, Audience, DeviceAuthorizePayload,
     DeviceEnrollmentAuthorityBinding, DeviceEnrollmentAuthorityBindingKind, DeviceOrPrincipalRef,
@@ -144,7 +137,7 @@ fn enforce_service_attested_device_authorize_provenance(
 fn service_attested_provenance_error(message: impl std::fmt::Display) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::FORBIDDEN,
-        ERROR_CODE_FAILED_PRECONDITION,
+        arkret_core::error::ErrorCode::FAILED_PRECONDITION,
         format!("reason_code=service_attested_provenance_required; {message}"),
     )
 }
@@ -156,18 +149,18 @@ fn device_enroll_prev_refs(
     match (actor_seq, bootstrap_create_event_id) {
         (0, _) => Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            ERROR_CODE_INVALID_PARAM,
+            arkret_core::error::ErrorCode::INVALID_PARAM,
             "actor_seq must be the next positive principal control sequence",
         )),
         (1, Some(create_event_id)) => Ok(vec![create_event_id]),
         (1, None) => Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            ERROR_CODE_INVALID_PARAM,
+            arkret_core::error::ErrorCode::INVALID_PARAM,
             "bootstrap_create_event_id is required for first-device enrollment",
         )),
         (..) => Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            ERROR_CODE_INVALID_PARAM,
+            arkret_core::error::ErrorCode::INVALID_PARAM,
             "device-enroll is restricted to actor_seq=1 founding-device enrollment",
         )),
     }
@@ -192,18 +185,18 @@ fn sole_principal_audience(
             .ok_or_else(|| {
                 ArkretRouteError::coded(
                     StatusCode::SERVICE_UNAVAILABLE,
-                    ERROR_CODE_SERVICE_UNAVAILABLE,
+                    arkret_core::error::ErrorCode::SERVICE_UNAVAILABLE,
                     "principal server audience is not yet resolved from /_arkret/describe",
                 )
             }),
         [] => Err(ArkretRouteError::coded(
             StatusCode::SERVICE_UNAVAILABLE,
-            ERROR_CODE_SERVICE_UNAVAILABLE,
+            arkret_core::error::ErrorCode::SERVICE_UNAVAILABLE,
             "no principal server is configured for device enrollment",
         )),
         _ => Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            ERROR_CODE_INVALID_PARAM,
+            arkret_core::error::ErrorCode::INVALID_PARAM,
             "multiple principal servers configured; device-enroll cannot pick one",
         )),
     }
@@ -237,7 +230,7 @@ pub async fn device_enroll_endpoint(
     let dpop_header = dpop_header_from_request(req).ok_or_else(|| {
         ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            ERROR_CODE_DID_PROOF_REQUIRED,
+            arkret_core::error::ErrorCode::DID_PROOF_REQUIRED,
             "session-grant grant-binding DPoP proof required",
         )
     })?;
@@ -271,7 +264,7 @@ pub async fn device_enroll_endpoint(
         .ok_or_else(|| {
             ArkretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
-                ERROR_CODE_SESSION_GRANT_NOT_FOUND,
+                arkret_core::error::ErrorCode::SESSION_GRANT_NOT_FOUND,
                 "no session grant matches the presented bearer",
             )
         })?;
@@ -279,7 +272,7 @@ pub async fn device_enroll_endpoint(
         repo.cancel().await.ok();
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            ERROR_CODE_GRANT_ALREADY_CONSUMED,
+            arkret_core::error::ErrorCode::GRANT_ALREADY_CONSUMED,
             "session grant has been revoked",
         ));
     }
@@ -287,7 +280,7 @@ pub async fn device_enroll_endpoint(
         repo.cancel().await.ok();
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            ERROR_CODE_SESSION_GRANT_NOT_FOUND,
+            arkret_core::error::ErrorCode::SESSION_GRANT_NOT_FOUND,
             "session grant has expired",
         ));
     }
@@ -295,7 +288,7 @@ pub async fn device_enroll_endpoint(
         repo.cancel().await.ok();
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            ERROR_CODE_SESSION_GRANT_NOT_FOUND,
+            arkret_core::error::ErrorCode::SESSION_GRANT_NOT_FOUND,
             "device enrollment requires a browser-bound session grant",
         ));
     };
@@ -313,7 +306,7 @@ pub async fn device_enroll_endpoint(
         repo.cancel().await.ok();
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            ERROR_CODE_SESSION_LOGGED_OUT,
+            arkret_core::error::ErrorCode::SESSION_LOGGED_OUT,
             "browser session is logged out",
         ));
     }
@@ -326,7 +319,7 @@ pub async fn device_enroll_endpoint(
         .ok_or_else(|| {
             ArkretRouteError::coded(
                 StatusCode::NOT_FOUND,
-                ERROR_CODE_PRINCIPAL_UNKNOWN,
+                arkret_core::error::ErrorCode::PRINCIPAL_UNKNOWN,
                 "principal_unknown",
             )
         })?;
@@ -347,14 +340,14 @@ pub async fn device_enroll_endpoint(
         .map_err(|error| {
             ArkretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
-                ERROR_CODE_INVALID_SIGNATURE,
+                arkret_core::error::ErrorCode::INVALID_SIGNATURE,
                 error.to_string(),
             )
         })?;
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
         ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            ERROR_CODE_INVALID_SIGNATURE,
+            arkret_core::error::ErrorCode::INVALID_SIGNATURE,
             error.to_string(),
         )
     })?;
@@ -370,7 +363,7 @@ pub async fn device_enroll_endpoint(
     if grant_payload.audience != audience {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            ERROR_CODE_AUDIENCE_MISMATCH,
+            arkret_core::error::ErrorCode::AUDIENCE_MISMATCH,
             "session grant was not issued for this principal server",
         ));
     }
@@ -389,7 +382,7 @@ pub async fn device_enroll_endpoint(
     if authority.did() != enrollment_authority_did.as_str() {
         return Err(ArkretRouteError::coded(
             StatusCode::SERVICE_UNAVAILABLE,
-            ERROR_CODE_SERVICE_UNAVAILABLE,
+            arkret_core::error::ErrorCode::SERVICE_UNAVAILABLE,
             "configured enrollment authority does not match the verified DID delegation",
         ));
     }
@@ -519,7 +512,7 @@ pub async fn device_enroll_endpoint(
         repo.cancel().await.ok();
         return Err(ArkretRouteError::coded(
             StatusCode::CONFLICT,
-            ERROR_CODE_FAILED_PRECONDITION,
+            arkret_core::error::ErrorCode::FAILED_PRECONDITION,
             "founding device enrollment requires a verified identity-creation receipt and no existing device",
         ));
     }

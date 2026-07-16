@@ -14,7 +14,6 @@
 // `coauth_admin_types::integration_manifest_admin` so the sodmin admin SPA
 // decodes them through the same typed shape. The `integration_describe`
 // endpoint below returns the shared `IntegrationManifest` directly.
-use arkret_core::error::REASON_PROOF_INVALID;
 use arkret_core::{AccountRegisterRequestBody, DeviceId, Did};
 use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
@@ -113,7 +112,7 @@ impl OidcExchangeError {
     }
 
     fn proof_invalid(message: impl Into<String>) -> Self {
-        Self::new(REASON_PROOF_INVALID, message)
+        Self::new(arkret_core::error::ReasonCode::PROOF_INVALID, message)
     }
 }
 
@@ -908,7 +907,7 @@ async fn exchange_oidc_code(
                 let lower_description = error_description.to_ascii_lowercase();
                 let (code, error_kind) = match error.error {
                     ClientErrorCode::InvalidGrant if lower_description.contains("pkce") => (
-                        REASON_PROOF_INVALID,
+                        arkret_core::error::ReasonCode::PROOF_INVALID,
                         format!("pkce verification failed: {error_description}"),
                     ),
                     ClientErrorCode::InvalidGrant => {
@@ -1497,7 +1496,7 @@ mod tests {
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
             .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
-                arkret_core::error::ERROR_CODE_FAILED_PRECONDITION,
+                arkret_core::error::ErrorCode::FAILED_PRECONDITION,
                 "account registration is closed",
             )))
             .expect(1)

@@ -51,7 +51,7 @@ mod agent_auth_error_matrix_tests {
         assert_eq!(body["ok"], false);
         assert_eq!(
             body["error"]["code"],
-            arkret_core::error::REASON_AGENT_PCR_RECOVERY_NOT_READY
+            arkret_core::error::ReasonCode::AGENT_PCR_RECOVERY_NOT_READY
         );
         assert!(body.get("errors").is_none());
     }
@@ -229,7 +229,7 @@ mod agent_auth_error_matrix_tests {
         let err = AgentAuthRejection::AgentKeyAuthorizationExpired;
         assert_eq!(
             err.reason_code(),
-            Some(arkret_core::error::REASON_AGENT_KEY_AUTHORIZATION_EXPIRED)
+            Some(arkret_core::error::ReasonCode::AGENT_KEY_AUTHORIZATION_EXPIRED)
         );
         assert_eq!(err.http_status(), http::StatusCode::UNAUTHORIZED);
         assert_ne!(

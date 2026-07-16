@@ -1,9 +1,3 @@
-use arkret_core::error::{
-    ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_CLAIM_REQUIRED, ERROR_CODE_FAILED_PRECONDITION,
-    ERROR_CODE_INTERNAL_ERROR, ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE,
-    ERROR_CODE_POLICY_DENIED, ERROR_CODE_PRINCIPAL_UNKNOWN, ERROR_CODE_SCHEMA_VIOLATION,
-    ERROR_CODE_SERVICE_UNAVAILABLE, ERROR_CODE_UNSUPPORTED_FEATURE, REASON_PROOF_INVALID,
-};
 use coauth_data::user::PrincipalDidRepository as _;
 use salvo::prelude::*;
 
@@ -129,7 +123,7 @@ pub async fn issue_session_grant_endpoint(
         }
         other => Err(ArkretRouteError::coded(
             StatusCode::NOT_IMPLEMENTED,
-            ERROR_CODE_UNSUPPORTED_FEATURE,
+            arkret_core::error::ErrorCode::UNSUPPORTED_FEATURE,
             format!(
                 "reason_code=unsupported_proof_kind; this Account Authority only issues session grants via oidc_code_exchange or agent_key_proof; proof_kind={other:?} is not implemented here"
             ),
@@ -147,7 +141,7 @@ async fn extract_kickoff_dpop(
         .map_err(|error| {
             ArkretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
-                ERROR_CODE_INVALID_SIGNATURE,
+                arkret_core::error::ErrorCode::INVALID_SIGNATURE,
                 format!("reason_code=proof_invalid; invalid grant-binding DPoP proof: {error}"),
             )
         })
@@ -192,7 +186,7 @@ async fn issue_pre_registration_handoff_session_grant(
     {
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            ERROR_CODE_INVALID_SIGNATURE,
+            arkret_core::error::ErrorCode::INVALID_SIGNATURE,
             "reason_code=proof_invalid; pre-registration handoff transcript is malformed",
         ));
     }
@@ -200,28 +194,28 @@ async fn issue_pre_registration_handoff_session_grant(
     let expires_at = proof.expires_at.ok_or_else(|| {
         ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            ERROR_CODE_INVALID_SIGNATURE,
+            arkret_core::error::ErrorCode::INVALID_SIGNATURE,
             "reason_code=proof_invalid; pre-registration handoff proof expiry is required",
         )
     })?;
     if expires_at <= now || expires_at - now > chrono::Duration::minutes(5) {
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            ERROR_CODE_INVALID_SIGNATURE,
+            arkret_core::error::ErrorCode::INVALID_SIGNATURE,
             "reason_code=proof_invalid; pre-registration handoff proof is expired or too long-lived",
         ));
     }
     let expected_digest = body.canonical_request_digest().map_err(|error| {
         ArkretRouteError::coded(
             StatusCode::UNPROCESSABLE_ENTITY,
-            ERROR_CODE_SCHEMA_VIOLATION,
+            arkret_core::error::ErrorCode::SCHEMA_VIOLATION,
             error.to_string(),
         )
     })?;
     if proof.request_canonical_digest != expected_digest {
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            ERROR_CODE_INVALID_SIGNATURE,
+            arkret_core::error::ErrorCode::INVALID_SIGNATURE,
             "reason_code=proof_invalid; session request canonical digest does not match",
         ));
     }
@@ -235,7 +229,7 @@ async fn issue_pre_registration_handoff_session_grant(
     if !verify_detached_ed25519_signature(&public_key, &signing_bytes, &proof.signature) {
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            ERROR_CODE_INVALID_SIGNATURE,
+            arkret_core::error::ErrorCode::INVALID_SIGNATURE,
             "reason_code=proof_invalid; handoff holder signature is invalid",
         ));
     }
@@ -256,7 +250,7 @@ async fn issue_pre_registration_handoff_session_grant(
         .ok_or_else(|| {
             ArkretRouteError::coded(
                 StatusCode::NOT_FOUND,
-                ERROR_CODE_PRINCIPAL_UNKNOWN,
+                arkret_core::error::ErrorCode::PRINCIPAL_UNKNOWN,
                 "principal_unknown",
             )
         })?;
@@ -269,7 +263,7 @@ async fn issue_pre_registration_handoff_session_grant(
             .ok_or_else(|| {
                 ArkretRouteError::coded(
                     StatusCode::UNAUTHORIZED,
-                    ERROR_CODE_FAILED_PRECONDITION,
+                    arkret_core::error::ErrorCode::FAILED_PRECONDITION,
                     "account handoff browser session is no longer active",
                 )
             })?,
@@ -322,7 +316,7 @@ async fn issue_pre_registration_handoff_session_grant(
     .map_err(|message| {
         ArkretRouteError::coded(
             StatusCode::BAD_GATEWAY,
-            ERROR_CODE_SERVICE_UNAVAILABLE,
+            arkret_core::error::ErrorCode::SERVICE_UNAVAILABLE,
             format!("principal account registration failed: {message}"),
         )
     })?;
@@ -348,7 +342,7 @@ async fn issue_pre_registration_handoff_session_grant(
         repo.cancel().await.ok();
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            ERROR_CODE_FAILED_PRECONDITION,
+            arkret_core::error::ErrorCode::FAILED_PRECONDITION,
             "account handoff was already consumed",
         ));
     }
@@ -377,21 +371,21 @@ fn require_agent_key_proof_dpop_binding(
     let binding = binding.ok_or_else(|| {
         ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            arkret_core::error::ERROR_CODE_DID_PROOF_REQUIRED,
+            arkret_core::error::ErrorCode::DID_PROOF_REQUIRED,
             "agent_key_proof session grant requires a grant-binding DPoP proof",
         )
     })?;
     let body_binding = body_binding.ok_or_else(|| {
         ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            ERROR_CODE_INVALID_SIGNATURE,
+            arkret_core::error::ErrorCode::INVALID_SIGNATURE,
             "reason_code=proof_invalid; agent_key_proof body must carry dpop_binding_proof",
         )
     })?;
     if body_binding.proof_jwt != binding.proof_jwt {
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            ERROR_CODE_INVALID_SIGNATURE,
+            arkret_core::error::ErrorCode::INVALID_SIGNATURE,
             "reason_code=proof_invalid; DPoP header does not match body dpop_binding_proof",
         ));
     }
@@ -490,7 +484,7 @@ async fn issue_agent_key_proof_session_grant(
         repo.cancel().await.ok();
         return Err(ArkretRouteError::coded(
             StatusCode::FORBIDDEN,
-            ERROR_CODE_FAILED_PRECONDITION,
+            arkret_core::error::ErrorCode::FAILED_PRECONDITION,
             "accountable controller is deactivated or suspended",
         ));
     }
@@ -573,7 +567,7 @@ fn require_principal_id(raw_body: &serde_json::Value) -> Result<(), ArkretRouteE
     {
         return Err(ArkretRouteError::coded(
             StatusCode::NOT_FOUND,
-            ERROR_CODE_PRINCIPAL_UNKNOWN,
+            arkret_core::error::ErrorCode::PRINCIPAL_UNKNOWN,
             "principal_unknown",
         ));
     }
@@ -584,12 +578,12 @@ fn map_session_grant_material_error(error: SessionGrantError) -> ArkretRouteErro
     match error {
         error @ SessionGrantError::DidWebPrincipalNotExplicit => ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            ERROR_CODE_INVALID_PARAM,
+            arkret_core::error::ErrorCode::INVALID_PARAM,
             error.to_string(),
         ),
         SessionGrantError::PrincipalUnknown => ArkretRouteError::coded(
             StatusCode::NOT_FOUND,
-            ERROR_CODE_PRINCIPAL_UNKNOWN,
+            arkret_core::error::ErrorCode::PRINCIPAL_UNKNOWN,
             "principal_unknown",
         ),
         other => ArkretRouteError::Internal(Box::new(other)),
@@ -600,26 +594,47 @@ pub(crate) fn map_oidc_exchange_error(
     error: crate::handlers::account::auth::oidc_bridge::OidcExchangeError,
 ) -> ArkretRouteError {
     let (status, code) = match error.code {
-        "internal_error" => (StatusCode::INTERNAL_SERVER_ERROR, ERROR_CODE_INTERNAL_ERROR),
-        REASON_PROOF_INVALID | "invalid_authorization_code" | "invalid_client" => {
-            (StatusCode::UNAUTHORIZED, REASON_PROOF_INVALID)
-        }
-        "invalid_audience" => (StatusCode::BAD_REQUEST, ERROR_CODE_AUDIENCE_MISMATCH),
+        "internal_error" => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            arkret_core::error::ErrorCode::INTERNAL_ERROR,
+        ),
+        arkret_core::error::ReasonCode::PROOF_INVALID
+        | "invalid_authorization_code"
+        | "invalid_client" => (
+            StatusCode::UNAUTHORIZED,
+            arkret_core::error::ReasonCode::PROOF_INVALID,
+        ),
+        "invalid_audience" => (
+            StatusCode::BAD_REQUEST,
+            arkret_core::error::ErrorCode::AUDIENCE_MISMATCH,
+        ),
         "invalid_request" => (
             StatusCode::UNPROCESSABLE_ENTITY,
-            ERROR_CODE_SCHEMA_VIOLATION,
+            arkret_core::error::ErrorCode::SCHEMA_VIOLATION,
         ),
-        "invalid_discovery_binding" => (StatusCode::CONFLICT, ERROR_CODE_FAILED_PRECONDITION),
-        "upstream_link_required" => (StatusCode::FORBIDDEN, ERROR_CODE_CLAIM_REQUIRED),
-        "principal_unknown" => (StatusCode::NOT_FOUND, ERROR_CODE_PRINCIPAL_UNKNOWN),
+        "invalid_discovery_binding" => (
+            StatusCode::CONFLICT,
+            arkret_core::error::ErrorCode::FAILED_PRECONDITION,
+        ),
+        "upstream_link_required" => (
+            StatusCode::FORBIDDEN,
+            arkret_core::error::ErrorCode::CLAIM_REQUIRED,
+        ),
+        "principal_unknown" => (
+            StatusCode::NOT_FOUND,
+            arkret_core::error::ErrorCode::PRINCIPAL_UNKNOWN,
+        ),
         "account_unavailable" | "principal_account_registration_failed" => (
             StatusCode::SERVICE_UNAVAILABLE,
-            ERROR_CODE_SERVICE_UNAVAILABLE,
+            arkret_core::error::ErrorCode::SERVICE_UNAVAILABLE,
         ),
-        "session_grant_denied" => (StatusCode::FORBIDDEN, ERROR_CODE_POLICY_DENIED),
+        "session_grant_denied" => (
+            StatusCode::FORBIDDEN,
+            arkret_core::error::ErrorCode::POLICY_DENIED,
+        ),
         _ => (
             StatusCode::UNPROCESSABLE_ENTITY,
-            ERROR_CODE_SCHEMA_VIOLATION,
+            arkret_core::error::ErrorCode::SCHEMA_VIOLATION,
         ),
     };
     let message = if error.code == code {
@@ -686,7 +701,7 @@ mod tests {
                 message,
             } => {
                 assert_eq!(status, StatusCode::UNAUTHORIZED);
-                assert_eq!(code, REASON_PROOF_INVALID);
+                assert_eq!(code, arkret_core::error::ReasonCode::PROOF_INVALID);
                 assert!(message.contains("reason_code=invalid_authorization_code"));
             }
             other => panic!("expected coded error, got {other:?}"),
@@ -711,7 +726,7 @@ mod tests {
                     message,
                 } => {
                     assert_eq!(status, StatusCode::NOT_FOUND);
-                    assert_eq!(code, ERROR_CODE_PRINCIPAL_UNKNOWN);
+                    assert_eq!(code, arkret_core::error::ErrorCode::PRINCIPAL_UNKNOWN);
                     assert_eq!(message, "principal_unknown");
                 }
                 other => panic!("expected coded principal_unknown error, got {other:?}"),
@@ -731,7 +746,7 @@ mod tests {
         assert_coded(
             err,
             StatusCode::UNAUTHORIZED,
-            arkret_core::error::ERROR_CODE_DID_PROOF_REQUIRED,
+            arkret_core::error::ErrorCode::DID_PROOF_REQUIRED,
         );
     }
 
@@ -742,7 +757,11 @@ mod tests {
             None,
         ));
 
-        assert_coded(err, StatusCode::UNAUTHORIZED, ERROR_CODE_INVALID_SIGNATURE);
+        assert_coded(
+            err,
+            StatusCode::UNAUTHORIZED,
+            arkret_core::error::ErrorCode::INVALID_SIGNATURE,
+        );
     }
 
     #[test]
@@ -754,6 +773,10 @@ mod tests {
             }),
         ));
 
-        assert_coded(err, StatusCode::UNAUTHORIZED, ERROR_CODE_INVALID_SIGNATURE);
+        assert_coded(
+            err,
+            StatusCode::UNAUTHORIZED,
+            arkret_core::error::ErrorCode::INVALID_SIGNATURE,
+        );
     }
 }

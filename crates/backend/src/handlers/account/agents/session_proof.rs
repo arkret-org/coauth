@@ -1584,7 +1584,7 @@ mod tests {
         authorization.expires_at = Some(now);
         authorization.revoked_at = Some(now);
         authorization.revoked_reason =
-            Some(arkret_core::error::REASON_SUPERSEDED_BY_REPAIRING.to_owned());
+            Some(arkret_core::error::ReasonCode::SUPERSEDED_BY_REPAIRING.to_owned());
 
         let err = validate_agent_key_authorization_binding(
             &authorization,

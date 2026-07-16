@@ -372,7 +372,7 @@ pub async fn post_agent_key_pair(
                 "authorized_event_id": &superseded.authorized_event_id,
                 "key_id": &superseded.key_id,
                 "verification_method": &superseded.verification_method,
-                "revoked_reason": arkret_core::error::REASON_SUPERSEDED_BY_REPAIRING,
+                "revoked_reason": arkret_core::error::ReasonCode::SUPERSEDED_BY_REPAIRING,
             })
         })
         .collect();
@@ -1031,7 +1031,7 @@ async fn commit_and_mark_agent_key_authorization(
             &*clock,
             authorized_event_id,
             &superseded_event_refs,
-            arkret_core::error::REASON_SUPERSEDED_BY_REPAIRING,
+            arkret_core::error::ReasonCode::SUPERSEDED_BY_REPAIRING,
         )
         .await?;
     if !updated {

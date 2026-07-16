@@ -9,8 +9,8 @@
 //!   those adapters fail closed unless `COAUTH_ALLOW_NON_STANDARD_UPSTREAM_OAUTH=true` is set.
 //!
 //! - **Handler layer** (this module): User-facing strand orchestration (session management,
-//!   link/unlink, attribute mapping, conflict resolution). This logic is delegated to
-//!   the private `link_workflow` submodule.
+//!   link/unlink, attribute mapping, conflict resolution). This logic is delegated to the private
+//!   `link_workflow` submodule.
 //!
 //! The `ConnectorRegistry` provides runtime provider lookup. Each upstream
 //! OAuth provider is NOT a `ConnectorProvider` (that's for PrincipalServers).
