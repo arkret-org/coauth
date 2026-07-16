@@ -264,7 +264,8 @@ pub async fn add_account_did(
                 "control_proof_invalid: authoritative DID history head is required",
             )
         })?;
-    let authority = crate::services::device_enrollment_authority::enrollment_authority();
+    let authority = crate::services::device_enrollment_authority::enrollment_authority(&key_store)
+        .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
     let enrollment_authority_did = arkret_core::Did::new(authority.did().to_owned())
         .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
     if !validated_control

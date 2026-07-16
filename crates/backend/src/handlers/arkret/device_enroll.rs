@@ -383,7 +383,9 @@ pub async fn device_enroll_endpoint(
     let device_public_key_multibase = ed25519_pubkey_to_did_key_multibase(&device_public_key);
 
     // 4. Assemble the B-model envelope.
-    let authority = enrollment_authority();
+    let key_store = depot.key_store()?;
+    let authority = enrollment_authority(&key_store)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     if authority.did() != enrollment_authority_did.as_str() {
         return Err(ArkretRouteError::coded(
             StatusCode::SERVICE_UNAVAILABLE,

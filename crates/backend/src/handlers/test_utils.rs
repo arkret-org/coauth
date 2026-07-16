@@ -284,8 +284,12 @@ impl TestState {
         let eddsa = JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(43)))
             .with_kid("test-eddsa")
             .with_alg(JsonWebSignatureAlg::EdDsa);
+        let enrollment =
+            JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(44)))
+                .with_kid(coauth_keystore::DEVICE_ENROLLMENT_KEY_ID)
+                .with_alg(JsonWebSignatureAlg::EdDsa);
 
-        let jwks = JsonWebKeySet::new(vec![rsa, eddsa]);
+        let jwks = JsonWebKeySet::new(vec![rsa, eddsa, enrollment]);
         let key_store = Keystore::new(jwks);
 
         let encrypter = Encrypter::new(&[0x42; 32]);

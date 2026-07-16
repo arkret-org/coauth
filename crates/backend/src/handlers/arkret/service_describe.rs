@@ -396,7 +396,11 @@ fn build_verified_profile_descriptors(
 /// Proprietary fields with no first-class slot on `AuthMetadata` are inserted
 /// into `extra` so they keep serializing at the top level of the
 /// `auth_metadata` object.
-fn build_auth_metadata(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -> AuthMetadata {
+fn build_auth_metadata(
+    url_builder: &UrlBuilder,
+    arkret_config: &ArkretConfig,
+    enrollment_authority_did: &arkret_core::Did,
+) -> AuthMetadata {
     use serde_json::json;
 
     let issuer = url_builder.oidc_issuer().to_string();
@@ -452,6 +456,7 @@ fn build_auth_metadata(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -
         account_authority: Some(AccountAuthority {
             origin,
             gate_account_base,
+            enrollment_authority_did: Some(enrollment_authority_did.clone()),
         }),
         methods: vec![AuthMethod {
             method: AuthMethodKind::Oidc,
@@ -513,6 +518,7 @@ pub(crate) fn service_describe_response(
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
     loaded_verified_profiles: &[crate::services::verified_profiles::VerifiedProfileDescriptor],
+    enrollment_authority_did: &arkret_core::Did,
 ) -> ServiceDescribeOutcome {
     validate_claimed_profiles_against_sdk_requirements();
 
@@ -700,7 +706,7 @@ pub(crate) fn service_describe_response(
             arkret_config,
         ),
         service_boundary: service_boundary_descriptor(),
-        auth_metadata: build_auth_metadata(url_builder, arkret_config),
+        auth_metadata: build_auth_metadata(url_builder, arkret_config, enrollment_authority_did),
         limits: ServiceLimitsDescriptor {
             max_body_bytes: 1_048_576,
             max_page_size: 100,
@@ -758,10 +764,17 @@ pub async fn server_describe(
         )
         .cloned()
         .unwrap_or_else(|_| std::sync::Arc::new(Vec::new()));
+    let key_store = depot.key_store()?;
+    let enrollment_authority =
+        crate::services::device_enrollment_authority::enrollment_authority(&key_store)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let enrollment_authority_did = arkret_core::Did::new(enrollment_authority.did().to_owned())
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let mut response = service_describe_response(
         &url_builder,
         &arkret_config,
         verified_profiles_loaded.as_ref(),
+        &enrollment_authority_did,
     );
     set_auth_metadata_oidc_clients(&mut response.auth_metadata, oidc_clients);
     Ok(Json(response))

@@ -181,17 +181,18 @@ pub async fn account_register_endpoint(
         head_event_digest: head_event_digest.clone(),
     };
 
+    let key_store = depot.key_store()?;
+    let enrollment_authority =
+        crate::services::device_enrollment_authority::enrollment_authority(&key_store)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let enrollment_authority_ref = inception_enrollment_authority_ref(
         body.principal_id.as_str(),
         &identity_creation.did_operation.operation,
+        enrollment_authority.did(),
     )
     .ok_or_else(|| failed_precondition("invalid enrollment authority service reference"))?;
-    let enrollment_authority_did = arkret_core::Did::new(
-        crate::services::device_enrollment_authority::enrollment_authority()
-            .did()
-            .to_owned(),
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let enrollment_authority_did = arkret_core::Did::new(enrollment_authority.did().to_owned())
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     let mut rng = make_rng();
     let mut repo = depot.repo().await?;
@@ -353,8 +354,8 @@ fn principal_server_target(
 fn inception_enrollment_authority_ref(
     principal_id: &str,
     operation: &std::collections::BTreeMap<String, Value>,
+    authority_did: &str,
 ) -> Option<String> {
-    let authority_did = crate::services::device_enrollment_authority::enrollment_authority().did();
     let document = operation.get("state")?;
     if document.get("capabilityDelegation").is_some() {
         return None;

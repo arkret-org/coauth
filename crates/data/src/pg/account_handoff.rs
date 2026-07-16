@@ -712,7 +712,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             || challenge.dpop_jkt != grant.cnf_jkt
             || challenge.replaced_at.is_some()
             || challenge.expires_at <= now
-            || challenge.consumed_at.is_some()
+            || !registration_challenge_state_is_usable(lease.state, challenge.consumed_at.is_some())
         {
             return Ok(None);
         }
@@ -835,5 +835,48 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .execute(self.conn)
         .await?;
         Ok(updated == 1)
+    }
+}
+
+fn registration_challenge_state_is_usable(
+    lease_state: IdentityCreationSagaState,
+    challenge_consumed: bool,
+) -> bool {
+    match lease_state {
+        IdentityCreationSagaState::Reserved => !challenge_consumed,
+        // Publishing and challenge consumption are committed together before
+        // the verified account binding. A retry after a binding-store failure
+        // must be able to finish only this exact durable reservation.
+        IdentityCreationSagaState::Published => challenge_consumed,
+        IdentityCreationSagaState::Active | IdentityCreationSagaState::Bound => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn published_saga_can_resume_with_its_consumed_challenge_only() {
+        assert!(registration_challenge_state_is_usable(
+            IdentityCreationSagaState::Reserved,
+            false,
+        ));
+        assert!(!registration_challenge_state_is_usable(
+            IdentityCreationSagaState::Reserved,
+            true,
+        ));
+        assert!(registration_challenge_state_is_usable(
+            IdentityCreationSagaState::Published,
+            true,
+        ));
+        assert!(!registration_challenge_state_is_usable(
+            IdentityCreationSagaState::Published,
+            false,
+        ));
+        assert!(!registration_challenge_state_is_usable(
+            IdentityCreationSagaState::Bound,
+            true,
+        ));
     }
 }

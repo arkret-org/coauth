@@ -170,8 +170,11 @@ pub async fn issue_identity_binding_challenge(
             "account-first identity creation requires the external enrollment-authority B model",
         ));
     }
-    let expected_authority =
-        crate::services::device_enrollment_authority::enrollment_authority().did();
+    let key_store = depot.key_store()?;
+    let enrollment_authority =
+        crate::services::device_enrollment_authority::enrollment_authority(&key_store)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let expected_authority = enrollment_authority.did();
     if validated
         .enrollment_authority
         .as_ref()

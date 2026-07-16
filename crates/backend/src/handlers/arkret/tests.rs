@@ -66,7 +66,16 @@ fn test_keystore() -> Keystore {
     let mut rng = ChaChaRng::seed_from_u64(42);
     let eddsa = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
         .with_kid("test-eddsa");
-    Keystore::new(JsonWebKeySet::new(vec![eddsa]))
+    let enrollment = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+        .with_kid(coauth_keystore::DEVICE_ENROLLMENT_KEY_ID);
+    Keystore::new(JsonWebKeySet::new(vec![eddsa, enrollment]))
+}
+
+fn test_enrollment_authority_did() -> arkret_core::Did {
+    let authority =
+        crate::services::device_enrollment_authority::enrollment_authority(&test_keystore())
+            .unwrap();
+    arkret_core::Did::new(authority.did().to_owned()).unwrap()
 }
 
 fn test_session_public_jwk(session_key: &PrivateKey, kid: impl Into<String>) -> PublicJsonWebKey {
@@ -212,8 +221,13 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         audit_signature_fail_closed: false,
     };
 
-    let body =
-        serde_json::to_value(service_describe_response(&url_builder, &arkret_config, &[])).unwrap();
+    let body = serde_json::to_value(service_describe_response(
+        &url_builder,
+        &arkret_config,
+        &[],
+        &test_enrollment_authority_did(),
+    ))
+    .unwrap();
 
     assert_eq!(
         body["service_id"],
@@ -221,6 +235,10 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     );
     assert_eq!(body["trust_domain"], "ak:trust_domain:auth.example.com");
     assert_eq!(body["service_type"], "auth_server");
+    assert_eq!(
+        body["auth_metadata"]["account_authority"]["enrollment_authority_did"],
+        test_enrollment_authority_did().as_str()
+    );
     assert_eq!(
         body["x_coauth_admin_audience"],
         "https://auth.example.com/api/admin"
@@ -234,9 +252,11 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         PRINCIPAL_SERVER_SESSION_BIND_SCOPE
     );
     assert_eq!(
-        body["x_coauth_principal_server_delegation_targets"][0]["audience"],
-        "https://soland.example.com/api"
+        body["x_coauth_principal_server_delegation_targets"][0]["endpoint"],
+        "https://soland.example.com/arkret"
     );
+    assert!(body["x_coauth_principal_server_delegation_targets"][0]["audience"].is_null());
+    assert!(body["x_coauth_principal_server_delegation_targets"][0]["did"].is_null());
     assert_eq!(
         body["x_coauth_identity_registry_resolver"]["mode"],
         "delegated_resolver"
@@ -350,8 +370,13 @@ fn service_describe_marks_personal_node_did_web_service_as_no_history() {
         principal_method: PrincipalMethodConfig::DidWeb,
         ..ArkretConfig::default()
     };
-    let body =
-        serde_json::to_value(service_describe_response(&url_builder, &arkret_config, &[])).unwrap();
+    let body = serde_json::to_value(service_describe_response(
+        &url_builder,
+        &arkret_config,
+        &[],
+        &test_enrollment_authority_did(),
+    ))
+    .unwrap();
 
     assert_eq!(body["service_id"], "did:web:auth.example.com");
     assert_eq!(
@@ -365,25 +390,36 @@ fn service_describe_marks_personal_node_did_web_service_as_no_history() {
 }
 
 fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
-    ArkretConfig {
+    let config = ArkretConfig {
         runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
             "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:coauth",
         ),
         principal_servers: vec![PrincipalServerConfig {
             name: "soland-dev".to_owned(),
-            endpoint: "https://local.host/".parse().unwrap(),
+            endpoint: "https://session-grant-static.test/".parse().unwrap(),
             session_grant_introspection_bearer: Some(bearer.to_owned()),
             embedded_webvh_registration_bearer: None,
         }],
         ..ArkretConfig::default()
-    }
+    };
+    crate::services::resolved_principal_audiences::shared().insert_for_test(
+        &config.principal_servers[0].endpoint,
+        "did:web:session-grant-static.test",
+    );
+    config
 }
 
 #[test]
 fn service_describe_advertises_auth_session_logout_boundary() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
     let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
-    let body = serde_json::to_value(service_describe_response(&url_builder, &config, &[])).unwrap();
+    let body = serde_json::to_value(service_describe_response(
+        &url_builder,
+        &config,
+        &[],
+        &test_enrollment_authority_did(),
+    ))
+    .unwrap();
     let supported_operations = body["supported_operations"].as_array().unwrap();
 
     assert!(
@@ -452,6 +488,7 @@ fn describe_separates_claim_levels() {
         &url_builder,
         &test_arkret_config(),
         &[],
+        &test_enrollment_authority_did(),
     ))
     .unwrap();
 
@@ -554,7 +591,13 @@ fn service_describe_emits_trust_domain_when_configured() {
         ..Default::default()
     };
 
-    let body = serde_json::to_value(service_describe_response(&url_builder, &config, &[])).unwrap();
+    let body = serde_json::to_value(service_describe_response(
+        &url_builder,
+        &config,
+        &[],
+        &test_enrollment_authority_did(),
+    ))
+    .unwrap();
     assert_eq!(body["trust_domain"], "ak:trust_domain:example.net");
 }
 
@@ -569,6 +612,7 @@ fn service_describe_derives_trust_domain_from_public_host_when_unset() {
         &url_builder,
         &test_arkret_config(),
         &[],
+        &test_enrollment_authority_did(),
     ))
     .unwrap();
     assert_eq!(body["trust_domain"], "ak:trust_domain:auth.example.com");
@@ -581,6 +625,7 @@ fn service_describe_derives_valid_trust_domain_for_ipv6_host() {
         &url_builder,
         &test_arkret_config(),
         &[],
+        &test_enrollment_authority_did(),
     ))
     .unwrap();
     assert_eq!(body["trust_domain"], "ak:trust_domain:host-::1");
@@ -599,6 +644,7 @@ fn service_describe_defaults_to_local_identity_binding_resolver() {
         &url_builder,
         &test_arkret_config(),
         &[],
+        &test_enrollment_authority_did(),
     ))
     .unwrap();
 
@@ -628,7 +674,13 @@ fn service_describe_advertises_configured_session_grant_ttl() {
         ..ArkretConfig::default()
     };
 
-    let body = serde_json::to_value(service_describe_response(&url_builder, &config, &[])).unwrap();
+    let body = serde_json::to_value(service_describe_response(
+        &url_builder,
+        &config,
+        &[],
+        &test_enrollment_authority_did(),
+    ))
+    .unwrap();
 
     assert_eq!(body["limits"]["session_grant_ttl_seconds"], 900);
 }

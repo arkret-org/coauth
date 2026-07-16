@@ -8,8 +8,8 @@ use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::jwk::{ParametersInfo, Thumbprint};
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::{
-    JsonWebKey, JsonWebKeySet, Keystore, PrivateKey, SERVICE_IDENTITY_KEY_ID,
-    ServiceIdentityKeyError,
+    DEVICE_ENROLLMENT_KEY_ID, DeviceEnrollmentKeyError, JsonWebKey, JsonWebKeySet, Keystore,
+    PrivateKey, SERVICE_IDENTITY_KEY_ID, ServiceIdentityKeyError,
 };
 use der::pem::LineEnding;
 use rand_core::SeedableRng;
@@ -350,5 +350,46 @@ fn service_identity_key_rejects_missing_and_wrong_type() {
     assert!(matches!(
         wrong_type.service_identity_seed(),
         Err(ServiceIdentityKeyError::WrongKeyType)
+    ));
+}
+
+#[test]
+fn device_enrollment_key_is_distinct_and_selected_by_reserved_kid() {
+    let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(2029);
+    let service_identity = PrivateKey::generate_ed25519(&mut rng);
+    let expected = PrivateKey::generate_ed25519(&mut rng);
+    let expected_seed = match &expected {
+        PrivateKey::OkpEd25519(key) => key.to_bytes(),
+        _ => unreachable!(),
+    };
+    let store = Keystore::new(JsonWebKeySet::new(vec![
+        JsonWebKey::new(service_identity).with_kid(SERVICE_IDENTITY_KEY_ID),
+        JsonWebKey::new(expected).with_kid(DEVICE_ENROLLMENT_KEY_ID),
+    ]));
+
+    assert_eq!(store.device_enrollment_seed().unwrap(), expected_seed);
+    assert_ne!(
+        store.device_enrollment_seed().unwrap(),
+        store.service_identity_seed().unwrap()
+    );
+}
+
+#[test]
+fn device_enrollment_key_rejects_missing_and_wrong_type() {
+    let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(2030);
+    let missing = Keystore::new(JsonWebKeySet::new(vec![JsonWebKey::new(
+        PrivateKey::generate_ed25519(&mut rng),
+    )]));
+    assert!(matches!(
+        missing.device_enrollment_seed(),
+        Err(DeviceEnrollmentKeyError::Missing)
+    ));
+
+    let wrong_type = Keystore::new(JsonWebKeySet::new(vec![
+        JsonWebKey::new(PrivateKey::generate_ec_p256(&mut rng)).with_kid(DEVICE_ENROLLMENT_KEY_ID),
+    ]));
+    assert!(matches!(
+        wrong_type.device_enrollment_seed(),
+        Err(DeviceEnrollmentKeyError::WrongKeyType)
     ));
 }

@@ -65,6 +65,10 @@ secrets:
   # derivation. Retain this key across database restore or replacement.
   - kid: coauth-service-identity-v1
     key: ${COAUTH_SERVICE_IDENTITY_KEY_ED25519_PEM}
+  # Stable, distinct Ed25519 key delegated only to B-model first-device
+  # enrollment. Retain it across process and database replacement.
+  - kid: coauth-device-enrollment-v1
+    key: ${COAUTH_DEVICE_ENROLLMENT_KEY_ED25519_PEM}
 sms:
   transport: blackhole
   # transport: twilio

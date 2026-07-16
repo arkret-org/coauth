@@ -3,18 +3,16 @@
 //! Under the B custody model, the identity root and recovery keys remain in
 //! client-controlled cold custody and never enter coauth. Device enrollment is
 //! instead attested by this **persistent**, narrowly delegated service key.
-//! coauth holds exactly one such key process-wide; it signs `service_attested`
+//! coauth holds exactly one such key in its configured key backend; it signs `service_attested`
 //! `ak.device.authorize` events on behalf of principals whose inception DID
 //! document designates this authority via an
 //! `ArkretDeviceEnrollmentAuthority` service entry
 //! (`zh/crypto-media/device-lifecycle.md` §5.4).
 //!
-//! The key is loaded from `COAUTH_DEVICE_ENROLLMENT_KEY_SEED` (base64 of a
-//! 32-byte ed25519 seed). When absent, a random seed is generated once at
-//! process start and a warning is emitted: anything signed with an ephemeral
-//! key is unverifiable across restarts (acceptable for single-process e2e, not
-//! for production). The resolved authority is cached in a process-wide
-//! `OnceLock` so every request shares the same key.
+//! The key is selected from the deployment keystore by the reserved
+//! `coauth-device-enrollment-v1` key id. Missing, duplicated, or non-Ed25519
+//! keys fail closed; there is no ephemeral runtime fallback because it would
+//! invalidate every previously issued device authorization after restart.
 //!
 //! The authority identity is a `did:key` so any spec-conformant `did:key`
 //! resolver (soland's included) can verify the event proof without contacting
@@ -22,27 +20,12 @@
 //! method is `did:key:z<mb>#z<mb>` — the canonical `did:key` VM form the SDK
 //! `DidKeyResolver` produces.
 
-use std::sync::OnceLock;
-
 use arkret_core::Did;
 use arkret_core::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_signatures::Ed25519MoveSigner;
 use ed25519_dalek::SigningKey;
 
-/// Env var carrying the base64-encoded 32-byte ed25519 enrollment seed.
-pub const ENROLLMENT_KEY_SEED_ENV: &str = "COAUTH_DEVICE_ENROLLMENT_KEY_SEED";
-
-/// How the enrollment signing key was obtained at process start.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EnrollmentKeyOrigin {
-    /// Loaded from [`ENROLLMENT_KEY_SEED_ENV`].
-    Configured,
-    /// No env var present — generated at process start. Anything signed with
-    /// this key is unverifiable across restarts.
-    Ephemeral,
-}
-
-/// Resolved, process-wide enrollment authority. Carries the raw seed so a
+/// Resolved enrollment authority. Carries the raw seed so a
 /// fresh [`Ed25519MoveSigner`] (not `Clone`) can be rebuilt per signing call.
 #[derive(Clone)]
 pub struct EnrollmentAuthority {
@@ -51,7 +34,6 @@ pub struct EnrollmentAuthority {
     did: String,
     /// `did:key:z<mb>#z<mb>` — the proof `verification_method`.
     verification_method: String,
-    origin: EnrollmentKeyOrigin,
 }
 
 impl std::fmt::Debug for EnrollmentAuthority {
@@ -60,7 +42,6 @@ impl std::fmt::Debug for EnrollmentAuthority {
             .field("seed", &"<redacted>")
             .field("did", &self.did)
             .field("verification_method", &self.verification_method)
-            .field("origin", &self.origin)
             .finish()
     }
 }
@@ -68,7 +49,7 @@ impl std::fmt::Debug for EnrollmentAuthority {
 impl EnrollmentAuthority {
     /// Build the authority from a raw 32-byte ed25519 seed.
     #[must_use]
-    pub fn from_seed(seed: [u8; 32], origin: EnrollmentKeyOrigin) -> Self {
+    pub fn from_seed(seed: [u8; 32]) -> Self {
         let verifying_key = SigningKey::from_bytes(&seed).verifying_key();
         let multibase = ed25519_pubkey_to_did_key_multibase(&verifying_key.to_bytes());
         let did = format!("did:key:{multibase}");
@@ -77,7 +58,6 @@ impl EnrollmentAuthority {
             seed,
             did,
             verification_method,
-            origin,
         }
     }
 
@@ -97,12 +77,6 @@ impl EnrollmentAuthority {
         &self.verification_method
     }
 
-    /// Origin of the underlying key (configured vs ephemeral).
-    #[must_use]
-    pub fn origin(&self) -> EnrollmentKeyOrigin {
-        self.origin
-    }
-
     /// Build a fresh SDK signer bound to this authority's DID + VM. The signer
     /// is consumed by [`arkret_signatures::sign_event`].
     #[must_use]
@@ -112,52 +86,13 @@ impl EnrollmentAuthority {
     }
 }
 
-static AUTHORITY: OnceLock<EnrollmentAuthority> = OnceLock::new();
-
-/// Decode the configured seed, or generate a random one with a warning.
-fn load_authority() -> EnrollmentAuthority {
-    use base64ct::{Base64, Encoding as _};
-
-    if let Ok(raw) = coauth_config::runtime_var(ENROLLMENT_KEY_SEED_ENV) {
-        let trimmed = raw.trim();
-        let mut buf = [0u8; 48];
-        match Base64::decode(trimmed, &mut buf) {
-            Ok(decoded) if decoded.len() == 32 => {
-                let mut seed = [0u8; 32];
-                seed.copy_from_slice(decoded);
-                return EnrollmentAuthority::from_seed(seed, EnrollmentKeyOrigin::Configured);
-            }
-            Ok(decoded) => {
-                tracing::warn!(
-                    "{ENROLLMENT_KEY_SEED_ENV} decoded to {} bytes (expected 32); \
-                     falling back to an ephemeral enrollment key",
-                    decoded.len()
-                );
-            }
-            Err(error) => {
-                tracing::warn!(
-                    "{ENROLLMENT_KEY_SEED_ENV} base64 decode failed ({error:?}); \
-                     falling back to an ephemeral enrollment key"
-                );
-            }
-        }
-    }
-
-    let mut seed = [0u8; 32];
-    use rand::RngCore as _;
-    rand::thread_rng().fill_bytes(&mut seed[..]);
-    tracing::warn!(
-        "{ENROLLMENT_KEY_SEED_ENV} not set; using an ephemeral device-enrollment \
-         authority key (signed device authorizations will be unverifiable across \
-         restarts — configure a real key for production)"
-    );
-    EnrollmentAuthority::from_seed(seed, EnrollmentKeyOrigin::Ephemeral)
-}
-
-/// Return the process-wide enrollment authority, initialising it on first use.
-#[must_use]
-pub fn enrollment_authority() -> &'static EnrollmentAuthority {
-    AUTHORITY.get_or_init(load_authority)
+/// Resolve the deployment-pinned authority from the configured key backend.
+pub fn enrollment_authority(
+    key_store: &coauth_keystore::Keystore,
+) -> Result<EnrollmentAuthority, coauth_keystore::DeviceEnrollmentKeyError> {
+    key_store
+        .device_enrollment_seed()
+        .map(EnrollmentAuthority::from_seed)
 }
 
 #[cfg(test)]
@@ -166,7 +101,7 @@ mod tests {
 
     #[test]
     fn did_and_vm_share_the_multibase_key() {
-        let authority = EnrollmentAuthority::from_seed([7u8; 32], EnrollmentKeyOrigin::Configured);
+        let authority = EnrollmentAuthority::from_seed([7u8; 32]);
         let did = authority.did();
         assert!(did.starts_with("did:key:z"));
         // VM form is `did:key:z…#z…` with the same multibase on both sides.
@@ -179,15 +114,15 @@ mod tests {
 
     #[test]
     fn derivation_is_deterministic() {
-        let a = EnrollmentAuthority::from_seed([3u8; 32], EnrollmentKeyOrigin::Configured);
-        let b = EnrollmentAuthority::from_seed([3u8; 32], EnrollmentKeyOrigin::Configured);
+        let a = EnrollmentAuthority::from_seed([3u8; 32]);
+        let b = EnrollmentAuthority::from_seed([3u8; 32]);
         assert_eq!(a.did(), b.did());
         assert_eq!(a.verification_method(), b.verification_method());
     }
 
     #[test]
     fn signer_did_matches_authority_did() {
-        let authority = EnrollmentAuthority::from_seed([9u8; 32], EnrollmentKeyOrigin::Configured);
+        let authority = EnrollmentAuthority::from_seed([9u8; 32]);
         let signer = authority.signer();
         use arkret_core::MoveSigner as _;
         assert_eq!(signer.signer_did().as_str(), authority.did());

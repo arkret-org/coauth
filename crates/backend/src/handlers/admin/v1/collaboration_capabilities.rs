@@ -543,7 +543,7 @@ mod tests {
     }
 
     fn config() -> ArkretConfig {
-        ArkretConfig {
+        let config = ArkretConfig {
             principal_servers: vec![PrincipalServerConfig {
                 name: "soland-dev".to_owned(),
                 endpoint: "http://soland.test".parse().unwrap(),
@@ -551,7 +551,10 @@ mod tests {
                 embedded_webvh_registration_bearer: None,
             }],
             ..ArkretConfig::default()
-        }
+        };
+        crate::services::resolved_principal_audiences::shared()
+            .insert_for_test(&config.principal_servers[0].endpoint, "did:web:soland.test");
+        config
     }
 
     fn key_store() -> Keystore {

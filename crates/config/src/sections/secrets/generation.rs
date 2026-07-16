@@ -51,6 +51,12 @@ impl SecretsConfig {
             spawn_ec_keygen(&mut rng, "ec_k256", PrivateKey::generate_ec_k256).await?;
         let ed25519_key =
             spawn_ec_keygen(&mut rng, "ed25519", PrivateKey::generate_ed25519).await?;
+        let device_enrollment_key = spawn_ec_keygen(
+            &mut rng,
+            "device_enrollment_ed25519",
+            PrivateKey::generate_ed25519,
+        )
+        .await?;
 
         Ok(Self {
             encryption: EncryptionKey::Value({
@@ -65,6 +71,10 @@ impl SecretsConfig {
                 into_key_config(ec_p521_key)?,
                 into_key_config(ec_k256_key)?,
                 into_key_config_with_kid(ed25519_key, coauth_keystore::SERVICE_IDENTITY_KEY_ID)?,
+                into_key_config_with_kid(
+                    device_enrollment_key,
+                    coauth_keystore::DEVICE_ENROLLMENT_KEY_ID,
+                )?,
             ]),
             keys_dir: None,
         })
