@@ -2,12 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
 use arkret_core::Did;
-use arkret_core::http::{
-    DirectoryDescribeOutcome, IdentityDescribeOutcome, IdentityDocumentViewOutcome,
-};
+use arkret_core::http::{IdentityDescribeOutcome, IdentityDocumentViewOutcome};
 use arkret_core::models::{
     DirectoryHandleResolutionOutcome, DirectoryResolveHandleRequestBody, IdentityDescription,
-    IdentityDocumentView, IdentityResolveOutcome, IdentityResolveRequestBody, ServiceDescribe,
+    IdentityDocumentView, IdentityResolveOutcome, IdentityResolveRequestBody,
 };
 use coauth_data::RepositoryAccess;
 use salvo::prelude::*;
@@ -118,96 +116,6 @@ pub async fn identity_document(
         seq: None,
         receipts: Vec::new(),
     })))
-}
-
-#[handler]
-pub async fn directory_describe(
-    depot: &Depot,
-) -> Result<Json<DirectoryDescribeOutcome>, ArkretRouteError> {
-    let url_builder = depot.url_builder()?;
-    let arkret_config = depot.arkret_config()?;
-    let service_id = service_id_for(&arkret_config);
-    let trust_domain =
-        arkret_core::TypedTrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
-            .map_err(|error| {
-                ArkretRouteError::Internal(Box::new(std::io::Error::other(format!(
-                    "invalid trust_domain: {error}"
-                ))))
-            })?;
-    let supported_profiles = vec!["ak.profile.directory_service.v1".to_owned()];
-    let supported_features = vec![
-        "directory.resolve".to_owned(),
-        "directory.handle_lookup".to_owned(),
-    ];
-    let description = ServiceDescribe {
-        service_id,
-        trust_domain,
-        service_type: arkret_core::ServiceType::DirectoryService,
-        protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
-        supported_profiles: supported_profiles.clone(),
-        supported_operations: vec![
-            arkret_core::ServiceOperationId::FIND_DIRECTORY_QUERY_DESCRIBE.to_owned(),
-            arkret_core::ServiceOperationId::FIND_DIRECTORY_QUERY_RESOLVE_HANDLE.to_owned(),
-        ],
-        supported_bindings: vec![
-            arkret_core::SupportedBinding::new("http_json")
-                .with_base_url(url_builder.http_base().to_string()),
-        ],
-        supported_features: supported_features.clone(),
-        auth_metadata: arkret_core::AuthMetadata::minimal("public_no_auth"),
-        limits: arkret_core::ServerLimits::default(),
-        plaintext_visibility: arkret_core::PlaintextVisibility::none(),
-        privacy_derivation: None,
-        receive_policy_constraints: None,
-        implemented_features: supported_features,
-        claimed_profiles: supported_profiles
-            .iter()
-            .map(arkret_core::ClaimedProfileEntry::self_claimed)
-            .collect(),
-        verified_profiles: Vec::new(),
-        experimental_features: Vec::new(),
-        compat_surfaces: Vec::new(),
-        development_mode: false,
-        rate_limit_policy: Some(arkret_core::RateLimitPolicy::unspecified()),
-        rate_limit_policy_id: None,
-        egress_network_policy: Some(arkret_core::EgressNetworkPolicy::deny_private_defaults()),
-        resource_types: vec![
-            arkret_core::models::DirectoryResourceKind::Actor,
-            arkret_core::models::DirectoryResourceKind::Handle,
-        ],
-        discovery_profiles: supported_profiles,
-        restricted_query_proof: Some(true),
-        ingest_modes: vec![arkret_core::DirectoryIngestMode::Push],
-        accept_policy_kind: Some(arkret_core::DirectoryAcceptPolicyKind::Open),
-        accept_policy_ref: None,
-        default_ttl_seconds: Some(86_400),
-        max_ttl_seconds: Some(604_800),
-        revalidation_grace_seconds: Some(3_600),
-        accepted_resource_kinds: vec![
-            arkret_core::models::DirectoryResourceKind::Actor,
-            arkret_core::models::DirectoryResourceKind::Handle,
-        ],
-        accepted_did_methods: vec![
-            "did:web".to_owned(),
-            "did:webvh".to_owned(),
-            "did:key".to_owned(),
-        ],
-        takedown_contact: None,
-        rate_limits: Some(BTreeMap::new()),
-        supported_reducer_profiles: Vec::new(),
-        supported_schema_profiles: Vec::new(),
-        frontier: Vec::new(),
-        snapshot_frontier: Vec::new(),
-        reducer_profile: None,
-        last_materialized_at: None,
-    };
-    description.validate().map_err(|error| {
-        ArkretRouteError::Internal(Box::new(std::io::Error::other(format!(
-            "invalid directory describe: {error}"
-        ))))
-    })?;
-
-    Ok(Json(DirectoryDescribeOutcome(description)))
 }
 
 #[handler]

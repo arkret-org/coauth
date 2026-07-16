@@ -20,7 +20,6 @@ const SUPPORTED_OPERATIONS: &[&str] = &[
     arkret_core::ServiceOperationId::ROOT_IDENTITY_REGISTRY_QUERY_DESCRIBE,
     arkret_core::ServiceOperationId::ROOT_IDENTITY_QUERY_RESOLVE,
     arkret_core::ServiceOperationId::ROOT_IDENTITY_DOCUMENT_RESOURCE_GET,
-    arkret_core::ServiceOperationId::FIND_DIRECTORY_QUERY_DESCRIBE,
     arkret_core::ServiceOperationId::FIND_DIRECTORY_QUERY_RESOLVE_HANDLE,
     arkret_core::ServiceOperationId::SELF_POLICY_QUERY_CHECK,
     arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT,
@@ -29,6 +28,7 @@ const SUPPORTED_OPERATIONS: &[&str] = &[
     "ak.gate.account.command.introspect_session_grant",
     arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
     arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ENROLL_DEVICE,
+    arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_REVOKE_SESSION,
 ];
 
 const IMPLEMENTED_PROFILE_EVENT_KINDS: &[&str] = &["ak.session.grant"];
@@ -164,7 +164,7 @@ pub(crate) struct ServiceDescribeOutcome {
     claimed_profiles: Vec<ClaimedProfileDescriptor>,
     /// T6.1 — cotest-verified profiles. MUST be empty when
     /// `development_mode=true` (§3.0).
-    verified_profiles: Vec<VerifiedProfileDescriptor>,
+    verified_profiles: Vec<arkret_core::VerifiedProfileEntry>,
     /// T6.1 — features the service exposes but does NOT promise stable
     /// interop for.
     experimental_features: Vec<&'static str>,
@@ -221,30 +221,13 @@ pub(crate) struct ServiceDescribeOutcome {
 }
 
 /// T6.1 — self-claimed profile entry. `claim_kind = "self_claimed"`;
-/// cotest-verified entries belong in `verified_profiles`.
+/// Conformance-verified entries belong in `verified_profiles`.
 #[derive(Debug, Serialize)]
 struct ClaimedProfileDescriptor {
     profile_id: &'static str,
     claim_kind: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     notes: Option<&'static str>,
-}
-
-/// T6.1 — cotest-verified profile entry. Required `cotest_run_id`,
-/// `artifact_digest`, `artifact_ref`, `cotest_issuer_did`, `signature`,
-/// `timestamp`. Dev-mode posture MUST NOT advertise any such entry (§3.0).
-#[derive(Debug, Serialize)]
-struct VerifiedProfileDescriptor {
-    profile_id: String,
-    claim_kind: &'static str,
-    cotest_run_id: String,
-    artifact_digest: String,
-    artifact_ref: String,
-    cotest_issuer_did: String,
-    signature: String,
-    timestamp: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    expires_at: Option<String>,
 }
 
 /// T6.1 — external-interop surface entry. `kind` is schema-defined.
@@ -351,7 +334,7 @@ fn validate_claimed_profiles_against_sdk_requirements() {
 /// entries.
 fn build_verified_profile_descriptors(
     loaded: &[crate::services::verified_profiles::VerifiedProfileDescriptor],
-) -> Vec<VerifiedProfileDescriptor> {
+) -> Vec<arkret_core::VerifiedProfileEntry> {
     loaded
         .iter()
         .filter_map(|entry| {
@@ -363,16 +346,17 @@ fn build_verified_profile_descriptors(
                 );
                 return None;
             }
-            Some(VerifiedProfileDescriptor {
+            Some(arkret_core::VerifiedProfileEntry {
                 profile_id: entry.profile_id.clone(),
-                claim_kind: "cotest_verified",
-                cotest_run_id: entry.cotest_run_id.clone(),
+                claim_kind: arkret_core::ConformanceVerifiedKind::ConformanceVerified,
+                verification_run_id: entry.verification_run_id.clone(),
                 artifact_digest: entry.artifact_digest.clone(),
                 artifact_ref: entry.artifact_ref.clone(),
-                cotest_issuer_did: entry.cotest_issuer_did.clone(),
+                verifier_did: entry.verifier_did.clone(),
                 signature: entry.signature.clone(),
-                timestamp: entry.timestamp.to_rfc3339(),
-                expires_at: entry.expires_at.map(|ts| ts.to_rfc3339()),
+                timestamp: entry.timestamp,
+                expires_at: entry.expires_at,
+                extra: Default::default(),
             })
         })
         .collect()
@@ -568,6 +552,7 @@ pub(crate) fn service_describe_response(
             "account_recovery",
             "claim_attestation",
             "policy_hook",
+            "session_grant_revocation",
         ],
         supported_reducer_profiles: vec!["ak.reducer.v1"],
         // T6.3 — replace the historical `ak.schema.v1` placeholder with
@@ -607,6 +592,7 @@ pub(crate) fn service_describe_response(
             "account_recovery",
             "claim_attestation",
             "policy_hook",
+            "session_grant_revocation",
         ],
         // T6.3 / G3.C3 — claimed_profiles carries the auth-server slot.
         //
@@ -658,6 +644,7 @@ pub(crate) fn service_describe_response(
         experimental_features: vec![
             "session_grant_issue",
             "session_grant_introspection",
+            "session_grant_revocation",
             "did_webvh_embedded_registration",
             "principal_server_delegation_targets",
         ],

@@ -122,6 +122,7 @@ pub trait OrganizationControlRepository: Send + Sync {
     async fn revoke_delegation(
         &mut self,
         clock: &dyn Clock,
+        organization_did: &str,
         delegation_ref: &str,
     ) -> Result<Option<OrganizationDelegation>, Self::Error>;
 
@@ -130,6 +131,7 @@ pub trait OrganizationControlRepository: Send + Sync {
     async fn renew_delegation(
         &mut self,
         clock: &dyn Clock,
+        organization_did: &str,
         delegation_ref: &str,
         valid_until: Option<DateTime<Utc>>,
     ) -> Result<Option<OrganizationDelegation>, Self::Error>;
@@ -170,11 +172,13 @@ repository_impl!(OrganizationControlRepository:
     async fn revoke_delegation(
         &mut self,
         clock: &dyn Clock,
+        organization_did: &str,
         delegation_ref: &str,
     ) -> Result<Option<OrganizationDelegation>, Self::Error>;
     async fn renew_delegation(
         &mut self,
         clock: &dyn Clock,
+        organization_did: &str,
         delegation_ref: &str,
         valid_until: Option<DateTime<Utc>>,
     ) -> Result<Option<OrganizationDelegation>, Self::Error>;

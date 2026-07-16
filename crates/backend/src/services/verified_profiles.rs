@@ -64,7 +64,7 @@ struct RawVerifiedEntry {
     #[serde(default)]
     artifact_ref: Option<String>,
     #[serde(default)]
-    cotest_issuer_did: Option<String>,
+    verifier_did: Option<String>,
     #[serde(default)]
     signature: Option<String>,
     #[serde(default)]
@@ -81,10 +81,10 @@ struct RawVerifiedEntry {
 pub struct VerifiedProfileDescriptor {
     pub profile_id: String,
     pub service_role: String,
-    pub cotest_run_id: String,
+    pub verification_run_id: String,
     pub artifact_digest: String,
     pub artifact_ref: String,
-    pub cotest_issuer_did: String,
+    pub verifier_did: arkret_core::Did,
     pub signature: String,
     pub timestamp: DateTime<Utc>,
     pub expires_at: Option<DateTime<Utc>>,
@@ -168,22 +168,19 @@ pub fn load_from_path(path: impl AsRef<Utf8Path>) -> Vec<VerifiedProfileDescript
         else {
             continue;
         };
-        let Some(cotest_issuer_did) = required_non_empty(
-            entry.cotest_issuer_did,
-            "cotest_issuer_did",
-            &entry.profile_id,
-        ) else {
+        let Some(verifier_did) =
+            required_non_empty(entry.verifier_did, "verifier_did", &entry.profile_id)
+        else {
             continue;
         };
-        if !cotest_issuer_did.starts_with("did:") {
+        let Ok(verifier_did) = arkret_core::Did::new(verifier_did) else {
             tracing::warn!(
                 target: "verified_profiles",
                 profile_id = %entry.profile_id,
-                cotest_issuer_did = %cotest_issuer_did,
-                "dropping verified-profile entry: cotest_issuer_did must be a DID"
+                "dropping verified-profile entry: verifier_did must be a valid DID"
             );
             continue;
-        }
+        };
         let Some(signature) = required_non_empty(entry.signature, "signature", &entry.profile_id)
         else {
             continue;
@@ -191,10 +188,10 @@ pub fn load_from_path(path: impl AsRef<Utf8Path>) -> Vec<VerifiedProfileDescript
         out.push(VerifiedProfileDescriptor {
             profile_id: entry.profile_id,
             service_role: role.to_owned(),
-            cotest_run_id: run_id.clone(),
+            verification_run_id: run_id.clone(),
             artifact_digest,
             artifact_ref,
-            cotest_issuer_did,
+            verifier_did,
             signature,
             timestamp: generated_at,
             expires_at: entry.expires_at,
@@ -287,7 +284,7 @@ mod tests {
                     "spec_file": "cotest/e2e/tests/conformance/profile-gates.spec.ts",
                     "artifact_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                     "artifact_ref": "file:///tmp/verified-profiles.json",
-                    "cotest_issuer_did": "did:web:cotest.example",
+                    "verifier_did": "did:web:cotest.example",
                     "signature": "eddsa-jcs-b64url:test-principal-signature"
                 },
                 {
@@ -297,7 +294,7 @@ mod tests {
                     "spec_file": "cotest/e2e/tests/sync/service-surface-contract.spec.ts",
                     "artifact_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "artifact_ref": "file:///tmp/verified-profiles.json",
-                    "cotest_issuer_did": "did:web:cotest.example",
+                    "verifier_did": "did:web:cotest.example",
                     "signature": "eddsa-jcs-b64url:test-auth-signature",
                     "expires_at": "2026-06-20T00:00:00Z"
                 }
@@ -308,13 +305,13 @@ mod tests {
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].profile_id, "ak.profile.auth_server.v1");
         assert_eq!(v[0].service_role, "auth_server");
-        assert_eq!(v[0].cotest_run_id, "test-run");
+        assert_eq!(v[0].verification_run_id, "test-run");
         assert_eq!(
             v[0].artifact_digest,
             "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         );
         assert_eq!(v[0].artifact_ref, "file:///tmp/verified-profiles.json");
-        assert_eq!(v[0].cotest_issuer_did, "did:web:cotest.example");
+        assert_eq!(v[0].verifier_did.as_str(), "did:web:cotest.example");
         assert_eq!(v[0].signature, "eddsa-jcs-b64url:test-auth-signature");
         assert_eq!(
             v[0].expires_at.unwrap().to_rfc3339(),

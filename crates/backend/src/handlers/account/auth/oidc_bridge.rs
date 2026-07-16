@@ -139,29 +139,7 @@ fn validate_returned_nonce(grant_nonce: Option<&str>, expected_nonce: &str) -> R
 }
 
 pub(crate) fn is_protocol_device_id(value: &str) -> bool {
-    let Some(uuid) = value.strip_prefix("ak:device:") else {
-        return false;
-    };
-    is_lowercase_uuidv7(uuid)
-}
-
-fn is_lowercase_uuidv7(value: &str) -> bool {
-    if value.len() != 36 {
-        return false;
-    }
-    let bytes = value.as_bytes();
-    if bytes.iter().any(u8::is_ascii_uppercase) {
-        return false;
-    }
-    for (index, byte) in bytes.iter().copied().enumerate() {
-        match index {
-            8 | 13 | 18 | 23 if byte != b'-' => return false,
-            8 | 13 | 18 | 23 => {}
-            _ if !(byte.is_ascii_digit() || matches!(byte, b'a'..=b'f')) => return false,
-            _ => {}
-        }
-    }
-    bytes[14] == b'7' && matches!(bytes[19], b'8' | b'9' | b'a' | b'b')
+    DeviceId::new(value.to_owned()).is_ok()
 }
 
 pub(super) fn principal_session_grant_scopes(device_id: &str) -> Vec<String> {

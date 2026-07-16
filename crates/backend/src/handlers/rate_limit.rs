@@ -147,13 +147,18 @@ impl RequesterFingerprint {
 /// the map mutex across the verify call gives us the atomic
 /// read-modify-write semantics rate limiting requires.
 struct KeyedLimiter<K: Clone + Eq + Hash + Send + Sync + 'static> {
-    guards: Mutex<HashMap<K, GuardEntry>>,
+    state: Mutex<KeyedLimiterState<K>>,
     quota: CelledQuota,
     /// The quota period as a `std::time::Duration`, precomputed for lazy
     /// eviction. A guard whose window has fully elapsed (no activity for at
     /// least one full period) is equivalent to a fresh guard, so evicting it
     /// is behaviour-preserving while reclaiming the memory.
     period: Duration,
+}
+
+struct KeyedLimiterState<K> {
+    guards: HashMap<K, GuardEntry>,
+    next_sweep: Instant,
 }
 
 /// A guard plus the last time it was touched, used for lazy TTL eviction.
@@ -178,7 +183,10 @@ impl<K: Clone + Eq + Hash + Send + Sync + 'static> KeyedLimiter<K> {
         let cells = limit.min(10);
         let quota = CelledQuota::new(limit, cells, time::Duration::seconds_f64(period_secs));
         Some(Self {
-            guards: Mutex::new(HashMap::new()),
+            state: Mutex::new(KeyedLimiterState {
+                guards: HashMap::new(),
+                next_sweep: Instant::now() + Duration::from_secs_f64(period_secs),
+            }),
             quota,
             period: Duration::from_secs_f64(period_secs),
         })
@@ -191,13 +199,16 @@ impl<K: Clone + Eq + Hash + Send + Sync + 'static> KeyedLimiter<K> {
     /// attacker-controlled keys. If the map is at capacity and the key is new,
     /// the least-recently-seen entries are dropped to make room.
     async fn check(&self, key: &K) -> bool {
-        let mut map = self.guards.lock().await;
+        let mut state = self.state.lock().await;
         let now = Instant::now();
 
-        // Lazy TTL eviction: any guard not seen for a full period has a
-        // fully-elapsed window and is equivalent to a fresh guard, so removing
-        // it changes no rate-limiting decision.
-        map.retain(|_, entry| now.duration_since(entry.last_seen) < self.period);
+        if now >= state.next_sweep {
+            state
+                .guards
+                .retain(|_, entry| now.duration_since(entry.last_seen) < self.period);
+            state.next_sweep = now + self.period;
+        }
+        let map = &mut state.guards;
 
         // Capacity cap: if we are about to insert a brand-new key but the map
         // is full, drop the oldest entries first. Existing keys never trigger

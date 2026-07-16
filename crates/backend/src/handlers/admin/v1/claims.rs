@@ -389,11 +389,9 @@ fn require_non_empty(value: String, field: &str) -> Result<String, AppError> {
 
 fn require_did(value: String, field: &str) -> Result<String, AppError> {
     let value = require_non_empty(value, field)?;
-    if value.starts_with("did:") {
-        Ok(value)
-    } else {
-        Err(AppError::bad_request(format!("{field} must be a DID")))
-    }
+    arkret_core::Did::new(value.clone())
+        .map(|_| value)
+        .map_err(|error| AppError::bad_request(format!("{field} must be a valid DID: {error}")))
 }
 
 fn normalize_optional_query(value: Option<String>) -> Option<String> {

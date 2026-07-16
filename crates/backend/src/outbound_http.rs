@@ -188,14 +188,14 @@ impl reqwest::dns::Resolve for TracingResolver {
                         .instrument(span),
                 );
             }
-            if let Some(reason) = blocked_domain_reason(&requested_name) {
+            if let Some(reason) = blocked_domain_reason(&requested_name, false) {
                 return Box::pin(async move {
                     Err(Box::new(BlockedEgressTarget::new(requested_name, reason))
                         as Box<dyn StdError + Send + Sync>)
                 });
             }
             if let Ok(ip) = requested_name.parse::<IpAddr>()
-                && let Some(reason) = blocked_ip_reason(ip)
+                && let Some(reason) = blocked_ip_reason(ip, false)
             {
                 return Box::pin(async move {
                     Err(Box::new(BlockedEgressTarget::new(requested_name, reason))
@@ -258,12 +258,12 @@ fn enforce_resolved_egress_policy(
         return Ok(());
     }
 
-    if let Some(reason) = blocked_domain_reason(host) {
+    if let Some(reason) = blocked_domain_reason(host, false) {
         return Err(Box::new(BlockedEgressTarget::new(host, reason)));
     }
 
     for addr in addrs {
-        if let Some(reason) = blocked_ip_reason(addr.ip()) {
+        if let Some(reason) = blocked_ip_reason(addr.ip(), false) {
             return Err(Box::new(BlockedEgressTarget::new(
                 format!("{} ({})", host, addr.ip()),
                 reason,
@@ -287,7 +287,7 @@ pub(crate) fn enforce_outbound_url_policy(
     if private_egress_target_allowed(host) {
         return Ok(());
     }
-    if let Some(reason) = blocked_domain_reason(host) {
+    if let Some(reason) = blocked_domain_reason(host, false) {
         return Err(Box::new(BlockedEgressTarget::new(host, reason)));
     }
     let ip = match url.host() {
@@ -296,7 +296,7 @@ pub(crate) fn enforce_outbound_url_policy(
         _ => None,
     };
     if let Some(ip) = ip
-        && let Some(reason) = blocked_ip_reason(ip)
+        && let Some(reason) = blocked_ip_reason(ip, false)
     {
         return Err(Box::new(BlockedEgressTarget::new(ip.to_string(), reason)));
     }
@@ -350,9 +350,9 @@ fn target_allowed_by_private_allowlist(host: &str, raw: &str) -> bool {
         })
 }
 
-fn blocked_domain_reason(host: &str) -> Option<&'static str> {
+pub(crate) fn blocked_domain_reason(host: &str, allow_loopback: bool) -> Option<&'static str> {
     let host = host.trim_end_matches('.').to_ascii_lowercase();
-    if host == "localhost" || host.ends_with(".localhost") {
+    if (host == "localhost" || host.ends_with(".localhost")) && !allow_loopback {
         return Some("localhost names are not routable outbound targets");
     }
     if matches!(
@@ -367,14 +367,14 @@ fn blocked_domain_reason(host: &str) -> Option<&'static str> {
     None
 }
 
-fn blocked_ip_reason(ip: IpAddr) -> Option<&'static str> {
+pub(crate) fn blocked_ip_reason(ip: IpAddr, allow_loopback: bool) -> Option<&'static str> {
     match ip {
-        IpAddr::V4(addr) => blocked_ipv4_reason(addr),
-        IpAddr::V6(addr) => blocked_ipv6_reason(addr),
+        IpAddr::V4(addr) => blocked_ipv4_reason(addr, allow_loopback),
+        IpAddr::V6(addr) => blocked_ipv6_reason(addr, allow_loopback),
     }
 }
 
-fn blocked_ipv4_reason(addr: Ipv4Addr) -> Option<&'static str> {
+fn blocked_ipv4_reason(addr: Ipv4Addr, allow_loopback: bool) -> Option<&'static str> {
     let octets = addr.octets();
     if octets[0] == 0 {
         return Some("this-network IPv4 range");
@@ -385,7 +385,7 @@ fn blocked_ipv4_reason(addr: Ipv4Addr) -> Option<&'static str> {
     {
         return Some("private IPv4 range");
     }
-    if octets[0] == 127 {
+    if octets[0] == 127 && !allow_loopback {
         return Some("loopback IPv4 range");
     }
     if octets[0] == 169 && octets[1] == 254 {
@@ -421,12 +421,12 @@ fn blocked_ipv4_reason(addr: Ipv4Addr) -> Option<&'static str> {
     None
 }
 
-fn blocked_ipv6_reason(addr: Ipv6Addr) -> Option<&'static str> {
+fn blocked_ipv6_reason(addr: Ipv6Addr, allow_loopback: bool) -> Option<&'static str> {
     let segments = addr.segments();
     if addr.is_unspecified() {
         return Some("unspecified IPv6 address");
     }
-    if addr.is_loopback() {
+    if addr.is_loopback() && !allow_loopback {
         return Some("loopback IPv6 address");
     }
     if segments[0] & 0xfe00 == 0xfc00 {
@@ -787,10 +787,10 @@ mod tests {
 
     #[test]
     fn egress_policy_blocks_internal_names() {
-        assert!(blocked_domain_reason("localhost").is_some());
-        assert!(blocked_domain_reason("api.internal").is_some());
-        assert!(blocked_domain_reason("metadata.google.internal").is_some());
-        assert!(blocked_domain_reason("example.com").is_none());
+        assert!(blocked_domain_reason("localhost", false).is_some());
+        assert!(blocked_domain_reason("api.internal", false).is_some());
+        assert!(blocked_domain_reason("metadata.google.internal", false).is_some());
+        assert!(blocked_domain_reason("example.com", false).is_none());
     }
 
     #[test]
@@ -827,11 +827,11 @@ mod tests {
             "fe80::1",
         ] {
             let ip = ip.parse().unwrap();
-            assert!(blocked_ip_reason(ip).is_some(), "{ip}");
+            assert!(blocked_ip_reason(ip, false).is_some(), "{ip}");
         }
 
-        assert!(blocked_ip_reason("8.8.8.8".parse().unwrap()).is_none());
-        assert!(blocked_ip_reason("2001:4860:4860::8888".parse().unwrap()).is_none());
+        assert!(blocked_ip_reason("8.8.8.8".parse().unwrap(), false).is_none());
+        assert!(blocked_ip_reason("2001:4860:4860::8888".parse().unwrap(), false).is_none());
     }
 
     #[test]

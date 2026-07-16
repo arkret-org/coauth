@@ -24,6 +24,4 @@ pub use types::{
     PatchPrimaryHandlePreferenceRequestBody, PrimaryHandlePreferenceOutcome,
     SessionGrantConfirmation, SessionGrantMaterial, SessionGrantPayload,
 };
-pub(crate) use types::{
-    SessionGrantIntrospectionProofClaims, SessionGrantRecord, SessionGrantTarget,
-};
+pub(crate) use types::{SessionGrantRecord, SessionGrantTarget};

@@ -37,15 +37,16 @@ config:
     http:
       listeners:
         - name: public
-          resources: [oauth, oidc, admin]
+          resources:
+            - name: discovery
+            - name: human
+            - name: oauth
+            - name: restapi
+            - name: assets
+            - name: adminapi
+            - name: health
           binds:
-            - host: 0.0.0.0
-              port: 8080
-        - name: internal
-          resources: [health]
-          binds:
-            - host: 0.0.0.0
-              port: 8080
+            - address: 0.0.0.0:8080
 
 resources:
   requests:

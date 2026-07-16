@@ -1,7 +1,7 @@
 use arkret_core::{
-    DeviceId, Did, SessionGrantIntrospectGrant, SessionGrantIntrospectOutcome,
-    SessionGrantIntrospectRequestBody, SessionGrantIntrospectStatus,
-    SessionGrantIntrospectionProof, SessionGrantScopeDetails,
+    DeviceId, Did, SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_TYPE, SessionGrantIntrospectGrant,
+    SessionGrantIntrospectOutcome, SessionGrantIntrospectRequestBody, SessionGrantIntrospectStatus,
+    SessionGrantIntrospectionProof, SessionGrantIntrospectionProofClaims, SessionGrantScopeDetails,
 };
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::user::PrincipalDidRepository as _;
@@ -161,10 +161,10 @@ fn verify_session_grant_introspection_proof(
 
     let claims = jwt.payload();
     let max_future_skew = Duration::try_seconds(30).unwrap();
-    if claims.kind != "ak.session_grant.introspection_proof.v1"
+    if claims.kind != SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_TYPE
         || claims.grant_id != grant.grant_id.to_string()
         || claims.grant_jwt_hash != session_grant_jwt_hash(&grant.grant_jwt)
-        || claims.audience != grant.audience
+        || claims.audience.as_str() != grant.audience
         || claims.challenge != proof.challenge
         || claims.expires_at <= now
         || claims.issued_at > now + max_future_skew

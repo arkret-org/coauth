@@ -464,7 +464,6 @@ impl TestState {
             .push(Router::with_path("/_arkret/root/identity/resolve").post(crate::handlers::arkret::identity_resolve))
             .push(Router::with_path("/_arkret/root/identity/document").get(crate::handlers::arkret::identity_document))
             .push(Router::with_path("/_coauth/account/identity/primary-handle").patch(crate::handlers::account::primary_handle::patch_primary_handle_preference))
-            .push(Router::with_path("/_arkret/find/directory/describe").get(crate::handlers::arkret::directory_describe))
             .push(Router::with_path("/_arkret/find/directory/resolve-handle").post(crate::handlers::arkret::directory_resolve_handle))
             // Canonical spec surface (mirrors production server.rs): the
             // Principal Server calls introspection at the `/_arkret` path.
