@@ -38,7 +38,6 @@ p384 = {workspace = true}
 p521 = {workspace = true}
 rsa = {workspace = true}
 schemars = {workspace = true}
-sec1 = {workspace = true}
 serde = {workspace = true}
 serde_json = {workspace = true}
 serde_with = {workspace = true}
