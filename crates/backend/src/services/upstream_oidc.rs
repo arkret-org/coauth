@@ -91,8 +91,9 @@ pub trait UpstreamOidcService: Send + Sync {
         userinfo_endpoint: &Url,
     ) -> Result<(), String>;
 
-    fn session_grant_target_for_requested_audience(
+    async fn session_grant_target_for_requested_audience(
         &self,
+        http_client: &reqwest::Client,
         url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
         resolved: &ResolvedPrincipalAudiences,
@@ -252,13 +253,21 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
         Ok(())
     }
 
-    fn session_grant_target_for_requested_audience(
+    async fn session_grant_target_for_requested_audience(
         &self,
+        http_client: &reqwest::Client,
         url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
         resolved: &ResolvedPrincipalAudiences,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String> {
+        // The startup warm-up may run before a configured Principal Server is
+        // ready. Retry only missing/expired entries on demand so a valid OIDC
+        // callback does not wait for the background refresh interval.
+        resolved
+            .refresh_unresolved(http_client, arkret_config)
+            .await;
+
         if let Some(requested_audience) = requested_audience
             .map(str::trim)
             .filter(|value| !value.is_empty())
@@ -566,11 +575,17 @@ mod tests {
     use std::time::Duration;
 
     use coauth_config::PrincipalServerConfig;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
 
     fn principal_server_config() -> (ArkretConfig, Url) {
         let endpoint = Url::parse("https://soland.example/").unwrap();
+        (principal_server_config_for(endpoint.clone()), endpoint)
+    }
+
+    fn principal_server_config_for(endpoint: Url) -> ArkretConfig {
         let config = ArkretConfig {
             principal_servers: vec![PrincipalServerConfig {
                 name: "soland".to_owned(),
@@ -580,23 +595,26 @@ mod tests {
             }],
             ..ArkretConfig::default()
         };
-        (config, endpoint)
+        config
     }
 
-    #[test]
-    fn endpoint_alias_uses_a_fresh_authoritative_audience() {
+    #[tokio::test]
+    async fn endpoint_alias_uses_a_fresh_authoritative_audience() {
         let (config, endpoint) = principal_server_config();
         let resolved = ResolvedPrincipalAudiences::new();
         resolved.insert_for_test(&endpoint, "did:webvh:current:soland.example:webvh:service");
         let url_builder = UrlBuilder::new("https://auth.example/".parse().unwrap(), None, None);
+        let http_client = reqwest::Client::new();
 
         let target = DefaultUpstreamOidcService
             .session_grant_target_for_requested_audience(
+                &http_client,
                 &url_builder,
                 &config,
                 &resolved,
                 Some("https://soland.example/api"),
             )
+            .await
             .unwrap();
 
         assert_eq!(
@@ -605,20 +623,62 @@ mod tests {
         );
     }
 
-    #[test]
-    fn endpoint_alias_fails_closed_when_dynamic_audience_is_expired() {
-        let (config, endpoint) = principal_server_config();
+    #[tokio::test]
+    async fn endpoint_alias_fails_closed_when_dynamic_audience_is_expired() {
+        let server = MockServer::start().await;
+        let endpoint = Url::parse(&server.uri()).unwrap();
+        let config = principal_server_config_for(endpoint.clone());
         let resolved = ResolvedPrincipalAudiences::with_max_trusted_age_for_test(Duration::ZERO);
         resolved.insert_for_test(&endpoint, "did:webvh:stale:soland.example:webvh:service");
         let url_builder = UrlBuilder::new("https://auth.example/".parse().unwrap(), None, None);
+        let http_client = reqwest::Client::new();
 
-        let result = DefaultUpstreamOidcService.session_grant_target_for_requested_audience(
-            &url_builder,
-            &config,
-            &resolved,
-            Some("https://soland.example/api"),
-        );
+        let result = DefaultUpstreamOidcService
+            .session_grant_target_for_requested_audience(
+                &http_client,
+                &url_builder,
+                &config,
+                &resolved,
+                Some("https://soland.example/api"),
+            )
+            .await;
 
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn oidc_target_refreshes_an_unresolved_principal_audience_on_demand() {
+        let server = MockServer::start().await;
+        let endpoint = Url::parse(&server.uri()).unwrap();
+        let config = principal_server_config_for(endpoint);
+        let service_id =
+            arkret_core::Did::new("did:webvh:current:soland.example:webvh:service").unwrap();
+        let description = arkret_core::ServiceDescribe::development(
+            service_id.clone(),
+            arkret_core::TypedTrustDomainId::new("ak:trust_domain:example".to_owned()).unwrap(),
+            arkret_core::ServiceType::PrincipalServer,
+        );
+        Mock::given(method("GET"))
+            .and(path("/_arkret/describe"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(description))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let resolved = ResolvedPrincipalAudiences::new();
+        let url_builder = UrlBuilder::new("https://auth.example/".parse().unwrap(), None, None);
+        let http_client = reqwest::Client::new();
+        let target = DefaultUpstreamOidcService
+            .session_grant_target_for_requested_audience(
+                &http_client,
+                &url_builder,
+                &config,
+                &resolved,
+                Some(service_id.as_str()),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(target.audience, service_id.as_str());
     }
 }

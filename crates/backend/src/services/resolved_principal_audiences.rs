@@ -166,6 +166,27 @@ impl ResolvedPrincipalAudiences {
         }
     }
 
+    /// Resolve only configured Principal Servers that do not currently have a
+    /// fresh cached audience.
+    ///
+    /// Startup discovery can race a Principal Server that is still coming up.
+    /// Authentication paths call this once on a cache miss so they do not have
+    /// to wait for the normal five-minute refresh cadence. Existing trusted
+    /// values are never probed or replaced here.
+    pub(crate) async fn refresh_unresolved(
+        &self,
+        http_client: &reqwest::Client,
+        arkret_config: &ArkretConfig,
+    ) {
+        for server in &arkret_config.principal_servers {
+            if self.resolve(&server.endpoint).is_some() {
+                continue;
+            }
+            let result = fetch_service_id(http_client, &server.endpoint).await;
+            self.apply_refresh_result(server, result, Instant::now());
+        }
+    }
+
     fn apply_refresh_result(
         &self,
         server: &PrincipalServerConfig,

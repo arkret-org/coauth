@@ -664,11 +664,13 @@ async fn exchange_oidc_code(
             .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
         let grant_target = upstream_oidc
             .session_grant_target_for_requested_audience(
+                &http_client,
                 &url_builder,
                 &arkret_config,
                 crate::services::resolved_principal_audiences::shared(),
                 input.requested_audience.as_deref(),
             )
+            .await
             .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
         if intent == OidcExchangeIntent::AccountHandoff {
             let success = OidcHandoffExchangeSuccess {
@@ -1155,11 +1157,13 @@ async fn exchange_oidc_code(
 
     let grant_target = upstream_oidc
         .session_grant_target_for_requested_audience(
+            &http_client,
             &url_builder,
             &arkret_config,
             crate::services::resolved_principal_audiences::shared(),
             input.requested_audience.as_deref(),
         )
+        .await
         .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
     let user = &browser_session.user;
     if intent == OidcExchangeIntent::AccountHandoff {
