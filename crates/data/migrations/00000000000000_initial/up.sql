@@ -502,6 +502,87 @@ CREATE TABLE public.principal_did_bindings (
     updated_at timestamp with time zone NOT NULL
 );
 
+CREATE TABLE public.account_handoff_grants (
+    id uuid NOT NULL,
+    request_id uuid NOT NULL,
+    request_digest text NOT NULL,
+    service_account_id uuid NOT NULL,
+    browser_session_id uuid,
+    audience text NOT NULL,
+    cnf_jkt text NOT NULL,
+    allowed_operations text[] NOT NULL,
+    account_handoff_grant text NOT NULL,
+    issued_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    revoked_at timestamp with time zone,
+    consumed_at timestamp with time zone,
+    CONSTRAINT account_handoff_grants_request_digest_valid CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT account_handoff_grants_audience_nonempty CHECK ((btrim(audience) <> ''::text)),
+    CONSTRAINT account_handoff_grants_cnf_jkt_valid CHECK ((cnf_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
+    CONSTRAINT account_handoff_grants_allowed_operations_closed CHECK ((allowed_operations = ARRAY['ak.gate.account.command.issue_identity_binding_challenge'::text, 'ak.gate.account.command.register'::text, 'ak.gate.account.command.issue_session_grant'::text])),
+    CONSTRAINT account_handoff_grants_token_nonempty CHECK ((length(account_handoff_grant) >= 32)),
+    CONSTRAINT account_handoff_grants_expiry_valid CHECK ((expires_at > issued_at))
+);
+
+CREATE TABLE public.identity_creation_leases (
+    service_account_id uuid NOT NULL,
+    audience text NOT NULL,
+    lease_id text NOT NULL,
+    holder_jkt text NOT NULL,
+    fence bigint NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    reserved_principal_id text,
+    reserved_operation_digest text,
+    did_operation jsonb,
+    state text NOT NULL,
+    registry_receipt jsonb,
+    head_event_digest text,
+    binding_receipt jsonb,
+    first_device_id text,
+    first_device_enrolled_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT identity_creation_leases_audience_nonempty CHECK ((btrim(audience) <> ''::text)),
+    CONSTRAINT identity_creation_leases_lease_id_valid CHECK ((lease_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
+    CONSTRAINT identity_creation_leases_holder_jkt_valid CHECK ((holder_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
+    CONSTRAINT identity_creation_leases_fence_positive CHECK ((fence >= 1)),
+    CONSTRAINT identity_creation_leases_operation_digest_valid CHECK (((reserved_operation_digest IS NULL) OR (reserved_operation_digest ~ '^sha256:[0-9a-f]{64}$'::text))),
+    CONSTRAINT identity_creation_leases_head_digest_valid CHECK (((head_event_digest IS NULL) OR (head_event_digest ~ '^sha256:[0-9a-f]{64}$'::text))),
+    CONSTRAINT identity_creation_leases_state_valid CHECK ((state = ANY (ARRAY['active'::text, 'reserved'::text, 'published'::text, 'bound'::text]))),
+    CONSTRAINT identity_creation_leases_reservation_complete CHECK ((((reserved_principal_id IS NULL) AND (reserved_operation_digest IS NULL) AND (did_operation IS NULL)) OR ((reserved_principal_id IS NOT NULL) AND (reserved_operation_digest IS NOT NULL) AND (did_operation IS NOT NULL)))),
+    CONSTRAINT identity_creation_leases_first_device_complete CHECK ((((first_device_id IS NULL) AND (first_device_enrolled_at IS NULL)) OR ((first_device_id IS NOT NULL) AND (first_device_enrolled_at IS NOT NULL))))
+);
+
+CREATE TABLE public.identity_binding_challenges (
+    request_id uuid NOT NULL,
+    request_digest text NOT NULL,
+    service_account_id uuid NOT NULL,
+    challenge_id text NOT NULL,
+    challenge text NOT NULL,
+    purpose text NOT NULL,
+    principal_id text NOT NULL,
+    operation_digest text NOT NULL,
+    lease_id text NOT NULL,
+    lease_fence bigint NOT NULL,
+    dpop_jkt text NOT NULL,
+    audience text NOT NULL,
+    origin text NOT NULL,
+    trust_domain text NOT NULL,
+    issued_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    consumed_at timestamp with time zone,
+    replaced_at timestamp with time zone,
+    CONSTRAINT identity_binding_challenges_request_digest_valid CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_binding_challenges_challenge_id_valid CHECK ((challenge_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
+    CONSTRAINT identity_binding_challenges_challenge_nonempty CHECK ((length(challenge) >= 22)),
+    CONSTRAINT identity_binding_challenges_purpose_valid CHECK ((purpose = 'account_binding'::text)),
+    CONSTRAINT identity_binding_challenges_operation_digest_valid CHECK ((operation_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_binding_challenges_lease_id_valid CHECK ((lease_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
+    CONSTRAINT identity_binding_challenges_lease_fence_positive CHECK ((lease_fence >= 1)),
+    CONSTRAINT identity_binding_challenges_dpop_jkt_valid CHECK ((dpop_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
+    CONSTRAINT identity_binding_challenges_expiry_valid CHECK ((expires_at > issued_at AND expires_at <= (issued_at + '00:05:00'::interval)))
+);
+
 CREATE TABLE public.queue_jobs (
     id uuid NOT NULL,
     status text DEFAULT 'available'::text NOT NULL,
@@ -1065,6 +1146,27 @@ ALTER TABLE ONLY public.principal_did_owners
         length(enrollment_authority_ref) > length(principal_id) + 1
     );
 
+ALTER TABLE ONLY public.account_handoff_grants
+    ADD CONSTRAINT account_handoff_grants_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.account_handoff_grants
+    ADD CONSTRAINT account_handoff_grants_request_id_unique UNIQUE (request_id);
+
+ALTER TABLE ONLY public.account_handoff_grants
+    ADD CONSTRAINT account_handoff_grants_token_unique UNIQUE (account_handoff_grant);
+
+ALTER TABLE ONLY public.identity_creation_leases
+    ADD CONSTRAINT identity_creation_leases_pkey PRIMARY KEY (service_account_id, audience);
+
+ALTER TABLE ONLY public.identity_creation_leases
+    ADD CONSTRAINT identity_creation_leases_lease_id_unique UNIQUE (lease_id);
+
+ALTER TABLE ONLY public.identity_binding_challenges
+    ADD CONSTRAINT identity_binding_challenges_pkey PRIMARY KEY (request_id);
+
+ALTER TABLE ONLY public.identity_binding_challenges
+    ADD CONSTRAINT identity_binding_challenges_challenge_id_unique UNIQUE (challenge_id);
+
 ALTER TABLE ONLY public.queue_jobs
     ADD CONSTRAINT queue_jobs_pkey PRIMARY KEY (id);
 
@@ -1254,6 +1356,16 @@ CREATE INDEX idx_principal_did_bindings_user_id ON public.principal_did_bindings
 
 CREATE INDEX idx_principal_did_owners_user_id ON public.principal_did_owners USING btree (user_id);
 
+CREATE INDEX idx_account_handoff_grants_account_audience ON public.account_handoff_grants USING btree (service_account_id, audience);
+
+CREATE INDEX idx_account_handoff_grants_expiry ON public.account_handoff_grants USING btree (expires_at) WHERE ((revoked_at IS NULL) AND (consumed_at IS NULL));
+
+CREATE INDEX idx_identity_creation_leases_expiry ON public.identity_creation_leases USING btree (expires_at) WHERE (state <> 'bound'::text);
+
+CREATE INDEX idx_identity_binding_challenges_reservation ON public.identity_binding_challenges USING btree (service_account_id, audience, lease_id, lease_fence, operation_digest);
+
+CREATE INDEX idx_identity_binding_challenges_expiry ON public.identity_binding_challenges USING btree (expires_at) WHERE ((consumed_at IS NULL) AND (replaced_at IS NULL));
+
 CREATE INDEX idx_user_totp_configs_user_id ON public.user_totp_configs USING btree (user_id);
 
 CREATE INDEX invite_quarantine_queue_consent_id_idx ON public.invite_quarantine_queue USING btree (consent_id);
@@ -1424,6 +1536,18 @@ ALTER TABLE ONLY public.principal_did_bindings
 
 ALTER TABLE ONLY public.principal_did_owners
     ADD CONSTRAINT principal_did_owners_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.account_handoff_grants
+    ADD CONSTRAINT account_handoff_grants_service_account_id_fkey FOREIGN KEY (service_account_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.account_handoff_grants
+    ADD CONSTRAINT account_handoff_grants_browser_session_id_fkey FOREIGN KEY (browser_session_id) REFERENCES public.user_sessions(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY public.identity_creation_leases
+    ADD CONSTRAINT identity_creation_leases_service_account_id_fkey FOREIGN KEY (service_account_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.identity_binding_challenges
+    ADD CONSTRAINT identity_binding_challenges_service_account_id_fkey FOREIGN KEY (service_account_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.queue_jobs
     ADD CONSTRAINT queue_jobs_next_attempt_id_fkey FOREIGN KEY (next_attempt_id) REFERENCES public.queue_jobs(id);

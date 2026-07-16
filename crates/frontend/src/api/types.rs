@@ -464,7 +464,6 @@ pub struct RegisterStatusOutcome {
     pub next_step: String,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct StepOutcome {
     pub status: String,

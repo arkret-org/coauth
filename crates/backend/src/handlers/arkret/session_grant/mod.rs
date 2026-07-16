@@ -16,6 +16,7 @@ pub(crate) use issuance::{
     mint_agent_session_grant, persist_session_grant, persist_unbound_session_grant,
 };
 pub use issue::issue_session_grant_endpoint;
+pub(crate) use issue::map_oidc_exchange_error;
 pub use refresh::refresh_session_grant;
 pub use revoke::revoke_session_grant_endpoint;
 pub use session_logout::logout_auth_session;

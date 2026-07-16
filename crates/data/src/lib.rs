@@ -37,6 +37,8 @@ diesel::define_sql_function! {
 
 /// Unified contact points and external identity bindings for user accounts.
 pub mod account;
+/// Durable canonical account handoff and identity-creation state.
+pub mod account_handoff;
 /// Durable accountability grants for Personal Agent capability approval.
 pub mod accountability;
 /// Durable agent key authorizations + agent-key-proof replay table (AKP-0008).
@@ -134,6 +136,12 @@ pub fn new_id(
 
 pub use self::account::{
     AccountContactPoint, AccountIdentityBinding, ContactChannel, IdentityProviderType,
+};
+pub use self::account_handoff::{
+    AccountHandoffCreation, AccountHandoffGrant, AccountHandoffGrantInput,
+    AccountHandoffRepository, IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
+    IdentityBindingChallengeRecord, IdentityCreationLeaseRecord,
+    IdentityCreationRegistrationContext, IdentityCreationSagaState, PgAccountHandoffRepository,
 };
 pub use self::accountability::{
     AccountabilityGrant, AccountabilityGrantFanoutState, AccountabilitySubjectKind,

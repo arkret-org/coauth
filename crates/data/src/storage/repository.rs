@@ -4,6 +4,7 @@ use thiserror::Error;
 
 use super::notification_template::NotificationTemplateRepository;
 use crate::account::AccountRepository;
+use crate::account_handoff::AccountHandoffRepository;
 use crate::accountability::AccountabilityGrantRepository;
 use crate::agent_key::AgentKeyAuthorizationRepository;
 use crate::app_session::AppSessionRepository;
@@ -135,6 +136,11 @@ pub trait RepositoryAccess: Send {
 
     /// Get an [`AccountRepository`]
     fn account<'c>(&'c mut self) -> Box<dyn AccountRepository<Error = Self::Error> + 'c>;
+
+    /// Get an [`AccountHandoffRepository`].
+    fn account_handoff<'c>(
+        &'c mut self,
+    ) -> Box<dyn AccountHandoffRepository<Error = Self::Error> + 'c>;
 
     /// Get an [`AccountabilityGrantRepository`]
     fn accountability_grant<'c>(
@@ -313,6 +319,7 @@ mod impls {
 
     use super::RepositoryAccess;
     use crate::account::AccountRepository;
+    use crate::account_handoff::AccountHandoffRepository;
     use crate::accountability::AccountabilityGrantRepository;
     use crate::agent_key::AgentKeyAuthorizationRepository;
     use crate::app_session::AppSessionRepository;
@@ -385,6 +392,12 @@ mod impls {
 
         fn account<'c>(&'c mut self) -> Box<dyn AccountRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(self.inner.account(), &mut self.mapper))
+        }
+
+        fn account_handoff<'c>(
+            &'c mut self,
+        ) -> Box<dyn AccountHandoffRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(self.inner.account_handoff(), &mut self.mapper))
         }
 
         fn accountability_grant<'c>(
@@ -671,6 +684,12 @@ mod impls {
 
         fn account<'c>(&'c mut self) -> Box<dyn AccountRepository<Error = Self::Error> + 'c> {
             (**self).account()
+        }
+
+        fn account_handoff<'c>(
+            &'c mut self,
+        ) -> Box<dyn AccountHandoffRepository<Error = Self::Error> + 'c> {
+            (**self).account_handoff()
         }
 
         fn accountability_grant<'c>(

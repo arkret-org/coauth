@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use coauth_data::account::AccountRepository;
+use coauth_data::account_handoff::AccountHandoffRepository;
 use coauth_data::accountability::AccountabilityGrantRepository;
 use coauth_data::agent_key::AgentKeyAuthorizationRepository;
 use coauth_data::app_session::AppSessionRepository;
@@ -39,6 +40,7 @@ use tracing::Instrument;
 
 use crate::DatabaseError;
 use crate::account::PgAccountRepository;
+use crate::account_handoff::PgAccountHandoffRepository;
 use crate::accountability::PgAccountabilityGrantRepository;
 use crate::agent_key::PgAgentKeyAuthorizationRepository;
 use crate::app_session::PgAppSessionRepository;
@@ -195,6 +197,12 @@ impl RepositoryAccess for PgRepository {
 
     fn account<'c>(&'c mut self) -> Box<dyn AccountRepository<Error = Self::Error> + 'c> {
         Box::new(PgAccountRepository::new(&mut self.conn))
+    }
+
+    fn account_handoff<'c>(
+        &'c mut self,
+    ) -> Box<dyn AccountHandoffRepository<Error = Self::Error> + 'c> {
+        Box::new(PgAccountHandoffRepository::new(&mut self.conn))
     }
 
     fn accountability_grant<'c>(

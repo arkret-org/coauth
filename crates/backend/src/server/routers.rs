@@ -139,6 +139,21 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // so it is exposed under `/_arkret` (not the product-private `/_coauth`)
         // and clients reach it as a protocol path.
         .push(
+            Router::with_path("gate/account/authentication-handoffs")
+                .options(oidc_preflight_handler)
+                .post(arkret::create_account_handoff),
+        )
+        .push(
+            Router::with_path("gate/account/identity-binding-challenges")
+                .options(oidc_preflight_handler)
+                .post(arkret::issue_identity_binding_challenge),
+        )
+        .push(
+            Router::with_path("gate/account/register")
+                .options(oidc_preflight_handler)
+                .post(arkret::account_register_endpoint),
+        )
+        .push(
             Router::with_path("gate/account/session-grants/refresh")
                 .options(oidc_preflight_handler)
                 .post(arkret::refresh_session_grant),
@@ -322,32 +337,6 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                 .push(
                     Router::with_path("register")
                         .post(register::post_register)
-                        .push(
-                            Router::with_path("webvh")
-                                .push(
-                                    Router::with_path("start")
-                                        .options(oidc_preflight_handler)
-                                        .post(register::post_webvh_start),
-                                )
-                                .push(
-                                    Router::with_path("{id}")
-                                        .push(
-                                            Router::with_path("email")
-                                                .options(oidc_preflight_handler)
-                                                .post(register::post_webvh_email),
-                                        )
-                                        .push(
-                                            Router::with_path("verify-email")
-                                                .options(oidc_preflight_handler)
-                                                .post(register::post_webvh_verify_email),
-                                        )
-                                        .push(
-                                            Router::with_path("finish")
-                                                .options(oidc_preflight_handler)
-                                                .post(register::post_webvh_finish),
-                                        ),
-                                ),
-                        )
                         .push(
                             Router::with_path("{id}")
                                 .get(register::get_registration)

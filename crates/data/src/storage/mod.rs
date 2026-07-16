@@ -104,6 +104,7 @@ mod utils;
 /// Account aggregate repositories (unified contact points, identity bindings,
 /// and security summary).
 pub mod account;
+pub mod account_handoff;
 /// Accountability grant repositories.
 pub mod accountability;
 /// Agent key authorization + agent-key-proof replay repositories (AKP-0008).

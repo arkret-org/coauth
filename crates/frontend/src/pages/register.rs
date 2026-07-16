@@ -537,10 +537,6 @@ fn registration_error_message(code: &str) -> String {
         "bootstrap_admin_token_invalid" => {
             "That admin bootstrap token is not valid. Clear the field to continue as a regular user, or enter the correct token to claim the first administrator account.".to_owned()
         }
-        "client_signed_webvh_inception_required" => {
-            "Create this identity from an Arkret client. The client must generate and confirm your Recovery Key, sign the did:webvh inception locally, and then return here for sign-in."
-                .to_owned()
-        }
         other => other.to_owned(),
     }
 }

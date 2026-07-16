@@ -17,7 +17,7 @@ mod workflow;
 mod tests;
 
 use admin_bootstrap::{PrepareAdminBootstrapError, prepare_admin_bootstrap};
-pub(crate) use finish::{check_registration_finish_eligibility, finish_registration};
+pub(crate) use finish::finish_registration;
 pub(crate) use operations::{
     begin_password_registration, change_registration_email, resend_registration_verification,
     submit_registration_display_name, submit_registration_email_code,
@@ -39,7 +39,7 @@ pub use types::{
     RegistrationWorkflowEventKind, RegistrationWorkflowSnapshot, RegistrationWorkflowState,
     ResendRegistrationVerificationError, ResendRegistrationVerificationStatus,
     SetRegistrationDisplayNameError, StartPasswordRegistrationError,
-    StartPasswordRegistrationRequestBody, StartedPasswordRegistration, VerifiedPrincipalBinding,
+    StartPasswordRegistrationRequestBody, StartedPasswordRegistration,
     VerifyRegistrationEmailCodeError, VerifyRegistrationPhoneCodeError,
 };
 pub(crate) use workflow::next_registration_step;

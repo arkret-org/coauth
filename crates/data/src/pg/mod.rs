@@ -13,6 +13,7 @@ use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 
 /// PostgreSQL account aggregate repositories.
 pub mod account;
+pub mod account_handoff;
 /// PostgreSQL accountability grant repositories.
 pub mod accountability;
 /// Shared helpers for PostgreSQL advisory locks.

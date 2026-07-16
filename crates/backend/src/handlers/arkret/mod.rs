@@ -1,3 +1,5 @@
+mod account_handoff;
+mod account_register;
 mod device_enroll;
 mod did_document;
 mod handle_claim;
@@ -5,6 +7,8 @@ mod identity;
 mod service_describe;
 mod session_grant;
 
+pub use account_handoff::*;
+pub use account_register::*;
 pub use device_enroll::*;
 pub use did_document::*;
 pub use handle_claim::*;

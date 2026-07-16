@@ -30,24 +30,9 @@ pub async fn issue_session_grant_endpoint(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<arkret_core::SessionGrantOutcome>, ArkretRouteError> {
-    use crate::handlers::account::auth::extract_dpop_binding_for_kickoff;
     use crate::handlers::account::auth::oidc_bridge::{
         OidcCodeExchangeInput, exchange_oidc_code_for_session_grant,
     };
-
-    let url_builder = depot.url_builder()?;
-
-    // Grant-binding proof (DPoP) extraction. A present-but-malformed proof is a hard
-    // rejection: an OIDC-issued grant MUST be device-bound (`cnf.jkt`).
-    let dpop_binding = extract_dpop_binding_for_kickoff(req, depot, &url_builder)
-        .await
-        .map_err(|error| {
-            ArkretRouteError::coded(
-                StatusCode::UNAUTHORIZED,
-                ERROR_CODE_INVALID_SIGNATURE,
-                format!("reason_code=proof_invalid; invalid grant-binding DPoP proof: {error}"),
-            )
-        })?;
 
     let raw_body: serde_json::Value = req
         .parse_json()
@@ -58,6 +43,7 @@ pub async fn issue_session_grant_endpoint(
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
     match body.proof.proof_kind {
         arkret_core::SessionGrantProofKind::OidcCodeExchange => {
+            let dpop_binding = extract_kickoff_dpop(req, depot).await?;
             let proof = &body.proof;
             let expected_principal_id = body.principal_id.as_str().to_owned();
             let input = OidcCodeExchangeInput {
@@ -127,6 +113,7 @@ pub async fn issue_session_grant_endpoint(
             }))
         }
         arkret_core::SessionGrantProofKind::AgentKeyProof => {
+            let dpop_binding = extract_kickoff_dpop(req, depot).await?;
             // AKP-0008 §4.6: independent agent_key_proof validator. MUST NOT
             // fall back to any human proof validator. The grant-binding DPoP proof is
             // still required so the issued grant is device/runtime-bound
@@ -137,6 +124,9 @@ pub async fn issue_session_grant_endpoint(
             )?;
             issue_agent_key_proof_session_grant(req, depot, binding, &body).await
         }
+        arkret_core::SessionGrantProofKind::PreRegistrationHandoff => {
+            issue_pre_registration_handoff_session_grant(req, depot, &body).await
+        }
         other => Err(ArkretRouteError::coded(
             StatusCode::NOT_IMPLEMENTED,
             ERROR_CODE_UNSUPPORTED_FEATURE,
@@ -145,6 +135,208 @@ pub async fn issue_session_grant_endpoint(
             ),
         )),
     }
+}
+
+async fn extract_kickoff_dpop(
+    req: &Request,
+    depot: &Depot,
+) -> Result<Option<crate::handlers::account::auth::DpopSessionBinding>, ArkretRouteError> {
+    let url_builder = depot.url_builder()?;
+    crate::handlers::account::auth::extract_dpop_binding_for_kickoff(req, depot, &url_builder)
+        .await
+        .map_err(|error| {
+            ArkretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                ERROR_CODE_INVALID_SIGNATURE,
+                format!("reason_code=proof_invalid; invalid grant-binding DPoP proof: {error}"),
+            )
+        })
+}
+
+async fn issue_pre_registration_handoff_session_grant(
+    req: &Request,
+    depot: &Depot,
+    body: &arkret_core::SessionGrantRequestBody,
+) -> Result<Json<arkret_core::SessionGrantOutcome>, ArkretRouteError> {
+    use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
+    use coauth_data::RepositoryAccess as _;
+    use coauth_data::user::{
+        BrowserSessionRepository as _, PrincipalDidRepository as _, UserRepository as _,
+    };
+
+    let (handoff, dpop) = super::super::account_handoff::authenticate_account_handoff(
+        req,
+        depot,
+        arkret_core::AccountHandoffAllowedOperation::IssueSessionGrant,
+    )
+    .await?;
+    super::super::account_handoff::enforce_handoff_operation(
+        &handoff,
+        arkret_core::AccountHandoffAllowedOperation::IssueSessionGrant,
+    )?;
+    let proof = &body.proof;
+    if proof.audience.as_str() != handoff.audience
+        || proof.challenge != handoff.account_handoff_grant
+        || body.agent_key_authorization_ref.is_some()
+        || body.agent_scope_request.is_some()
+        || body.dpop_binding_proof.is_some()
+        || body.applet_delegation.is_some()
+        || proof.verification_method.is_some()
+        || proof.issuer.is_some()
+        || proof.client_id.is_some()
+        || proof.redirect_uri.is_some()
+        || proof.state.is_some()
+        || proof.nonce.is_some()
+        || proof.authorization_code.is_some()
+        || proof.code_verifier.is_some()
+    {
+        return Err(ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            ERROR_CODE_INVALID_SIGNATURE,
+            "reason_code=proof_invalid; pre-registration handoff transcript is malformed",
+        ));
+    }
+    let now = chrono::Utc::now();
+    let expires_at = proof.expires_at.ok_or_else(|| {
+        ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            ERROR_CODE_INVALID_SIGNATURE,
+            "reason_code=proof_invalid; pre-registration handoff proof expiry is required",
+        )
+    })?;
+    if expires_at <= now || expires_at - now > chrono::Duration::minutes(5) {
+        return Err(ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            ERROR_CODE_INVALID_SIGNATURE,
+            "reason_code=proof_invalid; pre-registration handoff proof is expired or too long-lived",
+        ));
+    }
+    let expected_digest = body.canonical_request_digest().map_err(|error| {
+        ArkretRouteError::coded(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            ERROR_CODE_SCHEMA_VIOLATION,
+            error.to_string(),
+        )
+    })?;
+    if proof.request_canonical_digest != expected_digest {
+        return Err(ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            ERROR_CODE_INVALID_SIGNATURE,
+            "reason_code=proof_invalid; session request canonical digest does not match",
+        ));
+    }
+    let public_key = PublicKeyMaterial::Jwk {
+        value: serde_json::to_value(&dpop.jwk)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+    };
+    let signing_bytes = proof
+        .canonical_signing_bytes()
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    if !verify_detached_ed25519_signature(&public_key, &signing_bytes, &proof.signature) {
+        return Err(ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            ERROR_CODE_INVALID_SIGNATURE,
+            "reason_code=proof_invalid; handoff holder signature is invalid",
+        ));
+    }
+
+    let clock = crate::handlers::make_clock();
+    let mut rng = crate::handlers::make_rng();
+    let mut repo = depot.repo().await?;
+    let user = repo
+        .user()
+        .lookup(handoff.service_account_id)
+        .await?
+        .ok_or(ArkretRouteError::NotFound)?;
+    let binding = repo
+        .principal_did()
+        .get_for_user_and_audience(&user, &handoff.audience)
+        .await?
+        .filter(|binding| binding.principal_id == body.principal_id.as_str())
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::NOT_FOUND,
+                ERROR_CODE_PRINCIPAL_UNKNOWN,
+                "principal_unknown",
+            )
+        })?;
+    let browser_session = match handoff.browser_session_id {
+        Some(id) => repo
+            .browser_session()
+            .lookup(id)
+            .await?
+            .filter(|session| session.user.id == user.id && session.finished_at.is_none())
+            .ok_or_else(|| {
+                ArkretRouteError::coded(
+                    StatusCode::UNAUTHORIZED,
+                    ERROR_CODE_FAILED_PRECONDITION,
+                    "account handoff browser session is no longer active",
+                )
+            })?,
+        None => {
+            repo.browser_session()
+                .add(
+                    &mut *rng,
+                    &*clock,
+                    &user,
+                    Some("account-handoff".to_owned()),
+                )
+                .await?
+        }
+    };
+    let scopes = if body.requested_scope.is_empty() {
+        match body.device_id.as_ref() {
+            Some(device_id) => vec![
+                PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
+                format!("urn:arkret:client:device:{}", device_id.as_str()),
+            ],
+            None => vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
+        }
+    } else {
+        body.requested_scope.clone()
+    };
+    let material = issue_session_grant_for_audience(
+        &*clock,
+        &depot.arkret_config()?,
+        &depot.key_store()?,
+        &browser_session,
+        dpop.jwk,
+        handoff.audience.clone(),
+        scopes,
+        Some(&binding.principal_id),
+        Some(dpop.jkt),
+    )
+    .map_err(map_session_grant_material_error)?;
+    let persisted =
+        persist_session_grant(&mut repo, &mut *rng, &*clock, &browser_session, &material).await?;
+    if !repo
+        .account_handoff()
+        .consume_grant(&handoff, clock.now())
+        .await?
+    {
+        repo.cancel().await.ok();
+        return Err(ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            ERROR_CODE_FAILED_PRECONDITION,
+            "account handoff was already consumed",
+        ));
+    }
+    repo.save().await?;
+
+    Ok(Json(arkret_core::SessionGrantOutcome {
+        principal_id: body.principal_id.clone(),
+        device_id: body.device_id.clone(),
+        session_grant: material.grant_jwt,
+        expires_at: material.expires_at_timestamp,
+        grant_id: Some(
+            arkret_core::GrantId::new(persisted.grant_id.to_string())
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        ),
+        session_public_key: Some(material.session_public_key),
+        audience: Some(proof.audience.clone()),
+        granted_scope: material.scopes,
+        scope_details: None,
+    }))
 }
 
 fn require_agent_key_proof_dpop_binding(
@@ -373,7 +565,7 @@ fn map_session_grant_material_error(error: SessionGrantError) -> ArkretRouteErro
     }
 }
 
-fn map_oidc_exchange_error(
+pub(crate) fn map_oidc_exchange_error(
     error: crate::handlers::account::auth::oidc_bridge::OidcExchangeError,
 ) -> ArkretRouteError {
     let (status, code) = match error.code {

@@ -501,34 +501,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn webvh_registration_preflight_allows_browser_json_posts() {
-        let service = salvo::Service::new(build_account_api_router(Router::new()));
-        for path in [
-            "/_coauth/account/auth/register/webvh/start",
-            "/_coauth/account/auth/register/webvh/01JTEST/email",
-            "/_coauth/account/auth/register/webvh/01JTEST/verify-email",
-            "/_coauth/account/auth/register/webvh/01JTEST/finish",
-        ] {
-            let response = TestClient::options(format!("http://127.0.0.1:7080{path}"))
-                .add_header("Origin", "http://127.0.0.1:8080", true)
-                .add_header("Access-Control-Request-Method", "POST", true)
-                .add_header("Access-Control-Request-Headers", "content-type", true)
-                .send(&service)
-                .await;
-
-            assert_eq!(response.status_code, Some(StatusCode::NO_CONTENT), "{path}");
-            assert_eq!(
-                response
-                    .headers()
-                    .get(ACCESS_CONTROL_ALLOW_ORIGIN)
-                    .and_then(|value| value.to_str().ok()),
-                Some("*"),
-                "{path}"
-            );
-        }
-    }
-
-    #[tokio::test]
     async fn session_grants_post_error_keeps_browser_cors_headers() {
         let service = salvo::Service::new(build_account_api_router(Router::new()));
         let response =

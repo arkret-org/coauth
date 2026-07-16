@@ -165,12 +165,11 @@ fn device_enroll_prev_refs(
             ERROR_CODE_INVALID_PARAM,
             "bootstrap_create_event_id is required for first-device enrollment",
         )),
-        (_, Some(_)) => Err(ArkretRouteError::coded(
+        (..) => Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             ERROR_CODE_INVALID_PARAM,
-            "bootstrap_create_event_id is only valid for first-device enrollment",
+            "device-enroll is restricted to actor_seq=1 founding-device enrollment",
         )),
-        (_, None) => Ok(Vec::new()),
     }
 }
 
@@ -333,6 +332,7 @@ pub async fn device_enroll_endpoint(
         })?;
     let enrollment_authority_did = principal_binding.enrollment_authority_did;
     let authorization_ref = principal_binding.enrollment_authority_ref;
+    let service_account_id = principal_binding.user_id;
     repo.cancel().await.ok();
 
     // 2. Proof-of-possession: the caller MUST hold the key the grant is bound to.
@@ -502,6 +502,27 @@ pub async fn device_enroll_endpoint(
         )))
     })?;
 
+    let mut repo = depot.repo().await?;
+    if !repo
+        .account_handoff()
+        .claim_first_device_enrollment(
+            service_account_id,
+            &audience,
+            &principal_id,
+            &device_id,
+            clock.now(),
+        )
+        .await?
+    {
+        repo.cancel().await.ok();
+        return Err(ArkretRouteError::coded(
+            StatusCode::CONFLICT,
+            ERROR_CODE_FAILED_PRECONDITION,
+            "founding device enrollment requires a verified identity-creation receipt and no existing device",
+        ));
+    }
+    repo.save().await?;
+
     Ok(Json(AccountDeviceEnrollOutcome {
         principal_id,
         device_id,
@@ -529,13 +550,10 @@ mod tests {
     }
 
     #[test]
-    fn later_device_cannot_inject_bootstrap_predecessor() {
+    fn later_device_is_rejected_by_the_founding_device_endpoint() {
         let create = event_id("ak:event:01964137-0000-7000-8000-000000000001");
         assert!(device_enroll_prev_refs(2, Some(create)).is_err());
         assert!(device_enroll_prev_refs(0, None).is_err());
-        assert_eq!(
-            device_enroll_prev_refs(2, None).expect("ordinary refs"),
-            Vec::<EventId>::new()
-        );
+        assert!(device_enroll_prev_refs(2, None).is_err());
     }
 }
