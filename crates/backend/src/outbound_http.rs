@@ -274,6 +274,35 @@ fn enforce_resolved_egress_policy(
     Ok(())
 }
 
+pub(crate) fn enforce_outbound_url_policy(
+    url: &url::Url,
+) -> Result<(), Box<dyn StdError + Send + Sync>> {
+    if private_networks_allowed() {
+        return Ok(());
+    }
+
+    let host = url
+        .host_str()
+        .ok_or_else(|| Box::new(BlockedEgressTarget::new(url.as_str(), "missing host")))?;
+    if private_egress_target_allowed(host) {
+        return Ok(());
+    }
+    if let Some(reason) = blocked_domain_reason(host) {
+        return Err(Box::new(BlockedEgressTarget::new(host, reason)));
+    }
+    let ip = match url.host() {
+        Some(url::Host::Ipv4(ip)) => Some(IpAddr::V4(ip)),
+        Some(url::Host::Ipv6(ip)) => Some(IpAddr::V6(ip)),
+        _ => None,
+    };
+    if let Some(ip) = ip
+        && let Some(reason) = blocked_ip_reason(ip)
+    {
+        return Err(Box::new(BlockedEgressTarget::new(ip.to_string(), reason)));
+    }
+    Ok(())
+}
+
 fn private_networks_allowed() -> bool {
     if env_flag_enabled("COAUTH_OUTBOUND_HTTP_DENY_PRIVATE") {
         return false;
@@ -461,6 +490,15 @@ fn reqwest_client_builder() -> reqwest::ClientBuilder {
         .connect_timeout(Duration::from_secs(30))
 }
 
+fn telemetry_url(url: &url::Url) -> url::Url {
+    let mut sanitized = url.clone();
+    sanitized.set_query(None);
+    sanitized.set_fragment(None);
+    let _ = sanitized.set_username("");
+    let _ = sanitized.set_password(None);
+    sanitized
+}
+
 async fn send_traced(
     request: reqwest::RequestBuilder,
 ) -> Result<reqwest::Response, reqwest::Error> {
@@ -477,13 +515,14 @@ async fn send_traced(
         .map(tracing::field::display);
     let content_length = headers.typed_get().map(|ContentLength(len)| len);
     let method = request.method().to_string();
+    let telemetry_url = telemetry_url(request.url());
 
     let span = tracing::info_span!(
         "http.client.request",
         "otel.kind" = "client",
         "otel.status_code" = tracing::field::Empty,
         { HTTP_REQUEST_METHOD } = method,
-        { URL_FULL } = %request.url(),
+        { URL_FULL } = %telemetry_url,
         { HTTP_RESPONSE_STATUS_CODE } = tracing::field::Empty,
         { SERVER_ADDRESS } = server_address,
         { SERVER_PORT } = server_port,
@@ -734,8 +773,9 @@ mod tests {
     use tokio::net::TcpListener;
 
     use super::{
-        OutboundRequestPolicy, blocked_domain_reason, blocked_ip_reason, send_with_policy,
-        target_allowed_by_private_allowlist,
+        OutboundRequestPolicy, blocked_domain_reason, blocked_ip_reason,
+        enforce_outbound_url_policy, private_networks_allowed, send_with_policy,
+        target_allowed_by_private_allowlist, telemetry_url,
     };
 
     fn install_crypto_provider() {
@@ -792,6 +832,36 @@ mod tests {
 
         assert!(blocked_ip_reason("8.8.8.8".parse().unwrap()).is_none());
         assert!(blocked_ip_reason("2001:4860:4860::8888".parse().unwrap()).is_none());
+    }
+
+    #[test]
+    fn outbound_url_policy_blocks_ip_literals_that_bypass_dns_resolution() {
+        if private_networks_allowed() {
+            return;
+        }
+        for raw in [
+            "https://169.254.169.254/latest/meta-data/",
+            "https://127.0.0.1/jwks",
+            "https://[::1]/jwks",
+        ] {
+            let url = url::Url::parse(raw).unwrap();
+            assert!(
+                enforce_outbound_url_policy(&url).is_err(),
+                "{raw} should be rejected before dispatch"
+            );
+        }
+        assert!(
+            enforce_outbound_url_policy(&url::Url::parse("https://8.8.8.8/jwks").unwrap()).is_ok()
+        );
+    }
+
+    #[test]
+    fn telemetry_url_drops_credentials_query_and_fragment() {
+        let url = url::Url::parse(
+            "https://client:password@example.com/token?secret=top-secret&access_token=value#frag",
+        )
+        .unwrap();
+        assert_eq!(telemetry_url(&url).as_str(), "https://example.com/token");
     }
 
     #[tokio::test]

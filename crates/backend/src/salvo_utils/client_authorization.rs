@@ -192,6 +192,10 @@ async fn fetch_jwks(
         JwksOrJwksUri::Jwks(j) => return Ok(j.clone()),
         JwksOrJwksUri::JwksUri(u) => u,
     };
+    if uri.scheme() != "https" {
+        return Err("jwks_uri must use https".into());
+    }
+    crate::outbound_http::enforce_outbound_url_policy(uri)?;
 
     let response = http_client
         .get(uri.as_str())

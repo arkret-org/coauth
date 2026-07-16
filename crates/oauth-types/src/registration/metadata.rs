@@ -410,16 +410,17 @@ impl ClientMetadata {
             collected_errors.push(ClientMetadataVerificationError::JwksUriAndJwksMutuallyExclusive);
         }
 
-        // Validate sector_identifier_uri scheme
-        if let Some(url) = self
-            .sector_identifier_uri
-            .as_ref()
-            .filter(|url| url.scheme() != "https")
-        {
-            collected_errors.push(ClientMetadataVerificationError::UrlNonHttpsScheme(
-                "sector_identifier_uri",
-                url.clone(),
-            ));
+        // Remote metadata fetched by the authorization server must use HTTPS.
+        for (field, url) in [
+            ("sector_identifier_uri", self.sector_identifier_uri.as_ref()),
+            ("jwks_uri", self.jwks_uri.as_ref()),
+        ] {
+            if let Some(url) = url.filter(|url| url.scheme() != "https") {
+                collected_errors.push(ClientMetadataVerificationError::UrlNonHttpsScheme(
+                    field,
+                    url.clone(),
+                ));
+            }
         }
 
         // Validate token endpoint auth requirements

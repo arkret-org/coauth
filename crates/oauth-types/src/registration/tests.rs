@@ -195,9 +195,16 @@ fn validate_response_types_no_auth_grants() {
 fn validate_jwks() {
     let mut metadata = valid_client_metadata();
 
-    metadata.jwks_uri = Some(Url::parse("http://localhost/jwks").unwrap());
-    metadata.clone().validate().unwrap();
+    let insecure_jwks_uri = Url::parse("http://localhost/jwks").unwrap();
+    metadata.jwks_uri = Some(insecure_jwks_uri.clone());
+    let (field, url) = assert_matches!(
+        metadata.clone().validate(),
+        Err(ClientMetadataVerificationError::UrlNonHttpsScheme(field, url)) => (field, url)
+    );
+    assert_eq!(field, "jwks_uri");
+    assert_eq!(url, insecure_jwks_uri);
 
+    metadata.jwks_uri = Some(Url::parse("https://example.com/jwks").unwrap());
     metadata.jwks = Some(jwks());
     assert_matches!(
         metadata.clone().validate(),

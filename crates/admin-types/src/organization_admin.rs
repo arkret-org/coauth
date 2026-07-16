@@ -30,9 +30,9 @@ use serde::{Deserialize, Serialize};
 )]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum BootstrapAuthorizationInput {
-    /// Bootstrap from a verified DID controller proof. `proof_digest` is the
-    /// opaque digest of the controller proof the caller already verified.
-    DidControllerProof { proof_digest: String },
+    /// Bootstrap from a detached JWS signed by a verification method
+    /// controlled by the organization DID.
+    DidControllerProof { proof_jws: String },
     /// Bootstrap from a `principal_control_realm_bootstrap` delegation already
     /// recorded for this organization.
     DelegatedGovernance { delegation_ref: String },

@@ -21,6 +21,7 @@
 //! [`arkret_core::models::RealmOrganizationPayload`]. No admin-private wire
 //! struct is defined here.
 
+use arkret_core::canonical::{canonical_json_bytes, sha256_digest};
 use arkret_core::identifiers::new_prefixed_uuid7;
 use arkret_core::models::{RealmOrganizationPayload, RealmOrganizationStatus};
 use arkret_core::{Did, Hash, RealmId};
@@ -36,11 +37,13 @@ use coauth_data::organization_control::{
 use coauth_data::{BoxRepository, RepositoryAccess};
 use salvo::oapi::extract::PathParam;
 use salvo::prelude::*;
+use serde::Serialize;
 
 use crate::JsonResult;
 use crate::error::AppError;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::common::{DepotExt, make_clock, make_rng};
+use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
 use crate::services::organization_bootstrap::{
     AuthorizedBootstrap, BootstrapAttempt, authorize_bootstrap,
 };
@@ -52,6 +55,85 @@ use crate::services::organization_statement::{
 fn parse_did(raw: &str) -> Result<Did, AppError> {
     Did::new(raw.to_owned())
         .map_err(|e| AppError::bad_request(format!("invalid organization DID: {e}")))
+}
+
+#[derive(Serialize)]
+struct OrganizationControllerBootstrapTranscript<'a> {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    organization_did: &'a str,
+    principal_control_realm_id: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    control_stream_ref: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pcr_frontier_digest: Option<&'a str>,
+    purpose: &'static str,
+    profile: &'static str,
+}
+
+fn organization_controller_bootstrap_transcript_bytes(
+    body: &BootstrapOrganizationRequest,
+) -> Result<Vec<u8>, AppError> {
+    canonical_json_bytes(&OrganizationControllerBootstrapTranscript {
+        kind: "org.arkret.coauth.organization_pcr.bootstrap.v1",
+        organization_did: &body.organization_did,
+        principal_control_realm_id: &body.principal_control_realm_id,
+        control_stream_ref: body.control_stream_ref.as_deref(),
+        pcr_frontier_digest: body.pcr_frontier_digest.as_deref(),
+        purpose: "principal_control",
+        profile: "ak.profile.principal_control_realm.v1",
+    })
+    .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))
+}
+
+async fn verify_organization_controller_proof(
+    depot: &Depot,
+    repo: &mut BoxRepository,
+    body: &BootstrapOrganizationRequest,
+    proof_jws: &str,
+) -> Result<String, AppError> {
+    if proof_jws.trim().is_empty() {
+        return Err(AppError::bad_request(
+            "organization bootstrap requires a non-empty controller proof JWS",
+        ));
+    }
+    let arkret_config = depot.arkret_config()?;
+    let did_resolver = depot.did_resolver_service()?;
+    let key_store = depot.key_store()?;
+    let url_builder = depot.url_builder()?;
+    let http_client = depot.http_client().map_err(AppError::internal)?;
+    let resolution = did_resolver
+        .resolve_did_document(
+            &http_client,
+            &url_builder,
+            &arkret_config,
+            &key_store,
+            repo,
+            &body.organization_did,
+        )
+        .await
+        .map_err(|error| {
+            AppError::bad_request(format!("organization_did_resolve_failed: {error}"))
+        })?;
+    let payload = organization_controller_bootstrap_transcript_bytes(body)?;
+    let verification_method = verify_detached_jws_with_sdk(
+        proof_jws,
+        &payload,
+        &resolution.document.verification_method,
+    )
+    .map_err(|error| AppError::bad_request(format!("controller_proof_jws_invalid: {error}")))?;
+    let method = resolution
+        .document
+        .verification_method
+        .iter()
+        .find(|method| method.id == verification_method)
+        .ok_or_else(|| AppError::bad_request("controller proof verification method not found"))?;
+    if method.controller != body.organization_did {
+        return Err(AppError::bad_request(
+            "controller proof verification method is not controlled by the organization DID",
+        ));
+    }
+    Ok(sha256_digest(proof_jws.as_bytes()))
 }
 
 async fn load_control(
@@ -114,10 +196,17 @@ pub async fn bootstrap_handler(
         BootstrapAuthorizationInput::DidControllerProof { .. } => None,
     };
 
+    let verified_controller_proof_digest = match &body.authorization {
+        BootstrapAuthorizationInput::DidControllerProof { proof_jws } => {
+            Some(verify_organization_controller_proof(depot, &mut repo, &body, proof_jws).await?)
+        }
+        BootstrapAuthorizationInput::DelegatedGovernance { .. } => None,
+    };
+
     let attempt = match &body.authorization {
-        BootstrapAuthorizationInput::DidControllerProof { proof_digest } => {
+        BootstrapAuthorizationInput::DidControllerProof { .. } => {
             BootstrapAttempt::ControllerProof {
-                proof_digest: Some(proof_digest.clone()),
+                proof_digest: verified_controller_proof_digest,
             }
         }
         BootstrapAuthorizationInput::DelegatedGovernance { delegation_ref } => {
@@ -453,4 +542,42 @@ pub async fn issue_statement_handler(
 
     repo.cancel().await?;
     Ok(Json(payload))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bootstrap_request(organization_did: &str) -> BootstrapOrganizationRequest {
+        BootstrapOrganizationRequest {
+            organization_did: organization_did.to_owned(),
+            principal_control_realm_id: "ak:realm:01904100-0000-7000-8000-65c7feb295d7".to_owned(),
+            control_stream_ref: Some("ak:event:01904100-0000-7000-8000-75c7feb295d7".to_owned()),
+            pcr_frontier_digest: Some(format!("sha256:{}", "ab".repeat(32))),
+            authorization: BootstrapAuthorizationInput::DidControllerProof {
+                proof_jws: "header..signature".to_owned(),
+            },
+        }
+    }
+
+    #[test]
+    fn controller_proof_transcript_binds_organization_and_pcr_inputs() {
+        let first = bootstrap_request("did:web:org-a.example");
+        let mut second = bootstrap_request("did:web:org-b.example");
+        let first_bytes = organization_controller_bootstrap_transcript_bytes(&first).unwrap();
+        let second_bytes = organization_controller_bootstrap_transcript_bytes(&second).unwrap();
+        assert_ne!(first_bytes, second_bytes);
+
+        second.organization_did = first.organization_did.clone();
+        second.pcr_frontier_digest = Some(format!("sha256:{}", "cd".repeat(32)));
+        let changed_frontier = organization_controller_bootstrap_transcript_bytes(&second).unwrap();
+        assert_ne!(first_bytes, changed_frontier);
+
+        let transcript: serde_json::Value = serde_json::from_slice(&first_bytes).unwrap();
+        assert_eq!(transcript["purpose"], "principal_control");
+        assert_eq!(
+            transcript["profile"],
+            "ak.profile.principal_control_realm.v1"
+        );
+    }
 }
