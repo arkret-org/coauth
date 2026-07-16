@@ -1,5 +1,28 @@
+use dioxus::prelude::*;
 use fluent_bundle::{FluentArgs, FluentBundle, FluentResource, FluentValue};
 use unic_langid::LanguageIdentifier;
+
+#[cfg(target_arch = "wasm32")]
+const LOCALE_STORAGE_KEY: &str = "arkret.ui.locale.v1";
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UiLocale {
+    #[default]
+    En,
+    Zh,
+}
+
+impl UiLocale {
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::En => "en",
+            Self::Zh => "zh",
+        }
+    }
+}
+
+pub type LocaleSignal = Signal<UiLocale>;
 
 const EN_FTL: &str = include_str!("../../../translations/en.ftl");
 const ZH_FTL: &str = include_str!("../../../translations/zh.ftl");
@@ -50,16 +73,93 @@ fn locale_is_chinese(locale: &str) -> bool {
         .is_some_and(|language| language.eq_ignore_ascii_case("zh"))
 }
 
-fn current_locale() -> String {
+fn supported_locale(locale: &str) -> Option<UiLocale> {
+    locale.split_ascii_whitespace().find_map(|tag| {
+        if locale_is_chinese(tag) {
+            Some(UiLocale::Zh)
+        } else if tag
+            .split(['-', '_'])
+            .next()
+            .is_some_and(|language| language.eq_ignore_ascii_case("en"))
+        {
+            Some(UiLocale::En)
+        } else {
+            None
+        }
+    })
+}
+
+fn requested_locale() -> Option<UiLocale> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let window = web_sys::window()?;
+        let search = window.location().search().ok()?;
+        let params = web_sys::UrlSearchParams::new_with_str(&search).ok()?;
+        return params
+            .get("ui_locales")
+            .as_deref()
+            .and_then(supported_locale);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    None
+}
+
+fn stored_locale() -> Option<UiLocale> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        return web_sys::window()
+            .and_then(|window| window.local_storage().ok().flatten())
+            .and_then(|storage| storage.get_item(LOCALE_STORAGE_KEY).ok().flatten())
+            .as_deref()
+            .and_then(supported_locale);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    None
+}
+
+fn document_locale() -> Option<UiLocale> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        return web_sys::window()
+            .and_then(|window| window.document())
+            .and_then(|document| document.document_element())
+            .and_then(|root| root.get_attribute("lang"))
+            .as_deref()
+            .and_then(supported_locale);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    None
+}
+
+fn browser_locale() -> Option<UiLocale> {
     #[cfg(target_arch = "wasm32")]
     {
         return web_sys::window()
             .and_then(|window| window.navigator().language())
-            .unwrap_or_else(|| "en".to_owned());
+            .as_deref()
+            .and_then(supported_locale);
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    "en".to_owned()
+    None
+}
+
+#[must_use]
+pub fn initial_locale() -> UiLocale {
+    requested_locale()
+        .or_else(stored_locale)
+        .or_else(document_locale)
+        .or_else(browser_locale)
+        .unwrap_or_default()
+}
+
+fn current_locale() -> UiLocale {
+    try_consume_context::<LocaleSignal>()
+        .map(|locale| *locale.read())
+        .unwrap_or_else(initial_locale)
 }
 
 fn format_for_locale(locale: &str, key: &str, args: Option<&FluentArgs<'_>>) -> Option<String> {
@@ -82,7 +182,7 @@ fn format_for_locale(locale: &str, key: &str, args: Option<&FluentArgs<'_>>) -> 
 /// Translate a bundled Fluent message using the browser's preferred language.
 #[must_use]
 pub fn t(key: &str) -> String {
-    format_for_locale(&current_locale(), key, None).unwrap_or_else(|| key.to_owned())
+    format_for_locale(current_locale().code(), key, None).unwrap_or_else(|| key.to_owned())
 }
 
 /// Translate a message with string interpolation arguments.
@@ -93,35 +193,47 @@ pub fn t_with(key: &str, values: &[(&str, &str)]) -> String {
         args.set(*name, FluentValue::from(*value));
     }
 
-    format_for_locale(&current_locale(), key, Some(&args)).unwrap_or_else(|| key.to_owned())
+    format_for_locale(current_locale().code(), key, Some(&args)).unwrap_or_else(|| key.to_owned())
 }
 
-/// Keep the document language metadata aligned with the selected catalog.
-pub fn init_document_language() {
+/// Apply the selected catalog to document metadata and durable UI preference.
+pub fn apply_locale(locale: UiLocale) {
     #[cfg(target_arch = "wasm32")]
-    if let Some(root) = web_sys::window()
-        .and_then(|window| window.document())
-        .and_then(|document| document.document_element())
-    {
-        let locale = current_locale();
-        let language = if locale_is_chinese(&locale) {
-            "zh"
-        } else {
-            "en"
-        };
-        let _ = root.set_attribute("lang", language);
+    if let Some(window) = web_sys::window() {
+        if let Some(root) = window
+            .document()
+            .and_then(|document| document.document_element())
+        {
+            let _ = root.set_attribute("lang", locale.code());
+        }
+        if let Ok(Some(storage)) = window.local_storage() {
+            let _ = storage.set_item(LOCALE_STORAGE_KEY, locale.code());
+        }
     }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = locale;
+}
+
+pub fn set_locale(locale: &mut LocaleSignal, value: UiLocale) {
+    if *locale.read() == value {
+        return;
+    }
+    apply_locale(value);
+    locale.set(value);
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{format_for_locale, locale_is_chinese};
+    use super::{UiLocale, format_for_locale, locale_is_chinese, supported_locale};
 
     #[test]
     fn selects_chinese_variants_and_falls_back_to_english() {
         assert!(locale_is_chinese("zh-CN"));
         assert!(locale_is_chinese("ZH_hant"));
         assert!(!locale_is_chinese("en-US"));
+        assert_eq!(supported_locale("fr zh-CN en"), Some(UiLocale::Zh));
+        assert_eq!(supported_locale("fr en-US"), Some(UiLocale::En));
 
         assert_eq!(
             format_for_locale("zh-CN", "action-sign-in", None).as_deref(),
