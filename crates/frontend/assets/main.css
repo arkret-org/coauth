@@ -600,14 +600,6 @@ html[data-theme="dark"] .account-sidebar .sidebar-item:hover {
     color: var(--color-destructive);
 }
 
-.text-link {
-    color: var(--color-primary);
-}
-
-.text-link:hover {
-    text-decoration: underline;
-}
-
 .font-semibold {
     font-weight: 600;
 }
@@ -650,22 +642,22 @@ html[data-theme="dark"] .account-sidebar .sidebar-item:hover {
 
 .flex { display: flex; }
 .flex-col { flex-direction: column; }
-.flex-row { flex-direction: row; }
+
 .flex-1 { flex: 1; }
 .flex-wrap { flex-wrap: wrap; }
 .items-center { align-items: center; }
-.items-start { align-items: flex-start; }
+
 .items-end { align-items: flex-end; }
-.justify-center { justify-content: center; }
+
 .justify-between { justify-content: space-between; }
-.justify-start { justify-content: flex-start; }
+
 .self-center { align-self: center; }
 .gap-1 { gap: var(--space-1x); }
 .gap-2 { gap: var(--space-2x); }
 .gap-3 { gap: var(--space-3x); }
 .gap-4 { gap: var(--space-4x); }
 .gap-6 { gap: var(--space-6x); }
-.gap-8 { gap: var(--space-8x); }
+
 .gap-10 { gap: var(--space-10x); }
 
 /* ─── Buttons ──────────────────────────────────────────────── */
