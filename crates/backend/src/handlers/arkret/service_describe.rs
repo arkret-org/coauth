@@ -701,7 +701,17 @@ pub(crate) fn service_describe_response(
 #[handler]
 pub async fn server_describe(
     depot: &Depot,
+    req: &Request,
 ) -> Result<Json<ServiceDescribeOutcome>, ArkretRouteError> {
+    if let Some(service_type) = req.query::<String>("service_type")
+        && service_type != arkret_core::ServiceType::AuthServer.as_str()
+    {
+        return Err(ArkretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            arkret_core::ErrorCode::INVALID_PARAM,
+            format!("service_type {service_type:?} is not available on this binding"),
+        ));
+    }
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let mut repo = depot.repo().await?;
