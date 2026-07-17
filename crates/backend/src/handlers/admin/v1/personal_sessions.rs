@@ -5,6 +5,7 @@
 use std::str::FromStr as _;
 
 use anyhow::Context;
+use arkret_core::canonical::format_timestamp_canonical;
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::TokenType;
 use coauth_data::personal::PersonalSessionFilter;
@@ -263,7 +264,7 @@ impl std::fmt::Display for FilterParams {
             write!(
                 f,
                 "{delim}filter[expires_before]={}",
-                ts.format("%Y-%m-%dT%H:%M:%SZ")
+                format_timestamp_canonical(ts)
             )?;
             delim = '&';
         }
@@ -271,7 +272,7 @@ impl std::fmt::Display for FilterParams {
             write!(
                 f,
                 "{delim}filter[expires_after]={}",
-                ts.format("%Y-%m-%dT%H:%M:%SZ")
+                format_timestamp_canonical(ts)
             )?;
             delim = '&';
         }

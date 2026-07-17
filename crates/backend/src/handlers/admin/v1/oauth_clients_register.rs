@@ -26,7 +26,7 @@
 
 use chrono::{DateTime, Utc};
 use coauth_data::audit::AdminOperation;
-use coauth_data::oauth::OAuthClientRepository;
+use coauth_data::oauth::{LOOPBACK_HOSTS, OAuthClientRepository};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use coauth_oauth_types::requests::GrantType;
 use rand::distributions::{Alphanumeric, DistString};
@@ -194,7 +194,7 @@ fn validate_redirect_uris(raw: &[String]) -> Result<Vec<Url>, AppError> {
         }
         let scheme = url.scheme();
         let host = url.host_str().unwrap_or_default();
-        let is_loopback = matches!(host, "localhost" | "127.0.0.1" | "[::1]");
+        let is_loopback = LOOPBACK_HOSTS.contains(&host);
         if scheme != "https" && !(scheme == "http" && is_loopback) {
             return Err(AppError::bad_request(format!(
                 "redirect_uri must use the https:// scheme (got `{scheme}://` for `{entry}`)"

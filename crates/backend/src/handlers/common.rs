@@ -20,7 +20,7 @@ use coauth_data::{
 use coauth_policy::PolicyFactory;
 use coauth_principal::ConnectorAdmin;
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
+use rand_core::{CryptoRngCore, SeedableRng};
 use salvo::prelude::*;
 use serde::Serialize;
 use ulid::Ulid;
@@ -431,6 +431,12 @@ pub fn make_clock() -> BoxClock {
 pub fn make_rng() -> BoxRng {
     let rng = ChaChaRng::from_rng(rand_core::OsRng).expect("Failed to seed rng");
     Box::new(rng)
+}
+
+/// Derive a sendable RNG for APIs that cannot borrow the request-scoped RNG.
+#[must_use]
+pub fn make_rng_from(rng: &mut (dyn CryptoRngCore + Send)) -> ChaChaRng {
+    ChaChaRng::from_rng(rng).expect("seeding ChaChaRng should not fail")
 }
 
 // ── User-agent parsing helper ──────────────────────────────────

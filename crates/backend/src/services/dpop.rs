@@ -35,8 +35,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration as StdDuration;
 
+use arkret_signatures::dpop_access_token_hash;
 use async_trait::async_trait;
-use base64ct::{Base64UrlUnpadded, Encoding};
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::{
     NewDpopJtiReplay, PgRepositoryFactory, RepositoryAccess as _, RepositoryFactory as _,
@@ -415,7 +415,7 @@ impl DpopVerifier {
 
         // ath — required when a Bearer token is presented (RFC 9449 §4.3).
         if let Some(token) = access_token {
-            let expected_ath = access_token_hash(token);
+            let expected_ath = dpop_access_token_hash(token);
             let Some(ath) = claims.ath.as_deref() else {
                 return Err(DpopError::MissingAth);
             };
@@ -450,13 +450,6 @@ impl DpopVerifier {
             })
         }
     }
-}
-
-/// Compute the RFC 9449 `ath` claim: `base64url(sha256(access_token))`.
-#[must_use]
-pub fn access_token_hash(access_token: &str) -> String {
-    let digest = Sha256::digest(access_token.as_bytes());
-    Base64UrlUnpadded::encode_string(&digest)
 }
 
 /// Read the `DPoP` header off a salvo request.
@@ -690,7 +683,7 @@ mod tests {
             htm: "POST".to_owned(),
             htu: "https://example.test/_arkret/gate/account/session-grants/refresh".to_owned(),
             iat: now.timestamp(),
-            ath: Some(access_token_hash(token)),
+            ath: Some(dpop_access_token_hash(token)),
             nonce: None,
         };
         let proof = sign_proof(&claims, &signing);
@@ -717,7 +710,7 @@ mod tests {
             htm: "POST".to_owned(),
             htu: "https://example.test/_arkret/gate/account/session-grants/refresh".to_owned(),
             iat: now.timestamp(),
-            ath: Some(access_token_hash("bound-access-token")),
+            ath: Some(dpop_access_token_hash("bound-access-token")),
             nonce: None,
         };
         let proof = sign_proof(&claims, &signing);

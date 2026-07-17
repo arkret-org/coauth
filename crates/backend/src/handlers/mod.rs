@@ -86,7 +86,7 @@ static METER: LazyLock<Meter> = LazyLock::new(|| {
 });
 
 pub use self::activity_tracker::{ActivityTracker, Bound as BoundActivityTracker};
-pub use self::common::{make_clock, make_rng};
+pub use self::common::{make_clock, make_rng, make_rng_from};
 pub use self::notification_language::notification_language;
 pub use self::preferred_language::{preferred_language, preferred_language_with_requested};
 pub use self::rate_limit::{Limiter, RequesterFingerprint};

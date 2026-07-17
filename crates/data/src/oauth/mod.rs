@@ -9,7 +9,8 @@ pub use self::authorization_grant::{
     AuthorizationCode, AuthorizationGrant, AuthorizationGrantStage, LoginHint, Pkce,
 };
 pub use self::client::{
-    Client, InvalidRedirectUriError, JwksOrJwksUri, LocalizableField, LocalizedClientMetadata,
+    Client, InvalidRedirectUriError, JwksOrJwksUri, LOOPBACK_HOSTS, LocalizableField,
+    LocalizedClientMetadata,
 };
 pub use self::device_code_grant::{DeviceCodeGrant, DeviceCodeGrantState};
 pub use self::i18n::{OAuthClientI18n, OAuthClientI18nEntry};

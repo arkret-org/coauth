@@ -26,7 +26,7 @@ use zeroize::Zeroizing;
 
 use crate::handlers::notification_dispatch::{NotificationIntent, schedule_notification};
 use crate::handlers::passwords::PasswordManager;
-use crate::handlers::{Limiter, RequesterFingerprint};
+use crate::handlers::{Limiter, RequesterFingerprint, make_rng_from};
 
 #[derive(Debug, Error)]
 pub enum StartAccountRecoveryError {
@@ -434,13 +434,6 @@ async fn load_account_recovery_ticket(
         .map_err(|_| LoadAccountRecoveryTicketError::SessionNotFound)?;
 
     Ok((ticket, session))
-}
-
-/// Create a new RNG from the provided one, suitable for `PasswordManager::hash`
-/// which requires `CryptoRng + RngCore + Send`.
-fn make_rng_from(rng: &mut (dyn CryptoRngCore + Send)) -> rand_chacha::ChaChaRng {
-    use rand_chacha::rand_core::SeedableRng;
-    rand_chacha::ChaChaRng::from_rng(rng).expect("seeding ChaChaRng should not fail")
 }
 
 #[cfg(test)]

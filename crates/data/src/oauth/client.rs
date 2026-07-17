@@ -432,14 +432,14 @@ fn pick_localized_url<'a>(map: &'a BTreeMap<String, Url>, locale: &str) -> Optio
 }
 
 /// The hosts that match the loopback interface.
-const LOCAL_HOSTS: &[&str] = &["localhost", "127.0.0.1", "[::1]"];
+pub const LOOPBACK_HOSTS: &[&str] = &["localhost", "127.0.0.1", "[::1]"];
 
 /// Whether the given URI matches one of the registered URIs.
 ///
 /// If the URI host is one if `localhost`, `127.0.0.1` or `[::1]`, any port is
 /// accepted.
 fn uri_matches_one_of(uri: &Url, registered_uris: &[Url]) -> bool {
-    if LOCAL_HOSTS.contains(&uri.host_str().unwrap_or_default()) {
+    if LOOPBACK_HOSTS.contains(&uri.host_str().unwrap_or_default()) {
         let mut uri = uri.clone();
         // Try matching without the port first
         if uri.set_port(None).is_ok() && registered_uris.contains(&uri) {

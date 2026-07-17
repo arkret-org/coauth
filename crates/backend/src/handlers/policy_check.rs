@@ -36,6 +36,7 @@ use std::time::Duration;
 
 #[cfg(test)]
 use arkret_core::Did;
+use arkret_core::canonical::format_timestamp_canonical;
 use arkret_core::{
     PolicyCheckBoundTo, PolicyCheckOutcome, PolicyCheckRequestBody, PolicyCheckSignature,
 };
@@ -243,7 +244,7 @@ pub(crate) async fn build_policy_check_response(
     // five-tuple, not to the TTL alone.
     let expires_at = now + chrono::Duration::seconds(DEFAULT_ALLOW_TTL_SECONDS);
 
-    let expires_at_str = format_canonical_rfc3339(expires_at);
+    let expires_at_str = format_timestamp_canonical(expires_at);
 
     let obligations_wire: Vec<Value> = decision
         .obligations
@@ -306,12 +307,6 @@ pub(crate) async fn build_policy_check_response(
         next_retry_at: None,
         obligations: obligations_wire,
     })
-}
-
-fn format_canonical_rfc3339(ts: chrono::DateTime<Utc>) -> String {
-    // Canonical form per `arkret_core::canonical::validate_timestamp_canonical`:
-    // `YYYY-MM-DDTHH:MM:SSZ` — no fractional seconds, uppercase `T` / `Z`.
-    ts.format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
 fn emit_audit_record(transcript: &DecisionTranscript<'_>, signature: &PolicyCheckSignature) {
@@ -420,8 +415,8 @@ mod tests {
         let ts = chrono::DateTime::parse_from_rfc3339("2026-05-21T10:11:12.345Z")
             .unwrap()
             .with_timezone(&Utc);
-        assert_eq!(format_canonical_rfc3339(ts), "2026-05-21T10:11:12Z");
-        arkret_core::canonical::validate_timestamp_canonical(&format_canonical_rfc3339(ts))
+        assert_eq!(format_timestamp_canonical(ts), "2026-05-21T10:11:12Z");
+        arkret_core::canonical::validate_timestamp_canonical(&format_timestamp_canonical(ts))
             .expect("formatted timestamp is canonical");
     }
 
@@ -491,7 +486,7 @@ mod tests {
         );
 
         let expires_at = response.expires_at;
-        let expires_at_str = format_canonical_rfc3339(expires_at);
+        let expires_at_str = format_timestamp_canonical(expires_at);
         assert_eq!(
             serde_json::to_value(expires_at).unwrap(),
             serde_json::Value::String(expires_at_str.clone())
