@@ -1,6 +1,6 @@
 # coauth
 
-> **Spec target**: [arkret-spec @ 5d66aeb](../arkret-spec) (v1 sync 2026-06-21)
+> **Normative protocol source**: [arkret-spec v1](../arkret-spec/spec/v1/)
 
 ## Pre-commit hook setup
 
@@ -43,8 +43,8 @@ inside a Realm and inherit its auth context.
 
 ## Trust domain rotation
 
-Round R2/R3 (2026-05-20) introduces the deployment-level `trust_domain`
-config knob (`arkret.trust_domain` in `config.yaml`):
+The deployment-level `trust_domain` config knob is
+`arkret.trust_domain` in `config.yaml`:
 
 ```yaml
 arkret:
@@ -66,7 +66,7 @@ invalidates all previously-issued `principal_signing` /
 proofs. Operators MUST roll fresh proofs through the device-lifecycle
 recovery strand as part of the rotation.
 
-## OOB invite code form (Round R2/R3 — T15)
+## OOB invite code form
 
 `coauth` mints third-party invite OOB codes in one of two configurable
 forms. Deployments choose per `auth.oob_code_kind`:
@@ -84,11 +84,10 @@ padding) so external observers cannot distinguish "expired" from
 "never existed". The normative source is the v1 spec under
 [`../arkret-spec/spec/v1/`](../arkret-spec/spec/v1/).
 
-## Round R4 (protocol review closures)
+## Current protocol behavior
 
-Spec round 4 layers on top of the R2/R3 trust-domain and OOB-invite work.
-The canonical wire-breaking list lives in the v1 spec artifacts and prose
-under [`../arkret-spec/spec/v1/`](../arkret-spec/spec/v1/).
+The canonical wire behavior lives in the v1 spec artifacts and prose under
+[`../arkret-spec/spec/v1/`](../arkret-spec/spec/v1/).
 
 - **3PID OOB invite has two wire modes.** Either `offline_token`
   (`token_commitment` + `token_salt_id` + `token_entropy_bits ≥ 128`,
@@ -242,9 +241,10 @@ just build-all
 ## Production Deployment Checklist
 
 Before exposing coauth to the public internet, walk every item below.
-The same list will be computed at runtime and surfaced on
-`/health.hardening` so sodmin's `/hardening` dashboard can flag failing
-checks across the whole fleet (see T8.3 for the cross-service shape).
+This is an operator checklist, not a runtime health endpoint. Use `/healthz`,
+`/readyz`, and `/metrics` for automated monitoring, and see the
+[deployment hardening guide](docs/en/topics/deployment_hardening.md) for
+rollout details.
 
 - [ ] `COAUTH_DEVELOPMENT_MODE=false` (or unset in production builds)
 - [ ] TLS enabled at the reverse proxy (`COAUTH_TLS_CERT_PATH` / `COAUTH_TLS_KEY_PATH` when terminated in-process)
@@ -259,10 +259,3 @@ checks across the whole fleet (see T8.3 for the cross-service shape).
 ## License
 
 `coauth` is distributed under `AGPL-3.0-only`. See [LICENSE](LICENSE).
-
----
-
-<!-- circle-rollout milestone pointer -->
-> **Active milestone tracking** (local-only, gitignored): see
-> `_coauth_todos.md` in the parent `arkret/` directory for the
-> circle-rollout (AKP-0007) work item list and per-stage checkpoints.
