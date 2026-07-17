@@ -238,64 +238,27 @@ fn verification_method_did(verification_method: &str) -> &str {
         .map_or(without_fragment, |(did, _)| did)
 }
 
-/// Verify an EdDSA detached compact JWS (`protected..signature`) over
-/// `payload_bytes` against a bare Ed25519 multibase verifying key (the
-/// device signing key resolved from the Principal Server directory). Returns
-/// the `kid` (verification method) from the protected header on success.
-///
-/// The signing input is recomputed from the wire bytes per RFC 7515 §5.2 as
-/// `b64u(protected) "." b64u(payload_bytes)`, so no JWS library state intervenes
-/// between the directory-resolved key and the SDK Ed25519 verifier
-/// (`arkret_signatures::proof::verify_detached_ed25519_signature`).
+/// Verify the soft-logout proof against the device signing key resolved from
+/// the Principal Server directory and return its protected-header `kid`.
 fn verify_detached_jws_with_device_key(
     detached_jws: &str,
     payload_bytes: &[u8],
     device_multibase: &str,
 ) -> Result<String, String> {
-    use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
-    use base64ct::{Base64UrlUnpadded, Encoding as _};
-
-    let mut parts = detached_jws.split('.');
-    let header_b64u = parts.next().ok_or("missing protected header")?;
-    let payload_segment = parts.next().ok_or("missing payload segment")?;
-    let signature_b64u = parts.next().ok_or("missing signature segment")?;
-    if parts.next().is_some() {
-        return Err("too many JWS segments".to_owned());
-    }
-    if !payload_segment.is_empty() {
-        return Err("detached JWS payload segment must be empty".to_owned());
-    }
-
-    let header_bytes = Base64UrlUnpadded::decode_vec(header_b64u)
-        .map_err(|error| format!("invalid header b64url: {error}"))?;
-    let header: serde_json::Value = serde_json::from_slice(&header_bytes)
-        .map_err(|error| format!("invalid protected header: {error}"))?;
-    if header.get("alg").and_then(serde_json::Value::as_str) != Some("EdDSA") {
-        return Err("protected header alg must be EdDSA".to_owned());
-    }
-    let verification_method = header
-        .get("kid")
-        .and_then(serde_json::Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or("protected header missing kid")?
-        .to_owned();
-
-    // RFC 7515 §5.2 signing input over the attached payload bytes.
-    let payload_b64u = Base64UrlUnpadded::encode_string(payload_bytes);
-    let mut signing_input = String::with_capacity(header_b64u.len() + 1 + payload_b64u.len());
-    signing_input.push_str(header_b64u);
-    signing_input.push('.');
-    signing_input.push_str(&payload_b64u);
+    use arkret_signatures::proof::{Ed25519DetachedJwsVerifier, PublicKeyMaterial};
 
     let material = PublicKeyMaterial::Ed25519Multibase {
         value: device_multibase.to_owned(),
     };
-    if verify_detached_ed25519_signature(&material, signing_input.as_bytes(), signature_b64u) {
-        Ok(verification_method)
-    } else {
-        Err("Ed25519 signature did not verify against the authorized device key".to_owned())
-    }
+    let verified = Ed25519DetachedJwsVerifier::new()
+        .verify_detached_jws_with_metadata(detached_jws, payload_bytes, &material)
+        .map_err(|error| error.to_string())?;
+    verified
+        .key_id()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| "protected header missing kid".to_owned())
 }
 
 async fn verify_soft_logout_did_proof(
