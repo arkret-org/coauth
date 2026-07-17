@@ -16,4 +16,4 @@ workspace = true
 anyhow = {workspace = true}
 arkret-core = {workspace = true}
 async-trait = {workspace = true}
-soland-core = {workspace = true}
+soland-contracts = {workspace = true}

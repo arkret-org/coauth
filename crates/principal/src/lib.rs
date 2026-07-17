@@ -7,7 +7,7 @@ pub mod registry;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use soland_core::capability_fanout::CapabilityFanoutBody;
+use soland_contracts::integration::capability_fanout::CapabilityFanoutBody;
 
 pub use self::registry::ConnectorRegistry;
 

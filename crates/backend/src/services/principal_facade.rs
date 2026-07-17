@@ -29,7 +29,9 @@ use coauth_principal::{
     ConnectorAccountProfile, ConnectorAdmin, ConnectorProvisionRequest,
     PrincipalAgentKeyPairCommitRequest, PrincipalCapabilityFanoutRequest,
 };
-use soland_core::capability_fanout::{CapabilityFanoutBody, CapabilityFanoutResponse};
+use soland_contracts::integration::capability_fanout::{
+    CapabilityFanoutBody, CapabilityFanoutResponse,
+};
 use url::Url;
 
 /// `ConnectorAdmin` backed by coauth's own Postgres (`users`).
@@ -537,7 +539,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
 mod tests {
     use coauth_config::PrincipalServerConfig;
     use serde_json::json;
-    use soland_core::capability_fanout::CapabilityFanoutAuthzState;
+    use soland_contracts::integration::capability_fanout::CapabilityFanoutAuthzState;
 
     use super::*;
 

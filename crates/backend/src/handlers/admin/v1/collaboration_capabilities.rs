@@ -32,7 +32,7 @@ use salvo::oapi::extract::PathParam;
 use salvo::prelude::*;
 use serde_json::{Value, json};
 use signature::RandomizedSigner as _;
-use soland_core::capability_fanout::CapabilityFanoutBody;
+use soland_contracts::integration::capability_fanout::CapabilityFanoutBody;
 use ulid::Ulid;
 
 use crate::JsonResult;
@@ -302,7 +302,7 @@ pub async fn revoke_handler(
 
 /// Fanout envelope kind expected by soland's
 /// `/_soland/root/authz/capability-fanout` handler (shared contract in
-/// `soland_core::capability_fanout`).
+/// `soland_contracts::integration::capability_fanout`).
 const CAPABILITY_FANOUT_KIND: &str = "ak.coauth.collaboration_capability.fanout.v1";
 
 fn build_grant_fanout_payload(

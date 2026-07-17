@@ -5,7 +5,7 @@ use coauth_data::{
     UserRecoverySession,
 };
 use serde::{Deserialize, Serialize};
-use soland_core::capability_fanout::CapabilityFanoutBody;
+use soland_contracts::integration::capability_fanout::CapabilityFanoutBody;
 use ulid::Ulid;
 
 use super::InsertableJob;
