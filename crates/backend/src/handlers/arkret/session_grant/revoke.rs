@@ -179,8 +179,8 @@ fn verification_method_did(verification_method: &str) -> &str {
         .map_or(without_fragment, |(did, _)| did)
 }
 
-fn grant_payload(grant: &SessionGrant) -> Option<SessionGrantPayload> {
-    Jwt::<SessionGrantPayload>::try_from(grant.grant_jwt.as_str())
+fn grant_payload(grant: &SessionGrant) -> Option<SignedSessionGrantClaims> {
+    Jwt::<SignedSessionGrantClaims>::try_from(grant.grant_jwt.as_str())
         .ok()
         .map(|jwt| jwt.payload().clone())
 }
@@ -194,7 +194,8 @@ fn grant_is_agent_delegated_to_controller(grant: &SessionGrant, controller_id: &
     }
     payload
         .scope_details
-        .get("controller_id")
+        .as_ref()
+        .and_then(|details| details.get("controller_id"))
         .and_then(serde_json::Value::as_str)
         .is_some_and(|value| value == controller_id)
 }

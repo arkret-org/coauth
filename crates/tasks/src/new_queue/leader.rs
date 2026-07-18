@@ -1,7 +1,8 @@
 use chrono::Duration;
-use coauth_data::pg::advisory_lock::{AdvisoryLockResult, advisory_lock_key};
+use coauth_data::RepositoryAccess;
 use coauth_data::queue::InsertableJob;
-use coauth_data::{DatabaseError, PgRepository, RepositoryAccess};
+use coauth_storage_postgres::advisory_lock::{AdvisoryLockResult, advisory_lock_key};
+use coauth_storage_postgres::{DatabaseError, PgRepository};
 use cron::Schedule;
 use diesel::sql_query;
 use diesel_async::RunQueryDsl;

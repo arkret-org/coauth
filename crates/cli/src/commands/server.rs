@@ -20,7 +20,8 @@ use coauth_config::{
     AppConfig, ClientsConfig, ConfigurationSection, ConfigurationSectionExt, HttpBindConfig,
     HttpListenerConfig, HttpResource, UpstreamOAuthConfig,
 };
-use coauth_data::{PgRepositoryFactory, SystemClock, UrlBuilder};
+use coauth_data::{SystemClock, UrlBuilder};
+use coauth_storage_postgres::PgRepositoryFactory;
 use figment::Figment;
 use itertools::Itertools;
 use tracing::{info, info_span, warn};
@@ -56,7 +57,7 @@ impl Options {
         let pool = diesel_pool_from_config(&config.database).await?;
 
         if self.no_migrate {
-            if coauth_data::has_pending_migrations(&db_url).await? {
+            if coauth_storage_postgres::has_pending_migrations(&db_url).await? {
                 // Refuse to start if there are pending migrations
                 return Err(anyhow::anyhow!(
                     "The server is running with `--no-migrate` but there are pending migrations. Please run them first with `coauth database migrate`, or omit the `--no-migrate` flag to apply them automatically on startup."
@@ -64,7 +65,7 @@ impl Options {
             }
         } else {
             info!("Running pending database migrations");
-            coauth_data::migrate(&pool, &db_url)
+            coauth_storage_postgres::migrate(&pool, &db_url)
                 .await
                 .context("could not run migrations")?;
         }

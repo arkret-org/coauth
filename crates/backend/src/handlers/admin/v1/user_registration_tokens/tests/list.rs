@@ -7,7 +7,7 @@ use super::*;
 #[tokio::test]
 async fn test_list_all_tokens() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -150,7 +150,7 @@ async fn test_list_all_tokens() {
 #[tokio::test]
 async fn test_filter_by_used() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -317,7 +317,7 @@ async fn test_filter_by_used() {
 #[tokio::test]
 async fn test_filter_by_revoked() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();

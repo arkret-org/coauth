@@ -14,8 +14,8 @@ use arkret_signatures::webvh::{
 };
 use chrono::Utc;
 use coauth_config::{ArkretConfig, RuntimeServiceIdentity};
-use coauth_data::PgRepositoryFactory;
 use coauth_keystore::Keystore;
+use coauth_storage_postgres::PgRepositoryFactory;
 use diesel::OptionalExtension;
 use diesel::prelude::*;
 use diesel::sql_types::Jsonb;

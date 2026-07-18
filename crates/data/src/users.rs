@@ -2,46 +2,12 @@ use std::net::IpAddr;
 
 use arkret_core::{AccountStatus, Handle};
 use chrono::{DateTime, Utc};
-use diesel::pg::Pg;
-use diesel::{Queryable, deserialize, sql_types};
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use crate::new_id;
 use crate::pagination::Node;
-
-type UserSqlType = (
-    sql_types::Uuid,
-    sql_types::Text,
-    sql_types::Timestamptz,
-    sql_types::Timestamptz,
-    sql_types::Text,
-    sql_types::Nullable<sql_types::Timestamptz>,
-    sql_types::Nullable<sql_types::Timestamptz>,
-    sql_types::Bool,
-    sql_types::Bool,
-    sql_types::Nullable<sql_types::Text>,
-    sql_types::Nullable<sql_types::Text>,
-    sql_types::Nullable<sql_types::Text>,
-    sql_types::Array<sql_types::Text>,
-);
-
-type UserSqlRow = (
-    uuid::Uuid,
-    String,
-    DateTime<Utc>,
-    DateTime<Utc>,
-    String,
-    Option<DateTime<Utc>>,
-    Option<DateTime<Utc>>,
-    bool,
-    bool,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    Vec<String>,
-);
 
 /// A downstream principal account projection used by consent and viewer APIs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -139,52 +105,6 @@ impl NewUserPrimaryHandlePreference {
             actor_user_id: Some(actor_user_id),
             source: "self_service".to_owned(),
         }
-    }
-}
-
-impl Queryable<UserSqlType, Pg> for User {
-    type Row = UserSqlRow;
-
-    fn build(row: Self::Row) -> deserialize::Result<Self> {
-        let (
-            id,
-            localpart,
-            created_at,
-            updated_at,
-            status,
-            locked_at,
-            deactivated_at,
-            can_request_admin,
-            is_guest,
-            display_name,
-            avatar_url,
-            preferred_locale,
-            handle_aliases,
-        ) = row;
-        let id = Ulid::from(id);
-        let status = AccountStatus::from_wire(&status).ok_or_else(|| {
-            Box::<dyn std::error::Error + Send + Sync>::from(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("unknown account status {status:?}"),
-            ))
-        })?;
-
-        Ok(Self {
-            id,
-            localpart,
-            sub: id.to_string(),
-            created_at,
-            updated_at,
-            status,
-            locked_at,
-            deactivated_at,
-            can_request_admin,
-            is_guest,
-            display_name,
-            avatar_url,
-            preferred_locale,
-            handle_aliases,
-        })
     }
 }
 

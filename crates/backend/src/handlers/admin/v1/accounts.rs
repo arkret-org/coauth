@@ -708,7 +708,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_and_get_accounts() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -764,7 +764,7 @@ mod tests {
     #[tokio::test]
     async fn test_lock_and_disable_account() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -812,7 +812,7 @@ mod tests {
     #[tokio::test]
     async fn test_risk_action_execute_requires_approval_and_locks_account() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -972,7 +972,7 @@ mod tests {
     #[tokio::test]
     async fn test_risk_action_approve_rejects_forged_approved_by_threshold_bypass() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -1096,7 +1096,7 @@ mod tests {
     #[tokio::test]
     async fn test_account_dids_add_list_and_revoke_use_audit_trail() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();

@@ -38,13 +38,12 @@ use std::time::Duration as StdDuration;
 use arkret_signatures::dpop_access_token_hash;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
-use coauth_data::{
-    NewDpopJtiReplay, PgRepositoryFactory, RepositoryAccess as _, RepositoryFactory as _,
-};
+use coauth_data::{NewDpopJtiReplay, RepositoryAccess as _, RepositoryFactory as _};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::jwa::AsymmetricVerifyingKey;
 use coauth_jose::jwk::{PublicJsonWebKey, Thumbprint};
 use coauth_jose::jwt::Jwt;
+use coauth_storage_postgres::PgRepositoryFactory;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 use thiserror::Error;

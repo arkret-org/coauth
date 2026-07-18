@@ -485,10 +485,10 @@ mod tests {
 
     #[tokio::test]
     async fn service_admin_audit_row_is_persisted_signed_and_verifiable() {
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut repo = coauth_data::PgRepositoryFactory::new(pool)
+        let mut repo = coauth_storage_postgres::PgRepositoryFactory::new(pool)
             .create()
             .await
             .unwrap();

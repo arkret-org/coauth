@@ -274,6 +274,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkret-network-policy"
+version = "0.3.0"
+dependencies = [
+ "thiserror 2.0.18",
+ "url",
+]
+
+[[package]]
 name = "arkret-policy"
 version = "0.3.0"
 dependencies = [
@@ -1233,6 +1241,7 @@ dependencies = [
  "coauth-config",
  "coauth-data",
  "coauth-messaging",
+ "coauth-storage-postgres",
  "coauth-tasks",
  "console",
  "dialoguer",
@@ -1275,7 +1284,7 @@ version = "0.3.0"
 dependencies = [
  "arkret-core",
  "chrono",
- "coauth-data",
+ "coauth-data-model",
  "salvo",
  "schemars 1.2.1",
  "serde",
@@ -1291,6 +1300,7 @@ dependencies = [
  "arkret-core",
  "arkret-crypto",
  "arkret-http-client",
+ "arkret-network-policy",
  "arkret-signatures",
  "arkret-state",
  "async-trait",
@@ -1312,6 +1322,7 @@ dependencies = [
  "coauth-oauth-types",
  "coauth-policy",
  "coauth-principal",
+ "coauth-storage-postgres",
  "coauth-tasks",
  "coauth-templates",
  "cookie",
@@ -1438,41 +1449,43 @@ dependencies = [
 name = "coauth-data"
 version = "0.3.0"
 dependencies = [
- "anyhow",
  "arkret-core",
  "async-trait",
  "chrono",
+ "coauth-data-model",
  "coauth-email-types",
  "coauth-iana",
  "coauth-jose",
  "coauth-oauth-types",
  "crc",
- "diesel",
- "diesel-async",
- "diesel_migrations",
  "futures-util",
- "ipnetwork",
  "language-tags",
  "opentelemetry",
- "opentelemetry-semantic-conventions",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "regex",
- "salvo",
- "schemars 1.2.1",
  "serde",
  "serde_json",
- "sha2 0.10.9",
  "soland-contracts",
- "subtle",
  "thiserror 2.0.18",
- "tokio",
  "tracing",
  "tracing-opentelemetry",
  "ulid",
  "url",
  "uuid",
  "woothee",
+]
+
+[[package]]
+name = "coauth-data-model"
+version = "0.3.0"
+dependencies = [
+ "arkret-core",
+ "chrono",
+ "salvo",
+ "schemars 1.2.1",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1678,6 +1691,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "coauth-storage-postgres"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-core",
+ "async-trait",
+ "chrono",
+ "coauth-data",
+ "coauth-email-types",
+ "coauth-iana",
+ "coauth-jose",
+ "coauth-oauth-types",
+ "crc",
+ "diesel",
+ "diesel-async",
+ "diesel_migrations",
+ "futures-util",
+ "ipnetwork",
+ "language-tags",
+ "opentelemetry",
+ "opentelemetry-semantic-conventions",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "soland-contracts",
+ "subtle",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-opentelemetry",
+ "ulid",
+ "url",
+ "uuid",
+ "woothee",
+]
+
+[[package]]
 name = "coauth-tasks"
 version = "0.3.0"
 dependencies = [
@@ -1690,6 +1743,7 @@ dependencies = [
  "coauth-messaging",
  "coauth-oauth-types",
  "coauth-principal",
+ "coauth-storage-postgres",
  "coauth-templates",
  "cron",
  "diesel",

@@ -64,7 +64,13 @@ pub async fn list_handler(
     depot: &Depot,
 ) -> JsonResult<ListCollaborationCapabilityGrantsOutcome> {
     let mut repo = extract_call_context(req, depot).await?.repo;
-    let data = repo.collaboration_capability_grant().list_active().await?;
+    let data = repo
+        .collaboration_capability_grant()
+        .list_active()
+        .await?
+        .into_iter()
+        .map(CollaborationCapabilityGrant::from)
+        .collect();
     repo.cancel().await?;
 
     Ok(Json(ListCollaborationCapabilityGrantsOutcome { data }))
@@ -221,7 +227,7 @@ pub async fn create_handler(
 
     repo.save().await?;
 
-    Ok(Json(grant))
+    Ok(Json(grant.into()))
 }
 
 #[endpoint]

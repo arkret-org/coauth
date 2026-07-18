@@ -22,6 +22,7 @@ clap = {workspace = true}
 coauth-backend = {workspace = true}
 coauth-config = {workspace = true}
 coauth-data = {workspace = true}
+coauth-storage-postgres = {workspace = true}
 coauth-messaging = {workspace = true}
 coauth-tasks = {workspace = true}
 console = {workspace = true}

@@ -6,7 +6,7 @@
 //! Rust struct backs the wire on both sides instead of a hand-mirrored
 //! one.
 //!
-//! Server-side helpers that need `coauth_data::Page` (e.g. cursor-paginated
+//! Server-side helpers that need the storage page type (e.g. cursor-paginated
 //! `for_page` builder) stay in `coauth-backend`; what lives here is the
 //! pure data shape plus the lightweight `Resource` trait so generic
 //! `new_canonical` / `from_parts` builders work without depending on the

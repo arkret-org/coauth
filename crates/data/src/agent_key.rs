@@ -5,7 +5,6 @@ use crate::Ulid;
 pub use crate::accountability::{
     AccountabilityGrantFanoutState, ParseAccountabilityGrantFanoutStateError,
 };
-pub use crate::pg::agent_key::PgAgentKeyAuthorizationRepository;
 pub use crate::storage::agent_key::*;
 
 /// Durable record of an accepted `ak.agent.key.authorize` (AKP-0008 §4.5).

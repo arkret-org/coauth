@@ -1,0 +1,26 @@
+[package]
+name = "coauth-data-model"
+description = "Storage-neutral domain models shared by coauth application and adapters."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+schema = ["dep:salvo", "dep:schemars"]
+
+[dependencies]
+arkret-core = {workspace = true}
+chrono = {workspace = true,features = ["serde"]}
+serde = {workspace = true,features = ["derive"]}
+salvo = {workspace = true,optional = true}
+schemars = {workspace = true,optional = true}
+thiserror = {workspace = true}

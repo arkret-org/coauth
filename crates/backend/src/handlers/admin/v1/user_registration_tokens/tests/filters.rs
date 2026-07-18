@@ -7,7 +7,7 @@ use super::*;
 #[tokio::test]
 async fn test_filter_by_expired() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -174,7 +174,7 @@ async fn test_filter_by_expired() {
 #[tokio::test]
 async fn test_filter_by_valid() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -341,7 +341,7 @@ async fn test_filter_by_valid() {
 #[tokio::test]
 async fn test_combined_filters() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();

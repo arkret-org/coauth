@@ -27,6 +27,8 @@ This includes:
  - `coauth`: Command line utility, main entry point
  - [`coauth-config`][coauth-config]: Configuration parsing and loading
  - [`coauth-data-model`][coauth-data-model]: Models of objects that live in the database, regardless of the storage backend
+ - [`coauth-data`][coauth-data]: Storage-neutral domain types and repository ports; depends on `coauth-data-model`
+ - [`coauth-storage-postgres`][coauth-storage-postgres]: PostgreSQL adapters, Diesel schema, and migrations; depends on `coauth-data`
  - [`coauth-email`][coauth-email]: High-level email sending abstraction
  - [`coauth-handlers`][coauth-handlers]: Main HTTP application logic
  - [`coauth-policy`][coauth-policy]: Policy engine abstraction layer supporting multiple backends (OPA/WASM, Cedar, Remote HTTP)
@@ -34,13 +36,13 @@ This includes:
  - [`coauth-iana-codegen`][coauth-iana-codegen]: Code generator for the `coauth-iana` crate
  - [`coauth-jose`][coauth-jose]: JWT/JWS/JWE/JWK abstraction
  - [`coauth-frontend`][coauth-frontend]: Frontend application (Dioxus-based Rust SPA)
- - [`coauth-storage`][coauth-storage]: Abstraction of the storage backends
- - [`coauth-storage-pg`][coauth-storage-pg]: Storage backend implementation for a PostgreSQL database
  - [`coauth-tasks`][coauth-tasks]: Asynchronous task runner and scheduler
  - [`oauth-types`][oauth-types]: Useful structures and types to deal with OAuth/OpenID Connect endpoints. This might end up published as a standalone library as it can be useful in other contexts.
 
 [coauth-config]: ../rustdoc/coauth_config/index.html
 [coauth-data-model]: ../rustdoc/coauth_data_model/index.html
+[coauth-data]: ../rustdoc/coauth_data/index.html
+[coauth-storage-postgres]: ../rustdoc/coauth_storage_postgres/index.html
 [coauth-email]: ../rustdoc/coauth_email/index.html
 [coauth-handlers]: ../rustdoc/coauth_handlers/index.html
 [coauth-policy]: ../rustdoc/coauth_policy/index.html
@@ -48,8 +50,6 @@ This includes:
 [coauth-iana-codegen]: ../rustdoc/coauth_iana_codegen/index.html
 [coauth-jose]: ../rustdoc/coauth_jose/index.html
 [coauth-frontend]: ../rustdoc/coauth_frontend/index.html
-[coauth-storage]: ../rustdoc/coauth_storage/index.html
-[coauth-storage-pg]: ../rustdoc/coauth_storage/index.html
 [coauth-tasks]: ../rustdoc/coauth_tasks/index.html
 [oauth-types]: ../rustdoc/oauth_types/index.html
 

@@ -76,6 +76,8 @@ pub struct PolicyData {
     #[serde(skip)]
     id: Ulid,
     created_at: DateTime<Utc>,
+    #[schemars(with = "serde_json::Value")]
+    #[salvo(schema(value_type = Object))]
     data: PolicyDataDocument,
 }
 

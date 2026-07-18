@@ -33,7 +33,13 @@ pub async fn list_handler(
     depot: &Depot,
 ) -> JsonResult<ListCircleCapabilityGrantsOutcome> {
     let mut repo = extract_call_context(req, depot).await?.repo;
-    let data = repo.circle_capability_grant().list_active().await?;
+    let data = repo
+        .circle_capability_grant()
+        .list_active()
+        .await?
+        .into_iter()
+        .map(CircleCapabilityGrant::from)
+        .collect();
     repo.cancel().await?;
 
     Ok(Json(ListCircleCapabilityGrantsOutcome { data }))
@@ -144,7 +150,7 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
 
     repo.save().await?;
 
-    Ok(Json(grant))
+    Ok(Json(grant.into()))
 }
 
 #[endpoint]

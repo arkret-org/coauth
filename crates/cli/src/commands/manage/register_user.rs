@@ -15,10 +15,9 @@ use coauth_backend::util::{diesel_pool_from_config, password_manager_from_config
 use coauth_config::{ConfigurationSectionExt, DatabaseConfig, PasswordsConfig};
 use coauth_data::queue::{ProvisionUserJob, QueueJobRepositoryExt as _};
 use coauth_data::user::{UserEmailRepository, UserPasswordRepository, UserRepository};
-use coauth_data::{
-    Clock, DatabaseError, PgRepository, RepositoryAccess, SystemClock, UpstreamOAuthProvider, User,
-};
+use coauth_data::{Clock, RepositoryAccess, SystemClock, UpstreamOAuthProvider, User};
 use coauth_messaging::email::Address;
+use coauth_storage_postgres::{DatabaseError, PgRepository};
 use console::{Alignment, Style, Term, pad_str, style};
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Confirm, FuzzySelect, Input, Password};

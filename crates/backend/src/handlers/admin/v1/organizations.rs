@@ -16,10 +16,8 @@
 //! - `POST   /organizations/{org_did}/statements` — issue a signed `ak.realm.organization`
 //!   statement (COA-ORG-03).
 //!
-//! Wire shapes come from [`coauth_admin_types::organization_admin`] (which
-//! re-exports the shared `coauth-data` domain types) and the SDK
-//! [`arkret_core::models::RealmOrganizationPayload`]. No admin-private wire
-//! struct is defined here.
+//! Wire shapes come from [`coauth_admin_types::organization_admin`] and map
+//! explicitly from storage-neutral domain records.
 
 use arkret_core::canonical::{canonical_json_bytes, sha256_digest};
 use arkret_core::identifiers::new_prefixed_uuid7;
@@ -27,12 +25,13 @@ use arkret_core::models::{RealmOrganizationPayload, RealmOrganizationStatus};
 use arkret_core::{Did, Hash, RealmId};
 use coauth_admin_types::organization_admin::{
     BootstrapAuthorizationInput, BootstrapOrganizationRequest, IssueOrganizationStatementRequest,
-    ListOrganizationDelegationsOutcome, OrganizationControlView, OrganizationPrincipalControl,
-    RecordOrganizationDelegationRequest, RenewOrganizationDelegationRequest,
-    RotateOrganizationControllerRequest,
+    ListOrganizationDelegationsOutcome, OrganizationControlView, OrganizationDelegation,
+    OrganizationPrincipalControl, RecordOrganizationDelegationRequest,
+    RenewOrganizationDelegationRequest, RotateOrganizationControllerRequest,
 };
 use coauth_data::organization_control::{
-    NewOrganizationDelegation, NewOrganizationPrincipalControl, OrganizationDelegation,
+    NewOrganizationDelegation, NewOrganizationPrincipalControl,
+    OrganizationPrincipalControl as DomainOrganizationPrincipalControl,
 };
 use coauth_data::{BoxRepository, RepositoryAccess};
 use salvo::oapi::extract::PathParam;
@@ -139,7 +138,7 @@ async fn verify_organization_controller_proof(
 async fn load_control(
     repo: &mut BoxRepository,
     organization_did: &str,
-) -> Result<OrganizationPrincipalControl, AppError> {
+) -> Result<DomainOrganizationPrincipalControl, AppError> {
     repo.organization_control()
         .get_control_by_did(organization_did)
         .await?
@@ -248,7 +247,7 @@ pub async fn bootstrap_handler(
         .await?;
     repo.save().await?;
 
-    Ok(Json(control))
+    Ok(Json(control.into()))
 }
 
 #[endpoint]
@@ -267,8 +266,8 @@ pub async fn get_handler(
         .await?;
     repo.cancel().await?;
     Ok(Json(OrganizationControlView {
-        control,
-        delegations,
+        control: control.into(),
+        delegations: delegations.into_iter().map(Into::into).collect(),
     }))
 }
 
@@ -284,7 +283,10 @@ pub async fn list_delegations_handler(
     let data = repo
         .organization_control()
         .list_delegations_for_org(&organization_did)
-        .await?;
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
     repo.cancel().await?;
     Ok(Json(ListOrganizationDelegationsOutcome { data }))
 }
@@ -333,7 +335,7 @@ pub async fn record_delegation_handler(
         )
         .await?;
     repo.save().await?;
-    Ok(Json(delegation))
+    Ok(Json(delegation.into()))
 }
 
 #[endpoint]
@@ -355,7 +357,7 @@ pub async fn revoke_delegation_handler(
     match revoked {
         Some(delegation) => {
             repo.save().await?;
-            Ok(Json(delegation))
+            Ok(Json(delegation.into()))
         }
         None => {
             repo.cancel().await?;
@@ -394,7 +396,7 @@ pub async fn renew_delegation_handler(
     match renewed {
         Some(delegation) => {
             repo.save().await?;
-            Ok(Json(delegation))
+            Ok(Json(delegation.into()))
         }
         None => {
             repo.cancel().await?;
@@ -431,7 +433,7 @@ pub async fn rotate_controller_handler(
     match updated {
         Some(control) => {
             repo.save().await?;
-            Ok(Json(control))
+            Ok(Json(control.into()))
         }
         None => {
             repo.cancel().await?;

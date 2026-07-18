@@ -7,7 +7,7 @@ use coauth_backend::util::{
 use coauth_config::{
     ConfigurationSection, ConfigurationSectionExt, DatabaseConfig, ExperimentalConfig, PolicyConfig,
 };
-use coauth_data::PgRepositoryFactory;
+use coauth_storage_postgres::PgRepositoryFactory;
 use figment::Figment;
 use tracing::{info, info_span};
 

@@ -1,13 +1,8 @@
 //! Admin DTOs for COA-ORG organization principal control + delegation
 //! management (`identity-did.md` §7, `ak.realm.organization`).
 //!
-//! The shared domain types ([`OrganizationPrincipalControl`],
-//! [`OrganizationDelegation`], [`OrganizationDelegationStatus`],
-//! [`OrganizationBootstrapAuthorization`]) are owned by the persistence layer
-//! (`coauth-data`) and re-exported here so the storage shape, the SDK
-//! `ak.realm.organization` shape, and this admin surface cannot drift. Only the
-//! request bodies + list/response envelopes are admin-API-specific and remain
-//! local to this crate.
+//! Domain enums come from the storage-neutral model crate. Response records
+//! are private admin-wire DTOs populated through explicit mappings.
 //!
 //! sodmin can render the full organization control state from these DTOs
 //! without touching the database or parsing any product-private fields.
@@ -16,11 +11,107 @@ use arkret_core::models::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
     RealmOrganizationStatus,
 };
-pub use coauth_data::organization_control::{
-    OrganizationBootstrapAuthorization, OrganizationDelegation, OrganizationDelegationStatus,
-    OrganizationPrincipalControl,
-};
+use chrono::{DateTime, Utc};
+pub use coauth_data_model::{OrganizationBootstrapAuthorization, OrganizationDelegationStatus};
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "schema",
+    derive(schemars::JsonSchema, salvo::oapi::ToSchema)
+)]
+pub struct OrganizationPrincipalControl {
+    pub id: String,
+    pub organization_did: String,
+    pub principal_control_realm_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control_stream_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pcr_frontier_digest: Option<String>,
+    pub bootstrap_authorization: OrganizationBootstrapAuthorization,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bootstrap_delegation_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executed_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bootstrap_proof_digest: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl From<coauth_data_model::OrganizationPrincipalControl> for OrganizationPrincipalControl {
+    fn from(value: coauth_data_model::OrganizationPrincipalControl) -> Self {
+        Self {
+            id: value.id,
+            organization_did: value.organization_did,
+            principal_control_realm_id: value.principal_control_realm_id,
+            control_stream_ref: value.control_stream_ref,
+            pcr_frontier_digest: value.pcr_frontier_digest,
+            bootstrap_authorization: value.bootstrap_authorization,
+            bootstrap_delegation_ref: value.bootstrap_delegation_ref,
+            executed_by: value.executed_by,
+            bootstrap_proof_digest: value.bootstrap_proof_digest,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "schema",
+    derive(schemars::JsonSchema, salvo::oapi::ToSchema)
+)]
+pub struct OrganizationDelegation {
+    pub id: String,
+    pub delegation_ref: String,
+    pub organization_did: String,
+    pub delegate_did: String,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub issuer_role: RealmOrganizationIssuerRole,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub purposes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "schema", schemars(with = "Vec<String>"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = Vec<String>)))]
+    pub covered_relationships: Vec<RealmOrganizationRelationship>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "schema", schemars(with = "Vec<String>"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = Vec<String>)))]
+    pub covered_control_scopes: Vec<RealmOrganizationControlScope>,
+    pub status: OrganizationDelegationStatus,
+    pub valid_from: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub valid_until: Option<DateTime<Utc>>,
+    pub created_by: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revoked_at: Option<DateTime<Utc>>,
+}
+
+impl From<coauth_data_model::OrganizationDelegation> for OrganizationDelegation {
+    fn from(value: coauth_data_model::OrganizationDelegation) -> Self {
+        Self {
+            id: value.id,
+            delegation_ref: value.delegation_ref,
+            organization_did: value.organization_did,
+            delegate_did: value.delegate_did,
+            issuer_role: value.issuer_role,
+            purposes: value.purposes,
+            covered_relationships: value.covered_relationships,
+            covered_control_scopes: value.covered_control_scopes,
+            status: value.status,
+            valid_from: value.valid_from,
+            valid_until: value.valid_until,
+            created_by: value.created_by,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+            revoked_at: value.revoked_at,
+        }
+    }
+}
 
 /// How a bootstrap request authorizes the organization PCR genesis.
 #[derive(Debug, Clone, Serialize, Deserialize)]

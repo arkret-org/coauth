@@ -4,7 +4,7 @@ use coauth_data::account_handoff::AccountHandoffRepository;
 use coauth_data::accountability::AccountabilityGrantRepository;
 use coauth_data::agent_key::AgentKeyAuthorizationRepository;
 use coauth_data::app_session::AppSessionRepository;
-use coauth_data::audit::{AuditRepository, HandleAuditRepository, PgHandleAuditRepository};
+use coauth_data::audit::{AuditRepository, HandleAuditRepository};
 use coauth_data::circle_capability::CircleCapabilityGrantRepository;
 use coauth_data::collaboration_capability::CollaborationCapabilityGrantRepository;
 use coauth_data::dpop_replay::DpopReplayRepository;
@@ -48,7 +48,9 @@ use crate::audit::PgAuditRepository;
 use crate::circle_capability::PgCircleCapabilityGrantRepository;
 use crate::collaboration_capability::PgCollaborationCapabilityGrantRepository;
 use crate::dpop_replay::PgDpopReplayRepository;
-use crate::notification::{PgNotificationRepository, PgNotificationTemplateRepository};
+use crate::handle_audit::PgHandleAuditRepository;
+use crate::notification::PgNotificationRepository;
+use crate::notification_template::PgNotificationTemplateRepository;
 use crate::oauth::{
     PgOAuthAccessTokenRepository, PgOAuthAuthorizationGrantRepository, PgOAuthClientRepository,
     PgOAuthDeviceCodeGrantRepository, PgOAuthRefreshTokenRepository, PgOAuthSessionGrantRepository,
@@ -56,11 +58,11 @@ use crate::oauth::{
 };
 use crate::organization_control::PgOrganizationControlRepository;
 use crate::personal::{PgPersonalAccessTokenRepository, PgPersonalSessionRepository};
-use crate::pg::telemetry::DB_CLIENT_CONNECTIONS_CREATE_TIME_HISTOGRAM;
 use crate::policy_data::PgPolicyDataRepository;
 use crate::queue::job::PgQueueJobRepository;
 use crate::queue::schedule::PgQueueScheduleRepository;
 use crate::queue::worker::PgQueueWorkerRepository;
+use crate::telemetry::DB_CLIENT_CONNECTIONS_CREATE_TIME_HISTOGRAM;
 use crate::upstream_oauth::{
     PgUpstreamOAuthLinkRepository, PgUpstreamOAuthProviderRepository,
     PgUpstreamOAuthSessionRepository,
@@ -155,7 +157,13 @@ impl PgRepository {
 
     /// Transform the repository into a type-erased [`BoxRepository`]
     pub fn boxed(self) -> BoxRepository {
-        Box::new(MapErr::new(self, RepositoryError::from_error))
+        Box::new(MapErr::new(self, |error: DatabaseError| {
+            if error.is_unique_violation() {
+                RepositoryError::from_unique_violation(error)
+            } else {
+                RepositoryError::from_error(error)
+            }
+        }))
     }
 
     /// Consume this [`PgRepository`], returning the underlying connection.

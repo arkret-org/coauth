@@ -16,7 +16,7 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::DatabaseError;
-use crate::pg::errors::DatabaseInconsistencyError;
+use crate::errors::DatabaseInconsistencyError;
 use crate::schema::{personal_access_tokens, personal_sessions};
 
 /// An implementation of [`PersonalSessionRepository`] for a PostgreSQL

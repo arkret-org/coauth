@@ -2,15 +2,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
-pub use crate::pg::policy_data::PgPolicyDataRepository;
 pub use crate::storage::policy_data::*;
 
 /// Dynamic policy payload consumed by the policy engine.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "schema",
-    derive(schemars::JsonSchema, salvo::oapi::ToSchema)
-)]
 #[serde(transparent)]
 pub struct PolicyDataDocument(serde_json::Value);
 

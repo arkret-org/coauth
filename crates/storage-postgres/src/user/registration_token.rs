@@ -10,7 +10,7 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::DatabaseInconsistencyError;
-use crate::pg::errors::DatabaseError;
+use crate::errors::DatabaseError;
 use crate::schema::user_registration_tokens;
 
 /// An implementation of

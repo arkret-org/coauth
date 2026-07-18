@@ -7,7 +7,7 @@ use super::*;
 #[tokio::test]
 async fn test_create() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -52,7 +52,7 @@ async fn test_create() {
 #[tokio::test]
 async fn test_create_auto_token() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -97,7 +97,7 @@ async fn test_create_auto_token() {
 #[tokio::test]
 async fn test_create_conflict() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -152,7 +152,7 @@ async fn test_create_conflict() {
 #[tokio::test]
 async fn test_get_token() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -211,7 +211,7 @@ async fn test_get_token() {
 #[tokio::test]
 async fn test_get_nonexistent_token() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();

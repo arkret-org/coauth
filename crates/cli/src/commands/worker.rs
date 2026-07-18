@@ -9,7 +9,8 @@ use coauth_backend::util::{
     test_mailer_in_background,
 };
 use coauth_config::{AppConfig, ConfigurationSection};
-use coauth_data::{PgRepositoryFactory, SystemClock, UrlBuilder};
+use coauth_data::{SystemClock, UrlBuilder};
+use coauth_storage_postgres::PgRepositoryFactory;
 use figment::Figment;
 use tracing::{info, info_span};
 

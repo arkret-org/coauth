@@ -128,6 +128,54 @@ macro_rules! select_user_columns {
     };
 }
 
+#[derive(Debug, Clone, Queryable)]
+pub(crate) struct UserRow {
+    id: Uuid,
+    localpart: String,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+    status: String,
+    locked_at: Option<DateTime<Utc>>,
+    deactivated_at: Option<DateTime<Utc>>,
+    can_request_admin: bool,
+    is_guest: bool,
+    display_name: Option<String>,
+    avatar_url: Option<String>,
+    preferred_locale: Option<String>,
+    handle_aliases: Vec<String>,
+}
+
+impl TryFrom<UserRow> for User {
+    type Error = DatabaseError;
+
+    fn try_from(row: UserRow) -> Result<Self, Self::Error> {
+        let id = Ulid::from(row.id);
+        let status = UserStatus::from_wire(&row.status).ok_or_else(|| {
+            DatabaseError::to_invalid_operation(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("unknown account status {:?}", row.status),
+            ))
+        })?;
+
+        Ok(Self {
+            id,
+            localpart: row.localpart,
+            sub: id.to_string(),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            status,
+            locked_at: row.locked_at,
+            deactivated_at: row.deactivated_at,
+            can_request_admin: row.can_request_admin,
+            is_guest: row.is_guest,
+            display_name: row.display_name,
+            avatar_url: row.avatar_url,
+            preferred_locale: row.preferred_locale,
+            handle_aliases: row.handle_aliases,
+        })
+    }
+}
+
 /// Insertable row for creating a new user
 #[derive(Insertable)]
 #[diesel(table_name = users)]
@@ -152,9 +200,11 @@ impl UserRepository for PgUserRepository<'_> {
         let res = users::table
             .find(Uuid::from(id))
             .select(select_user_columns!())
-            .first::<User>(self.conn)
+            .first::<UserRow>(self.conn)
             .await
-            .optional()?;
+            .optional()?
+            .map(TryInto::try_into)
+            .transpose()?;
 
         Ok(res)
     }
@@ -168,11 +218,15 @@ impl UserRepository for PgUserRepository<'_> {
     async fn find_by_handle(&mut self, handle: &str) -> Result<Option<User>, Self::Error> {
         use crate::lower;
 
-        let res: Vec<User> = users::table
+        let rows: Vec<UserRow> = users::table
             .filter(lower(users::localpart).eq(handle.to_lowercase()))
             .select(select_user_columns!())
             .load(self.conn)
             .await?;
+        let res = rows
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<User>, DatabaseError>>()?;
 
         match &res[..] {
             [user] => Ok(Some(user.clone())),
@@ -539,7 +593,12 @@ impl UserRepository for PgUserRepository<'_> {
             }
         }
 
-        let rows: Vec<User> = query.load(self.conn).await?;
+        let rows: Vec<User> = query
+            .load::<UserRow>(self.conn)
+            .await?
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, DatabaseError>>()?;
         let page = pagination.process(rows);
         Ok(page)
     }

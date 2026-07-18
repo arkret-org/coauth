@@ -583,7 +583,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_provider() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -631,7 +631,7 @@ mod tests {
     #[tokio::test]
     async fn test_not_found() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -763,7 +763,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_all_providers() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -857,7 +857,7 @@ mod tests {
     #[tokio::test]
     async fn test_filter_by_enabled_true() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -929,7 +929,7 @@ mod tests {
     #[tokio::test]
     async fn test_filter_by_enabled_false() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -982,7 +982,7 @@ mod tests {
     #[tokio::test]
     async fn test_pagination() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -1102,7 +1102,7 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_filter() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -1120,7 +1120,7 @@ mod tests {
     #[tokio::test]
     async fn test_count_parameter() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();

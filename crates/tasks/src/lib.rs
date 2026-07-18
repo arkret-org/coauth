@@ -16,11 +16,11 @@
 use std::sync::{Arc, LazyLock};
 
 use coauth_data::{
-    BoxRepository, Clock, PgRepositoryFactory, RepositoryError, RepositoryFactory, SiteConfig,
-    UrlBuilder,
+    BoxRepository, Clock, RepositoryError, RepositoryFactory, SiteConfig, UrlBuilder,
 };
 use coauth_messaging::NotificationCenter;
 use coauth_principal::ConnectorAdmin;
+use coauth_storage_postgres::PgRepositoryFactory;
 use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
 use new_queue::QueueRunnerError;

@@ -329,7 +329,7 @@ async fn issue_pre_registration_handoff_session_grant(
         handoff.audience.clone(),
         scopes,
         Some(&binding.principal_id),
-        Some(dpop.jkt),
+        dpop.jkt,
     )
     .map_err(map_session_grant_material_error)?;
     let persisted =

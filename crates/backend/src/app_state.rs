@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use coauth_config::ArkretConfig;
 use coauth_data::{
-    AppVersion, BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, PgRepositoryFactory,
-    RepositoryFactory, SiteConfig, SystemClock, UrlBuilder,
+    AppVersion, BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, RepositoryFactory,
+    SiteConfig, SystemClock, UrlBuilder,
 };
 use coauth_i18n::Translator;
 use coauth_keystore::{Encrypter, Keystore};
 use coauth_policy::{PolicyFactory, PolicyInstance};
 use coauth_principal::{ConnectorAdmin, ConnectorRegistry};
+use coauth_storage_postgres::PgRepositoryFactory;
 use coauth_templates::Templates;
 use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;

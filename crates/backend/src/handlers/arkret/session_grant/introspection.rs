@@ -20,14 +20,16 @@ fn introspection_grant_record(
 ) -> Result<SessionGrantIntrospectGrant, ArkretRouteError> {
     // `cnf.jkt` is not stored as its own column — it lives inside the signed
     // grant payload. Parse it back out of the persisted `grant_jwt` (the same
-    // way the refresh / logout paths read the prior grant's binding). A grant
-    // minted without DPoP binding has no `cnf`, so this stays `None`.
-    let parsed_payload = Jwt::<SessionGrantPayload>::try_from(grant.grant_jwt.as_str())
-        .ok()
-        .map(|jwt| jwt.payload().clone());
-    let cnf_jkt = parsed_payload
-        .as_ref()
-        .and_then(|payload| payload.cnf.as_ref().map(|cnf| cnf.jkt.clone()));
+    // way the refresh / logout paths read the prior grant's binding).
+    let parsed_jwt = Jwt::<SignedSessionGrantClaims>::try_from(grant.grant_jwt.as_str())
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    parsed_jwt.payload().validate().map_err(|error| {
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "stored session grant claims are invalid: {error}"
+        )))
+    })?;
+    let parsed_payload = parsed_jwt.payload().clone();
+    let cnf_jkt = Some(parsed_payload.cnf.jkt.clone());
     let service_account_id = browser_session
         .map(|session| session.user.id.to_string())
         .or_else(|| grant.browser_session_id.map(|id| id.to_string()))
@@ -37,11 +39,9 @@ fn introspection_grant_record(
         |id| format!("ak:session:{id}"),
     );
     let scope_details = parsed_payload
-        .as_ref()
-        .filter(|payload| !payload.scope_details.is_null())
-        .map(|payload| {
-            serde_json::from_value::<SessionGrantScopeDetails>(payload.scope_details.clone())
-        })
+        .scope_details
+        .clone()
+        .map(serde_json::from_value::<SessionGrantScopeDetails>)
         .transpose()
         .map_err(|error| {
             ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
@@ -82,9 +82,7 @@ fn introspection_grant_record(
         revocation_ref,
         session_public_key: grant.session_public_key.clone(),
         cnf_jkt,
-        proof_kind: parsed_payload
-            .as_ref()
-            .and_then(|payload| payload.proof_kind),
+        proof_kind: parsed_payload.proof_kind,
         scope_details,
         freshness_state: None,
     })
@@ -126,16 +124,6 @@ pub(crate) fn session_grant_jwt_hash(grant_jwt: &str) -> String {
         "sha256:{}",
         hex::encode(sha2::Sha256::digest(grant_jwt.as_bytes()))
     )
-}
-
-/// Whether the persisted grant carries a grant-binding confirmation key: a `cnf`
-/// confirmation claim inside the signed grant payload. A bound grant MUST NOT
-/// introspect as usable without a grant-binding DPoP proof; an unbound grant has no
-/// grant-bound confirmation key, so its grant-binding proof stays optional.
-fn session_grant_has_grant_binding(grant: &SessionGrant) -> bool {
-    Jwt::<SessionGrantPayload>::try_from(grant.grant_jwt.as_str())
-        .ok()
-        .is_some_and(|jwt| jwt.payload().cnf.is_some())
 }
 
 fn verify_session_grant_introspection_proof(
@@ -303,7 +291,7 @@ pub async fn introspect_session_grant(
             Some(proof) => {
                 status = verify_session_grant_introspection_proof(&grant, proof, clock.now());
             }
-            // A `cnf`-bound grant surfaces `proof_required` as an ADVISORY
+            // Every grant is `cnf`-bound and surfaces `proof_required` as an ADVISORY
             // signal: a stricter caller MAY re-introspect with a device-signed
             // grant-binding proof. But per `service-operation-dtos.schema.json`, the
             // default Principal Server grant+DPoP path does NOT require this
@@ -313,11 +301,9 @@ pub async fn introspect_session_grant(
             // only the advisory flag is raised. (Forcing `active=false` /
             // withholding metadata here broke every Principal Server session:
             // soland never reached its own DPoP check and read "not active".)
-            None if session_grant_has_grant_binding(&grant) => {
+            None => {
                 proof_required = true;
             }
-            // Unbound grant: the grant-binding proof is genuinely optional.
-            None => {}
         }
     }
     let mut active = status == SessionGrantIntrospectStatus::Active;
@@ -346,7 +332,7 @@ pub async fn introspect_session_grant(
     // `scope_details`; an agent grant without it (or whose authorization row
     // is gone) fails closed too.
     if active {
-        let parsed_payload = Jwt::<SessionGrantPayload>::try_from(grant.grant_jwt.as_str())
+        let parsed_payload = Jwt::<SignedSessionGrantClaims>::try_from(grant.grant_jwt.as_str())
             .ok()
             .map(|jwt| jwt.payload().clone());
         let is_agent_grant = parsed_payload.as_ref().is_some_and(|payload| {
@@ -364,7 +350,8 @@ pub async fn introspect_session_grant(
             let authorization_ref = parsed_payload.as_ref().and_then(|payload| {
                 payload
                     .scope_details
-                    .get("agent_key_authorization_ref")
+                    .as_ref()
+                    .and_then(|details| details.get("agent_key_authorization_ref"))
                     .and_then(serde_json::Value::as_str)
                     .map(ToOwned::to_owned)
             });

@@ -34,6 +34,7 @@ anyhow = {workspace = true}
 async-trait = {workspace = true}
 chrono = {workspace = true}
 coauth-data = {workspace = true}
+coauth-storage-postgres = {workspace = true}
 coauth-i18n = {workspace = true}
 coauth-messaging = {workspace = true}
 coauth-principal = {workspace = true}

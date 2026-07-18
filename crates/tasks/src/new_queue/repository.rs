@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
+use coauth_data::RepositoryAccess;
 use coauth_data::queue::Worker;
-use coauth_data::{PgRepository, RepositoryAccess};
+use coauth_storage_postgres::PgRepository;
 use tokio_util::sync::CancellationToken;
 
 use super::leader::ScheduleDefinition;

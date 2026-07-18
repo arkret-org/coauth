@@ -12,43 +12,25 @@ publish.workspace = true
 [lints]
 workspace = true
 
-[features]
-default = []
-# Enable JSON Schema + salvo OpenAPI derives on the shared domain types
-# (Circle capability grants). Backends turn this on so `#[salvo::endpoint]`
-# can populate the OpenAPI document; pure clients leave it off to avoid
-# pulling salvo + schemars.
-schema = ["dep:schemars", "dep:salvo"]
-
 [dependencies]
-anyhow = {workspace = true}
 async-trait = {workspace = true}
 chrono = {workspace = true}
 coauth-email-types = {workspace = true}
+coauth-data-model = {workspace = true}
 coauth-iana = {workspace = true}
 coauth-jose = {workspace = true}
 arkret-core = {workspace = true}
 crc = {workspace = true}
-diesel = {workspace = true}
-diesel-async = {workspace = true}
-diesel_migrations = {workspace = true}
 futures-util = {workspace = true}
-ipnetwork = {workspace = true}
 language-tags = {workspace = true}
 coauth-oauth-types = {workspace = true}
 opentelemetry = {workspace = true}
-opentelemetry-semantic-conventions = {workspace = true}
 rand_chacha = {workspace = true}
 rand_core = {workspace = true}
 regex = {workspace = true}
-salvo = {workspace = true,optional = true}
-schemars = {workspace = true,optional = true}
 serde = {workspace = true}
 serde_json = {workspace = true}
-sha2 = {workspace = true}
-subtle = {workspace = true}
 thiserror = {workspace = true}
-tokio = {workspace = true}
 tracing = {workspace = true}
 tracing-opentelemetry = {workspace = true}
 ulid = {workspace = true}

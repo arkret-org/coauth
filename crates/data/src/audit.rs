@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::Ulid;
-pub use crate::pg::audit::PgAuditRepository;
-pub use crate::pg::handle_audit::PgHandleAuditRepository;
 pub use crate::storage::audit::*;
 pub use crate::storage::handle_audit::{
     HandleAuditEventType, HandleAuditRepository, NewHandleAuditEvent,

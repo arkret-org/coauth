@@ -26,7 +26,7 @@ pub async fn logout_auth_session(
     // Reject malformed bodies, but do not require the row to still exist. The
     // operation is idempotent once a valid grant-shaped identifier is presented
     // by an authenticated service caller.
-    let _jwt: Jwt<'_, SessionGrantPayload> = Jwt::try_from(body.grant_jwt.as_str())
+    let _jwt: Jwt<'_, SignedSessionGrantClaims> = Jwt::try_from(body.grant_jwt.as_str())
         .map_err(|_| ArkretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
 
     Ok(Json(

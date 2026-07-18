@@ -42,8 +42,9 @@ use arkret_core::{
 };
 use chrono::Utc;
 use coauth_config::ArkretConfig;
-use coauth_data::{BoxRepositoryFactory, PgRepositoryFactory};
+use coauth_data::BoxRepositoryFactory;
 use coauth_keystore::Keystore;
+use coauth_storage_postgres::PgRepositoryFactory;
 use salvo::prelude::*;
 use serde_json::Value;
 

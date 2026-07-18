@@ -1006,7 +1006,7 @@ pub async fn debug_issue_dpop_grant(
         audience,
         scopes,
         Some(&principal_did),
-        Some(jkt.clone()),
+        jkt.clone(),
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 

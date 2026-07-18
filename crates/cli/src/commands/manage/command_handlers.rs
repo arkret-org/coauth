@@ -20,7 +20,8 @@ use coauth_data::queue::{
 use coauth_data::user::{
     BrowserSessionFilter, UserEmailRepository, UserFilter, UserPasswordRepository, UserRepository,
 };
-use coauth_data::{Clock, Pagination, PgRepository, RepositoryAccess, SystemClock};
+use coauth_data::{Clock, Pagination, RepositoryAccess, SystemClock};
+use coauth_storage_postgres::PgRepository;
 use figment::Figment;
 use rand_core::{RngCore, SeedableRng};
 use tracing::{error, info, info_span, warn};

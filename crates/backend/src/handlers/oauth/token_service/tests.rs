@@ -9,7 +9,7 @@ use coauth_config::ArkretConfig;
 use coauth_data::clock::MockClock;
 use coauth_data::oauth::{LocalizedClientMetadata, NewSessionGrant};
 use coauth_data::{
-    AuthorizationCode, Client, Clock, PgRepositoryFactory, Pkce, RefreshToken, RefreshTokenState,
+    AuthorizationCode, Client, Clock, Pkce, RefreshToken, RefreshTokenState,
     RepositoryFactory as _, SiteConfig, TokenType, UrlBuilder,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
@@ -22,6 +22,7 @@ use coauth_oauth_types::requests::{
 };
 use coauth_oauth_types::scope::{OPENID, Scope};
 use coauth_principal::ConnectorAdmin;
+use coauth_storage_postgres::PgRepositoryFactory;
 use coauth_templates::{SiteBranding, SiteFeatures, Templates};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
@@ -109,7 +110,7 @@ fn confidential_authorization_code_clients_do_not_require_pkce() {
 
 #[tokio::test]
 async fn authorization_code_openid_exchange_does_not_require_principal_did_row() {
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
 
@@ -282,7 +283,7 @@ impl RefreshFixture {
 }
 
 async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture> {
-    let pool = coauth_data::test_utils::setup_test_pool().await?;
+    let pool = coauth_storage_postgres::test_utils::setup_test_pool().await?;
 
     let factory = PgRepositoryFactory::new(pool);
     let clock = Arc::new(MockClock::default());

@@ -2,7 +2,9 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::notification::{NotificationChannel, NotificationTemplateVersion};
+use coauth_data::notification::{
+    NotificationChannel, NotificationTemplateRepository, NotificationTemplateVersion,
+};
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -11,7 +13,6 @@ use uuid::Uuid;
 
 use crate::DatabaseError;
 use crate::schema::notification_template_versions;
-use crate::storage::notification_template::NotificationTemplateRepository;
 
 /// PostgreSQL-backed notification template version repository.
 pub struct PgNotificationTemplateRepository<'c> {

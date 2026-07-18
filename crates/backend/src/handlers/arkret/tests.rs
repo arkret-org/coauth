@@ -1,6 +1,6 @@
 use arkret_core::{
     Did, SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_TYPE, SessionGrantIntrospectStatus,
-    SessionGrantIntrospectionProofClaims,
+    SessionGrantIntrospectionProofClaims, SignedSessionGrantClaims,
 };
 use chrono::{Duration, Utc};
 use coauth_config::{
@@ -722,13 +722,13 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
     )
     .unwrap();
 
-    let jwt = Jwt::<SessionGrantPayload>::try_from(grant.grant_jwt.as_str()).unwrap();
+    let jwt = Jwt::<SignedSessionGrantClaims>::try_from(grant.grant_jwt.as_str()).unwrap();
     jwt.verify_with_jwks(&key_store.public_jwks()).unwrap();
 
     let payload = jwt.payload();
     assert_eq!(payload.kind, "ak.session.grant");
     assert_eq!(payload.grant_id, grant.grant_id);
-    assert_eq!(payload.subject, principal_did);
+    assert_eq!(payload.subject.as_str(), principal_did);
     assert_eq!(
         payload.audience,
         required_audience_for(&url_builder, &arkret_config)
@@ -748,12 +748,12 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
     );
     let raw_payload = jwt_payload_value(&grant.grant_jwt);
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
-    assert_subject_did_occurs_once(&raw_payload, &payload.subject);
+    assert_subject_did_occurs_once(&raw_payload, payload.subject.as_str());
     assert!(
         raw_payload.get("session_public_key").is_none(),
         "session grant JWT must bind grant-binding keys with cnf.jkt, not inline the full JWK"
     );
-    assert!(raw_payload.get("cnf").is_none());
+    assert_eq!(raw_payload["cnf"]["jkt"], "test-grant-binding-jkt");
     assert!(
         grant
             .session_public_key
@@ -845,7 +845,7 @@ fn session_grant_uses_configured_ttl() {
     )
     .unwrap();
 
-    let jwt = Jwt::<SessionGrantPayload>::try_from(grant.grant_jwt.as_str()).unwrap();
+    let jwt = Jwt::<SignedSessionGrantClaims>::try_from(grant.grant_jwt.as_str()).unwrap();
     let payload = jwt.payload();
     assert_eq!(
         payload.expires_at - payload.not_before,
@@ -1048,7 +1048,7 @@ fn session_grant_introspection_proof(
 #[tokio::test]
 async fn session_grant_http_list_and_filter_work() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -1096,7 +1096,7 @@ async fn session_grant_http_list_and_filter_work() {
 #[tokio::test]
 async fn session_grant_http_introspection_returns_minimal_metadata() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -1115,7 +1115,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let body: serde_json::Value = response.json();
     assert_eq!(body["active"], true);
     assert_eq!(body["status"], "active");
-    assert_eq!(body["proof_required"], false);
+    assert_eq!(body["proof_required"], true);
     // Introspection is READ-ONLY: it MUST NOT consume the grant (consumption /
     // single-use rotation is the refresh endpoint's job). So one_time_use is
     // never reported as already-consumed here, and a follow-up introspect of
@@ -1132,9 +1132,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
         body["grant"]["session_public_key"],
         grant.session_public_key
     );
-    // This grant was seeded without a DPoP binding (`issue_session_grant`
-    // passes no `dpop_jkt`), so it has no `cnf` and `cnf_jkt` is omitted.
-    assert!(body["grant"].get("cnf_jkt").is_none());
+    assert_eq!(body["grant"]["cnf_jkt"], "test-grant-binding-jkt");
 
     // A second introspection of the same grant: still active (read-only — the
     // first call did not revoke it).
@@ -1150,7 +1148,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let body: serde_json::Value = response.json();
     assert_eq!(body["active"], true);
     assert_eq!(body["status"], "active");
-    assert_eq!(body["proof_required"], false);
+    assert_eq!(body["proof_required"], true);
     assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
 
     let challenge = format!("introspect-{}", grant.grant_id);
@@ -1195,7 +1193,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
 #[tokio::test]
 async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -1229,7 +1227,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         required_audience_for(&state.url_builder, &grant_config),
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
         None,
-        Some(bound_jkt.clone()),
+        bound_jkt.clone(),
     )
     .unwrap();
     let raw_payload = jwt_payload_value(&material.grant_jwt);
@@ -1296,7 +1294,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
 #[tokio::test]
 async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -1391,7 +1389,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
 #[tokio::test]
 async fn session_grant_introspection_rejects_ambiguous_selector() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -1434,7 +1432,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
 #[tokio::test]
 async fn session_grant_http_revoke_updates_followup_introspection() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -1468,7 +1466,7 @@ async fn session_grant_http_revoke_updates_followup_introspection() {
 #[tokio::test]
 async fn primary_handle_patch_validates_claims() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let state = TestState::from_pool(pool.clone()).await.unwrap();

@@ -28,7 +28,7 @@ impl Options {
         let pool = diesel_pool_from_config(&config).await?;
 
         // Run pending migrations
-        coauth_data::migrate(&pool, &db_url)
+        coauth_storage_postgres::migrate(&pool, &db_url)
             .await
             .context("could not run migrations")?;
 

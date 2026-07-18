@@ -7,12 +7,58 @@
 //! tooling MUST NOT grant umbrella strings such as `ak.pin.*`.
 
 use chrono::{DateTime, Utc};
-pub use coauth_data::circle_capability::RiskTier;
-pub use coauth_data::collaboration_capability::{
-    CapabilityCategory, CollaborationCapabilityAction, CollaborationCapabilityGrant,
-    ParseCollaborationCapabilityActionError,
+pub use coauth_data_model::{
+    CapabilityCategory, CollaborationCapabilityAction, ParseCollaborationCapabilityActionError,
+    RiskTier,
 };
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "schema",
+    derive(schemars::JsonSchema, salvo::oapi::ToSchema)
+)]
+pub struct CollaborationCapabilityGrant {
+    pub id: String,
+    pub capability_grant_id: String,
+    pub grant_event_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revoke_event_id: Option<String>,
+    pub subject: String,
+    pub realm_id: String,
+    pub action: CollaborationCapabilityAction,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_evidence_ref: Option<String>,
+    pub granted_by: String,
+    pub granted_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revoked_at: Option<DateTime<Utc>>,
+    pub grant_raw_payload_digest: String,
+    pub grant_fanout_idempotency_key: String,
+}
+
+impl From<coauth_data_model::CollaborationCapabilityGrant> for CollaborationCapabilityGrant {
+    fn from(value: coauth_data_model::CollaborationCapabilityGrant) -> Self {
+        Self {
+            id: value.id,
+            capability_grant_id: value.capability_grant_id,
+            grant_event_id: value.grant_event_id,
+            revoke_event_id: value.revoke_event_id,
+            subject: value.subject,
+            realm_id: value.realm_id,
+            action: value.action,
+            expires_at: value.expires_at,
+            approval_evidence_ref: value.approval_evidence_ref,
+            granted_by: value.granted_by,
+            granted_at: value.granted_at,
+            revoked_at: value.revoked_at,
+            grant_raw_payload_digest: value.grant_raw_payload_digest,
+            grant_fanout_idempotency_key: value.grant_fanout_idempotency_key,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(

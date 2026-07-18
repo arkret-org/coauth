@@ -11,6 +11,11 @@ use diesel_async::pooled_connection::deadpool::Pool;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 
+diesel::define_sql_function! {
+    /// SQL `lower()` function for case-insensitive text comparisons.
+    fn lower(x: diesel::sql_types::Text) -> diesel::sql_types::Text;
+}
+
 /// PostgreSQL account aggregate repositories.
 pub mod account;
 pub mod account_handoff;
@@ -60,7 +65,7 @@ pub(crate) mod telemetry;
 /// Test utilities for creating temporary test databases.
 ///
 /// This module is always compiled (not `#[cfg(test)]`) so that other crates
-/// can use `coauth_data::test_utils::setup_test_pool()` in their own
+/// can use `coauth_storage_postgres::test_utils::setup_test_pool()` in their own
 /// test code.
 pub mod test_utils;
 

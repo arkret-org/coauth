@@ -1,11 +1,12 @@
 use std::error::Error as StdError;
 use std::fmt;
 use std::future::Future;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use arkret_network_policy::{AddressClass, OutboundPolicy};
 use futures_util::FutureExt as _;
 use headers::{ContentLength, HeaderMapExt as _, UserAgent};
 use hyper_util::client::legacy::connect::HttpInfo;
@@ -33,7 +34,6 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use crate::telemetry::METER;
 
 static USER_AGENT: &str = concat!("coauth/", env!("CARGO_PKG_VERSION"));
-const COAUTH_OUTBOUND_HTTP_PRIVATE_ALLOWLIST: &str = "COAUTH_OUTBOUND_HTTP_PRIVATE_ALLOWLIST";
 
 static HTTP_REQUESTS_DURATION_HISTOGRAM: std::sync::LazyLock<Histogram<u64>> =
     std::sync::LazyLock::new(|| {
@@ -171,37 +171,21 @@ impl reqwest::dns::Resolve for TracingResolver {
                 );
             }
         };
-        if !private_networks_allowed() {
-            if private_egress_target_allowed(&requested_name) {
-                let mut inner = self.inner.clone();
-                return Box::pin(
-                    inner
-                        .call(parsed_name)
-                        .map(move |result| {
-                            let addrs =
-                                result.map_err(|err| -> Box<dyn StdError + Send + Sync> {
-                                    Box::new(err)
-                                })?;
-                            let addrs: Vec<SocketAddr> = addrs.collect();
-                            Ok(Box::new(addrs.into_iter()) as reqwest::dns::Addrs)
-                        })
-                        .instrument(span),
-                );
-            }
-            if let Some(reason) = blocked_domain_reason(&requested_name, false) {
-                return Box::pin(async move {
-                    Err(Box::new(BlockedEgressTarget::new(requested_name, reason))
-                        as Box<dyn StdError + Send + Sync>)
-                });
-            }
-            if let Ok(ip) = requested_name.parse::<IpAddr>()
-                && let Some(reason) = blocked_ip_reason(ip, false)
-            {
-                return Box::pin(async move {
-                    Err(Box::new(BlockedEgressTarget::new(requested_name, reason))
-                        as Box<dyn StdError + Send + Sync>)
-                });
-            }
+        if let Some(reason) = blocked_domain_reason(&requested_name, false) {
+            return Box::pin(async move {
+                Err(Box::new(BlockedEgressTarget::new(requested_name, reason))
+                    as Box<dyn StdError + Send + Sync>)
+            });
+        }
+        if let Ok(ip) = requested_name.parse::<IpAddr>()
+            && let Err(error) = OutboundPolicy::public_https().validate_ip(ip)
+        {
+            return Box::pin(async move {
+                Err(
+                    Box::new(BlockedEgressTarget::new(requested_name, error.to_string()))
+                        as Box<dyn StdError + Send + Sync>,
+                )
+            });
         }
         let mut inner = self.inner.clone();
         Box::pin(
@@ -222,14 +206,14 @@ impl reqwest::dns::Resolve for TracingResolver {
 #[derive(Debug)]
 struct BlockedEgressTarget {
     target: String,
-    reason: &'static str,
+    reason: String,
 }
 
 impl BlockedEgressTarget {
-    fn new(target: impl Into<String>, reason: &'static str) -> Self {
+    fn new(target: impl Into<String>, reason: impl Into<String>) -> Self {
         Self {
             target: target.into(),
-            reason,
+            reason: reason.into(),
         }
     }
 }
@@ -250,198 +234,49 @@ fn enforce_resolved_egress_policy(
     host: &str,
     addrs: &[SocketAddr],
 ) -> Result<(), Box<dyn StdError + Send + Sync>> {
-    if private_networks_allowed() {
-        return Ok(());
-    }
-
-    if private_egress_target_allowed(host) {
-        return Ok(());
-    }
-
     if let Some(reason) = blocked_domain_reason(host, false) {
         return Err(Box::new(BlockedEgressTarget::new(host, reason)));
     }
-
-    for addr in addrs {
-        if let Some(reason) = blocked_ip_reason(addr.ip(), false) {
-            return Err(Box::new(BlockedEgressTarget::new(
-                format!("{} ({})", host, addr.ip()),
-                reason,
-            )));
-        }
-    }
-
-    Ok(())
+    OutboundPolicy::public_https()
+        .validate_resolved_addresses(addrs)
+        .map_err(|error| Box::new(error) as Box<dyn StdError + Send + Sync>)
 }
 
 pub(crate) fn enforce_outbound_url_policy(
     url: &url::Url,
 ) -> Result<(), Box<dyn StdError + Send + Sync>> {
-    if private_networks_allowed() {
-        return Ok(());
-    }
-
-    let host = url
-        .host_str()
-        .ok_or_else(|| Box::new(BlockedEgressTarget::new(url.as_str(), "missing host")))?;
-    if private_egress_target_allowed(host) {
-        return Ok(());
-    }
-    if let Some(reason) = blocked_domain_reason(host, false) {
-        return Err(Box::new(BlockedEgressTarget::new(host, reason)));
-    }
-    let ip = match url.host() {
-        Some(url::Host::Ipv4(ip)) => Some(IpAddr::V4(ip)),
-        Some(url::Host::Ipv6(ip)) => Some(IpAddr::V6(ip)),
-        _ => None,
-    };
-    if let Some(ip) = ip
-        && let Some(reason) = blocked_ip_reason(ip, false)
-    {
-        return Err(Box::new(BlockedEgressTarget::new(ip.to_string(), reason)));
-    }
-    Ok(())
-}
-
-fn private_networks_allowed() -> bool {
-    if env_flag_enabled("COAUTH_OUTBOUND_HTTP_DENY_PRIVATE") {
-        return false;
-    }
-    // COA-SEC-01: private/cloud-metadata egress is allowed ONLY when explicitly
-    // opted in via env flag. Previously `cfg!(debug_assertions)` defaulted debug
-    // builds to allow, silently disabling SSRF protection for the whole
-    // private/loopback/link-local/metadata range whenever a debug image was
-    // (mis)deployed. debug and release now behave identically: deny by default.
-    env_flag_enabled("COAUTH_OUTBOUND_HTTP_ALLOW_PRIVATE")
-        || env_flag_enabled("COAUTH_ALLOW_PRIVATE_EGRESS")
-}
-
-fn env_flag_enabled(name: &str) -> bool {
-    coauth_config::runtime_var(name).is_ok_and(|value| {
-        let value = value.trim();
-        !(value.is_empty()
-            || value.eq_ignore_ascii_case("0")
-            || value.eq_ignore_ascii_case("false")
-            || value.eq_ignore_ascii_case("no"))
-    })
-}
-
-fn private_egress_target_allowed(host: &str) -> bool {
-    coauth_config::runtime_var(COAUTH_OUTBOUND_HTTP_PRIVATE_ALLOWLIST)
-        .ok()
-        .is_some_and(|raw| target_allowed_by_private_allowlist(host, &raw))
-}
-
-fn target_allowed_by_private_allowlist(host: &str, raw: &str) -> bool {
-    let host = host.trim_end_matches('.').to_ascii_lowercase();
-    raw.split([',', ';', '\n'])
-        .map(|entry| entry.trim().trim_end_matches('.').to_ascii_lowercase())
-        .filter(|entry| !entry.is_empty())
-        .any(|entry| {
-            let entry = entry
-                .strip_prefix("host:")
-                .or_else(|| entry.strip_prefix("domain:"))
-                .unwrap_or(entry.as_str());
-            if let Some(domain) = entry.strip_prefix("*.") {
-                host.ends_with(&format!(".{domain}"))
-            } else {
-                host == entry
-            }
-        })
+    OutboundPolicy::public_https()
+        .validate_url(url)
+        .map_err(|error| Box::new(error) as Box<dyn StdError + Send + Sync>)
 }
 
 pub(crate) fn blocked_domain_reason(host: &str, allow_loopback: bool) -> Option<&'static str> {
-    let host = host.trim_end_matches('.').to_ascii_lowercase();
-    if (host == "localhost" || host.ends_with(".localhost")) && !allow_loopback {
-        return Some("localhost names are not routable outbound targets");
+    let reason = arkret_network_policy::classify_host(host)?;
+    if allow_loopback && reason == "localhost name" {
+        return None;
     }
-    if matches!(
-        host.rsplit_once('.').map(|(_, suffix)| suffix),
-        Some("local" | "internal")
-    ) {
-        return Some("internal-only DNS suffix");
-    }
-    if host == "metadata.google.internal" {
-        return Some("cloud metadata hostname");
-    }
-    None
+    Some(reason)
 }
 
 pub(crate) fn blocked_ip_reason(ip: IpAddr, allow_loopback: bool) -> Option<&'static str> {
-    match ip {
-        IpAddr::V4(addr) => blocked_ipv4_reason(addr, allow_loopback),
-        IpAddr::V6(addr) => blocked_ipv6_reason(addr, allow_loopback),
+    let class = arkret_network_policy::classify_ip(ip)?;
+    if allow_loopback && class == AddressClass::Loopback {
+        return None;
     }
-}
-
-fn blocked_ipv4_reason(addr: Ipv4Addr, allow_loopback: bool) -> Option<&'static str> {
-    let octets = addr.octets();
-    if octets[0] == 0 {
-        return Some("this-network IPv4 range");
-    }
-    if octets[0] == 10
-        || (octets[0] == 172 && (16..=31).contains(&octets[1]))
-        || (octets[0] == 192 && octets[1] == 168)
-    {
-        return Some("private IPv4 range");
-    }
-    if octets[0] == 127 && !allow_loopback {
-        return Some("loopback IPv4 range");
-    }
-    if octets[0] == 169 && octets[1] == 254 {
-        return Some("link-local IPv4 range");
-    }
-    if octets[0] == 100 && (64..=127).contains(&octets[1]) {
-        return Some("carrier-grade NAT IPv4 range");
-    }
-    if octets[0] == 192 && octets[1] == 0 && octets[2] == 0 {
-        return Some("IETF protocol-assignment IPv4 range");
-    }
-    if octets[0] == 192 && octets[1] == 0 && octets[2] == 2 {
-        return Some("documentation IPv4 range");
-    }
-    if octets[0] == 198 && (octets[1] == 18 || octets[1] == 19) {
-        return Some("benchmark IPv4 range");
-    }
-    if octets[0] == 198 && octets[1] == 51 && octets[2] == 100 {
-        return Some("documentation IPv4 range");
-    }
-    if octets[0] == 203 && octets[1] == 0 && octets[2] == 113 {
-        return Some("documentation IPv4 range");
-    }
-    if (224..=239).contains(&octets[0]) {
-        return Some("multicast IPv4 range");
-    }
-    if octets[0] >= 240 {
-        return Some("reserved IPv4 range");
-    }
-    if addr == Ipv4Addr::BROADCAST {
-        return Some("broadcast IPv4 address");
-    }
-    None
-}
-
-fn blocked_ipv6_reason(addr: Ipv6Addr, allow_loopback: bool) -> Option<&'static str> {
-    let segments = addr.segments();
-    if addr.is_unspecified() {
-        return Some("unspecified IPv6 address");
-    }
-    if addr.is_loopback() && !allow_loopback {
-        return Some("loopback IPv6 address");
-    }
-    if segments[0] & 0xfe00 == 0xfc00 {
-        return Some("unique-local IPv6 range");
-    }
-    if segments[0] & 0xffc0 == 0xfe80 {
-        return Some("link-local IPv6 range");
-    }
-    if segments[0] & 0xff00 == 0xff00 {
-        return Some("multicast IPv6 range");
-    }
-    if segments[0] == 0x2001 && segments[1] == 0x0db8 {
-        return Some("documentation IPv6 range");
-    }
-    None
+    Some(match class {
+        AddressClass::Unspecified => "unspecified address",
+        AddressClass::Loopback => "loopback address",
+        AddressClass::Private => "private address",
+        AddressClass::LinkLocal => "link-local address",
+        AddressClass::CarrierGradeNat => "carrier-grade NAT address",
+        AddressClass::Benchmark => "benchmark address",
+        AddressClass::ProtocolAssignment => "protocol-assignment address",
+        AddressClass::Documentation => "documentation address",
+        AddressClass::Multicast => "multicast address",
+        AddressClass::Reserved => "reserved address",
+        AddressClass::Broadcast => "broadcast address",
+        _ => "non-public address",
+    })
 }
 
 /// Create a new [`reqwest::Client`] with sane parameters.
@@ -481,6 +316,7 @@ fn reqwest_client_builder() -> reqwest::ClientBuilder {
         rustls::ClientConfig::with_platform_verifier().expect("failed to create TLS config");
 
     reqwest::Client::builder()
+        .https_only(true)
         .dns_resolver(Arc::new(TracingResolver::new()))
         .use_preconfigured_tls(tls_config)
         .redirect(reqwest::redirect::Policy::none())
@@ -774,8 +610,7 @@ mod tests {
 
     use super::{
         OutboundRequestPolicy, blocked_domain_reason, blocked_ip_reason,
-        enforce_outbound_url_policy, private_networks_allowed, send_with_policy,
-        target_allowed_by_private_allowlist, telemetry_url,
+        enforce_outbound_url_policy, send_with_policy, telemetry_url,
     };
 
     fn install_crypto_provider() {
@@ -791,26 +626,6 @@ mod tests {
         assert!(blocked_domain_reason("api.internal", false).is_some());
         assert!(blocked_domain_reason("metadata.google.internal", false).is_some());
         assert!(blocked_domain_reason("example.com", false).is_none());
-    }
-
-    #[test]
-    fn private_egress_allowlist_matches_exact_and_wildcard_hosts() {
-        let raw = "host:soland.internal,*.svc.cluster.local,10.10.20.30";
-
-        assert!(target_allowed_by_private_allowlist("soland.internal", raw));
-        assert!(target_allowed_by_private_allowlist(
-            "coauth.auth.svc.cluster.local",
-            raw
-        ));
-        assert!(target_allowed_by_private_allowlist("10.10.20.30", raw));
-        assert!(!target_allowed_by_private_allowlist(
-            "metadata.google.internal",
-            raw
-        ));
-        assert!(!target_allowed_by_private_allowlist(
-            "evilsoland.internal",
-            raw
-        ));
     }
 
     #[test]
@@ -836,13 +651,16 @@ mod tests {
 
     #[test]
     fn outbound_url_policy_blocks_ip_literals_that_bypass_dns_resolution() {
-        if private_networks_allowed() {
-            return;
-        }
         for raw in [
+            "http://8.8.8.8/jwks",
             "https://169.254.169.254/latest/meta-data/",
             "https://127.0.0.1/jwks",
             "https://[::1]/jwks",
+            "https://198.18.0.1/jwks",
+            "https://192.0.2.1/jwks",
+            "https://[64:ff9b::a9fe:a9fe]/jwks",
+            "https://[2002:0a00:0001::]/jwks",
+            "https://[2001:0000:7f00:0001:0000:0000:3f57:fefe]/jwks",
         ] {
             let url = url::Url::parse(raw).unwrap();
             assert!(

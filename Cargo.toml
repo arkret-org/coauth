@@ -99,6 +99,8 @@ coauth-admin-types = {version = "=0.3.0",path = "crates/admin-types"}
 coauth-backend = {version = "=0.3.0",path = "crates/backend"}
 coauth-config = {version = "=0.3.0",path = "crates/config"}
 coauth-data = {version = "=0.3.0",path = "crates/data"}
+coauth-data-model = {version = "=0.3.0",path = "crates/data-model"}
+coauth-storage-postgres = {version = "=0.3.0",path = "crates/storage-postgres"}
 coauth-email-types = {version = "=0.3.0",path = "crates/email-types"}
 coauth-frontend = {version = "=0.3.0",path = "crates/frontend"}
 coauth-i18n = {version = "=0.3.0",path = "crates/i18n"}
@@ -123,6 +125,7 @@ arkret-crypto = {version = "0.3.0",path = "../arkret-rust-sdk/crates/crypto",def
 # what `arkret-core` already pulls in). Used by `coauth-config` for the
 # `ak:trust_domain:<scope>` wire-form check so config and SDK never drift.
 arkret-identifiers = {version = "0.3.0",path = "../arkret-rust-sdk/crates/identifiers",default-features = false}
+arkret-network-policy = {version = "0.3.0",path = "../arkret-rust-sdk/crates/network-policy",default-features = false}
 arkret-signatures = {version = "0.3.0",path = "../arkret-rust-sdk/crates/signatures",default-features = false,features = ["signer"]}
 arkret-state = {version = "0.3.0",path = "../arkret-rust-sdk/crates/state",default-features = false}
 console = "0.16.3"

@@ -61,6 +61,7 @@ fn data_example() -> serde_json::Value {
 #[serde(rename = "SetPolicyDataRequestBody")]
 pub struct SetPolicyDataRequestBody {
     #[schemars(example = data_example())]
+    #[schemars(with = "serde_json::Value")]
     pub data: PolicyDataDocument,
 }
 
@@ -127,7 +128,7 @@ mod tests {
     #[tokio::test]
     async fn test_get() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -179,7 +180,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_not_found() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -205,7 +206,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_latest() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -256,7 +257,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_no_latest() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -282,7 +283,7 @@ mod tests {
     #[tokio::test]
     async fn test_create() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();

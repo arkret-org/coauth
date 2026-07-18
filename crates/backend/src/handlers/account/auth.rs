@@ -435,7 +435,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     grant_target.audience.clone(),
                     oidc_bridge::principal_session_grant_scopes(device_id.as_str()),
                     Some(principal_did.as_str()),
-                    Some(dpop_binding.jkt),
+                    dpop_binding.jkt,
                 )
                 .map_err(|error| RouteError::Internal(Box::new(error)))?;
 

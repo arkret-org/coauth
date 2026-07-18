@@ -242,9 +242,11 @@ async fn load_session_lookup(
     let user_row = users::table
         .filter(users::id.eq(session_row.user_id))
         .select(select_user_columns!())
-        .first::<User>(conn)
+        .first::<super::UserRow>(conn)
         .await
-        .optional()?;
+        .optional()?
+        .map(TryInto::try_into)
+        .transpose()?;
 
     let Some(user_row) = user_row else {
         return Ok(None);
@@ -417,8 +419,11 @@ impl BrowserSessionRepository for PgBrowserSessionRepository<'_> {
         let user_rows: Vec<User> = users::table
             .filter(users::id.eq_any(&user_ids))
             .select(select_user_columns!())
-            .load(self.conn)
-            .await?;
+            .load::<super::UserRow>(self.conn)
+            .await?
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, DatabaseError>>()?;
 
         let user_map: std::collections::HashMap<Uuid, User> = user_rows
             .into_iter()

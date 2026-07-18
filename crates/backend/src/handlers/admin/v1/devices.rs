@@ -544,7 +544,7 @@ mod tests {
     #[tokio::test]
     async fn device_inventory_lists_and_revokes_persisted_session_grant_devices() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();

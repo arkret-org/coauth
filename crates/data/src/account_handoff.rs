@@ -3,7 +3,6 @@
 use chrono::{DateTime, Utc};
 
 use crate::Ulid;
-pub use crate::pg::account_handoff::PgAccountHandoffRepository;
 pub use crate::storage::account_handoff::AccountHandoffRepository;
 
 #[derive(Clone)]

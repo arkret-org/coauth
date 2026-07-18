@@ -159,8 +159,7 @@ factory. The factory installs:
 - rustls platform certificate verification;
 - no redirects and no proxy inheritance;
 - a DNS resolver that rejects localhost, private, link-local, multicast,
-  documentation, and cloud metadata targets unless private egress is explicitly
-  enabled;
+  documentation, and cloud metadata targets;
 - request and connect timeouts;
 - OpenTelemetry client spans and metrics.
 
@@ -171,19 +170,13 @@ OIDC discovery and JWKS fetches use this shared client and reject response
 bodies above 1 MiB. This prevents a malicious or misconfigured upstream from
 turning metadata refresh into an unbounded memory sink.
 
-Private-network egress is denied in release builds by default. The escape
-hatches are intentionally explicit:
-
-- `COAUTH_OUTBOUND_HTTP_DENY_PRIVATE=1` forces denial even in debug builds.
-- `COAUTH_OUTBOUND_HTTP_PRIVATE_ALLOWLIST` allows exact hosts, exact IP
-  literals, or wildcard DNS suffixes such as
-  `host:soland.internal,10.10.20.30,*.svc.cluster.local` without disabling SSRF
-  checks for every destination.
-- `COAUTH_OUTBOUND_HTTP_ALLOW_PRIVATE=1` or
-  `COAUTH_ALLOW_PRIVATE_EGRESS=1` allows private egress for controlled
-  deployments; prefer the narrower allow-list above.
+Private-network egress is denied in all builds. The shared client intentionally
+has no process-wide private-network escape hatch because a hostname-only allow
+list cannot express the purpose, service identity, CIDR, port, expiry, and audit
+requirements of a controlled-network exception.
 
 Prefer public, routable service endpoints for upstream OIDC, starid, soland
 webvh registration, and policy frontier calls. If a deployment truly needs
-private service URLs, document the target service, owner, and expected CIDR in
-the cluster egress policy before enabling the escape hatch.
+private service URLs, route them through a dedicated egress proxy whose policy
+binds the target service identity, trust domain, CIDR, port, expiry, and audit
+record.

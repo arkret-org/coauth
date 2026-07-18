@@ -1,8 +1,7 @@
-use arkret_core::{GrantId, SessionGrantProofKind};
+use arkret_core::GrantId;
 use chrono::{DateTime, Utc};
 use coauth_data::SessionGrant;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 #[derive(Debug, Clone)]
 pub struct SessionGrantMaterial {
@@ -28,38 +27,6 @@ pub(crate) struct SessionGrantTarget {
     pub audience: String,
     pub principal_server_name: Option<String>,
     pub principal_server_endpoint: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionGrantPayload {
-    #[serde(rename = "type")]
-    pub kind: String,
-    pub grant_id: GrantId,
-    pub subject: String,
-    pub audience: String,
-    pub scopes: Vec<String>,
-    pub not_before: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>,
-    pub session_id: String,
-    /// RFC 9449 §6 confirmation — when the grant was issued bound to a
-    /// DPoP proof, `cnf.jkt` carries the RFC 7638 SHA-256 thumbprint
-    /// (base64url) of the proof's public key. The refresh path requires
-    /// any follow-up proof to recompute the same thumbprint.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cnf: Option<SessionGrantConfirmation>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub proof_kind: Option<SessionGrantProofKind>,
-    #[serde(default, skip_serializing_if = "Value::is_null")]
-    pub scope_details: Value,
-}
-
-/// RFC 9449 / RFC 7800 confirmation claim, carrying the JWK thumbprint
-/// that binds an access token (here a session grant) to the grant-binding key's
-/// proof-of-possession key.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionGrantConfirmation {
-    /// `jkt` — base64url SHA-256 JWK thumbprint per RFC 7638.
-    pub jkt: String,
 }
 
 #[derive(Debug, Serialize)]

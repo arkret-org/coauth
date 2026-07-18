@@ -11,7 +11,7 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::DatabaseError;
-use crate::pg::errors::DatabaseInconsistencyError;
+use crate::errors::DatabaseInconsistencyError;
 use crate::schema::oauth_device_code_grant;
 
 /// An implementation of [`OAuthDeviceCodeGrantRepository`] for a PostgreSQL

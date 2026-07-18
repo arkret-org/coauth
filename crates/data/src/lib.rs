@@ -1,8 +1,10 @@
-//! Core data model types for the coauth authentication service.
+//! Storage-neutral domain types and persistence ports for the coauth
+//! authentication service.
 //!
-//! This crate defines the domain objects that are persisted in the database
-//! and shared across the application. Types here are storage-backend agnostic —
-//! they describe *what* is stored, not *how*.
+//! Storage-neutral models shared with API contracts belong in
+//! `coauth-data-model`. This crate re-exports those models where existing
+//! repository ports use them. Diesel schema, migrations, and PostgreSQL
+//! implementations live in `coauth-storage-postgres`.
 //!
 //! # Main type categories
 //!
@@ -23,17 +25,8 @@
 #![allow(clippy::module_name_repetitions)]
 
 extern crate self as coauth_data;
-extern crate self as coauth_data_model;
-extern crate self as coauth_storage;
-extern crate self as coauth_storage_pg;
 
 use thiserror::Error;
-
-// Define `lower()` as a SQL function for Diesel (Diesel doesn't ship one).
-diesel::define_sql_function! {
-    /// SQL `lower()` function for case-insensitive text comparisons
-    fn lower(x: diesel::sql_types::Text) -> diesel::sql_types::Text;
-}
 
 /// Unified contact points and external identity bindings for user accounts.
 pub mod account;
@@ -43,7 +36,7 @@ pub mod account_handoff;
 pub mod accountability;
 /// Durable agent key authorizations + agent-key-proof replay table (AKP-0008).
 pub mod agent_key;
-/// App session repositories and PostgreSQL implementations.
+/// App session models and repository ports.
 pub mod app_session;
 /// Admin operation logs and account security event models.
 pub mod audit;
@@ -64,12 +57,10 @@ pub mod oauth;
 pub mod organization_control;
 /// Personal access token types.
 pub mod personal;
-/// PostgreSQL storage backend implementation details.
-pub mod pg;
 pub mod policy_data;
 /// Post-authentication action types.
 pub mod post_auth_action;
-/// Queue repositories and PostgreSQL implementations.
+/// Queue models and repository ports.
 pub mod queue;
 mod site_config;
 /// Storage repository abstractions and pagination helpers.
@@ -80,7 +71,7 @@ pub mod strand;
 pub(crate) mod tokens;
 pub mod upstream_oauth;
 mod url_builder;
-/// User domain types, repositories, and PostgreSQL implementations.
+/// User domain types and repository ports.
 pub mod user;
 pub(crate) mod user_agent;
 pub(crate) mod users;
@@ -96,10 +87,6 @@ pub struct InvalidTransitionError;
 
 pub use ulid::Ulid;
 
-pub use self::pg::{
-    DatabaseError, MIGRATIONS, PgRepository, PgRepositoryFactory, has_pending_migrations, migrate,
-    schema, test_utils,
-};
 pub use self::storage::{
     BoxRepository, BoxRepositoryFactory, MapErr, Page, Pagination, Repository, RepositoryAccess,
     RepositoryError, RepositoryFactory, RepositoryTransaction, pagination,
@@ -141,7 +128,7 @@ pub use self::account_handoff::{
     AccountHandoffCreation, AccountHandoffGrant, AccountHandoffGrantInput,
     AccountHandoffRepository, IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
     IdentityBindingChallengeRecord, IdentityCreationLeaseRecord,
-    IdentityCreationRegistrationContext, IdentityCreationSagaState, PgAccountHandoffRepository,
+    IdentityCreationRegistrationContext, IdentityCreationSagaState,
 };
 pub use self::accountability::{
     AccountabilityGrant, AccountabilityGrantFanoutState, AccountabilitySubjectKind,
@@ -175,7 +162,6 @@ pub use self::organization_control::{
     OrganizationControlRepository, OrganizationDelegation, OrganizationDelegationStatus,
     OrganizationPrincipalControl, PRINCIPAL_CONTROL_REALM_BOOTSTRAP_PURPOSE,
 };
-pub(crate) use self::pg::DatabaseInconsistencyError;
 pub use self::policy_data::{PolicyData, PolicyDataDocument};
 pub use self::post_auth_action::{AccountAction, PostAuthAction};
 pub use self::site_config::{

@@ -46,7 +46,7 @@ pub(crate) fn issue_session_grant(
         required_audience_for(url_builder, arkret_config),
         scopes,
         Some(subject),
-        None,
+        "test-grant-binding-jkt".to_owned(),
     )
 }
 
@@ -62,7 +62,7 @@ pub(crate) fn issue_session_grant_for_audience(
     audience: String,
     scopes: Vec<String>,
     subject_override: Option<&str>,
-    dpop_jkt: Option<String>,
+    dpop_jkt: String,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     issue_session_grant_for_audience_inner(
         clock,
@@ -88,7 +88,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
     audience: String,
     scopes: Vec<String>,
     subject_override: Option<&str>,
-    dpop_jkt: Option<String>,
+    dpop_jkt: String,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     issue_session_grant_for_audience_inner(
         clock,
@@ -114,7 +114,7 @@ fn issue_session_grant_for_audience_inner(
     audience: String,
     scopes: Vec<String>,
     subject_override: Option<&str>,
-    dpop_jkt: Option<String>,
+    dpop_jkt: String,
     enforce_principal_did_method: bool,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     let subject = subject_override
@@ -130,13 +130,14 @@ fn issue_session_grant_for_audience_inner(
     let grant_id = new_session_grant_id();
     let device_id = primary_device_id_from_tokens(scopes.iter().map(String::as_str));
     let issuer = issuer_did_for(arkret_config);
-    let cnf = dpop_jkt
-        .as_ref()
-        .map(|jkt| SessionGrantConfirmation { jkt: jkt.clone() });
-    let payload = SessionGrantPayload {
+    let cnf = SessionGrantCnf {
+        jkt: dpop_jkt.clone(),
+    };
+    let payload = SignedSessionGrantClaims {
         kind: "ak.session.grant".to_owned(),
         grant_id: grant_id.clone(),
-        subject: subject.clone(),
+        subject: arkret_core::Did::new(subject.clone())
+            .map_err(|_| SessionGrantError::PrincipalUnknown)?,
         audience: audience.clone(),
         scopes: scopes.clone(),
         not_before: now,
@@ -144,8 +145,9 @@ fn issue_session_grant_for_audience_inner(
         session_id: browser_session.id.to_string(),
         cnf,
         proof_kind: None,
-        scope_details: serde_json::Value::Null,
+        scope_details: None,
     };
+    payload.validate()?;
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
@@ -164,7 +166,7 @@ fn issue_session_grant_for_audience_inner(
         device_id,
         audience,
         scopes,
-        dpop_jkt,
+        dpop_jkt: Some(dpop_jkt),
     })
 }
 
@@ -264,15 +266,16 @@ pub(crate) fn mint_agent_session_grant(
     ensure_principal_did_method_allowed(arkret_config, agent_id)?;
     let issuer = issuer_did_for(arkret_config);
     let grant_id = new_session_grant_id();
-    let cnf = Some(SessionGrantConfirmation {
+    let cnf = SessionGrantCnf {
         jkt: dpop_jkt.clone(),
-    });
+    };
     let session_id = grant_id.to_string();
     let scope_details = compact_agent_scope_details(scope_details);
-    let payload = SessionGrantPayload {
+    let payload = SignedSessionGrantClaims {
         kind: "ak.session.grant".to_owned(),
         grant_id: grant_id.clone(),
-        subject: agent_id.to_owned(),
+        subject: arkret_core::Did::new(agent_id.to_owned())
+            .map_err(|_| SessionGrantError::PrincipalUnknown)?,
         audience: audience.clone(),
         scopes: scopes.clone(),
         not_before: now,
@@ -280,8 +283,9 @@ pub(crate) fn mint_agent_session_grant(
         session_id,
         cnf,
         proof_kind: Some(arkret_core::SessionGrantProofKind::AgentKeyProof),
-        scope_details,
+        scope_details: Some(scope_details),
     };
+    payload.validate()?;
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();

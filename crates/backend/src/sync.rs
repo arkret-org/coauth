@@ -3,10 +3,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use coauth_config::{ClientsConfig, UpstreamOAuthConfig};
-use coauth_data::pg::advisory_lock::advisory_lock_key;
 use coauth_data::upstream_oauth::{UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams};
-use coauth_data::{Clock, Pagination, PgRepository, RepositoryAccess, UpstreamOAuthProviderSource};
+use coauth_data::{Clock, Pagination, RepositoryAccess, UpstreamOAuthProviderSource};
 use coauth_keystore::Encrypter;
+use coauth_storage_postgres::PgRepository;
+use coauth_storage_postgres::advisory_lock::advisory_lock_key;
 use diesel::sql_query;
 use diesel_async::pooled_connection::deadpool::Object as PooledConnection;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};

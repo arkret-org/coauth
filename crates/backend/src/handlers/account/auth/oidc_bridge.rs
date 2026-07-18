@@ -692,7 +692,7 @@ async fn exchange_oidc_code(
             grant_target.audience.clone(),
             principal_session_grant_scopes(&device_id),
             Some(&principal_did),
-            Some(dpop_binding.jkt.clone()),
+            dpop_binding.jkt.clone(),
         )
         .map_err(|error| OidcExchangeError::new("session_grant_denied", error.to_string()))?;
         let persisted = arkret::persist_session_grant(
@@ -1183,7 +1183,7 @@ async fn exchange_oidc_code(
         grant_target.audience.clone(),
         principal_session_grant_scopes(&device_id),
         Some(&principal_did),
-        Some(dpop_binding.jkt),
+        dpop_binding.jkt,
     )
     .map_err(|error| OidcExchangeError::new("session_grant_denied", error.to_string()))?;
     let persisted = arkret::persist_session_grant(
@@ -1523,7 +1523,7 @@ mod tests {
     #[tokio::test]
     async fn session_grant_oidc_exchange_requires_dpop_holder_proof() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
         let state = TestState::from_pool(pool.clone()).await.unwrap();

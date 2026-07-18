@@ -34,9 +34,9 @@ fn sample_registration(created_at: DateTime<Utc>) -> UserRegistration {
 /// Returns `Some(repo)` when `DATABASE_URL` is configured; `None`
 /// otherwise. Test bodies should early-return on `None`.
 async fn test_repo() -> Option<BoxRepository> {
-    let pool = coauth_data::test_utils::setup_test_pool().await?;
+    let pool = coauth_storage_postgres::test_utils::setup_test_pool().await?;
     Some(
-        coauth_data::PgRepositoryFactory::new(pool)
+        coauth_storage_postgres::PgRepositoryFactory::new(pool)
             .create()
             .await
             .unwrap(),

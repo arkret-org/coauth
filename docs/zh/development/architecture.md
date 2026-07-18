@@ -22,7 +22,7 @@ coauth 是 Arkret 的 Auth Server，负责账号认证、OAuth/OIDC、会话授�
 | `coauth-config` | 配置管理 |
 | `coauth-data-model` | 领域数据模型 |
 | `coauth-storage` | 存储抽象层 |
-| `coauth-storage-pg` | PostgreSQL 实现 |
+| `coauth-storage-postgres` | PostgreSQL 实现 |
 | `coauth-handlers` | HTTP 适配层（REST/OAuth/Admin） |
 | `coauth-policy` | 策略引擎（OPA + Cedar） |
 | `coauth-tasks` | 后台任务与工作流调度 |
@@ -128,7 +128,7 @@ Workflow / Service 层
     ├────────────────┬────────────────┐
     ▼                ▼                ▼
 Repository      Principal       Notification
-(storage-pg)    (soland)        (messaging)
+(storage-postgres) (soland)        (messaging)
     │                │                │
     ▼                ▼                ▼
 PostgreSQL       Session grants Email / SMS
@@ -136,7 +136,7 @@ PostgreSQL       Session grants Email / SMS
 
 Handler 层负责 HTTP 协议的适配——解析请求、校验参数、映射响应格式。业务逻辑集中在 Workflow / Service 层，每个工作流封装一个完整的业务流程（如注册、恢复、登录等）。工作流通过三类基础设施完成实际操作：
 
-- **Repository**（`coauth-storage-pg`）：持久化读写，对接 PostgreSQL。
+- **Repository**（`coauth-storage-postgres`）：持久化读写，对接 PostgreSQL。
 - **Principal**（`coauth-principal`）：保留账号/设备同步抽象；生产路径通过 Arkret session grants 与 soland 集成。
 - **Notification**（`coauth-messaging`）：统一通知中心，将邮件和短信通过对应通道发送。
 

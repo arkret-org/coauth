@@ -25,15 +25,15 @@ use std::sync::{Mutex, OnceLock};
 use arkret_core::{
     AccountDeviceEnrollOutcome, AccountDeviceEnrollRequestBody, Audience, DeviceAuthorizePayload,
     DeviceEnrollmentAuthorityBinding, DeviceEnrollmentAuthorityBindingKind, DeviceOrPrincipalRef,
-    Did, Event, EventId, EventRequirements, Hlc, HlcGenerator, NonEmptyString, RealmId,
-    ed25519_pubkey_to_did_key_multibase,
+    Event, EventId, EventRequirements, Hlc, HlcGenerator, NonEmptyString, RealmId,
+    SignedSessionGrantClaims, ed25519_pubkey_to_did_key_multibase,
 };
 use arkret_signatures::{SignEventOptions, sign_event};
 use chrono::{DateTime, Utc};
 use coauth_data::user::PrincipalDidRepository as _;
 use salvo::prelude::*;
 
-use super::{ArkretRouteError, SessionGrantPayload};
+use super::ArkretRouteError;
 use crate::handlers::common::DepotExt;
 use crate::services::device_enrollment_authority::enrollment_authority;
 use crate::services::resolved_principal_audiences::{
@@ -259,16 +259,13 @@ pub async fn device_enroll_endpoint(
 
     // Read `cnf.jkt` from the grant payload; the persisted row is the source of
     // truth (no JWT signature check here — the DB lookup authenticates it).
-    let jwt: Jwt<'_, SessionGrantPayload> = Jwt::try_from(grant_jwt.as_str())
+    let jwt: Jwt<'_, SignedSessionGrantClaims> = Jwt::try_from(grant_jwt.as_str())
         .map_err(|_| ArkretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
     let grant_payload = jwt.payload().clone();
-    let expected_jkt = grant_payload
-        .cnf
-        .as_ref()
-        .map(|cnf| cnf.jkt.clone())
-        .ok_or_else(|| {
-            ArkretRouteError::BadRequest("grant_jwt is not DPoP-bound (cnf.jkt missing)".to_owned())
-        })?;
+    grant_payload
+        .validate()
+        .map_err(|error| ArkretRouteError::BadRequest(format!("invalid grant_jwt: {error}")))?;
+    let expected_jkt = grant_payload.cnf.jkt.clone();
 
     let mut repo = depot.repo().await?;
     let grant_row = repo
@@ -327,7 +324,7 @@ pub async fn device_enroll_endpoint(
     }
     let principal_binding = repo
         .principal_did()
-        .get_by_did_and_audience(&grant_payload.subject, &grant_payload.audience)
+        .get_by_did_and_audience(grant_payload.subject.as_str(), &grant_payload.audience)
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .filter(|binding| binding.user_id == browser_session.user.id)
@@ -369,11 +366,7 @@ pub async fn device_enroll_endpoint(
 
     // 3. The principal DID is the grant subject. Bind the event proof to the configured principal
     //    server and require the grant to target it.
-    let principal_id = Did::new(grant_payload.subject.clone()).map_err(|error| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "grant subject is not a valid principal DID: {error}"
-        )))
-    })?;
+    let principal_id = grant_payload.subject.clone();
     let audience = sole_principal_audience(&arkret_config, resolved_principal_audiences::shared())?;
     if grant_payload.audience != audience {
         return Err(ArkretRouteError::coded(

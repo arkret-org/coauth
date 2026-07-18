@@ -6,6 +6,7 @@ mod revoke;
 mod session_logout;
 mod types;
 
+pub(crate) use arkret_core::{SessionGrantCnf, SignedSessionGrantClaims};
 pub use introspection::introspect_session_grant;
 #[cfg(test)]
 pub(crate) use introspection::{introspection_status, session_grant_jwt_hash};
@@ -21,7 +22,6 @@ pub use refresh::refresh_session_grant;
 pub use revoke::revoke_session_grant_endpoint;
 pub use session_logout::logout_auth_session;
 pub use types::{
-    PatchPrimaryHandlePreferenceRequestBody, PrimaryHandlePreferenceOutcome,
-    SessionGrantConfirmation, SessionGrantMaterial, SessionGrantPayload,
+    PatchPrimaryHandlePreferenceRequestBody, PrimaryHandlePreferenceOutcome, SessionGrantMaterial,
 };
 pub(crate) use types::{SessionGrantRecord, SessionGrantTarget};

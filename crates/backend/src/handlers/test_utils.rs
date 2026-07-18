@@ -15,8 +15,8 @@ use coauth_data::personal::session::PersonalSessionOwner;
 use coauth_data::personal::{PersonalAccessTokenRepository, PersonalSessionRepository};
 use coauth_data::user::UserRepository;
 use coauth_data::{
-    AppVersion, BoxRepository, PgRepositoryFactory, RepositoryAccess, RepositoryError,
-    RepositoryFactory, SiteConfig, SystemClock, TokenType, UrlBuilder,
+    AppVersion, BoxRepository, RepositoryAccess, RepositoryError, RepositoryFactory, SiteConfig,
+    SystemClock, TokenType, UrlBuilder,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_keystore::{Encrypter, JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
@@ -25,6 +25,7 @@ use coauth_messaging::email::{Mailer, Transport as MailTransport};
 use coauth_oauth_types::scope::Scope;
 use coauth_policy::PolicyFactory;
 use coauth_principal::ConnectorAdmin;
+use coauth_storage_postgres::PgRepositoryFactory;
 use coauth_tasks::QueueWorker;
 use coauth_templates::{SiteConfigExt, Templates};
 use cookie_store::{CookieStore, RawCookie};

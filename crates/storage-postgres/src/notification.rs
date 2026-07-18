@@ -502,7 +502,7 @@ impl NotificationRepository for PgNotificationRepository<'_> {
         provider_binding_key: &str,
         provider_message_id: &str,
     ) -> Result<Option<NotificationDelivery>, Self::Error> {
-        use crate::pg::schema::notification_deliveries::dsl;
+        use crate::schema::notification_deliveries::dsl;
 
         dsl::notification_deliveries
             .filter(dsl::provider_binding_key.eq(provider_binding_key))

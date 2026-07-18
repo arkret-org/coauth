@@ -446,16 +446,13 @@ pub async fn refresh_session_grant(
     // 2. Parse + load the existing grant. We never verify the JWT signature here — the persisted
     //    row IS the source of truth — but we DO read the `cnf.jkt` claim out of the JWT payload to
     //    bind the proof.
-    let jwt: Jwt<'_, SessionGrantPayload> = Jwt::try_from(body.grant_jwt.as_str())
+    let jwt: Jwt<'_, SignedSessionGrantClaims> = Jwt::try_from(body.grant_jwt.as_str())
         .map_err(|_| ArkretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
     let prior_payload = jwt.payload().clone();
-    let expected_jkt = prior_payload
-        .cnf
-        .as_ref()
-        .map(|cnf| cnf.jkt.clone())
-        .ok_or_else(|| {
-            ArkretRouteError::BadRequest("grant_jwt is not DPoP-bound (cnf.jkt missing)".to_owned())
-        })?;
+    prior_payload
+        .validate()
+        .map_err(|error| ArkretRouteError::BadRequest(format!("invalid grant_jwt: {error}")))?;
+    let expected_jkt = prior_payload.cnf.jkt.clone();
 
     let mut repo = depot.repo().await?;
     let prior_grant = repo
@@ -620,7 +617,7 @@ pub async fn refresh_session_grant(
         audience,
         scopes,
         Some(&prior_grant.subject),
-        Some(verification.jkt.clone()),
+        verification.jkt.clone(),
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 

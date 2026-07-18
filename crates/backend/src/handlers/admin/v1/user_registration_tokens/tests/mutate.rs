@@ -7,7 +7,7 @@ use super::*;
 #[tokio::test]
 async fn test_revoke_token() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -46,7 +46,7 @@ async fn test_revoke_token() {
 #[tokio::test]
 async fn test_revoke_already_revoked_token() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -96,7 +96,7 @@ async fn test_revoke_already_revoked_token() {
 #[tokio::test]
 async fn test_revoke_unknown_token() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -118,7 +118,7 @@ async fn test_revoke_unknown_token() {
 #[tokio::test]
 async fn test_unrevoke_token() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -185,7 +185,7 @@ async fn test_unrevoke_token() {
 #[tokio::test]
 async fn test_unrevoke_not_revoked_token() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -224,7 +224,7 @@ async fn test_unrevoke_not_revoked_token() {
 #[tokio::test]
 async fn test_unrevoke_unknown_token() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -247,7 +247,7 @@ async fn test_unrevoke_unknown_token() {
 #[tokio::test]
 async fn test_update_expiry() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -352,7 +352,7 @@ async fn test_update_expiry() {
 #[tokio::test]
 async fn test_update_usage_limit() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -456,7 +456,7 @@ async fn test_update_usage_limit() {
 #[tokio::test]
 async fn test_update_multiple_fields() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -522,7 +522,7 @@ async fn test_update_multiple_fields() {
 #[tokio::test]
 async fn test_update_no_fields() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -585,7 +585,7 @@ async fn test_update_no_fields() {
 #[tokio::test]
 async fn test_update_unknown_token() {
     setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();

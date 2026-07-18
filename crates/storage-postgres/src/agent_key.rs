@@ -35,13 +35,14 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use coauth_data::clock::MockClock;
-    use coauth_data::{RepositoryAccess as _, RepositoryFactory as _};
+    use coauth_data::{
+        AccountabilityGrantFanoutState, RepositoryAccess as _, RepositoryFactory as _,
+    };
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 
     use super::*;
     use crate::PgRepositoryFactory;
-    use crate::accountability::AccountabilityGrantFanoutState;
 
     fn unique_label(name: &str) -> String {
         let nanos = SystemTime::now()

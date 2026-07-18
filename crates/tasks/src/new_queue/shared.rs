@@ -1,5 +1,6 @@
 use chrono::Duration;
-use coauth_data::{DatabaseError, RepositoryError};
+use coauth_data::RepositoryError;
+use coauth_storage_postgres::DatabaseError;
 use thiserror::Error;
 
 /// Errors that can occur while operating the queue worker.
