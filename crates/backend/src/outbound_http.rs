@@ -35,6 +35,9 @@ use crate::telemetry::METER;
 
 static USER_AGENT: &str = concat!("coauth/", env!("CARGO_PKG_VERSION"));
 
+const ENABLE_TEST_ENDPOINTS_ENV: &str = "COAUTH_ENABLE_TEST_ENDPOINTS";
+const ALLOW_INSECURE_LOOPBACK_HTTP_ENV: &str = "COAUTH_ALLOW_INSECURE_LOOPBACK_HTTP";
+
 static HTTP_REQUESTS_DURATION_HISTOGRAM: std::sync::LazyLock<Histogram<u64>> =
     std::sync::LazyLock::new(|| {
         METER
@@ -144,12 +147,14 @@ pub(crate) const fn policy_frontier_policy() -> OutboundRequestPolicy {
 
 struct TracingResolver {
     inner: GaiResolver,
+    allow_loopback: bool,
 }
 
 impl TracingResolver {
-    fn new() -> Self {
+    fn new(allow_loopback: bool) -> Self {
         Self {
             inner: GaiResolver::new(),
+            allow_loopback,
         }
     }
 }
@@ -171,23 +176,30 @@ impl reqwest::dns::Resolve for TracingResolver {
                 );
             }
         };
-        if let Some(reason) = blocked_domain_reason(&requested_name, false) {
+        if self.allow_loopback && !is_explicit_loopback_host(&requested_name) {
+            return Box::pin(async move {
+                Err(Box::new(BlockedEgressTarget::new(
+                    requested_name,
+                    "debug loopback client only permits localhost or loopback IP literals",
+                )) as Box<dyn StdError + Send + Sync>)
+            });
+        }
+        if let Some(reason) = blocked_domain_reason(&requested_name, self.allow_loopback) {
             return Box::pin(async move {
                 Err(Box::new(BlockedEgressTarget::new(requested_name, reason))
                     as Box<dyn StdError + Send + Sync>)
             });
         }
         if let Ok(ip) = requested_name.parse::<IpAddr>()
-            && let Err(error) = OutboundPolicy::public_https().validate_ip(ip)
+            && let Some(reason) = blocked_ip_reason(ip, self.allow_loopback)
         {
             return Box::pin(async move {
-                Err(
-                    Box::new(BlockedEgressTarget::new(requested_name, error.to_string()))
-                        as Box<dyn StdError + Send + Sync>,
-                )
+                Err(Box::new(BlockedEgressTarget::new(requested_name, reason))
+                    as Box<dyn StdError + Send + Sync>)
             });
         }
         let mut inner = self.inner.clone();
+        let allow_loopback = self.allow_loopback;
         Box::pin(
             inner
                 .call(parsed_name)
@@ -195,7 +207,7 @@ impl reqwest::dns::Resolve for TracingResolver {
                     let addrs = result
                         .map_err(|err| -> Box<dyn StdError + Send + Sync> { Box::new(err) })?;
                     let addrs: Vec<SocketAddr> = addrs.collect();
-                    enforce_resolved_egress_policy(&requested_name, &addrs)?;
+                    enforce_resolved_egress_policy(&requested_name, &addrs, allow_loopback)?;
                     Ok(Box::new(addrs.into_iter()) as reqwest::dns::Addrs)
                 })
                 .instrument(span),
@@ -233,9 +245,21 @@ impl StdError for BlockedEgressTarget {}
 fn enforce_resolved_egress_policy(
     host: &str,
     addrs: &[SocketAddr],
+    allow_loopback: bool,
 ) -> Result<(), Box<dyn StdError + Send + Sync>> {
-    if let Some(reason) = blocked_domain_reason(host, false) {
+    if let Some(reason) = blocked_domain_reason(host, allow_loopback) {
         return Err(Box::new(BlockedEgressTarget::new(host, reason)));
+    }
+    if allow_loopback {
+        for addr in addrs {
+            if !addr.ip().is_loopback() {
+                return Err(Box::new(BlockedEgressTarget::new(
+                    host,
+                    "debug loopback client resolved outside the loopback range",
+                )));
+            }
+        }
+        return Ok(());
     }
     OutboundPolicy::public_https()
         .validate_resolved_addresses(addrs)
@@ -279,6 +303,13 @@ pub(crate) fn blocked_ip_reason(ip: IpAddr, allow_loopback: bool) -> Option<&'st
     })
 }
 
+fn is_explicit_loopback_host(host: &str) -> bool {
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<IpAddr>()
+            .is_ok_and(|address| address.is_loopback())
+}
+
 /// Create a new [`reqwest::Client`] with sane parameters.
 ///
 /// # Panics
@@ -286,7 +317,7 @@ pub(crate) fn blocked_ip_reason(ip: IpAddr, allow_loopback: bool) -> Option<&'st
 /// Panics if the client fails to build, which should never happen.
 #[must_use]
 pub fn reqwest_client() -> reqwest::Client {
-    reqwest_client_builder()
+    reqwest_client_builder(insecure_loopback_http_enabled())
         .build()
         .expect("failed to create HTTP client")
 }
@@ -305,25 +336,40 @@ pub(crate) fn reqwest_client_with_static_resolution(
     host: &str,
     addrs: &[SocketAddr],
 ) -> reqwest::Client {
-    reqwest_client_builder()
+    reqwest_client_builder(false)
         .resolve_to_addrs(host, addrs)
         .build()
         .expect("failed to create static-resolution HTTP client")
 }
 
-fn reqwest_client_builder() -> reqwest::ClientBuilder {
+fn reqwest_client_builder(allow_insecure_loopback_http: bool) -> reqwest::ClientBuilder {
     let tls_config: rustls::ClientConfig =
         rustls::ClientConfig::with_platform_verifier().expect("failed to create TLS config");
 
     reqwest::Client::builder()
-        .https_only(true)
-        .dns_resolver(Arc::new(TracingResolver::new()))
+        .https_only(!allow_insecure_loopback_http)
+        .dns_resolver(Arc::new(TracingResolver::new(allow_insecure_loopback_http)))
         .use_preconfigured_tls(tls_config)
         .redirect(reqwest::redirect::Policy::none())
         .no_proxy()
         .user_agent(USER_AGENT)
         .timeout(Duration::from_mins(1))
         .connect_timeout(Duration::from_secs(30))
+}
+
+fn insecure_loopback_http_enabled() -> bool {
+    cfg!(debug_assertions)
+        && runtime_flag_enabled(ENABLE_TEST_ENDPOINTS_ENV)
+        && runtime_flag_enabled(ALLOW_INSECURE_LOOPBACK_HTTP_ENV)
+}
+
+fn runtime_flag_enabled(name: &str) -> bool {
+    coauth_config::runtime_var(name).is_ok_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    })
 }
 
 fn telemetry_url(url: &url::Url) -> url::Url {
@@ -610,7 +656,7 @@ mod tests {
 
     use super::{
         OutboundRequestPolicy, blocked_domain_reason, blocked_ip_reason,
-        enforce_outbound_url_policy, send_with_policy, telemetry_url,
+        enforce_outbound_url_policy, reqwest_client_builder, send_with_policy, telemetry_url,
     };
 
     fn install_crypto_provider() {
@@ -647,6 +693,27 @@ mod tests {
 
         assert!(blocked_ip_reason("8.8.8.8".parse().unwrap(), false).is_none());
         assert!(blocked_ip_reason("2001:4860:4860::8888".parse().unwrap(), false).is_none());
+    }
+
+    #[tokio::test]
+    async fn explicit_test_client_allows_only_loopback_plain_http() {
+        install_crypto_provider();
+        let (url, attempts) = spawn_status_http_server(200).await;
+        let client = reqwest_client_builder(true).build().unwrap();
+
+        let response = client.get(url).send().await.unwrap();
+
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+        let non_loopback = client
+            .get("http://example.com/")
+            .send()
+            .await
+            .expect_err("non-loopback HTTP must stay blocked");
+        assert!(
+            non_loopback.is_connect() || non_loopback.is_builder(),
+            "{non_loopback}"
+        );
     }
 
     #[test]

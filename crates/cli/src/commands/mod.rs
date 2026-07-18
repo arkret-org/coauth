@@ -72,6 +72,10 @@ pub struct Options {
     #[arg(long, global = true)]
     allow_insecure_password_bootstrap: bool,
 
+    /// Debug/test only: allow outbound plain HTTP to loopback services
+    #[arg(long, global = true)]
+    allow_insecure_loopback_http: bool,
+
     #[command(subcommand)]
     subcommand: Option<Subcommand>,
 }
@@ -94,6 +98,10 @@ impl Options {
             (
                 "COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP",
                 self.allow_insecure_password_bootstrap,
+            ),
+            (
+                "COAUTH_ALLOW_INSECURE_LOOPBACK_HTTP",
+                self.allow_insecure_loopback_http,
             ),
         ] {
             if enabled {
