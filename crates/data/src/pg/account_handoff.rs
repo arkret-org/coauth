@@ -503,7 +503,10 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .lease_for_account(Uuid::from(input.service_account_id), &input.audience, false)
             .await?
             .ok_or_else(DatabaseError::invalid_operation)?;
-        Ok(AccountHandoffCreation::Active { grant, lease })
+        Ok(AccountHandoffCreation::Active {
+            grant,
+            lease: Box::new(lease),
+        })
     }
 
     async fn resolve_creation(
@@ -544,7 +547,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         if lease.holder_jkt == grant.cnf_jkt {
             Ok(AccountHandoffCreation::Active {
                 grant: grant.clone(),
-                lease,
+                lease: Box::new(lease),
             })
         } else {
             Ok(AccountHandoffCreation::Busy {

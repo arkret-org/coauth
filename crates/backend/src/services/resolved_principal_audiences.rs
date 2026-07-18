@@ -239,7 +239,7 @@ impl ResolvedPrincipalAudiences {
                         name = %server.name,
                         %error,
                         cached_age_seconds = age.as_secs(),
-                        remaining_trust_seconds = (self.max_trusted_age - age).as_secs(),
+                        remaining_trust_seconds = self.max_trusted_age.saturating_sub(age).as_secs(),
                         "failed to refresh principal-server audience; retaining the last known value until its maximum trusted age",
                     );
                 }

@@ -125,7 +125,7 @@ impl IdentityCreationLeaseRecord {
 pub enum AccountHandoffCreation {
     Active {
         grant: AccountHandoffGrant,
-        lease: IdentityCreationLeaseRecord,
+        lease: Box<IdentityCreationLeaseRecord>,
     },
     Busy {
         grant: AccountHandoffGrant,

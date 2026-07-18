@@ -356,7 +356,7 @@ fn build_verified_profile_descriptors(
                 signature: entry.signature.clone(),
                 timestamp: entry.timestamp,
                 expires_at: entry.expires_at,
-                extra: Default::default(),
+                extra: std::collections::BTreeMap::default(),
             })
         })
         .collect()

@@ -168,7 +168,7 @@ impl RuntimeServiceIdentity {
                 control_key_ref: ServiceIdentityKeyRef::new("fixture:coauth:control")
                     .expect("fixture control key ref"),
                 version_id: "fixture-v1".to_owned(),
-                last_verified_at: chrono::Utc::now(),
+                last_verified_at: chrono::DateTime::UNIX_EPOCH,
             },
         });
         handle
@@ -609,13 +609,13 @@ impl ConfigurationSection for ArkretConfig {
                 .into());
             }
         }
-        if let Some(selected) = self.identity_provider.as_deref() {
-            if selected.trim().is_empty() || !provider_names.contains(selected) {
-                return Err(std::io::Error::other(
-                    "arkret.identity_provider must name a configured registration-capable service entry",
-                )
-                .into());
-            }
+        if let Some(selected) = self.identity_provider.as_deref()
+            && (selected.trim().is_empty() || !provider_names.contains(selected))
+        {
+            return Err(std::io::Error::other(
+                "arkret.identity_provider must name a configured registration-capable service entry",
+            )
+            .into());
         }
 
         // Fail closed: `password_login_session_grants_enabled` activates the

@@ -53,7 +53,7 @@ pub async fn initialize_and_spawn(
     let provider = match select_provider(arkret_config) {
         Ok(provider) => provider,
         Err(state) => {
-            handle.store(state);
+            handle.store(*state);
             return Ok(());
         }
     };
@@ -141,7 +141,7 @@ async fn run_supervisor(
     }
 }
 
-fn select_provider(config: &ArkretConfig) -> Result<ProviderCandidate, ServiceIdentityState> {
+fn select_provider(config: &ArkretConfig) -> Result<ProviderCandidate, Box<ServiceIdentityState>> {
     let mut candidates = config
         .principal_servers
         .iter()
@@ -163,17 +163,17 @@ fn select_provider(config: &ArkretConfig) -> Result<ProviderCandidate, ServiceId
         candidates.retain(|(name, ..)| name == selected);
     }
     match candidates.as_slice() {
-        [] => Err(ServiceIdentityState::Faulted {
+        [] => Err(Box::new(ServiceIdentityState::Faulted {
             diagnostic: ServiceIdentityDiagnostic::ProviderNotConfigured,
             next_action: "configure registration credentials on one trusted principal_servers[] or identity_services[] entry"
                 .to_owned(),
-        }),
+        })),
         [(name, provider_endpoint, bearer)] => {
             let endpoint = CanonicalServiceUrl::canonicalize(provider_endpoint.as_str()).map_err(
-                |error| ServiceIdentityState::Faulted {
+                |error| Box::new(ServiceIdentityState::Faulted {
                     diagnostic: ServiceIdentityDiagnostic::ProviderNotConfigured,
                     next_action: format!("fix Provider endpoint {provider_endpoint}: {error}"),
-                },
+                }),
             )?;
             Ok(ProviderCandidate {
                 reference: ServiceIdentityProviderRef {
@@ -183,7 +183,7 @@ fn select_provider(config: &ArkretConfig) -> Result<ProviderCandidate, ServiceId
                 bearer: bearer.clone(),
             })
         }
-        _ => Err(ServiceIdentityState::Faulted {
+        _ => Err(Box::new(ServiceIdentityState::Faulted {
             diagnostic: ServiceIdentityDiagnostic::ProviderAmbiguous,
             next_action: format!(
                 "set `arkret.identity_provider` to one of: {}",
@@ -193,7 +193,7 @@ fn select_provider(config: &ArkretConfig) -> Result<ProviderCandidate, ServiceId
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-        }),
+        })),
     }
 }
 
@@ -640,13 +640,13 @@ mod tests {
             identity_services: vec![standalone("identity-a", "https://identity.example/")],
             ..ArkretConfig::default()
         };
-        assert!(matches!(
-            select_provider(&config),
-            Err(ServiceIdentityState::Faulted {
+        assert!(select_provider(&config).is_err_and(|state| matches!(
+            *state,
+            ServiceIdentityState::Faulted {
                 diagnostic: ServiceIdentityDiagnostic::ProviderAmbiguous,
                 ..
-            })
-        ));
+            }
+        )));
     }
 
     #[test]
