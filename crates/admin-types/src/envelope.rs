@@ -127,10 +127,7 @@ impl SingleResourceMeta {
 /// which we don't want here. Backend installs minimal hand-written
 /// schema impls when the `schema` feature is on (see below).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound(
-    serialize = "T: Serialize",
-    deserialize = "T: Default + serde::Deserialize<'de>"
-))]
+#[serde(bound(serialize = "T: Serialize", deserialize = "T: serde::Deserialize<'de>"))]
 pub struct SingleResource<T> {
     #[serde(rename = "type", default)]
     pub type_: String,
@@ -138,7 +135,6 @@ pub struct SingleResource<T> {
     #[serde(default)]
     pub id: String,
 
-    #[serde(default)]
     pub attributes: T,
 
     #[serde(default)]
@@ -179,10 +175,7 @@ where
 
 /// Top-level envelope for a single-resource response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound(
-    serialize = "T: Serialize",
-    deserialize = "T: Default + serde::Deserialize<'de>"
-))]
+#[serde(bound(serialize = "T: Serialize", deserialize = "T: serde::Deserialize<'de>"))]
 pub struct SingleOutcome<T> {
     pub data: SingleResource<T>,
     pub links: SelfLinks,
@@ -212,10 +205,7 @@ where
 /// `data` is `Option` so a count-only response (`?count=true`) can omit
 /// it without changing the type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound(
-    serialize = "T: Serialize",
-    deserialize = "T: Default + serde::Deserialize<'de>"
-))]
+#[serde(bound(serialize = "T: Serialize", deserialize = "T: serde::Deserialize<'de>"))]
 pub struct PaginatedOutcome<T> {
     #[serde(default, skip_serializing_if = "PaginationMeta::is_empty")]
     pub meta: PaginationMeta,

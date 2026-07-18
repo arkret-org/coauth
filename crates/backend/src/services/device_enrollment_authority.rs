@@ -77,6 +77,15 @@ impl EnrollmentAuthority {
         &self.verification_method
     }
 
+    /// Stable secret dedicated to Realm-scoped HLC node-id derivation.
+    #[must_use]
+    pub fn hlc_node_secret(&self) -> [u8; 32] {
+        arkret_core::canonical::sha256_bytes_from_slices(&[
+            b"coauth-device-enrollment-hlc-v1",
+            &self.seed,
+        ])
+    }
+
     /// Build a fresh SDK signer bound to this authority's DID + VM. The signer
     /// is consumed by [`arkret_signatures::sign_event`].
     #[must_use]

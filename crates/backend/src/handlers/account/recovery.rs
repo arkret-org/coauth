@@ -158,7 +158,7 @@ pub async fn get_recovery(
     Ok(Json(RecoveryStatusOutcome {
         id: session.id.to_string(),
         email: super::mask_email(&session.email),
-        status,
+        status: status.to_owned(),
     }))
 }
 

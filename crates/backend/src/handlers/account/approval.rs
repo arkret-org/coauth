@@ -3,6 +3,7 @@
 //! These endpoints are consumed by the Dioxus SPA frontend and return JSON
 //! responses. They replace the server-rendered HTML approval pages.
 
+use coauth_account_types::DeviceLinkOutcome;
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -58,13 +59,6 @@ pub struct ApprovalPostRequestBody {
 pub struct ApprovalPostOutcome {
     pub status: &'static str,
     pub redirect_url: String,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct DeviceLinkOutcome {
-    pub status: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub grant_id: Option<String>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -291,7 +285,7 @@ pub async fn device_link_get(
     if let Err(error) = limiter.check_device_link_lookup(requester).await {
         tracing::warn!(error = &error as &dyn std::error::Error);
         res.render(Json(DeviceLinkOutcome {
-            status: "invalid",
+            status: "invalid".to_owned(),
             grant_id: None,
         }));
         return Ok(());
@@ -305,7 +299,7 @@ pub async fn device_link_get(
 
     let Some(code) = query.code else {
         res.render(Json(DeviceLinkOutcome {
-            status: "invalid",
+            status: "invalid".to_owned(),
             grant_id: None,
         }));
         return Ok(());
@@ -317,12 +311,12 @@ pub async fn device_link_get(
         .map_err(map_oauth_access_error)?
     {
         res.render(Json(DeviceLinkOutcome {
-            status: "valid",
+            status: "valid".to_owned(),
             grant_id: Some(grant_id.to_string()),
         }));
     } else {
         res.render(Json(DeviceLinkOutcome {
-            status: "invalid",
+            status: "invalid".to_owned(),
             grant_id: None,
         }));
     }

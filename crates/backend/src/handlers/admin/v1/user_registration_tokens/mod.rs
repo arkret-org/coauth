@@ -13,7 +13,7 @@ use serde::{Deserialize, Deserializer};
 
 use crate::handlers::admin::CreatedJson;
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::model::{Resource, UserRegistrationToken};
+use crate::handlers::admin::model::{Resource, UserRegistrationToken, to_user_registration_token};
 use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
@@ -94,7 +94,7 @@ pub async fn add_token(
     repo.save().await?;
 
     Ok(CreatedJson(SingleOutcome::new_canonical(
-        UserRegistrationToken::new(entry, clock.now()),
+        to_user_registration_token(entry, clock.now()),
     )))
 }
 
@@ -120,7 +120,7 @@ pub async fn get_token(
         })?;
 
     Ok(Json(SingleOutcome::new_canonical(
-        UserRegistrationToken::new(entry, clock.now()),
+        to_user_registration_token(entry, clock.now()),
     )))
 }
 
@@ -211,7 +211,7 @@ pub async fn list_tokens(
                 .user_registration_token()
                 .list(filter, pagination)
                 .await?
-                .map(|t| UserRegistrationToken::new(t, now));
+                .map(|t| to_user_registration_token(t, now));
             let total = repo.user_registration_token().count(filter).await?;
             paginated_response_for_page(page, pagination, Some(total), &base_url)
         }
@@ -220,7 +220,7 @@ pub async fn list_tokens(
                 .user_registration_token()
                 .list(filter, pagination)
                 .await?
-                .map(|t| UserRegistrationToken::new(t, now));
+                .map(|t| to_user_registration_token(t, now));
             paginated_response_for_page(page, pagination, None, &base_url)
         }
         IncludeCount::Only => {
@@ -280,7 +280,7 @@ pub async fn revoke_token(
     repo.save().await?;
 
     Ok(Json(SingleOutcome::new(
-        UserRegistrationToken::new(revoked, clock.now()),
+        to_user_registration_token(revoked, clock.now()),
         format!("/_coauth/admin/user-registration-tokens/{target_id}/revoke"),
     )))
 }
@@ -317,7 +317,7 @@ pub async fn unrevoke_token(
     repo.save().await?;
 
     Ok(Json(SingleOutcome::new(
-        UserRegistrationToken::new(restored, clock.now()),
+        to_user_registration_token(restored, clock.now()),
         format!("/_coauth/admin/user-registration-tokens/{target_id}/unrevoke"),
     )))
 }
@@ -395,7 +395,7 @@ pub async fn update_token(
     repo.save().await?;
 
     Ok(Json(SingleOutcome::new(
-        UserRegistrationToken::new(entry, clock.now()),
+        to_user_registration_token(entry, clock.now()),
         format!("/_coauth/admin/user-registration-tokens/{target_id}"),
     )))
 }

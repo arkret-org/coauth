@@ -1,3 +1,4 @@
+pub use coauth_account_types::RecoveryStatusOutcome;
 use salvo::oapi::ToSchema;
 use serde::{Deserialize, Serialize};
 
@@ -18,13 +19,6 @@ pub struct StartRecoveryOutcome {
     pub id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryStatusOutcome {
-    pub id: String,
-    pub email: String,
-    pub status: &'static str,
 }
 
 #[derive(Serialize, ToSchema)]

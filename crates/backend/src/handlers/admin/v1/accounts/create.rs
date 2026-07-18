@@ -350,7 +350,10 @@ pub async fn mint_registration_tokens(
                 .await?;
         }
 
-        let model = UserRegistrationToken::new(registration_token, clock.now());
+        let model = crate::handlers::admin::model::to_user_registration_token(
+            registration_token,
+            clock.now(),
+        );
         tokens.push(SingleOutcome::new_canonical(model));
     }
     Ok(tokens)

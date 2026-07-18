@@ -1,5 +1,6 @@
 //! Policy dry-run and decision-audit contract endpoints.
 
+use arkret_core::PolicyEffect;
 use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
 use coauth_data::{PolicyDataDocument, RepositoryAccess};
 use salvo::oapi::ToSchema;
@@ -31,21 +32,13 @@ pub struct PolicyDryRunRequestBody {
     attributes: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum PolicyEffect {
-    Allow,
-    Deny,
-    Quarantine,
-    RequireReview,
-}
-
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct PolicyDryRunOutcome {
     /// Signed decision audit identifier.
     audit_id: String,
 
     /// Dry-run decision effect.
+    #[schemars(with = "String")]
     effect: PolicyEffect,
 
     /// Policy identifier that produced the decision.

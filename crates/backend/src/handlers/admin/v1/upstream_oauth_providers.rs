@@ -21,7 +21,7 @@ use serde::Deserialize;
 use url::Url;
 
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::model::{Resource, UpstreamOAuthProvider};
+use crate::handlers::admin::model::{Resource, UpstreamOAuthProvider, to_upstream_oauth_provider};
 use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
@@ -47,7 +47,7 @@ pub async fn get_provider(
         .ok_or_else(|| AppError::not_found("Provider not found"))?;
 
     Ok(Json(SingleOutcome::new_canonical(
-        UpstreamOAuthProvider::from(entry),
+        to_upstream_oauth_provider(entry),
     )))
 }
 
@@ -103,7 +103,7 @@ pub async fn list_providers(
                 .upstream_oauth_provider()
                 .list(filter, pagination)
                 .await?
-                .map(UpstreamOAuthProvider::from);
+                .map(to_upstream_oauth_provider);
             let total = repo.upstream_oauth_provider().count(filter).await?;
             paginated_response_for_page(page, pagination, Some(total), &base_url)
         }
@@ -112,7 +112,7 @@ pub async fn list_providers(
                 .upstream_oauth_provider()
                 .list(filter, pagination)
                 .await?
-                .map(UpstreamOAuthProvider::from);
+                .map(to_upstream_oauth_provider);
             paginated_response_for_page(page, pagination, None, &base_url)
         }
         IncludeCount::Only => {
@@ -317,7 +317,7 @@ pub async fn add_provider(
     repo.save().await?;
 
     Ok(crate::handlers::admin::CreatedJson(
-        SingleOutcome::new_canonical(UpstreamOAuthProvider::from(provider)),
+        SingleOutcome::new_canonical(to_upstream_oauth_provider(provider)),
     ))
 }
 
@@ -376,7 +376,7 @@ pub async fn update_provider(
     repo.save().await?;
 
     Ok(Json(SingleOutcome::new_canonical(
-        UpstreamOAuthProvider::from(provider),
+        to_upstream_oauth_provider(provider),
     )))
 }
 
@@ -474,7 +474,7 @@ pub async fn disable_provider(
     repo.save().await?;
 
     Ok(Json(SingleOutcome::new_canonical(
-        UpstreamOAuthProvider::from(provider),
+        to_upstream_oauth_provider(provider),
     )))
 }
 
@@ -518,7 +518,7 @@ pub async fn enable_provider(
     repo.save().await?;
 
     Ok(Json(SingleOutcome::new_canonical(
-        UpstreamOAuthProvider::from(provider),
+        to_upstream_oauth_provider(provider),
     )))
 }
 

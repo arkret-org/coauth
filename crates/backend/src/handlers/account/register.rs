@@ -5,6 +5,7 @@
 //! check config/policy constraints, delegate to service functions, and map
 //! results to JSON responses.
 
+use coauth_account_types::{ChangeRegistrationEmailOutcome, RegisterOutcome};
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -41,17 +42,6 @@ pub struct RegisterInput {
     /// registration policy / availability checks run.
     #[serde(default)]
     pub captcha_token: Option<String>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RegisterOutcome {
-    pub status: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub next_step: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
 }
 
 #[endpoint]
@@ -105,7 +95,7 @@ pub async fn post_register(
         {
             tracing::warn!(error = %error, "CAPTCHA verification failed on registration");
             return Ok(Json(RegisterOutcome {
-                status: "error",
+                status: "error".to_owned(),
                 id: None,
                 next_step: None,
                 error: Some("captcha_failed".into()),
@@ -159,7 +149,7 @@ pub async fn post_register(
         BeginPasswordRegistrationResult::Started(started) => started,
         BeginPasswordRegistrationResult::Rejected { issues } => {
             return Ok(Json(RegisterOutcome {
-                status: "error",
+                status: "error".to_owned(),
                 id: None,
                 next_step: None,
                 error: Some(
@@ -180,9 +170,9 @@ pub async fn post_register(
     let step = next_registration_step(&registration, email_verified, phone_verified);
 
     Ok(Json(RegisterOutcome {
-        status: "success",
+        status: "success".to_owned(),
         id: Some(registration.id.to_string()),
-        next_step: Some(step),
+        next_step: Some(step.to_owned()),
         error: None,
     }))
 }
@@ -381,13 +371,6 @@ pub struct ChangeRegistrationEmailInput {
     pub email: String,
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct ChangeRegistrationEmailOutcome {
-    pub status: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
 #[endpoint]
 pub async fn post_change_email(
     req: &mut Request,
@@ -452,7 +435,10 @@ pub async fn post_change_email(
         RegistrationEmailChangeOutcome::RateLimited => ("error", Some("rate_limited".into())),
     };
 
-    Ok(Json(ChangeRegistrationEmailOutcome { status, error }))
+    Ok(Json(ChangeRegistrationEmailOutcome {
+        status: status.to_owned(),
+        error,
+    }))
 }
 
 // ── POST /_coauth/account/auth/register/:id/verify-phone ────────────────

@@ -1,3 +1,4 @@
+use coauth_account_types::RecoveryTicketStatusOutcome;
 use coauth_data::user::UserRecoveryRepository;
 use coauth_data::{Clock, RepositoryAccess};
 use salvo::oapi::ToSchema;
@@ -161,13 +162,6 @@ pub async fn set_password(
 
 // ── GET /_coauth/account/password-recovery/:ticket ─────────────────────
 
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryTicketStatusOutcome {
-    pub status: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
-}
-
 #[endpoint]
 pub async fn get_recovery_ticket_status(
     req: &mut Request,
@@ -180,7 +174,7 @@ pub async fn get_recovery_ticket_status(
     let config = depot.site_config()?;
     if !config.account_recovery_allowed {
         return Ok(Json(RecoveryTicketStatusOutcome {
-            status: "disabled",
+            status: "disabled".to_owned(),
             email: None,
         }));
     }
@@ -192,7 +186,7 @@ pub async fn get_recovery_ticket_status(
     let Some(recovery_ticket) = repo.user_recovery().find_ticket(&ticket).await? else {
         repo.cancel().await?;
         return Ok(Json(RecoveryTicketStatusOutcome {
-            status: "not_found",
+            status: "not_found".to_owned(),
             email: None,
         }));
     };
@@ -220,7 +214,10 @@ pub async fn get_recovery_ticket_status(
     let email = Some(super::mask_email(&recovery_session.email));
     repo.cancel().await?;
 
-    Ok(Json(RecoveryTicketStatusOutcome { status, email }))
+    Ok(Json(RecoveryTicketStatusOutcome {
+        status: status.to_owned(),
+        email,
+    }))
 }
 
 // ── POST /_coauth/account/password-recovery/set ─────────────────────────

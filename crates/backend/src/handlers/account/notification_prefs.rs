@@ -4,8 +4,12 @@
 //!   preference settings.
 //! - `PATCH /_coauth/self/viewer/preferences` — updates the user's notification preferences.
 
+use coauth_account_types::{
+    ChannelAvailability, ChannelPreference, NotificationPreferencesOutcome,
+    PatchNotificationPreferencesOutcome,
+};
 use salvo::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use super::{
     DepotExt, RouteError, extract_bound_activity_tracker, extract_session_info, get_requester,
@@ -18,47 +22,10 @@ use crate::services::user_profile::{
 
 // ── Response / request types ─────────────────────────────────
 
-/// Availability status of a single notification channel.
-#[derive(Serialize, Deserialize, Clone, salvo::oapi::ToSchema)]
-pub struct ChannelAvailability {
-    /// Channel name, e.g. `"email"` or `"sms"`.
-    pub channel: String,
-
-    /// Whether this channel is enabled on the server.
-    pub enabled: bool,
-}
-
-/// Per-channel preference of the current user.
-#[derive(Serialize, Deserialize, Clone, salvo::oapi::ToSchema)]
-pub struct ChannelPreference {
-    /// Channel name, e.g. `"email"` or `"sms"`.
-    pub channel: String,
-
-    /// Whether the user wants to receive notifications on this channel.
-    pub enabled: bool,
-}
-
-/// Response for `GET /_coauth/self/viewer/preferences`.
-#[derive(Serialize, salvo::oapi::ToSchema)]
-pub struct NotificationPreferencesOutcome {
-    /// Server-side channel availability.
-    pub available_channels: Vec<ChannelAvailability>,
-
-    /// The user's current preferences (one entry per channel).
-    pub preferences: Vec<ChannelPreference>,
-}
-
 /// Request body for `PATCH /_coauth/self/viewer/preferences`.
 #[derive(Deserialize, salvo::oapi::ToSchema)]
 pub struct PatchNotificationPreferencesRequestBody {
     /// The per-channel preferences to update.
-    pub preferences: Vec<ChannelPreference>,
-}
-
-/// Response for `PATCH /_coauth/self/viewer/preferences`.
-#[derive(Serialize, salvo::oapi::ToSchema)]
-pub struct PatchNotificationPreferencesOutcome {
-    /// The preferences as persisted by the server.
     pub preferences: Vec<ChannelPreference>,
 }
 

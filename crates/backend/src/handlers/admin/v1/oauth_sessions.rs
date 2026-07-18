@@ -15,7 +15,7 @@ use serde::Deserialize;
 use ulid::Ulid;
 
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::model::{OAuthSession, Resource};
+use crate::handlers::admin::model::{OAuthSession, Resource, to_oauth_session};
 use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
@@ -82,7 +82,7 @@ pub async fn finish_session(
     repo.save().await?;
 
     Ok(Json(SingleOutcome::new(
-        OAuthSession::from(ended),
+        to_oauth_session(ended),
         format!("/_coauth/admin/oauth-sessions/{session_id}/finish"),
     )))
 }
@@ -103,7 +103,7 @@ pub async fn get_session(
         .await?
         .ok_or_else(|| AppError::not_found(format!("OAuth session ID {id} not found")))?;
 
-    Ok(Json(SingleOutcome::new_canonical(OAuthSession::from(
+    Ok(Json(SingleOutcome::new_canonical(to_oauth_session(
         session,
     ))))
 }
@@ -319,7 +319,7 @@ pub async fn list_sessions(
                 .oauth_session()
                 .list(filter, pagination)
                 .await?
-                .map(OAuthSession::from);
+                .map(to_oauth_session);
             let count = repo.oauth_session().count(filter).await?;
             paginated_response_for_page(page, pagination, Some(count), &base)
         }
@@ -328,7 +328,7 @@ pub async fn list_sessions(
                 .oauth_session()
                 .list(filter, pagination)
                 .await?
-                .map(OAuthSession::from);
+                .map(to_oauth_session);
             paginated_response_for_page(page, pagination, None, &base)
         }
         IncludeCount::Only => {

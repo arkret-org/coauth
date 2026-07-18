@@ -168,6 +168,129 @@ pub struct ProviderInfo {
     pub authorize_url: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct LinkedAccount {
+    pub id: String,
+    pub provider_id: String,
+    pub provider_name: Option<String>,
+    pub provider_brand: Option<String>,
+    pub subject: String,
+    pub human_account_name: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct LinkedAccountsOutcome {
+    pub accounts: Vec<LinkedAccount>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct UnlinkOutcome {
+    pub status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct ChannelAvailability {
+    pub channel: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct ChannelPreference {
+    pub channel: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct NotificationPreferencesOutcome {
+    pub available_channels: Vec<ChannelAvailability>,
+    pub preferences: Vec<ChannelPreference>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct UpdateNotificationPreferencesOutcome {
+    pub preferences: Vec<ChannelPreference>,
+}
+
+pub type PatchNotificationPreferencesOutcome = UpdateNotificationPreferencesOutcome;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct RegisterOutcome {
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_step: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct ChangeRegistrationEmailOutcome {
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct RecoveryStatusOutcome {
+    pub id: String,
+    pub email: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct RecoveryTicketStatusOutcome {
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct DeviceLinkOutcome {
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grant_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct WorkflowInboxItem {
+    pub session_id: String,
+    pub strand_slug: String,
+    pub strand_title: String,
+    pub current_stage: String,
+    pub started_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct WorkflowInboxOutcome {
+    pub pending: Vec<WorkflowInboxItem>,
+    pub total: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct PageInfo {
+    pub has_next_page: bool,
+    pub has_previous_page: bool,
+    pub start_cursor: Option<String>,
+    pub end_cursor: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

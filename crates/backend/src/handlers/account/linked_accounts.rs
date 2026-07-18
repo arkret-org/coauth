@@ -3,9 +3,8 @@
 //! These endpoints allow authenticated users to view and unlink their
 //! connected external accounts (GitHub, Google, etc.).
 
-use salvo::oapi::ToSchema;
+use coauth_account_types::{LinkedAccount, LinkedAccountsOutcome, UnlinkOutcome};
 use salvo::prelude::*;
-use serde::Serialize;
 use ulid::Ulid;
 
 use super::{
@@ -15,29 +14,6 @@ use super::{
 use crate::handlers::account::service::connections::{
     LinkedAccountError, list_linked_accounts as list_linked_accounts_service, unlink_linked_account,
 };
-
-// ── Response types ──────────────────────────────────────────────
-
-#[derive(Serialize, ToSchema)]
-pub struct LinkedAccountsOutcome {
-    pub accounts: Vec<LinkedAccount>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct LinkedAccount {
-    pub id: String,
-    pub provider_id: String,
-    pub provider_name: Option<String>,
-    pub provider_brand: Option<String>,
-    pub subject: String,
-    pub human_account_name: Option<String>,
-    pub created_at: String,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct UnlinkOutcome {
-    pub status: &'static str,
-}
 
 // ── GET /_coauth/self/linked-accounts ─────────────────────────────────
 
@@ -99,7 +75,9 @@ pub async fn unlink_account(
         .await
         .map_err(map_linked_account_error)?;
 
-    Ok(Json(UnlinkOutcome { status: "unlinked" }))
+    Ok(Json(UnlinkOutcome {
+        status: "unlinked".to_owned(),
+    }))
 }
 
 fn map_linked_account_error(error: LinkedAccountError) -> RouteError {

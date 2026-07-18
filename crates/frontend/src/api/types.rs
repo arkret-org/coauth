@@ -1,3 +1,9 @@
+pub use coauth_account_types::{
+    ChangeRegistrationEmailOutcome, ChannelAvailability, ChannelPreference, DeviceLinkOutcome,
+    LinkedAccount, LinkedAccountsOutcome, NotificationPreferencesOutcome, PageInfo,
+    RecoveryStatusOutcome, RecoveryTicketStatusOutcome, RegisterOutcome, UnlinkOutcome,
+    UpdateNotificationPreferencesOutcome, WorkflowInboxOutcome,
+};
 use serde::{Deserialize, Serialize};
 
 // ── Viewer & User ──────────────────────────────────────────────
@@ -62,27 +68,6 @@ pub struct UserProfile {
     #[serde(default)]
     pub preferred_locale: Option<String>,
     pub updated_at: String,
-}
-
-// ── Linked accounts ───────────────────────────────────────────
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct LinkedAccount {
-    pub id: String,
-    pub provider_id: String,
-    #[serde(default)]
-    pub provider_name: Option<String>,
-    #[serde(default)]
-    pub provider_brand: Option<String>,
-    pub subject: String,
-    #[serde(default)]
-    pub human_account_name: Option<String>,
-    pub created_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct UnlinkOutcome {
-    pub status: String,
 }
 
 // ── Session types ──────────────────────────────────────────────
@@ -213,14 +198,6 @@ pub struct EmailEdge {
 }
 
 // ── Session connections / pagination ───────────────────────────
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct PageInfo {
-    pub has_next_page: bool,
-    pub has_previous_page: bool,
-    pub start_cursor: Option<String>,
-    pub end_cursor: Option<String>,
-}
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct BrowserSessionConnection {
@@ -443,17 +420,6 @@ pub use coauth_account_types::{CurrentAccountInfo, LoginOutcome, ProvidersOutcom
 // ── Registration API types ────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct RegisterOutcome {
-    pub status: String,
-    #[serde(default)]
-    pub id: Option<String>,
-    #[serde(default)]
-    pub next_step: Option<String>,
-    #[serde(default)]
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct RegisterStatusOutcome {
     pub id: String,
     pub handle: String,
@@ -478,13 +444,6 @@ pub struct StepOutcome {
     pub post_auth_action: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ChangeRegistrationEmailOutcome {
-    pub status: String,
-    #[serde(default)]
-    pub error: Option<String>,
-}
-
 // ── Recovery API types ────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -494,20 +453,6 @@ pub struct RecoveryStartOutcome {
     pub id: Option<String>,
     #[serde(default)]
     pub error: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct RecoveryStatusOutcome {
-    pub id: String,
-    pub email: String,
-    pub status: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct RecoveryTicketStatusOutcome {
-    pub status: String,
-    #[serde(default)]
-    pub email: Option<String>,
 }
 
 // ── OAuth Approval API types ─────────────────────────────────
@@ -557,13 +502,6 @@ pub struct OAuthApprovalSubmitOutcome {
 // ── Device Code API types ─────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct DeviceLinkOutcome {
-    pub status: String,
-    #[serde(default)]
-    pub grant_id: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct DeviceApprovalOutcome {
     pub status: String,
 }
@@ -580,50 +518,3 @@ pub struct SecuritySummaryOutcome {
 }
 
 // ── Linked accounts list (GET /_coauth/self/linked-accounts) ───────
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct LinkedAccountsOutcome {
-    pub accounts: Vec<LinkedAccount>,
-}
-
-// ── Workflow inbox (GET /_coauth/self/viewer/workflow-inbox) ───────
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct WorkflowInboxItem {
-    pub session_id: String,
-    pub strand_slug: String,
-    pub strand_title: String,
-    pub current_stage: String,
-    pub started_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct WorkflowInboxOutcome {
-    pub pending: Vec<WorkflowInboxItem>,
-    pub total: usize,
-}
-
-// ── Notification preferences (GET/PATCH /_coauth/self/viewer/preferences)
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ChannelAvailability {
-    pub channel: String,
-    pub enabled: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ChannelPreference {
-    pub channel: String,
-    pub enabled: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct NotificationPreferencesOutcome {
-    pub available_channels: Vec<ChannelAvailability>,
-    pub preferences: Vec<ChannelPreference>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct UpdateNotificationPreferencesOutcome {
-    pub preferences: Vec<ChannelPreference>,
-}

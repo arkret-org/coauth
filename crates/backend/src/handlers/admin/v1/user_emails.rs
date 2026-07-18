@@ -15,7 +15,7 @@ use serde::Deserialize;
 use ulid::Ulid;
 
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::model::{Resource, UserEmail};
+use crate::handlers::admin::model::{Resource, UserEmail, to_user_email};
 use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
@@ -108,7 +108,7 @@ pub async fn add_email(
     repo.save().await?;
 
     Ok(crate::handlers::admin::CreatedJson(
-        SingleOutcome::new_canonical(entry.into()),
+        SingleOutcome::new_canonical(to_user_email(entry)),
     ))
 }
 
@@ -173,7 +173,7 @@ pub async fn get_email(req: &mut Request, depot: &Depot) -> JsonResult<SingleOut
         .await?
         .ok_or_else(|| AppError::not_found(format!("User email ID {email_id} not found")))?;
 
-    Ok(Json(SingleOutcome::new_canonical(UserEmail::from(entry))))
+    Ok(Json(SingleOutcome::new_canonical(to_user_email(entry))))
 }
 
 /// Query-string parameters for filtering user email results.
@@ -255,7 +255,7 @@ pub async fn list_emails(
                 .user_email()
                 .list(filter, pagination)
                 .await?
-                .map(UserEmail::from);
+                .map(to_user_email);
             let total = repo.user_email().count(filter).await?;
             paginated_response_for_page(page, pagination, Some(total), &base_url)
         }
@@ -264,7 +264,7 @@ pub async fn list_emails(
                 .user_email()
                 .list(filter, pagination)
                 .await?
-                .map(UserEmail::from);
+                .map(to_user_email);
             paginated_response_for_page(page, pagination, None, &base_url)
         }
         IncludeCount::Only => {
@@ -319,7 +319,7 @@ pub async fn update_email(
 
     repo.save().await?;
 
-    Ok(Json(SingleOutcome::new_canonical(UserEmail::from(
+    Ok(Json(SingleOutcome::new_canonical(to_user_email(
         user_email,
     ))))
 }

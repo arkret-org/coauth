@@ -11,7 +11,7 @@ use serde::Deserialize;
 use ulid::Ulid;
 
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::model::{Resource, UserSession};
+use crate::handlers::admin::model::{Resource, UserSession, to_user_session};
 use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
@@ -70,7 +70,7 @@ pub async fn finish_session(
     repo.save().await?;
 
     Ok(Json(SingleOutcome::new(
-        UserSession::from(ended),
+        to_user_session(ended),
         format!("/_coauth/admin/user-sessions/{session_id}/finish"),
     )))
 }
@@ -92,7 +92,7 @@ pub async fn get_session(
         .await?
         .ok_or_else(|| AppError::not_found(format!("User session ID {session_id} not found")))?;
 
-    Ok(Json(SingleOutcome::new_canonical(UserSession::from(
+    Ok(Json(SingleOutcome::new_canonical(to_user_session(
         browser_session,
     ))))
 }
@@ -199,7 +199,7 @@ pub async fn list_sessions(
                 .browser_session()
                 .list(filter, pagination)
                 .await?
-                .map(UserSession::from);
+                .map(to_user_session);
             let total = repo.browser_session().count(filter).await?;
             paginated_response_for_page(page, pagination, Some(total), &base_url)
         }
@@ -208,7 +208,7 @@ pub async fn list_sessions(
                 .browser_session()
                 .list(filter, pagination)
                 .await?
-                .map(UserSession::from);
+                .map(to_user_session);
             paginated_response_for_page(page, pagination, None, &base_url)
         }
         IncludeCount::Only => {

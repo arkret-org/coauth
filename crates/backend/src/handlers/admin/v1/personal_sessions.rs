@@ -20,7 +20,7 @@ use tracing::error;
 use ulid::Ulid;
 
 use crate::handlers::admin::call_context::{CallerSession, extract_call_context};
-use crate::handlers::admin::model::{PersonalSession, Resource};
+use crate::handlers::admin::model::{PersonalSession, Resource, to_personal_session};
 use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
@@ -144,7 +144,7 @@ pub async fn add_session(
 
     Ok(crate::handlers::admin::CreatedJson(
         SingleOutcome::new_canonical(
-            PersonalSession::try_from((new_session, Some(token_record)))?.with_token(raw_token),
+            to_personal_session((new_session, Some(token_record)))?.with_token(raw_token),
         ),
     ))
 }
@@ -174,9 +174,10 @@ pub async fn get_session(
             .await?
     };
 
-    Ok(Json(SingleOutcome::new_canonical(
-        PersonalSession::try_from((entry, active_token))?,
-    )))
+    Ok(Json(SingleOutcome::new_canonical(to_personal_session((
+        entry,
+        active_token,
+    ))?)))
 }
 
 /// Whether a personal session is currently active or has been revoked.
@@ -391,7 +392,7 @@ pub async fn list_sessions(
             let page = repo.personal_session().list(filter, pagination).await?;
             let total = repo.personal_session().count(filter).await?;
             paginated_response_for_page(
-                page.try_map(PersonalSession::try_from)?,
+                page.try_map(to_personal_session)?,
                 pagination,
                 Some(total),
                 &base_url,
@@ -400,7 +401,7 @@ pub async fn list_sessions(
         IncludeCount::False => {
             let page = repo.personal_session().list(filter, pagination).await?;
             paginated_response_for_page(
-                page.try_map(PersonalSession::try_from)?,
+                page.try_map(to_personal_session)?,
                 pagination,
                 None,
                 &base_url,
@@ -490,7 +491,7 @@ pub async fn regenerate_session(
 
     Ok(crate::handlers::admin::CreatedJson(
         SingleOutcome::new_canonical(
-            PersonalSession::try_from((entry, Some(new_token_record)))?.with_token(new_token_str),
+            to_personal_session((entry, Some(new_token_record)))?.with_token(new_token_str),
         ),
     ))
 }
@@ -553,9 +554,9 @@ pub async fn revoke_session(
 
     repo.save().await?;
 
-    Ok(Json(SingleOutcome::new_canonical(
-        PersonalSession::try_from((revoked, None))?,
-    )))
+    Ok(Json(SingleOutcome::new_canonical(to_personal_session((
+        revoked, None,
+    ))?)))
 }
 
 #[cfg(test)]

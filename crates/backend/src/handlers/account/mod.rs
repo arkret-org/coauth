@@ -7,6 +7,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use chrono::{DateTime, Utc};
+use coauth_account_types::PageInfo;
 use coauth_data::{BoxRepository, Clock, SiteConfig, User};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
@@ -209,14 +210,6 @@ pub struct PaginationParams {
     pub after: Option<String>,
     pub last: Option<i64>,
     pub before: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct PageInfo {
-    pub has_next_page: bool,
-    pub has_previous_page: bool,
-    pub start_cursor: Option<String>,
-    pub end_cursor: Option<String>,
 }
 
 #[derive(Serialize)]

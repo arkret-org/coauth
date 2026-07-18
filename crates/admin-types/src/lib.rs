@@ -29,6 +29,7 @@ pub mod federation_admin;
 pub mod integration_manifest_admin;
 pub mod notification_admin;
 pub mod organization_admin;
+pub mod resource_models;
 pub mod risk_action;
 
 pub use account_admin::*;
@@ -44,4 +45,5 @@ pub use federation_admin::*;
 pub use integration_manifest_admin::*;
 pub use notification_admin::*;
 pub use organization_admin::*;
+pub use resource_models::*;
 pub use risk_action::*;

@@ -20,10 +20,12 @@
 //!    `enrollment_authority_binding`.
 //! 5. Sign the proof with the persistent enrollment key (VM mapped to `executed_by`) and return the
 //!    full Event JSON.
+use std::sync::{Mutex, OnceLock};
+
 use arkret_core::{
     AccountDeviceEnrollOutcome, AccountDeviceEnrollRequestBody, Audience, DeviceAuthorizePayload,
     DeviceEnrollmentAuthorityBinding, DeviceEnrollmentAuthorityBindingKind, DeviceOrPrincipalRef,
-    Did, Event, EventId, EventRequirements, Hlc, NonEmptyString, RealmId,
+    Did, Event, EventId, EventRequirements, Hlc, HlcGenerator, NonEmptyString, RealmId,
     ed25519_pubkey_to_did_key_multibase,
 };
 use arkret_signatures::{SignEventOptions, sign_event};
@@ -106,19 +108,33 @@ fn truncate_to_seconds(when: DateTime<Utc>) -> DateTime<Utc> {
     DateTime::from_timestamp(when.timestamp(), 0).unwrap_or(when)
 }
 
-/// Generate a fresh HLC string (`<unix_ms>-<logical>-<node>`) in the
-/// 26-char form the SDK `Hlc` validator accepts.
-fn fresh_hlc(now: DateTime<Utc>, rng: &mut (dyn rand_core::RngCore + Send)) -> Hlc {
+static DEVICE_ENROLL_HLC: OnceLock<Mutex<HlcGenerator>> = OnceLock::new();
+
+fn fresh_hlc(
+    authority: &crate::services::device_enrollment_authority::EnrollmentAuthority,
+    realm_id: &RealmId,
+    device_id: &arkret_core::DeviceId,
+    now: DateTime<Utc>,
+) -> Result<Hlc, ArkretRouteError> {
     let unix_ms = u64::try_from(now.timestamp_millis().max(0)).unwrap_or(0);
-    let node = rng.next_u32();
-    // 12 hex (48-bit ms) + 4 hex logical + 8 hex node = 26 with separators.
-    let value = format!(
-        "{:012x}-{:04x}-{:08x}",
-        unix_ms & 0xFFFF_FFFF_FFFF,
-        0u16,
-        node
-    );
-    Hlc::new(value).expect("generated HLC is well-formed")
+    let secret = authority.hlc_node_secret();
+    let clock = DEVICE_ENROLL_HLC.get_or_init(|| {
+        Mutex::new(HlcGenerator::with_initial_time(
+            realm_id.as_str(),
+            device_id.as_str(),
+            &secret,
+            0,
+        ))
+    });
+    clock
+        .lock()
+        .map_err(|_| {
+            ArkretRouteError::Internal(Box::new(std::io::Error::other(
+                "device enrollment HLC lock poisoned",
+            )))
+        })?
+        .try_generate_for_scope_at(realm_id.as_str(), device_id.as_str(), &secret, unix_ms)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
 }
 
 fn enforce_service_attested_device_authorize_provenance(
@@ -217,7 +233,6 @@ pub async fn device_enroll_endpoint(
     let arkret_config = depot.arkret_config()?;
     let url_builder = depot.url_builder()?;
     let clock = crate::handlers::make_clock();
-    let mut rng = crate::handlers::make_rng();
 
     // 1. Durable-session auth: the caller presents its `ak.session.grant` (`Authorization: Bearer`)
     //    plus a grant-binding `DPoP` proof bound to the grant's `cnf.jkt`. This is the same
@@ -441,6 +456,7 @@ pub async fn device_enroll_endpoint(
         )))
     })?;
 
+    let hlc = fresh_hlc(&authority, &realm_id, &device_id, now)?;
     let mut event = Event {
         event_id: EventId::new(arkret_core::identifiers::new_prefixed_uuid7("ak:event:")).map_err(
             |error| {
@@ -454,7 +470,7 @@ pub async fn device_enroll_endpoint(
         actor_id: principal_id.clone(),
         actor_seq: body.actor_seq,
         created_at: now,
-        hlc: fresh_hlc(now, &mut *rng),
+        hlc,
         prev_refs,
         effective_scope: None,
         refs: Vec::new(),

@@ -12,7 +12,7 @@ use serde::Deserialize;
 use ulid::Ulid;
 
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::model::{Resource, UpstreamOAuthLink};
+use crate::handlers::admin::model::{Resource, UpstreamOAuthLink, to_upstream_oauth_link};
 use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
@@ -114,7 +114,7 @@ pub async fn add_link(
         repo.save().await?;
 
         return Ok(crate::handlers::admin::CreatedJson(
-            SingleOutcome::new_canonical(entry.into()),
+            SingleOutcome::new_canonical(to_upstream_oauth_link(entry)),
         ));
     }
 
@@ -154,7 +154,7 @@ pub async fn add_link(
     repo.save().await?;
 
     Ok(crate::handlers::admin::CreatedJson(
-        SingleOutcome::new_canonical(entry.into()),
+        SingleOutcome::new_canonical(to_upstream_oauth_link(entry)),
     ))
 }
 
@@ -224,7 +224,7 @@ pub async fn get_link(
             AppError::not_found(format!("Upstream OAuth Link ID {link_id} not found"))
         })?;
 
-    Ok(Json(SingleOutcome::new_canonical(UpstreamOAuthLink::from(
+    Ok(Json(SingleOutcome::new_canonical(to_upstream_oauth_link(
         entry,
     ))))
 }
@@ -336,7 +336,7 @@ pub async fn list_links(
                 .upstream_oauth_link()
                 .list(filter, pagination)
                 .await?
-                .map(UpstreamOAuthLink::from);
+                .map(to_upstream_oauth_link);
             let total = repo.upstream_oauth_link().count(filter).await?;
             paginated_response_for_page(page, pagination, Some(total), &base_url)
         }
@@ -345,7 +345,7 @@ pub async fn list_links(
                 .upstream_oauth_link()
                 .list(filter, pagination)
                 .await?
-                .map(UpstreamOAuthLink::from);
+                .map(to_upstream_oauth_link);
             paginated_response_for_page(page, pagination, None, &base_url)
         }
         IncludeCount::Only => {
@@ -400,7 +400,7 @@ pub async fn update_link(
 
     repo.save().await?;
 
-    Ok(Json(SingleOutcome::new_canonical(UpstreamOAuthLink::from(
+    Ok(Json(SingleOutcome::new_canonical(to_upstream_oauth_link(
         link,
     ))))
 }

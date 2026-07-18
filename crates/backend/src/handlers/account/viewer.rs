@@ -1,10 +1,10 @@
+use coauth_account_types::{LinkedAccount, WorkflowInboxItem, WorkflowInboxOutcome};
 use coauth_data::RepositoryAccess;
 use coauth_data::account::AccountSecuritySummary;
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use serde::Serialize;
 
-use super::linked_accounts::LinkedAccount;
 use super::site_config::{SiteConfigOutcome, from_site_config};
 use super::{
     DepotExt, NodeType, RouteError, UserAgentInfo, extract_bound_activity_tracker,
@@ -286,23 +286,6 @@ pub async fn get_security_summary(
 }
 
 // ── Response types for workflow inbox ────────────────────────
-
-/// A single pending workflow item in the inbox.
-#[derive(Serialize, ToSchema)]
-pub struct WorkflowInboxItem {
-    pub session_id: String,
-    pub strand_slug: String,
-    pub strand_title: String,
-    pub current_stage: String,
-    pub started_at: String,
-}
-
-/// Response for `GET /_coauth/self/viewer/workflow-inbox`.
-#[derive(Serialize, ToSchema)]
-pub struct WorkflowInboxOutcome {
-    pub pending: Vec<WorkflowInboxItem>,
-    pub total: usize,
-}
 
 // ── GET /_coauth/self/viewer/workflow-inbox ────────────────────────
 
