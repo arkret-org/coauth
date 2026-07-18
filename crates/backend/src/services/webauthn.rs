@@ -439,6 +439,20 @@ mod tests {
     }
 
     #[test]
+    fn rp_builder_accepts_localhost_http_origin() {
+        let origin = url::Url::parse("http://localhost:7080").unwrap();
+        let result = WebauthnBuilder::new("localhost", &origin);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rp_builder_rejects_ip_literal_origin() {
+        let origin = url::Url::parse("http://127.0.0.1:7080").unwrap();
+        let result = WebauthnBuilder::new("127.0.0.1", &origin);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn rp_builder_rejects_mismatched_id() {
         // `rp_id` must be a registrable suffix of the origin.
         let origin = url::Url::parse("https://auth.example.com").unwrap();
