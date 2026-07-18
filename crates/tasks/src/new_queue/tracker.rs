@@ -91,7 +91,21 @@ impl JobTracker {
                     job.attempt = %context.attempt,
                     "Running job"
                 );
-                let result = job.run(&state, context.clone()).await;
+                let result = match job.timeout() {
+                    Some(limit) => {
+                        match tokio::time::timeout(limit, job.run(&state, context.clone())).await {
+                            Ok(result) => result,
+                            Err(_) => {
+                                context.cancellation_token.cancel();
+                                Err(JobError::retry(anyhow::anyhow!(
+                                    "job exceeded its {:?} execution timeout",
+                                    limit
+                                )))
+                            }
+                        }
+                    }
+                    None => job.run(&state, context.clone()).await,
+                };
 
                 match &result {
                     Ok(()) => {

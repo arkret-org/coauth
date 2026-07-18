@@ -24,7 +24,7 @@ expression: snapshot
     "name",
     "nonce",
     "org.arkret.device_id",
-    "org.arkret.principal_did",
+    "org.arkret.principal_id",
     "org.arkret.session_id",
     "picture",
     "preferred_username",

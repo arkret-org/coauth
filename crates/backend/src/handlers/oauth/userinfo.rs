@@ -22,8 +22,8 @@ struct UserInfo {
     sub: String,
     username: String,
     preferred_username: String,
-    #[serde(rename = "org.arkret.principal_did")]
-    principal_did: Option<String>,
+    #[serde(rename = "org.arkret.principal_id")]
+    principal_id: Option<String>,
     #[serde(rename = "org.arkret.device_id")]
     #[serde(skip_serializing_if = "Option::is_none")]
     device_id: Option<String>,
@@ -170,7 +170,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
         .await?
         .ok_or(RouteError::NoSuchUser(user_id))?;
     let subject_did = arkret::oidc_subject_for_user(&arkret_config, &user);
-    let principal_did =
+    let principal_id =
         arkret::published_principal_did_for_user(&mut repo, &arkret_config, &user).await?;
 
     let user_info = UserInfo {
@@ -180,7 +180,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
         // display form (spec 7157ee8 retires the URI form but the display
         // shape stays for OIDC client compatibility).
         preferred_username: arkret::user_handle_display(&url_builder, &user),
-        principal_did,
+        principal_id,
         device_id: arkret::primary_device_id(&session.scope),
         session_id: session.id.to_string(),
         name: user.display_name.clone(),

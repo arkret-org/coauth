@@ -221,7 +221,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
         "name".to_owned(),
         "picture".to_owned(),
         "locale".to_owned(),
-        arkret::CLAIM_PRINCIPAL_DID.to_owned(),
+        arkret::CLAIM_PRINCIPAL_ID.to_owned(),
         arkret::CLAIM_DEVICE_ID.to_owned(),
         arkret::CLAIM_SESSION_ID.to_owned(),
     ]);
@@ -425,7 +425,7 @@ mod tests {
         assert!(
             claims
                 .iter()
-                .any(|claim| claim == arkret::CLAIM_PRINCIPAL_DID)
+                .any(|claim| claim == arkret::CLAIM_PRINCIPAL_ID)
         );
         assert!(claims.iter().any(|claim| claim == arkret::CLAIM_DEVICE_ID));
         assert!(claims.iter().any(|claim| claim == arkret::CLAIM_SESSION_ID));

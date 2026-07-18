@@ -35,8 +35,11 @@ jobs:
         with:
           tool: mdbook
 
-      - name: Generate documentation output
+      - name: Generate English documentation output
         run: mdbook build
+
+      - name: Generate Chinese documentation output
+        run: mdbook build book-zh
 
       - name: Adjust file permissions for deployment
         run: |

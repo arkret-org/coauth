@@ -45,7 +45,7 @@ Principal Server 能力族。这个命名空间用于需要比普通 OIDC 登录
 
 在适用场景下，ID token、userinfo response 和 introspection response 可以暴露：
 
-- `org.arkret.principal_did`
+- `org.arkret.principal_id`
 - `org.arkret.device_id`
 - `org.arkret.session_id`
 

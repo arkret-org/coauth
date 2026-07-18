@@ -20,7 +20,7 @@ use serde::Deserialize;
 use crate::EnumEntry;
 use crate::traits::{Section, s};
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "all IANA CSV columns are deserialized to validate registry shape")]
 #[derive(Debug, Deserialize)]
 pub struct AccessTokenType {
     #[serde(rename = "Name")]
@@ -48,7 +48,7 @@ impl EnumEntry for AccessTokenType {
     }
 }
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "all IANA CSV columns are deserialized to validate registry shape")]
 #[derive(Debug, Deserialize)]
 pub struct AuthorizationEndpointResponseType {
     #[serde(rename = "Name")]
@@ -75,7 +75,7 @@ impl EnumEntry for AuthorizationEndpointResponseType {
     }
 }
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "all IANA CSV columns are deserialized to validate registry shape")]
 #[derive(Debug, Deserialize)]
 pub struct TokenEndpointAuthenticationMethod {
     #[serde(rename = "Token Endpoint Authentication Method Name")]
@@ -86,7 +86,7 @@ pub struct TokenEndpointAuthenticationMethod {
     reference: String,
 }
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "all IANA CSV columns are deserialized to validate registry shape")]
 #[derive(Debug, Deserialize)]
 pub struct TokenTypeHint {
     #[serde(rename = "Hint Value")]
@@ -128,7 +128,7 @@ impl EnumEntry for TokenEndpointAuthenticationMethod {
     }
 }
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "all IANA CSV columns are deserialized to validate registry shape")]
 #[derive(Debug, Deserialize)]
 pub struct PkceCodeChallengeMethod {
     #[serde(rename = "Code Challenge Method Parameter Name")]

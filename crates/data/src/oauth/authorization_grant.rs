@@ -117,13 +117,6 @@ impl AuthorizationGrantStage {
         }
     }
 
-    fn cancel(self, cancelled_at: DateTime<Utc>) -> Result<Self, InvalidTransitionError> {
-        match self {
-            Self::Pending => Ok(Self::Cancelled { cancelled_at }),
-            _ => Err(InvalidTransitionError),
-        }
-    }
-
     /// Returns `true` if the authorization grant stage is [`Pending`].
     ///
     /// [`Pending`]: AuthorizationGrantStage::Pending
@@ -232,22 +225,6 @@ impl AuthorizationGrant {
         session: &Session,
     ) -> Result<Self, InvalidTransitionError> {
         self.stage = self.stage.fulfill(fulfilled_at, session)?;
-        Ok(self)
-    }
-
-    /// Mark the authorization grant as cancelled.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the authorization grant is not [`Pending`].
-    ///
-    /// [`Pending`]: AuthorizationGrantStage::Pending
-    ///
-    /// # TODO
-    ///
-    /// This appears to be unused
-    pub fn cancel(mut self, canceled_at: DateTime<Utc>) -> Result<Self, InvalidTransitionError> {
-        self.stage = self.stage.cancel(canceled_at)?;
         Ok(self)
     }
 

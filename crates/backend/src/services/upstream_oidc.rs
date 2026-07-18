@@ -32,9 +32,9 @@ pub struct OidcUserinfoClaims {
     pub email: Option<String>,
     #[serde(default)]
     pub preferred_username: Option<String>,
-    #[serde(rename = "org.arkret.principal_did")]
+    #[serde(rename = "org.arkret.principal_id")]
     #[serde(default)]
-    pub principal_did: Option<String>,
+    pub principal_id: Option<String>,
     #[serde(rename = "org.arkret.session_id")]
     #[serde(default)]
     pub session_id: Option<String>,

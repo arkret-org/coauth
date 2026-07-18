@@ -117,10 +117,6 @@ pub trait RunnableJob: Send + 'static {
 
     /// Optional per-job timeout. When elapsed the job's cancellation token is
     /// triggered so the implementation can shut down gracefully.
-    ///
-    /// KNOWN GAP: the queue runner does not read this yet, so declared
-    /// timeouts are not enforced (tracked as a spawned follow-up task).
-    #[allow(dead_code)]
     fn timeout(&self) -> Option<std::time::Duration> {
         None
     }

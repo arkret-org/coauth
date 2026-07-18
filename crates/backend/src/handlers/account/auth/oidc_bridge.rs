@@ -1118,7 +1118,7 @@ async fn exchange_oidc_code(
             expected_subject, oauth_userinfo.sub
         )));
     }
-    // `org.arkret.principal_did` is optional and only carries a persisted,
+    // `org.arkret.principal_id` is optional and only carries a persisted,
     // method-allowed principal DID. The local OAuth proof binds the account
     // with `sub` + session id; the audience-specific principal DID must already
     // have a verified binding before session-grant issuance.

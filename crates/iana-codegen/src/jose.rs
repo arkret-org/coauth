@@ -43,7 +43,7 @@ enum ImplRequirement {
 
 /// Row from the IANA "JSON Web Signature and Encryption Algorithms"
 /// registry.
-#[allow(dead_code)]
+#[expect(dead_code, reason = "all IANA CSV columns are deserialized to validate registry shape")]
 #[derive(Debug, Deserialize)]
 pub struct WebEncryptionSignatureAlgorithm {
     #[serde(rename = "Algorithm Name")]
@@ -132,7 +132,7 @@ impl WebEncryptionSignatureAlgorithm {
 
 // ── JWE compression ──────────────────────────────────────────────────
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "all IANA CSV columns are deserialized to validate registry shape")]
 #[derive(Debug, Deserialize)]
 pub struct WebEncryptionCompressionAlgorithm {
     #[serde(rename = "Compression Algorithm Value")]
@@ -169,7 +169,7 @@ impl EnumEntry for WebEncryptionCompressionAlgorithm {
 
 // ── JWK key types ────────────────────────────────────────────────────
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "all IANA CSV columns are deserialized to validate registry shape")]
 #[derive(Debug, Deserialize)]
 pub struct WebKeyType {
     #[serde(rename = "\"kty\" Parameter Value")]
@@ -203,7 +203,7 @@ impl EnumEntry for WebKeyType {
 
 // ── JWK elliptic curves ──────────────────────────────────────────────
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "all IANA CSV columns are deserialized to validate registry shape")]
 #[derive(Debug, Deserialize)]
 pub struct WebKeyEllipticCurve {
     #[serde(rename = "Curve Name")]
@@ -253,7 +253,7 @@ impl EnumEntry for WebKeyEllipticCurve {
 
 // ── JWK use ──────────────────────────────────────────────────────────
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "all IANA CSV columns are deserialized to validate registry shape")]
 #[derive(Debug, Deserialize)]
 pub struct WebKeyUse {
     #[serde(rename = "Use Member Value")]
@@ -285,7 +285,7 @@ impl EnumEntry for WebKeyUse {
 
 // ── JWK operations ───────────────────────────────────────────────────
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "all IANA CSV columns are deserialized to validate registry shape")]
 #[derive(Debug, Deserialize)]
 pub struct WebKeyOperation {
     #[serde(rename = "Key Operation Value")]

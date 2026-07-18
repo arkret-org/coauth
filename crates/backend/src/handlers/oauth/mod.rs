@@ -91,7 +91,7 @@ pub(crate) fn generate_id_token(
     claims::SUB.insert(&mut claims, subject_did.to_owned())?;
     if let Some(principal_did) = principal_did {
         claims.insert(
-            arkret::CLAIM_PRINCIPAL_DID.to_owned(),
+            arkret::CLAIM_PRINCIPAL_ID.to_owned(),
             serde_json::Value::String(principal_did.to_owned()),
         );
     }
@@ -268,7 +268,7 @@ mod tests {
         );
         assert_eq!(
             payload
-                .get(arkret::CLAIM_PRINCIPAL_DID)
+                .get(arkret::CLAIM_PRINCIPAL_ID)
                 .and_then(Value::as_str),
             Some(principal_did)
         );
@@ -300,7 +300,7 @@ mod tests {
     }
 
     #[test]
-    fn generate_id_token_omits_principal_did_claim_when_not_published() {
+    fn generate_id_token_omits_principal_id_claim_when_not_published() {
         let clock = MockClock::default();
         let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
         let subject = "did:web:example.com:users:01ARZ3NDEKTSV4RRFFQ69G5FAV";
@@ -338,7 +338,7 @@ mod tests {
             jwt.payload().get("sub").and_then(Value::as_str),
             Some(subject)
         );
-        assert!(!jwt.payload().contains_key(arkret::CLAIM_PRINCIPAL_DID));
+        assert!(!jwt.payload().contains_key(arkret::CLAIM_PRINCIPAL_ID));
     }
 
     #[test]

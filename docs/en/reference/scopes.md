@@ -52,7 +52,7 @@ issues a session grant for a trusted Principal Server.
 When applicable, ID tokens, userinfo responses, and introspection responses can
 expose these Arkret claims:
 
-- `org.arkret.principal_did`
+- `org.arkret.principal_id`
 - `org.arkret.device_id`
 - `org.arkret.session_id`
 

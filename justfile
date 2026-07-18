@@ -160,7 +160,7 @@ docs-en:
 
 # Build the Chinese documentation (mdBook)
 docs-zh:
-    mdbook build -d ../target/docs/zh book-zh.toml
+    mdbook build book-zh
 
 # ── Utilities ────────────────────────────────────────────────
 
