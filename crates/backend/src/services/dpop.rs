@@ -35,31 +35,25 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration as StdDuration;
 
-use arkret_signatures::dpop_access_token_hash;
+use arkret_signatures::dpop::{DpopVerificationError, DpopVerificationRequest, verify_dpop_proof};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::{NewDpopJtiReplay, RepositoryAccess as _, RepositoryFactory as _};
-use coauth_iana::jose::JsonWebSignatureAlg;
-use coauth_jose::jwa::AsymmetricVerifyingKey;
-use coauth_jose::jwk::{PublicJsonWebKey, Thumbprint};
-use coauth_jose::jwt::Jwt;
+use coauth_jose::jwk::PublicJsonWebKey;
 use coauth_storage_postgres::PgRepositoryFactory;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 use thiserror::Error;
 use tokio::sync::Mutex;
 
-/// Maximum tolerated skew between the proof's `iat` and the verifier's
-/// clock (±). Mirrors RFC 9449 §4.3's "small leeway" guidance — we pick
-/// 60s, which is also what most well-known DPoP implementations use.
-const MAX_CLOCK_SKEW: Duration = Duration::seconds(60);
+/// Accepted proof freshness and future-clock leeway.
+const MAX_PROOF_AGE: Duration = Duration::seconds(300);
+const MAX_FUTURE_SKEW: Duration = Duration::seconds(30);
 
 /// Time window for jti replay detection — once a jti is observed it is
 /// rejected until this many seconds after its `iat`.
 const NONCE_TTL: StdDuration = StdDuration::from_mins(5);
-
-/// Standard `typ` value the proof header must carry per RFC 9449 §4.2.
-const DPOP_TYP: &str = "dpop+jwt";
+const MAX_IN_MEMORY_JTIS: usize = 100_000;
 
 /// The `jkt` thumbprint extracted from a DPoP proof, base64url-encoded
 /// per RFC 7638. Used as the value of the `cnf.jkt` claim on tokens
@@ -75,7 +69,7 @@ pub struct DpopClaims {
     pub htm: String,
     /// HTTP target URI without query / fragment.
     pub htu: String,
-    /// `issued at` — Unix seconds. MUST be within `MAX_CLOCK_SKEW`.
+    /// `issued at` — Unix seconds. MUST be inside the accepted freshness window.
     pub iat: i64,
     /// Access-token hash, set when the proof accompanies a Bearer token.
     /// Equal to `base64url(sha256(access_token))`.
@@ -114,14 +108,11 @@ pub enum DpopError {
     #[error("DPoP header `typ` must be `dpop+jwt`")]
     BadTyp,
 
-    #[error("DPoP header `alg` `{0}` is not supported (only ES256, EdDSA)")]
+    #[error("DPoP header `alg` `{0}` is not supported (only EdDSA)")]
     BadAlg(String),
 
     #[error("DPoP header is missing the embedded `jwk`")]
     MissingJwk,
-
-    #[error("DPoP embedded `jwk` does not match the signing algorithm: {0}")]
-    JwkAlgMismatch(String),
 
     #[error("DPoP signature verification failed")]
     BadSignature,
@@ -129,14 +120,14 @@ pub enum DpopError {
     #[error("DPoP claim `{0}` is missing or empty")]
     MissingClaim(&'static str),
 
-    #[error("DPoP `htm` mismatch (expected `{expected}`, got `{actual}`)")]
-    HtmMismatch { expected: String, actual: String },
+    #[error("DPoP `htm` does not match the request method")]
+    HtmMismatch,
 
-    #[error("DPoP `htu` mismatch (expected `{expected}`, got `{actual}`)")]
-    HtuMismatch { expected: String, actual: String },
+    #[error("DPoP `htu` does not match the request URI")]
+    HtuMismatch,
 
-    #[error("DPoP `iat` is outside the ±{0}s clock-skew window")]
-    IatOutOfRange(i64),
+    #[error("DPoP `iat` is outside the accepted freshness window")]
+    IatOutOfRange,
 
     #[error("DPoP `jti` `{0}` was already presented within the replay window")]
     JtiReplayed(String),
@@ -186,9 +177,19 @@ pub trait JtiReplayStore: Send + Sync + std::fmt::Debug {
 /// Default in-process [`JtiReplayStore`], keyed by `jti` → expiry
 /// timestamp. Adequate for single-node deployments and tests; replaced by
 /// a shared backend in multi-replica production.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct InMemoryJtiStore {
     seen: Mutex<HashMap<String, DateTime<Utc>>>,
+    max_entries: usize,
+}
+
+impl Default for InMemoryJtiStore {
+    fn default() -> Self {
+        Self {
+            seen: Mutex::new(HashMap::new()),
+            max_entries: MAX_IN_MEMORY_JTIS,
+        }
+    }
 }
 
 #[async_trait]
@@ -203,6 +204,11 @@ impl JtiReplayStore for InMemoryJtiStore {
         guard.retain(|_, expiry| *expiry > now);
         if guard.contains_key(jti) {
             return Err(DpopError::JtiReplayed(jti.to_owned()));
+        }
+        if guard.len() >= self.max_entries {
+            return Err(DpopError::ReplayStore(
+                "in-memory DPoP replay store capacity exhausted".to_owned(),
+            ));
         }
         let expiry = now + Duration::from_std(ttl).expect("NONCE_TTL fits in chrono::Duration");
         guard.insert(jti.to_owned(), expiry);
@@ -345,90 +351,35 @@ impl DpopVerifier {
             return Err(DpopError::Missing);
         }
 
-        let jwt: Jwt<'_, DpopClaims> =
-            Jwt::try_from(trimmed).map_err(|error| DpopError::NotJwt(error.to_string()))?;
-        let header = jwt.header();
+        let verified = verify_dpop_proof(&DpopVerificationRequest {
+            proof_jwt: trimmed,
+            method: htm,
+            htu,
+            access_token,
+            now,
+            max_age: MAX_PROOF_AGE,
+            max_future_skew: MAX_FUTURE_SKEW,
+        })
+        .map_err(map_verification_error)?;
+        let claims = DpopClaims {
+            jti: verified.claims.jti,
+            htm: verified.claims.htm,
+            htu: verified.claims.htu,
+            iat: verified.claims.iat,
+            ath: verified.claims.ath,
+            nonce: verified.claims.nonce,
+        };
+        let jkt = verified.jkt;
+        let jwk = serde_json::from_value(
+            serde_json::to_value(verified.public_jwk)
+                .map_err(|error| DpopError::Malformed(error.to_string()))?,
+        )
+        .map_err(|error| DpopError::Malformed(error.to_string()))?;
 
-        // `typ` MUST be `dpop+jwt` (RFC 9449 §4.2).
-        if header.typ() != Some(DPOP_TYP) {
-            return Err(DpopError::BadTyp);
-        }
-
-        // Only allow the two algs the task pins us to. The wider
-        // `coauth_jose` machinery supports many more, but DPoP requires
-        // an asymmetric proof key and we lock down the surface explicitly.
-        let alg = header.alg();
-        if !matches!(alg, JsonWebSignatureAlg::Es256 | JsonWebSignatureAlg::EdDsa) {
-            return Err(DpopError::BadAlg(alg.to_string()));
-        }
-
-        // Embedded JWK is the verification key (RFC 9449 §4.2: jwk MUST
-        // be present).
-        let jwk = header.jwk().ok_or(DpopError::MissingJwk)?.clone();
-        let verifying_key = AsymmetricVerifyingKey::from_jwk_and_alg(jwk.params(), alg)
-            .map_err(|error| DpopError::JwkAlgMismatch(error.to_string()))?;
-        jwt.verify(&verifying_key)
-            .map_err(|_| DpopError::BadSignature)?;
-
-        let claims = jwt.payload().clone();
-
-        // Required claims.
-        if claims.jti.trim().is_empty() {
-            return Err(DpopError::MissingClaim("jti"));
-        }
-        if claims.htm.trim().is_empty() {
-            return Err(DpopError::MissingClaim("htm"));
-        }
-        if claims.htu.trim().is_empty() {
-            return Err(DpopError::MissingClaim("htu"));
-        }
-        if claims.iat == 0 {
-            return Err(DpopError::MissingClaim("iat"));
-        }
-
-        // htm — case-sensitive uppercase match per RFC 9449 §4.3.
-        if !claims.htm.eq_ignore_ascii_case(htm) {
-            return Err(DpopError::HtmMismatch {
-                expected: htm.to_owned(),
-                actual: claims.htm.clone(),
-            });
-        }
-
-        // htu — strip query+fragment on both sides before comparing.
-        let expected_htu = canonicalize_htu(htu);
-        let actual_htu = canonicalize_htu(&claims.htu);
-        if expected_htu != actual_htu {
-            return Err(DpopError::HtuMismatch {
-                expected: expected_htu,
-                actual: actual_htu,
-            });
-        }
-
-        // iat skew.
-        let iat = DateTime::<Utc>::from_timestamp(claims.iat, 0)
-            .ok_or(DpopError::IatOutOfRange(MAX_CLOCK_SKEW.num_seconds()))?;
-        let skew = if iat > now { iat - now } else { now - iat };
-        if skew > MAX_CLOCK_SKEW {
-            return Err(DpopError::IatOutOfRange(MAX_CLOCK_SKEW.num_seconds()));
-        }
-
-        // ath — required when a Bearer token is presented (RFC 9449 §4.3).
-        if let Some(token) = access_token {
-            let expected_ath = dpop_access_token_hash(token);
-            let Some(ath) = claims.ath.as_deref() else {
-                return Err(DpopError::MissingAth);
-            };
-            if ath != expected_ath {
-                return Err(DpopError::AthMismatch);
-            }
-        }
-
-        // jti replay.
         self.jti_store
             .check_and_record(&claims.jti, now, NONCE_TTL)
             .await?;
 
-        let jkt = jwk.params().thumbprint_sha256_base64();
         Ok(DpopVerification { jkt, claims, jwk })
     }
 
@@ -448,6 +399,26 @@ impl DpopVerifier {
                 actual: actual.to_owned(),
             })
         }
+    }
+}
+
+fn map_verification_error(error: DpopVerificationError) -> DpopError {
+    match error {
+        DpopVerificationError::Malformed | DpopVerificationError::InvalidJson => {
+            DpopError::NotJwt(error.to_string())
+        }
+        DpopVerificationError::InvalidType => DpopError::BadTyp,
+        DpopVerificationError::InvalidAlgorithm => DpopError::BadAlg("not EdDSA".to_owned()),
+        DpopVerificationError::InvalidJwk => DpopError::MissingJwk,
+        DpopVerificationError::InvalidSignature => DpopError::BadSignature,
+        DpopVerificationError::MissingClaim(claim) => DpopError::MissingClaim(claim),
+        DpopVerificationError::MethodMismatch => DpopError::HtmMismatch,
+        DpopVerificationError::InvalidTargetUri | DpopVerificationError::TargetUriMismatch => {
+            DpopError::HtuMismatch
+        }
+        DpopVerificationError::IssuedAtOutOfRange => DpopError::IatOutOfRange,
+        DpopVerificationError::MissingAccessTokenHash => DpopError::MissingAth,
+        DpopVerificationError::AccessTokenHashMismatch => DpopError::AthMismatch,
     }
 }
 
@@ -495,45 +466,13 @@ pub fn dpop_htu(public_base: &url::Url, req: &salvo::Request) -> String {
 }
 
 /// Trim query string and fragment from `htu`, lowercase scheme + host.
-fn canonicalize_htu(input: &str) -> String {
-    let trimmed = input.trim();
-    let without_fragment = trimmed
-        .split_once('#')
-        .map_or(trimmed, |(prefix, _)| prefix);
-    let without_query = without_fragment
-        .split_once('?')
-        .map_or(without_fragment, |(prefix, _)| prefix);
-    // Lowercase scheme + authority but leave path case alone (paths are
-    // case-sensitive per RFC 3986).
-    if let Some(scheme_end) = without_query.find("://") {
-        let (scheme, rest) = without_query.split_at(scheme_end);
-        let rest = &rest[3..];
-        if let Some(path_start) = rest.find('/') {
-            let (authority, path) = rest.split_at(path_start);
-            format!(
-                "{}://{}{}",
-                scheme.to_ascii_lowercase(),
-                authority.to_ascii_lowercase(),
-                path
-            )
-        } else {
-            format!(
-                "{}://{}",
-                scheme.to_ascii_lowercase(),
-                rest.to_ascii_lowercase()
-            )
-        }
-    } else {
-        without_query.to_owned()
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use arkret_signatures::dpop_access_token_hash;
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::jwa::AsymmetricSigningKey;
     use coauth_jose::jwk::JsonWebKeyPublicParameters;
-    use coauth_jose::jwt::JsonWebSignatureHeader;
+    use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
     use ed25519_dalek::SigningKey;
     use rand_core::OsRng;
 
@@ -642,7 +581,7 @@ mod tests {
                 None,
             )
             .await;
-        assert!(matches!(result, Err(DpopError::HtmMismatch { .. })));
+        assert!(matches!(result, Err(DpopError::HtmMismatch)));
     }
 
     #[tokio::test]
@@ -669,7 +608,7 @@ mod tests {
                 None,
             )
             .await;
-        assert!(matches!(result, Err(DpopError::IatOutOfRange(_))));
+        assert!(matches!(result, Err(DpopError::IatOutOfRange)));
     }
 
     #[tokio::test]
@@ -738,11 +677,5 @@ mod tests {
                 actual,
             }) if expected == "grant-bound-jkt" && actual == "runtime-jkt"
         ));
-    }
-
-    #[test]
-    fn canonicalize_htu_strips_query_fragment_and_lowercases_host() {
-        let canon = canonicalize_htu("HTTPS://Example.TEST:8443/api/v1/Refresh?a=1#frag");
-        assert_eq!(canon, "https://example.test:8443/api/v1/Refresh");
     }
 }

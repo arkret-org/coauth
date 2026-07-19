@@ -16,8 +16,6 @@ use coauth_jose::jwa::{AsymmetricVerifyingKey, Signature as JoseSignature};
 use coauth_keystore::Keystore;
 use rand_chacha::ChaChaRng;
 use rand_core::{RngCore, SeedableRng as _};
-use salvo::oapi::ToSchema;
-use schemars::JsonSchema;
 use serde::Serialize;
 use sha2::{Digest as _, Sha256};
 use signature::{RandomizedSigner as _, Verifier as _};
@@ -27,19 +25,7 @@ use uuid::Uuid;
 const AUDIT_TRANSCRIPT_KIND: &str = "org.arkret.coauth.audit.admin_operation.v1";
 const AUDIT_TRANSCRIPT_SCHEMA_VERSION: u32 = 1;
 
-/// Verification state returned on admin audit read/export surfaces.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum AuditSignatureStatus {
-    /// The row has a signature and the current service public key verifies it.
-    Verified,
-    /// The row was explicitly written unsigned.
-    Unsigned,
-    /// The row has a signature, but the signature no longer matches the row.
-    Invalid,
-    /// The row references a signing key that is not available in this process.
-    KeyUnavailable,
-}
+pub use coauth_admin_types::AuditSignatureStatus;
 
 /// Runtime signing inputs for admin audit helpers.
 #[derive(Clone, Copy)]

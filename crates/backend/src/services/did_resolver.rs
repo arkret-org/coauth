@@ -125,11 +125,9 @@ pub enum DidResolveError {
     DidWebPrincipalNotExplicit,
 }
 
-/// Hard upper bound on the size of a fetched DID document. Anything
-/// larger is treated as hostile (the caller may be trying to exhaust
-/// memory via a slowloris-style response). 10 MiB is a deliberately
-/// generous ceiling for any legitimate DID document.
-pub const DID_DOCUMENT_MAX_BYTES: usize = 10 * 1024 * 1024;
+/// Hard upper bound on the size of a fetched DID document. The value is
+/// shared with the SDK so all did:web consumers apply the same limit.
+pub const DID_DOCUMENT_MAX_BYTES: usize = arkret_core::identity::DID_WEB_MAX_DOCUMENT_BYTES;
 
 #[async_trait]
 pub trait DidResolverService: Send + Sync {
@@ -716,22 +714,10 @@ fn did_method(did: &str) -> Option<String> {
 }
 
 fn did_web_document_url(did: &str) -> Result<Url, DidResolveError> {
-    let method_id = did
-        .strip_prefix("did:web:")
-        .ok_or_else(|| DidResolveError::InvalidDid(did.to_owned()))?;
-    let mut parts = method_id.split(':');
-    let host = parts
-        .next()
-        .filter(|host| !host.is_empty())
-        .ok_or_else(|| DidResolveError::InvalidDid(did.to_owned()))?
-        .replace("%3A", ":")
-        .replace("%3a", ":");
-    let path: Vec<&str> = parts.filter(|part| !part.is_empty()).collect();
-    let url = if path.is_empty() {
-        format!("https://{host}/.well-known/did.json")
-    } else {
-        format!("https://{}/{}/did.json", host, path.join("/"))
-    };
+    let did = arkret_core::Did::new(did.to_owned())
+        .map_err(|_| DidResolveError::InvalidDid(did.to_owned()))?;
+    let url = arkret_core::identity::did_web_document_url(&did)
+        .map_err(|_| DidResolveError::InvalidDid(did.to_string()))?;
     Ok(Url::parse(&url)?)
 }
 

@@ -45,14 +45,16 @@ struct VerifiedProfilesArtifact {
     #[serde(default)]
     run_id: Option<String>,
     #[serde(default)]
-    generated_at: Option<DateTime<Utc>>,
-    #[serde(default)]
     verified: Vec<RawVerifiedEntry>,
 }
 
 #[derive(Debug, Deserialize)]
 struct RawVerifiedEntry {
     profile_id: String,
+    #[serde(default)]
+    claim_kind: Option<String>,
+    #[serde(default)]
+    verification_run_id: Option<String>,
     #[serde(default)]
     service_role: Option<String>,
     #[serde(default)]
@@ -67,6 +69,8 @@ struct RawVerifiedEntry {
     verifier_did: Option<String>,
     #[serde(default)]
     signature: Option<String>,
+    #[serde(default)]
+    timestamp: Option<DateTime<Utc>>,
     #[serde(default)]
     expires_at: Option<DateTime<Utc>>,
 }
@@ -141,7 +145,6 @@ pub fn load_from_path(path: impl AsRef<Utf8Path>) -> Vec<VerifiedProfileDescript
     };
 
     let run_id = parsed.run_id.unwrap_or_default();
-    let generated_at = parsed.generated_at.unwrap_or_else(Utc::now);
     let total_input = parsed.verified.len();
     let mut out = Vec::with_capacity(total_input);
     for entry in parsed.verified {
@@ -159,6 +162,21 @@ pub fn load_from_path(path: impl AsRef<Utf8Path>) -> Vec<VerifiedProfileDescript
         if role != COAUTH_SERVICE_ROLE {
             continue;
         }
+        if entry.claim_kind.as_deref() != Some("conformance_verified") {
+            tracing::warn!(
+                target: "verified_profiles",
+                profile_id = %entry.profile_id,
+                "dropping verified-profile entry: claim_kind must be conformance_verified"
+            );
+            continue;
+        }
+        let Some(verification_run_id) = required_non_empty(
+            entry.verification_run_id,
+            "verification_run_id",
+            &entry.profile_id,
+        ) else {
+            continue;
+        };
         let Some(artifact_digest) = valid_artifact_digest(entry.artifact_digest, &entry.profile_id)
         else {
             continue;
@@ -185,15 +203,23 @@ pub fn load_from_path(path: impl AsRef<Utf8Path>) -> Vec<VerifiedProfileDescript
         else {
             continue;
         };
+        let Some(timestamp) = entry.timestamp else {
+            tracing::warn!(
+                target: "verified_profiles",
+                profile_id = %entry.profile_id,
+                "dropping verified-profile entry: missing timestamp"
+            );
+            continue;
+        };
         out.push(VerifiedProfileDescriptor {
             profile_id: entry.profile_id,
             service_role: role.to_owned(),
-            verification_run_id: run_id.clone(),
+            verification_run_id,
             artifact_digest,
             artifact_ref,
             verifier_did,
             signature,
-            timestamp: generated_at,
+            timestamp,
             expires_at: entry.expires_at,
             test_count: entry.test_count.unwrap_or(0),
             spec_file: entry.spec_file,
@@ -279,16 +305,21 @@ mod tests {
             "verified": [
                 {
                     "profile_id": "ak.profile.principal_server.v1",
+                    "claim_kind": "conformance_verified",
+                    "verification_run_id": "test-run",
                     "service_role": "principal_server",
                     "test_count": 3,
                     "spec_file": "cotest/e2e/tests/conformance/profile-gates.spec.ts",
                     "artifact_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                     "artifact_ref": "file:///tmp/verified-profiles.json",
                     "verifier_did": "did:web:cotest.example",
-                    "signature": "eddsa-jcs-b64url:test-principal-signature"
+                    "signature": "eddsa-jcs-b64url:test-principal-signature",
+                    "timestamp": "2026-05-20T00:00:00Z"
                 },
                 {
                     "profile_id": "ak.profile.auth_server.v1",
+                    "claim_kind": "conformance_verified",
+                    "verification_run_id": "test-run",
                     "service_role": "auth_server",
                     "test_count": 1,
                     "spec_file": "cotest/e2e/tests/sync/service-surface-contract.spec.ts",
@@ -296,6 +327,7 @@ mod tests {
                     "artifact_ref": "file:///tmp/verified-profiles.json",
                     "verifier_did": "did:web:cotest.example",
                     "signature": "eddsa-jcs-b64url:test-auth-signature",
+                    "timestamp": "2026-05-20T00:00:00Z",
                     "expires_at": "2026-06-20T00:00:00Z"
                 }
             ]

@@ -17,7 +17,6 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::outbound_http::RequestBuilderExt;
 use crate::record_error;
 
 static JWT_BEARER_CLIENT_ASSERTION: &str = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
@@ -192,20 +191,7 @@ async fn fetch_jwks(
         JwksOrJwksUri::Jwks(j) => return Ok(j.clone()),
         JwksOrJwksUri::JwksUri(u) => u,
     };
-    if uri.scheme() != "https" {
-        return Err("jwks_uri must use https".into());
-    }
-    crate::outbound_http::enforce_outbound_url_policy(uri)?;
-
-    let response = http_client
-        .get(uri.as_str())
-        .send_traced()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
-
-    Ok(response)
+    Ok(crate::oidc_client::requests::jose::fetch_jwks(http_client, uri).await?)
 }
 
 #[derive(Debug, Error)]

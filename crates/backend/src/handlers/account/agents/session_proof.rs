@@ -6,7 +6,6 @@
 
 use std::collections::BTreeSet;
 
-use arkret_core::canonical::canonical_sha256;
 use arkret_core::identifiers::new_prefixed_uuid7;
 use coauth_config::ArkretConfig;
 use coauth_data::RepositoryAccess;
@@ -445,14 +444,9 @@ pub async fn validate_agent_session_proof(
 fn canonical_session_grant_request_digest_without_signature(
     body: &arkret_core::SessionGrantRequestBody,
 ) -> Result<String, AgentAuthRejection> {
-    let mut value = serde_json::to_value(body).map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    let proof = value
-        .get_mut("proof")
-        .and_then(Value::as_object_mut)
-        .ok_or(AgentAuthRejection::ProofInvalid)?;
-    proof.remove("signature");
-    proof.remove("request_canonical_digest");
-    canonical_sha256(&value).map_err(|_| AgentAuthRejection::ProofInvalid)
+    body.canonical_request_digest()
+        .map(|digest| digest.to_string())
+        .map_err(|_| AgentAuthRejection::ProofInvalid)
 }
 
 fn validate_agent_key_authorization_binding(

@@ -67,9 +67,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use arkret_core::{
-    Did, RealmId, ThirdPartyInvite, ThirdPartyInviteOobKind, ThirdPartyInviteTerminalState,
-};
+use arkret_core::{Did, ThirdPartyInvite, ThirdPartyInviteOobKind, ThirdPartyInviteTerminalState};
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
@@ -272,40 +270,6 @@ pub fn offline_token_commitment(token: &[u8], salt: &[u8]) -> String {
 /// documented in `oob_code.rs`.
 pub fn schedule_terminal_zeroize(rec: &ThirdPartyInviteRecord) -> Option<DateTime<Utc>> {
     rec.zeroize_due_at()
-}
-
-/// Round 4 invite-claim transcript fragment. Distinct from the SDK's
-/// wire shape (which lives in `model::round4`) so coauth can attach
-/// service-local fields (`audience`, `claim_nonce`) before signing.
-///
-/// `binding_proof` covers the *verification-service* side of the chain
-/// (auth server attesting the 3PID was verified). `subject_proof` is
-/// produced by the claimant device — see the partner crate
-/// `inkson-client::claim_invite` which is **not** part of coauth's
-/// build.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InviteClaimBindingProof {
-    /// `verification_service_id` from the originating invite.
-    pub verification_service_id: Did,
-    /// Verification method identifier (DID URL `#fragment` form), e.g.
-    /// `did:web:auth.example#key-1`. The fragment is mandatory per
-    /// round 4 (kid pattern `^did:[a-z0-9]+:[^\s]+#.+$`).
-    pub verification_method: String,
-    /// Claimant DID — the subject the proof binds to.
-    pub subject_id: Did,
-    /// Realm scope of the binding (round 4 — every binding is
-    /// realm-scoped, no global bindings).
-    pub realm_id: RealmId,
-    /// Audience the proof is issued for (typically the principal
-    /// server's service DID).
-    pub audience: String,
-    /// Single-use nonce echoed by the claimant in their `subject_proof`
-    /// to prevent re-binding.
-    pub claim_nonce: String,
-    /// Wall-clock expiry. Receivers MUST reject after this point.
-    pub expires_at: DateTime<Utc>,
-    /// Detached signature over the canonical proof transcript.
-    pub signature: String,
 }
 
 // ───────────────────────────── Invite verifier ─────────────────────────────

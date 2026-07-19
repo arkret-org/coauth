@@ -19,6 +19,7 @@
 pub mod account_admin;
 pub mod account_claims_admin;
 pub mod applets_admin;
+pub mod audit_admin;
 pub mod bridge_admin;
 pub mod circle_capability_admin;
 pub mod collaboration_capability_admin;
@@ -35,6 +36,7 @@ pub mod risk_action;
 pub use account_admin::*;
 pub use account_claims_admin::*;
 pub use applets_admin::*;
+pub use audit_admin::*;
 pub use bridge_admin::*;
 pub use circle_capability_admin::*;
 pub use collaboration_capability_admin::*;

@@ -4,13 +4,11 @@
 //! resource type. Queries the [`AuditRepository`] for persisted admin
 //! operation log entries.
 
-use chrono::{DateTime, Utc};
+use coauth_admin_types::{AuditEntry, AuditFeedOutcome};
 use coauth_data::RepositoryAccess;
 use coauth_data::audit::{AdminOperation, AdminOperationFilter, AdminOperationLog};
-use salvo::oapi::ToSchema;
 use salvo::prelude::*;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use ulid::Ulid;
 
 use crate::JsonResult;
@@ -20,37 +18,6 @@ use crate::handlers::admin::audit_helper::{
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::arkret::service_id_for;
 use crate::handlers::common::DepotExt;
-
-/// A single entry in the admin audit feed.
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AuditEntry {
-    /// Unique identifier for this audit entry.
-    pub id: String,
-
-    /// The admin user who performed the operation, if known.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub admin_user_id: Option<String>,
-
-    /// The operation that was performed, e.g. `"user.lock"`,
-    /// `"session.finish"`.
-    pub operation: String,
-
-    /// The type of resource that was acted upon, e.g. `"user"`, `"session"`.
-    pub resource_type: String,
-
-    /// The identifier of the resource that was acted upon.
-    pub resource_id: String,
-
-    /// Additional details about the operation (free-form JSON).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<serde_json::Value>,
-
-    /// When the operation was performed.
-    pub created_at: DateTime<Utc>,
-
-    /// Verification state for the detached admin-audit signature.
-    pub signature_status: AuditSignatureStatus,
-}
 
 /// Convert an [`AdminOperation`] enum variant into a human-readable
 /// dot-separated operation string for the API response.
@@ -82,32 +49,26 @@ fn format_operation(op: &AdminOperation) -> String {
     }
 }
 
-impl AuditEntry {
-    fn from_log(log: AdminOperationLog, signature_status: AuditSignatureStatus) -> Self {
-        let details = if log.details.is_null() || log.details == serde_json::json!({}) {
-            None
-        } else {
-            Some(log.details)
-        };
+fn audit_entry_from_log(
+    log: AdminOperationLog,
+    signature_status: AuditSignatureStatus,
+) -> AuditEntry {
+    let details = if log.details.is_null() || log.details == serde_json::json!({}) {
+        None
+    } else {
+        Some(log.details)
+    };
 
-        Self {
-            id: log.id.to_string(),
-            admin_user_id: Some(log.admin_user_id.to_string()),
-            operation: format_operation(&log.operation),
-            resource_type: log.resource_type,
-            resource_id: log.resource_id.map(|id| id.to_string()).unwrap_or_default(),
-            details,
-            created_at: log.created_at,
-            signature_status,
-        }
+    AuditEntry {
+        id: log.id.to_string(),
+        admin_user_id: Some(log.admin_user_id.to_string()),
+        operation: format_operation(&log.operation),
+        resource_type: log.resource_type,
+        resource_id: log.resource_id.map(|id| id.to_string()).unwrap_or_default(),
+        details,
+        created_at: log.created_at,
+        signature_status,
     }
-}
-
-/// Response body for the audit feed endpoint.
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AuditFeedOutcome {
-    /// The list of audit entries, ordered by most recent first.
-    pub data: Vec<AuditEntry>,
 }
 
 /// Query parameters accepted by the audit feed endpoint.
@@ -155,7 +116,7 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<AuditFeedOu
         .map(|log| {
             let signature_status =
                 verify_admin_operation_signature(&log, &key_store, service_id.as_str());
-            AuditEntry::from_log(log, signature_status)
+            audit_entry_from_log(log, signature_status)
         })
         .collect();
 
