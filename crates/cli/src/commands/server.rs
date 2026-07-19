@@ -154,8 +154,8 @@ impl Options {
         .await?;
         shutdown.register_reloadable(&templates);
 
-        let http_client = coauth_backend::reqwest_client();
         let arkret_config = config.arkret.clone();
+        let http_client = coauth_backend::reqwest_client_for_arkret(&arkret_config);
         coauth_backend::services::service_identity::initialize_and_spawn(
             PgRepositoryFactory::new(pool.clone()),
             &arkret_config,

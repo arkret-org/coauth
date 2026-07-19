@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::error::Error as StdError;
 use std::fmt;
 use std::future::Future;
@@ -148,13 +149,20 @@ pub(crate) const fn policy_frontier_policy() -> OutboundRequestPolicy {
 struct TracingResolver {
     inner: GaiResolver,
     allow_loopback: bool,
+    trusted_loopback_https_hosts: Arc<HashSet<String>>,
 }
 
 impl TracingResolver {
-    fn new(allow_loopback: bool) -> Self {
+    fn new(allow_loopback: bool, trusted_loopback_https_hosts: &[String]) -> Self {
         Self {
             inner: GaiResolver::new(),
             allow_loopback,
+            trusted_loopback_https_hosts: Arc::new(
+                trusted_loopback_https_hosts
+                    .iter()
+                    .map(|host| normalize_host(host))
+                    .collect(),
+            ),
         }
     }
 }
@@ -200,6 +208,7 @@ impl reqwest::dns::Resolve for TracingResolver {
         }
         let mut inner = self.inner.clone();
         let allow_loopback = self.allow_loopback;
+        let trusted_loopback_https_hosts = Arc::clone(&self.trusted_loopback_https_hosts);
         Box::pin(
             inner
                 .call(parsed_name)
@@ -207,7 +216,12 @@ impl reqwest::dns::Resolve for TracingResolver {
                     let addrs = result
                         .map_err(|err| -> Box<dyn StdError + Send + Sync> { Box::new(err) })?;
                     let addrs: Vec<SocketAddr> = addrs.collect();
-                    enforce_resolved_egress_policy(&requested_name, &addrs, allow_loopback)?;
+                    enforce_resolved_egress_policy(
+                        &requested_name,
+                        &addrs,
+                        allow_loopback,
+                        &trusted_loopback_https_hosts,
+                    )?;
                     Ok(Box::new(addrs.into_iter()) as reqwest::dns::Addrs)
                 })
                 .instrument(span),
@@ -246,6 +260,7 @@ fn enforce_resolved_egress_policy(
     host: &str,
     addrs: &[SocketAddr],
     allow_loopback: bool,
+    trusted_loopback_https_hosts: &HashSet<String>,
 ) -> Result<(), Box<dyn StdError + Send + Sync>> {
     if let Some(reason) = blocked_domain_reason(host, allow_loopback) {
         return Err(Box::new(BlockedEgressTarget::new(host, reason)));
@@ -259,6 +274,17 @@ fn enforce_resolved_egress_policy(
                 )));
             }
         }
+        return Ok(());
+    }
+    // Arkret service endpoints are operator-controlled trust anchors. Permit an
+    // exact configured hostname to resolve wholly to loopback so local HTTPS
+    // deployments can use stable names such as `local.host`. This exception is
+    // deliberately narrower than private-network egress: it never permits an
+    // unconfigured host, a private/LAN address, or a mixed DNS answer.
+    if trusted_loopback_https_hosts.contains(&normalize_host(host))
+        && !addrs.is_empty()
+        && addrs.iter().all(|addr| addr.ip().is_loopback())
+    {
         return Ok(());
     }
     OutboundPolicy::public_https()
@@ -310,6 +336,10 @@ fn is_explicit_loopback_host(host: &str) -> bool {
             .is_ok_and(|address| address.is_loopback())
 }
 
+fn normalize_host(host: &str) -> String {
+    host.trim_end_matches('.').to_ascii_lowercase()
+}
+
 /// Create a new [`reqwest::Client`] with sane parameters.
 ///
 /// # Panics
@@ -317,9 +347,22 @@ fn is_explicit_loopback_host(host: &str) -> bool {
 /// Panics if the client fails to build, which should never happen.
 #[must_use]
 pub fn reqwest_client() -> reqwest::Client {
-    reqwest_client_builder(insecure_loopback_http_enabled())
+    reqwest_client_builder(insecure_loopback_http_enabled(), &[])
         .build()
         .expect("failed to create HTTP client")
+}
+
+/// Create the server-runtime HTTP client with narrowly scoped loopback HTTPS
+/// exceptions for operator-configured Arkret service hosts.
+///
+/// The configured host name must match exactly and every resolved address must
+/// be loopback. All other targets retain the normal public-HTTPS-only policy.
+#[must_use]
+pub fn reqwest_client_for_arkret(config: &coauth_config::ArkretConfig) -> reqwest::Client {
+    let trusted_hosts = config.trusted_outbound_hosts();
+    reqwest_client_builder(insecure_loopback_http_enabled(), &trusted_hosts)
+        .build()
+        .expect("failed to create Arkret HTTP client")
 }
 
 /// Create a new [`reqwest::Client`] that pins `host` to already-resolved
@@ -336,19 +379,25 @@ pub(crate) fn reqwest_client_with_static_resolution(
     host: &str,
     addrs: &[SocketAddr],
 ) -> reqwest::Client {
-    reqwest_client_builder(false)
+    reqwest_client_builder(false, &[])
         .resolve_to_addrs(host, addrs)
         .build()
         .expect("failed to create static-resolution HTTP client")
 }
 
-fn reqwest_client_builder(allow_insecure_loopback_http: bool) -> reqwest::ClientBuilder {
+fn reqwest_client_builder(
+    allow_insecure_loopback_http: bool,
+    trusted_loopback_https_hosts: &[String],
+) -> reqwest::ClientBuilder {
     let tls_config: rustls::ClientConfig =
         rustls::ClientConfig::with_platform_verifier().expect("failed to create TLS config");
 
     reqwest::Client::builder()
         .https_only(!allow_insecure_loopback_http)
-        .dns_resolver(Arc::new(TracingResolver::new(allow_insecure_loopback_http)))
+        .dns_resolver(Arc::new(TracingResolver::new(
+            allow_insecure_loopback_http,
+            trusted_loopback_https_hosts,
+        )))
         .use_preconfigured_tls(tls_config)
         .redirect(reqwest::redirect::Policy::none())
         .no_proxy()
@@ -646,6 +695,7 @@ impl RequestBuilderExt for reqwest::RequestBuilder {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
     use std::future::Future;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Once};
@@ -656,7 +706,8 @@ mod tests {
 
     use super::{
         OutboundRequestPolicy, blocked_domain_reason, blocked_ip_reason,
-        enforce_outbound_url_policy, reqwest_client_builder, send_with_policy, telemetry_url,
+        enforce_outbound_url_policy, enforce_resolved_egress_policy, reqwest_client_builder,
+        send_with_policy, telemetry_url,
     };
 
     fn install_crypto_provider() {
@@ -699,7 +750,7 @@ mod tests {
     async fn explicit_test_client_allows_only_loopback_plain_http() {
         install_crypto_provider();
         let (url, attempts) = spawn_status_http_server(200).await;
-        let client = reqwest_client_builder(true).build().unwrap();
+        let client = reqwest_client_builder(true, &[]).build().unwrap();
 
         let response = client.get(url).send().await.unwrap();
 
@@ -714,6 +765,22 @@ mod tests {
             non_loopback.is_connect() || non_loopback.is_builder(),
             "{non_loopback}"
         );
+    }
+
+    #[test]
+    fn configured_arkret_host_allows_only_exact_loopback_resolution() {
+        let trusted = HashSet::from(["local.host".to_owned()]);
+        let loopback = ["127.0.0.1:443".parse().unwrap()];
+        assert!(enforce_resolved_egress_policy("LOCAL.HOST.", &loopback, false, &trusted).is_ok());
+
+        assert!(enforce_resolved_egress_policy("other.host", &loopback, false, &trusted).is_err());
+        let private = ["192.168.1.10:443".parse().unwrap()];
+        assert!(enforce_resolved_egress_policy("local.host", &private, false, &trusted).is_err());
+        let mixed = [
+            "127.0.0.1:443".parse().unwrap(),
+            "8.8.8.8:443".parse().unwrap(),
+        ];
+        assert!(enforce_resolved_egress_policy("local.host", &mixed, false, &trusted).is_err());
     }
 
     #[test]
