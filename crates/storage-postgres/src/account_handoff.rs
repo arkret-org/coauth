@@ -857,7 +857,55 @@ fn registration_challenge_state_is_usable(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
+    use chrono::Duration;
+    use coauth_data::clock::MockClock;
+    use coauth_data::user::UserRepository as _;
+    use coauth_data::{Clock as _, RepositoryAccess as _, RepositoryFactory as _, new_id};
+    use rand_chacha::ChaChaRng;
+    use rand_core::SeedableRng;
+
     use super::*;
+    use crate::PgRepositoryFactory;
+
+    fn handoff_input(
+        rng: &mut ChaChaRng,
+        service_account_id: Ulid,
+        issued_at: DateTime<Utc>,
+        holder_jkt: &str,
+        lease_id: &str,
+    ) -> AccountHandoffGrantInput {
+        AccountHandoffGrantInput {
+            id: new_id(issued_at, rng),
+            request_id: arkret_core::RequestId::new(format!("ak:request:{}", Uuid::now_v7()))
+                .unwrap(),
+            request_digest: arkret_core::Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
+            service_account_id,
+            browser_session_id: None,
+            audience: "did:web:principal.example".to_owned(),
+            cnf_jkt: holder_jkt.to_owned(),
+            account_handoff_grant: format!("{}{}", Uuid::now_v7().simple(), "A".repeat(11)),
+            issued_at,
+            expires_at: issued_at + Duration::minutes(30),
+            lease_id: lease_id.to_owned(),
+            lease_expires_at: issued_at + Duration::minutes(15),
+        }
+    }
+
+    fn did_operation(label: &str) -> arkret_core::DidOperationSubmitRequestBody {
+        let did = arkret_core::Did::new(format!("did:webvh:z{label}:example.com")).unwrap();
+        arkret_core::DidOperationSubmitRequestBody {
+            did: did.clone(),
+            did_method: "webvh".to_owned(),
+            seq: Some(0),
+            prev_event_digest: None,
+            operation: BTreeMap::from([(
+                "state".to_owned(),
+                serde_json::json!({ "id": did.as_str() }),
+            )]),
+        }
+    }
 
     #[test]
     fn published_saga_can_resume_with_its_consumed_challenge_only() {
@@ -881,5 +929,158 @@ mod tests {
             IdentityCreationSagaState::Bound,
             true,
         ));
+    }
+
+    #[tokio::test]
+    async fn expired_lease_reclaim_preserves_reservation_and_rejects_old_fence() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let clock = MockClock::default();
+        let now = clock.now();
+        let mut rng = ChaChaRng::seed_from_u64(0xacce_5510);
+        let label = Uuid::now_v7().simple().to_string();
+        let holder_one = "A".repeat(43);
+        let holder_two = "B".repeat(43);
+        let holder_three = "C".repeat(43);
+        let lease_one = "D".repeat(32);
+        let lease_two = "E".repeat(32);
+        let renewal_lease = "F".repeat(32);
+        let lease_three = "G".repeat(32);
+        let user = repo
+            .user()
+            .add(&mut rng, &clock, format!("handoff-{label}"))
+            .await
+            .unwrap();
+
+        let first = repo
+            .account_handoff()
+            .create_with_lease(handoff_input(
+                &mut rng,
+                user.id,
+                now,
+                &holder_one,
+                &lease_one,
+            ))
+            .await
+            .unwrap();
+        let AccountHandoffCreation::Active {
+            grant: first_grant,
+            lease: first_lease,
+        } = first
+        else {
+            panic!("first holder must acquire an active lease");
+        };
+        assert_eq!(first_lease.fence, 1);
+
+        let operation = did_operation(&label);
+        let reserved =
+            arkret_core::ReservedIdentityCreation::from_operation(operation.clone()).unwrap();
+        let first_challenge = IdentityBindingChallengeInput {
+            request_id: arkret_core::RequestId::new(format!("ak:request:{}", Uuid::now_v7()))
+                .unwrap(),
+            request_digest: arkret_core::Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap(),
+            service_account_id: user.id,
+            audience: first_grant.audience.clone(),
+            lease_id: first_lease.lease_id.clone(),
+            lease_fence: first_lease.fence,
+            holder_jkt: first_lease.holder_jkt.clone(),
+            did_operation: operation.clone(),
+            operation_digest: reserved.operation_digest.clone(),
+            challenge_id: Uuid::now_v7().simple().to_string(),
+            challenge: format!("{}{}", Uuid::now_v7().simple(), "H".repeat(11)),
+            origin: "https://account.example".to_owned(),
+            trust_domain: arkret_core::TypedTrustDomainId::new("ak:trust_domain:example.net")
+                .unwrap(),
+            issued_at: now,
+            expires_at: now + Duration::minutes(5),
+            lease_expires_at: first_lease.expires_at,
+        };
+        assert!(matches!(
+            repo.account_handoff()
+                .reserve_and_issue_challenge(first_challenge.clone())
+                .await
+                .unwrap(),
+            IdentityBindingChallengeIssue::Issued(_)
+        ));
+
+        let reclaimed_at = first_lease.expires_at + Duration::seconds(1);
+        let reclaimed = repo
+            .account_handoff()
+            .create_with_lease(handoff_input(
+                &mut rng,
+                user.id,
+                reclaimed_at,
+                &holder_two,
+                &lease_two,
+            ))
+            .await
+            .unwrap();
+        let AccountHandoffCreation::Active {
+            lease: reclaimed_lease,
+            ..
+        } = reclaimed
+        else {
+            panic!("the second holder must reclaim the expired lease");
+        };
+        assert_eq!(reclaimed_lease.fence, first_lease.fence + 1);
+        assert_eq!(reclaimed_lease.lease_id, lease_two);
+        assert_eq!(reclaimed_lease.holder_jkt, holder_two);
+        assert_eq!(reclaimed_lease.reserved_identity, Some(reserved));
+
+        let renewed = repo
+            .account_handoff()
+            .create_with_lease(handoff_input(
+                &mut rng,
+                user.id,
+                reclaimed_at + Duration::seconds(1),
+                &holder_two,
+                &renewal_lease,
+            ))
+            .await
+            .unwrap();
+        let AccountHandoffCreation::Active {
+            lease: renewed_lease,
+            ..
+        } = renewed
+        else {
+            panic!("the current holder must renew its active lease");
+        };
+        assert_eq!(renewed_lease.lease_id, reclaimed_lease.lease_id);
+        assert_eq!(renewed_lease.fence, reclaimed_lease.fence);
+
+        assert!(matches!(
+            repo.account_handoff()
+                .create_with_lease(handoff_input(
+                    &mut rng,
+                    user.id,
+                    reclaimed_at + Duration::seconds(2),
+                    &holder_three,
+                    &lease_three,
+                ))
+                .await
+                .unwrap(),
+            AccountHandoffCreation::Busy { .. }
+        ));
+
+        let stale_challenge = IdentityBindingChallengeInput {
+            request_id: arkret_core::RequestId::new(format!("ak:request:{}", Uuid::now_v7()))
+                .unwrap(),
+            request_digest: arkret_core::Hash::new(format!("sha256:{}", "c".repeat(64))).unwrap(),
+            issued_at: reclaimed_at,
+            expires_at: reclaimed_at + Duration::minutes(5),
+            lease_expires_at: reclaimed_at + Duration::minutes(15),
+            ..first_challenge
+        };
+        assert!(matches!(
+            repo.account_handoff()
+                .reserve_and_issue_challenge(stale_challenge)
+                .await
+                .unwrap(),
+            IdentityBindingChallengeIssue::LeaseMismatch
+        ));
+
+        repo.cancel().await.unwrap();
     }
 }
