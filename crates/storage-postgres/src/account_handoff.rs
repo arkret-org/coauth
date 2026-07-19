@@ -1123,4 +1123,139 @@ mod tests {
 
         repo.cancel().await.unwrap();
     }
+
+    #[tokio::test]
+    async fn verified_binding_allows_exactly_one_founding_device_claim() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let clock = MockClock::default();
+        let now = clock.now();
+        let mut rng = ChaChaRng::seed_from_u64(0xf1a5_7d3e);
+        let label = Uuid::now_v7().simple().to_string();
+        let user = repo
+            .user()
+            .add(&mut rng, &clock, format!("device-claim-{label}"))
+            .await
+            .unwrap();
+        let created = repo
+            .account_handoff()
+            .create_with_lease(handoff_input(
+                &mut rng,
+                user.id,
+                now,
+                &"A".repeat(43),
+                &"D".repeat(32),
+            ))
+            .await
+            .unwrap();
+        let AccountHandoffCreation::Active { grant, lease } = created else {
+            panic!("identity creation must acquire an active lease");
+        };
+
+        let operation = did_operation(&label);
+        let reserved =
+            arkret_core::ReservedIdentityCreation::from_operation(operation.clone()).unwrap();
+        let challenge_input = IdentityBindingChallengeInput {
+            request_id: arkret_core::RequestId::new(format!("ak:request:{}", Uuid::now_v7()))
+                .unwrap(),
+            request_digest: arkret_core::Hash::new(format!("sha256:{}", "4".repeat(64))).unwrap(),
+            service_account_id: user.id,
+            audience: grant.audience.clone(),
+            lease_id: lease.lease_id.clone(),
+            lease_fence: lease.fence,
+            holder_jkt: lease.holder_jkt.clone(),
+            did_operation: operation,
+            operation_digest: reserved.operation_digest.clone(),
+            challenge_id: Uuid::now_v7().simple().to_string(),
+            challenge: format!("{}{}", Uuid::now_v7().simple(), "H".repeat(11)),
+            origin: "https://account.example".to_owned(),
+            trust_domain: arkret_core::TypedTrustDomainId::new("ak:trust_domain:example.net")
+                .unwrap(),
+            issued_at: now,
+            expires_at: now + Duration::minutes(5),
+            lease_expires_at: lease.expires_at,
+        };
+        let issued = match repo
+            .account_handoff()
+            .reserve_and_issue_challenge(challenge_input)
+            .await
+            .unwrap()
+        {
+            IdentityBindingChallengeIssue::Issued(challenge) => challenge,
+            other => panic!("challenge must be issued, got {other:?}"),
+        };
+        let context = repo
+            .account_handoff()
+            .registration_context(
+                &grant,
+                &lease.lease_id,
+                lease.fence,
+                &issued.challenge_id,
+                now,
+            )
+            .await
+            .unwrap()
+            .expect("fresh challenge must produce registration context");
+        let head = arkret_core::Hash::new(format!("sha256:{}", "5".repeat(64))).unwrap();
+        assert!(
+            repo.account_handoff()
+                .mark_published(
+                    &context,
+                    &serde_json::json!({ "status": "accepted" }),
+                    &head,
+                    now
+                )
+                .await
+                .unwrap()
+        );
+        let binding_receipt = arkret_core::AccountBindingReceipt {
+            binding_state: arkret_core::AccountBindingState::Bound,
+            lease_id: lease.lease_id.clone(),
+            lease_fence: lease.fence,
+            operation_status: arkret_core::IdentityCreationOperationStatus::Accepted,
+            operation_digest: reserved.operation_digest,
+            head_event_digest: head,
+        };
+        assert!(
+            repo.account_handoff()
+                .mark_bound(&context, &binding_receipt, now)
+                .await
+                .unwrap()
+        );
+
+        let first_device =
+            arkret_core::DeviceId::new(format!("ak:device:{}", Uuid::now_v7())).unwrap();
+        let second_device =
+            arkret_core::DeviceId::new(format!("ak:device:{}", Uuid::now_v7())).unwrap();
+        assert!(
+            repo.account_handoff()
+                .claim_first_device_enrollment(
+                    user.id,
+                    &grant.audience,
+                    &reserved.principal_id,
+                    &first_device,
+                    now
+                )
+                .await
+                .unwrap()
+        );
+        assert!(
+            !repo
+                .account_handoff()
+                .claim_first_device_enrollment(
+                    user.id,
+                    &grant.audience,
+                    &reserved.principal_id,
+                    &second_device,
+                    now + Duration::seconds(1),
+                )
+                .await
+                .unwrap(),
+            "a second device must not reuse the founding-device enrollment endpoint"
+        );
+
+        repo.cancel().await.unwrap();
+    }
 }
