@@ -63,11 +63,12 @@ impl Options {
         }
 
         // ── Principal account facade ───────────────────────────────────
+        let arkret_http_client = coauth_backend::reqwest_client_for_arkret(&app_cfg.arkret);
         let (principal_conn, _registry) = principal_server_connection_from_config(
             &site_cfg,
             PgRepositoryFactory::new(db_pool.clone()).boxed(),
             app_cfg.arkret.clone(),
-            coauth_backend::reqwest_client(),
+            arkret_http_client,
         );
 
         drop(app_cfg);
