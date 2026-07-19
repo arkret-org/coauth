@@ -936,7 +936,10 @@ mod tests {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
         let clock = MockClock::default();
         let now = clock.now();
         let mut rng = ChaChaRng::seed_from_u64(0xacce_5510);
@@ -997,13 +1000,50 @@ mod tests {
             expires_at: now + Duration::minutes(5),
             lease_expires_at: first_lease.expires_at,
         };
+        let issued_challenge = match repo
+            .account_handoff()
+            .reserve_and_issue_challenge(first_challenge.clone())
+            .await
+            .unwrap()
+        {
+            IdentityBindingChallengeIssue::Issued(challenge) => challenge,
+            other => panic!("first challenge must be issued, got {other:?}"),
+        };
+        repo.save().await.unwrap();
+
+        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
         assert!(matches!(
             repo.account_handoff()
                 .reserve_and_issue_challenge(first_challenge.clone())
                 .await
                 .unwrap(),
-            IdentityBindingChallengeIssue::Issued(_)
+            IdentityBindingChallengeIssue::Replay(_)
         ));
+        let conflicting_replay = IdentityBindingChallengeInput {
+            request_digest: arkret_core::Hash::new(format!("sha256:{}", "9".repeat(64))).unwrap(),
+            ..first_challenge.clone()
+        };
+        assert!(matches!(
+            repo.account_handoff()
+                .reserve_and_issue_challenge(conflicting_replay)
+                .await
+                .unwrap(),
+            IdentityBindingChallengeIssue::DuplicateConflict
+        ));
+        assert!(
+            repo.account_handoff()
+                .registration_context(
+                    &first_grant,
+                    &first_lease.lease_id,
+                    first_lease.fence,
+                    &issued_challenge.challenge_id,
+                    issued_challenge.expires_at + Duration::seconds(1),
+                )
+                .await
+                .unwrap()
+                .is_none(),
+            "an expired challenge must not produce a registration context"
+        );
 
         let reclaimed_at = first_lease.expires_at + Duration::seconds(1);
         let reclaimed = repo
