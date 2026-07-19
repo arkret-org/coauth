@@ -39,6 +39,7 @@ pub async fn create_account_handoff(
         ));
     }
     let url_builder = depot.url_builder()?;
+    let arkret_config = depot.arkret_config()?;
     let dpop_binding = extract_dpop_binding_for_kickoff(req, depot, &url_builder)
         .await
         .map_err(|error| proof_invalid(format!("invalid account-handoff DPoP proof: {error}")))?
@@ -76,8 +77,11 @@ pub async fn create_account_handoff(
             .await?
             .ok_or(ArkretRouteError::NotFound)
             .and_then(|user| {
-                Handle::parse(&user.canonical_handle(url_builder.public_hostname()))
-                    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
+                canonical_account_handle(
+                    &user.localpart,
+                    url_builder.public_hostname(),
+                    arkret_config.trust_domain.as_deref(),
+                )
             })?;
         let creation =
             if existing.request_digest == request_digest && existing.cnf_jkt == dpop_binding.jkt {
@@ -109,7 +113,14 @@ pub async fn create_account_handoff(
     let authenticated =
         exchange_oidc_code_for_account_handoff(req, depot, dpop_binding.clone(), input)
             .await
-            .map_err(map_oidc_exchange_error)?;
+            .map_err(|error| {
+                tracing::error!(
+                    error_code = error.code,
+                    error_message = %error.message,
+                    "OIDC exchange failed while creating an account handoff",
+                );
+                map_oidc_exchange_error(error)
+            })?;
     if authenticated.audience != proof.audience.as_str() {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
@@ -117,12 +128,11 @@ pub async fn create_account_handoff(
             "authenticated handoff audience does not match the request proof",
         ));
     }
-    let account_handle = Handle::parse(
-        &authenticated
-            .user
-            .canonical_handle(url_builder.public_hostname()),
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let account_handle = canonical_account_handle(
+        &authenticated.user.localpart,
+        url_builder.public_hostname(),
+        arkret_config.trust_domain.as_deref(),
+    )?;
 
     let mut rng = make_rng();
     let mut repo = depot.repo().await?;
@@ -422,6 +432,31 @@ fn creation_to_outcome(
     Ok(outcome)
 }
 
+fn canonical_account_handle(
+    localpart: &str,
+    public_hostname: &str,
+    configured_trust_domain: Option<&str>,
+) -> Result<Handle, ArkretRouteError> {
+    let public_candidate = format!(
+        "{}:{}",
+        localpart.to_lowercase(),
+        public_hostname.to_lowercase()
+    );
+    match Handle::parse(&public_candidate) {
+        Ok(handle) => Ok(handle),
+        Err(public_error) => {
+            let Some(scope) =
+                configured_trust_domain.and_then(|value| value.strip_prefix("ak:trust_domain:"))
+            else {
+                return Err(ArkretRouteError::Internal(Box::new(public_error)));
+            };
+            let trust_domain_candidate = format!("{}:{}", localpart.to_lowercase(), scope);
+            Handle::parse(&trust_domain_candidate)
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
+        }
+    }
+}
+
 fn random_opaque(rng: &mut (impl RngCore + ?Sized), bytes: usize) -> String {
     let mut value = vec![0_u8; bytes];
     rng.fill_bytes(&mut value);
@@ -442,4 +477,36 @@ fn failed_precondition(message: impl Into<String>) -> ArkretRouteError {
         arkret_core::error::ErrorCode::FAILED_PRECONDITION,
         message,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn account_handle_uses_public_dns_hostname() {
+        let handle = canonical_account_handle("Alice", "auth.example.com", None).unwrap();
+        assert_eq!(handle.canonical(), "alice:auth.example.com");
+    }
+
+    #[test]
+    fn account_handle_uses_explicit_trust_domain_for_loopback_deployment() {
+        let handle =
+            canonical_account_handle("Alice", "localhost", Some("ak:trust_domain:local.host"))
+                .unwrap();
+        assert_eq!(handle.canonical(), "alice:local.host");
+    }
+
+    #[test]
+    fn account_handle_rejects_invalid_public_and_trust_domains() {
+        assert!(canonical_account_handle("Alice", "localhost", None).is_err());
+        assert!(
+            canonical_account_handle(
+                "Alice",
+                "localhost",
+                Some("ak:trust_domain:not_a_handle_domain"),
+            )
+            .is_err()
+        );
+    }
 }
