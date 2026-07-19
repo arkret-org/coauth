@@ -147,7 +147,7 @@ fn issue_session_grant_for_audience_inner(
         proof_kind: None,
         scope_details: None,
     };
-    payload.validate()?;
+    payload.validate().map_err(arkret_core::Error::from)?;
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
@@ -285,7 +285,7 @@ pub(crate) fn mint_agent_session_grant(
         proof_kind: Some(arkret_core::SessionGrantProofKind::AgentKeyProof),
         scope_details: Some(scope_details),
     };
-    payload.validate()?;
+    payload.validate().map_err(arkret_core::Error::from)?;
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();

@@ -37,14 +37,18 @@ fn validate_retained_stub(
     retained_stub: Option<&VerificationStub>,
 ) -> Result<(), ErasureReceiptVerificationError> {
     if let Some(retained_stub) = retained_stub {
-        receipt.validate_with_retained_stub(retained_stub)?;
+        receipt
+            .validate_with_retained_stub(retained_stub)
+            .map_err(arkret_core::Error::from)?;
         return Ok(());
     }
 
     if receipt.retained_stub.is_none() {
         return Err(ErasureReceiptVerificationError::MissingRetainedStub);
     }
-    receipt.validate_with_inline_retained_stub()?;
+    receipt
+        .validate_with_inline_retained_stub()
+        .map_err(arkret_core::Error::from)?;
     Ok(())
 }
 
@@ -62,8 +66,12 @@ pub async fn verify_erasure_receipt(
     retained_stub: Option<&VerificationStub>,
 ) -> Result<(), ErasureReceiptVerificationError> {
     validate_retained_stub(receipt, retained_stub)?;
-    let expected_digest = receipt.canonical_payload_digest()?;
-    let proof_payload = receipt.canonical_proof_input()?;
+    let expected_digest = receipt
+        .canonical_payload_digest()
+        .map_err(arkret_core::Error::from)?;
+    let proof_payload = receipt
+        .canonical_proof_input()
+        .map_err(arkret_core::Error::from)?;
 
     let resolution = did_resolver
         .resolve_did_document(

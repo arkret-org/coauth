@@ -73,7 +73,8 @@ pub(crate) fn issue_handle_claim(
 
     // Spec 7157ee8 §3.1 — canonical handle wire form is
     // `<localpart>:<domain>`.
-    let handle = Handle::parse(&user_handle(url_builder, user))?;
+    let handle =
+        Handle::parse(&user_handle(url_builder, user)).map_err(arkret_core::Error::from)?;
     let mut aliases = vec![user_handle_acct_alias(url_builder, user)];
     aliases.extend(user.handle_aliases.iter().cloned());
     // De-duplicate while preserving first-seen order.

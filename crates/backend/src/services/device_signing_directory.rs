@@ -16,8 +16,8 @@
 //! same static bearer coauth already holds for that server's embedded
 //! `did:webvh` registration surface.
 
-use arkret_core::DeviceSigningKeyDirectoryQueryRequestBody;
 use coauth_config::ArkretConfig;
+use soland_contracts::admin::DeviceSigningKeyDirectoryQueryRequestBody;
 use thiserror::Error;
 
 use crate::outbound_http;
@@ -165,10 +165,12 @@ pub async fn resolve_authorized_device_signing_key(
         });
     }
 
-    let outcome: arkret_core::DeviceSigningKeyDirectoryOutcome = serde_json::from_str(&text)
-        .map_err(|error| DeviceSigningDirectoryError::DirectoryRejected {
-            status: status.as_u16(),
-            body: format!("invalid response body: {error}"),
+    let outcome: soland_contracts::admin::DeviceSigningKeyDirectoryOutcome =
+        serde_json::from_str(&text).map_err(|error| {
+            DeviceSigningDirectoryError::DirectoryRejected {
+                status: status.as_u16(),
+                body: format!("invalid response body: {error}"),
+            }
         })?;
 
     let entry = outcome
