@@ -405,3 +405,167 @@ fn failed_precondition(message: impl Into<String>) -> ArkretRouteError {
         message,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use chrono::{Duration, TimeZone as _, Utc};
+    use coauth_data::account_handoff::{
+        AccountHandoffGrant, IdentityBindingChallengeRecord, IdentityCreationLeaseRecord,
+    };
+    use coauth_data::{IdentityCreationSagaState, new_id};
+    use rand_chacha::ChaChaRng;
+    use rand_core::SeedableRng;
+
+    use super::*;
+
+    fn transcript_fixture() -> (
+        IdentityCreationRegistrationContext,
+        arkret_core::IdentityCreationRegistration,
+    ) {
+        let now = Utc.with_ymd_and_hms(2026, 7, 19, 0, 0, 0).unwrap();
+        let mut rng = ChaChaRng::seed_from_u64(0x7a11_5c21);
+        let service_account_id = new_id(now, &mut rng);
+        let did = arkret_core::Did::new("did:webvh:zfixture:principal.example").unwrap();
+        let operation = arkret_core::DidOperationSubmitRequestBody {
+            did: did.clone(),
+            did_method: "webvh".to_owned(),
+            seq: Some(0),
+            prev_event_digest: None,
+            operation: BTreeMap::from([(
+                "state".to_owned(),
+                serde_json::json!({ "id": did.as_str() }),
+            )]),
+        };
+        let reserved =
+            arkret_core::ReservedIdentityCreation::from_operation(operation.clone()).unwrap();
+        let request_id =
+            arkret_core::RequestId::new("ak:request:019b0000-0000-7000-8000-000000000071").unwrap();
+        let request_digest = arkret_core::Hash::new(format!("sha256:{}", "7".repeat(64))).unwrap();
+        let audience = arkret_core::Did::new("did:web:principal.example").unwrap();
+        let trust_domain =
+            arkret_core::TypedTrustDomainId::new("ak:trust_domain:example.net").unwrap();
+        let lease_id = "D".repeat(32);
+        let holder_jkt = "A".repeat(43);
+        let challenge_id = "E".repeat(32);
+        let challenge_value = "F".repeat(43);
+        let expires_at = now + Duration::minutes(5);
+        let challenge = IdentityBindingChallengeRecord {
+            request_id: request_id.clone(),
+            request_digest: request_digest.clone(),
+            service_account_id,
+            challenge_id: challenge_id.clone(),
+            challenge: challenge_value.clone(),
+            purpose: arkret_core::IdentityBindingPurpose::AccountBinding,
+            principal_id: did.clone(),
+            operation_digest: reserved.operation_digest.clone(),
+            lease_id: lease_id.clone(),
+            lease_fence: 4,
+            dpop_jkt: holder_jkt.clone(),
+            audience: audience.clone(),
+            origin: "https://account.example".to_owned(),
+            trust_domain: trust_domain.clone(),
+            issued_at: now,
+            expires_at,
+            consumed_at: None,
+            replaced_at: None,
+        };
+        let grant = AccountHandoffGrant {
+            id: new_id(now, &mut rng),
+            request_id,
+            request_digest,
+            service_account_id,
+            browser_session_id: None,
+            audience: audience.to_string(),
+            cnf_jkt: holder_jkt.clone(),
+            allowed_operations: arkret_core::ACCOUNT_HANDOFF_ALLOWED_OPERATIONS,
+            account_handoff_grant: "G".repeat(43),
+            issued_at: now,
+            expires_at: now + Duration::minutes(10),
+            revoked_at: None,
+            consumed_at: None,
+        };
+        let lease = IdentityCreationLeaseRecord {
+            service_account_id,
+            audience: audience.to_string(),
+            lease_id: lease_id.clone(),
+            holder_jkt,
+            fence: 4,
+            expires_at: now + Duration::minutes(15),
+            reserved_identity: Some(reserved.clone()),
+            state: IdentityCreationSagaState::Reserved,
+            registry_receipt: None,
+            head_event_digest: None,
+            binding_receipt: None,
+            created_at: now,
+            updated_at: now,
+        };
+        let registration = arkret_core::IdentityCreationRegistration {
+            lease_id,
+            lease_fence: 4,
+            did_operation: operation,
+            control_proof: arkret_core::IdentityCreationControlProof {
+                proof_kind:
+                    arkret_core::IdentityCreationControlProofKind::DidWebvhInceptionUpdateKey,
+                challenge_id,
+                challenge: challenge_value,
+                purpose: arkret_core::IdentityBindingPurpose::AccountBinding,
+                principal_id: did,
+                operation_digest: reserved.operation_digest,
+                lease_id: challenge.lease_id.clone(),
+                lease_fence: challenge.lease_fence,
+                dpop_jkt: challenge.dpop_jkt.clone(),
+                audience,
+                origin: challenge.origin.clone(),
+                trust_domain,
+                issued_at: now,
+                expires_at,
+                verification_key_multibase: "z6Mkfixture".to_owned(),
+                signature: "fixture-signature".to_owned(),
+            },
+        };
+        (
+            IdentityCreationRegistrationContext {
+                grant,
+                lease,
+                challenge,
+            },
+            registration,
+        )
+    }
+
+    #[test]
+    fn registration_transcript_rejects_cross_boundary_replay_fields() {
+        let (context, registration) = transcript_fixture();
+        validate_registration_transcript(&context, &registration).unwrap();
+
+        let mut cross_audience = registration.clone();
+        cross_audience.control_proof.audience =
+            arkret_core::Did::new("did:web:other.example").unwrap();
+        assert!(validate_registration_transcript(&context, &cross_audience).is_err());
+
+        let mut cross_origin = registration.clone();
+        cross_origin.control_proof.origin = "https://other.example".to_owned();
+        assert!(validate_registration_transcript(&context, &cross_origin).is_err());
+
+        let mut cross_trust_domain = registration.clone();
+        cross_trust_domain.control_proof.trust_domain =
+            arkret_core::TypedTrustDomainId::new("ak:trust_domain:other.example").unwrap();
+        assert!(validate_registration_transcript(&context, &cross_trust_domain).is_err());
+
+        let mut stale_fence = registration.clone();
+        stale_fence.control_proof.lease_fence += 1;
+        assert!(validate_registration_transcript(&context, &stale_fence).is_err());
+    }
+
+    #[test]
+    fn registration_transcript_rejects_freshness_windows_over_300_seconds() {
+        let (mut context, mut registration) = transcript_fixture();
+        let oversized_expiry = context.challenge.issued_at + Duration::seconds(301);
+        context.challenge.expires_at = oversized_expiry;
+        registration.control_proof.expires_at = oversized_expiry;
+
+        assert!(validate_registration_transcript(&context, &registration).is_err());
+    }
+}

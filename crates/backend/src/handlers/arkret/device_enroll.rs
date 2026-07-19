@@ -70,11 +70,14 @@ fn decode_device_public_key(input: &str) -> Result<[u8; 32], ArkretRouteError> {
         ));
     }
 
-    // Multibase `z…` carries the `0xed01` ed25519-pub multicodec prefix.
+    // A canonical multibase `z…` carries the `0xed01` ed25519-pub multicodec
+    // prefix. Raw base64url is also allowed and can legitimately begin with
+    // the character `z`, so a failed multibase parse must fall through to the
+    // raw-key decoder instead of making the first character a format tag.
     if trimmed.starts_with('z') {
-        return arkret_core::decode_ed25519_multibase(trimmed).map_err(|error| {
-            ArkretRouteError::BadRequest(format!("invalid multibase device_public_key: {error}"))
-        });
+        if let Ok(raw) = arkret_core::decode_ed25519_multibase(trimmed) {
+            return Ok(raw);
+        }
     }
 
     // Otherwise treat as base64 (standard or URL-safe, padded or not) of the
@@ -559,5 +562,22 @@ mod tests {
         assert!(device_enroll_prev_refs(2, Some(create)).is_err());
         assert!(device_enroll_prev_refs(0, None).is_err());
         assert!(device_enroll_prev_refs(2, None).is_err());
+    }
+
+    #[test]
+    fn raw_base64url_key_starting_with_z_is_not_misclassified_as_multibase() {
+        use base64ct::{Base64UrlUnpadded, Encoding as _};
+
+        let raw = [0xcc_u8; 32];
+        let encoded = Base64UrlUnpadded::encode_string(&raw);
+        assert!(encoded.starts_with('z'));
+        assert_eq!(decode_device_public_key(&encoded).unwrap(), raw);
+    }
+
+    #[test]
+    fn canonical_ed25519_multibase_key_still_decodes() {
+        let raw = [0x5a_u8; 32];
+        let encoded = ed25519_pubkey_to_did_key_multibase(&raw);
+        assert_eq!(decode_device_public_key(&encoded).unwrap(), raw);
     }
 }
