@@ -125,7 +125,7 @@ arkret-crypto = {version = "0.3.0",path = "../arkret-rust-sdk/crates/crypto",def
 # what `arkret-core` already pulls in). Used by `coauth-config` for the
 # `ak:trust_domain:<scope>` wire-form check so config and SDK never drift.
 arkret-identifiers = {version = "0.3.0",path = "../arkret-rust-sdk/crates/identifiers",default-features = false}
-arkret-network-policy = {version = "0.3.0",path = "../arkret-rust-sdk/crates/network-policy",default-features = false}
+arkret-egress-policy = {version = "0.3.0",path = "../arkret-rust-sdk/crates/egress-policy",default-features = false}
 arkret-signatures = {version = "0.3.0",path = "../arkret-rust-sdk/crates/signatures",default-features = false,features = ["signer"]}
 arkret-state = {version = "0.3.0",path = "../arkret-rust-sdk/crates/state",default-features = false}
 console = "0.16.3"

@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use arkret_network_policy::{AddressClass, OutboundPolicy};
+use arkret_egress_policy::{AddressClass, OutboundPolicy};
 use futures_util::FutureExt as _;
 use headers::{ContentLength, HeaderMapExt as _, UserAgent};
 use hyper_util::client::legacy::connect::HttpInfo;
@@ -301,7 +301,7 @@ pub(crate) fn enforce_outbound_url_policy(
 }
 
 pub(crate) fn blocked_domain_reason(host: &str, allow_loopback: bool) -> Option<&'static str> {
-    let reason = arkret_network_policy::classify_host(host)?;
+    let reason = arkret_egress_policy::classify_host(host)?;
     if allow_loopback && reason == "localhost name" {
         return None;
     }
@@ -309,7 +309,7 @@ pub(crate) fn blocked_domain_reason(host: &str, allow_loopback: bool) -> Option<
 }
 
 pub(crate) fn blocked_ip_reason(ip: IpAddr, allow_loopback: bool) -> Option<&'static str> {
-    let class = arkret_network_policy::classify_ip(ip)?;
+    let class = arkret_egress_policy::classify_ip(ip)?;
     if allow_loopback && class == AddressClass::Loopback {
         return None;
     }

@@ -38,7 +38,7 @@ coauth-tasks = {workspace = true}
 coauth-templates = {workspace = true}
 arkret-core = {workspace = true,features = ["salvo"]}
 arkret-http-client = {workspace = true}
-arkret-network-policy = {workspace = true}
+arkret-egress-policy = {workspace = true}
 arkret-crypto = {workspace = true}
 arkret-signatures = {workspace = true,features = ["signer"]}
 arkret-state = {workspace = true}

@@ -244,6 +244,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkret-egress-policy"
+version = "0.3.0"
+dependencies = [
+ "thiserror 2.0.18",
+ "url",
+]
+
+[[package]]
 name = "arkret-http-client"
 version = "0.3.0"
 dependencies = [
@@ -307,14 +315,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
-]
-
-[[package]]
-name = "arkret-network-policy"
-version = "0.3.0"
-dependencies = [
- "thiserror 2.0.18",
- "url",
 ]
 
 [[package]]
@@ -1323,8 +1323,8 @@ dependencies = [
  "argon2",
  "arkret-core",
  "arkret-crypto",
+ "arkret-egress-policy",
  "arkret-http-client",
- "arkret-network-policy",
  "arkret-signatures",
  "arkret-state",
  "async-trait",
