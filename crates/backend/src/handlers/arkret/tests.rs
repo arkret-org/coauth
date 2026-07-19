@@ -444,6 +444,32 @@ fn service_describe_advertises_auth_session_logout_boundary() {
 }
 
 #[test]
+fn service_describe_advertises_complete_account_first_onboarding_surface() {
+    let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
+    let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
+    let body = serde_json::to_value(service_describe_response(
+        &url_builder,
+        &config,
+        &[],
+        &test_enrollment_authority_did(),
+    ))
+    .unwrap();
+    let supported_operations = body["supported_operations"].as_array().unwrap();
+
+    for operation in [
+        arkret_core::ServiceOperationId::GATE_ACCOUNT_EXCHANGE_CREATE_HANDOFF,
+        arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE,
+        arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER,
+        arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT,
+    ] {
+        assert!(
+            supported_operations.contains(&serde_json::json!(operation)),
+            "account-first endpoint operation {operation} must be advertised"
+        );
+    }
+}
+
+#[test]
 fn principal_server_static_session_grant_bearer_matches_exact_token() {
     let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
     assert!(principal_server_static_session_grant_bearer_matches(
