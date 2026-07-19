@@ -365,6 +365,43 @@ pub fn reqwest_client_for_arkret(config: &coauth_config::ArkretConfig) -> reqwes
         .expect("failed to create Arkret HTTP client")
 }
 
+/// Create the HTTP client used by the server process.
+///
+/// In addition to configured Arkret service trust anchors, the server's own
+/// public and issuer origins are exact trust anchors. Coauth performs live OIDC
+/// discovery against its issuer during authorization-code exchange, so a local
+/// Caddy-fronted issuer such as `auth.local.host` must be able to resolve to
+/// loopback without weakening the policy for any other hostname.
+#[must_use]
+pub fn reqwest_client_for_server(
+    config: &coauth_config::ArkretConfig,
+    public_base: &url::Url,
+    issuer: Option<&url::Url>,
+) -> reqwest::Client {
+    let trusted_hosts = server_trusted_loopback_https_hosts(config, public_base, issuer);
+    reqwest_client_builder(insecure_loopback_http_enabled(), &trusted_hosts)
+        .build()
+        .expect("failed to create server HTTP client")
+}
+
+fn server_trusted_loopback_https_hosts(
+    config: &coauth_config::ArkretConfig,
+    public_base: &url::Url,
+    issuer: Option<&url::Url>,
+) -> Vec<String> {
+    let mut hosts = config.trusted_outbound_hosts();
+    for origin in std::iter::once(public_base).chain(issuer) {
+        let Some(host) = origin.host_str() else {
+            continue;
+        };
+        let host = normalize_host(host);
+        if !hosts.iter().any(|trusted| normalize_host(trusted) == host) {
+            hosts.push(host);
+        }
+    }
+    hosts
+}
+
 /// Create a new [`reqwest::Client`] that pins `host` to already-resolved
 /// socket addresses while retaining the standard outbound HTTP guardrails.
 ///
@@ -707,7 +744,7 @@ mod tests {
     use super::{
         OutboundRequestPolicy, blocked_domain_reason, blocked_ip_reason,
         enforce_outbound_url_policy, enforce_resolved_egress_policy, reqwest_client_builder,
-        send_with_policy, telemetry_url,
+        send_with_policy, server_trusted_loopback_https_hosts, telemetry_url,
     };
 
     fn install_crypto_provider() {
@@ -781,6 +818,27 @@ mod tests {
             "8.8.8.8:443".parse().unwrap(),
         ];
         assert!(enforce_resolved_egress_policy("local.host", &mixed, false, &trusted).is_err());
+    }
+
+    #[test]
+    fn server_self_issuer_is_an_exact_loopback_https_trust_anchor() {
+        let config = coauth_config::ArkretConfig::default();
+        let public_base = url::Url::parse("https://auth.local.host/").unwrap();
+        let trusted_hosts = server_trusted_loopback_https_hosts(&config, &public_base, None);
+        let trusted = HashSet::from_iter(trusted_hosts);
+        let loopback = ["127.0.0.1:443".parse().unwrap()];
+
+        assert!(
+            enforce_resolved_egress_policy("auth.local.host", &loopback, false, &trusted).is_ok()
+        );
+        assert!(
+            enforce_resolved_egress_policy("attacker.local.host", &loopback, false, &trusted)
+                .is_err()
+        );
+        let private = ["192.168.1.10:443".parse().unwrap()];
+        assert!(
+            enforce_resolved_egress_policy("auth.local.host", &private, false, &trusted).is_err()
+        );
     }
 
     #[test]
