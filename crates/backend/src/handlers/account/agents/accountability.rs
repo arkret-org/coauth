@@ -50,9 +50,9 @@ fn is_registered_agent_capability(action: &str) -> bool {
                 | CapabilityActionId::AgentActionRequest
                 | CapabilityActionId::AgentActionApprove
                 | CapabilityActionId::AgentActionReject
-                | CapabilityActionId::SelfAgentSidecarThreadCommandEnsure
-                | CapabilityActionId::AgentSidecarThreadWrite
-                | CapabilityActionId::AgentSidecarThreadPublish
+                | CapabilityActionId::SelfAgentSidecarCommandEnsure
+                | CapabilityActionId::AgentSidecarWrite
+                | CapabilityActionId::AgentSidecarPublish
         )
     )
 }

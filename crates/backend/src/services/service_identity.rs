@@ -262,7 +262,7 @@ async fn resolve_once(
             )
             .await
         }
-        Err(arkret_core::Error::Api { status: 404, .. }) if stored.is_none() => {
+        Err(arkret_http_client::Error::Api { status: 404, .. }) if stored.is_none() => {
             let request = match ServiceRegistrationEnsureRequestBody::new(
                 registration_key.clone(),
                 match prepared.service_registration_operation() {
@@ -585,11 +585,11 @@ fn retry_at() -> chrono::DateTime<Utc> {
     Utc::now() + chrono::Duration::seconds(RETRY_DELAY_SECONDS)
 }
 
-fn provider_unavailable(error: &arkret_core::Error) -> bool {
+fn provider_unavailable(error: &arkret_http_client::Error) -> bool {
     matches!(
         error,
-        arkret_core::Error::Http(_)
-            | arkret_core::Error::Api {
+        arkret_http_client::Error::Http(_)
+            | arkret_http_client::Error::Api {
                 status: 429 | 502 | 503 | 504,
                 ..
             }
