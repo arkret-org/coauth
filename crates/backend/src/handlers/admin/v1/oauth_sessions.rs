@@ -493,7 +493,7 @@ mod tests {
             "type": "oauth-session",
             "id": "01FSHN9AG0MKGTBNZ16RDR3PVY",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "finished_at": null,
               "user_id": null,
               "user_session_id": null,
@@ -558,7 +558,7 @@ mod tests {
               "type": "oauth-session",
               "id": "01FSHN9AG0MKGTBNZ16RDR3PVY",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "finished_at": null,
                 "user_id": null,
                 "user_session_id": null,
@@ -601,7 +601,7 @@ mod tests {
               "type": "oauth-session",
               "id": "01FSHN9AG0MKGTBNZ16RDR3PVY",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "finished_at": null,
                 "user_id": null,
                 "user_session_id": null,

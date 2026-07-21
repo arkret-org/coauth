@@ -77,8 +77,12 @@ fn oauth_session_detail_response(detail: OAuthSessionDetailData) -> OAuthSession
         }),
         user_agent: session.user_agent.as_deref().map(parse_user_agent),
         last_active_ip: session.last_active_ip.map(|ip| ip.to_string()),
-        last_active_at: session.last_active_at.map(|t| t.to_rfc3339()),
-        created_at: Some(session.created_at.to_rfc3339()),
+        last_active_at: session
+            .last_active_at
+            .map(arkret_core::canonical::format_timestamp_canonical),
+        created_at: Some(arkret_core::canonical::format_timestamp_canonical(
+            session.created_at,
+        )),
     }
 }
 
@@ -166,11 +170,15 @@ pub async fn get_session(
                 display_name: None,
                 user_agent: session.user_agent.as_deref().map(parse_user_agent),
                 last_active_ip: session.last_active_ip.map(|ip| ip.to_string()),
-                last_active_at: session.last_active_at.map(|t| t.to_rfc3339()),
-                created_at: Some(session.created_at.to_rfc3339()),
+                last_active_at: session
+                    .last_active_at
+                    .map(arkret_core::canonical::format_timestamp_canonical),
+                created_at: Some(arkret_core::canonical::format_timestamp_canonical(
+                    session.created_at,
+                )),
                 last_authentication: detail.last_authentication.map(|a| AuthenticationData {
                     id: NodeType::Authentication.serialize(a.id),
-                    created_at: a.created_at.to_rfc3339(),
+                    created_at: arkret_core::canonical::format_timestamp_canonical(a.created_at),
                 }),
             })
         }
@@ -193,8 +201,12 @@ pub async fn get_session(
                 }),
                 user_agent: session.user_agent.as_deref().map(parse_user_agent),
                 last_active_ip: session.last_active_ip.map(|ip| ip.to_string()),
-                last_active_at: session.last_active_at.map(|t| t.to_rfc3339()),
-                created_at: Some(session.created_at.to_rfc3339()),
+                last_active_at: session
+                    .last_active_at
+                    .map(arkret_core::canonical::format_timestamp_canonical),
+                created_at: Some(arkret_core::canonical::format_timestamp_canonical(
+                    session.created_at,
+                )),
             })
         }
         _ => return Err(RouteError::BadRequest("not a session id".into())),

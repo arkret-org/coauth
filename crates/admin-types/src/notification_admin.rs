@@ -249,7 +249,7 @@ mod tests {
             locale: "en".into(),
             subject_template: None,
             body_template: "x".into(),
-            created_at: "2026-05-10T00:00:00Z".parse().unwrap(),
+            created_at: "2026-05-10T00:00:00.000Z".parse().unwrap(),
             published_at: None,
         };
         let s = serde_json::to_string(&r).unwrap();

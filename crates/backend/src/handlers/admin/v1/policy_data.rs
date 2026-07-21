@@ -161,7 +161,7 @@ mod tests {
             "type": "policy-data",
             "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "data": {
                 "hello": "world"
               }
@@ -238,7 +238,7 @@ mod tests {
             "type": "policy-data",
             "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "data": {
                 "hello": "world"
               }
@@ -305,7 +305,7 @@ mod tests {
             "type": "policy-data",
             "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "data": {
                 "hello": "world"
               }

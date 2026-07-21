@@ -79,7 +79,9 @@ pub async fn get_email_auth(
     Ok(Json(EmailAuthStatusOutcome {
         id: NodeType::UserEmailAuthentication.serialize(auth.id),
         email: auth.email,
-        completed_at: auth.completed_at.map(|t| t.to_rfc3339()),
+        completed_at: auth
+            .completed_at
+            .map(arkret_core::canonical::format_timestamp_canonical),
     }))
 }
 

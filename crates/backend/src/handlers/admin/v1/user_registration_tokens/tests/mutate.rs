@@ -166,7 +166,7 @@ async fn test_unrevoke_token() {
               "valid": true,
               "usage_limit": 5,
               "times_used": 0,
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "last_used_at": null,
               "expires_at": null,
               "revoked_at": null
@@ -294,9 +294,9 @@ async fn test_update_expiry() {
               "valid": true,
               "usage_limit": null,
               "times_used": 0,
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "last_used_at": null,
-              "expires_at": "2022-02-15T14:40:00Z",
+              "expires_at": "2022-02-15T14:40:00.000Z",
               "revoked_at": null
             },
             "links": {
@@ -333,7 +333,7 @@ async fn test_update_expiry() {
               "valid": true,
               "usage_limit": null,
               "times_used": 0,
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "last_used_at": null,
               "expires_at": null,
               "revoked_at": null
@@ -398,7 +398,7 @@ async fn test_update_usage_limit() {
               "valid": true,
               "usage_limit": 10,
               "times_used": 0,
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "last_used_at": null,
               "expires_at": null,
               "revoked_at": null
@@ -437,7 +437,7 @@ async fn test_update_usage_limit() {
               "valid": true,
               "usage_limit": null,
               "times_used": 0,
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "last_used_at": null,
               "expires_at": null,
               "revoked_at": null
@@ -503,9 +503,9 @@ async fn test_update_multiple_fields() {
               "valid": true,
               "usage_limit": 20,
               "times_used": 0,
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "last_used_at": null,
-              "expires_at": "2022-02-15T14:40:00Z",
+              "expires_at": "2022-02-15T14:40:00.000Z",
               "revoked_at": null
             },
             "links": {
@@ -566,9 +566,9 @@ async fn test_update_no_fields() {
               "valid": true,
               "usage_limit": 5,
               "times_used": 0,
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "last_used_at": null,
-              "expires_at": "2022-02-15T14:40:00Z",
+              "expires_at": "2022-02-15T14:40:00.000Z",
               "revoked_at": null
             },
             "links": {

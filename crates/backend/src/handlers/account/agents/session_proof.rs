@@ -1345,7 +1345,7 @@ mod tests {
                     },
                     "requested_scope_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "pairing_request_id": pairing_request_id,
-                    "pairing_expires_at": "2099-01-01T00:00:00Z",
+                    "pairing_expires_at": "2099-01-01T00:00:00.000Z",
                     "active_authorizations": []
                 }
             })))

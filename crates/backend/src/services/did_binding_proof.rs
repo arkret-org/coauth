@@ -112,9 +112,11 @@ pub struct BindingStatementClaims {
     pub nonce: String,
     /// Issuance time. `|iat - now|` MUST be within ±300s of the server
     /// clock.
+    #[serde(with = "chrono::serde::ts_seconds")]
     pub iat: DateTime<Utc>,
     /// Expiry. `exp - iat` MUST be ≤ 300s (max-freshness window) and the
     /// proof MUST be rejected once `now >= exp`.
+    #[serde(with = "chrono::serde::ts_seconds")]
     pub exp: DateTime<Utc>,
 }
 

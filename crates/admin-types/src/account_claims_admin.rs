@@ -190,7 +190,7 @@ mod tests {
                 "verifier_did": "did:web:verifier.example",
                 "represented_org": "Example Org",
                 "payload": {"value": "admin"},
-                "issued_at": "2026-05-01T00:00:00Z",
+                "issued_at": "2026-05-01T00:00:00.000Z",
                 "expires_at": null,
                 "revoked_at": null,
                 "revoked_reason": null

@@ -345,7 +345,7 @@ mod tests {
     async fn test_metadata_cache() {
         setup();
         let mock_server = MockServer::start().await;
-        let http_client = crate::reqwest_client();
+        let http_client = crate::outbound_http::reqwest_client_for_tests();
 
         let cache = MetadataCache::new();
 
@@ -409,7 +409,7 @@ mod tests {
         setup();
 
         let mock_server = MockServer::start().await;
-        let http_client = crate::reqwest_client();
+        let http_client = crate::outbound_http::reqwest_client_for_tests();
 
         let expected_calls = 2;
         let mut calls = 0;

@@ -412,11 +412,11 @@ mod tests {
     }
 
     #[test]
-    fn canonical_rfc3339_drops_fractional_seconds() {
+    fn canonical_rfc3339_preserves_milliseconds() {
         let ts = chrono::DateTime::parse_from_rfc3339("2026-05-21T10:11:12.345Z")
             .unwrap()
             .with_timezone(&Utc);
-        assert_eq!(format_timestamp_canonical(ts), "2026-05-21T10:11:12Z");
+        assert_eq!(format_timestamp_canonical(ts), "2026-05-21T10:11:12.345Z");
         arkret_core::canonical::validate_timestamp_canonical(&format_timestamp_canonical(ts))
             .expect("formatted timestamp is canonical");
     }
@@ -488,8 +488,9 @@ mod tests {
 
         let expires_at = response.expires_at;
         let expires_at_str = format_timestamp_canonical(expires_at);
+        let response_wire = serde_json::to_value(&response).unwrap();
         assert_eq!(
-            serde_json::to_value(expires_at).unwrap(),
+            response_wire["expires_at"],
             serde_json::Value::String(expires_at_str.clone())
         );
         let transcript = DecisionTranscript {

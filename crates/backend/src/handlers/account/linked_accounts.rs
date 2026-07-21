@@ -42,7 +42,7 @@ pub async fn list_linked_accounts(
             provider_brand: link.provider_brand,
             subject: link.subject,
             human_account_name: link.human_account_name,
-            created_at: link.created_at.to_rfc3339(),
+            created_at: arkret_core::canonical::format_timestamp_canonical(link.created_at),
         })
         .collect();
 

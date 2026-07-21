@@ -176,31 +176,3 @@ pub fn to_personal_session(
         access_token: None,
     })
 }
-
-#[cfg(test)]
-pub fn registration_token_samples() -> [UserRegistrationToken; 2] {
-    [
-        UserRegistrationToken {
-            id: Ulid::from_bytes([0x01; 16]).to_string(),
-            token: "abc123def456".to_owned(),
-            valid: true,
-            usage_limit: Some(10),
-            times_used: 5,
-            created_at: DateTime::default(),
-            last_used_at: Some(DateTime::default()),
-            expires_at: Some(DateTime::default() + chrono::Duration::days(30)),
-            revoked_at: None,
-        },
-        UserRegistrationToken {
-            id: Ulid::from_bytes([0x02; 16]).to_string(),
-            token: "xyz789abc012".to_owned(),
-            valid: false,
-            usage_limit: None,
-            times_used: 0,
-            created_at: DateTime::default(),
-            last_used_at: None,
-            expires_at: None,
-            revoked_at: Some(DateTime::default()),
-        },
-    ]
-}

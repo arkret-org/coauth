@@ -232,7 +232,7 @@ mod tests {
             policy_frontier_digest: &pol,
             membership_frontier_digest: &mem,
             reason_code: "ok",
-            expires_at: "2026-05-21T00:01:00Z",
+            expires_at: "2026-05-21T00:01:00.000Z",
             obligations: &obligations,
         };
         let a = PolicySigner::canonical_transcript_bytes(&transcript).unwrap();
@@ -264,7 +264,7 @@ mod tests {
             policy_frontier_digest: &h,
             membership_frontier_digest: &h,
             reason_code: "ok",
-            expires_at: "2026-05-21T00:01:00Z",
+            expires_at: "2026-05-21T00:01:00.000Z",
             obligations: &obligations,
         };
         let allow_bytes = PolicySigner::canonical_transcript_bytes(&transcript).unwrap();

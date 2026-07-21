@@ -616,7 +616,7 @@ mod tests {
             "type": "personal-session",
             "id": "01FSHN9AG07HNEZXNQM2KNBNF6",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "revoked_at": null,
               "owner_user_id": null,
               "owner_client_id": "01FSHN9AG0FAQ50MT1E9FFRPZR",
@@ -625,7 +625,7 @@ mod tests {
               "scope": "openid urn:coauth:admin",
               "last_active_at": null,
               "last_active_ip": null,
-              "expires_at": "2022-01-16T15:40:00Z",
+              "expires_at": "2022-01-16T15:40:00.000Z",
               "access_token": "mpt_FM44zJN5qePGMLvvMXC4Ds1A3lCWc6_bJ9Wj1"
             },
             "links": {
@@ -751,7 +751,7 @@ mod tests {
             "type": "personal-session",
             "id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "revoked_at": null,
               "owner_user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
               "owner_client_id": null,
@@ -903,7 +903,7 @@ mod tests {
               "type": "personal-session",
               "id": "01FSHN9AG0YQYAR04VCYTHJ8SK",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "revoked_at": null,
                 "owner_user_id": "01FSHN9AG09FE39KETP6F390F8",
                 "owner_client_id": null,
@@ -912,7 +912,7 @@ mod tests {
                 "scope": "openid",
                 "last_active_at": null,
                 "last_active_ip": null,
-                "expires_at": "2022-02-27T14:40:00Z"
+                "expires_at": "2022-02-27T14:40:00.000Z"
               },
               "links": {
                 "self": "/_coauth/admin/personal-sessions/01FSHN9AG0YQYAR04VCYTHJ8SK"
@@ -927,8 +927,8 @@ mod tests {
               "type": "personal-session",
               "id": "01FSM7P1G0VBGAMK9D9QMGQ5MY",
               "attributes": {
-                "created_at": "2022-01-17T14:40:00Z",
-                "revoked_at": "2022-01-17T14:40:00Z",
+                "created_at": "2022-01-17T14:40:00.000Z",
+                "revoked_at": "2022-01-17T14:40:00.000Z",
                 "owner_user_id": "01FSHN9AG09FE39KETP6F390F8",
                 "owner_client_id": null,
                 "actor_user_id": "01FSHN9AG09FE39KETP6F390F8",
@@ -951,7 +951,7 @@ mod tests {
               "type": "personal-session",
               "id": "01FSPT2RG08Y11Y5BM4VZ4CN8K",
               "attributes": {
-                "created_at": "2022-01-18T14:40:00Z",
+                "created_at": "2022-01-18T14:40:00.000Z",
                 "revoked_at": null,
                 "owner_user_id": "01FSHN9AG09FE39KETP6F390F8",
                 "owner_client_id": null,
@@ -960,7 +960,7 @@ mod tests {
                 "scope": "openid urn:coauth:admin",
                 "last_active_at": null,
                 "last_active_ip": null,
-                "expires_at": "2022-02-01T14:40:00Z"
+                "expires_at": "2022-02-01T14:40:00.000Z"
               },
               "links": {
                 "self": "/_coauth/admin/personal-sessions/01FSPT2RG08Y11Y5BM4VZ4CN8K"
@@ -983,11 +983,11 @@ mod tests {
         // Validate individual filters against expected ID sets
         let cases: &[(&str, &[&str])] = &[
             (
-                "filter[expires_before]=2022-02-15T00:00:00Z",
+                "filter[expires_before]=2022-02-15T00:00:00.000Z",
                 &["01FSPT2RG08Y11Y5BM4VZ4CN8K"],
             ),
             (
-                "filter[expires_after]=2022-02-15T00:00:00Z",
+                "filter[expires_after]=2022-02-15T00:00:00.000Z",
                 &["01FSHN9AG0YQYAR04VCYTHJ8SK"],
             ),
             (
@@ -1081,7 +1081,7 @@ mod tests {
             "type": "personal-session",
             "id": "01FSHN9AG07HNEZXNQM2KNBNF6",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "revoked_at": null,
               "owner_user_id": null,
               "owner_client_id": "01FSHN9AG0FAQ50MT1E9FFRPZR",
@@ -1090,7 +1090,7 @@ mod tests {
               "scope": "openid urn:coauth:admin",
               "last_active_at": null,
               "last_active_ip": null,
-              "expires_at": "2022-01-17T14:43:00Z",
+              "expires_at": "2022-01-17T14:43:00.000Z",
               "access_token": "mpt_6cq7FqNSYoosbXl3bbpfh9yNy9NzuR_0vOV2O"
             },
             "links": {

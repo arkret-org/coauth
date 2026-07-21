@@ -292,14 +292,6 @@ fn enforce_resolved_egress_policy(
         .map_err(|error| Box::new(error) as Box<dyn StdError + Send + Sync>)
 }
 
-pub(crate) fn enforce_outbound_url_policy(
-    url: &url::Url,
-) -> Result<(), Box<dyn StdError + Send + Sync>> {
-    OutboundPolicy::public_https()
-        .validate_url(url)
-        .map_err(|error| Box::new(error) as Box<dyn StdError + Send + Sync>)
-}
-
 pub(crate) fn blocked_domain_reason(host: &str, allow_loopback: bool) -> Option<&'static str> {
     let reason = arkret_egress_policy::classify_host(host)?;
     if allow_loopback && reason == "localhost name" {
@@ -350,6 +342,13 @@ pub fn reqwest_client() -> reqwest::Client {
     reqwest_client_builder(insecure_loopback_http_enabled(), &[])
         .build()
         .expect("failed to create HTTP client")
+}
+
+#[cfg(test)]
+pub(crate) fn reqwest_client_for_tests() -> reqwest::Client {
+    reqwest_client_builder(true, &[])
+        .build()
+        .expect("failed to create loopback HTTP test client")
 }
 
 /// Create the server-runtime HTTP client with narrowly scoped loopback HTTPS
@@ -742,9 +741,9 @@ mod tests {
     use tokio::net::TcpListener;
 
     use super::{
-        OutboundRequestPolicy, blocked_domain_reason, blocked_ip_reason,
-        enforce_outbound_url_policy, enforce_resolved_egress_policy, reqwest_client_builder,
-        send_with_policy, server_trusted_loopback_https_hosts, telemetry_url,
+        OutboundPolicy, OutboundRequestPolicy, blocked_domain_reason, blocked_ip_reason,
+        enforce_resolved_egress_policy, reqwest_client_builder, send_with_policy,
+        server_trusted_loopback_https_hosts, telemetry_url,
     };
 
     fn install_crypto_provider() {
@@ -856,12 +855,14 @@ mod tests {
         ] {
             let url = url::Url::parse(raw).unwrap();
             assert!(
-                enforce_outbound_url_policy(&url).is_err(),
+                OutboundPolicy::public_https().validate_url(&url).is_err(),
                 "{raw} should be rejected before dispatch"
             );
         }
         assert!(
-            enforce_outbound_url_policy(&url::Url::parse("https://8.8.8.8/jwks").unwrap()).is_ok()
+            OutboundPolicy::public_https()
+                .validate_url(&url::Url::parse("https://8.8.8.8/jwks").unwrap())
+                .is_ok()
         );
     }
 

@@ -56,7 +56,7 @@ async fn test_get() {
             "type": "upstream-oauth-link",
             "id": "01FSHN9AG09NMZYX8MFYH578R9",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "provider_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
               "subject": "subject1",
               "user_id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",

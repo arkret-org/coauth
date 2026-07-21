@@ -28,7 +28,9 @@ struct SoftLogoutDidProofClaims<'a> {
     pub audience: &'a str,
     pub challenge: &'a str,
     pub request_canonical_digest: &'a str,
+    #[serde(serialize_with = "arkret_core::canonical::serialize_canonical_timestamp")]
     pub issued_at: DateTime<Utc>,
+    #[serde(serialize_with = "arkret_core::canonical::serialize_canonical_timestamp")]
     pub expires_at: DateTime<Utc>,
 }
 

@@ -5,9 +5,8 @@
 //! repository-generated row id and created_at timestamp, and finally update the
 //! same row's `audit_signature` column.
 
-use arkret_core::canonical::canonical_json_bytes;
+use arkret_core::canonical::{canonical_json_bytes, format_timestamp_canonical};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
-use chrono::SecondsFormat;
 use coauth_data::audit::{AdminOperation, AdminOperationLog, NewAdminOperationLog};
 use coauth_data::{BoxRepository, RepositoryAccess, RepositoryError};
 use coauth_iana::jose::JsonWebSignatureAlg;
@@ -256,7 +255,7 @@ fn transcript_for_log(log: &AdminOperationLog) -> AuditTranscript<'_> {
         kind: AUDIT_TRANSCRIPT_KIND,
         schema_version: AUDIT_TRANSCRIPT_SCHEMA_VERSION,
         row_id: log.id.to_string(),
-        created_at: log.created_at.to_rfc3339_opts(SecondsFormat::Micros, true),
+        created_at: format_timestamp_canonical(log.created_at),
         admin_user_id: log.admin_user_id.to_string(),
         operation: &log.operation,
         resource_type: &log.resource_type,

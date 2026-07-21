@@ -35,9 +35,9 @@ async fn test_list_all_tokens() {
                 "valid": false,
                 "usage_limit": 5,
                 "times_used": 0,
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "last_used_at": null,
-                "expires_at": "2022-01-15T14:40:00Z",
+                "expires_at": "2022-01-15T14:40:00.000Z",
                 "revoked_at": null
               },
               "links": {
@@ -57,8 +57,8 @@ async fn test_list_all_tokens() {
                 "valid": true,
                 "usage_limit": 10,
                 "times_used": 1,
-                "created_at": "2022-01-16T14:40:00Z",
-                "last_used_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
+                "last_used_at": "2022-01-16T14:40:00.000Z",
                 "expires_at": null,
                 "revoked_at": null
               },
@@ -79,10 +79,10 @@ async fn test_list_all_tokens() {
                 "valid": false,
                 "usage_limit": 10,
                 "times_used": 0,
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "last_used_at": null,
                 "expires_at": null,
-                "revoked_at": "2022-01-16T14:40:00Z"
+                "revoked_at": "2022-01-16T14:40:00.000Z"
               },
               "links": {
                 "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
@@ -101,7 +101,7 @@ async fn test_list_all_tokens() {
                 "valid": true,
                 "usage_limit": 10,
                 "times_used": 0,
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "last_used_at": null,
                 "expires_at": null,
                 "revoked_at": null
@@ -123,10 +123,10 @@ async fn test_list_all_tokens() {
                 "valid": false,
                 "usage_limit": 10,
                 "times_used": 1,
-                "created_at": "2022-01-16T14:40:00Z",
-                "last_used_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
+                "last_used_at": "2022-01-16T14:40:00.000Z",
                 "expires_at": null,
-                "revoked_at": "2022-01-16T14:40:00Z"
+                "revoked_at": "2022-01-16T14:40:00.000Z"
               },
               "links": {
                 "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
@@ -179,8 +179,8 @@ async fn test_filter_by_used() {
                 "valid": true,
                 "usage_limit": 10,
                 "times_used": 1,
-                "created_at": "2022-01-16T14:40:00Z",
-                "last_used_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
+                "last_used_at": "2022-01-16T14:40:00.000Z",
                 "expires_at": null,
                 "revoked_at": null
               },
@@ -201,10 +201,10 @@ async fn test_filter_by_used() {
                 "valid": false,
                 "usage_limit": 10,
                 "times_used": 1,
-                "created_at": "2022-01-16T14:40:00Z",
-                "last_used_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
+                "last_used_at": "2022-01-16T14:40:00.000Z",
                 "expires_at": null,
-                "revoked_at": "2022-01-16T14:40:00Z"
+                "revoked_at": "2022-01-16T14:40:00.000Z"
               },
               "links": {
                 "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
@@ -246,9 +246,9 @@ async fn test_filter_by_used() {
                 "valid": false,
                 "usage_limit": 5,
                 "times_used": 0,
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "last_used_at": null,
-                "expires_at": "2022-01-15T14:40:00Z",
+                "expires_at": "2022-01-15T14:40:00.000Z",
                 "revoked_at": null
               },
               "links": {
@@ -268,10 +268,10 @@ async fn test_filter_by_used() {
                 "valid": false,
                 "usage_limit": 10,
                 "times_used": 0,
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "last_used_at": null,
                 "expires_at": null,
-                "revoked_at": "2022-01-16T14:40:00Z"
+                "revoked_at": "2022-01-16T14:40:00.000Z"
               },
               "links": {
                 "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
@@ -290,7 +290,7 @@ async fn test_filter_by_used() {
                 "valid": true,
                 "usage_limit": 10,
                 "times_used": 0,
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "last_used_at": null,
                 "expires_at": null,
                 "revoked_at": null
@@ -346,10 +346,10 @@ async fn test_filter_by_revoked() {
                 "valid": false,
                 "usage_limit": 10,
                 "times_used": 0,
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "last_used_at": null,
                 "expires_at": null,
-                "revoked_at": "2022-01-16T14:40:00Z"
+                "revoked_at": "2022-01-16T14:40:00.000Z"
               },
               "links": {
                 "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
@@ -368,10 +368,10 @@ async fn test_filter_by_revoked() {
                 "valid": false,
                 "usage_limit": 10,
                 "times_used": 1,
-                "created_at": "2022-01-16T14:40:00Z",
-                "last_used_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
+                "last_used_at": "2022-01-16T14:40:00.000Z",
                 "expires_at": null,
-                "revoked_at": "2022-01-16T14:40:00Z"
+                "revoked_at": "2022-01-16T14:40:00.000Z"
               },
               "links": {
                 "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
@@ -413,9 +413,9 @@ async fn test_filter_by_revoked() {
                 "valid": false,
                 "usage_limit": 5,
                 "times_used": 0,
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "last_used_at": null,
-                "expires_at": "2022-01-15T14:40:00Z",
+                "expires_at": "2022-01-15T14:40:00.000Z",
                 "revoked_at": null
               },
               "links": {
@@ -435,8 +435,8 @@ async fn test_filter_by_revoked() {
                 "valid": true,
                 "usage_limit": 10,
                 "times_used": 1,
-                "created_at": "2022-01-16T14:40:00Z",
-                "last_used_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
+                "last_used_at": "2022-01-16T14:40:00.000Z",
                 "expires_at": null,
                 "revoked_at": null
               },
@@ -457,7 +457,7 @@ async fn test_filter_by_revoked() {
                 "valid": true,
                 "usage_limit": 10,
                 "times_used": 0,
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "last_used_at": null,
                 "expires_at": null,
                 "revoked_at": null

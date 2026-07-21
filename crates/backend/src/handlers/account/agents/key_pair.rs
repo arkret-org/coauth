@@ -52,6 +52,7 @@ struct ProofOfPossessionInput {
     challenge: String,
     audience: String,
     request_canonical_digest: String,
+    #[serde(deserialize_with = "arkret_core::canonical::deserialize_canonical_timestamp")]
     expires_at: DateTime<Utc>,
     signature: String,
 }
@@ -1096,7 +1097,7 @@ mod tests {
     }
 
     fn test_now() -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339("2026-07-06T00:05:00Z")
+        DateTime::parse_from_rfc3339("2026-07-06T00:05:00.000Z")
             .unwrap()
             .with_timezone(&Utc)
     }
@@ -1141,7 +1142,7 @@ mod tests {
             "executed_by": CONTROLLER,
             "authorization_ref": format!("{AGENT}#managed-controller"),
             "actor_seq": 1,
-            "created_at": "2026-07-06T00:00:00Z",
+            "created_at": "2026-07-06T00:00:00.000Z",
             "hlc": "01970e589d21-0001-a13f9c2e",
             "prev_refs": [],
             "payload": {
@@ -1158,8 +1159,8 @@ mod tests {
                     "resources": []
                 },
                 "audience": [AUDIENCE],
-                "issued_at": "2026-07-06T00:00:00Z",
-                "expires_at": "2026-07-06T00:10:00Z",
+                "issued_at": "2026-07-06T00:00:00.000Z",
+                "expires_at": "2026-07-06T00:10:00.000Z",
                 "approval_evidence": {
                     "kind": "pairing_request",
                     "request_canonical_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -1351,7 +1352,7 @@ mod tests {
     #[test]
     fn authorize_event_accepts_lifetime_longer_than_session_ttl() {
         let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
-        event["payload"]["expires_at"] = json!("2026-08-05T00:00:00Z");
+        event["payload"]["expires_at"] = json!("2026-08-05T00:00:00.000Z");
 
         validate_controller_authorize_event(
             &event,
@@ -1369,8 +1370,8 @@ mod tests {
     #[test]
     fn authorize_event_rejects_non_positive_authorization_lifetime() {
         let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
-        event["payload"]["issued_at"] = json!("2026-07-06T00:06:00Z");
-        event["payload"]["expires_at"] = json!("2026-07-06T00:06:00Z");
+        event["payload"]["issued_at"] = json!("2026-07-06T00:06:00.000Z");
+        event["payload"]["expires_at"] = json!("2026-07-06T00:06:00.000Z");
 
         let err = validate_controller_authorize_event(
             &event,
@@ -1436,7 +1437,7 @@ mod tests {
                 &canonical_bytes,
             ))
             .unwrap(),
-            created_at: "2026-07-06T00:01:00Z".parse().unwrap(),
+            created_at: "2026-07-06T00:01:00.000Z".parse().unwrap(),
             domain: None,
             audience: None,
             jws: String::new(),
@@ -1469,7 +1470,7 @@ mod tests {
             "alg": "EdDSA",
             "verification_method": "did:web:controller.example#key-1",
             "event_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-            "created_at": "2026-07-06T00:01:00Z",
+            "created_at": "2026-07-06T00:01:00.000Z",
             "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
         }]);
         let parsed: arkret_core::Event = serde_json::from_value(event.clone()).unwrap();

@@ -416,7 +416,7 @@ mod tests {
             "type": "user-email",
             "id": "01FSHN9AG07HNEZXNQM2KNBNF6",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
               "email": "alice@example.com"
             },
@@ -652,7 +652,7 @@ mod tests {
             "type": "user-email",
             "id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
               "email": "alice@example.com"
             },
@@ -738,7 +738,7 @@ mod tests {
               "type": "user-email",
               "id": "01FSHN9AG09NMZYX8MFYH578R9",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
                 "email": "alice@example.com"
               },
@@ -755,7 +755,7 @@ mod tests {
               "type": "user-email",
               "id": "01FSHN9AG0KEPHYQQXW9XPTX6Z",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "user_id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",
                 "email": "bob@example.com"
               },
@@ -797,7 +797,7 @@ mod tests {
               "type": "user-email",
               "id": "01FSHN9AG09NMZYX8MFYH578R9",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
                 "email": "alice@example.com"
               },
@@ -836,7 +836,7 @@ mod tests {
               "type": "user-email",
               "id": "01FSHN9AG09NMZYX8MFYH578R9",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
                 "email": "alice@example.com"
               },
@@ -872,7 +872,7 @@ mod tests {
               "type": "user-email",
               "id": "01FSHN9AG09NMZYX8MFYH578R9",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
                 "email": "alice@example.com"
               },
@@ -889,7 +889,7 @@ mod tests {
               "type": "user-email",
               "id": "01FSHN9AG0KEPHYQQXW9XPTX6Z",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "user_id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",
                 "email": "bob@example.com"
               },
@@ -946,7 +946,7 @@ mod tests {
               "type": "user-email",
               "id": "01FSHN9AG09NMZYX8MFYH578R9",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
                 "email": "alice@example.com"
               },

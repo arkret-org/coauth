@@ -614,7 +614,7 @@ mod tests {
               "issuer": "https://accounts.google.com",
               "human_name": "Google",
               "brand_name": "google",
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "disabled_at": null
             },
             "links": {
@@ -794,8 +794,8 @@ mod tests {
                 "issuer": "https://appleid.apple.com",
                 "human_name": "Apple ID",
                 "brand_name": "apple",
-                "created_at": "2022-01-16T14:40:00Z",
-                "disabled_at": "2022-01-16T14:40:00Z"
+                "created_at": "2022-01-16T14:40:00.000Z",
+                "disabled_at": "2022-01-16T14:40:00.000Z"
               },
               "links": {
                 "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
@@ -813,7 +813,7 @@ mod tests {
                 "issuer": "https://login.microsoftonline.com/common/v2.0",
                 "human_name": "Microsoft",
                 "brand_name": "microsoft",
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "disabled_at": null
               },
               "links": {
@@ -832,7 +832,7 @@ mod tests {
                 "issuer": "https://accounts.google.com",
                 "human_name": "Google",
                 "brand_name": "google",
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "disabled_at": null
               },
               "links": {
@@ -885,7 +885,7 @@ mod tests {
                 "issuer": "https://login.microsoftonline.com/common/v2.0",
                 "human_name": "Microsoft",
                 "brand_name": "microsoft",
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "disabled_at": null
               },
               "links": {
@@ -904,7 +904,7 @@ mod tests {
                 "issuer": "https://accounts.google.com",
                 "human_name": "Google",
                 "brand_name": "google",
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "disabled_at": null
               },
               "links": {
@@ -957,8 +957,8 @@ mod tests {
                 "issuer": "https://appleid.apple.com",
                 "human_name": "Apple ID",
                 "brand_name": "apple",
-                "created_at": "2022-01-16T14:40:00Z",
-                "disabled_at": "2022-01-16T14:40:00Z"
+                "created_at": "2022-01-16T14:40:00.000Z",
+                "disabled_at": "2022-01-16T14:40:00.000Z"
               },
               "links": {
                 "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
@@ -1011,8 +1011,8 @@ mod tests {
                 "issuer": "https://appleid.apple.com",
                 "human_name": "Apple ID",
                 "brand_name": "apple",
-                "created_at": "2022-01-16T14:40:00Z",
-                "disabled_at": "2022-01-16T14:40:00Z"
+                "created_at": "2022-01-16T14:40:00.000Z",
+                "disabled_at": "2022-01-16T14:40:00.000Z"
               },
               "links": {
                 "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
@@ -1030,7 +1030,7 @@ mod tests {
                 "issuer": "https://login.microsoftonline.com/common/v2.0",
                 "human_name": "Microsoft",
                 "brand_name": "microsoft",
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "disabled_at": null
               },
               "links": {
@@ -1077,7 +1077,7 @@ mod tests {
                 "issuer": "https://accounts.google.com",
                 "human_name": "Google",
                 "brand_name": "google",
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "disabled_at": null
               },
               "links": {
@@ -1145,8 +1145,8 @@ mod tests {
                 "issuer": "https://appleid.apple.com",
                 "human_name": "Apple ID",
                 "brand_name": "apple",
-                "created_at": "2022-01-16T14:40:00Z",
-                "disabled_at": "2022-01-16T14:40:00Z"
+                "created_at": "2022-01-16T14:40:00.000Z",
+                "disabled_at": "2022-01-16T14:40:00.000Z"
               },
               "links": {
                 "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
@@ -1164,7 +1164,7 @@ mod tests {
                 "issuer": "https://login.microsoftonline.com/common/v2.0",
                 "human_name": "Microsoft",
                 "brand_name": "microsoft",
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "disabled_at": null
               },
               "links": {
@@ -1183,7 +1183,7 @@ mod tests {
                 "issuer": "https://accounts.google.com",
                 "human_name": "Google",
                 "brand_name": "google",
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "disabled_at": null
               },
               "links": {
@@ -1243,7 +1243,7 @@ mod tests {
                 "issuer": "https://login.microsoftonline.com/common/v2.0",
                 "human_name": "Microsoft",
                 "brand_name": "microsoft",
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "disabled_at": null
               },
               "links": {
@@ -1262,7 +1262,7 @@ mod tests {
                 "issuer": "https://accounts.google.com",
                 "human_name": "Google",
                 "brand_name": "google",
-                "created_at": "2022-01-16T14:40:00Z",
+                "created_at": "2022-01-16T14:40:00.000Z",
                 "disabled_at": null
               },
               "links": {

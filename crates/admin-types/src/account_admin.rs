@@ -264,9 +264,9 @@ mod tests {
         let wire = r#"{
             "handle": "alice",
             "status": "locked",
-            "created_at": "2026-05-01T00:00:00Z",
-            "updated_at": "2026-05-02T00:00:00Z",
-            "locked_at": "2026-05-02T00:00:00Z",
+            "created_at": "2026-05-01T00:00:00.000Z",
+            "updated_at": "2026-05-02T00:00:00.000Z",
+            "locked_at": "2026-05-02T00:00:00.000Z",
             "deactivated_at": null,
             "admin": false,
             "display_name": null,

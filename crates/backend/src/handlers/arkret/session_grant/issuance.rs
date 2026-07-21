@@ -1,4 +1,5 @@
 use arkret_core::GrantId;
+use arkret_core::canonical::normalize_timestamp_canonical;
 use arkret_core::identifiers::new_prefixed_uuid7;
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
@@ -125,7 +126,7 @@ fn issue_session_grant_for_audience_inner(
     }
     let session_public_key = serde_json::to_string(&session_public_key)?;
 
-    let now = clock.now();
+    let now = normalize_timestamp_canonical(clock.now());
     let expires_at = now + arkret_config.session_grant_ttl;
     let grant_id = new_session_grant_id();
     let device_id = primary_device_id_from_tokens(scopes.iter().map(String::as_str));
@@ -159,7 +160,7 @@ fn issue_session_grant_for_audience_inner(
         grant_id,
         grant_jwt,
         session_public_key,
-        expires_at: expires_at.to_rfc3339(),
+        expires_at: arkret_core::canonical::format_timestamp_canonical(expires_at),
         expires_at_timestamp: expires_at,
         issuer: issuer.to_string(),
         subject,
@@ -263,6 +264,8 @@ pub(crate) fn mint_agent_session_grant(
     now: DateTime<Utc>,
     expires_at: DateTime<Utc>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
+    let now = normalize_timestamp_canonical(now);
+    let expires_at = normalize_timestamp_canonical(expires_at);
     ensure_principal_did_method_allowed(arkret_config, agent_id)?;
     let issuer = issuer_did_for(arkret_config);
     let grant_id = new_session_grant_id();
@@ -297,7 +300,7 @@ pub(crate) fn mint_agent_session_grant(
         grant_id,
         grant_jwt,
         session_public_key,
-        expires_at: expires_at.to_rfc3339(),
+        expires_at: arkret_core::canonical::format_timestamp_canonical(expires_at),
         expires_at_timestamp: expires_at,
         issuer: issuer.to_string(),
         subject: agent_id.to_owned(),

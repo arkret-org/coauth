@@ -303,7 +303,7 @@ mod tests {
     }
 
     fn fixed_now() -> chrono::DateTime<chrono::Utc> {
-        chrono::DateTime::parse_from_rfc3339("2026-06-20T00:00:00Z")
+        chrono::DateTime::parse_from_rfc3339("2026-06-20T00:00:00.000Z")
             .unwrap()
             .with_timezone(&chrono::Utc)
     }
@@ -342,7 +342,7 @@ mod tests {
     #[test]
     fn observed_frontier_within_required_window_is_fresh() {
         assert_eq!(
-            frontier_freshness_state("2026-06-19T23:58:30Z", fixed_now()),
+            frontier_freshness_state("2026-06-19T23:58:30.000Z", fixed_now()),
             FreshnessState::Fresh
         );
     }
@@ -350,7 +350,7 @@ mod tests {
     #[test]
     fn observed_frontier_outside_required_window_is_stale() {
         assert_eq!(
-            frontier_freshness_state("2026-06-19T23:55:00Z", fixed_now()),
+            frontier_freshness_state("2026-06-19T23:55:00.000Z", fixed_now()),
             FreshnessState::Stale
         );
     }
@@ -363,7 +363,7 @@ mod tests {
             FreshnessState::Unknown
         );
         assert_eq!(
-            frontier_freshness_state("2026-06-20T00:02:00Z", fixed_now()),
+            frontier_freshness_state("2026-06-20T00:02:00.000Z", fixed_now()),
             FreshnessState::Unknown
         );
     }

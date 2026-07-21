@@ -33,7 +33,7 @@ async fn test_create() {
               "valid": true,
               "usage_limit": 5,
               "times_used": 0,
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "last_used_at": null,
               "expires_at": null,
               "revoked_at": null
@@ -78,7 +78,7 @@ async fn test_create_auto_token() {
               "valid": true,
               "usage_limit": 1,
               "times_used": 0,
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "last_used_at": null,
               "expires_at": null,
               "revoked_at": null
@@ -124,7 +124,7 @@ async fn test_create_conflict() {
               "valid": true,
               "usage_limit": 5,
               "times_used": 0,
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "last_used_at": null,
               "expires_at": null,
               "revoked_at": null
@@ -192,7 +192,7 @@ async fn test_get_token() {
               "valid": true,
               "usage_limit": 5,
               "times_used": 0,
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "last_used_at": null,
               "expires_at": null,
               "revoked_at": null

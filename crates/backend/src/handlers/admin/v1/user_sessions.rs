@@ -379,7 +379,7 @@ mod tests {
             "type": "user-session",
             "id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00Z",
+              "created_at": "2022-01-16T14:40:00.000Z",
               "finished_at": null,
               "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
               "user_agent": null,
@@ -456,7 +456,7 @@ mod tests {
               "type": "user-session",
               "id": "01FSHNB5309NMZYX8MFYH578R9",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00Z",
+                "created_at": "2022-01-16T14:41:00.000Z",
                 "finished_at": null,
                 "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
                 "user_agent": null,
@@ -476,8 +476,8 @@ mod tests {
               "type": "user-session",
               "id": "01FSHNB530KEPHYQQXW9XPTX6Z",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00Z",
-                "finished_at": "2022-01-16T14:42:00Z",
+                "created_at": "2022-01-16T14:41:00.000Z",
+                "finished_at": "2022-01-16T14:42:00.000Z",
                 "user_id": "01FSHNB530AJ6AC5HQ9X6H4RP4",
                 "user_agent": null,
                 "last_active_at": null,
@@ -521,7 +521,7 @@ mod tests {
               "type": "user-session",
               "id": "01FSHNB5309NMZYX8MFYH578R9",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00Z",
+                "created_at": "2022-01-16T14:41:00.000Z",
                 "finished_at": null,
                 "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
                 "user_agent": null,
@@ -563,7 +563,7 @@ mod tests {
               "type": "user-session",
               "id": "01FSHNB5309NMZYX8MFYH578R9",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00Z",
+                "created_at": "2022-01-16T14:41:00.000Z",
                 "finished_at": null,
                 "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
                 "user_agent": null,
@@ -605,8 +605,8 @@ mod tests {
               "type": "user-session",
               "id": "01FSHNB530KEPHYQQXW9XPTX6Z",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00Z",
-                "finished_at": "2022-01-16T14:42:00Z",
+                "created_at": "2022-01-16T14:41:00.000Z",
+                "finished_at": "2022-01-16T14:42:00.000Z",
                 "user_id": "01FSHNB530AJ6AC5HQ9X6H4RP4",
                 "user_agent": null,
                 "last_active_at": null,
@@ -644,7 +644,7 @@ mod tests {
               "type": "user-session",
               "id": "01FSHNB5309NMZYX8MFYH578R9",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00Z",
+                "created_at": "2022-01-16T14:41:00.000Z",
                 "finished_at": null,
                 "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
                 "user_agent": null,
@@ -664,8 +664,8 @@ mod tests {
               "type": "user-session",
               "id": "01FSHNB530KEPHYQQXW9XPTX6Z",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00Z",
-                "finished_at": "2022-01-16T14:42:00Z",
+                "created_at": "2022-01-16T14:41:00.000Z",
+                "finished_at": "2022-01-16T14:42:00.000Z",
                 "user_id": "01FSHNB530AJ6AC5HQ9X6H4RP4",
                 "user_agent": null,
                 "last_active_at": null,
@@ -724,7 +724,7 @@ mod tests {
               "type": "user-session",
               "id": "01FSHNB5309NMZYX8MFYH578R9",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00Z",
+                "created_at": "2022-01-16T14:41:00.000Z",
                 "finished_at": null,
                 "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
                 "user_agent": null,
