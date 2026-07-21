@@ -40,6 +40,27 @@ struct IdentityRow {
     identity: Value,
 }
 
+enum StoredIdentityLoad {
+    Missing,
+    Loaded(StoredServiceIdentity),
+    Invalid(String),
+}
+
+impl StoredIdentityLoad {
+    fn into_runtime_result(self) -> Result<Option<StoredServiceIdentity>, ServiceIdentityState> {
+        match self {
+            Self::Missing => Ok(None),
+            Self::Loaded(stored) => Ok(Some(stored)),
+            Self::Invalid(error) => Err(ServiceIdentityState::Faulted {
+                diagnostic: ServiceIdentityDiagnostic::RestoreFailed,
+                next_action: format!(
+                    "restore a verified service_identity database record; the stored record cannot be decoded: {error}"
+                ),
+            }),
+        }
+    }
+}
+
 /// Resolve the initial state and start the bounded Provider retry supervisor
 /// when the external service is temporarily unavailable.
 pub async fn initialize_and_spawn(
@@ -204,7 +225,10 @@ async fn resolve_once(
     signing_seed: &[u8; 32],
     http: &reqwest::Client,
 ) -> anyhow::Result<ServiceIdentityState> {
-    let stored = load_stored(repository_factory).await?;
+    let stored = match load_stored(repository_factory).await?.into_runtime_result() {
+        Ok(stored) => stored,
+        Err(state) => return Ok(state),
+    };
     let prepared = match prepare_inception(provider, registration_key, signing_seed) {
         Ok(prepared) => prepared,
         Err(error) => {
@@ -549,14 +573,19 @@ fn validate_local_key_binding(
 
 async fn load_stored(
     repository_factory: &PgRepositoryFactory,
-) -> anyhow::Result<Option<StoredServiceIdentity>> {
+) -> anyhow::Result<StoredIdentityLoad> {
     let mut connection = repository_factory.pool().get().await?;
     let row = diesel::sql_query("SELECT identity FROM service_identity WHERE id = 1")
         .get_result::<IdentityRow>(&mut *connection)
         .await
         .optional()?;
-    row.map(|row| serde_json::from_value(row.identity).map_err(anyhow::Error::from))
-        .transpose()
+    Ok(match row {
+        None => StoredIdentityLoad::Missing,
+        Some(row) => match serde_json::from_value(row.identity) {
+            Ok(stored) => StoredIdentityLoad::Loaded(stored),
+            Err(error) => StoredIdentityLoad::Invalid(error.to_string()),
+        },
+    })
 }
 
 async fn save_stored(
@@ -659,5 +688,25 @@ mod tests {
         };
         let selected = select_provider(&config).unwrap();
         assert_eq!(selected.reference.name, "identity-a");
+    }
+
+    #[test]
+    fn malformed_persisted_identity_is_a_faulted_runtime_state() {
+        let load = match serde_json::from_value::<StoredServiceIdentity>(Value::Null) {
+            Ok(stored) => StoredIdentityLoad::Loaded(stored),
+            Err(error) => StoredIdentityLoad::Invalid(error.to_string()),
+        };
+
+        let state = load
+            .into_runtime_result()
+            .expect_err("malformed persisted identity must fail closed");
+
+        assert!(matches!(
+            state,
+            ServiceIdentityState::Faulted {
+                diagnostic: ServiceIdentityDiagnostic::RestoreFailed,
+                ..
+            }
+        ));
     }
 }
