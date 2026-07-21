@@ -644,26 +644,16 @@ pub(crate) fn user_handle_display(url_builder: &UrlBuilder, user: &User) -> Stri
     )
 }
 
-/// Canonical Arkret handle for a user per spec 7157ee8 §3.1:
-/// `<lowercase-localpart>:<lowercase-domain>`. This is the form that MUST
+/// Canonical Arkret handle for a user:
+/// `<prepared-localpart>:<lowercase-A-label-domain>`. This is the form that MUST
 /// appear in `alsoKnownAs`, on any handle claim `handle` field, and as
-/// directory cache key. `acct:<local>@<host>` is interop-only and lives in
+/// directory cache key. `acct:<percent-encoded-local>@<host>` is interop-only and lives in
 /// `handle_aliases[]` on the handle claim.
 pub(crate) fn user_handle(url_builder: &UrlBuilder, user: &User) -> String {
     format!(
         "{}:{}",
-        user.localpart.to_lowercase(),
-        url_builder.public_hostname().to_lowercase()
-    )
-}
-
-/// `acct:` interop alias for [`user_handle`]. Use this for
-/// `handle_aliases[]` on a `handle-claim.schema.json` payload.
-pub(crate) fn user_handle_acct_alias(url_builder: &UrlBuilder, user: &User) -> String {
-    format!(
-        "acct:{}@{}",
-        user.localpart.to_lowercase(),
-        url_builder.public_hostname().to_lowercase()
+        user.localpart,
+        url_builder.public_hostname().to_ascii_lowercase()
     )
 }
 

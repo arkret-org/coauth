@@ -479,7 +479,7 @@ async fn primary_handle_verified_claim_rejects_unknown_wrong_holder_and_expired_
     );
 }
 
-/// Test [`UserRepository::find_by_handle`] with different casings.
+/// Test [`UserRepository::find_by_handle`] with equivalent profile inputs.
 #[tokio::test]
 async fn test_user_repo_find_by_handle() {
     let Some(pool) = crate::test_utils::setup_test_pool().await else {
@@ -497,30 +497,34 @@ async fn test_user_repo_find_by_handle() {
         .add(&mut rng, &clock, "Alice".to_owned())
         .await
         .unwrap();
-    let bob1 = repo
+    assert_eq!(alice.localpart, "alice");
+
+    let xiaoming = repo
         .user()
-        .add(&mut rng, &clock, "Bob".to_owned())
-        .await
-        .unwrap();
-    let bob2 = repo
-        .user()
-        .add(&mut rng, &clock, "BOB".to_owned())
+        .add(&mut rng, &clock, "小明".to_owned())
         .await
         .unwrap();
 
-    // This is fine, we can do a case-insensitive search
     assert_eq!(
         repo.user().find_by_handle("alice").await.unwrap(),
+        Some(alice.clone())
+    );
+    assert_eq!(
+        repo.user().find_by_handle("ＡＬＩＣＥ").await.unwrap(),
         Some(alice)
     );
-
-    // In case there are multiple users with the same username, we should return the
-    // one that matches the exact casing
-    assert_eq!(repo.user().find_by_handle("Bob").await.unwrap(), Some(bob1));
-    assert_eq!(repo.user().find_by_handle("BOB").await.unwrap(), Some(bob2));
-
-    // If none match, we should return None
+    assert_eq!(
+        repo.user().find_by_handle("小明").await.unwrap(),
+        Some(xiaoming)
+    );
     assert!(repo.user().find_by_handle("bob").await.unwrap().is_none());
+
+    let duplicate = repo
+        .user()
+        .add(&mut rng, &clock, "ALICE".to_owned())
+        .await
+        .unwrap_err();
+    assert!(duplicate.is_unique_violation());
 }
 
 #[tokio::test]

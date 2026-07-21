@@ -155,13 +155,14 @@ pub trait UserRepository: Send + Sync {
     /// Returns [`Self::Error`] if the underlying repository fails
     async fn lookup(&mut self, id: Ulid) -> Result<Option<User>, Self::Error>;
 
-    /// Find a [`User`] by its handle, in a case-insensitive manner
+    /// Find a [`User`] by a handle localpart after applying the Arkret handle
+    /// preparation profile.
     ///
     /// Returns `None` if no [`User`] was found
     ///
     /// # Parameters
     ///
-    /// * `handle`: The handle of the [`User`] to lookup
+    /// * `handle`: The handle localpart of the [`User`] to look up
     ///
     /// # Errors
     ///
@@ -176,7 +177,8 @@ pub trait UserRepository: Send + Sync {
     ///
     /// * `rng`: A random number generator to generate the [`User`] ID
     /// * `clock`: The clock used to generate timestamps
-    /// * `handle`: The handle of the [`User`]
+    /// * `handle`: The handle localpart of the [`User`]; implementations must store its prepared
+    ///   canonical form
     ///
     /// # Errors
     ///
@@ -218,7 +220,8 @@ pub trait UserRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `handle`: The handle of the [`User`] to lookup
+    /// * `handle`: The handle localpart of the [`User`] to look up, after applying the Arkret
+    ///   handle preparation profile
     ///
     /// # Errors
     ///

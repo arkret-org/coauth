@@ -216,29 +216,19 @@ impl UserRepository for PgUserRepository<'_> {
         err,
     )]
     async fn find_by_handle(&mut self, handle: &str) -> Result<Option<User>, Self::Error> {
-        use crate::lower;
+        let handle = arkret_core::prepare_handle_localpart(handle)
+            .map_err(DatabaseError::to_invalid_operation)?;
 
-        let rows: Vec<UserRow> = users::table
-            .filter(lower(users::localpart).eq(handle.to_lowercase()))
+        let row = users::table
+            .filter(users::localpart.eq(handle))
             .select(select_user_columns!())
-            .load(self.conn)
-            .await?;
-        let res = rows
-            .into_iter()
+            .first::<UserRow>(self.conn)
+            .await
+            .optional()?
             .map(TryInto::try_into)
-            .collect::<Result<Vec<User>, DatabaseError>>()?;
+            .transpose()?;
 
-        match &res[..] {
-            [user] => Ok(Some(user.clone())),
-            [] => Ok(None),
-            list => {
-                if let Some(user) = list.iter().find(|u| u.localpart == handle) {
-                    Ok(Some(user.clone()))
-                } else {
-                    Ok(None)
-                }
-            }
-        }
+        Ok(row)
     }
 
     #[tracing::instrument(
@@ -253,6 +243,8 @@ impl UserRepository for PgUserRepository<'_> {
         clock: &dyn Clock,
         handle: String,
     ) -> Result<User, Self::Error> {
+        let handle = arkret_core::prepare_handle_localpart(&handle)
+            .map_err(DatabaseError::to_invalid_operation)?;
         let created_at = clock.now();
         let id = new_id(created_at, rng);
         tracing::Span::current().record("user.id", tracing::field::display(id));
@@ -417,13 +409,12 @@ impl UserRepository for PgUserRepository<'_> {
     async fn exists(&mut self, handle: &str) -> Result<bool, Self::Error> {
         use diesel::dsl::{exists, select};
 
-        use crate::lower;
+        let handle = arkret_core::prepare_handle_localpart(handle)
+            .map_err(DatabaseError::to_invalid_operation)?;
 
-        let result = select(exists(
-            users::table.filter(lower(users::localpart).eq(handle.to_lowercase())),
-        ))
-        .get_result::<bool>(self.conn)
-        .await?;
+        let result = select(exists(users::table.filter(users::localpart.eq(handle))))
+            .get_result::<bool>(self.conn)
+            .await?;
 
         Ok(result)
     }

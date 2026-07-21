@@ -1723,7 +1723,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     );
 
     let canonical = user_handle(&url_builder, &user);
-    let acct = user_handle_acct_alias(&url_builder, &user);
+    let acct = arkret_core::Handle::parse(&canonical).unwrap().to_acct();
     // Spec 7157ee8 §3.1 — canonical `<localpart>:<domain>` form on
     // the wire `handle` field.
     assert_eq!(material.payload.schema, "ak.schema.handle_claim.v1");

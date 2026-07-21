@@ -121,7 +121,7 @@ pub async fn begin_password_registration(
     principal_server: &dyn ConnectorAdmin,
     policy_factory: &PolicyFactory,
     limiter: &Limiter,
-    request: BeginPasswordRegistrationRequestBody,
+    mut request: BeginPasswordRegistrationRequestBody,
 ) -> Result<BeginPasswordRegistrationResult, BeginPasswordRegistrationError> {
     if !request.password_registration_enabled {
         return Ok(BeginPasswordRegistrationResult::Rejected {
@@ -133,26 +133,26 @@ pub async fn begin_password_registration(
 
     if request.handle.is_empty() {
         issues.push(BeginPasswordRegistrationIssue::HandleRequired);
-    } else if arkret_core::normalize_handle_localpart(&request.handle).is_err() {
-        // HDL-1 (R3 spec-sync 2026-05-27, arkret-spec b47ff6ec) —
-        // wire-level NFC + UTS#39 confusable skeleton + script-mixed
-        // reject. MUST run before any storage / availability lookup so
-        // confusable handles can never reach the user table or the
-        // upstream principal server. The SDK helper is the single
-        // source of truth for the rejection set.
-        issues.push(BeginPasswordRegistrationIssue::HandleHomographForbidden);
-    } else if repo.user().exists(&request.handle).await? {
-        issues.push(BeginPasswordRegistrationIssue::HandleExists);
     } else {
-        match principal_server.is_handle_available(&request.handle).await {
-            Ok(false) => issues.push(BeginPasswordRegistrationIssue::HandleExists),
-            Ok(true) => {}
-            Err(error) => {
-                tracing::warn!(
-                    error = &*error as &dyn std::error::Error,
-                    "Failed to check username availability, skipping PrincipalServer check"
-                );
+        match arkret_core::prepare_handle_localpart(&request.handle) {
+            Ok(prepared) => {
+                request.handle = prepared;
+                if repo.user().exists(&request.handle).await? {
+                    issues.push(BeginPasswordRegistrationIssue::HandleExists);
+                } else {
+                    match principal_server.is_handle_available(&request.handle).await {
+                        Ok(false) => issues.push(BeginPasswordRegistrationIssue::HandleExists),
+                        Ok(true) => {}
+                        Err(error) => {
+                            tracing::warn!(
+                                error = &*error as &dyn std::error::Error,
+                                "Failed to check username availability, skipping PrincipalServer check"
+                            );
+                        }
+                    }
+                }
             }
+            Err(_) => issues.push(BeginPasswordRegistrationIssue::HandleInvalid),
         }
     }
 

@@ -75,7 +75,7 @@ pub(crate) fn issue_handle_claim(
     // `<localpart>:<domain>`.
     let handle =
         Handle::parse(&user_handle(url_builder, user)).map_err(arkret_core::Error::from)?;
-    let mut aliases = vec![user_handle_acct_alias(url_builder, user)];
+    let mut aliases = vec![handle.to_acct()];
     aliases.extend(user.handle_aliases.iter().cloned());
     // De-duplicate while preserving first-seen order.
     let mut seen = std::collections::HashSet::new();

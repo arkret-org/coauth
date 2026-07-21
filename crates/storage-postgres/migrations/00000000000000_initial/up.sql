@@ -782,7 +782,7 @@ CREATE TABLE public.user_primary_handle_preferences (
     created_at timestamp with time zone NOT NULL,
     CONSTRAINT user_primary_handle_preferences_check CHECK (((replaced_at IS NULL) OR (replaced_at > effective_at))),
     CONSTRAINT user_primary_handle_preferences_check1 CHECK (((handle IS NULL) OR ((source_claim_id IS NOT NULL) AND (source_claim_digest IS NOT NULL)))),
-    CONSTRAINT user_primary_handle_preferences_handle_check CHECK (((handle IS NULL) OR ((POSITION((':'::text) IN (handle)) > 1) AND (handle = lower(handle)) AND (handle !~~ 'acct:%'::text) AND (handle !~~ 'arkret://%'::text))))
+    CONSTRAINT user_primary_handle_preferences_handle_check CHECK (((handle IS NULL) OR ((char_length(handle) <= 319) AND (octet_length(handle) <= 512) AND (POSITION((':'::text) IN (handle)) > 1) AND (handle !~ '[[:space:][:cntrl:]@/#?]'::text) AND (POSITION(('\\'::text) IN (handle)) = 0) AND (handle !~~ 'acct:%'::text) AND (handle !~~ 'arkret://%'::text))))
 );
 
 CREATE TABLE public.user_recovery_sessions (
@@ -880,7 +880,7 @@ CREATE TABLE public.user_unsupported_third_party_ids (
 
 CREATE TABLE public.users (
     id uuid NOT NULL,
-    localpart text NOT NULL,
+    localpart text NOT NULL CHECK ((char_length(localpart) BETWEEN 1 AND 64) AND (octet_length(localpart) <= 256) AND (localpart !~ '[[:space:][:cntrl:]:@/#?]'::text) AND (POSITION(('\\'::text) IN (localpart)) = 0)),
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     status text DEFAULT 'active'::text NOT NULL CHECK (status = ANY (ARRAY['active'::text, 'soft_logged_out'::text, 'locked'::text, 'suspended'::text, 'deactivated'::text, 'erasure_pending'::text])),

@@ -52,12 +52,9 @@ pub enum BeginPasswordRegistrationIssue {
     RegistrationDisabled,
     HandleRequired,
     HandleExists,
-    /// HDL-1 (R3 spec-sync 2026-05-27, arkret-spec b47ff6ec) — the
-    /// candidate handle localpart failed the wire-level homograph guard
-    /// (NFC + UTS#39 confusable + script-mixed). Renders as the
-    /// canonical `handle_homograph_forbidden` wire code from the SDK
-    /// helper [`arkret_core::normalize_handle_localpart`].
-    HandleHomographForbidden,
+    /// The candidate localpart cannot be prepared with the shared RFC 8265
+    /// human-identifier input profile.
+    HandleInvalid,
     EmailOrPhoneRequired,
     EmailInvalid,
     EmailInUse,
@@ -81,7 +78,7 @@ impl BeginPasswordRegistrationIssue {
             Self::RegistrationDisabled => "registration_disabled".into(),
             Self::HandleRequired => "handle_required".into(),
             Self::HandleExists => "handle_exists".into(),
-            Self::HandleHomographForbidden => "handle_homograph_forbidden".into(),
+            Self::HandleInvalid => "handle_invalid".into(),
             Self::EmailOrPhoneRequired => "email_or_phone_required".into(),
             Self::EmailInvalid => "email_invalid".into(),
             Self::EmailInUse => "email_in_use".into(),

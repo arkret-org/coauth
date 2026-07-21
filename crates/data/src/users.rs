@@ -129,27 +129,25 @@ pub fn validate_canonical_handle(value: &str) -> Result<&str, (&'static str, Str
 }
 
 impl User {
-    /// Canonical Arkret handle per spec 7157ee8:
-    /// `<lowercase-localpart>:<lowercase-domain>`.
+    /// Canonical Arkret handle:
+    /// `<prepared-localpart>:<lowercase-A-label-domain>`.
     ///
     /// The host is supplied by the caller (typically the URL builder's
     /// public hostname); the data crate has no opinion on which host is
     /// "the" service host since the same `User` row may be addressed by
     /// multiple alias hosts.
     #[must_use]
-    pub fn canonical_handle(&self, host: &str) -> String {
-        format!("{}:{}", self.localpart.to_lowercase(), host.to_lowercase())
+    pub fn canonical_handle(&self, host: &str) -> std::result::Result<String, arkret_core::Error> {
+        Ok(Handle::prepare(&format!("{}:{host}", self.localpart))?
+            .canonical()
+            .to_owned())
     }
 
     /// Interop `acct:` alias for this user against the supplied host. Used
     /// to populate `handle_claim.handle_aliases[]`. Never used as canonical.
     #[must_use]
-    pub fn acct_alias(&self, host: &str) -> String {
-        format!(
-            "acct:{}@{}",
-            self.localpart.to_lowercase(),
-            host.to_lowercase()
-        )
+    pub fn acct_alias(&self, host: &str) -> std::result::Result<String, arkret_core::Error> {
+        Ok(Handle::prepare(&format!("{}:{host}", self.localpart))?.to_acct())
     }
 }
 

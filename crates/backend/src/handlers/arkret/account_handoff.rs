@@ -437,12 +437,8 @@ fn canonical_account_handle(
     public_hostname: &str,
     configured_trust_domain: Option<&str>,
 ) -> Result<Handle, ArkretRouteError> {
-    let public_candidate = format!(
-        "{}:{}",
-        localpart.to_lowercase(),
-        public_hostname.to_lowercase()
-    );
-    match Handle::parse(&public_candidate) {
+    let public_candidate = format!("{localpart}:{public_hostname}");
+    match Handle::prepare(&public_candidate) {
         Ok(handle) => Ok(handle),
         Err(public_error) => {
             let Some(scope) =
@@ -450,8 +446,8 @@ fn canonical_account_handle(
             else {
                 return Err(ArkretRouteError::Internal(Box::new(public_error)));
             };
-            let trust_domain_candidate = format!("{}:{}", localpart.to_lowercase(), scope);
-            Handle::parse(&trust_domain_candidate)
+            let trust_domain_candidate = format!("{localpart}:{scope}");
+            Handle::prepare(&trust_domain_candidate)
                 .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
         }
     }
