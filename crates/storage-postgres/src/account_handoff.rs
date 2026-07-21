@@ -561,6 +561,18 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         &mut self,
         input: IdentityBindingChallengeInput,
     ) -> Result<IdentityBindingChallengeIssue, Self::Error> {
+        // These timestamps are replayed verbatim in the client-signed control
+        // proof. Canonical wire serialization uses fixed millisecond precision,
+        // so persist that same value rather than PostgreSQL's finer-grained
+        // representation; otherwise the proof can never equal the durable row.
+        let input = IdentityBindingChallengeInput {
+            issued_at: arkret_core::canonical::normalize_timestamp_canonical(input.issued_at),
+            expires_at: arkret_core::canonical::normalize_timestamp_canonical(input.expires_at),
+            lease_expires_at: arkret_core::canonical::normalize_timestamp_canonical(
+                input.lease_expires_at,
+            ),
+            ..input
+        };
         if let Some(existing) = self.challenge_by_request(input.request_id.uuid()).await? {
             if existing.request_digest != input.request_digest
                 || existing.service_account_id != input.service_account_id
@@ -859,7 +871,7 @@ fn registration_challenge_state_is_usable(
 mod tests {
     use std::collections::BTreeMap;
 
-    use chrono::Duration;
+    use chrono::{Duration, Timelike as _};
     use coauth_data::clock::MockClock;
     use coauth_data::user::UserRepository as _;
     use coauth_data::{Clock as _, RepositoryAccess as _, RepositoryFactory as _, new_id};
@@ -980,6 +992,7 @@ mod tests {
         let operation = did_operation(&label);
         let reserved =
             arkret_core::ReservedIdentityCreation::from_operation(operation.clone()).unwrap();
+        let challenge_issued_at = now.with_nanosecond(123_456_789).unwrap();
         let first_challenge = IdentityBindingChallengeInput {
             request_id: arkret_core::RequestId::new(format!("ak:request:{}", Uuid::now_v7()))
                 .unwrap(),
@@ -996,8 +1009,8 @@ mod tests {
             origin: "https://account.example".to_owned(),
             trust_domain: arkret_core::TypedTrustDomainId::new("ak:trust_domain:example.net")
                 .unwrap(),
-            issued_at: now,
-            expires_at: now + Duration::minutes(5),
+            issued_at: challenge_issued_at,
+            expires_at: challenge_issued_at + Duration::minutes(5),
             lease_expires_at: first_lease.expires_at,
         };
         let issued_challenge = match repo
@@ -1009,6 +1022,16 @@ mod tests {
             IdentityBindingChallengeIssue::Issued(challenge) => challenge,
             other => panic!("first challenge must be issued, got {other:?}"),
         };
+        assert_eq!(
+            issued_challenge.issued_at,
+            arkret_core::canonical::normalize_timestamp_canonical(challenge_issued_at),
+            "durable challenge timestamps must exactly match their canonical wire value"
+        );
+        let wire_challenge: arkret_core::IdentityBindingChallengeOutcome =
+            serde_json::from_value(serde_json::to_value(issued_challenge.wire_outcome()).unwrap())
+                .unwrap();
+        assert_eq!(wire_challenge.issued_at, issued_challenge.issued_at);
+        assert_eq!(wire_challenge.expires_at, issued_challenge.expires_at);
         repo.save().await.unwrap();
 
         let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
