@@ -9,7 +9,6 @@ use std::collections::BTreeSet;
 use arkret_core::identifiers::new_prefixed_uuid7;
 use coauth_config::ArkretConfig;
 use coauth_data::RepositoryAccess;
-use coauth_data::accountability::{AccountabilityGrant, AccountabilitySubjectKind};
 use coauth_data::agent_key::NewAgentSessionProofReplay;
 use serde::Deserialize;
 use serde_json::Value;
@@ -44,6 +43,10 @@ const AGENT_SERVICE_SCOPE_ACTIONS: &[&str] = &[
     "ak.self.events.query.scan",
     "ak.self.events.stream.subscribe",
     "ak.self.events.query.frontier",
+    "ak.self.keys.keypackages.upload.create",
+    "ak.self.keys.keypackages.command.consume",
+    "ak.self.device_messages.query.list",
+    "ak.self.device_messages.command.ack",
 ];
 
 /// Closed action set of the `limited` tier (AKP-0008 §4.5 baseline). Shared
@@ -57,6 +60,10 @@ pub(super) const LIMITED_AGENT_SCOPE_ACTIONS: &[&str] = &[
     "ak.self.events.query.scan",
     "ak.self.events.stream.subscribe",
     "ak.self.events.query.frontier",
+    "ak.self.keys.keypackages.upload.create",
+    "ak.self.keys.keypackages.command.consume",
+    "ak.self.device_messages.query.list",
+    "ak.self.device_messages.command.ack",
     "ak.event.read",
     "ak.message.create",
     "ak.reaction.add",
@@ -131,6 +138,7 @@ pub async fn validate_agent_session_proof(
     clock: &dyn coauth_data::Clock,
     url_builder: &coauth_data::UrlBuilder,
     arkret_config: &ArkretConfig,
+    authoritative_agent: &arkret_core::AgentView,
     body: &arkret_core::SessionGrantRequestBody,
 ) -> Result<AgentSessionAuthorization, AgentSessionProofError> {
     let now = clock.now();
@@ -226,6 +234,7 @@ pub async fn validate_agent_session_proof(
         tracing::warn!(agent_id, verification_method, authorization_ref, audience = %proof.audience, "agent_key_proof rejected: authorization binding mismatch");
         return Err(error.into());
     }
+    validate_authoritative_agent_session_evidence(&authorization, authoritative_agent)?;
     // Verify the proof signature over the same canonical signed-fields shape
     // the pairing PoP used, against the authorized public key.
     let signed_fields = ProofSignedFields {
@@ -309,27 +318,10 @@ pub async fn validate_agent_session_proof(
     }
 
     let controller_id = authorization.accountable_principal_id.clone();
-    let active_grants = repo
-        .accountability_grant()
-        .list_active_for_subject(AccountabilitySubjectKind::AgentId, &agent_id)
-        .await
-        .map_err(|_| AgentAuthRejection::AccountabilityGrantMissing)?
-        .into_iter()
-        .filter(|grant| {
-            grant.controller_id == controller_id
-                && grant.agent_id == agent_id
-                && grant.revoked_at.is_none()
-        })
-        .collect::<Vec<_>>();
-    if active_grants.is_empty() {
-        return Err(AgentAuthRejection::AccountabilityGrantMissing.into());
-    }
-    tracing::debug!(
-        agent_id,
-        active_accountability_grants = active_grants.len(),
-        "agent_key_proof debug: accountability grants resolved"
-    );
-    let capability_scope = AgentSessionCapabilityScope::from_active_grants(&active_grants);
+    // The controller-authored accountability Event is validated by the
+    // authoritative Agent projection. It is not a Realm capability grant and
+    // therefore contributes no content actions or resource selectors here.
+    let capability_scope = AgentSessionCapabilityScope::default();
 
     let policy_snapshot = repo
         .policy_data()
@@ -489,6 +481,56 @@ fn validate_agent_key_authorization_binding(
     Ok(())
 }
 
+fn validate_authoritative_agent_session_evidence(
+    authorization: &coauth_data::agent_key::AgentKeyAuthorization,
+    view: &arkret_core::AgentView,
+) -> Result<(), AgentAuthRejection> {
+    let key_state = view
+        .key_state
+        .as_ref()
+        .ok_or(AgentAuthRejection::PolicyUnavailable)?;
+    if view.agent.agent_id.as_str() != authorization.agent_id
+        || key_state.agent_id.as_str() != authorization.agent_id
+        || key_state.controller_id.as_str() != authorization.accountable_principal_id
+        || !key_state.active_authorizations.iter().any(|active| {
+            active.authorized_event_ref.as_str() == authorization.authorized_event_id
+                && active.verification_method == authorization.verification_method
+        })
+    {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
+
+    // A delivered pair request is verifier-private evidence that the
+    // Principal Server validated the controller-signed disclosure against the
+    // accepted-at Agent DID commitment. Re-bind that cached evidence to the
+    // current authoritative projection before every session issuance.
+    let paired_request: arkret_core::AgentKeyPairRequestBody =
+        serde_json::from_value(authorization.soland_fanout_payload.clone())
+            .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
+    let disclosure = &paired_request.requested_scope_disclosure;
+    disclosure
+        .validate()
+        .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
+    let computed_digest = arkret_core::agent_requested_scope_digest(
+        &disclosure.agent_id,
+        &disclosure.controller_id,
+        &disclosure.requested_scope,
+    )
+    .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
+    if paired_request.agent_id.as_str() != authorization.agent_id
+        || paired_request.verification_method.as_str() != authorization.verification_method
+        || paired_request.authorize_event.event_id.as_str() != authorization.authorized_event_id
+        || disclosure.agent_id.as_str() != authorization.agent_id
+        || disclosure.controller_id.as_str() != authorization.accountable_principal_id
+        || disclosure.requested_scope_digest != computed_digest
+        || disclosure.requested_scope_digest != key_state.requested_scope_digest
+        || disclosure.requested_scope != key_state.requested_scope
+    {
+        return Err(AgentAuthRejection::AgentRequestedScopeCommitmentInvalid);
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Default)]
 struct AgentSessionCapabilityScope {
     actions: BTreeSet<String>,
@@ -498,26 +540,6 @@ struct AgentSessionCapabilityScope {
     allowed_data_classes: Option<BTreeSet<String>>,
     allowed_endpoints: Option<BTreeSet<String>>,
     grant_refs: BTreeSet<String>,
-}
-
-impl AgentSessionCapabilityScope {
-    fn from_active_grants(grants: &[AccountabilityGrant]) -> Self {
-        let mut scope = Self::default();
-        for grant in grants {
-            scope.actions.extend(
-                grant
-                    .capabilities
-                    .iter()
-                    .map(|action| action.trim().to_owned()),
-            );
-            scope
-                .grant_refs
-                .insert(grant.accountability_grant_id.clone());
-            merge_capability_projection(&grant.soland_fanout_payload, &mut scope);
-        }
-        scope.actions.retain(|action| !action.is_empty());
-        scope
-    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -599,6 +621,9 @@ fn intersect_agent_session_scope(
         }
     }
 
+    let content_resource_scoped = granted_scope
+        .iter()
+        .any(|token| !service_surface_scope_token(token) && realm_resource_scope_token(token));
     let resource_scoped = granted_scope
         .iter()
         .any(|token| realm_resource_scope_token(token))
@@ -613,35 +638,67 @@ fn intersect_agent_session_scope(
         policy_refs,
     ) = if resource_scoped {
         let policy = realm_policy.ok_or(AgentAuthRejection::PolicyUnavailable)?;
-        let realm_ids = materialize_optional_selector(
-            &scope_request.realm_ids,
-            capability_scope.realm_ids.as_ref(),
-            policy.realm_ids.as_ref(),
-        )?;
-        let strand_ids = materialize_optional_selector(
-            &scope_request.strand_ids,
-            capability_scope.strand_ids.as_ref(),
-            policy.strand_ids.as_ref(),
-        )?;
-        if realm_ids.is_empty() && strand_ids.is_empty() {
-            return Err(missing_resource_selector_rejection(
-                capability_scope,
-                policy,
-            ));
-        }
-        let allowed_tracks = materialize_optional_selector(
-            &scope_request.track_names,
-            capability_scope.allowed_tracks.as_ref(),
-            policy.allowed_tracks.as_ref(),
-        )?;
-        let allowed_data_classes = materialize_optional_constraint(
-            capability_scope.allowed_data_classes.as_ref(),
-            policy.allowed_data_classes.as_ref(),
-        )?;
-        let allowed_endpoints = materialize_optional_constraint(
-            capability_scope.allowed_endpoints.as_ref(),
-            policy.allowed_endpoints.as_ref(),
-        )?;
+        let (realm_ids, strand_ids, allowed_tracks, allowed_data_classes, allowed_endpoints) =
+            if content_resource_scoped {
+                let realm_ids = materialize_optional_selector(
+                    &scope_request.realm_ids,
+                    capability_scope.realm_ids.as_ref(),
+                    policy.realm_ids.as_ref(),
+                )?;
+                let strand_ids = materialize_optional_selector(
+                    &scope_request.strand_ids,
+                    capability_scope.strand_ids.as_ref(),
+                    policy.strand_ids.as_ref(),
+                )?;
+                if realm_ids.is_empty() && strand_ids.is_empty() {
+                    return Err(missing_resource_selector_rejection(
+                        capability_scope,
+                        policy,
+                    ));
+                }
+                (
+                    realm_ids,
+                    strand_ids,
+                    materialize_optional_selector(
+                        &scope_request.track_names,
+                        capability_scope.allowed_tracks.as_ref(),
+                        policy.allowed_tracks.as_ref(),
+                    )?,
+                    materialize_optional_constraint(
+                        capability_scope.allowed_data_classes.as_ref(),
+                        policy.allowed_data_classes.as_ref(),
+                    )?,
+                    materialize_optional_constraint(
+                        capability_scope.allowed_endpoints.as_ref(),
+                        policy.allowed_endpoints.as_ref(),
+                    )?,
+                )
+            } else {
+                (
+                    materialize_service_selector(
+                        &scope_request.realm_ids,
+                        policy.realm_ids.as_ref(),
+                    )?,
+                    materialize_service_selector(
+                        &scope_request.strand_ids,
+                        policy.strand_ids.as_ref(),
+                    )?,
+                    materialize_service_selector(
+                        &scope_request.track_names,
+                        policy.allowed_tracks.as_ref(),
+                    )?,
+                    policy
+                        .allowed_data_classes
+                        .as_ref()
+                        .map(|values| values.iter().cloned().collect())
+                        .unwrap_or_default(),
+                    policy
+                        .allowed_endpoints
+                        .as_ref()
+                        .map(|values| values.iter().cloned().collect())
+                        .unwrap_or_default(),
+                )
+            };
 
         let policy_data = policy_data.ok_or(AgentAuthRejection::PolicyUnavailable)?;
         granted_scope.retain(|token| {
@@ -857,6 +914,24 @@ fn materialize_optional_selector(
     Ok(policy_intersection.into_iter().collect())
 }
 
+fn materialize_service_selector(
+    requested: &[String],
+    policy: Option<&BTreeSet<String>>,
+) -> Result<Vec<String>, AgentAuthRejection> {
+    let requested = normalize_string_set(requested);
+    if requested.is_empty() {
+        return Ok(Vec::new());
+    }
+    let Some(policy) = policy else {
+        return Err(AgentAuthRejection::PolicyUnavailable);
+    };
+    let selected = requested.intersection(policy).cloned().collect::<Vec<_>>();
+    if selected.is_empty() {
+        return Err(AgentAuthRejection::PolicyViolation);
+    }
+    Ok(selected)
+}
+
 fn materialize_optional_constraint(
     capability_values: Option<&BTreeSet<String>>,
     policy_values: Option<&BTreeSet<String>>,
@@ -953,65 +1028,6 @@ fn value_contains_str(value: Option<&Value>, needle: &str) -> bool {
         Some(Value::String(value)) => value == needle,
         _ => false,
     }
-}
-
-fn merge_capability_projection(value: &Value, scope: &mut AgentSessionCapabilityScope) {
-    visit_agent_scope_projection_objects(value, &mut |projection| {
-        if let Some(actions) = read_string_set(
-            projection,
-            &["actions", "capabilities", "granted_scope", "scope"],
-        ) {
-            scope.actions.extend(actions);
-        }
-        merge_optional_set(
-            &mut scope.realm_ids,
-            read_string_set(projection, &["realm_ids", "allowed_realm_ids"]),
-        );
-        merge_optional_set(
-            &mut scope.strand_ids,
-            read_string_set(projection, &["strand_ids", "allowed_strand_ids"]),
-        );
-        merge_optional_set(
-            &mut scope.allowed_tracks,
-            read_string_set(projection, &["allowed_tracks"]),
-        );
-        merge_optional_set(
-            &mut scope.allowed_data_classes,
-            read_string_set(projection, &["allowed_data_classes"]),
-        );
-        merge_optional_set(
-            &mut scope.allowed_endpoints,
-            read_string_set(projection, &["allowed_endpoints"]),
-        );
-        if let Some(constraints) = projection.get("constraints") {
-            merge_optional_set(
-                &mut scope.strand_ids,
-                read_string_set(constraints, &["allowed_strand_ids", "strand_ids"]),
-            );
-            merge_optional_set(
-                &mut scope.allowed_tracks,
-                read_string_set(constraints, &["allowed_tracks"]),
-            );
-            merge_optional_set(
-                &mut scope.allowed_data_classes,
-                read_string_set(constraints, &["allowed_data_classes"]),
-            );
-            merge_optional_set(
-                &mut scope.allowed_endpoints,
-                read_string_set(constraints, &["allowed_endpoints"]),
-            );
-        }
-        if let Some(refs) = read_string_set(
-            projection,
-            &[
-                "capability_grant_refs",
-                "accountability_grant_refs",
-                "grant_refs",
-            ],
-        ) {
-            scope.grant_refs.extend(refs);
-        }
-    });
 }
 
 fn merge_policy_projection(projection: &Value, policy: &mut AgentSessionRealmPolicy) -> bool {
@@ -1228,6 +1244,13 @@ pub(super) async fn fetch_authoritative_agent_view(
             continue;
         }
         if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            if status == reqwest::StatusCode::PRECONDITION_FAILED
+                && body.contains(arkret_core::error::ReasonCode::ACCOUNTABILITY_GRANT_MISSING)
+            {
+                return Err(AgentAuthRejection::AccountabilityGrantMissing);
+            }
             return Err(AgentAuthRejection::PolicyUnavailable);
         }
         let view = response
@@ -1248,10 +1271,10 @@ pub async fn enforce_authoritative_agent_lifecycle(
     http_client: &reqwest::Client,
     arkret_config: &ArkretConfig,
     agent_id: &str,
-) -> Result<(), AgentAuthRejection> {
+) -> Result<arkret_core::AgentView, AgentAuthRejection> {
     let (view, _) = fetch_authoritative_agent_view(http_client, arkret_config, agent_id).await?;
     match view.status {
-        arkret_core::AgentStatus::Active => Ok(()),
+        arkret_core::AgentStatus::Active => Ok(view),
         arkret_core::AgentStatus::Paused => Err(AgentAuthRejection::AgentPaused),
         arkret_core::AgentStatus::Deactivated => Err(AgentAuthRejection::AgentDeactivated),
         _ => Err(AgentAuthRejection::ProofInvalid),
@@ -1635,6 +1658,10 @@ mod tests {
                 "ak.message.create".to_owned(),
                 "ak.self.events.command.submit".to_owned(),
                 "ak.reaction.add".to_owned(),
+                "ak.self.keys.keypackages.upload.create".to_owned(),
+                "ak.self.keys.keypackages.command.consume".to_owned(),
+                "ak.self.device_messages.query.list".to_owned(),
+                "ak.self.device_messages.command.ack".to_owned(),
             ],
         )
         .expect("limited runtime scope should be accepted");
@@ -1644,9 +1671,38 @@ mod tests {
             vec![
                 "ak.message.create".to_owned(),
                 "ak.reaction.add".to_owned(),
+                "ak.self.device_messages.command.ack".to_owned(),
+                "ak.self.device_messages.query.list".to_owned(),
                 "ak.self.events.command.submit".to_owned(),
+                "ak.self.keys.keypackages.command.consume".to_owned(),
+                "ak.self.keys.keypackages.upload.create".to_owned(),
             ]
         );
+    }
+
+    #[test]
+    fn secure_messaging_service_scope_needs_no_realm_content_grant() {
+        let requested_scope = [
+            "ak.self.device_messages.command.ack",
+            "ak.self.device_messages.query.list",
+            "ak.self.keys.keypackages.command.consume",
+            "ak.self.keys.keypackages.upload.create",
+        ]
+        .map(str::to_owned);
+
+        let effective_scope = intersect_agent_session_scope(
+            AGENT_KEY_SCOPE_LIMITED,
+            &requested_scope,
+            &AgentScopeRequestInput::default(),
+            &AgentSessionCapabilityScope::default(),
+            None,
+            None,
+            "did:example:agent",
+        )
+        .expect("MLS and to-device operations are service-surface scope");
+
+        assert_eq!(effective_scope.granted_scope, requested_scope);
+        assert!(effective_scope.capability_grant_refs.is_empty());
     }
 
     #[test]
