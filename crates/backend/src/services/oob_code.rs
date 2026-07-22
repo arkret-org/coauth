@@ -36,7 +36,7 @@
 //! as an indistinguishable `{ "error": "not_found" }` body, padded to a
 //! constant ≤50 ms response time. The internal reason code is logged
 //! (and stored on the invite row) but never returned. Constants are
-//! re-exported from `arkret_core::error` to keep parity with the SDK.
+//! owned by `arkret_wire::error_codes` to keep parity with the SDK.
 //!
 //! See `arkret-spec` 2026-05-20 §T15 ("OOB token state machine") for
 //! the wire contract this module implements.

@@ -1875,6 +1875,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "arkret-core",
+ "arkret-wire",
  "async-trait",
  "chrono",
  "coauth-data",
@@ -1915,6 +1916,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "arkret-core",
+ "arkret-wire",
  "async-trait",
  "chrono",
  "coauth-data",

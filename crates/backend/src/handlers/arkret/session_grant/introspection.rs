@@ -183,14 +183,14 @@ pub async fn introspect_session_grant(
         (false, false) => {
             return Err(ArkretRouteError::coded(
                 StatusCode::BAD_REQUEST,
-                arkret_core::error::ErrorCode::SCHEMA_VIOLATION,
+                arkret_wire::ErrorCode::SCHEMA_VIOLATION,
                 "exactly one of id or grant_jwt is required",
             ));
         }
         (true, true) => {
             return Err(ArkretRouteError::coded(
                 StatusCode::BAD_REQUEST,
-                arkret_core::error::ErrorCode::SCHEMA_VIOLATION,
+                arkret_wire::ErrorCode::SCHEMA_VIOLATION,
                 "id and grant_jwt are mutually exclusive",
             ));
         }

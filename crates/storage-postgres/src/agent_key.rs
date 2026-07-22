@@ -166,7 +166,7 @@ mod tests {
                 &clock,
                 replacement_event,
                 &[first_event.to_owned()],
-                arkret_core::error::ReasonCode::SUPERSEDED_BY_REPAIRING,
+                arkret_wire::ReasonCode::SUPERSEDED_BY_REPAIRING,
             )
             .await
             .unwrap();

@@ -38,7 +38,7 @@ fn empty_session_revoke_body() -> SessionRevokeRequestBody {
 fn session_grant_not_found() -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::NOT_FOUND,
-        arkret_core::error::ErrorCode::SESSION_GRANT_NOT_FOUND,
+        arkret_wire::ErrorCode::SESSION_GRANT_NOT_FOUND,
         "session grant is unknown, inactive, or not owned by the current principal",
     )
 }
@@ -46,7 +46,7 @@ fn session_grant_not_found() -> ArkretRouteError {
 fn selector_conflict(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::UNPROCESSABLE_ENTITY,
-        arkret_core::error::ErrorCode::SESSION_REVOKE_SELECTOR_CONFLICT,
+        arkret_wire::ErrorCode::SESSION_REVOKE_SELECTOR_CONFLICT,
         message,
     )
 }
@@ -54,7 +54,7 @@ fn selector_conflict(message: impl Into<String>) -> ArkretRouteError {
 fn lifecycle_proof_required(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::UNAUTHORIZED,
-        arkret_core::error::ErrorCode::DID_PROOF_REQUIRED,
+        arkret_wire::ErrorCode::DID_PROOF_REQUIRED,
         message,
     )
 }
@@ -62,7 +62,7 @@ fn lifecycle_proof_required(message: impl Into<String>) -> ArkretRouteError {
 fn lifecycle_proof_invalid(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::UNAUTHORIZED,
-        arkret_core::error::ReasonCode::PROOF_INVALID,
+        arkret_wire::ReasonCode::PROOF_INVALID,
         format!("reason_code=proof_invalid; {}", message.into()),
     )
 }
@@ -261,7 +261,7 @@ async fn verify_cross_session_lifecycle_proof(
     if proof.audience != current_grant.audience {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_core::error::ErrorCode::AUDIENCE_MISMATCH,
+            arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
             "session revoke lifecycle proof audience must match the current session grant audience",
         ));
     }
@@ -269,7 +269,7 @@ async fn verify_cross_session_lifecycle_proof(
     let actor_id = Did::new(current_grant.subject.clone()).map_err(|error| {
         ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_core::error::ErrorCode::INVALID_PARAM,
+            arkret_wire::ErrorCode::INVALID_PARAM,
             format!("current session grant subject is not a DID: {error}"),
         )
     })?;
@@ -473,7 +473,7 @@ pub async fn revoke_session_grant_endpoint(
         .map_err(|error| {
             ArkretRouteError::coded(
                 StatusCode::BAD_REQUEST,
-                arkret_core::error::ErrorCode::INVALID_PARAM,
+                arkret_wire::ErrorCode::INVALID_PARAM,
                 format!("current session grant device_id is invalid: {error}"),
             )
         })?;

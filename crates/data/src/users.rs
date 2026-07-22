@@ -118,10 +118,10 @@ impl Node<Ulid> for User {
 pub fn validate_canonical_handle(value: &str) -> Result<&str, (&'static str, String)> {
     let trimmed = value.trim();
     let handle = Handle::parse(trimmed)
-        .map_err(|error| (arkret_core::ErrorCode::INVALID_PARAM, error.to_string()))?;
+        .map_err(|error| (arkret_wire::ErrorCode::INVALID_PARAM, error.to_string()))?;
     if handle.canonical() != trimmed {
         return Err((
-            arkret_core::ErrorCode::INVALID_PARAM,
+            arkret_wire::ErrorCode::INVALID_PARAM,
             format!("handle must be canonical form {}", handle.canonical()),
         ));
     }

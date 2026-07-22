@@ -34,7 +34,7 @@ pub async fn create_account_handoff(
     if req.headers().contains_key(http::header::AUTHORIZATION) {
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            arkret_core::error::ErrorCode::UNAUTHENTICATED,
+            arkret_wire::ErrorCode::UNAUTHENTICATED,
             "account handoff creation must not carry an Authorization credential",
         ));
     }
@@ -124,7 +124,7 @@ pub async fn create_account_handoff(
     if authenticated.audience != proof.audience.as_str() {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_core::error::ErrorCode::AUDIENCE_MISMATCH,
+            arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
             "authenticated handoff audience does not match the request proof",
         ));
     }
@@ -260,7 +260,7 @@ pub async fn issue_identity_binding_challenge(
             repo.cancel().await.ok();
             Err(ArkretRouteError::coded(
                 StatusCode::CONFLICT,
-                arkret_core::error::ErrorCode::DUPLICATE_CONFLICT,
+                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
                 "request or identity reservation conflicts with durable state",
             ))
         }
@@ -289,7 +289,7 @@ pub(crate) async fn authenticate_account_handoff(
         .ok_or_else(|| {
             ArkretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
-                arkret_core::error::ErrorCode::UNAUTHENTICATED,
+                arkret_wire::ErrorCode::UNAUTHENTICATED,
                 "account handoff is expired, revoked, consumed, or unknown",
             )
         })?;
@@ -334,14 +334,14 @@ fn account_handoff_authorization(req: &Request) -> Result<&str, ArkretRouteError
         .ok_or_else(|| {
             ArkretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
-                arkret_core::error::ErrorCode::UNAUTHENTICATED,
+                arkret_wire::ErrorCode::UNAUTHENTICATED,
                 "Authorization: DPoP <account_handoff_grant> is required",
             )
         })?;
     let (scheme, token) = value.split_once(' ').ok_or_else(|| {
         ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            arkret_core::error::ErrorCode::UNAUTHENTICATED,
+            arkret_wire::ErrorCode::UNAUTHENTICATED,
             "account handoff Authorization header is malformed",
         )
     })?;
@@ -351,7 +351,7 @@ fn account_handoff_authorization(req: &Request) -> Result<&str, ArkretRouteError
     {
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            arkret_core::error::ErrorCode::UNAUTHENTICATED,
+            arkret_wire::ErrorCode::UNAUTHENTICATED,
             "account handoff requires the DPoP authorization scheme",
         ));
     }
@@ -406,14 +406,14 @@ fn creation_to_outcome(
         AccountHandoffCreation::DuplicateConflict => {
             return Err(ArkretRouteError::coded(
                 StatusCode::CONFLICT,
-                arkret_core::error::ErrorCode::DUPLICATE_CONFLICT,
+                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
                 "request_id was reused with different canonical request bytes",
             ));
         }
         AccountHandoffCreation::ExpiredReplay => {
             return Err(ArkretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
-                arkret_core::error::ErrorCode::UNAUTHENTICATED,
+                arkret_wire::ErrorCode::UNAUTHENTICATED,
                 "the replayed account handoff request is no longer live",
             ));
         }
@@ -462,7 +462,7 @@ fn random_opaque(rng: &mut (impl RngCore + ?Sized), bytes: usize) -> String {
 fn proof_invalid(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::UNAUTHORIZED,
-        arkret_core::error::ErrorCode::INVALID_SIGNATURE,
+        arkret_wire::ErrorCode::INVALID_SIGNATURE,
         format!("reason_code=proof_invalid; {}", message.into()),
     )
 }
@@ -470,7 +470,7 @@ fn proof_invalid(message: impl Into<String>) -> ArkretRouteError {
 fn failed_precondition(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::CONFLICT,
-        arkret_core::error::ErrorCode::FAILED_PRECONDITION,
+        arkret_wire::ErrorCode::FAILED_PRECONDITION,
         message,
     )
 }

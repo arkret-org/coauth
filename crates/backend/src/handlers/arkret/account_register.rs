@@ -100,7 +100,7 @@ pub async fn account_register_endpoint(
             .map_err(|error| {
                 ArkretRouteError::coded(
                     StatusCode::SERVICE_UNAVAILABLE,
-                    arkret_core::error::ErrorCode::SERVICE_UNAVAILABLE,
+                    arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
                     format!("principal registry rejected identity creation: {error}"),
                 )
             })?;
@@ -210,7 +210,7 @@ pub async fn account_register_endpoint(
             repo.cancel().await.ok();
             return Err(ArkretRouteError::coded(
                 StatusCode::CONFLICT,
-                arkret_core::error::ErrorCode::DUPLICATE_CONFLICT,
+                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
                 "service account already has a different verified principal binding",
             ));
         }
@@ -385,7 +385,7 @@ fn inception_enrollment_authority_ref(
 fn schema_violation(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::UNPROCESSABLE_ENTITY,
-        arkret_core::error::ErrorCode::SCHEMA_VIOLATION,
+        arkret_wire::ErrorCode::SCHEMA_VIOLATION,
         message,
     )
 }
@@ -393,7 +393,7 @@ fn schema_violation(message: impl Into<String>) -> ArkretRouteError {
 fn proof_invalid(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::UNAUTHORIZED,
-        arkret_core::error::ErrorCode::INVALID_SIGNATURE,
+        arkret_wire::ErrorCode::INVALID_SIGNATURE,
         format!("reason_code=proof_invalid; {}", message.into()),
     )
 }
@@ -401,7 +401,7 @@ fn proof_invalid(message: impl Into<String>) -> ArkretRouteError {
 fn failed_precondition(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::CONFLICT,
-        arkret_core::error::ErrorCode::FAILED_PRECONDITION,
+        arkret_wire::ErrorCode::FAILED_PRECONDITION,
         message,
     )
 }

@@ -166,43 +166,29 @@ impl From<crate::AppError> for ArkretRouteError {
             return Self::coded(status, code, message);
         }
         match status {
-            StatusCode::BAD_REQUEST => Self::coded(
-                status,
-                arkret_core::error::ErrorCode::INVALID_PARAM,
-                message,
-            ),
+            StatusCode::BAD_REQUEST => {
+                Self::coded(status, arkret_wire::ErrorCode::INVALID_PARAM, message)
+            }
             StatusCode::UNAUTHORIZED => Self::Unauthorized(message),
             StatusCode::FORBIDDEN => Self::Forbidden(message),
             StatusCode::NOT_FOUND => {
-                Self::coded(status, arkret_core::error::ErrorCode::NOT_FOUND, message)
+                Self::coded(status, arkret_wire::ErrorCode::NOT_FOUND, message)
             }
-            StatusCode::CONFLICT => {
-                Self::coded(status, arkret_core::error::ErrorCode::CONFLICT, message)
+            StatusCode::CONFLICT => Self::coded(status, arkret_wire::ErrorCode::CONFLICT, message),
+            StatusCode::GONE | StatusCode::PRECONDITION_FAILED => {
+                Self::coded(status, arkret_wire::ErrorCode::FAILED_PRECONDITION, message)
             }
-            StatusCode::GONE | StatusCode::PRECONDITION_FAILED => Self::coded(
-                status,
-                arkret_core::error::ErrorCode::FAILED_PRECONDITION,
-                message,
-            ),
-            StatusCode::UNPROCESSABLE_ENTITY => Self::coded(
-                status,
-                arkret_core::error::ErrorCode::SCHEMA_VIOLATION,
-                message,
-            ),
+            StatusCode::UNPROCESSABLE_ENTITY => {
+                Self::coded(status, arkret_wire::ErrorCode::SCHEMA_VIOLATION, message)
+            }
             StatusCode::TOO_MANY_REQUESTS => {
-                Self::coded(status, arkret_core::error::ErrorCode::RATE_LIMITED, message)
+                Self::coded(status, arkret_wire::ErrorCode::RATE_LIMITED, message)
             }
-            StatusCode::NOT_IMPLEMENTED => Self::coded(
-                status,
-                arkret_core::error::ErrorCode::UNSUPPORTED_FEATURE,
-                message,
-            ),
+            StatusCode::NOT_IMPLEMENTED => {
+                Self::coded(status, arkret_wire::ErrorCode::UNSUPPORTED_FEATURE, message)
+            }
             StatusCode::INTERNAL_SERVER_ERROR => Self::Internal(Box::new(value)),
-            _ => Self::coded(
-                status,
-                arkret_core::error::ErrorCode::INTERNAL_ERROR,
-                message,
-            ),
+            _ => Self::coded(status, arkret_wire::ErrorCode::INTERNAL_ERROR, message),
         }
     }
 }
@@ -464,17 +450,17 @@ impl Scribe for ArkretRouteError {
             Self::Internal(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ErrorEnvelope::new(
-                    arkret_core::error::ErrorCode::INTERNAL_ERROR,
+                    arkret_wire::ErrorCode::INTERNAL_ERROR,
                     "internal server error",
                 ),
             ),
             Self::NotFound => (
                 StatusCode::NOT_FOUND,
-                ErrorEnvelope::new(arkret_core::error::ErrorCode::NOT_FOUND, "not found"),
+                ErrorEnvelope::new(arkret_wire::ErrorCode::NOT_FOUND, "not found"),
             ),
             Self::BadRequest(message) => (
                 StatusCode::BAD_REQUEST,
-                ErrorEnvelope::new(arkret_core::error::ErrorCode::BAD_JSON, message),
+                ErrorEnvelope::new(arkret_wire::ErrorCode::BAD_JSON, message),
             ),
             Self::Coded {
                 status,
@@ -490,11 +476,11 @@ impl Scribe for ArkretRouteError {
             ),
             Self::Unauthorized(message) => (
                 StatusCode::UNAUTHORIZED,
-                ErrorEnvelope::new(arkret_core::error::ErrorCode::UNAUTHENTICATED, message),
+                ErrorEnvelope::new(arkret_wire::ErrorCode::UNAUTHENTICATED, message),
             ),
             Self::Forbidden(message) => (
                 StatusCode::FORBIDDEN,
-                ErrorEnvelope::new(arkret_core::error::ErrorCode::CAPABILITY_DENIED, message),
+                ErrorEnvelope::new(arkret_wire::ErrorCode::CAPABILITY_DENIED, message),
             ),
         };
 
@@ -666,7 +652,7 @@ pub(crate) fn require_canonical_handle(input: &str) -> Result<&str, ArkretRouteE
     coauth_data::user::validate_canonical_handle(input).map_err(|(_code, message)| {
         ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_core::ErrorCode::INVALID_PARAM,
+            arkret_wire::ErrorCode::INVALID_PARAM,
             format!("reason_code=handle_not_canonical; {message}"),
         )
     })
@@ -962,7 +948,7 @@ pub async fn debug_issue_dpop_grant(
         .ok_or_else(|| {
             ArkretRouteError::coded(
                 StatusCode::PRECONDITION_FAILED,
-                arkret_core::error::ErrorCode::PRINCIPAL_UNKNOWN,
+                arkret_wire::ErrorCode::PRINCIPAL_UNKNOWN,
                 "principal_unknown",
             )
         })?;

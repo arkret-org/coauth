@@ -109,15 +109,15 @@ impl AgentAuthRejection {
             | Self::AgentPcrRecoveryNotReady
             | Self::AgentRequestedScopeCommitmentInvalid
             | Self::AgentDeactivated
-            | Self::AgentPaused => arkret_core::error::ErrorCode::FAILED_PRECONDITION,
-            Self::ProofInvalid => arkret_core::error::ErrorCode::INVALID_SIGNATURE,
+            | Self::AgentPaused => arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            Self::ProofInvalid => arkret_wire::ErrorCode::INVALID_SIGNATURE,
             // `accountability_grant_missing` is delivered as a
             // `failed_precondition` HTTP rejection with `reason` carrying
             // this canonical string (see operations↔error mapping §0.8).
-            Self::AccountabilityGrantMissing => arkret_core::error::ErrorCode::FAILED_PRECONDITION,
-            Self::CapabilityDenied => arkret_core::error::ErrorCode::CAPABILITY_DENIED,
-            Self::PolicyViolation => arkret_core::error::ErrorCode::POLICY_VIOLATION,
-            Self::PolicyUnavailable => arkret_core::error::ErrorCode::POLICY_UNAVAILABLE,
+            Self::AccountabilityGrantMissing => arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            Self::CapabilityDenied => arkret_wire::ErrorCode::CAPABILITY_DENIED,
+            Self::PolicyViolation => arkret_wire::ErrorCode::POLICY_VIOLATION,
+            Self::PolicyUnavailable => arkret_wire::ErrorCode::POLICY_UNAVAILABLE,
         }
     }
 
@@ -166,7 +166,7 @@ impl AgentAuthRejection {
             }
             Self::PairingRequestExpired => Some("pairing_request_expired"),
             Self::AgentKeyAuthorizationExpired => {
-                Some(arkret_core::error::ReasonCode::AGENT_KEY_AUTHORIZATION_EXPIRED)
+                Some(arkret_wire::ReasonCode::AGENT_KEY_AUTHORIZATION_EXPIRED)
             }
             Self::AgentPcrRecoveryNotReady => Some("agent_pcr_recovery_not_ready"),
             Self::AgentRequestedScopeCommitmentInvalid => {
@@ -176,7 +176,7 @@ impl AgentAuthRejection {
             Self::AgentDeactivated => Some("agent_deactivated"),
             Self::AgentPaused => Some("agent_paused"),
             Self::AccountabilityGrantMissing => {
-                Some(arkret_core::error::ReasonCode::ACCOUNTABILITY_GRANT_MISSING)
+                Some(arkret_wire::ReasonCode::ACCOUNTABILITY_GRANT_MISSING)
             }
             Self::CapabilityDenied | Self::PolicyViolation | Self::PolicyUnavailable => None,
         }

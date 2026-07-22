@@ -74,7 +74,7 @@ impl RunnableJob for AgentKeyPairCommitJob {
                 state.clock(),
                 self.authorized_event_id(),
                 &superseded_event_ids,
-                arkret_core::error::ReasonCode::SUPERSEDED_BY_REPAIRING,
+                arkret_wire::ReasonCode::SUPERSEDED_BY_REPAIRING,
             )
             .await
             .map_err(JobError::retry)?;

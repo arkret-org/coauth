@@ -1247,7 +1247,7 @@ pub(super) async fn fetch_authoritative_agent_view(
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             if status == reqwest::StatusCode::PRECONDITION_FAILED
-                && body.contains(arkret_core::error::ReasonCode::ACCOUNTABILITY_GRANT_MISSING)
+                && body.contains(arkret_wire::ReasonCode::ACCOUNTABILITY_GRANT_MISSING)
             {
                 return Err(AgentAuthRejection::AccountabilityGrantMissing);
             }
@@ -1601,7 +1601,7 @@ mod tests {
         authorization.expires_at = Some(now);
         authorization.revoked_at = Some(now);
         authorization.revoked_reason =
-            Some(arkret_core::error::ReasonCode::SUPERSEDED_BY_REPAIRING.to_owned());
+            Some(arkret_wire::ReasonCode::SUPERSEDED_BY_REPAIRING.to_owned());
 
         let err = validate_agent_key_authorization_binding(
             &authorization,

@@ -52,7 +52,7 @@ fn shared_soft_logout_did_proof_nonce_store() -> &'static Arc<NonceStore> {
 fn did_proof_required(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::UNAUTHORIZED,
-        arkret_core::error::ErrorCode::DID_PROOF_REQUIRED,
+        arkret_wire::ErrorCode::DID_PROOF_REQUIRED,
         message,
     )
 }
@@ -60,7 +60,7 @@ fn did_proof_required(message: impl Into<String>) -> ArkretRouteError {
 fn did_proof_invalid(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::UNAUTHORIZED,
-        arkret_core::error::ReasonCode::PROOF_INVALID,
+        arkret_wire::ReasonCode::PROOF_INVALID,
         format!("reason_code=proof_invalid; {}", message.into()),
     )
 }
@@ -68,7 +68,7 @@ fn did_proof_invalid(message: impl Into<String>) -> ArkretRouteError {
 fn did_proof_replay_window_exceeded(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::UNAUTHORIZED,
-        arkret_core::error::ReasonCode::PROOF_INVALID,
+        arkret_wire::ReasonCode::PROOF_INVALID,
         format!(
             "reason_code={}; {}",
             SOFT_LOGOUT_DID_PROOF_REPLAY_REASON,
@@ -154,7 +154,7 @@ fn require_soft_logout_bound_device_id<'a>(
     DeviceId::new(presented.to_owned()).map_err(|error| {
         ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_core::error::ErrorCode::INVALID_PARAM,
+            arkret_wire::ErrorCode::INVALID_PARAM,
             format!("device_id is not a protocol device identifier: {error}"),
         )
     })?;
@@ -285,7 +285,7 @@ async fn verify_soft_logout_did_proof(
     if proof_audience != prior_grant.audience {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_core::error::ErrorCode::AUDIENCE_MISMATCH,
+            arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
             "soft logout DID proof audience must match the session grant audience",
         ));
     }
@@ -431,7 +431,7 @@ pub async fn refresh_session_grant(
         // an auth failure, not a malformed body.
         ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            arkret_core::error::ErrorCode::DID_PROOF_REQUIRED,
+            arkret_wire::ErrorCode::DID_PROOF_REQUIRED,
             "session-grant grant-binding DPoP proof required",
         )
     })?;
@@ -465,7 +465,7 @@ pub async fn refresh_session_grant(
         .ok_or_else(|| {
             ArkretRouteError::coded(
                 StatusCode::NOT_FOUND,
-                arkret_core::error::ErrorCode::SESSION_GRANT_NOT_FOUND,
+                arkret_wire::ErrorCode::SESSION_GRANT_NOT_FOUND,
                 "no session grant matches the presented grant_jwt",
             )
         })?;
@@ -480,7 +480,7 @@ pub async fn refresh_session_grant(
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_core::error::ErrorCode::GRANT_ALREADY_CONSUMED,
+            arkret_wire::ErrorCode::GRANT_ALREADY_CONSUMED,
             "session grant already consumed; its rotation chain cannot continue",
         ));
     }
@@ -498,7 +498,7 @@ pub async fn refresh_session_grant(
         .map_err(|error| {
             ArkretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
-                arkret_core::error::ErrorCode::INVALID_SIGNATURE,
+                arkret_wire::ErrorCode::INVALID_SIGNATURE,
                 error.to_string(),
             )
         })?;
@@ -506,7 +506,7 @@ pub async fn refresh_session_grant(
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
         ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            arkret_core::error::ErrorCode::INVALID_SIGNATURE,
+            arkret_wire::ErrorCode::INVALID_SIGNATURE,
             error.to_string(),
         )
     })?;
@@ -516,7 +516,7 @@ pub async fn refresh_session_grant(
     let browser_session_id = prior_grant.browser_session_id.ok_or_else(|| {
         ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            arkret_core::error::ErrorCode::SESSION_GRANT_NOT_FOUND,
+            arkret_wire::ErrorCode::SESSION_GRANT_NOT_FOUND,
             "session-grant refresh requires a browser-bound session grant",
         )
     })?;
@@ -543,7 +543,7 @@ pub async fn refresh_session_grant(
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_core::error::ErrorCode::SESSION_LOGGED_OUT,
+            arkret_wire::ErrorCode::SESSION_LOGGED_OUT,
             "underlying browser session is logged out; rotation chain cannot be resumed",
         ));
     }
@@ -558,7 +558,7 @@ pub async fn refresh_session_grant(
     {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_core::error::ErrorCode::AUDIENCE_MISMATCH,
+            arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
             "session-grant rotation MUST NOT change the bound audience",
         ));
     }
@@ -598,7 +598,7 @@ pub async fn refresh_session_grant(
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_core::error::ErrorCode::GRANT_ALREADY_CONSUMED,
+            arkret_wire::ErrorCode::GRANT_ALREADY_CONSUMED,
             "session grant already consumed; its rotation chain cannot continue",
         ));
     }
@@ -689,7 +689,7 @@ mod tests {
         )
         .expect_err("oversized DID proof replay window must fail closed");
 
-        let message = assert_coded(err, arkret_core::error::ReasonCode::PROOF_INVALID);
+        let message = assert_coded(err, arkret_wire::ReasonCode::PROOF_INVALID);
         assert!(message.contains(SOFT_LOGOUT_DID_PROOF_REPLAY_REASON));
     }
 
@@ -700,7 +700,7 @@ mod tests {
         let err = validate_soft_logout_did_proof_window(issued_at, expires_at, expires_at)
             .expect_err("expired DID proof must fail closed");
 
-        let message = assert_coded(err, arkret_core::error::ReasonCode::PROOF_INVALID);
+        let message = assert_coded(err, arkret_wire::ReasonCode::PROOF_INVALID);
         assert!(message.contains(SOFT_LOGOUT_DID_PROOF_REPLAY_REASON));
     }
 
@@ -709,7 +709,7 @@ mod tests {
         let err = validate_soft_logout_proof_kind(None)
             .expect_err("missing proof_kind must require proof context");
 
-        assert_coded(err, arkret_core::error::ErrorCode::DID_PROOF_REQUIRED);
+        assert_coded(err, arkret_wire::ErrorCode::DID_PROOF_REQUIRED);
     }
 
     #[test]
@@ -717,7 +717,7 @@ mod tests {
         let err = validate_soft_logout_proof_kind(Some(SessionGrantProofKind::AgentKeyProof))
             .expect_err("agent_key_proof must not restore a human soft-logged-out session");
 
-        assert_coded(err, arkret_core::error::ReasonCode::PROOF_INVALID);
+        assert_coded(err, arkret_wire::ReasonCode::PROOF_INVALID);
     }
 
     #[test]
@@ -725,7 +725,7 @@ mod tests {
         let err = require_soft_logout_bound_device_id(None, Some(DEVICE_ID))
             .expect_err("missing presented device_id must require DID proof context");
 
-        assert_coded(err, arkret_core::error::ErrorCode::DID_PROOF_REQUIRED);
+        assert_coded(err, arkret_wire::ErrorCode::DID_PROOF_REQUIRED);
     }
 
     #[test]
@@ -733,7 +733,7 @@ mod tests {
         let err = require_soft_logout_bound_device_id(Some(DEVICE_ID), None)
             .expect_err("legacy unbound grant must not be recoverable");
 
-        assert_coded(err, arkret_core::error::ErrorCode::DID_PROOF_REQUIRED);
+        assert_coded(err, arkret_wire::ErrorCode::DID_PROOF_REQUIRED);
     }
 
     #[test]
@@ -741,7 +741,7 @@ mod tests {
         let err = require_soft_logout_bound_device_id(Some(OTHER_DEVICE_ID), Some(DEVICE_ID))
             .expect_err("presented device_id must match the grant binding");
 
-        assert_coded(err, arkret_core::error::ReasonCode::PROOF_INVALID);
+        assert_coded(err, arkret_wire::ReasonCode::PROOF_INVALID);
     }
 
     #[test]

@@ -711,7 +711,7 @@ pub async fn server_describe(
     {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_core::ErrorCode::INVALID_PARAM,
+            arkret_wire::ErrorCode::INVALID_PARAM,
             format!("service_type {service_type:?} is not available on this binding"),
         ));
     }

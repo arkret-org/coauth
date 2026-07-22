@@ -112,7 +112,7 @@ impl OidcExchangeError {
     }
 
     fn proof_invalid(message: impl Into<String>) -> Self {
-        Self::new(arkret_core::error::ReasonCode::PROOF_INVALID, message)
+        Self::new(arkret_wire::ReasonCode::PROOF_INVALID, message)
     }
 }
 
@@ -887,7 +887,7 @@ async fn exchange_oidc_code(
                 let lower_description = error_description.to_ascii_lowercase();
                 let (code, error_kind) = match error.error {
                     ClientErrorCode::InvalidGrant if lower_description.contains("pkce") => (
-                        arkret_core::error::ReasonCode::PROOF_INVALID,
+                        arkret_wire::ReasonCode::PROOF_INVALID,
                         format!("pkce verification failed: {error_description}"),
                     ),
                     ClientErrorCode::InvalidGrant => {
@@ -1478,7 +1478,7 @@ mod tests {
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
             .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
-                arkret_core::error::ErrorCode::FAILED_PRECONDITION,
+                arkret_wire::ErrorCode::FAILED_PRECONDITION,
                 "account registration is closed",
             )))
             .expect(1)

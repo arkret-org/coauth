@@ -54,7 +54,7 @@ use crate::services::policy_frontier::Frontier;
 
 /// Local (non-registry) reason codes. `"ok"` and `"policy_review_required"`
 /// are evaluator-internal `reason_code` values that are NOT part of the
-/// canonical `arkret_core::error::ERROR_CODE_*` wire-error registry, so
+/// canonical `arkret_wire::error_codes::ERROR_CODE_*` wire-error registry, so
 /// they are kept as local constants rather than aliased to SDK symbols.
 const REASON_CODE_OK: &str = "ok";
 const REASON_CODE_POLICY_REVIEW_REQUIRED: &str = "policy_review_required";
@@ -201,19 +201,19 @@ impl PolicyDecision {
     ///
     /// The reason code on the wire is `failed_precondition`; the
     /// obligation carries the canonical
-    /// [`arkret_core::error::ReasonCode::ACCOUNTABILITY_GRANT_MISSING`]
+    /// [`arkret_wire::ReasonCode::ACCOUNTABILITY_GRANT_MISSING`]
     /// string so downstream consumers can render the exact registry
     /// rejection.
     #[must_use]
     pub fn strict_reject_accountable_principals(policy_version: String) -> Self {
         Self {
             decision: AuthzDecision::HardDeny,
-            reason_code: arkret_core::error::ErrorCode::FAILED_PRECONDITION.to_owned(),
+            reason_code: arkret_wire::ErrorCode::FAILED_PRECONDITION.to_owned(),
             obligations: vec![PolicyObligation {
                 kind: "accountability_grant_required".to_owned(),
                 expires_at: None,
                 payload: serde_json::json!({
-                    "reason": arkret_core::error::ReasonCode::ACCOUNTABILITY_GRANT_MISSING,
+                    "reason": arkret_wire::ReasonCode::ACCOUNTABILITY_GRANT_MISSING,
                     "profile": "ak.profile.accountable_principals.strict_reject.v1",
                 }),
             }],
@@ -400,7 +400,7 @@ fn match_rules_with_grants(
         if value_contains_str(scope.get("deny_actors"), actor_str) {
             return PolicyDecision {
                 decision: AuthzDecision::HardDeny,
-                reason_code: arkret_core::error::ErrorCode::POLICY_VIOLATION.to_owned(),
+                reason_code: arkret_wire::ErrorCode::POLICY_VIOLATION.to_owned(),
                 obligations: Vec::new(),
                 policy_version: policy_version.to_owned(),
             };
@@ -409,7 +409,7 @@ fn match_rules_with_grants(
         if value_contains_str(scope.get("deny_actions"), action_str) {
             return PolicyDecision {
                 decision: AuthzDecision::HardDeny,
-                reason_code: arkret_core::error::ErrorCode::POLICY_VIOLATION.to_owned(),
+                reason_code: arkret_wire::ErrorCode::POLICY_VIOLATION.to_owned(),
                 obligations: Vec::new(),
                 policy_version: policy_version.to_owned(),
             };
@@ -520,7 +520,7 @@ fn capability_action_gate_decision(
 
 fn unsupported_feature(policy_version: &str) -> PolicyDecision {
     PolicyDecision::hard_deny(
-        arkret_core::error::ErrorCode::UNSUPPORTED_FEATURE,
+        arkret_wire::ErrorCode::UNSUPPORTED_FEATURE,
         policy_version.to_owned(),
     )
 }

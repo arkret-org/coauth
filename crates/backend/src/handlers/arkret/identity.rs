@@ -144,7 +144,7 @@ pub async fn directory_resolve_handle(
         .map_err(|error| {
             ArkretRouteError::coded(
                 StatusCode::TOO_MANY_REQUESTS,
-                arkret_core::error::ErrorCode::RATE_LIMITED,
+                arkret_wire::ErrorCode::RATE_LIMITED,
                 error.to_string(),
             )
         })?;
@@ -285,17 +285,17 @@ fn map_handle_claim_issue_error(error: SessionGrantError) -> ArkretRouteError {
     match error {
         SessionGrantError::HandleClaimSubject(error) => ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_core::error::ErrorCode::INVALID_PARAM,
+            arkret_wire::ErrorCode::INVALID_PARAM,
             error.to_string(),
         ),
         error @ SessionGrantError::DidWebPrincipalNotExplicit => ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_core::error::ErrorCode::INVALID_PARAM,
+            arkret_wire::ErrorCode::INVALID_PARAM,
             error.to_string(),
         ),
         SessionGrantError::PrincipalUnknown => ArkretRouteError::coded(
             StatusCode::NOT_FOUND,
-            arkret_core::error::ErrorCode::PRINCIPAL_UNKNOWN,
+            arkret_wire::ErrorCode::PRINCIPAL_UNKNOWN,
             "principal_unknown",
         ),
         other => ArkretRouteError::Internal(Box::new(other)),
