@@ -127,7 +127,7 @@ pub enum DidResolveError {
 
 /// Hard upper bound on the size of a fetched DID document. The value is
 /// shared with the SDK so all did:web consumers apply the same limit.
-pub const DID_DOCUMENT_MAX_BYTES: usize = arkret_core::identity::DID_WEB_MAX_DOCUMENT_BYTES;
+pub const DID_DOCUMENT_MAX_BYTES: usize = arkret_models_identity::DID_WEB_MAX_DOCUMENT_BYTES;
 
 #[async_trait]
 pub trait DidResolverService: Send + Sync {
@@ -716,7 +716,7 @@ fn did_method(did: &str) -> Option<String> {
 fn did_web_document_url(did: &str) -> Result<Url, DidResolveError> {
     let did = arkret_core::Did::new(did.to_owned())
         .map_err(|_| DidResolveError::InvalidDid(did.to_owned()))?;
-    let url = arkret_core::identity::did_web_document_url(&did)
+    let url = arkret_models_identity::did_web_document_url(&did)
         .map_err(|_| DidResolveError::InvalidDid(did.to_string()))?;
     Ok(Url::parse(&url)?)
 }

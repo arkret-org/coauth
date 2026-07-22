@@ -41,6 +41,7 @@ arkret-hlc = {workspace = true}
 arkret-canonical = {workspace = true}
 arkret-models-collaboration = {workspace = true}
 arkret-models-discovery = {workspace = true}
+arkret-models-identity = {workspace = true}
 arkret-policy = {workspace = true}
 arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
 arkret-wire = {workspace = true}
