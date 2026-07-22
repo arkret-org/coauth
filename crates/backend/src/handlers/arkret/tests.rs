@@ -1652,8 +1652,8 @@ fn require_canonical_handle_rejects_acct_aliases() {
         ArkretRouteError::Coded { code, message, .. } => {
             assert_eq!(code, arkret_core::ErrorCode::INVALID_PARAM);
             assert!(
-                message.contains("acct:"),
-                "expected acct: in reason, got {message}"
+                message.contains("reason_code=handle_not_canonical"),
+                "expected canonical-handle reason code, got {message}"
             );
         }
         other => panic!("expected Coded, got {other:?}"),
