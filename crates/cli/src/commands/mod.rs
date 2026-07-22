@@ -64,6 +64,10 @@ pub struct Options {
     #[arg(long, global = true)]
     enable_test_endpoints: bool,
 
+    /// Enable the global development posture and detailed diagnostics
+    #[arg(long, global = true)]
+    development_mode: bool,
+
     /// Confirm that the configured in-band email verification bypass is intentional
     #[arg(long, global = true)]
     allow_insecure_dev_email_bypass: bool,
@@ -90,6 +94,7 @@ impl Options {
             self.has_explicit_config() && self.no_env_overrides,
         );
         for (key, enabled) in [
+            ("COAUTH_DEVELOPMENT_MODE", self.development_mode),
             ("COAUTH_ENABLE_TEST_ENDPOINTS", self.enable_test_endpoints),
             (
                 "COAUTH_ALLOW_INSECURE_DEV_EMAIL_BYPASS",

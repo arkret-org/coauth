@@ -118,3 +118,14 @@ RUST_LOG=info coauth server -c config.yaml
 # 仅显示 coauth 相关的 debug 日志
 RUST_LOG=coauth=debug coauth server -c config.yaml
 ```
+
+开发或测试期间如需启用全局开发姿态并记录完整的服务端错误诊断，可使用：
+
+```bash
+COAUTH_DEVELOPMENT_MODE=true coauth server -c config.yaml
+```
+
+也可以使用等价的全局命令行参数 `--development-mode`。开发模式不会改变 HTTP
+错误响应；测试端点和不安全的开发旁路仍需各自的显式开关。若未显式设置
+`RUST_LOG`，开发模式会将默认日志过滤级别设为 `debug`。详细错误可能包含敏感的
+部署信息，因此不应在生产环境启用。

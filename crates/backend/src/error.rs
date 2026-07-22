@@ -14,6 +14,16 @@ use crate::salvo_utils::sentry::SentryEventId;
 
 type BoxError = Box<dyn StdError + Send + Sync + 'static>;
 
+/// Return whether the process-wide development posture is enabled.
+///
+/// Detailed diagnostics follow this posture, while test-only endpoints and
+/// insecure escape hatches retain their own explicit authorization switches.
+#[must_use]
+pub fn development_mode_from_env() -> bool {
+    coauth_config::runtime_var("COAUTH_DEVELOPMENT_MODE")
+        .is_ok_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
+}
+
 #[derive(Debug)]
 pub struct AppError {
     status: StatusCode,
@@ -150,10 +160,28 @@ impl Scribe for AppError {
     fn render(self, res: &mut Response) {
         let response = ErrorOutcome::from_error(&self);
         let sentry_event_id = if self.capture {
-            tracing::error!(message = &self as &dyn StdError);
+            if development_mode_from_env() {
+                tracing::error!(
+                    status = self.status.as_u16(),
+                    protocol_code = self.protocol_code,
+                    error = ?self,
+                    "detailed application error"
+                );
+            } else {
+                tracing::error!(message = &self as &dyn StdError);
+            }
             SentryEventId::for_last_event()
         } else {
-            tracing::warn!(message = &self as &dyn StdError);
+            if development_mode_from_env() {
+                tracing::warn!(
+                    status = self.status.as_u16(),
+                    protocol_code = self.protocol_code,
+                    error = ?self,
+                    "detailed application error"
+                );
+            } else {
+                tracing::warn!(message = &self as &dyn StdError);
+            }
             None
         };
 
@@ -275,5 +303,9 @@ mod tests {
 
         assert_eq!(error.message(), "Internal server error");
         assert!(StdError::source(&error).is_some());
+        assert!(
+            format!("{error:?}").contains("database password appeared in a diagnostic"),
+            "debug formatting must retain the source used by diagnostic mode"
+        );
     }
 }

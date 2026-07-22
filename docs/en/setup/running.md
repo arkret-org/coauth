@@ -87,3 +87,20 @@ In Kubernetes, point `livenessProbe.httpGet.path` at `/healthz` and
 
 Once the service is running, it is possible to check its configuration using the [`coauth doctor`](../reference/cli/doctor.md) command.
 This should help diagnose common issues with the service configuration and deployment.
+
+
+## Development mode
+
+To enable the global development posture and record full server-side error
+diagnostics, use:
+
+```sh
+COAUTH_DEVELOPMENT_MODE=true coauth server -c config.yaml
+```
+
+The equivalent global CLI flag is `--development-mode`. Development mode does
+not change HTTP error responses. Test endpoints and insecure development escape
+hatches still require their dedicated explicit flags. When `RUST_LOG` is not
+set, development mode changes the default log filter to `debug`. Detailed
+errors may contain sensitive deployment information, so do not enable it in
+production.

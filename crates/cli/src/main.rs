@@ -120,8 +120,13 @@ async fn execute_command(
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_writer(writer)
         .with_ansi(use_ansi);
+    let default_filter = if coauth_backend::error::development_mode_from_env() {
+        "debug"
+    } else {
+        "info"
+    };
     let env_filter = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info"))
+        .or_else(|_| EnvFilter::try_new(default_filter))
         .context("could not setup logging filter")?;
 
     // Filter out noisy Jaeger propagator warnings about empty header values
