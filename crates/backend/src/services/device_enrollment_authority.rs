@@ -20,8 +20,8 @@
 //! method is `did:key:z<mb>#z<mb>` — the canonical `did:key` VM form the SDK
 //! `DidKeyResolver` produces.
 
+use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_core::Did;
-use arkret_core::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_signatures::Ed25519MoveSigner;
 use ed25519_dalek::SigningKey;
 
