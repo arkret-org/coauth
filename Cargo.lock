@@ -504,7 +504,6 @@ version = "0.3.0"
 dependencies = [
  "arkret-canonical",
  "arkret-models-collaboration",
- "arkret-models-crypto",
  "arkret-models-discovery",
  "arkret-models-identity",
  "arkret-wire",
@@ -1486,6 +1485,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "argon2",
+ "arkret-canonical",
  "arkret-core",
  "arkret-crypto",
  "arkret-egress-policy",
@@ -1642,6 +1642,7 @@ name = "coauth-data"
 version = "0.3.0"
 dependencies = [
  "arkret-core",
+ "arkret-wire",
  "async-trait",
  "chrono",
  "coauth-data-model",

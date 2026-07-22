@@ -73,8 +73,7 @@ pub(crate) fn issue_handle_claim(
 
     // Spec 7157ee8 §3.1 — canonical handle wire form is
     // `<localpart>:<domain>`.
-    let handle =
-        Handle::parse(&user_handle(url_builder, user)).map_err(arkret_core::Error::from)?;
+    let handle = Handle::parse(&user_handle(url_builder, user))?;
     let mut aliases = vec![handle.to_acct()];
     aliases.extend(user.handle_aliases.iter().cloned());
     // De-duplicate while preserving first-seen order.
@@ -113,8 +112,7 @@ pub(crate) fn issue_handle_claim(
     // input mirrors the wire shape of `HandleClaimPayload` exactly so
     // downstream verifiers can reproduce the hash from the on-the-wire
     // claim without renaming.
-    let claim_digest = arkret_core::canonical::canonical_sha256(&payload_no_proofs)
-        .map_err(arkret_core::Error::from)?;
+    let claim_digest = arkret_canonical::canonical_sha256(&payload_no_proofs)?;
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();

@@ -136,8 +136,7 @@ impl User {
     /// public hostname); the data crate has no opinion on which host is
     /// "the" service host since the same `User` row may be addressed by
     /// multiple alias hosts.
-    #[must_use]
-    pub fn canonical_handle(&self, host: &str) -> std::result::Result<String, arkret_core::Error> {
+    pub fn canonical_handle(&self, host: &str) -> arkret_wire::Result<String> {
         Ok(Handle::prepare(&format!("{}:{host}", self.localpart))?
             .canonical()
             .to_owned())
@@ -145,8 +144,7 @@ impl User {
 
     /// Interop `acct:` alias for this user against the supplied host. Used
     /// to populate `handle_claim.handle_aliases[]`. Never used as canonical.
-    #[must_use]
-    pub fn acct_alias(&self, host: &str) -> std::result::Result<String, arkret_core::Error> {
+    pub fn acct_alias(&self, host: &str) -> arkret_wire::Result<String> {
         Ok(Handle::prepare(&format!("{}:{host}", self.localpart))?.to_acct())
     }
 }

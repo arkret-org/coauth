@@ -1,4 +1,4 @@
-use arkret_core::canonical::normalize_timestamp_canonical;
+use arkret_canonical::{format_timestamp_canonical, normalize_timestamp_canonical};
 use arkret_core::identifiers::new_prefixed_uuid7;
 use arkret_core::{DeviceId, GrantId};
 use chrono::{DateTime, Utc};
@@ -148,7 +148,7 @@ fn issue_session_grant_for_audience_inner(
         proof_kind: None,
         scope_details: None,
     };
-    payload.validate().map_err(arkret_core::Error::from)?;
+    payload.validate()?;
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
@@ -160,7 +160,7 @@ fn issue_session_grant_for_audience_inner(
         grant_id,
         grant_jwt,
         session_public_key,
-        expires_at: arkret_core::canonical::format_timestamp_canonical(expires_at),
+        expires_at: format_timestamp_canonical(expires_at),
         expires_at_timestamp: expires_at,
         issuer: issuer.to_string(),
         subject,
@@ -289,7 +289,7 @@ pub(crate) fn mint_agent_session_grant(
         proof_kind: Some(arkret_core::SessionGrantProofKind::AgentKeyProof),
         scope_details: Some(scope_details),
     };
-    payload.validate().map_err(arkret_core::Error::from)?;
+    payload.validate()?;
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
@@ -301,7 +301,7 @@ pub(crate) fn mint_agent_session_grant(
         grant_id,
         grant_jwt,
         session_public_key,
-        expires_at: arkret_core::canonical::format_timestamp_canonical(expires_at),
+        expires_at: format_timestamp_canonical(expires_at),
         expires_at_timestamp: expires_at,
         issuer: issuer.to_string(),
         subject: agent_id.to_owned(),

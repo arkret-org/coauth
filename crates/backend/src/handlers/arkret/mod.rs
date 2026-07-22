@@ -64,12 +64,13 @@ pub enum SessionGrantError {
     #[error(transparent)]
     Serialize(#[from] serde_json::Error),
 
-    /// Canonical-JSON / digest failure surfaced by the shared SDK pipeline
-    /// (`arkret_core::canonical`). Carried as the SDK error itself so call
-    /// sites keep its structured variants (e.g. `NonCanonicalNumber`)
-    /// instead of a flattened string.
+    /// Canonical JSON or digest failure surfaced by the canonical owner crate.
     #[error(transparent)]
-    Canonical(#[from] arkret_core::Error),
+    Canonical(#[from] arkret_canonical::CanonicalError),
+
+    /// Wire construction or validation failure surfaced by the wire owner crate.
+    #[error(transparent)]
+    Wire(#[from] arkret_wire::WireError),
 
     /// R3.2 (HC-COAUTH-1/2) — the handle-claim issuance request failed the
     /// `claim_kind` allow-list or subject (holder/principal DID)

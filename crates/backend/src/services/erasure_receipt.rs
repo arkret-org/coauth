@@ -12,7 +12,7 @@ pub enum ErasureReceiptVerificationError {
     #[error("retained verification stub is required")]
     MissingRetainedStub,
     #[error("receipt validation failed: {0}")]
-    Receipt(#[from] arkret_core::Error),
+    Receipt(#[from] arkret_wire::WireError),
     #[error("issuer DID resolution failed: {0}")]
     DidResolve(#[from] DidResolveError),
     #[error("issuer DID document cannot back a full identity fact: {0}")]
@@ -37,18 +37,14 @@ fn validate_retained_stub(
     retained_stub: Option<&VerificationStub>,
 ) -> Result<(), ErasureReceiptVerificationError> {
     if let Some(retained_stub) = retained_stub {
-        receipt
-            .validate_with_retained_stub(retained_stub)
-            .map_err(arkret_core::Error::from)?;
+        receipt.validate_with_retained_stub(retained_stub)?;
         return Ok(());
     }
 
     if receipt.retained_stub.is_none() {
         return Err(ErasureReceiptVerificationError::MissingRetainedStub);
     }
-    receipt
-        .validate_with_inline_retained_stub()
-        .map_err(arkret_core::Error::from)?;
+    receipt.validate_with_inline_retained_stub()?;
     Ok(())
 }
 
@@ -66,12 +62,8 @@ pub async fn verify_erasure_receipt(
     retained_stub: Option<&VerificationStub>,
 ) -> Result<(), ErasureReceiptVerificationError> {
     validate_retained_stub(receipt, retained_stub)?;
-    let expected_digest = receipt
-        .canonical_payload_digest()
-        .map_err(arkret_core::Error::from)?;
-    let proof_payload = receipt
-        .canonical_proof_input()
-        .map_err(arkret_core::Error::from)?;
+    let expected_digest = receipt.canonical_payload_digest()?;
+    let proof_payload = receipt.canonical_proof_input()?;
 
     let resolution = did_resolver
         .resolve_did_document(
