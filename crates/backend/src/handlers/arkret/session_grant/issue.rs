@@ -107,6 +107,7 @@ pub async fn issue_session_grant_endpoint(
             }))
         }
         arkret_core::SessionGrantProofKind::AgentKeyProof => {
+            require_agent_runtime_device_id(&body)?;
             let dpop_binding = extract_kickoff_dpop(req, depot).await?;
             // AKP-0008 §4.6: independent agent_key_proof validator. MUST NOT
             // fall back to any human proof validator. The grant-binding DPoP proof is
@@ -129,6 +130,19 @@ pub async fn issue_session_grant_endpoint(
             ),
         )),
     }
+}
+
+fn require_agent_runtime_device_id(
+    body: &arkret_core::SessionGrantRequestBody,
+) -> Result<(), ArkretRouteError> {
+    if body.device_id.is_none() {
+        return Err(ArkretRouteError::coded(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            arkret_core::error::ErrorCode::SCHEMA_VIOLATION,
+            "agent_key_proof session grant requires a stable device_id",
+        ));
+    }
+    Ok(())
 }
 
 async fn extract_kickoff_dpop(
@@ -509,6 +523,9 @@ async fn issue_agent_key_proof_session_grant(
         &arkret_config,
         &key_store,
         &authorization.agent_id,
+        body.device_id
+            .as_ref()
+            .expect("agent device id was required before proof validation"),
         audience.to_string(),
         authorization.granted_scope.clone(),
         dpop_binding.jkt.clone(),
@@ -551,7 +568,7 @@ async fn issue_agent_key_proof_session_grant(
 
     Ok(Json(arkret_core::SessionGrantOutcome {
         principal_id,
-        device_id: None,
+        device_id: body.device_id.clone(),
         session_grant: material.grant_jwt,
         expires_at: material.expires_at_timestamp,
         grant_id: Some(grant_id),
