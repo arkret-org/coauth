@@ -361,7 +361,7 @@ fn inception_enrollment_authority_ref(
         .iter()
         .filter(|service| {
             service.get("type").and_then(Value::as_str)
-                == Some(arkret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY)
+                == Some(arkret_models_discovery::service_requirements::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY)
         });
     let service = designated.next()?;
     if designated.next().is_some()

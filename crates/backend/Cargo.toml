@@ -40,6 +40,7 @@ arkret-core = {workspace = true,features = ["salvo"]}
 arkret-hlc = {workspace = true}
 arkret-canonical = {workspace = true}
 arkret-models-collaboration = {workspace = true}
+arkret-models-discovery = {workspace = true}
 arkret-policy = {workspace = true}
 arkret-wire = {workspace = true}
 arkret-http-client = {workspace = true}

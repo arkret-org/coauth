@@ -285,7 +285,8 @@ pub async fn add_account_did(
             .service
             .iter()
             .filter(|service| {
-                service.kind == arkret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY
+                service.kind
+                    == arkret_models_discovery::service_requirements::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY
             });
     let designated_service = designated_services.next().ok_or_else(|| {
         AppError::bad_request(
