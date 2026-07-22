@@ -2,11 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
 use arkret_core::Did;
-use arkret_core::http::{IdentityDescribeOutcome, IdentityDocumentViewOutcome};
 use arkret_core::models::{
     DirectoryHandleResolutionOutcome, DirectoryResolveHandleRequestBody, IdentityDescription,
     IdentityDocumentView, IdentityResolveOutcome, IdentityResolveRequestBody,
 };
+use arkret_models_identity::http_bodies::{IdentityDescribeOutcome, IdentityDocumentViewOutcome};
 use coauth_data::RepositoryAccess;
 use salvo::prelude::*;
 
