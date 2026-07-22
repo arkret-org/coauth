@@ -42,6 +42,7 @@ arkret-canonical = {workspace = true}
 arkret-models-collaboration = {workspace = true}
 arkret-models-discovery = {workspace = true}
 arkret-policy = {workspace = true}
+arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
 arkret-wire = {workspace = true}
 arkret-http-client = {workspace = true}
 arkret-egress-policy = {workspace = true}

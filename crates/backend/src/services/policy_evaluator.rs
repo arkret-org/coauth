@@ -491,7 +491,7 @@ fn capability_action_gate_decision(
         return Some(unsupported_feature(policy_version));
     }
 
-    let descriptor = match arkret_core::schema::embedded_capability_action(action) {
+    let descriptor = match arkret_schema::embedded_capability_action(action) {
         Ok(Some(descriptor)) => descriptor,
         Ok(None) => return Some(unsupported_feature(policy_version)),
         Err(error) => {

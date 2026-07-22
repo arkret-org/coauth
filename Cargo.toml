@@ -118,12 +118,13 @@ coauth-templates = {version = "=0.3.0",path = "crates/templates"}
 # identifiers + the `MoveSigner` trait + `UnsignedMove` builder, while
 # `arkret-signatures` (with the `signer` feature) provides the production
 # Ed25519 backend used by `anchor_pending_move`.
-arkret-core = {version = "0.3.0",path = "../arkret-rust-sdk/crates/core",default-features = false,features = ["embedded-artifacts"]}
+arkret-core = {version = "0.3.0",path = "../arkret-rust-sdk/crates/core",default-features = false}
 arkret-hlc = {version = "0.3.0",path = "../arkret-rust-sdk/crates/hlc",default-features = false}
 arkret-canonical = {version = "0.3.0",path = "../arkret-rust-sdk/crates/canonical",default-features = false}
 arkret-models-collaboration = {version = "0.3.0",path = "../arkret-rust-sdk/crates/models-collaboration",default-features = false}
 arkret-models-discovery = {version = "0.3.0",path = "../arkret-rust-sdk/crates/models-discovery",default-features = false}
 arkret-policy = {version = "0.3.0",path = "../arkret-rust-sdk/crates/policy",default-features = false}
+arkret-schema = {version = "0.3.0",path = "../arkret-rust-sdk/crates/schema",default-features = false}
 arkret-wire = {version = "0.3.0",path = "../arkret-rust-sdk/crates/wire",default-features = false}
 arkret-http-client = {version = "0.3.0",path = "../arkret-rust-sdk/crates/http-client",default-features = false,features = ["tls-rustls"]}
 arkret-crypto = {version = "0.3.0",path = "../arkret-rust-sdk/crates/crypto",default-features = false}

@@ -1,9 +1,9 @@
-use arkret_core::generated::profile_requirements::{
-    requirements_for, validate_profile_requirements,
-};
 use arkret_core::{
     AccountAuthority, AuthGrantExchange, AuthMetadata, AuthMethod, AuthMethodKind,
     SessionGrantProofKind,
+};
+use arkret_schema::generated::profile_requirements::{
+    requirements_for, validate_profile_requirements,
 };
 use coauth_config::ArkretConfig;
 use coauth_data::{RepositoryAccess, UrlBuilder};

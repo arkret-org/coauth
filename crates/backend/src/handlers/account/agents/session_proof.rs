@@ -853,7 +853,7 @@ fn content_capability_scope_token(token: &str) -> Result<bool, AgentAuthRejectio
     if LIMITED_AGENT_SCOPE_ACTIONS.contains(&token) && !service_surface_scope_token(token) {
         return Ok(true);
     }
-    arkret_core::schema::embedded_capability_action(token)
+    arkret_schema::embedded_capability_action(token)
         .map(|descriptor| descriptor.is_some())
         .map_err(|_| AgentAuthRejection::ProofInvalid)
 }
