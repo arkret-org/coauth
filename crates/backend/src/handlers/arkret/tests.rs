@@ -1349,6 +1349,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         &state.arkret_config,
         &state.key_store,
         "did:web:agent.example",
+        &arkret_core::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000005").unwrap(),
         audience.clone(),
         vec!["ak.agent.action:message.send".to_owned()],
         "agent-runtime-dpop-jkt".to_owned(),
@@ -1401,7 +1402,10 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     assert_eq!(body["status"], "active");
     assert_eq!(body["proof_required"], false);
     assert_eq!(body["grant"]["subject"], "did:web:agent.example");
-    assert_eq!(body["grant"]["device_id"], serde_json::Value::Null);
+    assert_eq!(
+        body["grant"]["device_id"],
+        "ak:device:0196419b-0000-7000-8000-000000000005"
+    );
     assert_eq!(body["grant"]["proof_kind"], "agent_key_proof");
     assert_eq!(body["grant"]["scope_details"], scope_details);
     assert_eq!(body["grant"]["freshness_state"], serde_json::Value::Null);

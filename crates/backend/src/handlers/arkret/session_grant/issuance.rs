@@ -1,6 +1,6 @@
-use arkret_core::GrantId;
 use arkret_core::canonical::normalize_timestamp_canonical;
 use arkret_core::identifiers::new_prefixed_uuid7;
+use arkret_core::{DeviceId, GrantId};
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
 #[cfg(test)]
@@ -256,6 +256,7 @@ pub(crate) fn mint_agent_session_grant(
     arkret_config: &ArkretConfig,
     key_store: &Keystore,
     agent_id: &str,
+    device_id: &DeviceId,
     audience: String,
     scopes: Vec<String>,
     dpop_jkt: String,
@@ -304,7 +305,7 @@ pub(crate) fn mint_agent_session_grant(
         expires_at_timestamp: expires_at,
         issuer: issuer.to_string(),
         subject: agent_id.to_owned(),
-        device_id: None,
+        device_id: Some(device_id.to_string()),
         audience,
         scopes,
         dpop_jkt: Some(dpop_jkt),

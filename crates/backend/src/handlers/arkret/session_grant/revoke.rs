@@ -588,6 +588,7 @@ mod tests {
             &personal_did_web_config(),
             &test_keystore(),
             "did:web:agent.example",
+            &DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000006").unwrap(),
             "did:web:soland.example".to_owned(),
             vec!["ak.self.events.stream.subscribe".to_owned()],
             "runtime-dpop-jkt".to_owned(),
@@ -609,7 +610,7 @@ mod tests {
             browser_session_id: None,
             issuer: material.issuer,
             subject: material.subject,
-            device_id: None,
+            device_id: material.device_id,
             applet_id: None,
             effective_scope: None,
             registration_epoch: None,
@@ -628,6 +629,11 @@ mod tests {
     #[test]
     fn agent_key_proof_grant_is_owned_by_accountable_controller_only() {
         let grant = agent_session_grant("did:web:controller.example");
+
+        assert_eq!(
+            grant.device_id.as_deref(),
+            Some("ak:device:0196419b-0000-7000-8000-000000000006")
+        );
 
         assert!(grant_is_agent_delegated_to_controller(
             &grant,
