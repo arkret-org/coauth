@@ -25,9 +25,10 @@ use std::sync::{Mutex, OnceLock};
 use arkret_core::{
     AccountDeviceEnrollOutcome, AccountDeviceEnrollRequestBody, Audience, DeviceAuthorizePayload,
     DeviceEnrollmentAuthorityBinding, DeviceEnrollmentAuthorityBindingKind, DeviceOrPrincipalRef,
-    Event, EventId, EventRequirements, Hlc, HlcGenerator, NonEmptyString, RealmId,
-    SignedSessionGrantClaims, ed25519_pubkey_to_did_key_multibase,
+    Event, EventId, EventRequirements, Hlc, NonEmptyString, RealmId, SignedSessionGrantClaims,
+    ed25519_pubkey_to_did_key_multibase,
 };
+use arkret_hlc::HlcGenerator;
 use arkret_signatures::{SignEventOptions, sign_event};
 use chrono::{DateTime, Utc};
 use coauth_data::user::PrincipalDidRepository as _;

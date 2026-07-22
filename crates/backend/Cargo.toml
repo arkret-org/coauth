@@ -37,6 +37,7 @@ coauth-principal = {workspace = true}
 coauth-tasks = {workspace = true}
 coauth-templates = {workspace = true}
 arkret-core = {workspace = true,features = ["salvo"]}
+arkret-hlc = {workspace = true}
 arkret-canonical = {workspace = true}
 arkret-models-collaboration = {workspace = true}
 arkret-policy = {workspace = true}
