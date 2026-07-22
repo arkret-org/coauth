@@ -25,14 +25,16 @@
 //! against the durable `organization_delegations` table, so a forged or expired
 //! delegation fails closed exactly as soland's verifier would reject it.
 
-use arkret_core::models::{
-    NoDelegationResolver, RealmOrganizationAuthorization, RealmOrganizationControlScope,
-    RealmOrganizationDelegation, RealmOrganizationDelegationResolver, RealmOrganizationIssuerRole,
-    RealmOrganizationPayload, RealmOrganizationRelationship, RealmOrganizationStatus,
-    SignatureMaterial, realm_organization_statement_signing_bytes,
+use arkret_models_collaboration::{
+    ObjectRef, RealmOrganizationAuthorization, RealmOrganizationControlScope,
+    RealmOrganizationIssuerRole, RealmOrganizationPayload, RealmOrganizationRelationship,
+    RealmOrganizationStatus, SignatureMaterial, realm_organization_statement_signing_bytes,
+};
+use arkret_policy::{
+    NoDelegationResolver, RealmOrganizationDelegation, RealmOrganizationDelegationResolver,
     verify_realm_organization_statement,
 };
-use arkret_core::{Did, DidUrl, NonEmptyString, RealmId};
+use arkret_wire::{Did, DidUrl, Hash, NonEmptyString, RealmId};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::organization_control::OrganizationDelegation;
 use coauth_jose::constraints::Constrainable as _;
@@ -76,7 +78,7 @@ pub struct OrganizationStatementRequest {
     pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
     pub supersedes_statement_id: Option<String>,
     pub revokes_statement_id: Option<String>,
-    pub realm_frontier_digest: Option<arkret_core::Hash>,
+    pub realm_frontier_digest: Option<Hash>,
     pub organization_policy_ref: Option<String>,
     pub issuer: Did,
     pub issuer_role: RealmOrganizationIssuerRole,
@@ -205,11 +207,13 @@ impl RepositoryDelegationResolver {
 }
 
 impl RealmOrganizationDelegationResolver for RepositoryDelegationResolver {
+    type Error = std::convert::Infallible;
+
     fn resolve_delegation(
         &self,
-        delegation_ref: &arkret_core::models::ObjectRef,
+        delegation_ref: &ObjectRef,
         organization_id: &Did,
-    ) -> arkret_core::Result<Option<RealmOrganizationDelegation>> {
+    ) -> Result<Option<RealmOrganizationDelegation>, Self::Error> {
         let Some(delegation) = self.delegation.as_ref() else {
             return Ok(None);
         };
