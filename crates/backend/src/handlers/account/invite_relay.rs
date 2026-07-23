@@ -90,7 +90,8 @@ pub struct InviteRelayRequestBody {
     /// Typed v1 invite-delivery body for `POST /_arkret/peer/invites`.
     /// When omitted, the endpoint runs as a consent gate check only.
     #[serde(default)]
-    pub invite_delivery: Option<arkret_core::InviteDeliveryRequest>,
+    pub invite_delivery:
+        Option<arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequest>,
 }
 
 fn default_require_consent() -> bool {
@@ -175,7 +176,9 @@ pub async fn relay_invite_with(
     scope: &str,
     require_consent: bool,
     peer_protocol_client: Option<&PeerProtocolClient<'_>>,
-    invite_delivery: Option<&arkret_core::InviteDeliveryRequest>,
+    invite_delivery: Option<
+        &arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequest,
+    >,
     http_client: &reqwest::Client,
 ) -> Result<RelayOutcome, RouteError> {
     let Some(principal_url) = target_principal_url else {
@@ -380,13 +383,16 @@ mod tests {
     }
 
     fn payload() -> serde_json::Value {
-        arkret_core::InviteCreatePayload::new(
-            arkret_core::InviteId::new("ak:invite:0196419b-0000-7000-8000-000000000001").unwrap(),
-            arkret_core::Did::new("did:web:holder").unwrap(),
-            arkret_core::InviteDeliveryTarget::principal_server(
-                arkret_core::Did::new("did:web:auth.example").unwrap(),
+        arkret_models_collaboration::governance::membership_invite::InviteCreatePayload::new(
+            arkret_identifiers::InviteId::new(
+                "ak:invite:0196419b-0000-7000-8000-000000000001",
+            )
+            .unwrap(),
+            arkret_identifiers::Did::new("did:web:holder").unwrap(),
+            arkret_models_collaboration::governance::invite_addressing::InviteDeliveryTarget::principal_server(
+                arkret_identifiers::Did::new("did:web:auth.example").unwrap(),
             ),
-            arkret_core::Hash::new(
+            arkret_identifiers::Hash::new(
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             )
             .unwrap(),
@@ -398,22 +404,26 @@ mod tests {
         .unwrap()
     }
 
-    fn invite_delivery() -> arkret_core::InviteDeliveryRequest {
-        arkret_core::InviteDeliveryRequest::new(
-            arkret_core::Event::new(
+    fn invite_delivery()
+    -> arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequest {
+        arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequest::new(
+            arkret_wire::Event::new(
                 arkret_wire::events::EventKind::INVITE_CREATE,
-                arkret_core::RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000001").unwrap(),
-                arkret_core::Did::new("did:web:inviter").unwrap(),
+                arkret_identifiers::RealmId::new(
+                    "ak:realm:0196419b-0000-7000-8000-000000000001",
+                )
+                .unwrap(),
+                arkret_identifiers::Did::new("did:web:inviter").unwrap(),
                 1,
-                arkret_core::Hlc::new("01970e589d21-0001-a13f9c2e").unwrap(),
+                arkret_identifiers::Hlc::new("01970e589d21-0001-a13f9c2e").unwrap(),
                 payload(),
             )
             .unwrap(),
-            arkret_core::InviteAddress::principal_server(
-                arkret_core::Did::new("did:web:holder").unwrap(),
-                arkret_core::Did::new("did:web:auth.example").unwrap(),
+            arkret_models_collaboration::governance::invite_addressing::InviteAddress::principal_server(
+                arkret_identifiers::Did::new("did:web:holder").unwrap(),
+                arkret_identifiers::Did::new("did:web:auth.example").unwrap(),
             ),
-            arkret_core::IntroductionEvidence::ExplicitAddress,
+            arkret_models_collaboration::governance::invite_addressing::IntroductionEvidence::ExplicitAddress,
             "idem-1",
         )
     }

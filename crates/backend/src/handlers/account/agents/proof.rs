@@ -57,7 +57,7 @@ pub(super) fn runtime_public_key_material_from_spec(
     public_key: &Value,
     verification_method: &str,
 ) -> Result<String, AgentAuthRejection> {
-    let key: arkret_core::PublicKey =
+    let key: arkret_models_collaboration::governance::agent_artifacts::PublicKey =
         serde_json::from_value(public_key.clone()).map_err(|_| AgentAuthRejection::ProofInvalid)?;
     if key.kty.as_str() != "OKP"
         || key.kid.as_str() != verification_method
@@ -70,7 +70,7 @@ pub(super) fn runtime_public_key_material_from_spec(
     let raw: [u8; 32] = raw
         .try_into()
         .map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    Ok(arkret_core::ed25519_pubkey_to_did_key_multibase(&raw))
+    Ok(arkret_canonical::ed25519_pubkey_to_did_key_multibase(&raw))
 }
 
 /// Compute the canonical SHA-256 digest of `value`, mapping the canonical

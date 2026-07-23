@@ -12,8 +12,8 @@
 
 use std::collections::BTreeSet;
 
-use arkret_core::CapabilityActionId;
-use arkret_core::identifiers::{GrantId, new_prefixed_uuid7};
+use arkret_identifiers::{GrantId, new_prefixed_uuid7};
+use arkret_wire::CapabilityActionId;
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
 use coauth_data::RepositoryAccess;

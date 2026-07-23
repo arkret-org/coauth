@@ -119,7 +119,7 @@ impl AppError {
 
     /// Preserve a canonical Arkret error code while an error crosses shared
     /// account-handler helpers. Product/admin routes ignore this metadata;
-    /// protocol routes convert it into the standard [`arkret_core::ErrorEnvelope`].
+    /// protocol routes convert it into the standard [`arkret_wire::ErrorEnvelope`].
     #[must_use]
     pub fn with_protocol_code(mut self, code: &'static str) -> Self {
         self.protocol_code = Some(code);
