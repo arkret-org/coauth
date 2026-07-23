@@ -73,14 +73,17 @@ struct ProofOfPossessionInput {
 pub async fn post_agent_key_pair(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<arkret_core::AgentKeyPairOutcome>, ArkretRouteError> {
+) -> Result<
+    Json<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome>,
+    ArkretRouteError,
+> {
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
     let key_store = depot.key_store()?;
     let did_resolver = depot.did_resolver_service()?;
 
-    let body: arkret_core::AgentKeyPairRequestBody = req
+    let body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody = req
         .parse_json()
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
@@ -153,7 +156,7 @@ pub async fn post_agent_key_pair(
             )
             .into());
         }
-        let stored_body: arkret_core::AgentKeyPairRequestBody =
+        let stored_body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody =
             serde_json::from_value(existing.soland_fanout_payload.clone()).map_err(|error| {
                 AppError::new(
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -161,13 +164,16 @@ pub async fn post_agent_key_pair(
                 )
             })?;
         idempotency_repo.cancel().await?;
-        let authorized_event_ref = arkret_core::EventId::new(existing.authorized_event_id.clone())
-            .map_err(|error| AppError::internal_box(Box::new(error)))?;
+        let authorized_event_ref =
+            arkret_identifiers::EventId::new(existing.authorized_event_id.clone())
+                .map_err(|error| AppError::internal_box(Box::new(error)))?;
         if existing.soland_fanout_state == AccountabilityGrantFanoutState::Delivered {
-            return Ok(Json(arkret_core::AgentKeyPairOutcome {
-                ok: true,
-                authorized_event_ref,
-            }));
+            return Ok(Json(
+                arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
+                    ok: true,
+                    authorized_event_ref,
+                },
+            ));
         }
         let (_, authoritative_server) = super::session_proof::fetch_authoritative_agent_view(
             &http_client,
@@ -185,10 +191,12 @@ pub async fn post_agent_key_pair(
             stored_body,
         )
         .await?;
-        return Ok(Json(arkret_core::AgentKeyPairOutcome {
-            ok: true,
-            authorized_event_ref,
-        }));
+        return Ok(Json(
+            arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
+                ok: true,
+                authorized_event_ref,
+            },
+        ));
     }
     idempotency_repo.cancel().await?;
 
@@ -229,20 +237,21 @@ pub async fn post_agent_key_pair(
     if !pop.request_canonical_digest.starts_with("sha256:") {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
     }
-    let agent_did = arkret_core::Did::new(agent_id.clone())
+    let agent_did = arkret_identifiers::Did::new(agent_id.clone())
         .map_err(|error| AppError::bad_request(format!("agent_id invalid: {error}")))?;
-    let expected_pop_digest = arkret_core::agent_key_pair_proof_request_binding_digest(
-        &body.pairing_request_id,
-        &agent_did,
-        &body.verification_method,
-        &public_key.public_key,
-        runtime_attestation_value.as_ref(),
-    )
-    .map_err(|error| {
-        AppError::bad_request(format!(
-            "proof_of_possession request binding failed: {error}"
-        ))
-    })?;
+    let expected_pop_digest =
+        arkret_signatures::agent::agent_key_pair_proof_request_binding_digest(
+            &body.pairing_request_id,
+            &agent_did,
+            &body.verification_method,
+            &public_key.public_key,
+            runtime_attestation_value.as_ref(),
+        )
+        .map_err(|error| {
+            AppError::bad_request(format!(
+                "proof_of_possession request binding failed: {error}"
+            ))
+        })?;
     if pop.request_canonical_digest != expected_pop_digest.as_str() {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
     }
@@ -328,7 +337,7 @@ pub async fn post_agent_key_pair(
         .list_active_for_agent(&agent_id)
         .await?;
     let service_id = service_id_for(&arkret_config);
-    let outcome_event_id = arkret_core::EventId::new(authorized_event_id.clone())
+    let outcome_event_id = arkret_identifiers::EventId::new(authorized_event_id.clone())
         .map_err(|err| AppError::internal_box(Box::new(err)))?;
 
     let raw_payload_digest = request_digest;
@@ -437,10 +446,12 @@ pub async fn post_agent_key_pair(
     )
     .await?;
 
-    Ok(Json(arkret_core::AgentKeyPairOutcome {
-        ok: true,
-        authorized_event_ref: outcome_event_id,
-    }))
+    Ok(Json(
+        arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
+            ok: true,
+            authorized_event_ref: outcome_event_id,
+        },
+    ))
 }
 
 #[derive(Debug)]
@@ -459,8 +470,9 @@ fn validate_runtime_public_key(
     public_key: &Value,
     verification_method: &str,
 ) -> Result<ValidatedRuntimePublicKey, AppError> {
-    let key: arkret_core::PublicKey = serde_json::from_value(public_key.clone())
-        .map_err(|error| AppError::bad_request(format!("public_key invalid: {error}")))?;
+    let key: arkret_models_collaboration::governance::agent_artifacts::PublicKey =
+        serde_json::from_value(public_key.clone())
+            .map_err(|error| AppError::bad_request(format!("public_key invalid: {error}")))?;
     if key.kty.as_str() != "OKP" {
         return Err(AppError::bad_request("public_key.kty must be OKP"));
     }
@@ -481,7 +493,7 @@ fn validate_runtime_public_key(
         .map_err(|_| AppError::bad_request("public_key.key must decode to 32 bytes"))?;
     Ok(ValidatedRuntimePublicKey {
         public_key: public_key.clone(),
-        verification_public_key: arkret_core::ed25519_pubkey_to_did_key_multibase(&raw),
+        verification_public_key: arkret_canonical::ed25519_pubkey_to_did_key_multibase(&raw),
     })
 }
 
@@ -490,7 +502,7 @@ fn runtime_public_key_digest(
     verification_method: &str,
 ) -> Result<String, AppError> {
     validate_runtime_public_key(public_key, verification_method)?;
-    arkret_core::agent_runtime_public_key_digest(public_key)
+    arkret_signatures::agent::agent_runtime_public_key_digest(public_key)
         .map(|digest| digest.as_str().to_owned())
         .map_err(|error| AppError::bad_request(format!("public_key is invalid: {error}")))
 }
@@ -502,7 +514,7 @@ fn validate_controller_authorize_event<'a>(
     runtime_public_key_digest: &str,
     pairing_request_id: &str,
     audience: &str,
-    authoritative_key_state: &arkret_core::KeyState,
+    authoritative_key_state: &arkret_models_collaboration::agent_operations::KeyState,
     now: DateTime<Utc>,
 ) -> Result<ValidatedAuthorizeEvent<'a>, AppError> {
     if !envelope.is_object() {
@@ -521,7 +533,7 @@ fn validate_controller_authorize_event<'a>(
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| AppError::bad_request("authorize_event.event_id is required"))?;
-    arkret_core::EventId::new(event_id.to_owned())
+    arkret_identifiers::EventId::new(event_id.to_owned())
         .map_err(|err| AppError::bad_request(format!("authorize_event.event_id invalid: {err}")))?;
     if envelope.get("actor_id").and_then(Value::as_str) != Some(agent_id) {
         return Err(AppError::forbidden(
@@ -533,7 +545,7 @@ fn validate_controller_authorize_event<'a>(
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| AppError::bad_request("authorize_event.executed_by is required"))?;
-    arkret_core::Did::new(controller_id.to_owned()).map_err(|err| {
+    arkret_identifiers::Did::new(controller_id.to_owned()).map_err(|err| {
         AppError::bad_request(format!("authorize_event.executed_by invalid: {err}"))
     })?;
     if authoritative_key_state.agent_id.as_str() != agent_id
@@ -685,7 +697,7 @@ fn validate_controller_authorize_event<'a>(
 
 fn validate_authorize_event_supersedes(
     payload: &Value,
-    authoritative_key_state: &arkret_core::KeyState,
+    authoritative_key_state: &arkret_models_collaboration::agent_operations::KeyState,
 ) -> Result<(), AppError> {
     let active_authorizations = &authoritative_key_state.active_authorizations;
     let expected: std::collections::BTreeSet<(String, String)> = active_authorizations
@@ -921,8 +933,8 @@ fn authorize_event_signature_input(
     envelope: &Value,
     agent_id: &str,
     controller_id: &str,
-) -> Result<(arkret_core::Event, Vec<u8>), AppError> {
-    let event: arkret_core::Event = serde_json::from_value(envelope.clone()).map_err(|error| {
+) -> Result<(arkret_wire::Event, Vec<u8>), AppError> {
+    let event: arkret_wire::Event = serde_json::from_value(envelope.clone()).map_err(|error| {
         AppError::bad_request(format!(
             "authorize_event must be a complete signed Event envelope: {error}"
         ))
@@ -932,7 +944,12 @@ fn authorize_event_signature_input(
             "authorize_event.actor_id must match the managed Agent DID",
         ));
     }
-    if event.executed_by.as_ref().map(arkret_core::Did::as_str) != Some(controller_id) {
+    if event
+        .executed_by
+        .as_ref()
+        .map(arkret_identifiers::Did::as_str)
+        != Some(controller_id)
+    {
         return Err(AppError::bad_request(
             "authorize_event.executed_by must match the resolved controller DID",
         ));
@@ -967,7 +984,7 @@ fn verification_method_controller(verification_method: &str) -> &str {
 fn verification_method_device_id(verification_method: &str) -> Option<String> {
     let (_, fragment) = verification_method.split_once('#')?;
     let fragment = fragment.split('?').next().unwrap_or("").trim();
-    arkret_core::DeviceId::new(fragment.to_owned())
+    arkret_identifiers::DeviceId::new(fragment.to_owned())
         .ok()
         .map(|device_id| device_id.to_string())
 }
@@ -997,7 +1014,7 @@ async fn commit_and_mark_agent_key_authorization(
     idempotency_key: &str,
     request_digest: &str,
     principal_server_name: &str,
-    body: arkret_core::AgentKeyPairRequestBody,
+    body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody,
 ) -> Result<(), AppError> {
     let superseded_event_refs = pairing_superseded_event_refs(&body)?;
     let http_client = depot.http_client()?;
@@ -1046,7 +1063,7 @@ async fn commit_and_mark_agent_key_authorization(
 }
 
 fn pairing_superseded_event_refs(
-    body: &arkret_core::AgentKeyPairRequestBody,
+    body: &arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody,
 ) -> Result<Vec<String>, AppError> {
     match body.authorize_event.payload.get("supersedes") {
         None => Ok(Vec::new()),
@@ -1102,7 +1119,7 @@ mod tests {
             .with_timezone(&Utc)
     }
 
-    fn authoritative_key_state() -> arkret_core::KeyState {
+    fn authoritative_key_state() -> arkret_models_collaboration::agent_operations::KeyState {
         serde_json::from_value(json!({
             "agent_id": AGENT,
             "controller_id": CONTROLLER,
@@ -1421,20 +1438,22 @@ mod tests {
         let device_id = "ak:device:01999999-0000-7000-8000-000000000042";
         let verification_method = format!("{CONTROLLER}#{device_id}");
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
-        let multibase = arkret_core::ed25519_pubkey_to_did_key_multibase(
+        let multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
             &signing_key.verifying_key().to_bytes(),
         );
         let mut unsigned_event = valid_authorize_event(PAIRING_REQUEST_ID);
         unsigned_event["proofs"] = json!([]);
-        let mut event: arkret_core::Event = serde_json::from_value(unsigned_event).unwrap();
+        let mut event: arkret_wire::Event = serde_json::from_value(unsigned_event).unwrap();
         let canonical_bytes =
             arkret_canonical::canonical_json_bytes(&event.digest_payload().unwrap()).unwrap();
-        let mut proof = arkret_core::Proof {
+        let mut proof = arkret_wire::Proof {
             kind: "detached_jws".to_owned(),
             alg: "EdDSA".to_owned(),
             verification_method: verification_method.clone(),
-            event_digest: arkret_core::Hash::new(arkret_canonical::sha256_digest(&canonical_bytes))
-                .unwrap(),
+            event_digest: arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(
+                &canonical_bytes,
+            ))
+            .unwrap(),
             created_at: "2026-07-06T00:01:00.000Z".parse().unwrap(),
             domain: None,
             audience: None,
@@ -1471,7 +1490,7 @@ mod tests {
             "created_at": "2026-07-06T00:01:00.000Z",
             "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
         }]);
-        let parsed: arkret_core::Event = serde_json::from_value(event.clone()).unwrap();
+        let parsed: arkret_wire::Event = serde_json::from_value(event.clone()).unwrap();
         event["proofs"][0]["event_digest"] = json!(parsed.event_digest().unwrap());
         event
     }
