@@ -1,5 +1,5 @@
 //! Canonical account-first handoff, lease, and identity-binding operations.
-use arkret_core::{
+use arkret_models_identity::{
     ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffAllowedOperation, AccountHandoffBinding,
     AccountHandoffOutcome, AccountHandoffRequestBody, Handle, IdentityBindingChallengeRequestBody,
 };
@@ -162,7 +162,7 @@ pub async fn create_account_handoff(
 pub async fn issue_identity_binding_challenge(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<arkret_core::IdentityBindingChallengeOutcome>, ArkretRouteError> {
+) -> Result<Json<arkret_models_identity::IdentityBindingChallengeOutcome>, ArkretRouteError> {
     let (grant, _dpop) = authenticate_account_handoff(
         req,
         depot,
@@ -198,7 +198,7 @@ pub async fn issue_identity_binding_challenge(
     if validated
         .enrollment_authority
         .as_ref()
-        .map(arkret_core::Did::as_str)
+        .map(arkret_identifiers::Did::as_str)
         != Some(expected_authority)
     {
         return Err(failed_precondition(
@@ -209,9 +209,9 @@ pub async fn issue_identity_binding_challenge(
     let arkret_config = depot.arkret_config()?;
     let url_builder = depot.url_builder()?;
     let trust_domain = trust_domain_for(&url_builder, &arkret_config);
-    let trust_domain = arkret_core::TypedTrustDomainId::new(trust_domain)
+    let trust_domain = arkret_identifiers::TypedTrustDomainId::new(trust_domain)
         .map_err(|error| failed_precondition(error.to_string()))?;
-    let audience = arkret_core::Did::new(grant.audience.clone())
+    let audience = arkret_identifiers::Did::new(grant.audience.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
     let origin = depot
         .url_builder()?

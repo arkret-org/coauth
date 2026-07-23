@@ -22,14 +22,18 @@
 //!    full Event JSON.
 use std::sync::{Mutex, OnceLock};
 
-use arkret_core::{
-    AccountDeviceEnrollOutcome, AccountDeviceEnrollRequestBody, Audience, DeviceAuthorizePayload,
-    DeviceEnrollmentAuthorityBinding, DeviceEnrollmentAuthorityBindingKind, DeviceOrPrincipalRef,
-    Event, EventId, EventRequirements, Hlc, NonEmptyString, RealmId, SignedSessionGrantClaims,
-    ed25519_pubkey_to_did_key_multibase,
-};
+use arkret_canonical::ed25519_pubkey_to_did_key_multibase;
 use arkret_hlc::HlcGenerator;
+use arkret_identifiers::{EventId, Hlc, RealmId};
+use arkret_models_collaboration::events_payloads::device_identity::{
+    DeviceAuthorizePayload, DeviceOrPrincipalRef,
+};
+use arkret_models_identity::{
+    AccountDeviceEnrollOutcome, AccountDeviceEnrollRequestBody, DeviceEnrollmentAuthorityBinding,
+    DeviceEnrollmentAuthorityBindingKind, SignedSessionGrantClaims,
+};
 use arkret_signatures::{SignEventOptions, sign_event};
+use arkret_wire::{Audience, Event, EventRequirements, NonEmptyString};
 use chrono::{DateTime, Utc};
 use coauth_data::user::PrincipalDidRepository as _;
 use salvo::prelude::*;
@@ -76,7 +80,7 @@ fn decode_device_public_key(input: &str) -> Result<[u8; 32], ArkretRouteError> {
     // the character `z`, so a failed multibase parse must fall through to the
     // raw-key decoder instead of making the first character a format tag.
     if trimmed.starts_with('z') {
-        if let Ok(raw) = arkret_core::decode_ed25519_multibase(trimmed) {
+        if let Ok(raw) = arkret_canonical::decode_ed25519_multibase(trimmed) {
             return Ok(raw);
         }
     }
@@ -117,7 +121,7 @@ static DEVICE_ENROLL_HLC: OnceLock<Mutex<HlcGenerator>> = OnceLock::new();
 fn fresh_hlc(
     authority: &crate::services::device_enrollment_authority::EnrollmentAuthority,
     realm_id: &RealmId,
-    device_id: &arkret_core::DeviceId,
+    device_id: &arkret_identifiers::DeviceId,
     now: DateTime<Utc>,
 ) -> Result<Hlc, ArkretRouteError> {
     let unix_ms = u64::try_from(now.timestamp_millis().max(0)).unwrap_or(0);
@@ -399,7 +403,7 @@ pub async fn device_enroll_endpoint(
         ));
     }
     let authority_did = enrollment_authority_did;
-    let realm_id_string = arkret_core::principal_control_realm_id(&principal_id);
+    let realm_id_string = arkret_models_identity::principal_control_realm_id(&principal_id);
     let realm_id = RealmId::new(realm_id_string).map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "derived principal-control realm id is invalid: {error}"
@@ -455,7 +459,7 @@ pub async fn device_enroll_endpoint(
 
     let hlc = fresh_hlc(&authority, &realm_id, &device_id, now)?;
     let mut event = Event {
-        event_id: EventId::new(arkret_core::identifiers::new_prefixed_uuid7("ak:event:")).map_err(
+        event_id: EventId::new(arkret_identifiers::new_prefixed_uuid7("ak:event:")).map_err(
             |error| {
                 ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                     format!("failed to mint event id: {error}"),

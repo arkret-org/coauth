@@ -1,8 +1,11 @@
 //! Canonical account-first identity creation and binding.
-use arkret_core::{
+use arkret_models_collaboration::account_lifecycle::{
+    AccountRegisterOutcome, AccountRegisterRequestBody,
+};
+use arkret_models_collaboration::objects::account_status::AccountStatus;
+use arkret_models_identity::{
     AccountBindingReceipt, AccountBindingState, AccountHandoffAllowedOperation,
-    AccountRegisterOutcome, AccountRegisterRequestBody, AccountStatus, DidOperationSubmitOutcome,
-    IdentityCreationOperationStatus,
+    DidOperationSubmitOutcome, IdentityCreationOperationStatus,
 };
 use coauth_data::RepositoryAccess as _;
 use coauth_data::account_handoff::{
@@ -186,8 +189,9 @@ pub async fn account_register_endpoint(
         enrollment_authority.did(),
     )
     .ok_or_else(|| failed_precondition("invalid enrollment authority service reference"))?;
-    let enrollment_authority_did = arkret_core::Did::new(enrollment_authority.did().to_owned())
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let enrollment_authority_did =
+        arkret_identifiers::Did::new(enrollment_authority.did().to_owned())
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     let mut rng = make_rng();
     let mut repo = depot.repo().await?;
@@ -258,7 +262,7 @@ pub async fn account_register_endpoint(
 
 fn validate_registration_transcript(
     context: &IdentityCreationRegistrationContext,
-    registration: &arkret_core::IdentityCreationRegistration,
+    registration: &arkret_models_identity::IdentityCreationRegistration,
 ) -> Result<(), ArkretRouteError> {
     let reserved = context
         .lease
@@ -300,7 +304,7 @@ fn validate_registration_transcript(
 
 fn validate_registry_outcome(
     outcome: &DidOperationSubmitOutcome,
-    principal_id: &arkret_core::Did,
+    principal_id: &arkret_identifiers::Did,
 ) -> Result<(), ArkretRouteError> {
     if outcome.did != *principal_id
         || !matches!(outcome.status.as_str(), "accepted" | "duplicate")
@@ -375,7 +379,7 @@ fn inception_enrollment_authority_ref(
     } else {
         reference.to_owned()
     };
-    arkret_core::DidUrl::new(reference.clone()).ok()?;
+    arkret_wire::DidUrl::new(reference.clone()).ok()?;
     reference
         .strip_prefix(principal_id)
         .is_some_and(|fragment| fragment.starts_with('#') && fragment.len() > 1)
@@ -422,13 +426,13 @@ mod tests {
 
     fn transcript_fixture() -> (
         IdentityCreationRegistrationContext,
-        arkret_core::IdentityCreationRegistration,
+        arkret_models_identity::IdentityCreationRegistration,
     ) {
         let now = Utc.with_ymd_and_hms(2026, 7, 19, 0, 0, 0).unwrap();
         let mut rng = ChaChaRng::seed_from_u64(0x7a11_5c21);
         let service_account_id = new_id(now, &mut rng);
-        let did = arkret_core::Did::new("did:webvh:zfixture:principal.example").unwrap();
-        let operation = arkret_core::DidOperationSubmitRequestBody {
+        let did = arkret_identifiers::Did::new("did:webvh:zfixture:principal.example").unwrap();
+        let operation = arkret_models_identity::DidOperationSubmitRequestBody {
             did: did.clone(),
             did_method: "webvh".to_owned(),
             seq: Some(0),
@@ -439,13 +443,16 @@ mod tests {
             )]),
         };
         let reserved =
-            arkret_core::ReservedIdentityCreation::from_operation(operation.clone()).unwrap();
+            arkret_models_identity::ReservedIdentityCreation::from_operation(operation.clone())
+                .unwrap();
         let request_id =
-            arkret_core::RequestId::new("ak:request:019b0000-0000-7000-8000-000000000071").unwrap();
-        let request_digest = arkret_core::Hash::new(format!("sha256:{}", "7".repeat(64))).unwrap();
-        let audience = arkret_core::Did::new("did:web:principal.example").unwrap();
+            arkret_identifiers::RequestId::new("ak:request:019b0000-0000-7000-8000-000000000071")
+                .unwrap();
+        let request_digest =
+            arkret_identifiers::Hash::new(format!("sha256:{}", "7".repeat(64))).unwrap();
+        let audience = arkret_identifiers::Did::new("did:web:principal.example").unwrap();
         let trust_domain =
-            arkret_core::TypedTrustDomainId::new("ak:trust_domain:example.net").unwrap();
+            arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:example.net").unwrap();
         let lease_id = "D".repeat(32);
         let holder_jkt = "A".repeat(43);
         let challenge_id = "E".repeat(32);
@@ -457,7 +464,7 @@ mod tests {
             service_account_id,
             challenge_id: challenge_id.clone(),
             challenge: challenge_value.clone(),
-            purpose: arkret_core::IdentityBindingPurpose::AccountBinding,
+            purpose: arkret_models_identity::IdentityBindingPurpose::AccountBinding,
             principal_id: did.clone(),
             operation_digest: reserved.operation_digest.clone(),
             lease_id: lease_id.clone(),
@@ -479,7 +486,7 @@ mod tests {
             browser_session_id: None,
             audience: audience.to_string(),
             cnf_jkt: holder_jkt.clone(),
-            allowed_operations: arkret_core::ACCOUNT_HANDOFF_ALLOWED_OPERATIONS,
+            allowed_operations: arkret_models_identity::ACCOUNT_HANDOFF_ALLOWED_OPERATIONS,
             account_handoff_grant: "G".repeat(43),
             issued_at: now,
             expires_at: now + Duration::minutes(10),
@@ -501,16 +508,16 @@ mod tests {
             created_at: now,
             updated_at: now,
         };
-        let registration = arkret_core::IdentityCreationRegistration {
+        let registration = arkret_models_identity::IdentityCreationRegistration {
             lease_id,
             lease_fence: 4,
             did_operation: operation,
-            control_proof: arkret_core::IdentityCreationControlProof {
+            control_proof: arkret_models_identity::IdentityCreationControlProof {
                 proof_kind:
-                    arkret_core::IdentityCreationControlProofKind::DidWebvhInceptionUpdateKey,
+                    arkret_models_identity::IdentityCreationControlProofKind::DidWebvhInceptionUpdateKey,
                 challenge_id,
                 challenge: challenge_value,
-                purpose: arkret_core::IdentityBindingPurpose::AccountBinding,
+                purpose: arkret_models_identity::IdentityBindingPurpose::AccountBinding,
                 principal_id: did,
                 operation_digest: reserved.operation_digest,
                 lease_id: challenge.lease_id.clone(),
@@ -542,7 +549,7 @@ mod tests {
 
         let mut cross_audience = registration.clone();
         cross_audience.control_proof.audience =
-            arkret_core::Did::new("did:web:other.example").unwrap();
+            arkret_identifiers::Did::new("did:web:other.example").unwrap();
         assert!(validate_registration_transcript(&context, &cross_audience).is_err());
 
         let mut cross_origin = registration.clone();
@@ -551,7 +558,7 @@ mod tests {
 
         let mut cross_trust_domain = registration.clone();
         cross_trust_domain.control_proof.trust_domain =
-            arkret_core::TypedTrustDomainId::new("ak:trust_domain:other.example").unwrap();
+            arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:other.example").unwrap();
         assert!(validate_registration_transcript(&context, &cross_trust_domain).is_err());
 
         let mut stale_fence = registration.clone();
