@@ -337,6 +337,7 @@ async fn issue_pre_registration_handoff_session_grant(
         body.device_id
             .as_ref()
             .map(arkret_identifiers::DeviceId::as_str),
+        user.localpart.as_str(),
     )
     .await
     .map_err(|message| {
