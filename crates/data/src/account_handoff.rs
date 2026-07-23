@@ -8,13 +8,13 @@ pub use crate::storage::account_handoff::AccountHandoffRepository;
 #[derive(Clone)]
 pub struct AccountHandoffGrant {
     pub id: Ulid,
-    pub request_id: arkret_core::RequestId,
-    pub request_digest: arkret_core::Hash,
+    pub request_id: arkret_identifiers::RequestId,
+    pub request_digest: arkret_identifiers::Hash,
     pub service_account_id: Ulid,
     pub browser_session_id: Option<Ulid>,
     pub audience: String,
     pub cnf_jkt: String,
-    pub allowed_operations: [arkret_core::AccountHandoffAllowedOperation; 3],
+    pub allowed_operations: [arkret_models_identity::AccountHandoffAllowedOperation; 3],
     pub account_handoff_grant: String,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -46,8 +46,8 @@ impl std::fmt::Debug for AccountHandoffGrant {
 #[derive(Clone, Debug)]
 pub struct AccountHandoffGrantInput {
     pub id: Ulid,
-    pub request_id: arkret_core::RequestId,
-    pub request_digest: arkret_core::Hash,
+    pub request_id: arkret_identifiers::RequestId,
+    pub request_digest: arkret_identifiers::Hash,
     pub service_account_id: Ulid,
     pub browser_session_id: Option<Ulid>,
     pub audience: String,
@@ -100,18 +100,18 @@ pub struct IdentityCreationLeaseRecord {
     pub holder_jkt: String,
     pub fence: u64,
     pub expires_at: DateTime<Utc>,
-    pub reserved_identity: Option<arkret_core::ReservedIdentityCreation>,
+    pub reserved_identity: Option<arkret_models_identity::ReservedIdentityCreation>,
     pub state: IdentityCreationSagaState,
     pub registry_receipt: Option<serde_json::Value>,
-    pub head_event_digest: Option<arkret_core::Hash>,
-    pub binding_receipt: Option<arkret_core::AccountBindingReceipt>,
+    pub head_event_digest: Option<arkret_identifiers::Hash>,
+    pub binding_receipt: Option<arkret_models_identity::AccountBindingReceipt>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
 impl IdentityCreationLeaseRecord {
-    pub fn wire_lease(&self) -> arkret_core::IdentityCreationLease {
-        arkret_core::IdentityCreationLease {
+    pub fn wire_lease(&self) -> arkret_models_identity::IdentityCreationLease {
+        arkret_models_identity::IdentityCreationLease {
             lease_id: self.lease_id.clone(),
             fence: self.fence,
             expires_at: self.expires_at,
@@ -132,7 +132,7 @@ pub enum AccountHandoffCreation {
     },
     Bound {
         grant: AccountHandoffGrant,
-        principal_id: arkret_core::Did,
+        principal_id: arkret_identifiers::Did,
     },
     DuplicateConflict,
     ExpiredReplay,
@@ -140,19 +140,19 @@ pub enum AccountHandoffCreation {
 
 #[derive(Clone, Debug)]
 pub struct IdentityBindingChallengeInput {
-    pub request_id: arkret_core::RequestId,
-    pub request_digest: arkret_core::Hash,
+    pub request_id: arkret_identifiers::RequestId,
+    pub request_digest: arkret_identifiers::Hash,
     pub service_account_id: Ulid,
     pub audience: String,
     pub lease_id: String,
     pub lease_fence: u64,
     pub holder_jkt: String,
-    pub did_operation: arkret_core::DidOperationSubmitRequestBody,
-    pub operation_digest: arkret_core::Hash,
+    pub did_operation: arkret_models_identity::DidOperationSubmitRequestBody,
+    pub operation_digest: arkret_identifiers::Hash,
     pub challenge_id: String,
     pub challenge: String,
     pub origin: String,
-    pub trust_domain: arkret_core::TypedTrustDomainId,
+    pub trust_domain: arkret_identifiers::TypedTrustDomainId,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub lease_expires_at: DateTime<Utc>,
@@ -160,20 +160,20 @@ pub struct IdentityBindingChallengeInput {
 
 #[derive(Clone, Debug)]
 pub struct IdentityBindingChallengeRecord {
-    pub request_id: arkret_core::RequestId,
-    pub request_digest: arkret_core::Hash,
+    pub request_id: arkret_identifiers::RequestId,
+    pub request_digest: arkret_identifiers::Hash,
     pub service_account_id: Ulid,
     pub challenge_id: String,
     pub challenge: String,
-    pub purpose: arkret_core::IdentityBindingPurpose,
-    pub principal_id: arkret_core::Did,
-    pub operation_digest: arkret_core::Hash,
+    pub purpose: arkret_models_identity::IdentityBindingPurpose,
+    pub principal_id: arkret_identifiers::Did,
+    pub operation_digest: arkret_identifiers::Hash,
     pub lease_id: String,
     pub lease_fence: u64,
     pub dpop_jkt: String,
-    pub audience: arkret_core::Did,
+    pub audience: arkret_identifiers::Did,
     pub origin: String,
-    pub trust_domain: arkret_core::TypedTrustDomainId,
+    pub trust_domain: arkret_identifiers::TypedTrustDomainId,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub consumed_at: Option<DateTime<Utc>>,
@@ -181,8 +181,8 @@ pub struct IdentityBindingChallengeRecord {
 }
 
 impl IdentityBindingChallengeRecord {
-    pub fn wire_outcome(&self) -> arkret_core::IdentityBindingChallengeOutcome {
-        arkret_core::IdentityBindingChallengeOutcome {
+    pub fn wire_outcome(&self) -> arkret_models_identity::IdentityBindingChallengeOutcome {
+        arkret_models_identity::IdentityBindingChallengeOutcome {
             request_id: self.request_id.clone(),
             challenge_id: self.challenge_id.clone(),
             challenge: self.challenge.clone(),

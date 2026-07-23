@@ -19,8 +19,9 @@ coauth-email-types = {workspace = true}
 coauth-data-model = {workspace = true}
 coauth-iana = {workspace = true}
 coauth-jose = {workspace = true}
-arkret-core = {workspace = true}
+arkret-identifiers = {workspace = true}
 arkret-models-collaboration = {workspace = true}
+arkret-models-identity = {workspace = true}
 arkret-wire = {workspace = true}
 crc = {workspace = true}
 futures-util = {workspace = true}

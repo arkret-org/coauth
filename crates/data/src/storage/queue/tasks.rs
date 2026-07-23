@@ -1,4 +1,4 @@
-use arkret_core::AgentKeyPairRequestBody;
+use arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody;
 use chrono::{DateTime, Utc};
 use coauth_data::{
     BrowserSession, Session, User, UserEmailAuthentication, UserPhoneAuthentication,

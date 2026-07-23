@@ -1629,8 +1629,9 @@ dependencies = [
 name = "coauth-data"
 version = "0.3.0"
 dependencies = [
- "arkret-core",
+ "arkret-identifiers",
  "arkret-models-collaboration",
+ "arkret-models-identity",
  "arkret-wire",
  "async-trait",
  "chrono",

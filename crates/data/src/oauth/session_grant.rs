@@ -1,4 +1,4 @@
-use arkret_core::GrantId;
+use arkret_identifiers::GrantId;
 use chrono::{DateTime, Utc};
 use coauth_oauth_types::scope::Scope;
 use serde::Serialize;

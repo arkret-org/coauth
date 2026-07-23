@@ -1,6 +1,7 @@
 use std::net::IpAddr;
 
-use arkret_core::{AccountStatus, Handle};
+use arkret_models_collaboration::objects::account_status::AccountStatus;
+use arkret_models_identity::Handle;
 use chrono::{DateTime, Utc};
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
@@ -611,9 +612,9 @@ pub struct PrincipalDidBinding {
     /// Principal DID supplied by the client and verified by the authoritative host.
     pub principal_id: String,
     /// Verified DID history head returned by the authoritative host.
-    pub key_log_head: arkret_core::Hash,
+    pub key_log_head: arkret_identifiers::Hash,
     /// Enrollment authority DID verified in the authoritative DID document.
-    pub enrollment_authority_did: arkret_core::Did,
+    pub enrollment_authority_did: arkret_identifiers::Did,
     /// Entry-0 delegation reference designating coauth's enrollment authority.
     pub enrollment_authority_ref: String,
     pub created_at: DateTime<Utc>,

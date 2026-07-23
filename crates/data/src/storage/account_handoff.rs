@@ -19,7 +19,7 @@ pub trait AccountHandoffRepository: Send + Sync {
     /// Look up a handoff by its replay-protection request identifier.
     async fn get_by_request_id(
         &mut self,
-        request_id: &arkret_core::RequestId,
+        request_id: &arkret_identifiers::RequestId,
     ) -> Result<Option<AccountHandoffGrant>, Self::Error>;
 
     /// Resolve an unexpired, unconsumed handoff bearer value.
@@ -63,7 +63,7 @@ pub trait AccountHandoffRepository: Send + Sync {
         &mut self,
         context: &IdentityCreationRegistrationContext,
         registry_receipt: &serde_json::Value,
-        head_event_digest: &arkret_core::Hash,
+        head_event_digest: &arkret_identifiers::Hash,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error>;
 
@@ -71,7 +71,7 @@ pub trait AccountHandoffRepository: Send + Sync {
     async fn mark_bound(
         &mut self,
         context: &IdentityCreationRegistrationContext,
-        binding_receipt: &arkret_core::AccountBindingReceipt,
+        binding_receipt: &arkret_models_identity::AccountBindingReceipt,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error>;
 
@@ -81,8 +81,8 @@ pub trait AccountHandoffRepository: Send + Sync {
         &mut self,
         service_account_id: coauth_data::Ulid,
         audience: &str,
-        principal_id: &arkret_core::Did,
-        device_id: &arkret_core::DeviceId,
+        principal_id: &arkret_identifiers::Did,
+        device_id: &arkret_identifiers::DeviceId,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error>;
 
@@ -97,7 +97,7 @@ pub trait AccountHandoffRepository: Send + Sync {
 repository_impl!(AccountHandoffRepository:
     async fn get_by_request_id(
         &mut self,
-        request_id: &arkret_core::RequestId,
+        request_id: &arkret_identifiers::RequestId,
     ) -> Result<Option<AccountHandoffGrant>, Self::Error>;
     async fn get_active_by_token(
         &mut self,
@@ -129,21 +129,21 @@ repository_impl!(AccountHandoffRepository:
         &mut self,
         context: &IdentityCreationRegistrationContext,
         registry_receipt: &serde_json::Value,
-        head_event_digest: &arkret_core::Hash,
+        head_event_digest: &arkret_identifiers::Hash,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error>;
     async fn mark_bound(
         &mut self,
         context: &IdentityCreationRegistrationContext,
-        binding_receipt: &arkret_core::AccountBindingReceipt,
+        binding_receipt: &arkret_models_identity::AccountBindingReceipt,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error>;
     async fn claim_first_device_enrollment(
         &mut self,
         service_account_id: coauth_data::Ulid,
         audience: &str,
-        principal_id: &arkret_core::Did,
-        device_id: &arkret_core::DeviceId,
+        principal_id: &arkret_identifiers::Did,
+        device_id: &arkret_identifiers::DeviceId,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error>;
     async fn consume_grant(
