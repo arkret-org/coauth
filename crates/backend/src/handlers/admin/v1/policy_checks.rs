@@ -39,6 +39,7 @@ pub struct PolicyDryRunOutcome {
 
     /// Dry-run decision effect.
     #[schemars(with = "String")]
+    #[salvo(schema(value_type = String))]
     effect: PolicyEffect,
 
     /// Policy identifier that produced the decision.

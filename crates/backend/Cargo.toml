@@ -46,7 +46,7 @@ arkret-models-discovery = {workspace = true}
 arkret-models-identity = {workspace = true}
 arkret-policy = {workspace = true}
 arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
-arkret-wire = {workspace = true,features = ["salvo-oapi"]}
+arkret-wire = {workspace = true}
 arkret-http-client = {workspace = true}
 arkret-egress-policy = {workspace = true}
 arkret-crypto = {workspace = true}
