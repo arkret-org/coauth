@@ -21,8 +21,8 @@
 
 use arkret_canonical::{canonical_json_bytes, sha256_digest};
 use arkret_core::identifiers::new_prefixed_uuid7;
-use arkret_core::models::{RealmOrganizationPayload, RealmOrganizationStatus};
 use arkret_core::{Did, Hash, RealmId};
+use arkret_models_collaboration::{RealmOrganizationPayload, RealmOrganizationStatus};
 use coauth_admin_types::organization_admin::{
     BootstrapAuthorizationInput, BootstrapOrganizationRequest, IssueOrganizationStatementRequest,
     ListOrganizationDelegationsOutcome, OrganizationControlView, OrganizationDelegation,

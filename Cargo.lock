@@ -1453,6 +1453,7 @@ name = "coauth-admin-types"
 version = "0.3.0"
 dependencies = [
  "arkret-core",
+ "arkret-models-collaboration",
  "chrono",
  "coauth-data-model",
  "salvo",
@@ -1628,6 +1629,7 @@ name = "coauth-data"
 version = "0.3.0"
 dependencies = [
  "arkret-core",
+ "arkret-models-collaboration",
  "arkret-wire",
  "async-trait",
  "chrono",
@@ -1660,6 +1662,7 @@ name = "coauth-data-model"
 version = "0.3.0"
 dependencies = [
  "arkret-core",
+ "arkret-models-collaboration",
  "chrono",
  "salvo",
  "schemars 1.2.1",
@@ -1876,6 +1879,7 @@ dependencies = [
  "anyhow",
  "arkret-canonical",
  "arkret-core",
+ "arkret-models-collaboration",
  "arkret-wire",
  "async-trait",
  "chrono",

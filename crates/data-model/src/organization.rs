@@ -1,4 +1,4 @@
-use arkret_core::models::{
+use arkret_models_collaboration::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
 };
 use chrono::{DateTime, Utc};

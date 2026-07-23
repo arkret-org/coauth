@@ -7,7 +7,7 @@
 //! sodmin can render the full organization control state from these DTOs
 //! without touching the database or parsing any product-private fields.
 
-use arkret_core::models::{
+use arkret_models_collaboration::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
     RealmOrganizationStatus,
 };
@@ -216,7 +216,7 @@ pub struct RotateOrganizationControllerRequest {
 /// Request body for `POST /_coauth/admin/organizations/{org}/statements`.
 ///
 /// Produces an organization-side `ak.realm.organization` statement. The signed
-/// statement is returned as the SDK [`arkret_core::models::RealmOrganizationPayload`]
+/// statement is returned as the SDK [`arkret_models_collaboration::RealmOrganizationPayload`]
 /// type — no admin-private wire struct.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(

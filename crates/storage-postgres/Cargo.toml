@@ -17,6 +17,7 @@ workspace = true
 anyhow = {workspace = true}
 arkret-canonical = {workspace = true}
 arkret-core = {workspace = true}
+arkret-models-collaboration = {workspace = true}
 arkret-wire = {workspace = true}
 async-trait = {workspace = true}
 chrono = {workspace = true}

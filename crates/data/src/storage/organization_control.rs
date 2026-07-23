@@ -1,6 +1,6 @@
 //! Organization principal control + organization delegation repository.
 
-use arkret_core::models::{
+use arkret_models_collaboration::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
 };
 use async_trait::async_trait;
