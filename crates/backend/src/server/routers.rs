@@ -113,9 +113,9 @@ pub(super) fn build_oauth_router(router: Router) -> Router {
 }
 pub(super) fn build_account_api_router(router: Router) -> Router {
     use crate::handlers::account::{
-        agents, approval, auth, avatar, bootstrap_admin_status, emails, invite_accept,
-        invite_relay, linked_accounts, notification_prefs, oauth_clients, openapi, password,
-        recovery, register, sessions, site_config, strand, upstream_oauth, users, viewer,
+        agents, approval, auth, avatar, bootstrap_admin_status, emails, invite_relay,
+        linked_accounts, notification_prefs, oauth_clients, openapi, password, recovery, register,
+        sessions, site_config, strand, upstream_oauth, users, viewer,
     };
     use crate::handlers::{arkret, policy_check};
 
@@ -215,7 +215,8 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                 .options(oidc_preflight_handler)
                 .post(arkret::device_enroll_endpoint),
         )
-        .push(Router::with_path("self/policy/check").post(policy_check::post_policy_check));
+        .push(Router::with_path("self/policy/check").post(policy_check::post_policy_check))
+        .push(Router::with_path("{**rest}").goal(arkret_not_found));
 
     let mut coauth_router = Router::with_path("/_coauth")
         .hoop(public_oidc_browser_cors())
@@ -379,13 +380,6 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         )
         // Invite relay (consent-gated forward to target principal)
         .push(Router::with_path("self/account/invites/relay").post(invite_relay::post_invite_relay))
-        // G3.C3: 3PID invite verifier — runs the binding-proof +
-        // subject-proof chain in `services::third_party_invite` and
-        // returns the verified summary. The actual invite-claim
-        // reducer lives on soland; this endpoint is the trusted
-        // pre-flight check the claimant runs before submitting
-        // `ak.invite.claim`.
-        .push(Router::with_path("self/invites/3pid/verify").post(invite_accept::post_verify_invite))
         // Device code link & approval
         .push(Router::with_path("self/device-link").get(approval::device_link_get))
         .push(
@@ -447,6 +441,59 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         .push(coauth_router)
         .push(docs_router)
         .push(Router::with_path("/.well-known/arkret/openapi.yaml").get(arkret_doc_yaml))
+}
+
+#[handler]
+async fn arkret_not_found(req: &Request, res: &mut Response) {
+    let request_id = req
+        .headers()
+        .get("x-arkret-request-id")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("unknown");
+    if let Some(allowed) = arkret_allowed_methods(req.uri().path()) {
+        res.status_code(StatusCode::METHOD_NOT_ALLOWED);
+        if let Ok(value) = http::HeaderValue::from_str(allowed) {
+            res.headers_mut().insert(http::header::ALLOW, value);
+        }
+        res.render(Json(
+            arkret_wire::ErrorEnvelope::new(
+                arkret_wire::ErrorCode::METHOD_NOT_ALLOWED,
+                "method not allowed",
+            )
+            .with_request_id(request_id),
+        ));
+    } else {
+        res.status_code(StatusCode::NOT_FOUND);
+        res.render(Json(
+            arkret_wire::ErrorEnvelope::new(
+                arkret_wire::ErrorCode::UNRECOGNIZED_ENDPOINT,
+                "unrecognized Arkret endpoint",
+            )
+            .with_request_id(request_id),
+        ));
+    }
+}
+
+fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
+    match path {
+        "/_arkret/describe"
+        | "/_arkret/root/identity/describe"
+        | "/_arkret/root/identity/document" => Some("GET"),
+        "/_arkret/root/identity/resolve"
+        | "/_arkret/find/directory/resolve-handle"
+        | "/_arkret/gate/account/auth-sessions/logout"
+        | "/_arkret/gate/account/session-grants/introspect"
+        | "/_arkret/self/policy/check" => Some("POST"),
+        "/_arkret/gate/account/authentication-handoffs"
+        | "/_arkret/gate/account/identity-binding-challenges"
+        | "/_arkret/gate/account/register"
+        | "/_arkret/gate/account/session-grants/refresh"
+        | "/_arkret/gate/account/session-grants/revoke"
+        | "/_arkret/gate/account/session-grants"
+        | "/_arkret/gate/account/agent-key-pair"
+        | "/_arkret/gate/account/device-enroll" => Some("POST, OPTIONS"),
+        _ => None,
+    }
 }
 
 pub(super) fn build_arkret_protocol_openapi_doc(arkret_router: &Router) -> salvo::oapi::OpenApi {

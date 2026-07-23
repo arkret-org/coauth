@@ -13,7 +13,7 @@ use salvo::prelude::*;
 use super::*;
 use crate::handlers::arkret::*;
 use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
-use crate::services::third_party_invite::NonceStore;
+use crate::services::nonce_store::NonceStore;
 
 const SESSION_REVOKE_PROOF_MAX_WINDOW_SECS: i64 = 300;
 

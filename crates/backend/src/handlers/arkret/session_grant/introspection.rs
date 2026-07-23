@@ -37,8 +37,8 @@ fn introspection_grant_record(
         .or_else(|| grant.browser_session_id.map(|id| id.to_string()))
         .unwrap_or_else(|| grant.subject.clone());
     let revocation_ref = grant.browser_session_id.map_or_else(
-        || format!("ak:session-grant:{}", grant.grant_id),
-        |id| format!("ak:session:{id}"),
+        || format!("org.arkret.coauth.session_grant:{}", grant.grant_id),
+        |id| format!("org.arkret.coauth.browser_session:{id}"),
     );
     let scope_details = parsed_payload
         .scope_details

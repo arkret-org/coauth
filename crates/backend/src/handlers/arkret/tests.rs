@@ -221,8 +221,6 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         oob_code_kind: ArkretConfig::default().oob_code_kind,
         password_login_session_grants_enabled: false,
         admin_org_id: None,
-        verification_service_id: None,
-        verification_service_ids: Vec::new(),
         audit_signature_fail_closed: false,
     };
 

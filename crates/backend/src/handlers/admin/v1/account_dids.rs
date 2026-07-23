@@ -27,17 +27,15 @@ use crate::services::did_binding_proof::{
     DidBindingProofError, normalize_did_for_binding, validate_control_proof,
 };
 use crate::services::did_resolver::DidResolverService;
-use crate::services::third_party_invite::NonceStore;
+use crate::services::nonce_store::NonceStore;
 use crate::{AppError, CreatedJsonResult, JsonResult};
 
 /// Process-global single-use store for DID-binding control-proof nonces.
 ///
-/// Mirrors the 3PID invite chain's `shared_nonce_store`
-/// (`handlers::account::invite_accept`). Single-process semantics are
-/// acceptable while coauth runs as a single replica; a multi-replica
-/// deployment would back this with the shared DB (see the note on
-/// [`NonceStore`]). Held behind an `Arc` so verify calls can borrow a
-/// `&NonceStore` into it without cloning the underlying map.
+/// Single-process semantics are acceptable while coauth runs as a single
+/// replica; a multi-replica deployment would back this with the shared DB.
+/// Held behind an `Arc` so verify calls can borrow a `&NonceStore` into it
+/// without cloning the underlying map.
 fn shared_did_binding_nonce_store() -> &'static Arc<NonceStore> {
     static STORE: OnceLock<Arc<NonceStore>> = OnceLock::new();
     STORE.get_or_init(|| Arc::new(NonceStore::new()))

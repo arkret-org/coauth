@@ -55,20 +55,7 @@
 //! state intervenes between the resolved DID-document JWK and the SDK verifier.
 //! The embedded coauth_jose `jwt.verify_with_jwks(...)` path has been removed;
 //! coauth_jose's JWT parser is still used to extract the typed
-//! `BindingStatementClaims` / `VerificationServiceProofClaims` payload.
-//!
-//! ## Verification-service proof
-//!
-//! [`verify_verification_service_proof`] is the sister verifier for the
-//! 3PID invite chain (see `third_party_invite::verify_invite`). It
-//! validates a signed JWT issued by a trusted 3PID verification service
-//! whose claims attest that a 3PID (e.g. email) was verified for the
-//! presented invite. Required claims: `iss` (must be a member of the
-//! configured verification-service allowlist — SEC-07a), `aud` (must equal the
-//! local coauth service DID), `sub` (SHA-256 hex of the normalized 3PID),
-//! `exp` (must be in the future), `nbf` (must be ≤ now), `jti`, and
-//! `nonce`. The signature is verified against the verification
-//! service's resolved DID document JWKS.
+//! `BindingStatementClaims` payload.
 
 use arkret_canonical::canonical_json_bytes;
 use arkret_signatures::proof::verify_detached_ed25519_signature;
@@ -270,7 +257,7 @@ pub async fn validate_control_proof(
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
-    nonce_store: &crate::services::third_party_invite::NonceStore,
+    nonce_store: &crate::services::nonce_store::NonceStore,
     proof_jws: &str,
     account_did: &str,
     nonce: &str,
@@ -588,191 +575,6 @@ fn validate_binding_statement_claims(
     Ok(())
 }
 
-// ─────────────── Verification-service proof (3PID invite chain)
-// ───────────────
-
-/// JWT claims issued by the trusted 3PID verification service.
-///
-/// All fields are MANDATORY. Unknown / missing claims are rejected
-/// up-front via the JSON deserialiser; semantic checks
-/// (`iss` / `aud` / `sub` / `exp` / `nbf`) live in
-/// [`verify_verification_service_proof`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VerificationServiceProofClaims {
-    /// Issuer DID — MUST equal the configured trusted verification
-    /// service DID.
-    pub iss: String,
-    /// Audience — MUST equal the local coauth service DID.
-    pub aud: String,
-    /// Subject — SHA-256 (hex) of the normalized 3PID (e.g. lowercased
-    /// trimmed email address).
-    pub sub: String,
-    /// Expiry, Unix-epoch seconds. MUST be in the future.
-    pub exp: i64,
-    /// Not-before, Unix-epoch seconds. MUST be ≤ now.
-    pub nbf: i64,
-    /// JWT ID. Used for replay defence in the calling layer.
-    pub jti: String,
-    /// Single-use nonce; the upper layer (`third_party_invite`)
-    /// records it for cross-proof linkage.
-    pub nonce: String,
-}
-
-/// Errors returned by [`verify_verification_service_proof`].
-///
-/// The caller MAPS these onto the public
-/// `InviteVerificationError::VerificationProofInvalid` /
-/// `ProofExpired` variants in `third_party_invite.rs`. We keep this
-/// enum private to coauth's service layer (i.e. not exposed on the
-/// wire) so we can grow it without breaking the HTTP surface.
-#[derive(Debug, Error)]
-pub enum VerificationProofError {
-    #[error("JWS could not be parsed: {0}")]
-    InvalidJws(String),
-    #[error("DID resolver failed: {0}")]
-    Resolve(#[from] DidResolveError),
-    #[error("DID document has no verificationMethod entries")]
-    NoVerificationKey,
-
-    #[error("DID resolver result is not acceptable as a full identity fact: {0:?}")]
-    ResolverNotFullIdentityFact(DidResolutionIdentityFactRejection),
-    #[error("JWS header is missing a verificationMethod kid")]
-    MissingVerificationMethod,
-    #[error("JWS alg must be EdDSA, got {0}")]
-    UnsupportedAlgorithm(String),
-    #[error("JWS verificationMethod is not present in the resolved DID document")]
-    VerificationMethodNotFound,
-    #[error("JWS signature did not verify against any verification-service key")]
-    SignatureMismatch,
-    #[error("iss claim {actual:?} is not in the verification-service allowlist {allowlist:?}")]
-    IssuerNotAllowed {
-        allowlist: Vec<String>,
-        actual: String,
-    },
-    #[error("aud claim {actual:?} does not match expected audience {expected:?}")]
-    AudienceMismatch { expected: String, actual: String },
-    #[error("nbf claim {nbf} is in the future (now={now})")]
-    NotYetValid { nbf: i64, now: i64 },
-    #[error("proof has expired: {0}")]
-    Expired(String),
-    #[error("sub claim is empty or malformed")]
-    SubjectMalformed,
-}
-
-/// SEC-07a — exact-match membership test for the verification-service
-/// allowlist (`spec/v1/zh/sync/third-party-invites.md` §2.1 / §4.3 step 2a).
-/// Returns `true` iff `iss` is byte-for-byte equal to an allowlist member.
-/// An empty allowlist always returns `false` (fail closed).
-#[must_use]
-pub fn issuer_is_allowed(allowlist: &[String], iss: &str) -> bool {
-    allowlist.iter().any(|did| did == iss)
-}
-
-/// Verify a verification-service proof JWS.
-///
-/// Steps:
-/// 1. Parse the compact JWS into a typed JWT.
-/// 2. Reject empty / malformed claims (`sub`).
-/// 3. SEC-07a — reject any `iss` not in the verification-service allowlist
-///    (`spec/v1/zh/sync/third-party-invites.md` §2.1 / §4.3 step 2a). This membership gate runs
-///    *before* the subject proof is checked by the caller, so a valid subject proof can never admit
-///    an off-allowlist verifier. Also match `aud` against the expected value.
-/// 4. Reject `nbf > now` and `exp <= now`.
-/// 5. Resolve the issuer DID document, verify the signature against its JWKS.
-///
-/// Replay defence (`jti` deduplication) is NOT done here — the caller
-/// owns the nonce store so a successful verify against a replayed
-/// `jti` doesn't poison the store with garbage entries before the
-/// signature is checked.
-#[allow(clippy::too_many_arguments)]
-pub async fn verify_verification_service_proof(
-    http_client: &reqwest::Client,
-    url_builder: &UrlBuilder,
-    arkret_config: &ArkretConfig,
-    key_store: &Keystore,
-    repo: &mut BoxRepository,
-    did_resolver: &dyn DidResolverService,
-    proof_jws: &str,
-    expected_issuer_dids: &[String],
-    expected_audience: &str,
-    now: DateTime<Utc>,
-) -> Result<VerificationServiceProofClaims, VerificationProofError> {
-    if proof_jws.trim().is_empty() {
-        return Err(VerificationProofError::InvalidJws("empty JWS".into()));
-    }
-
-    let jwt: Jwt<'_, VerificationServiceProofClaims> =
-        Jwt::try_from(proof_jws).map_err(|e| VerificationProofError::InvalidJws(e.to_string()))?;
-    if jwt.header().alg() != &JsonWebSignatureAlg::EdDsa {
-        return Err(VerificationProofError::UnsupportedAlgorithm(
-            jwt.header().alg().to_string(),
-        ));
-    }
-
-    let claims = jwt.payload();
-    if claims.sub.trim().is_empty() {
-        return Err(VerificationProofError::SubjectMalformed);
-    }
-    // SEC-07a / §4.3 step 2a — membership gate. The issuer MUST be in the
-    // explicit allowlist; this runs before the caller's subject-proof check,
-    // so a valid subject proof can never admit an off-allowlist verifier.
-    if !issuer_is_allowed(expected_issuer_dids, &claims.iss) {
-        return Err(VerificationProofError::IssuerNotAllowed {
-            allowlist: expected_issuer_dids.to_vec(),
-            actual: claims.iss.clone(),
-        });
-    }
-    if claims.aud != expected_audience {
-        return Err(VerificationProofError::AudienceMismatch {
-            expected: expected_audience.to_owned(),
-            actual: claims.aud.clone(),
-        });
-    }
-    let now_ts = now.timestamp();
-    if claims.nbf > now_ts {
-        return Err(VerificationProofError::NotYetValid {
-            nbf: claims.nbf,
-            now: now_ts,
-        });
-    }
-    if claims.exp <= now_ts {
-        return Err(VerificationProofError::Expired(format!(
-            "exp {} <= now {}",
-            claims.exp, now_ts
-        )));
-    }
-
-    let verification_method = jwt
-        .header()
-        .kid()
-        .ok_or(VerificationProofError::MissingVerificationMethod)?
-        .to_owned();
-
-    // Resolve the issuer DID and check the signature against the exact
-    // verificationMethod selected by the protected header.
-    let resolution = did_resolver
-        .resolve_did_document(
-            http_client,
-            url_builder,
-            arkret_config,
-            key_store,
-            repo,
-            &claims.iss,
-        )
-        .await?;
-    ensure_full_identity_fact_resolution(&resolution)
-        .map_err(VerificationProofError::ResolverNotFullIdentityFact)?;
-
-    let verification_methods = &resolution.document.verification_method;
-    if verification_methods.is_empty() {
-        return Err(VerificationProofError::NoVerificationKey);
-    }
-    verify_compact_jws_with_sdk(proof_jws, verification_methods, &verification_method)
-        .map_err(|_| VerificationProofError::SignatureMismatch)?;
-
-    Ok(claims.clone())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -831,35 +633,6 @@ mod tests {
                 DidResolutionIdentityFactRejection::CacheOnlyDegraded
             )
         ));
-
-        let verification_err = ensure_full_identity_fact_resolution(&resolution)
-            .map_err(VerificationProofError::ResolverNotFullIdentityFact)
-            .expect_err("degraded resolver must not back verification-service proof success");
-        assert!(matches!(
-            verification_err,
-            VerificationProofError::ResolverNotFullIdentityFact(
-                DidResolutionIdentityFactRejection::CacheOnlyDegraded
-            )
-        ));
-    }
-
-    #[test]
-    fn issuer_allowlist_membership_gate() {
-        // SEC-07a / §4.3 step 2a — only allowlisted issuers pass.
-        let allowlist = vec![
-            "did:web:a.example".to_owned(),
-            "did:web:b.example".to_owned(),
-        ];
-        // Membership hit → allowed.
-        assert!(issuer_is_allowed(&allowlist, "did:web:a.example"));
-        assert!(issuer_is_allowed(&allowlist, "did:web:b.example"));
-        // Off-allowlist issuer → rejected (must not be admitted by any
-        // later subject-proof check).
-        assert!(!issuer_is_allowed(&allowlist, "did:web:evil.example"));
-        // Byte-exact: no prefix / substring leniency.
-        assert!(!issuer_is_allowed(&allowlist, "did:web:a.example#key-1"));
-        // Empty allowlist → fail closed.
-        assert!(!issuer_is_allowed(&[], "did:web:a.example"));
     }
 
     #[test]
@@ -1081,7 +854,7 @@ mod tests {
         // account_did, nonce) inside the freshness window must be
         // rejected as a replay.
         let claims = statement_claims_default();
-        let store = crate::services::third_party_invite::NonceStore::new();
+        let store = crate::services::nonce_store::NonceStore::new();
         let key = format!(
             "{}|{}|{}|{}|{}",
             DID_BINDING_CONTROL_PROOF_SCHEMA,

@@ -561,7 +561,7 @@ mod tests {
 
     fn body() -> CapabilityFanoutBody {
         CapabilityFanoutBody {
-            kind: "ak.coauth.collaboration_capability.fanout.v1".to_owned(),
+            kind: "org.arkret.coauth.collaboration_capability.fanout.v1".to_owned(),
             operation: "grant".to_owned(),
             issuer_service_id: "did:web:coauth.example".to_owned(),
             event_kind: "ak.capability.grant".to_owned(),

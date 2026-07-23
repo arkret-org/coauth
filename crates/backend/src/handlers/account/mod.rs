@@ -29,7 +29,6 @@ pub mod avatar;
 pub mod bootstrap_admin_status;
 pub mod consent_cell_query;
 pub mod emails;
-pub mod invite_accept;
 pub mod invite_relay;
 pub mod linked_accounts;
 pub mod notification_prefs;

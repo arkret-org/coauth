@@ -462,6 +462,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn arkret_unknown_path_and_method_use_protocol_errors() {
+        let service = salvo::Service::new(build_account_api_router(Router::new()));
+
+        let mut unknown = TestClient::get("http://127.0.0.1:8698/_arkret/missing")
+            .send(&service)
+            .await;
+        assert_eq!(unknown.status_code, Some(StatusCode::NOT_FOUND));
+        let unknown_body = unknown.take_json::<serde_json::Value>().await.unwrap();
+        assert_eq!(
+            unknown_body
+                .pointer("/error/code")
+                .and_then(|value| value.as_str()),
+            Some("unrecognized_endpoint")
+        );
+
+        let mut wrong_method = TestClient::get("http://127.0.0.1:8698/_arkret/self/policy/check")
+            .send(&service)
+            .await;
+        assert_eq!(
+            wrong_method.status_code,
+            Some(StatusCode::METHOD_NOT_ALLOWED)
+        );
+        assert_eq!(
+            wrong_method
+                .headers()
+                .get(http::header::ALLOW)
+                .and_then(|value| value.to_str().ok()),
+            Some("POST")
+        );
+        let wrong_method_body = wrong_method.take_json::<serde_json::Value>().await.unwrap();
+        assert_eq!(
+            wrong_method_body
+                .pointer("/error/code")
+                .and_then(|value| value.as_str()),
+            Some("method_not_allowed")
+        );
+    }
+
+    #[tokio::test]
     async fn session_grants_preflight_allows_dpop_header() {
         let service = salvo::Service::new(build_account_api_router(Router::new()));
         for path in [

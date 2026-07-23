@@ -15,8 +15,8 @@ use sha2::Digest as _;
 use super::*;
 use crate::handlers::arkret::*;
 use crate::services::device_signing_directory::resolve_authorized_device_signing_key;
+use crate::services::nonce_store::NonceStore;
 use crate::services::resolved_principal_audiences;
-use crate::services::third_party_invite::NonceStore;
 
 const SOFT_LOGOUT_RESTORE_OPERATION: &str = "resume_soft_logged_out_session";
 const SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS: i64 = 300;

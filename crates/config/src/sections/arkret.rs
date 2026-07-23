@@ -303,36 +303,6 @@ pub struct ArkretConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admin_org_id: Option<String>,
 
-    /// Round 4 — DID of the trusted 3PID verification service whose
-    /// `binding_proof` JWTs this coauth deployment will accept on
-    /// `POST /_coauth/self/invites/3pid/verify`. When omitted, the invite
-    /// verifier endpoint returns `503 verifier_not_configured` because
-    /// it has no trusted `iss` to compare against.
-    ///
-    /// Override at runtime via `COAUTH_VERIFICATION_SERVICE_ID`.
-    ///
-    /// Deprecated single-value form. New deployments use
-    /// [`Self::verification_service_ids`]; this field is ignored by the
-    /// effective allowlist.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub verification_service_id: Option<String>,
-
-    /// SEC-07a — explicit allowlist of trusted 3PID verification-service
-    /// DIDs whose `binding_proof` JWTs this coauth deployment will accept
-    /// on `POST /_coauth/self/invites/3pid/verify`.
-    ///
-    /// Per `spec/v1/zh/sync/third-party-invites.md` §2.1 (Allowlist MUST)
-    /// the verification service is the trust root of a 3PID invite, so the
-    /// acceptable `verification_service_id` MUST be constrained to an
-    /// explicit authorization set rather than taken from invite metadata.
-    /// Any `binding_proof.verification_service_id` not in this set MUST be
-    /// rejected (and MUST NOT be admitted merely because the `subject_proof`
-    /// is valid — see §4.3 step 2a).
-    ///
-    /// The effective set is computed by [`Self::verification_service_allowlist`].
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub verification_service_ids: Vec<String>,
-
     /// Require signed admin-audit writes to succeed before committing
     /// security-sensitive admin mutations. Defaults to `false` so existing
     /// deployments tolerate missing service signing keys during rollout; set
@@ -367,8 +337,6 @@ impl Default for ArkretConfig {
             oob_code_kind: OobCodeKindConfig::default(),
             password_login_session_grants_enabled: false,
             admin_org_id: None,
-            verification_service_id: None,
-            verification_service_ids: Vec::new(),
             audit_signature_fail_closed: false,
         }
     }
@@ -391,31 +359,7 @@ impl ArkretConfig {
             && matches!(self.oob_code_kind, OobCodeKindConfig::OfflineVerifiable)
             && !self.password_login_session_grants_enabled
             && self.admin_org_id.is_none()
-            && self.verification_service_id.is_none()
-            && self.verification_service_ids.is_empty()
             && !self.audit_signature_fail_closed
-    }
-
-    /// SEC-07a — effective allowlist of trusted 3PID verification-service
-    /// DIDs from the multi-value [`Self::verification_service_ids`].
-    ///
-    /// Empty/whitespace-only entries are dropped and duplicates are
-    /// collapsed. An empty result means no verifier is configured and the
-    /// verify endpoint MUST fail closed
-    /// (`503 verifier_not_configured`).
-    #[must_use]
-    pub fn verification_service_allowlist(&self) -> Vec<String> {
-        let mut out: Vec<String> = Vec::new();
-        let mut push = |candidate: &str| {
-            let trimmed = candidate.trim();
-            if !trimmed.is_empty() && !out.iter().any(|existing| existing == trimmed) {
-                out.push(trimmed.to_owned());
-            }
-        };
-        for did in &self.verification_service_ids {
-            push(did);
-        }
-        out
     }
 
     /// Set of host names this deployment trusts as outbound
@@ -874,59 +818,6 @@ mod tests {
         .unwrap();
         assert_eq!(config.identity_services[0].name, "identity-a");
         assert!(config.validate(&figment::Figment::new()).is_ok());
-    }
-
-    #[test]
-    fn verification_allowlist_ignores_deprecated_single_value() {
-        let config = ArkretConfig {
-            verification_service_id: Some("did:web:verifier.example".to_owned()),
-            ..ArkretConfig::default()
-        };
-        assert!(config.verification_service_allowlist().is_empty());
-    }
-
-    #[test]
-    fn verification_allowlist_merges_and_dedups() {
-        let config = ArkretConfig {
-            verification_service_id: Some("did:web:a.example".to_owned()),
-            verification_service_ids: vec![
-                "did:web:a.example".to_owned(),
-                "  ".to_owned(), // whitespace dropped
-                "did:web:b.example".to_owned(),
-            ],
-            ..ArkretConfig::default()
-        };
-        assert_eq!(
-            config.verification_service_allowlist(),
-            vec![
-                "did:web:a.example".to_owned(),
-                "did:web:b.example".to_owned()
-            ]
-        );
-    }
-
-    #[test]
-    fn verification_allowlist_empty_when_unset() {
-        assert!(
-            ArkretConfig::default()
-                .verification_service_allowlist()
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn verification_dids_deserializes_list() {
-        let config: ArkretConfig = serde_json::from_value(serde_json::json!({
-            "verification_service_ids": ["did:web:x.example", "did:web:y.example"]
-        }))
-        .unwrap();
-        assert_eq!(
-            config.verification_service_allowlist(),
-            vec![
-                "did:web:x.example".to_owned(),
-                "did:web:y.example".to_owned()
-            ]
-        );
     }
 
     #[test]

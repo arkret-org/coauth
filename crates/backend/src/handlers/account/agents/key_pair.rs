@@ -1449,6 +1449,7 @@ mod tests {
         let mut proof = arkret_wire::Proof {
             kind: "detached_jws".to_owned(),
             alg: "EdDSA".to_owned(),
+            proof_purpose: None,
             verification_method: verification_method.clone(),
             event_digest: arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(
                 &canonical_bytes,

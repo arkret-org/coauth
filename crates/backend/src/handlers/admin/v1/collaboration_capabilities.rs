@@ -309,7 +309,7 @@ pub async fn revoke_handler(
 /// Fanout envelope kind expected by soland's
 /// `/_soland/root/authz/capability-fanout` handler (shared contract in
 /// `soland_contracts::integration::capability_fanout`).
-const CAPABILITY_FANOUT_KIND: &str = "ak.coauth.collaboration_capability.fanout.v1";
+const CAPABILITY_FANOUT_KIND: &str = "org.arkret.coauth.collaboration_capability.fanout.v1";
 
 fn build_grant_fanout_payload(
     grant_event_id: &str,
