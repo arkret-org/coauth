@@ -386,7 +386,6 @@ dependencies = [
  "arkret-canonical",
  "arkret-models-collaboration",
  "arkret-models-crypto",
- "arkret-models-integration",
  "arkret-schema",
  "arkret-wire",
  "chrono",
