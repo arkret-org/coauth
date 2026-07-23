@@ -23,7 +23,10 @@ use crate::handlers::arkret::*;
 pub async fn issue_session_grant_endpoint(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<arkret_core::SessionGrantOutcome>, ArkretRouteError> {
+) -> Result<
+    Json<arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome>,
+    ArkretRouteError,
+> {
     use crate::handlers::account::auth::oidc_bridge::{
         OidcCodeExchangeInput, exchange_oidc_code_for_session_grant,
     };
@@ -33,10 +36,11 @@ pub async fn issue_session_grant_endpoint(
         .await
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
     require_principal_id(&raw_body)?;
-    let body: arkret_core::SessionGrantRequestBody = serde_json::from_value(raw_body.clone())
-        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
+    let body: arkret_models_collaboration::session_grant_bodies::SessionGrantRequestBody =
+        serde_json::from_value(raw_body.clone())
+            .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
     match body.proof.proof_kind {
-        arkret_core::SessionGrantProofKind::OidcCodeExchange => {
+        arkret_models_identity::SessionGrantProofKind::OidcCodeExchange => {
             let dpop_binding = extract_kickoff_dpop(req, depot).await?;
             let proof = &body.proof;
             let expected_principal_id = body.principal_id.as_str().to_owned();
@@ -63,13 +67,14 @@ pub async fn issue_session_grant_endpoint(
                 .await
                 .map_err(map_oidc_exchange_error)?;
 
-            let device_id = arkret_core::DeviceId::new(success.device_id.clone()).map_err(|e| {
-                ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
-                    format!("issued grant carried a non-protocol device_id: {e}"),
-                ))
-            })?;
-            let principal_id =
-                arkret_core::Did::new(success.principal_did.clone()).map_err(|e| {
+            let device_id =
+                arkret_identifiers::DeviceId::new(success.device_id.clone()).map_err(|e| {
+                    ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                        format!("issued grant carried a non-protocol device_id: {e}"),
+                    ))
+                })?;
+            let principal_id = arkret_identifiers::Did::new(success.principal_did.clone())
+                .map_err(|e| {
                     ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                         format!("issued grant carried a non-DID principal_id: {e}"),
                     ))
@@ -81,32 +86,34 @@ pub async fn issue_session_grant_endpoint(
             // overlay and MUST be omitted (None) for human grants — the prior
             // code wrote these three into `scope_details`, violating its
             // `additionalProperties:false` agent-only schema.
-            let grant_id =
-                arkret_core::GrantId::new(success.persisted_grant_id.clone()).map_err(|e| {
+            let grant_id = arkret_identifiers::GrantId::new(success.persisted_grant_id.clone())
+                .map_err(|e| {
                     ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                         format!("issued grant carried a non-protocol grant_id: {e}"),
                     ))
                 })?;
-            let audience =
-                arkret_core::Did::new(success.session_grant.audience.clone()).map_err(|e| {
+            let audience = arkret_identifiers::Did::new(success.session_grant.audience.clone())
+                .map_err(|e| {
                     ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                         format!("issued grant carried a non-DID audience: {e}"),
                     ))
                 })?;
 
-            Ok(Json(arkret_core::SessionGrantOutcome {
-                principal_id,
-                device_id: Some(device_id),
-                session_grant: success.session_grant.grant_jwt.clone(),
-                expires_at: success.session_grant.expires_at_timestamp,
-                grant_id: Some(grant_id),
-                session_public_key: Some(success.session_grant.session_public_key.clone()),
-                audience: Some(audience),
-                granted_scope: success.session_grant.scopes.clone(),
-                scope_details: None,
-            }))
+            Ok(Json(
+                arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome {
+                    principal_id,
+                    device_id: Some(device_id),
+                    session_grant: success.session_grant.grant_jwt.clone(),
+                    expires_at: success.session_grant.expires_at_timestamp,
+                    grant_id: Some(grant_id),
+                    session_public_key: Some(success.session_grant.session_public_key.clone()),
+                    audience: Some(audience),
+                    granted_scope: success.session_grant.scopes.clone(),
+                    scope_details: None,
+                },
+            ))
         }
-        arkret_core::SessionGrantProofKind::AgentKeyProof => {
+        arkret_models_identity::SessionGrantProofKind::AgentKeyProof => {
             require_agent_runtime_device_id(&body)?;
             let dpop_binding = extract_kickoff_dpop(req, depot).await?;
             // AKP-0008 §4.6: independent agent_key_proof validator. MUST NOT
@@ -119,7 +126,7 @@ pub async fn issue_session_grant_endpoint(
             )?;
             issue_agent_key_proof_session_grant(req, depot, binding, &body).await
         }
-        arkret_core::SessionGrantProofKind::PreRegistrationHandoff => {
+        arkret_models_identity::SessionGrantProofKind::PreRegistrationHandoff => {
             issue_pre_registration_handoff_session_grant(req, depot, &body).await
         }
         other => Err(ArkretRouteError::coded(
@@ -133,7 +140,7 @@ pub async fn issue_session_grant_endpoint(
 }
 
 fn require_agent_runtime_device_id(
-    body: &arkret_core::SessionGrantRequestBody,
+    body: &arkret_models_collaboration::session_grant_bodies::SessionGrantRequestBody,
 ) -> Result<(), ArkretRouteError> {
     if body.device_id.is_none() {
         return Err(ArkretRouteError::coded(
@@ -164,8 +171,11 @@ async fn extract_kickoff_dpop(
 async fn issue_pre_registration_handoff_session_grant(
     req: &Request,
     depot: &Depot,
-    body: &arkret_core::SessionGrantRequestBody,
-) -> Result<Json<arkret_core::SessionGrantOutcome>, ArkretRouteError> {
+    body: &arkret_models_collaboration::session_grant_bodies::SessionGrantRequestBody,
+) -> Result<
+    Json<arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome>,
+    ArkretRouteError,
+> {
     use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
     use coauth_data::RepositoryAccess as _;
     use coauth_data::user::{
@@ -175,12 +185,12 @@ async fn issue_pre_registration_handoff_session_grant(
     let (handoff, dpop) = super::super::account_handoff::authenticate_account_handoff(
         req,
         depot,
-        arkret_core::AccountHandoffAllowedOperation::IssueSessionGrant,
+        arkret_models_identity::AccountHandoffAllowedOperation::IssueSessionGrant,
     )
     .await?;
     super::super::account_handoff::enforce_handoff_operation(
         &handoff,
-        arkret_core::AccountHandoffAllowedOperation::IssueSessionGrant,
+        arkret_models_identity::AccountHandoffAllowedOperation::IssueSessionGrant,
     )?;
     let proof = &body.proof;
     if proof.audience.as_str() != handoff.audience
@@ -324,7 +334,9 @@ async fn issue_pre_registration_handoff_session_grant(
         &binding.principal_id,
         operation_bearer,
         user.display_name.as_deref(),
-        body.device_id.as_ref().map(arkret_core::DeviceId::as_str),
+        body.device_id
+            .as_ref()
+            .map(arkret_identifiers::DeviceId::as_str),
     )
     .await
     .map_err(|message| {
@@ -362,25 +374,29 @@ async fn issue_pre_registration_handoff_session_grant(
     }
     repo.save().await?;
 
-    Ok(Json(arkret_core::SessionGrantOutcome {
-        principal_id: body.principal_id.clone(),
-        device_id: body.device_id.clone(),
-        session_grant: material.grant_jwt,
-        expires_at: material.expires_at_timestamp,
-        grant_id: Some(
-            arkret_core::GrantId::new(persisted.grant_id.to_string())
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-        ),
-        session_public_key: Some(material.session_public_key),
-        audience: Some(proof.audience.clone()),
-        granted_scope: material.scopes,
-        scope_details: None,
-    }))
+    Ok(Json(
+        arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome {
+            principal_id: body.principal_id.clone(),
+            device_id: body.device_id.clone(),
+            session_grant: material.grant_jwt,
+            expires_at: material.expires_at_timestamp,
+            grant_id: Some(
+                arkret_identifiers::GrantId::new(persisted.grant_id.to_string())
+                    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            ),
+            session_public_key: Some(material.session_public_key),
+            audience: Some(proof.audience.clone()),
+            granted_scope: material.scopes,
+            scope_details: None,
+        },
+    ))
 }
 
 fn require_agent_key_proof_dpop_binding(
     binding: Option<crate::handlers::account::auth::DpopSessionBinding>,
-    body_binding: Option<&arkret_core::SessionGrantDpopBindingProof>,
+    body_binding: Option<
+        &arkret_models_collaboration::session_grant_bodies::SessionGrantDpopBindingProof,
+    >,
 ) -> Result<crate::handlers::account::auth::DpopSessionBinding, ArkretRouteError> {
     let binding = binding.ok_or_else(|| {
         ArkretRouteError::coded(
@@ -415,8 +431,11 @@ async fn issue_agent_key_proof_session_grant(
     _req: &mut Request,
     depot: &Depot,
     dpop_binding: crate::handlers::account::auth::DpopSessionBinding,
-    body: &arkret_core::SessionGrantRequestBody,
-) -> Result<Json<arkret_core::SessionGrantOutcome>, ArkretRouteError> {
+    body: &arkret_models_collaboration::session_grant_bodies::SessionGrantRequestBody,
+) -> Result<
+    Json<arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome>,
+    ArkretRouteError,
+> {
     use crate::handlers::account::agents::{
         AgentSessionProofError, enforce_authoritative_agent_lifecycle, validate_agent_session_proof,
     };
@@ -543,11 +562,12 @@ async fn issue_agent_key_proof_session_grant(
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
-    let principal_id = arkret_core::Did::new(authorization.agent_id.clone()).map_err(|e| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "agent principal is not a valid DID: {e}"
-        )))
-    })?;
+    let principal_id =
+        arkret_identifiers::Did::new(authorization.agent_id.clone()).map_err(|e| {
+            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                "agent principal is not a valid DID: {e}"
+            )))
+        })?;
 
     // grant_id / session_public_key / audience are SessionGrantOutcome
     // top-level fields (mirroring SessionGrantRefreshOutcome), NOT entries in
@@ -555,28 +575,31 @@ async fn issue_agent_key_proof_session_grant(
     // agent overlay (AKP-0008 §4.6); the JWT-internal scope details with the
     // canonical constraint projection are already baked into the minted grant
     // above.
-    let grant_id = arkret_core::GrantId::new(persisted.grant_id.to_string()).map_err(|e| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "issued agent grant carried a non-protocol grant_id: {e}"
-        )))
-    })?;
-    let wire_audience = arkret_core::Did::new(material.audience.clone()).map_err(|e| {
+    let grant_id =
+        arkret_identifiers::GrantId::new(persisted.grant_id.to_string()).map_err(|e| {
+            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                "issued agent grant carried a non-protocol grant_id: {e}"
+            )))
+        })?;
+    let wire_audience = arkret_identifiers::Did::new(material.audience.clone()).map_err(|e| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "issued agent grant carried a non-DID audience: {e}"
         )))
     })?;
 
-    Ok(Json(arkret_core::SessionGrantOutcome {
-        principal_id,
-        device_id: body.device_id.clone(),
-        session_grant: material.grant_jwt,
-        expires_at: material.expires_at_timestamp,
-        grant_id: Some(grant_id),
-        session_public_key: Some(material.session_public_key.clone()),
-        audience: Some(wire_audience),
-        granted_scope: material.scopes,
-        scope_details: Some(authorization.wire_scope_details),
-    }))
+    Ok(Json(
+        arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome {
+            principal_id,
+            device_id: body.device_id.clone(),
+            session_grant: material.grant_jwt,
+            expires_at: material.expires_at_timestamp,
+            grant_id: Some(grant_id),
+            session_public_key: Some(material.session_public_key.clone()),
+            audience: Some(wire_audience),
+            granted_scope: material.scopes,
+            scope_details: Some(authorization.wire_scope_details),
+        },
+    ))
 }
 
 fn require_principal_id(raw_body: &serde_json::Value) -> Result<(), ArkretRouteError> {
@@ -755,9 +778,11 @@ mod tests {
     fn agent_key_proof_session_grant_requires_dpop_header_binding() {
         let err = unwrap_binding_error(require_agent_key_proof_dpop_binding(
             None,
-            Some(&arkret_core::SessionGrantDpopBindingProof {
-                proof_jwt: "proof.jwt".to_owned(),
-            }),
+            Some(
+                &arkret_models_collaboration::session_grant_bodies::SessionGrantDpopBindingProof {
+                    proof_jwt: "proof.jwt".to_owned(),
+                },
+            ),
         ));
 
         assert_coded(
@@ -785,9 +810,11 @@ mod tests {
     fn agent_key_proof_session_grant_rejects_mismatched_body_dpop_binding() {
         let err = unwrap_binding_error(require_agent_key_proof_dpop_binding(
             Some(test_dpop_binding("header.proof.jwt")),
-            Some(&arkret_core::SessionGrantDpopBindingProof {
-                proof_jwt: "body.proof.jwt".to_owned(),
-            }),
+            Some(
+                &arkret_models_collaboration::session_grant_bodies::SessionGrantDpopBindingProof {
+                    proof_jwt: "body.proof.jwt".to_owned(),
+                },
+            ),
         ));
 
         assert_coded(

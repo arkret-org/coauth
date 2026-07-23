@@ -1,6 +1,5 @@
 use arkret_canonical::{format_timestamp_canonical, normalize_timestamp_canonical};
-use arkret_core::identifiers::new_prefixed_uuid7;
-use arkret_core::{DeviceId, GrantId};
+use arkret_identifiers::{DeviceId, GrantId, new_prefixed_uuid7};
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
 #[cfg(test)]
@@ -137,7 +136,7 @@ fn issue_session_grant_for_audience_inner(
     let payload = SignedSessionGrantClaims {
         kind: "ak.session.grant".to_owned(),
         grant_id: grant_id.clone(),
-        subject: arkret_core::Did::new(subject.clone())
+        subject: arkret_identifiers::Did::new(subject.clone())
             .map_err(|_| SessionGrantError::PrincipalUnknown)?,
         audience: audience.clone(),
         scopes: scopes.clone(),
@@ -278,7 +277,7 @@ pub(crate) fn mint_agent_session_grant(
     let payload = SignedSessionGrantClaims {
         kind: "ak.session.grant".to_owned(),
         grant_id: grant_id.clone(),
-        subject: arkret_core::Did::new(agent_id.to_owned())
+        subject: arkret_identifiers::Did::new(agent_id.to_owned())
             .map_err(|_| SessionGrantError::PrincipalUnknown)?,
         audience: audience.clone(),
         scopes: scopes.clone(),
@@ -286,7 +285,7 @@ pub(crate) fn mint_agent_session_grant(
         expires_at,
         session_id,
         cnf,
-        proof_kind: Some(arkret_core::SessionGrantProofKind::AgentKeyProof),
+        proof_kind: Some(arkret_models_identity::SessionGrantProofKind::AgentKeyProof),
         scope_details: Some(scope_details),
     };
     payload.validate()?;

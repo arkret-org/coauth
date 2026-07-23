@@ -6,7 +6,7 @@ mod revoke;
 mod session_logout;
 mod types;
 
-pub(crate) use arkret_core::{SessionGrantCnf, SignedSessionGrantClaims};
+pub(crate) use arkret_models_identity::{SessionGrantCnf, SignedSessionGrantClaims};
 pub use introspection::introspect_session_grant;
 #[cfg(test)]
 pub(crate) use introspection::{introspection_status, session_grant_jwt_hash};

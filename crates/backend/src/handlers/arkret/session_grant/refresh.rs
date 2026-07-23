@@ -1,10 +1,11 @@
 use std::sync::{Arc, OnceLock};
 
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
-use arkret_core::{
-    DeviceId, Did, Hash, SessionGrantProofKind, SessionGrantRefreshOutcome,
-    SessionGrantRefreshProof, SessionGrantRefreshRequestBody,
+use arkret_identifiers::{DeviceId, Did, Hash};
+use arkret_models_collaboration::session_grant_bodies::{
+    SessionGrantRefreshOutcome, SessionGrantRefreshProof, SessionGrantRefreshRequestBody,
 };
+use arkret_models_identity::SessionGrantProofKind;
 use chrono::{DateTime, Utc};
 use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
@@ -122,7 +123,7 @@ fn required_proof_hash<'a>(
 ) -> Result<&'a str, ArkretRouteError> {
     value
         .as_ref()
-        .map(arkret_core::Hash::as_str)
+        .map(arkret_identifiers::Hash::as_str)
         .ok_or_else(|| did_proof_required(format!("soft logout DID proof requires {field}")))
 }
 

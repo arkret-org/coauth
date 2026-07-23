@@ -1,4 +1,6 @@
-use arkret_core::{AuthSessionLogoutOutcome, AuthSessionLogoutRequestBody};
+use arkret_models_collaboration::session_grant_bodies::{
+    AuthSessionLogoutOutcome, AuthSessionLogoutRequestBody,
+};
 use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
 

@@ -1,7 +1,8 @@
 use std::sync::{Arc, OnceLock};
 
-use arkret_core::{
-    AccountLifecycleProof, DeviceId, Did, GrantId, SessionRevokeOutcome, SessionRevokeRequestBody,
+use arkret_identifiers::{DeviceId, Did, GrantId};
+use arkret_models_collaboration::account_lifecycle::{
+    AccountLifecycleProof, SessionRevokeOutcome, SessionRevokeRequestBody,
 };
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::oauth::SessionGrantFilter;
@@ -189,7 +190,7 @@ fn grant_is_agent_delegated_to_controller(grant: &SessionGrant, controller_id: &
     let Some(payload) = grant_payload(grant) else {
         return false;
     };
-    if payload.proof_kind != Some(arkret_core::SessionGrantProofKind::AgentKeyProof) {
+    if payload.proof_kind != Some(arkret_models_identity::SessionGrantProofKind::AgentKeyProof) {
         return false;
     }
     payload
@@ -349,7 +350,7 @@ async fn verify_cross_session_lifecycle_proof(
 
     let replay_key = format!(
         "{}|{}|{}|{}|{}|{}",
-        arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_REVOKE_SESSION,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REVOKE_SESSION,
         current_grant.subject,
         current_device_id,
         proof.audience,

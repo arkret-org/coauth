@@ -1,9 +1,10 @@
-use arkret_core::{
-    DeviceId, Did, FreshnessState, SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_TYPE,
-    SessionGrantIntrospectGrant, SessionGrantIntrospectOutcome, SessionGrantIntrospectRequestBody,
-    SessionGrantIntrospectStatus, SessionGrantIntrospectionProof,
-    SessionGrantIntrospectionProofClaims, SessionGrantScopeDetails,
+use arkret_identifiers::{DeviceId, Did};
+use arkret_models_collaboration::session_grant_bodies::{
+    SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_TYPE, SessionGrantIntrospectGrant,
+    SessionGrantIntrospectOutcome, SessionGrantIntrospectRequestBody, SessionGrantIntrospectStatus,
+    SessionGrantIntrospectionProof, SessionGrantIntrospectionProofClaims, SessionGrantScopeDetails,
 };
+use arkret_wire::FreshnessState;
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::user::PrincipalDidRepository as _;
 use coauth_data::{BrowserSession, SessionGrant, User};
@@ -380,7 +381,7 @@ pub async fn introspect_session_grant(
             .ok()
             .map(|jwt| jwt.payload().clone());
         let is_agent_grant = parsed_payload.as_ref().is_some_and(|payload| {
-            payload.proof_kind == Some(arkret_core::SessionGrantProofKind::AgentKeyProof)
+            payload.proof_kind == Some(arkret_models_identity::SessionGrantProofKind::AgentKeyProof)
         });
         if is_agent_grant {
             let lifecycle_alive =
@@ -432,7 +433,7 @@ pub async fn introspect_session_grant(
         .then(|| introspection_grant_record(&grant, browser_session.as_ref()))
         .transpose()?;
     if let Some(record) = grant_record.as_mut()
-        && record.proof_kind == Some(arkret_core::SessionGrantProofKind::AgentKeyProof)
+        && record.proof_kind == Some(arkret_models_identity::SessionGrantProofKind::AgentKeyProof)
     {
         record.freshness_state = Some(if active {
             FreshnessState::Fresh
