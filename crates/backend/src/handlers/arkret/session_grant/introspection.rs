@@ -1,7 +1,8 @@
 use arkret_core::{
-    DeviceId, Did, SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_TYPE, SessionGrantIntrospectGrant,
-    SessionGrantIntrospectOutcome, SessionGrantIntrospectRequestBody, SessionGrantIntrospectStatus,
-    SessionGrantIntrospectionProof, SessionGrantIntrospectionProofClaims, SessionGrantScopeDetails,
+    DeviceId, Did, FreshnessState, SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_TYPE,
+    SessionGrantIntrospectGrant, SessionGrantIntrospectOutcome, SessionGrantIntrospectRequestBody,
+    SessionGrantIntrospectStatus, SessionGrantIntrospectionProof,
+    SessionGrantIntrospectionProofClaims, SessionGrantScopeDetails,
 };
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::user::PrincipalDidRepository as _;
@@ -40,8 +41,8 @@ fn introspection_grant_record(
     );
     let scope_details = parsed_payload
         .scope_details
-        .clone()
-        .map(serde_json::from_value::<SessionGrantScopeDetails>)
+        .as_ref()
+        .map(project_scope_details)
         .transpose()
         .map_err(|error| {
             ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
@@ -86,6 +87,49 @@ fn introspection_grant_record(
         scope_details,
         freshness_state: None,
     })
+}
+
+fn project_scope_details(
+    value: &serde_json::Value,
+) -> serde_json::Result<SessionGrantScopeDetails> {
+    let mut object = value.as_object().cloned().ok_or_else(|| {
+        serde_json::Error::io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "session grant scope_details must be an object",
+        ))
+    })?;
+    object.retain(|field, _| {
+        matches!(
+            field.as_str(),
+            "realm_ids" | "strand_ids" | "track_names" | "participation"
+        )
+    });
+    serde_json::from_value(serde_json::Value::Object(object))
+}
+
+#[cfg(test)]
+mod scope_projection_tests {
+    use super::*;
+
+    #[test]
+    fn internal_agent_scope_projects_only_wire_fields() {
+        let projected = project_scope_details(&serde_json::json!({
+            "controller_id": "did:web:controller.example",
+            "agent_key_authorization_ref": "ak:event:01904100-0000-7000-8000-000000000001",
+            "realm_ids": [],
+            "strand_ids": [],
+            "constraints": {"allowed_endpoints": []}
+        }))
+        .unwrap();
+
+        assert!(projected.realm_ids.is_empty());
+        assert!(projected.strand_ids.is_empty());
+    }
+
+    #[test]
+    fn invalid_scope_details_shape_still_fails_closed() {
+        assert!(project_scope_details(&serde_json::json!([])).is_err());
+    }
 }
 
 pub(crate) fn introspection_status(
@@ -383,10 +427,19 @@ pub async fn introspect_session_grant(
     // Only NotFound / AudienceMismatch withhold it — a `proof_required` advisory
     // does NOT, or the default grant+DPoP path could never obtain the cnf_jkt it
     // must verify against.
-    let grant_record = (status != SessionGrantIntrospectStatus::NotFound
+    let mut grant_record = (status != SessionGrantIntrospectStatus::NotFound
         && status != SessionGrantIntrospectStatus::AudienceMismatch)
         .then(|| introspection_grant_record(&grant, browser_session.as_ref()))
         .transpose()?;
+    if let Some(record) = grant_record.as_mut()
+        && record.proof_kind == Some(arkret_core::SessionGrantProofKind::AgentKeyProof)
+    {
+        record.freshness_state = Some(if active {
+            FreshnessState::Fresh
+        } else {
+            FreshnessState::Stale
+        });
+    }
 
     // Introspection is READ-ONLY. The session grant is the (minutes-to-hours,
     // multi-day-via-rotation) refresh credential: the legitimate device

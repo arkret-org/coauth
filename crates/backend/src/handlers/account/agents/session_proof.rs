@@ -45,6 +45,7 @@ const AGENT_SERVICE_SCOPE_ACTIONS: &[&str] = &[
     "ak.self.events.query.frontier",
     "ak.self.keys.keypackages.upload.create",
     "ak.self.keys.keypackages.command.consume",
+    "ak.self.keys.keypackages.command.revoke",
     "ak.self.device_messages.query.list",
     "ak.self.device_messages.command.ack",
 ];
@@ -62,6 +63,7 @@ pub(super) const LIMITED_AGENT_SCOPE_ACTIONS: &[&str] = &[
     "ak.self.events.query.frontier",
     "ak.self.keys.keypackages.upload.create",
     "ak.self.keys.keypackages.command.consume",
+    "ak.self.keys.keypackages.command.revoke",
     "ak.self.device_messages.query.list",
     "ak.self.device_messages.command.ack",
     "ak.event.read",
