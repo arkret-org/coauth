@@ -306,6 +306,7 @@ impl Options {
                 // COAUTH_VERIFIED_PROFILES_ARTIFACT (env var IS the feature
                 // flag). Empty Arc when unset.
                 verified_profiles: coauth_backend::services::verified_profiles::load_from_env(),
+                development_mode: coauth_backend::error::development_mode_from_env(),
             };
             s.init_metrics();
             s.init_metadata_cache();

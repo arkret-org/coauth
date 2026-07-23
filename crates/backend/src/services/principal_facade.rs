@@ -171,7 +171,7 @@ async fn submit_agent_key_pair_to_target(
 // that `validate_capability_fanout_response` below requires.
 //
 // Both facts point to the same ruling: this belongs on soland's own
-// negative-space root per service-http-binding.md §2.1.3(b) (product /
+// negative-space root per service-http-binding.md §2.1.4(b) (product /
 // deployment-private capability MUST NOT occupy a `/_arkret/*` protocol
 // segment). soland exposes it as `org.arkret.soland.root.authz.capability_fanout
 // .submit`, bearer-gated by the shared `embedded_webvh_registration_bearer`,

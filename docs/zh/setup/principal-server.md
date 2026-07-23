@@ -27,7 +27,7 @@ arkret:
 coauth 以 Auth Server 角色对 Principal Server 发起两类**无 principal session**的
 服务对服务读写，因此无法走需要 principal 鉴权的 `/_arkret/self/*` 协议面。它们是
 落在 Principal Server 自有 negative-space root 上的部署内 S2S 契约，依据
-`service-http-binding.md` §2.1.3(b) —— **不是** v1 协议 operation：
+`service-http-binding.md` §2.1.4(b) —— **不是** v1 协议 operation：
 
 | coauth 调用 | Principal Server 端点 | Operation id | 时机 |
 | --- | --- | --- | --- |

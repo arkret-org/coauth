@@ -30,7 +30,7 @@ In its Auth-Server role coauth performs two server-to-server reads/writes
 against the Principal Server that have **no principal session** and therefore
 cannot use the principal-authenticated `/_arkret/self/*` protocol surface.
 These are deployment-internal S2S contracts on the Principal Server's own
-negative-space root, per `service-http-binding.md` §2.1.3(b) — they are **not**
+negative-space root, per `service-http-binding.md` §2.1.4(b) — they are **not**
 v1 protocol operations:
 
 | coauth call | Principal Server endpoint | Operation id | When |

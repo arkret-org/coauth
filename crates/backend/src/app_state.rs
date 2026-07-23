@@ -101,6 +101,11 @@ pub struct AppState {
     /// `crate::services::verified_profiles::load_from_env`) and surfaced
     /// into the per-request depot as the `verified_profiles` key.
     pub verified_profiles: Arc<Vec<crate::services::verified_profiles::VerifiedProfileDescriptor>>,
+
+    /// Development posture captured once during process startup. Service
+    /// discovery uses this same value for every request and suppresses
+    /// verified profiles while it is enabled.
+    pub development_mode: bool,
 }
 
 impl AppState {
@@ -226,6 +231,7 @@ pub async fn inject_app_state(
     // `handlers::arkret::server_describe` to populate the wire
     // `verified_profiles[]`. Empty Arc when the env var is unset.
     depot.insert("verified_profiles", state.verified_profiles.clone());
+    depot.insert("development_mode", state.development_mode);
     depot.insert(
         "risk_action_state_service",
         default_risk_action_state_service(),

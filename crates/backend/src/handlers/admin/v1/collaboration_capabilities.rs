@@ -306,11 +306,6 @@ pub async fn revoke_handler(
     }
 }
 
-/// Fanout envelope kind expected by soland's
-/// `/_soland/root/authz/capability-fanout` handler (shared contract in
-/// `soland_contracts::integration::capability_fanout`).
-const CAPABILITY_FANOUT_KIND: &str = "org.arkret.coauth.collaboration_capability.fanout.v1";
-
 fn build_grant_fanout_payload(
     grant_event_id: &str,
     capability_grant_id: &str,
@@ -362,7 +357,7 @@ fn build_grant_fanout_payload(
     signed_grant["proofs"] = json!([proof]);
 
     Ok(CapabilityFanoutBody {
-        kind: CAPABILITY_FANOUT_KIND.to_owned(),
+        kind: soland_contracts::integration::capability_fanout::CAPABILITY_FANOUT_KIND.to_owned(),
         operation: "grant".to_owned(),
         issuer_service_id: service_id.to_owned(),
         event_kind: "ak.capability.grant".to_owned(),
@@ -402,7 +397,7 @@ fn build_revoke_fanout_payload(
     revoke_payload["proofs"] = json!([proof]);
 
     Ok(CapabilityFanoutBody {
-        kind: CAPABILITY_FANOUT_KIND.to_owned(),
+        kind: soland_contracts::integration::capability_fanout::CAPABILITY_FANOUT_KIND.to_owned(),
         operation: "revoke".to_owned(),
         issuer_service_id: service_id.to_owned(),
         event_kind: "ak.capability.revoke".to_owned(),

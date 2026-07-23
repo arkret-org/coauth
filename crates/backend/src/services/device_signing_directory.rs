@@ -43,13 +43,13 @@ use crate::services::resolved_principal_audiences::{
 // a missing exemption. There is no spec gap and no protocol S2S directory-read
 // operation to migrate to (decision 4's "already covered by
 // `ak.self.keys.query.lookup`" was over-optimistic; service-http-binding.md
-// §2.1.3(b) is the correct framing).
+// §2.1.4(b) is the correct framing).
 //
 // soland therefore exposes this as a product-surface S2S contract on its own
 // negative-space root: `POST /_soland/gate/account/device-signing-keys/query`,
 // op `org.arkret.soland.gate.account.device_signing_keys.query`, bearer-gated by
 // the shared `embedded_webvh_registration_bearer`. Per service-http-binding.md
-// §2.1.3(b) a deployment-private capability MUST live on the implementation's
+// §2.1.4(b) a deployment-private capability MUST live on the implementation's
 // own `/_soland/*` root and MUST NOT occupy a `/_arkret/*` protocol segment.
 // The coauth↔soland S2S trust boundary is registered in
 // `docs/{zh,en}/setup/principal-server.md`.

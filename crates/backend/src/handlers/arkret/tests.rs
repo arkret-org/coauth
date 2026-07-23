@@ -229,6 +229,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         &arkret_config,
         &[],
         &test_enrollment_authority_did(),
+        false,
     ))
     .unwrap();
 
@@ -378,6 +379,7 @@ fn service_describe_marks_personal_node_did_web_service_as_no_history() {
         &arkret_config,
         &[],
         &test_enrollment_authority_did(),
+        false,
     ))
     .unwrap();
 
@@ -421,6 +423,7 @@ fn service_describe_advertises_auth_session_logout_boundary() {
         &config,
         &[],
         &test_enrollment_authority_did(),
+        false,
     ))
     .unwrap();
     let supported_operations = body["supported_operations"].as_array().unwrap();
@@ -452,6 +455,7 @@ fn service_describe_advertises_complete_account_first_onboarding_surface() {
         &config,
         &[],
         &test_enrollment_authority_did(),
+        false,
     ))
     .unwrap();
     let supported_operations = body["supported_operations"].as_array().unwrap();
@@ -506,18 +510,16 @@ fn principal_server_static_session_grant_bearer_ignores_unset_field() {
 #[test]
 fn describe_separates_claim_levels() {
     // T6.1 — describe response MUST partition into
-    // supported_operations (wire-callable) and the new claim-level
-    // arrays. coauth has no dev toggle, but the spec invariant
-    // (development_mode=true => verified_profiles=[]) is still
-    // exercised: when development_mode is reported as `false`, the
-    // assertion below ensures we never lazily populate verified
-    // entries from self-claimed input.
+    // supported_operations (wire-callable) and the new claim-level arrays.
+    // Exercise the development posture explicitly so the response cannot
+    // accidentally advertise verifier output while development mode is on.
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
     let body = serde_json::to_value(service_describe_response(
         &url_builder,
         &test_arkret_config(),
         &[],
         &test_enrollment_authority_did(),
+        true,
     ))
     .unwrap();
 
@@ -593,7 +595,7 @@ fn describe_separates_claim_levels() {
 
     // development_mode field must be present so downstream tools
     // (sodmin / cotest) can render the dev banner.
-    assert!(body["development_mode"].is_boolean());
+    assert_eq!(body["development_mode"], true);
     let supported_operations = body["supported_operations"]
         .as_array()
         .expect("supported_operations array present");
@@ -625,6 +627,7 @@ fn service_describe_emits_trust_domain_when_configured() {
         &config,
         &[],
         &test_enrollment_authority_did(),
+        false,
     ))
     .unwrap();
     assert_eq!(body["trust_domain"], "ak:trust_domain:example.net");
@@ -642,6 +645,7 @@ fn service_describe_derives_trust_domain_from_public_host_when_unset() {
         &test_arkret_config(),
         &[],
         &test_enrollment_authority_did(),
+        false,
     ))
     .unwrap();
     assert_eq!(body["trust_domain"], "ak:trust_domain:auth.example.com");
@@ -655,6 +659,7 @@ fn service_describe_derives_valid_trust_domain_for_ipv6_host() {
         &test_arkret_config(),
         &[],
         &test_enrollment_authority_did(),
+        false,
     ))
     .unwrap();
     assert_eq!(body["trust_domain"], "ak:trust_domain:host-::1");
@@ -674,6 +679,7 @@ fn service_describe_defaults_to_local_identity_binding_resolver() {
         &test_arkret_config(),
         &[],
         &test_enrollment_authority_did(),
+        false,
     ))
     .unwrap();
 
@@ -708,6 +714,7 @@ fn service_describe_advertises_configured_session_grant_ttl() {
         &config,
         &[],
         &test_enrollment_authority_did(),
+        false,
     ))
     .unwrap();
 
