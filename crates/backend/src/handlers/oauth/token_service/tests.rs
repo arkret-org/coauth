@@ -347,7 +347,7 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
             &mut rng,
             &*clock,
             NewSessionGrant {
-                grant_id: arkret_core::GrantId::new(
+                grant_id: arkret_identifiers::GrantId::new(
                     "ak:grant:0196419b-0000-7000-8000-000000000204".to_owned(),
                 )
                 .unwrap(),

@@ -36,8 +36,8 @@ use std::time::Duration;
 
 use arkret_canonical::format_timestamp_canonical;
 #[cfg(test)]
-use arkret_core::Did;
-use arkret_core::{
+use arkret_identifiers::Did;
+use arkret_models_collaboration::governance::policy_check::{
     PolicyCheckBoundTo, PolicyCheckOutcome, PolicyCheckRequestBody, PolicyCheckSignature,
 };
 use chrono::Utc;
@@ -349,7 +349,9 @@ mod tests {
     use std::future::Future;
     use std::pin::Pin;
 
-    use arkret_core::{AuthzDecision, Hash, PolicyCheckSource, RealmId};
+    use arkret_identifiers::{Hash, RealmId};
+    use arkret_models_collaboration::governance::policy_check::PolicyCheckSource;
+    use arkret_wire::AuthzDecision;
     use base64ct::{Base64UrlUnpadded, Encoding as _};
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::constraints::Constrainable as _;

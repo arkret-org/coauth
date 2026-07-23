@@ -144,7 +144,7 @@ impl AccountRiskActionMutation {
 
 fn lock_patch() -> AdminUserPatch {
     AdminUserPatch {
-        status: Some(arkret_core::AccountStatus::Locked),
+        status: Some(arkret_models_collaboration::objects::account_status::AccountStatus::Locked),
         locked: Some(true),
         ..AdminUserPatch::default()
     }
@@ -180,7 +180,7 @@ fn account_risk_action_mutation(action: &str) -> Result<AccountRiskActionMutatio
         "disable" => Ok(AccountRiskActionMutation {
             operation: AccountRiskActionOperation::PatchUser {
                 patch: AdminUserPatch {
-                    status: Some(arkret_core::AccountStatus::Deactivated),
+                    status: Some(arkret_models_collaboration::objects::account_status::AccountStatus::Deactivated),
                     deactivated: Some(true),
                     ..AdminUserPatch::default()
                 },
@@ -192,7 +192,7 @@ fn account_risk_action_mutation(action: &str) -> Result<AccountRiskActionMutatio
         "erase" => Ok(AccountRiskActionMutation {
             operation: AccountRiskActionOperation::PatchUser {
                 patch: AdminUserPatch {
-                    status: Some(arkret_core::AccountStatus::ErasurePending),
+                    status: Some(arkret_models_collaboration::objects::account_status::AccountStatus::ErasurePending),
                     deactivated: Some(true),
                     ..AdminUserPatch::default()
                 },

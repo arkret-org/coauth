@@ -1,6 +1,6 @@
 //! Policy dry-run and decision-audit contract endpoints.
 
-use arkret_core::PolicyEffect;
+use arkret_wire::PolicyEffect;
 use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
 use coauth_data::{PolicyDataDocument, RepositoryAccess};
 use salvo::oapi::ToSchema;

@@ -134,7 +134,7 @@ pub async fn begin_password_registration(
     if request.handle.is_empty() {
         issues.push(BeginPasswordRegistrationIssue::HandleRequired);
     } else {
-        match arkret_core::prepare_handle_localpart(&request.handle) {
+        match arkret_wire::prepare_handle_localpart(&request.handle) {
             Ok(prepared) => {
                 request.handle = prepared;
                 if repo.user().exists(&request.handle).await? {

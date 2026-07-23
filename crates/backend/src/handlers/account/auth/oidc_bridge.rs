@@ -14,7 +14,8 @@
 // `coauth_admin_types::integration_manifest_admin` so the sodmin admin SPA
 // decodes them through the same typed shape. The `integration_describe`
 // endpoint below returns the shared `IntegrationManifest` directly.
-use arkret_core::{AccountRegisterRequestBody, DeviceId, Did};
+use arkret_identifiers::{DeviceId, Did};
+use arkret_models_collaboration::account_lifecycle::AccountRegisterRequestBody;
 use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
 };

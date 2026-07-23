@@ -403,7 +403,9 @@ pub async fn lock_account(
         req,
         depot,
         AdminUserPatch {
-            status: Some(arkret_core::AccountStatus::Locked),
+            status: Some(
+                arkret_models_collaboration::objects::account_status::AccountStatus::Locked,
+            ),
             locked: Some(true),
             ..AdminUserPatch::default()
         },
@@ -423,7 +425,9 @@ pub async fn disable_account(
         req,
         depot,
         AdminUserPatch {
-            status: Some(arkret_core::AccountStatus::Deactivated),
+            status: Some(
+                arkret_models_collaboration::objects::account_status::AccountStatus::Deactivated,
+            ),
             deactivated: Some(true),
             ..AdminUserPatch::default()
         },
@@ -443,7 +447,9 @@ pub async fn erase_account(
         req,
         depot,
         AdminUserPatch {
-            status: Some(arkret_core::AccountStatus::ErasurePending),
+            status: Some(
+                arkret_models_collaboration::objects::account_status::AccountStatus::ErasurePending,
+            ),
             deactivated: Some(true),
             ..AdminUserPatch::default()
         },
@@ -463,7 +469,9 @@ pub async fn reset_recovery(
         req,
         depot,
         AdminUserPatch {
-            status: Some(arkret_core::AccountStatus::Locked),
+            status: Some(
+                arkret_models_collaboration::objects::account_status::AccountStatus::Locked,
+            ),
             locked: Some(true),
             ..AdminUserPatch::default()
         },
@@ -633,14 +641,28 @@ async fn map_page_async(
 // above share it.
 use update::map_service_error;
 
-fn admin_account_status(status: arkret_core::AccountStatus) -> AccountStatus {
+fn admin_account_status(
+    status: arkret_models_collaboration::objects::account_status::AccountStatus,
+) -> AccountStatus {
     match status {
-        arkret_core::AccountStatus::Active => AccountStatus::Active,
-        arkret_core::AccountStatus::SoftLoggedOut => AccountStatus::SoftLoggedOut,
-        arkret_core::AccountStatus::Locked => AccountStatus::Locked,
-        arkret_core::AccountStatus::Suspended => AccountStatus::Suspended,
-        arkret_core::AccountStatus::Deactivated => AccountStatus::Deactivated,
-        arkret_core::AccountStatus::ErasurePending => AccountStatus::ErasurePending,
+        arkret_models_collaboration::objects::account_status::AccountStatus::Active => {
+            AccountStatus::Active
+        }
+        arkret_models_collaboration::objects::account_status::AccountStatus::SoftLoggedOut => {
+            AccountStatus::SoftLoggedOut
+        }
+        arkret_models_collaboration::objects::account_status::AccountStatus::Locked => {
+            AccountStatus::Locked
+        }
+        arkret_models_collaboration::objects::account_status::AccountStatus::Suspended => {
+            AccountStatus::Suspended
+        }
+        arkret_models_collaboration::objects::account_status::AccountStatus::Deactivated => {
+            AccountStatus::Deactivated
+        }
+        arkret_models_collaboration::objects::account_status::AccountStatus::ErasurePending => {
+            AccountStatus::ErasurePending
+        }
     }
 }
 

@@ -30,7 +30,7 @@ struct DiscoveryDocument {
     arkret_server_describe: String,
 
     #[serde(rename = "org.arkret.service_id")]
-    arkret_service_id: arkret_core::Did,
+    arkret_service_id: arkret_identifiers::Did,
 
     #[serde(rename = "org.arkret.did_binding_methods")]
     arkret_did_binding_methods: Vec<String>,
@@ -52,9 +52,9 @@ struct DiscoveryDocument {
 #[derive(Debug, Serialize)]
 struct PrincipalServerMetadata {
     name: String,
-    audience: Option<arkret_core::Did>,
+    audience: Option<arkret_identifiers::Did>,
     endpoint: String,
-    did: Option<arkret_core::Did>,
+    did: Option<arkret_identifiers::Did>,
 }
 
 #[derive(Debug, Serialize)]

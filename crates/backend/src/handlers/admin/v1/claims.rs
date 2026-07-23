@@ -389,7 +389,7 @@ fn require_non_empty(value: String, field: &str) -> Result<String, AppError> {
 
 fn require_did(value: String, field: &str) -> Result<String, AppError> {
     let value = require_non_empty(value, field)?;
-    arkret_core::Did::new(value.clone())
+    arkret_identifiers::Did::new(value.clone())
         .map(|_| value)
         .map_err(|error| AppError::bad_request(format!("{field} must be a valid DID: {error}")))
 }

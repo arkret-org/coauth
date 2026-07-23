@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Context as _;
-use arkret_core::ServiceIdentityState;
+use arkret_identity::service_identity::{ServiceIdentityDiagnostic, ServiceIdentityState};
 use coauth_config::ArkretConfig;
 use coauth_keystore::Keystore;
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
@@ -50,7 +50,7 @@ fn runtime_identity(depot: &Depot) -> Result<ServiceIdentityState, InternalError
 
 fn health_payload(depot: &Depot) -> serde_json::Value {
     let state = runtime_identity(depot).unwrap_or(ServiceIdentityState::Faulted {
-        diagnostic: arkret_core::ServiceIdentityDiagnostic::ProviderNotConfigured,
+        diagnostic: ServiceIdentityDiagnostic::ProviderNotConfigured,
         next_action: "initialize runtime service identity".to_owned(),
     });
     let configured_provider_endpoint = depot

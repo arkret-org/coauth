@@ -333,7 +333,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     ));
                     return Ok(());
                 };
-                let device_id = match arkret_core::DeviceId::new(device_id.to_owned()) {
+                let device_id = match arkret_identifiers::DeviceId::new(device_id.to_owned()) {
                     Ok(device_id) => device_id,
                     Err(error) => {
                         PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);

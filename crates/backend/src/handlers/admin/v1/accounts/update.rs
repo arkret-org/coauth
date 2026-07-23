@@ -68,7 +68,7 @@ pub async fn update_account(
         .status
         .as_deref()
         .map(|status| {
-            arkret_core::AccountStatus::from_wire(status)
+            arkret_models_collaboration::objects::account_status::AccountStatus::from_wire(status)
                 .ok_or_else(|| AppError::bad_request(format!("Unknown account status: {status}")))
         })
         .transpose()?;

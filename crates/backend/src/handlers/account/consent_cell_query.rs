@@ -22,7 +22,9 @@
 //! non-success responses, and response-key mismatches become
 //! [`ConsentLookup::Unknown`] so callers can degrade safely.
 
-use arkret_core::{ConsentCellView, ConsentState as SdkConsentState};
+use arkret_models_collaboration::account_lifecycle::{
+    ConsentCellView, ConsentState as SdkConsentState,
+};
 use tracing::{debug, warn};
 use url::Url;
 

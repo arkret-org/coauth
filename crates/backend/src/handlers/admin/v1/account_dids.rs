@@ -266,7 +266,7 @@ pub async fn add_account_did(
         })?;
     let authority = crate::services::device_enrollment_authority::enrollment_authority(&key_store)
         .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
-    let enrollment_authority_did = arkret_core::Did::new(authority.did().to_owned())
+    let enrollment_authority_did = arkret_identifiers::Did::new(authority.did().to_owned())
         .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
     if !validated_control
         .resolution
@@ -299,7 +299,7 @@ pub async fn add_account_did(
             .id
             .strip_prefix(&did)
             .is_some_and(|fragment| fragment.starts_with('#') && fragment.len() > 1)
-        || arkret_core::DidUrl::new(designated_service.id.clone()).is_err()
+        || arkret_wire::DidUrl::new(designated_service.id.clone()).is_err()
     {
         return Err(AppError::bad_request(
             "control_proof_invalid: DID enrollment authority delegation is ambiguous or invalid",
@@ -440,12 +440,14 @@ fn enforce_did_continuity_for_primary_upgrade(
     let proof_value = continuity_proof.ok_or_else(|| {
         AppError::bad_request("did_continuity_proof_required: did:web to did:webvh primary upgrade")
     })?;
-    let proof: arkret_core::DidContinuityProof = serde_json::from_value(proof_value.clone())
-        .map_err(|error| AppError::bad_request(format!("did_continuity_proof_invalid: {error}")))?;
+    let proof: arkret_models_identity::DidContinuityProof =
+        serde_json::from_value(proof_value.clone()).map_err(|error| {
+            AppError::bad_request(format!("did_continuity_proof_invalid: {error}"))
+        })?;
     proof
         .validate_minimal()
         .map_err(|error| AppError::bad_request(format!("did_continuity_proof_invalid: {error}")))?;
-    if proof.purpose != arkret_core::DidContinuityPurpose::PrincipalMethodUpgrade {
+    if proof.purpose != arkret_models_identity::DidContinuityPurpose::PrincipalMethodUpgrade {
         return Err(AppError::bad_request(
             "did_continuity_proof_invalid: purpose must be principal_method_upgrade",
         ));
