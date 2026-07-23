@@ -16,8 +16,9 @@ workspace = true
 [dependencies]
 anyhow = {workspace = true}
 arkret-canonical = {workspace = true}
-arkret-core = {workspace = true}
+arkret-identifiers = {workspace = true}
 arkret-models-collaboration = {workspace = true}
+arkret-models-identity = {workspace = true}
 arkret-wire = {workspace = true}
 async-trait = {workspace = true}
 chrono = {workspace = true}

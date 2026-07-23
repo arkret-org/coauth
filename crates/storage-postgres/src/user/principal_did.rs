@@ -77,13 +77,13 @@ fn binding_selection() -> (
 
 fn binding_from_row(row: PrincipalDidJoinedRow) -> Result<PrincipalDidBinding, DatabaseError> {
     let id = Ulid::from(row.0);
-    let key_log_head = arkret_core::Hash::new(row.4).map_err(|error| {
+    let key_log_head = arkret_identifiers::Hash::new(row.4).map_err(|error| {
         DatabaseInconsistencyError::on("principal_did_owners")
             .column("key_log_head")
             .row(id)
             .source(error)
     })?;
-    let enrollment_authority_did = arkret_core::Did::new(row.5).map_err(|error| {
+    let enrollment_authority_did = arkret_identifiers::Did::new(row.5).map_err(|error| {
         DatabaseInconsistencyError::on("principal_did_owners")
             .column("enrollment_authority_did")
             .row(id)
@@ -193,11 +193,11 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
         } = input;
         if audience.trim().is_empty()
             || principal_id.trim() != principal_id
-            || arkret_core::Did::new(principal_id.clone()).is_err()
+            || arkret_identifiers::Did::new(principal_id.clone()).is_err()
             || !enrollment_authority_ref
                 .strip_prefix(&principal_id)
                 .is_some_and(|fragment| fragment.starts_with('#') && fragment.len() > 1)
-            || arkret_core::DidUrl::new(enrollment_authority_ref.clone()).is_err()
+            || arkret_wire::DidUrl::new(enrollment_authority_ref.clone()).is_err()
         {
             return Err(DatabaseError::invalid_operation());
         }

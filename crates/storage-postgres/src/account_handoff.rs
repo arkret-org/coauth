@@ -76,7 +76,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         &mut self,
         service_account_id: Uuid,
         audience: &str,
-    ) -> Result<Option<arkret_core::Did>, DatabaseError> {
+    ) -> Result<Option<arkret_identifiers::Did>, DatabaseError> {
         let row = diesel::sql_query(
             "SELECT owners.principal_id \
              FROM principal_did_bindings bindings \
@@ -88,7 +88,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         .get_result::<PrincipalRow>(self.conn)
         .await
         .optional()?;
-        row.map(|row| arkret_core::Did::new(row.principal_id))
+        row.map(|row| arkret_identifiers::Did::new(row.principal_id))
             .transpose()
             .map_err(|_| DatabaseError::invalid_operation())
     }
@@ -176,15 +176,15 @@ fn handoff_from_row(row: HandoffRow) -> Result<AccountHandoffGrant, DatabaseErro
     }
     Ok(AccountHandoffGrant {
         id: Ulid::from(row.id),
-        request_id: arkret_core::RequestId::new(format!("ak:request:{}", row.request_id))
+        request_id: arkret_identifiers::RequestId::new(format!("ak:request:{}", row.request_id))
             .map_err(|_| DatabaseError::invalid_operation())?,
-        request_digest: arkret_core::Hash::new(row.request_digest)
+        request_digest: arkret_identifiers::Hash::new(row.request_digest)
             .map_err(|_| DatabaseError::invalid_operation())?,
         service_account_id: Ulid::from(row.service_account_id),
         browser_session_id: row.browser_session_id.map(Ulid::from),
         audience: row.audience,
         cnf_jkt: row.cnf_jkt,
-        allowed_operations: arkret_core::ACCOUNT_HANDOFF_ALLOWED_OPERATIONS,
+        allowed_operations: arkret_models_identity::ACCOUNT_HANDOFF_ALLOWED_OPERATIONS,
         account_handoff_grant: row.account_handoff_grant,
         issued_at: row.issued_at,
         expires_at: row.expires_at,
@@ -235,10 +235,10 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
     ) {
         (None, None, None) => None,
         (Some(principal_id), Some(operation_digest), Some(did_operation)) => {
-            Some(arkret_core::ReservedIdentityCreation {
-                principal_id: arkret_core::Did::new(principal_id)
+            Some(arkret_models_identity::ReservedIdentityCreation {
+                principal_id: arkret_identifiers::Did::new(principal_id)
                     .map_err(|_| DatabaseError::invalid_operation())?,
-                operation_digest: arkret_core::Hash::new(operation_digest)
+                operation_digest: arkret_identifiers::Hash::new(operation_digest)
                     .map_err(|_| DatabaseError::invalid_operation())?,
                 did_operation: serde_json::from_value(did_operation)
                     .map_err(|_| DatabaseError::invalid_operation())?,
@@ -259,7 +259,7 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
         registry_receipt: row.registry_receipt,
         head_event_digest: row
             .head_event_digest
-            .map(arkret_core::Hash::new)
+            .map(arkret_identifiers::Hash::new)
             .transpose()
             .map_err(|_| DatabaseError::invalid_operation())?,
         binding_receipt: row
@@ -317,26 +317,26 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
         return Err(DatabaseError::invalid_operation());
     }
     Ok(IdentityBindingChallengeRecord {
-        request_id: arkret_core::RequestId::new(format!("ak:request:{}", row.request_id))
+        request_id: arkret_identifiers::RequestId::new(format!("ak:request:{}", row.request_id))
             .map_err(|_| DatabaseError::invalid_operation())?,
-        request_digest: arkret_core::Hash::new(row.request_digest)
+        request_digest: arkret_identifiers::Hash::new(row.request_digest)
             .map_err(|_| DatabaseError::invalid_operation())?,
         service_account_id: Ulid::from(row.service_account_id),
         challenge_id: row.challenge_id,
         challenge: row.challenge,
-        purpose: arkret_core::IdentityBindingPurpose::AccountBinding,
-        principal_id: arkret_core::Did::new(row.principal_id)
+        purpose: arkret_models_identity::IdentityBindingPurpose::AccountBinding,
+        principal_id: arkret_identifiers::Did::new(row.principal_id)
             .map_err(|_| DatabaseError::invalid_operation())?,
-        operation_digest: arkret_core::Hash::new(row.operation_digest)
+        operation_digest: arkret_identifiers::Hash::new(row.operation_digest)
             .map_err(|_| DatabaseError::invalid_operation())?,
         lease_id: row.lease_id,
         lease_fence: u64::try_from(row.lease_fence)
             .map_err(|_| DatabaseError::invalid_operation())?,
         dpop_jkt: row.dpop_jkt,
-        audience: arkret_core::Did::new(row.audience)
+        audience: arkret_identifiers::Did::new(row.audience)
             .map_err(|_| DatabaseError::invalid_operation())?,
         origin: row.origin,
-        trust_domain: arkret_core::TypedTrustDomainId::new(row.trust_domain)
+        trust_domain: arkret_identifiers::TypedTrustDomainId::new(row.trust_domain)
             .map_err(|_| DatabaseError::invalid_operation())?,
         issued_at: row.issued_at,
         expires_at: row.expires_at,
@@ -355,7 +355,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
 
     async fn get_by_request_id(
         &mut self,
-        request_id: &arkret_core::RequestId,
+        request_id: &arkret_identifiers::RequestId,
     ) -> Result<Option<AccountHandoffGrant>, Self::Error> {
         self.handoff_by_request_uuid(request_id.uuid()).await
     }
@@ -603,9 +603,10 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(IdentityBindingChallengeIssue::LeaseMismatch);
         }
 
-        let reserved =
-            arkret_core::ReservedIdentityCreation::from_operation(input.did_operation.clone())
-                .map_err(|_| DatabaseError::invalid_operation())?;
+        let reserved = arkret_models_identity::ReservedIdentityCreation::from_operation(
+            input.did_operation.clone(),
+        )
+        .map_err(|_| DatabaseError::invalid_operation())?;
         if reserved.operation_digest != input.operation_digest {
             return Ok(IdentityBindingChallengeIssue::ReservationConflict);
         }
@@ -742,7 +743,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         &mut self,
         context: &IdentityCreationRegistrationContext,
         registry_receipt: &serde_json::Value,
-        head_event_digest: &arkret_core::Hash,
+        head_event_digest: &arkret_identifiers::Hash,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error> {
         diesel::sql_query(
@@ -785,7 +786,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
     async fn mark_bound(
         &mut self,
         context: &IdentityCreationRegistrationContext,
-        binding_receipt: &arkret_core::AccountBindingReceipt,
+        binding_receipt: &arkret_models_identity::AccountBindingReceipt,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error> {
         let receipt = serde_json::to_value(binding_receipt)
@@ -815,8 +816,8 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         &mut self,
         service_account_id: Ulid,
         audience: &str,
-        principal_id: &arkret_core::Did,
-        device_id: &arkret_core::DeviceId,
+        principal_id: &arkret_identifiers::Did,
+        device_id: &arkret_identifiers::DeviceId,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error> {
         let updated = diesel::sql_query(
@@ -890,9 +891,13 @@ mod tests {
     ) -> AccountHandoffGrantInput {
         AccountHandoffGrantInput {
             id: new_id(issued_at, rng),
-            request_id: arkret_core::RequestId::new(format!("ak:request:{}", Uuid::now_v7()))
+            request_id: arkret_identifiers::RequestId::new(format!(
+                "ak:request:{}",
+                Uuid::now_v7()
+            ))
+            .unwrap(),
+            request_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "a".repeat(64)))
                 .unwrap(),
-            request_digest: arkret_core::Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
             service_account_id,
             browser_session_id: None,
             audience: "did:web:principal.example".to_owned(),
@@ -905,9 +910,9 @@ mod tests {
         }
     }
 
-    fn did_operation(label: &str) -> arkret_core::DidOperationSubmitRequestBody {
-        let did = arkret_core::Did::new(format!("did:webvh:z{label}:example.com")).unwrap();
-        arkret_core::DidOperationSubmitRequestBody {
+    fn did_operation(label: &str) -> arkret_models_identity::DidOperationSubmitRequestBody {
+        let did = arkret_identifiers::Did::new(format!("did:webvh:z{label}:example.com")).unwrap();
+        arkret_models_identity::DidOperationSubmitRequestBody {
             did: did.clone(),
             did_method: "webvh".to_owned(),
             seq: Some(0),
@@ -991,12 +996,17 @@ mod tests {
 
         let operation = did_operation(&label);
         let reserved =
-            arkret_core::ReservedIdentityCreation::from_operation(operation.clone()).unwrap();
+            arkret_models_identity::ReservedIdentityCreation::from_operation(operation.clone())
+                .unwrap();
         let challenge_issued_at = now.with_nanosecond(123_456_789).unwrap();
         let first_challenge = IdentityBindingChallengeInput {
-            request_id: arkret_core::RequestId::new(format!("ak:request:{}", Uuid::now_v7()))
+            request_id: arkret_identifiers::RequestId::new(format!(
+                "ak:request:{}",
+                Uuid::now_v7()
+            ))
+            .unwrap(),
+            request_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "b".repeat(64)))
                 .unwrap(),
-            request_digest: arkret_core::Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap(),
             service_account_id: user.id,
             audience: first_grant.audience.clone(),
             lease_id: first_lease.lease_id.clone(),
@@ -1007,8 +1017,10 @@ mod tests {
             challenge_id: Uuid::now_v7().simple().to_string(),
             challenge: format!("{}{}", Uuid::now_v7().simple(), "H".repeat(11)),
             origin: "https://account.example".to_owned(),
-            trust_domain: arkret_core::TypedTrustDomainId::new("ak:trust_domain:example.net")
-                .unwrap(),
+            trust_domain: arkret_identifiers::TypedTrustDomainId::new(
+                "ak:trust_domain:example.net",
+            )
+            .unwrap(),
             issued_at: challenge_issued_at,
             expires_at: challenge_issued_at + Duration::minutes(5),
             lease_expires_at: first_lease.expires_at,
@@ -1027,7 +1039,7 @@ mod tests {
             arkret_canonical::normalize_timestamp_canonical(challenge_issued_at),
             "durable challenge timestamps must exactly match their canonical wire value"
         );
-        let wire_challenge: arkret_core::IdentityBindingChallengeOutcome =
+        let wire_challenge: arkret_models_identity::IdentityBindingChallengeOutcome =
             serde_json::from_value(serde_json::to_value(issued_challenge.wire_outcome()).unwrap())
                 .unwrap();
         assert_eq!(wire_challenge.issued_at, issued_challenge.issued_at);
@@ -1043,7 +1055,8 @@ mod tests {
             IdentityBindingChallengeIssue::Replay(_)
         ));
         let conflicting_replay = IdentityBindingChallengeInput {
-            request_digest: arkret_core::Hash::new(format!("sha256:{}", "9".repeat(64))).unwrap(),
+            request_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "9".repeat(64)))
+                .unwrap(),
             ..first_challenge.clone()
         };
         assert!(matches!(
@@ -1128,9 +1141,13 @@ mod tests {
         ));
 
         let stale_challenge = IdentityBindingChallengeInput {
-            request_id: arkret_core::RequestId::new(format!("ak:request:{}", Uuid::now_v7()))
+            request_id: arkret_identifiers::RequestId::new(format!(
+                "ak:request:{}",
+                Uuid::now_v7()
+            ))
+            .unwrap(),
+            request_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "c".repeat(64)))
                 .unwrap(),
-            request_digest: arkret_core::Hash::new(format!("sha256:{}", "c".repeat(64))).unwrap(),
             issued_at: reclaimed_at,
             expires_at: reclaimed_at + Duration::minutes(5),
             lease_expires_at: reclaimed_at + Duration::minutes(15),
@@ -1179,11 +1196,16 @@ mod tests {
 
         let operation = did_operation(&label);
         let reserved =
-            arkret_core::ReservedIdentityCreation::from_operation(operation.clone()).unwrap();
+            arkret_models_identity::ReservedIdentityCreation::from_operation(operation.clone())
+                .unwrap();
         let challenge_input = IdentityBindingChallengeInput {
-            request_id: arkret_core::RequestId::new(format!("ak:request:{}", Uuid::now_v7()))
+            request_id: arkret_identifiers::RequestId::new(format!(
+                "ak:request:{}",
+                Uuid::now_v7()
+            ))
+            .unwrap(),
+            request_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "4".repeat(64)))
                 .unwrap(),
-            request_digest: arkret_core::Hash::new(format!("sha256:{}", "4".repeat(64))).unwrap(),
             service_account_id: user.id,
             audience: grant.audience.clone(),
             lease_id: lease.lease_id.clone(),
@@ -1194,8 +1216,10 @@ mod tests {
             challenge_id: Uuid::now_v7().simple().to_string(),
             challenge: format!("{}{}", Uuid::now_v7().simple(), "H".repeat(11)),
             origin: "https://account.example".to_owned(),
-            trust_domain: arkret_core::TypedTrustDomainId::new("ak:trust_domain:example.net")
-                .unwrap(),
+            trust_domain: arkret_identifiers::TypedTrustDomainId::new(
+                "ak:trust_domain:example.net",
+            )
+            .unwrap(),
             issued_at: now,
             expires_at: now + Duration::minutes(5),
             lease_expires_at: lease.expires_at,
@@ -1221,7 +1245,7 @@ mod tests {
             .await
             .unwrap()
             .expect("fresh challenge must produce registration context");
-        let head = arkret_core::Hash::new(format!("sha256:{}", "5".repeat(64))).unwrap();
+        let head = arkret_identifiers::Hash::new(format!("sha256:{}", "5".repeat(64))).unwrap();
         assert!(
             repo.account_handoff()
                 .mark_published(
@@ -1233,11 +1257,11 @@ mod tests {
                 .await
                 .unwrap()
         );
-        let binding_receipt = arkret_core::AccountBindingReceipt {
-            binding_state: arkret_core::AccountBindingState::Bound,
+        let binding_receipt = arkret_models_identity::AccountBindingReceipt {
+            binding_state: arkret_models_identity::AccountBindingState::Bound,
             lease_id: lease.lease_id.clone(),
             lease_fence: lease.fence,
-            operation_status: arkret_core::IdentityCreationOperationStatus::Accepted,
+            operation_status: arkret_models_identity::IdentityCreationOperationStatus::Accepted,
             operation_digest: reserved.operation_digest,
             head_event_digest: head,
         };
@@ -1249,9 +1273,9 @@ mod tests {
         );
 
         let first_device =
-            arkret_core::DeviceId::new(format!("ak:device:{}", Uuid::now_v7())).unwrap();
+            arkret_identifiers::DeviceId::new(format!("ak:device:{}", Uuid::now_v7())).unwrap();
         let second_device =
-            arkret_core::DeviceId::new(format!("ak:device:{}", Uuid::now_v7())).unwrap();
+            arkret_identifiers::DeviceId::new(format!("ak:device:{}", Uuid::now_v7())).unwrap();
         assert!(
             repo.account_handoff()
                 .claim_first_device_enrollment(

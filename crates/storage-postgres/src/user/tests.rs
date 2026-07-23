@@ -21,10 +21,15 @@ use crate::PgRepositoryFactory;
 
 fn principal_binding_test_material(
     label: &str,
-) -> (String, arkret_core::Hash, arkret_core::Did, String) {
+) -> (
+    String,
+    arkret_identifiers::Hash,
+    arkret_identifiers::Did,
+    String,
+) {
     let principal_id = format!("did:webvh:z{label}:example.com:users:alice");
-    let key_log_head = arkret_core::Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();
-    let enrollment_authority_did = arkret_core::Did::new("did:key:z6Mkenrollment").unwrap();
+    let key_log_head = arkret_identifiers::Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();
+    let enrollment_authority_did = arkret_identifiers::Did::new("did:key:z6Mkenrollment").unwrap();
     let enrollment_authority_ref = format!("{principal_id}#arkret-device-enrollment-authority");
     (
         principal_id,
@@ -37,8 +42,8 @@ fn principal_binding_test_material(
 fn verified_principal_binding_input(
     audience: impl Into<String>,
     principal_id: String,
-    key_log_head: arkret_core::Hash,
-    enrollment_authority_did: arkret_core::Did,
+    key_log_head: arkret_identifiers::Hash,
+    enrollment_authority_did: arkret_identifiers::Did,
     enrollment_authority_ref: String,
 ) -> VerifiedPrincipalDidBindingInput {
     VerifiedPrincipalDidBindingInput {
@@ -1552,7 +1557,7 @@ async fn principal_did_binding_does_not_overwrite_the_verified_enrollment_author
                 "https://ps-b.example",
                 principal_id.clone(),
                 key_log_head,
-                arkret_core::Did::new("did:key:z6Mkreplacement").unwrap(),
+                arkret_identifiers::Did::new("did:key:z6Mkreplacement").unwrap(),
                 authority_ref,
             ),
         )

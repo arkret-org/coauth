@@ -1879,8 +1879,9 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "arkret-canonical",
- "arkret-core",
+ "arkret-identifiers",
  "arkret-models-collaboration",
+ "arkret-models-identity",
  "arkret-wire",
  "async-trait",
  "chrono",

@@ -216,7 +216,7 @@ impl UserRepository for PgUserRepository<'_> {
         err,
     )]
     async fn find_by_handle(&mut self, handle: &str) -> Result<Option<User>, Self::Error> {
-        let handle = arkret_core::prepare_handle_localpart(handle)
+        let handle = arkret_wire::prepare_handle_localpart(handle)
             .map_err(DatabaseError::to_invalid_operation)?;
 
         let row = users::table
@@ -243,7 +243,7 @@ impl UserRepository for PgUserRepository<'_> {
         clock: &dyn Clock,
         handle: String,
     ) -> Result<User, Self::Error> {
-        let handle = arkret_core::prepare_handle_localpart(&handle)
+        let handle = arkret_wire::prepare_handle_localpart(&handle)
             .map_err(DatabaseError::to_invalid_operation)?;
         let created_at = clock.now();
         let id = new_id(created_at, rng);
@@ -409,7 +409,7 @@ impl UserRepository for PgUserRepository<'_> {
     async fn exists(&mut self, handle: &str) -> Result<bool, Self::Error> {
         use diesel::dsl::{exists, select};
 
-        let handle = arkret_core::prepare_handle_localpart(handle)
+        let handle = arkret_wire::prepare_handle_localpart(handle)
             .map_err(DatabaseError::to_invalid_operation)?;
 
         let result = select(exists(users::table.filter(users::localpart.eq(handle))))

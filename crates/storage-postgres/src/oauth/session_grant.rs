@@ -1,4 +1,4 @@
-use arkret_core::GrantId;
+use arkret_identifiers::GrantId;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::oauth::{NewSessionGrant, SessionGrantFilter, SessionGrantRepository};
