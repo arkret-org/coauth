@@ -166,28 +166,8 @@ fn service_attested_provenance_error(message: impl std::fmt::Display) -> ArkretR
     )
 }
 
-fn device_enroll_prev_refs(
-    actor_seq: u64,
-    bootstrap_create_event_id: Option<EventId>,
-) -> Result<Vec<EventId>, ArkretRouteError> {
-    match (actor_seq, bootstrap_create_event_id) {
-        (0, _) => Err(ArkretRouteError::coded(
-            StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::INVALID_PARAM,
-            "actor_seq must be the next positive principal control sequence",
-        )),
-        (1, Some(create_event_id)) => Ok(vec![create_event_id]),
-        (1, None) => Err(ArkretRouteError::coded(
-            StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::INVALID_PARAM,
-            "bootstrap_create_event_id is required for first-device enrollment",
-        )),
-        (..) => Err(ArkretRouteError::coded(
-            StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::INVALID_PARAM,
-            "device-enroll is restricted to actor_seq=1 founding-device enrollment",
-        )),
-    }
+fn device_enroll_prev_refs(bootstrap_create_event_id: EventId) -> Vec<EventId> {
+    vec![bootstrap_create_event_id]
 }
 
 /// Single configured principal-server audience, or an error when the
@@ -412,8 +392,7 @@ pub async fn device_enroll_endpoint(
 
     let now = truncate_to_seconds(clock.now());
     let not_before = body.not_before.map_or_else(|| now, truncate_to_seconds);
-    let prev_refs =
-        device_enroll_prev_refs(body.actor_seq, body.bootstrap_create_event_id.clone())?;
+    let prev_refs = device_enroll_prev_refs(body.bootstrap_create_event_id.clone());
 
     let payload = DeviceAuthorizePayload {
         principal_id: principal_id.clone(),
@@ -554,21 +533,9 @@ mod tests {
     }
 
     #[test]
-    fn first_device_requires_and_uses_bootstrap_create_predecessor() {
+    fn first_device_uses_bootstrap_create_predecessor() {
         let create = event_id("ak:event:01964137-0000-7000-8000-000000000001");
-        assert_eq!(
-            device_enroll_prev_refs(1, Some(create.clone())).expect("bootstrap refs"),
-            vec![create]
-        );
-        assert!(device_enroll_prev_refs(1, None).is_err());
-    }
-
-    #[test]
-    fn later_device_is_rejected_by_the_founding_device_endpoint() {
-        let create = event_id("ak:event:01964137-0000-7000-8000-000000000001");
-        assert!(device_enroll_prev_refs(2, Some(create)).is_err());
-        assert!(device_enroll_prev_refs(0, None).is_err());
-        assert!(device_enroll_prev_refs(2, None).is_err());
+        assert_eq!(device_enroll_prev_refs(create.clone()), vec![create]);
     }
 
     #[test]
