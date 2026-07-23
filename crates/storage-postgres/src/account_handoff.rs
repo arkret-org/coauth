@@ -910,6 +910,22 @@ mod tests {
         }
     }
 
+    fn unique_lease_id() -> String {
+        Uuid::now_v7().simple().to_string()
+    }
+
+    /// Deterministic ids from a fixed seed collide with rows committed by a
+    /// previous run of the same test (`MockClock` pins the ULID timestamp),
+    /// so seed each run from a fresh UUIDv7. Fold in the low half too:
+    /// concurrent same-millisecond UUIDv7s share their first eight bytes and
+    /// differ only in the monotonic counter tail.
+    fn test_rng() -> ChaChaRng {
+        let bytes = Uuid::now_v7().into_bytes();
+        let hi = u64::from_le_bytes(bytes[..8].try_into().expect("8 bytes"));
+        let lo = u64::from_le_bytes(bytes[8..].try_into().expect("8 bytes"));
+        ChaChaRng::seed_from_u64(hi ^ lo)
+    }
+
     fn did_operation(label: &str) -> arkret_models_identity::DidOperationSubmitRequestBody {
         let did = arkret_identifiers::Did::new(format!("did:webvh:z{label}:example.com")).unwrap();
         arkret_models_identity::DidOperationSubmitRequestBody {
@@ -959,15 +975,18 @@ mod tests {
             .unwrap();
         let clock = MockClock::default();
         let now = clock.now();
-        let mut rng = ChaChaRng::seed_from_u64(0xacce_5510);
+        let mut rng = test_rng();
         let label = Uuid::now_v7().simple().to_string();
         let holder_one = "A".repeat(43);
         let holder_two = "B".repeat(43);
         let holder_three = "C".repeat(43);
-        let lease_one = "D".repeat(32);
-        let lease_two = "E".repeat(32);
-        let renewal_lease = "F".repeat(32);
-        let lease_three = "G".repeat(32);
+        // Lease ids are globally unique in the database and committed rows
+        // survive this test's mid-flight save, so every id must be fresh per
+        // run instead of a shared constant.
+        let lease_one = unique_lease_id();
+        let lease_two = unique_lease_id();
+        let renewal_lease = unique_lease_id();
+        let lease_three = unique_lease_id();
         let user = repo
             .user()
             .add(&mut rng, &clock, format!("handoff-{label}"))
@@ -1172,7 +1191,7 @@ mod tests {
         let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
         let clock = MockClock::default();
         let now = clock.now();
-        let mut rng = ChaChaRng::seed_from_u64(0xf1a5_7d3e);
+        let mut rng = test_rng();
         let label = Uuid::now_v7().simple().to_string();
         let user = repo
             .user()
@@ -1186,7 +1205,7 @@ mod tests {
                 user.id,
                 now,
                 &"A".repeat(43),
-                &"D".repeat(32),
+                &unique_lease_id(),
             ))
             .await
             .unwrap();
@@ -1301,6 +1320,247 @@ mod tests {
                 .await
                 .unwrap(),
             "a second device must not reuse the founding-device enrollment endpoint"
+        );
+
+        repo.cancel().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn published_binding_failure_resumes_only_the_original_reservation() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
+        let clock = MockClock::default();
+        let now = clock.now();
+        let mut rng = test_rng();
+        let label = Uuid::now_v7().simple().to_string();
+        let user = repo
+            .user()
+            .add(&mut rng, &clock, format!("binding-crash-{label}"))
+            .await
+            .unwrap();
+        let created = repo
+            .account_handoff()
+            .create_with_lease(handoff_input(
+                &mut rng,
+                user.id,
+                now,
+                &"A".repeat(43),
+                &unique_lease_id(),
+            ))
+            .await
+            .unwrap();
+        let AccountHandoffCreation::Active { grant, lease } = created else {
+            panic!("identity creation must acquire an active lease");
+        };
+
+        let operation = did_operation(&label);
+        let reserved =
+            arkret_models_identity::ReservedIdentityCreation::from_operation(operation.clone())
+                .unwrap();
+        let challenge_input = IdentityBindingChallengeInput {
+            request_id: arkret_identifiers::RequestId::new(format!(
+                "ak:request:{}",
+                Uuid::now_v7()
+            ))
+            .unwrap(),
+            request_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "7".repeat(64)))
+                .unwrap(),
+            service_account_id: user.id,
+            audience: grant.audience.clone(),
+            lease_id: lease.lease_id.clone(),
+            lease_fence: lease.fence,
+            holder_jkt: lease.holder_jkt.clone(),
+            did_operation: operation,
+            operation_digest: reserved.operation_digest.clone(),
+            challenge_id: Uuid::now_v7().simple().to_string(),
+            challenge: format!("{}{}", Uuid::now_v7().simple(), "H".repeat(11)),
+            origin: "https://account.example".to_owned(),
+            trust_domain: arkret_identifiers::TypedTrustDomainId::new(
+                "ak:trust_domain:example.net",
+            )
+            .unwrap(),
+            issued_at: now,
+            expires_at: now + Duration::minutes(5),
+            lease_expires_at: lease.expires_at,
+        };
+        let issued = match repo
+            .account_handoff()
+            .reserve_and_issue_challenge(challenge_input)
+            .await
+            .unwrap()
+        {
+            IdentityBindingChallengeIssue::Issued(challenge) => challenge,
+            other => panic!("challenge must be issued, got {other:?}"),
+        };
+        let context = repo
+            .account_handoff()
+            .registration_context(
+                &grant,
+                &lease.lease_id,
+                lease.fence,
+                &issued.challenge_id,
+                now,
+            )
+            .await
+            .unwrap()
+            .expect("fresh challenge must produce registration context");
+        let head = arkret_identifiers::Hash::new(format!("sha256:{}", "8".repeat(64))).unwrap();
+        let registry_receipt = serde_json::json!({ "status": "accepted" });
+        assert!(
+            repo.account_handoff()
+                .mark_published(&context, &registry_receipt, &head, now)
+                .await
+                .unwrap()
+        );
+        // The registry accepted the operation: commit exactly what the
+        // register handler commits before the binding store transaction.
+        repo.save().await.unwrap();
+
+        // The binding transaction fails after the registry acceptance: its
+        // partial work must leave no durable trace.
+        let binding_receipt = arkret_models_identity::AccountBindingReceipt {
+            binding_state: arkret_models_identity::AccountBindingState::Bound,
+            lease_id: lease.lease_id.clone(),
+            lease_fence: lease.fence,
+            operation_status: arkret_models_identity::IdentityCreationOperationStatus::Accepted,
+            operation_digest: reserved.operation_digest.clone(),
+            head_event_digest: head.clone(),
+        };
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
+        assert!(
+            repo.account_handoff()
+                .mark_bound(&context, &binding_receipt, now)
+                .await
+                .unwrap()
+        );
+        repo.cancel().await.unwrap();
+
+        // A fresh process recovers the exact published reservation together
+        // with its consumed challenge and the durable registry receipt.
+        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let recovered = repo
+            .account_handoff()
+            .registration_context(
+                &grant,
+                &lease.lease_id,
+                lease.fence,
+                &issued.challenge_id,
+                now + Duration::seconds(1),
+            )
+            .await
+            .unwrap()
+            .expect("published saga must recover its registration context");
+        assert_eq!(recovered.lease.state, IdentityCreationSagaState::Published);
+        assert_eq!(recovered.lease.reserved_identity, Some(reserved.clone()));
+        assert_eq!(recovered.lease.registry_receipt, Some(registry_receipt));
+        assert_eq!(recovered.lease.head_event_digest, Some(head));
+        assert!(recovered.challenge.consumed_at.is_some());
+
+        // No other operation may replace the published reservation.
+        let foreign_operation = did_operation(&format!("{label}f"));
+        let foreign_reserved = arkret_models_identity::ReservedIdentityCreation::from_operation(
+            foreign_operation.clone(),
+        )
+        .unwrap();
+        let foreign_challenge = IdentityBindingChallengeInput {
+            request_id: arkret_identifiers::RequestId::new(format!(
+                "ak:request:{}",
+                Uuid::now_v7()
+            ))
+            .unwrap(),
+            request_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "d".repeat(64)))
+                .unwrap(),
+            service_account_id: user.id,
+            audience: grant.audience.clone(),
+            lease_id: lease.lease_id.clone(),
+            lease_fence: lease.fence,
+            holder_jkt: lease.holder_jkt.clone(),
+            did_operation: foreign_operation,
+            operation_digest: foreign_reserved.operation_digest,
+            challenge_id: Uuid::now_v7().simple().to_string(),
+            challenge: format!("{}{}", Uuid::now_v7().simple(), "J".repeat(11)),
+            origin: "https://account.example".to_owned(),
+            trust_domain: arkret_identifiers::TypedTrustDomainId::new(
+                "ak:trust_domain:example.net",
+            )
+            .unwrap(),
+            issued_at: now + Duration::seconds(1),
+            expires_at: now + Duration::minutes(5),
+            lease_expires_at: lease.expires_at,
+        };
+        assert!(matches!(
+            repo.account_handoff()
+                .reserve_and_issue_challenge(foreign_challenge)
+                .await
+                .unwrap(),
+            IdentityBindingChallengeIssue::ReservationConflict
+        ));
+
+        // Neither a tampered digest nor a foreign holder can finalize.
+        let mut tampered = recovered.clone();
+        tampered.challenge.operation_digest =
+            arkret_identifiers::Hash::new(format!("sha256:{}", "e".repeat(64))).unwrap();
+        assert!(
+            !repo
+                .account_handoff()
+                .mark_bound(&tampered, &binding_receipt, now)
+                .await
+                .unwrap()
+        );
+        let mut foreign_holder = recovered.clone();
+        foreign_holder.grant.cnf_jkt = "Z".repeat(43);
+        assert!(
+            !repo
+                .account_handoff()
+                .mark_bound(&foreign_holder, &binding_receipt, now)
+                .await
+                .unwrap()
+        );
+
+        // Only the original context completes the saga, and the founding
+        // device claim works solely for the reserved principal.
+        assert!(
+            repo.account_handoff()
+                .mark_bound(&recovered, &binding_receipt, now)
+                .await
+                .unwrap()
+        );
+        let foreign_principal =
+            arkret_identifiers::Did::new(format!("did:webvh:z{label}f:example.com")).unwrap();
+        let device =
+            arkret_identifiers::DeviceId::new(format!("ak:device:{}", Uuid::now_v7())).unwrap();
+        assert!(
+            !repo
+                .account_handoff()
+                .claim_first_device_enrollment(
+                    user.id,
+                    &grant.audience,
+                    &foreign_principal,
+                    &device,
+                    now
+                )
+                .await
+                .unwrap()
+        );
+        assert!(
+            repo.account_handoff()
+                .claim_first_device_enrollment(
+                    user.id,
+                    &grant.audience,
+                    &reserved.principal_id,
+                    &device,
+                    now
+                )
+                .await
+                .unwrap()
         );
 
         repo.cancel().await.unwrap();
