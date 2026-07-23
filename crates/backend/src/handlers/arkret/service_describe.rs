@@ -1,7 +1,7 @@
-use arkret_core::{
+use arkret_models_discovery::{
     AccountAuthority, AuthGrantExchange, AuthMetadata, AuthMethod, AuthMethodKind,
-    SessionGrantProofKind,
 };
+use arkret_models_identity::SessionGrantProofKind;
 use arkret_schema::generated::profile_requirements::{
     requirements_for, validate_profile_requirements,
 };
@@ -16,22 +16,22 @@ use crate::handlers::common::DepotExt;
 const CLAIMED_PROFILE_IDS: &[&str] = &["ak.profile.auth_server.v1"];
 
 const SUPPORTED_OPERATIONS: &[&str] = &[
-    arkret_core::ServiceOperationId::SERVER_QUERY_DESCRIBE,
-    arkret_core::ServiceOperationId::ROOT_IDENTITY_REGISTRY_QUERY_DESCRIBE,
-    arkret_core::ServiceOperationId::ROOT_IDENTITY_QUERY_RESOLVE,
-    arkret_core::ServiceOperationId::ROOT_IDENTITY_DOCUMENT_RESOURCE_GET,
-    arkret_core::ServiceOperationId::FIND_DIRECTORY_QUERY_RESOLVE_HANDLE,
-    arkret_core::ServiceOperationId::SELF_POLICY_QUERY_CHECK,
-    arkret_core::ServiceOperationId::GATE_ACCOUNT_EXCHANGE_CREATE_HANDOFF,
-    arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE,
-    arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER,
-    arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT,
+    arkret_wire::ServiceOperationId::SERVER_QUERY_DESCRIBE,
+    arkret_wire::ServiceOperationId::ROOT_IDENTITY_REGISTRY_QUERY_DESCRIBE,
+    arkret_wire::ServiceOperationId::ROOT_IDENTITY_QUERY_RESOLVE,
+    arkret_wire::ServiceOperationId::ROOT_IDENTITY_DOCUMENT_RESOURCE_GET,
+    arkret_wire::ServiceOperationId::FIND_DIRECTORY_QUERY_RESOLVE_HANDLE,
+    arkret_wire::ServiceOperationId::SELF_POLICY_QUERY_CHECK,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_EXCHANGE_CREATE_HANDOFF,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT,
     "ak.gate.account.command.refresh_session_grant",
     "ak.gate.account.command.logout_auth_session",
     "ak.gate.account.command.introspect_session_grant",
-    arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
-    arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ENROLL_DEVICE,
-    arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_REVOKE_SESSION,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ENROLL_DEVICE,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REVOKE_SESSION,
 ];
 
 const IMPLEMENTED_PROFILE_EVENT_KINDS: &[&str] = &["ak.session.grant"];
@@ -50,9 +50,9 @@ struct SupportedBinding {
 #[derive(Debug, Clone, Serialize)]
 struct PrincipalServerDescriptor {
     name: String,
-    audience: Option<arkret_core::Did>,
+    audience: Option<arkret_identifiers::Did>,
     endpoint: String,
-    did: Option<arkret_core::Did>,
+    did: Option<arkret_identifiers::Did>,
 }
 
 #[derive(Debug, Serialize)]
@@ -118,7 +118,7 @@ struct OAuthClientHintDescriptor {
     token_endpoint_auth_method: Option<String>,
 }
 
-// `auth_metadata` is now the SDK-canonical `arkret_core::AuthMetadata`
+// `auth_metadata` is the SDK-canonical `arkret_models_discovery::AuthMetadata`
 // (wave 0). coauth-proprietary fields that have no first-class slot on the
 // strong type — `issuer_did`, `token_endpoint_auth_methods`,
 // `supported_grant_types`, `required_audience`, `admin_audience`,
@@ -142,7 +142,7 @@ struct PlaintextVisibilityDescriptor {
 pub(crate) struct ServiceDescribeOutcome {
     // --- canonical `ak.schema.service_describe.v1` fields, in the schema's
     //     property order (see service-describe.schema.json). ---
-    service_id: arkret_core::Did,
+    service_id: arkret_identifiers::Did,
     /// Round 4 (spec a77b995) — deployment-scope trust domain (wire
     /// form `ak:trust_domain:<scope>`). Explicit configuration wins;
     /// otherwise coauth derives a stable deployment-local value from the
@@ -167,7 +167,7 @@ pub(crate) struct ServiceDescribeOutcome {
     claimed_profiles: Vec<ClaimedProfileDescriptor>,
     /// T6.1 — cotest-verified profiles. MUST be empty when
     /// `development_mode=true` (§3.0).
-    verified_profiles: Vec<arkret_core::VerifiedProfileEntry>,
+    verified_profiles: Vec<arkret_models_discovery::VerifiedProfileEntry>,
     /// T6.1 — features the service exposes but does NOT promise stable
     /// interop for.
     experimental_features: Vec<&'static str>,
@@ -183,7 +183,7 @@ pub(crate) struct ServiceDescribeOutcome {
     /// per-endpoint budgets are enforced by the `Limiter` middleware; the
     /// describe surface advertises an unspecified policy (generic abuse
     /// protection only) rather than pinning numbers that drift from config.
-    rate_limit_policy: arkret_core::RateLimitPolicy,
+    rate_limit_policy: arkret_models_discovery::RateLimitPolicy,
 
     // --- coauth-proprietary extension fields. These are NOT part of
     //     `service-describe.schema.json` (top-level `additionalProperties:
@@ -337,7 +337,7 @@ fn validate_claimed_profiles_against_sdk_requirements() {
 /// entries.
 fn build_verified_profile_descriptors(
     loaded: &[crate::services::verified_profiles::VerifiedProfileDescriptor],
-) -> Vec<arkret_core::VerifiedProfileEntry> {
+) -> Vec<arkret_models_discovery::VerifiedProfileEntry> {
     loaded
         .iter()
         .filter_map(|entry| {
@@ -349,9 +349,9 @@ fn build_verified_profile_descriptors(
                 );
                 return None;
             }
-            Some(arkret_core::VerifiedProfileEntry {
+            Some(arkret_models_discovery::VerifiedProfileEntry {
                 profile_id: entry.profile_id.clone(),
-                claim_kind: arkret_core::ConformanceVerifiedKind::ConformanceVerified,
+                claim_kind: arkret_models_discovery::ConformanceVerifiedKind::ConformanceVerified,
                 verification_run_id: entry.verification_run_id.clone(),
                 artifact_digest: entry.artifact_digest.clone(),
                 artifact_ref: entry.artifact_ref.clone(),
@@ -381,7 +381,7 @@ fn build_verified_profile_descriptors(
 fn build_auth_metadata(
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
-    enrollment_authority_did: &arkret_core::Did,
+    enrollment_authority_did: &arkret_identifiers::Did,
 ) -> AuthMetadata {
     use serde_json::json;
 
@@ -500,7 +500,7 @@ pub(crate) fn service_describe_response(
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
     loaded_verified_profiles: &[crate::services::verified_profiles::VerifiedProfileDescriptor],
-    enrollment_authority_did: &arkret_core::Did,
+    enrollment_authority_did: &arkret_identifiers::Did,
 ) -> ServiceDescribeOutcome {
     validate_claimed_profiles_against_sdk_requirements();
 
@@ -682,7 +682,7 @@ pub(crate) fn service_describe_response(
             },
         ],
         development_mode: false,
-        rate_limit_policy: arkret_core::RateLimitPolicy::unspecified(),
+        rate_limit_policy: arkret_models_discovery::RateLimitPolicy::unspecified(),
         admin_audience: admin_audience.clone(),
         principal_servers: principal_servers.clone(),
         principal_server_delegation_targets: principal_servers,
@@ -707,7 +707,7 @@ pub async fn server_describe(
     req: &Request,
 ) -> Result<Json<ServiceDescribeOutcome>, ArkretRouteError> {
     if let Some(service_type) = req.query::<String>("service_type")
-        && service_type != arkret_core::ServiceType::AuthServer.as_str()
+        && service_type != arkret_wire::ServiceType::AuthServer.as_str()
     {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
@@ -763,8 +763,9 @@ pub async fn server_describe(
     let enrollment_authority =
         crate::services::device_enrollment_authority::enrollment_authority(&key_store)
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let enrollment_authority_did = arkret_core::Did::new(enrollment_authority.did().to_owned())
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let enrollment_authority_did =
+        arkret_identifiers::Did::new(enrollment_authority.did().to_owned())
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let mut response = service_describe_response(
         &url_builder,
         &arkret_config,

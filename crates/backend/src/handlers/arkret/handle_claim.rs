@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
 
-use arkret_core::{
-    Audience, DeliveryBindingHint as HandleClaimDeliveryBindingHint, Did, Handle,
-    HandleBindingState, HandleClaim as HandleClaimPayload, HandleClaimKind, Hash, PayloadProof,
-    proof_kind,
+use arkret_identifiers::{Did, Hash};
+use arkret_models_identity::{
+    DeliveryBindingHint as HandleClaimDeliveryBindingHint, Handle, HandleBindingState,
+    HandleClaim as HandleClaimPayload, HandleClaimKind,
 };
+use arkret_wire::{Audience, PayloadProof, proof_kind};
 use chrono::{DateTime, Duration, Utc};
 use coauth_config::ArkretConfig;
 use coauth_data::{Clock, UrlBuilder, User};

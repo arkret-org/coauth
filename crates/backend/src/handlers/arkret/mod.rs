@@ -20,7 +20,7 @@ pub use session_grant::*;
 mod tests;
 
 use anyhow::Error as AnyhowError;
-use arkret_core::ErrorEnvelope;
+use arkret_wire::ErrorEnvelope;
 use coauth_config::ArkretConfig;
 use coauth_data::user::PrincipalDidRepository as _;
 use coauth_data::{RepositoryAccess, UrlBuilder, User};
@@ -118,7 +118,7 @@ pub enum ArkretRouteError {
     /// controller approval flow. It renders as a closed `claim_required`
     /// details object and never as a browser challenge.
     #[error("controller approval required")]
-    HumanApprovalRequired(arkret_core::AgentHumanApprovalErrorDetails),
+    HumanApprovalRequired(arkret_wire::AgentHumanApprovalErrorDetails),
 
     /// Caller did not present a usable bearer token. Renders as `401`.
     #[error("{0}")]
@@ -520,14 +520,14 @@ fn map_did_resolve_error(
 }
 
 /// The deployment's Provider-resolved runtime service DID.
-pub(crate) fn service_id_for(arkret_config: &ArkretConfig) -> arkret_core::Did {
+pub(crate) fn service_id_for(arkret_config: &ArkretConfig) -> arkret_identifiers::Did {
     arkret_config
         .runtime_service_identity
         .service_id()
         .expect("identity readiness gate prevents handlers from running without a service DID")
 }
 
-pub(crate) fn issuer_did_for(arkret_config: &ArkretConfig) -> arkret_core::Did {
+pub(crate) fn issuer_did_for(arkret_config: &ArkretConfig) -> arkret_identifiers::Did {
     service_id_for(arkret_config)
 }
 

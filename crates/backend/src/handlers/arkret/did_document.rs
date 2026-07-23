@@ -164,7 +164,7 @@ mod tests {
         let public_key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32])
             .verifying_key()
             .to_bytes();
-        let multibase = arkret_core::ed25519_pubkey_to_did_key_multibase(&public_key);
+        let multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(&public_key);
         let did = "did:webvh:ztest:local.host:webvh:alice";
         let document: DidDocument = serde_json::from_value(json!({
             "id": did,
@@ -196,7 +196,7 @@ mod tests {
         .expect("JWK should serialize");
         assert_eq!(jwk["kty"], "OKP");
         assert_eq!(jwk["crv"], "Ed25519");
-        assert_eq!(jwk["x"], arkret_core::base64url_encode(public_key));
+        assert_eq!(jwk["x"], arkret_canonical::base64url_encode(public_key));
     }
 
     #[test]
@@ -207,7 +207,7 @@ mod tests {
             "id": format!("{did}#device-1"),
             "type": "Multikey",
             "controller": did,
-            "publicKeyMultibase": arkret_core::ed25519_pubkey_to_did_key_multibase(
+            "publicKeyMultibase": arkret_canonical::ed25519_pubkey_to_did_key_multibase(
                 &invalid_public_key
             ),
         }))
@@ -225,9 +225,9 @@ mod tests {
             "publicKeyJwk": {
                 "kty": "OKP",
                 "crv": "Ed25519",
-                "x": arkret_core::base64url_encode([7u8; 32]),
+                "x": arkret_canonical::base64url_encode([7u8; 32]),
             },
-            "publicKeyMultibase": arkret_core::ed25519_pubkey_to_did_key_multibase(&[7u8; 32]),
+            "publicKeyMultibase": arkret_canonical::ed25519_pubkey_to_did_key_multibase(&[7u8; 32]),
         }))
         .expect("wire document should parse before use-time validation");
 

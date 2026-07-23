@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
-use arkret_core::Did;
+use arkret_identifiers::Did;
 use arkret_models_discovery::{
     DirectoryHandleResolutionOutcome, DirectoryResolveHandleRequestBody,
 };
@@ -213,7 +213,7 @@ pub async fn directory_resolve_handle(
         &key_store,
         &user,
         &did,
-        arkret_core::HandleClaimKind::HandleBinding,
+        arkret_models_identity::HandleClaimKind::HandleBinding,
         handle_claim_audience.clone(),
         member_delivery_binding,
     )
@@ -255,28 +255,28 @@ fn directory_handle_claim_audience(
 fn directory_handle_delivery_binding(
     arkret_config: &ArkretConfig,
     principal_binding: &PrincipalDidBinding,
-) -> Result<arkret_core::DeliveryBindingHint, ArkretRouteError> {
+) -> Result<arkret_models_identity::DeliveryBindingHint, ArkretRouteError> {
     let recipient_service_id = principal_binding
         .principal_server_did
         .as_ref()
-        .and_then(|did| arkret_core::Did::new(did.clone()).ok())
-        .or_else(|| arkret_core::Did::new(principal_binding.audience.clone()).ok())
+        .and_then(|did| arkret_identifiers::Did::new(did.clone()).ok())
+        .or_else(|| arkret_identifiers::Did::new(principal_binding.audience.clone()).ok())
         .or_else(|| Some(service_id_for(arkret_config)))
         .ok_or_else(|| {
             ArkretRouteError::Internal(Box::new(std::io::Error::other(
                 "no valid DID available for handle claim delivery binding",
             )))
         })?;
-    Ok(arkret_core::DeliveryBindingHint {
+    Ok(arkret_models_identity::DeliveryBindingHint {
         recipient_service_id,
-        recipient_service_type: arkret_core::RecipientServiceType::PrincipalServer,
-        binding_source: arkret_core::HandleHintBindingSource::Explicit,
+        recipient_service_type: arkret_models_identity::RecipientServiceType::PrincipalServer,
+        binding_source: arkret_models_identity::HandleHintBindingSource::Explicit,
         delivery_modes: BTreeSet::from([
-            arkret_core::DeliveryMode::Events,
-            arkret_core::DeliveryMode::Sync,
-            arkret_core::DeliveryMode::ToDevice,
-            arkret_core::DeliveryMode::Push,
-            arkret_core::DeliveryMode::KeyPackages,
+            arkret_models_identity::DeliveryMode::Events,
+            arkret_models_identity::DeliveryMode::Sync,
+            arkret_models_identity::DeliveryMode::ToDevice,
+            arkret_models_identity::DeliveryMode::Push,
+            arkret_models_identity::DeliveryMode::KeyPackages,
         ]),
         service_acceptance_ref: None,
         policy_event_ref: None,
