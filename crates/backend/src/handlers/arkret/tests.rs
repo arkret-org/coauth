@@ -1,7 +1,9 @@
-use arkret_core::{
-    Did, SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_TYPE, SessionGrantIntrospectStatus,
-    SessionGrantIntrospectionProofClaims, SignedSessionGrantClaims,
+use arkret_identifiers::Did;
+use arkret_models_collaboration::session_grant_bodies::{
+    SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_TYPE, SessionGrantIntrospectStatus,
+    SessionGrantIntrospectionProofClaims,
 };
+use arkret_models_identity::SignedSessionGrantClaims;
 use chrono::{Duration, Utc};
 use coauth_config::{
     ArkretConfig, DeploymentProfileConfig, IdentityRegistryConfig, PrincipalMethodConfig,
@@ -27,7 +29,7 @@ use crate::salvo_utils::SessionInfoExt;
 #[salvo::handler]
 async fn human_approval_error_fixture() -> Result<(), ArkretRouteError> {
     Err(ArkretRouteError::HumanApprovalRequired(
-        arkret_core::AgentHumanApprovalErrorDetails::new("approval-opaque-01").unwrap(),
+        arkret_wire::AgentHumanApprovalErrorDetails::new("approval-opaque-01").unwrap(),
     ))
 }
 
@@ -74,11 +76,11 @@ fn test_keystore() -> Keystore {
     Keystore::new(JsonWebKeySet::new(vec![eddsa, enrollment]))
 }
 
-fn test_enrollment_authority_did() -> arkret_core::Did {
+fn test_enrollment_authority_did() -> arkret_identifiers::Did {
     let authority =
         crate::services::device_enrollment_authority::enrollment_authority(&test_keystore())
             .unwrap();
-    arkret_core::Did::new(authority.did().to_owned()).unwrap()
+    arkret_identifiers::Did::new(authority.did().to_owned()).unwrap()
 }
 
 fn test_session_public_jwk(session_key: &PrivateKey, kid: impl Into<String>) -> PublicJsonWebKey {
@@ -457,10 +459,10 @@ fn service_describe_advertises_complete_account_first_onboarding_surface() {
     let supported_operations = body["supported_operations"].as_array().unwrap();
 
     for operation in [
-        arkret_core::ServiceOperationId::GATE_ACCOUNT_EXCHANGE_CREATE_HANDOFF,
-        arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE,
-        arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER,
-        arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_EXCHANGE_CREATE_HANDOFF,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT,
     ] {
         assert!(
             supported_operations.contains(&serde_json::json!(operation)),
@@ -885,7 +887,7 @@ fn session_grant_record_exposes_metadata_without_secrets() {
     let now = Utc::now();
     let grant = SessionGrant {
         id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
-        grant_id: arkret_core::GrantId::new(
+        grant_id: arkret_identifiers::GrantId::new(
             "ak:grant:0196419b-0000-7000-8000-000000000205".to_owned(),
         )
         .unwrap(),
@@ -926,7 +928,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
     let mut user = User::samples(now, &mut rng).into_iter().next().unwrap();
     let mut grant = SessionGrant {
         id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
-        grant_id: arkret_core::GrantId::new(
+        grant_id: arkret_identifiers::GrantId::new(
             "ak:grant:0196419b-0000-7000-8000-000000000206".to_owned(),
         )
         .unwrap(),
@@ -1349,7 +1351,8 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         &state.arkret_config,
         &state.key_store,
         "did:web:agent.example",
-        &arkret_core::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000005").unwrap(),
+        &arkret_identifiers::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000005")
+            .unwrap(),
         audience.clone(),
         vec!["ak.agent.action:message.send".to_owned()],
         "agent-runtime-dpop-jkt".to_owned(),
@@ -1694,11 +1697,13 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
     let key_store = test_keystore();
 
-    let hint = arkret_core::DeliveryBindingHint {
-        recipient_service_id: arkret_core::Did::new("did:web:soland.example").unwrap(),
-        recipient_service_type: arkret_core::RecipientServiceType::PrincipalServer,
-        binding_source: arkret_core::HandleHintBindingSource::OrganizationPolicy,
-        delivery_modes: [arkret_core::DeliveryMode::Events].into_iter().collect(),
+    let hint = arkret_models_identity::DeliveryBindingHint {
+        recipient_service_id: arkret_identifiers::Did::new("did:web:soland.example").unwrap(),
+        recipient_service_type: arkret_models_identity::RecipientServiceType::PrincipalServer,
+        binding_source: arkret_models_identity::HandleHintBindingSource::OrganizationPolicy,
+        delivery_modes: [arkret_models_identity::DeliveryMode::Events]
+            .into_iter()
+            .collect(),
         service_acceptance_ref: None,
         policy_event_ref: None,
     };
@@ -1712,7 +1717,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
         &key_store,
         &user,
         subject_did,
-        arkret_core::HandleClaimKind::HandleBinding,
+        arkret_models_identity::HandleClaimKind::HandleBinding,
         "did:web:space.example".to_owned(),
         hint.clone(),
     )
@@ -1722,12 +1727,14 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
             .payload
             .subject
             .as_ref()
-            .map(arkret_core::Did::as_str),
+            .map(arkret_identifiers::Did::as_str),
         Some(subject_did)
     );
 
     let canonical = user_handle(&url_builder, &user);
-    let acct = arkret_core::Handle::parse(&canonical).unwrap().to_acct();
+    let acct = arkret_models_identity::Handle::parse(&canonical)
+        .unwrap()
+        .to_acct();
     // Spec 7157ee8 §3.1 — canonical `<localpart>:<domain>` form on
     // the wire `handle` field.
     assert_eq!(material.payload.schema, "ak.schema.handle_claim.v1");
@@ -1772,7 +1779,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     assert_eq!(material.payload.proofs.len(), 1);
     assert_eq!(
         material.payload.proofs[0].audience,
-        Some(arkret_core::Audience::Single(
+        Some(arkret_wire::Audience::Single(
             "did:web:space.example".to_owned()
         ))
     );
@@ -1780,7 +1787,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     // HC-COAUTH-1 — coauth only stamps allow-listed claim_kind values.
     assert_eq!(
         material.payload.claim_kind,
-        Some(arkret_core::HandleClaimKind::HandleBinding)
+        Some(arkret_models_identity::HandleClaimKind::HandleBinding)
     );
 }
 
@@ -1794,11 +1801,13 @@ fn issue_handle_claim_rejects_did_web_subject_without_explicit_personal_node_gat
     let now = clock.now();
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
     let key_store = test_keystore();
-    let hint = arkret_core::DeliveryBindingHint {
-        recipient_service_id: arkret_core::Did::new("did:web:soland.example").unwrap(),
-        recipient_service_type: arkret_core::RecipientServiceType::PrincipalServer,
-        binding_source: arkret_core::HandleHintBindingSource::OrganizationPolicy,
-        delivery_modes: [arkret_core::DeliveryMode::Events].into_iter().collect(),
+    let hint = arkret_models_identity::DeliveryBindingHint {
+        recipient_service_id: arkret_identifiers::Did::new("did:web:soland.example").unwrap(),
+        recipient_service_type: arkret_models_identity::RecipientServiceType::PrincipalServer,
+        binding_source: arkret_models_identity::HandleHintBindingSource::OrganizationPolicy,
+        delivery_modes: [arkret_models_identity::DeliveryMode::Events]
+            .into_iter()
+            .collect(),
         service_acceptance_ref: None,
         policy_event_ref: None,
     };
@@ -1810,7 +1819,7 @@ fn issue_handle_claim_rejects_did_web_subject_without_explicit_personal_node_gat
         &key_store,
         &user,
         "did:web:alice.example",
-        arkret_core::HandleClaimKind::HandleBinding,
+        arkret_models_identity::HandleClaimKind::HandleBinding,
         "did:web:space.example".to_owned(),
         hint,
     )
@@ -1833,11 +1842,13 @@ fn issue_handle_claim_accepts_organization_handle_claim_kind() {
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
     let key_store = test_keystore();
 
-    let hint = arkret_core::DeliveryBindingHint {
-        recipient_service_id: arkret_core::Did::new("did:web:soland.example").unwrap(),
-        recipient_service_type: arkret_core::RecipientServiceType::PrincipalServer,
-        binding_source: arkret_core::HandleHintBindingSource::OrganizationPolicy,
-        delivery_modes: [arkret_core::DeliveryMode::Events].into_iter().collect(),
+    let hint = arkret_models_identity::DeliveryBindingHint {
+        recipient_service_id: arkret_identifiers::Did::new("did:web:soland.example").unwrap(),
+        recipient_service_type: arkret_models_identity::RecipientServiceType::PrincipalServer,
+        binding_source: arkret_models_identity::HandleHintBindingSource::OrganizationPolicy,
+        delivery_modes: [arkret_models_identity::DeliveryMode::Events]
+            .into_iter()
+            .collect(),
         service_acceptance_ref: None,
         policy_event_ref: None,
     };
@@ -1849,13 +1860,13 @@ fn issue_handle_claim_accepts_organization_handle_claim_kind() {
         &key_store,
         &user,
         "did:webvh:zQmExampleScid:soland.example:webvh:01arz3ndektsv4rrffq69g5fav",
-        arkret_core::HandleClaimKind::OrganizationHandle,
+        arkret_models_identity::HandleClaimKind::OrganizationHandle,
         "did:web:space.example".to_owned(),
         hint,
     )
     .expect("organization_handle claim_kind must be accepted");
     assert_eq!(
         material.payload.claim_kind,
-        Some(arkret_core::HandleClaimKind::OrganizationHandle)
+        Some(arkret_models_identity::HandleClaimKind::OrganizationHandle)
     );
 }

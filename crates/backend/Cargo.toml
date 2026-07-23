@@ -36,7 +36,6 @@ coauth-policy = {workspace = true}
 coauth-principal = {workspace = true}
 coauth-tasks = {workspace = true}
 coauth-templates = {workspace = true}
-arkret-core = {workspace = true,features = ["salvo"]}
 arkret-hlc = {workspace = true}
 arkret-canonical = {workspace = true}
 arkret-identifiers = {workspace = true}
@@ -47,7 +46,7 @@ arkret-models-discovery = {workspace = true}
 arkret-models-identity = {workspace = true}
 arkret-policy = {workspace = true}
 arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
-arkret-wire = {workspace = true}
+arkret-wire = {workspace = true,features = ["salvo-oapi"]}
 arkret-http-client = {workspace = true}
 arkret-egress-policy = {workspace = true}
 arkret-crypto = {workspace = true}

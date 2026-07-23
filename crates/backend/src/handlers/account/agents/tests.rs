@@ -11,7 +11,7 @@ mod agent_auth_error_matrix_tests {
     }
 
     fn multicodec_ed25519_public_key(key: &ed25519_dalek::VerifyingKey) -> String {
-        arkret_core::ed25519_pubkey_to_did_key_multibase(&key.to_bytes())
+        arkret_canonical::ed25519_pubkey_to_did_key_multibase(&key.to_bytes())
     }
 
     use super::super::accountability::{
