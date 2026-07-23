@@ -7,10 +7,10 @@ fn next_focus_index(current: Option<usize>, len: usize, reverse: bool) -> Option
     }
 
     Some(match (current, reverse) {
-        (Some(0), true) | (None, true) => len - 1,
+        (Some(0) | None, true) => len - 1,
         (Some(index), true) => index - 1,
         (Some(index), false) if index + 1 < len => index + 1,
-        (Some(_), false) | (None, false) => 0,
+        (Some(_) | None, false) => 0,
     })
 }
 

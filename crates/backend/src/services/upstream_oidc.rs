@@ -586,7 +586,7 @@ mod tests {
     }
 
     fn principal_server_config_for(endpoint: Url) -> ArkretConfig {
-        let config = ArkretConfig {
+        ArkretConfig {
             principal_servers: vec![PrincipalServerConfig {
                 name: "soland".to_owned(),
                 endpoint: endpoint.clone(),
@@ -594,8 +594,7 @@ mod tests {
                 embedded_webvh_registration_bearer: None,
             }],
             ..ArkretConfig::default()
-        };
-        config
+        }
     }
 
     #[tokio::test]

@@ -46,21 +46,23 @@ struct IdentityRow {
 
 enum StoredIdentityLoad {
     Missing,
-    Loaded(StoredServiceIdentity),
+    Loaded(Box<StoredServiceIdentity>),
     Invalid(String),
 }
 
 impl StoredIdentityLoad {
-    fn into_runtime_result(self) -> Result<Option<StoredServiceIdentity>, ServiceIdentityState> {
+    fn into_runtime_result(
+        self,
+    ) -> Result<Option<StoredServiceIdentity>, Box<ServiceIdentityState>> {
         match self {
             Self::Missing => Ok(None),
-            Self::Loaded(stored) => Ok(Some(stored)),
-            Self::Invalid(error) => Err(ServiceIdentityState::Faulted {
+            Self::Loaded(stored) => Ok(Some(*stored)),
+            Self::Invalid(error) => Err(Box::new(ServiceIdentityState::Faulted {
                 diagnostic: ServiceIdentityDiagnostic::RestoreFailed,
                 next_action: format!(
                     "restore a verified service_identity database record; the stored record cannot be decoded: {error}"
                 ),
-            }),
+            })),
         }
     }
 }
@@ -231,7 +233,7 @@ async fn resolve_once(
 ) -> anyhow::Result<ServiceIdentityState> {
     let stored = match load_stored(repository_factory).await?.into_runtime_result() {
         Ok(stored) => stored,
-        Err(state) => return Ok(state),
+        Err(state) => return Ok(*state),
     };
     let prepared = match prepare_inception(provider, registration_key, signing_seed) {
         Ok(prepared) => prepared,
@@ -586,7 +588,7 @@ async fn load_stored(
     Ok(match row {
         None => StoredIdentityLoad::Missing,
         Some(row) => match serde_json::from_value(row.identity) {
-            Ok(stored) => StoredIdentityLoad::Loaded(stored),
+            Ok(stored) => StoredIdentityLoad::Loaded(Box::new(stored)),
             Err(error) => StoredIdentityLoad::Invalid(error.to_string()),
         },
     })
@@ -697,7 +699,7 @@ mod tests {
     #[test]
     fn malformed_persisted_identity_is_a_faulted_runtime_state() {
         let load = match serde_json::from_value::<StoredServiceIdentity>(Value::Null) {
-            Ok(stored) => StoredIdentityLoad::Loaded(stored),
+            Ok(stored) => StoredIdentityLoad::Loaded(Box::new(stored)),
             Err(error) => StoredIdentityLoad::Invalid(error.to_string()),
         };
 
@@ -706,7 +708,7 @@ mod tests {
             .expect_err("malformed persisted identity must fail closed");
 
         assert!(matches!(
-            state,
+            *state,
             ServiceIdentityState::Faulted {
                 diagnostic: ServiceIdentityDiagnostic::RestoreFailed,
                 ..

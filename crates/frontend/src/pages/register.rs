@@ -140,8 +140,10 @@ fn RegisterPage(providers: ProvidersOutcome) -> Element {
                                         let msg = resp
                                             .error
                                             .as_deref()
-                                            .map(registration_error_message)
-                                            .unwrap_or_else(|| "Registration failed.".to_owned());
+                                            .map_or_else(
+                                                || "Registration failed.".to_owned(),
+                                                registration_error_message,
+                                            );
                                         error.set(Some(msg));
                                     }
                                     Err(e) => error.set(Some(e)),

@@ -372,14 +372,10 @@ mod tests {
             resolved_at,
         );
 
-        assert!(
-            resolved
-                .resolve_at(
-                    &endpoint,
-                    resolved_at + MAX_TRUSTED_AUDIENCE_AGE - Duration::from_nanos(1)
-                )
-                .is_some()
-        );
+        let before_expiry = (resolved_at + MAX_TRUSTED_AUDIENCE_AGE)
+            .checked_sub(Duration::from_nanos(1))
+            .unwrap();
+        assert!(resolved.resolve_at(&endpoint, before_expiry).is_some());
         assert_eq!(
             resolved.resolve_at(&endpoint, resolved_at + MAX_TRUSTED_AUDIENCE_AGE),
             None
@@ -397,7 +393,9 @@ mod tests {
             resolved_at,
         );
 
-        let before_expiry = resolved_at + MAX_TRUSTED_AUDIENCE_AGE - Duration::from_secs(1);
+        let before_expiry = (resolved_at + MAX_TRUSTED_AUDIENCE_AGE)
+            .checked_sub(Duration::from_secs(1))
+            .unwrap();
         resolved.apply_refresh_result(
             &server,
             Err("describe unavailable".to_owned()),

@@ -73,6 +73,7 @@ fn locale_is_chinese(locale: &str) -> bool {
         .is_some_and(|language| language.eq_ignore_ascii_case("zh"))
 }
 
+#[cfg(any(target_arch = "wasm32", test))]
 fn supported_locale(locale: &str) -> Option<UiLocale> {
     locale.split_ascii_whitespace().find_map(|tag| {
         if locale_is_chinese(tag) {
@@ -157,9 +158,7 @@ pub fn initial_locale() -> UiLocale {
 }
 
 fn current_locale() -> UiLocale {
-    try_consume_context::<LocaleSignal>()
-        .map(|locale| *locale.read())
-        .unwrap_or_else(initial_locale)
+    try_consume_context::<LocaleSignal>().map_or_else(initial_locale, |locale| *locale.read())
 }
 
 fn format_for_locale(locale: &str, key: &str, args: Option<&FluentArgs<'_>>) -> Option<String> {

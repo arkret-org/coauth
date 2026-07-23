@@ -79,10 +79,10 @@ fn decode_device_public_key(input: &str) -> Result<[u8; 32], ArkretRouteError> {
     // prefix. Raw base64url is also allowed and can legitimately begin with
     // the character `z`, so a failed multibase parse must fall through to the
     // raw-key decoder instead of making the first character a format tag.
-    if trimmed.starts_with('z') {
-        if let Ok(raw) = arkret_canonical::decode_ed25519_multibase(trimmed) {
-            return Ok(raw);
-        }
+    if trimmed.starts_with('z')
+        && let Ok(raw) = arkret_canonical::decode_ed25519_multibase(trimmed)
+    {
+        return Ok(raw);
     }
 
     // Otherwise treat as base64 (standard or URL-safe, padded or not) of the

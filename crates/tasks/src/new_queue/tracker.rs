@@ -98,8 +98,7 @@ impl JobTracker {
                             Err(_) => {
                                 context.cancellation_token.cancel();
                                 Err(JobError::retry(anyhow::anyhow!(
-                                    "job exceeded its {:?} execution timeout",
-                                    limit
+                                    "job exceeded its {limit:?} execution timeout"
                                 )))
                             }
                         }
