@@ -401,7 +401,7 @@ mod tests {
     fn invite_delivery() -> arkret_core::InviteDeliveryRequest {
         arkret_core::InviteDeliveryRequest::new(
             arkret_core::Event::new(
-                arkret_core::events::EventKind::INVITE_CREATE,
+                arkret_wire::events::EventKind::INVITE_CREATE,
                 arkret_core::RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000001").unwrap(),
                 arkret_core::Did::new("did:web:inviter").unwrap(),
                 1,
