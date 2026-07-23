@@ -24,7 +24,6 @@ schema = ["dep:schemars", "dep:salvo", "coauth-data-model/schema"]
 [dependencies]
 chrono = {workspace = true,features = ["serde"]}
 coauth-data-model = {workspace = true}
-arkret-core = {workspace = true}
 arkret-models-collaboration = {workspace = true}
 salvo = {workspace = true,optional = true}
 schemars = {workspace = true,optional = true}

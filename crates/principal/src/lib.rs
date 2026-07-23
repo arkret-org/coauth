@@ -274,7 +274,7 @@ pub struct PrincipalAgentKeyPairCommitRequest {
     idempotency_key: String,
     request_digest: String,
     principal_server_name: String,
-    body: arkret_core::AgentKeyPairRequestBody,
+    body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody,
 }
 
 impl PrincipalAgentKeyPairCommitRequest {
@@ -283,7 +283,7 @@ impl PrincipalAgentKeyPairCommitRequest {
         idempotency_key: String,
         request_digest: String,
         principal_server_name: String,
-        body: arkret_core::AgentKeyPairRequestBody,
+        body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody,
     ) -> Self {
         Self {
             idempotency_key,
@@ -309,7 +309,7 @@ impl PrincipalAgentKeyPairCommitRequest {
     }
 
     #[must_use]
-    pub fn body(&self) -> &arkret_core::AgentKeyPairRequestBody {
+    pub fn body(&self) -> &arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody {
         &self.body
     }
 

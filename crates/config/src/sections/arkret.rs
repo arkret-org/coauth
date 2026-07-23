@@ -1,9 +1,11 @@
 use std::sync::{Arc, RwLock};
 
-use arkret_core::{
-    CanonicalServiceUrl, Did, LocalServiceIdentity, ServiceIdentityDiagnostic,
-    ServiceIdentityKeyRef, ServiceIdentityState, ServiceRegistrationKey, ServiceType,
+use arkret_identifiers::Did;
+use arkret_identity::service_identity::{
+    LocalServiceIdentity, ServiceIdentityDiagnostic, ServiceIdentityKeyRef, ServiceIdentityState,
 };
+use arkret_models_identity::service_identity::{CanonicalServiceUrl, ServiceRegistrationKey};
+use arkret_wire::ServiceType;
 use chrono::Duration;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -16,7 +18,7 @@ use super::ConfigurationSection;
 ///
 /// A `trust_domain` value MUST match `ak:trust_domain:<scope>` where
 /// `<scope>` is `[a-z0-9._:-]{1,128}`. This mirrors the SDK validator
-/// `arkret_core::TypedTrustDomainId` so coauth and the Realm policy
+/// `arkret_identifiers::TypedTrustDomainId` so coauth and the Realm policy
 /// engine agree on the exact byte-form. Validate via
 /// [`validate_trust_domain`].
 const TRUST_DOMAIN_PREFIX: &str = "ak:trust_domain:";

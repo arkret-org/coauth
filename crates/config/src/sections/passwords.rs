@@ -235,8 +235,10 @@ mod tests {
 
     #[test]
     fn rejects_password_complexity_above_zxcvbn_range() {
-        let mut config = PasswordsConfig::default();
-        config.minimum_complexity = 5;
+        let config = PasswordsConfig {
+            minimum_complexity: 5,
+            ..PasswordsConfig::default()
+        };
 
         let error = config
             .validate(&Figment::new())

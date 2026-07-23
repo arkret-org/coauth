@@ -14,6 +14,6 @@ workspace = true
 
 [dependencies]
 anyhow = {workspace = true}
-arkret-core = {workspace = true}
+arkret-models-collaboration = {workspace = true}
 async-trait = {workspace = true}
 soland-contracts = {workspace = true}

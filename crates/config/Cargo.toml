@@ -30,14 +30,16 @@ workspace = true
 
 # coauth workspace crates
 anyhow = {workspace = true}
-arkret-core = {workspace = true}
+arkret-identifiers = {workspace = true}
+arkret-identity = {workspace = true}
+arkret-models-identity = {workspace = true}
+arkret-wire = {workspace = true}
 camino = {workspace = true}
 chrono = {workspace = true}
 coauth-email-types = {workspace = true}
 coauth-iana = {workspace = true}
 coauth-jose = {workspace = true}
 coauth-keystore = {workspace = true}
-arkret-identifiers = {workspace = true}
 figment = {workspace = true}
 futures-util = {workspace = true}
 hex = {workspace = true}
