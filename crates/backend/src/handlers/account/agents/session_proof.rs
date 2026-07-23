@@ -629,10 +629,12 @@ fn intersect_agent_session_scope(
     let content_resource_scoped = granted_scope
         .iter()
         .any(|token| !service_surface_scope_token(token) && realm_resource_scope_token(token));
-    let resource_scoped = granted_scope
-        .iter()
-        .any(|token| realm_resource_scope_token(token))
-        || scope_request_has_resource_selectors(scope_request);
+    // Account-global agent service endpoints (for example the self event
+    // stream) do not become Realm-scoped merely because their operation name
+    // contains `events`. Content actions and explicit resource selectors must
+    // still fail closed through the Realm capability/policy intersection.
+    let resource_scoped =
+        content_resource_scoped || scope_request_has_resource_selectors(scope_request);
 
     let (
         realm_ids,
@@ -1977,6 +1979,30 @@ mod tests {
             effective_scope.granted_scope,
             vec!["ak.self.events.command.submit"]
         );
+    }
+
+    #[test]
+    fn account_global_service_scope_does_not_require_realm_policy() {
+        let effective_scope = intersect_agent_session_scope(
+            AGENT_KEY_SCOPE_LIMITED,
+            &[
+                "ak.self.events.stream.subscribe".to_owned(),
+                "ak.event.read".to_owned(),
+            ],
+            &AgentScopeRequestInput::default(),
+            &AgentSessionCapabilityScope::default(),
+            None,
+            None,
+            "did:example:agent",
+        )
+        .expect("account-global service access must precede Realm content grants");
+
+        assert_eq!(
+            effective_scope.granted_scope,
+            vec!["ak.self.events.stream.subscribe"]
+        );
+        assert!(effective_scope.realm_ids.is_empty());
+        assert!(effective_scope.policy_refs.is_empty());
     }
 
     #[test]

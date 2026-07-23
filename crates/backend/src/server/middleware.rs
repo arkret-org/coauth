@@ -399,6 +399,7 @@ pub(super) fn public_oidc_browser_cors() -> impl Handler {
             AUTHORIZATION,
             CONTENT_TYPE,
             HeaderName::from_static("dpop"),
+            HeaderName::from_static("idempotency-key"),
         ])
         .into_handler()
 }

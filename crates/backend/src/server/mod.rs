@@ -501,6 +501,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn agent_key_pair_preflight_allows_idempotency_key_header() {
+        let service = salvo::Service::new(build_account_api_router(Router::new()));
+        let path = "/_arkret/gate/account/agent-key-pair";
+        let response = TestClient::options(format!("http://127.0.0.1:8698{path}"))
+            .add_header("Origin", "http://127.0.0.1:8080", true)
+            .add_header("Access-Control-Request-Method", "POST", true)
+            .add_header(
+                "Access-Control-Request-Headers",
+                "content-type,idempotency-key",
+                true,
+            )
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code, Some(StatusCode::NO_CONTENT));
+        let allow_headers = response
+            .headers()
+            .get(ACCESS_CONTROL_ALLOW_HEADERS)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        assert!(
+            allow_headers
+                .split(',')
+                .any(|header| header.trim() == "idempotency-key"),
+            "agent-key-pair preflight must allow Idempotency-Key; got {allow_headers}",
+        );
+    }
+
+    #[tokio::test]
     async fn session_grants_post_error_keeps_browser_cors_headers() {
         let service = salvo::Service::new(build_account_api_router(Router::new()));
         let response =
