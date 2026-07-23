@@ -416,6 +416,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     operation_bearer,
                     display_name.as_deref(),
                     Some(device_id.as_str()),
+                    user.localpart.as_str(),
                 )
                 .await
                 {

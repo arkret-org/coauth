@@ -28,6 +28,7 @@ use coauth_oauth_types::requests::{
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
 use salvo::prelude::*;
+use soland_contracts::admin::AccountLocalpartAddRequestBody;
 use ulid::Ulid;
 
 use super::{DepotExt, DpopSessionBinding, RouteError, make_clock, make_rng};
@@ -157,6 +158,25 @@ fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url
         .map_err(|error| format!("invalid principal account register endpoint: {error}"))
 }
 
+fn soland_account_localparts_endpoint(
+    principal_endpoint: &str,
+    principal_did: &str,
+) -> Result<url::Url, String> {
+    let mut endpoint = url::Url::parse(principal_endpoint)
+        .map_err(|error| format!("invalid principal server endpoint: {error}"))?;
+    endpoint.set_query(None);
+    endpoint.set_fragment(None);
+    endpoint
+        .path_segments_mut()
+        .map_err(|_| "principal server endpoint cannot be a base URL".to_owned())?
+        .clear()
+        .push("_soland")
+        .push("accounts")
+        .push(principal_did)
+        .push("localparts");
+    Ok(endpoint)
+}
+
 pub(crate) fn principal_server_operation_bearer<'a>(
     arkret_config: &'a coauth_config::ArkretConfig,
     audience: &str,
@@ -218,9 +238,45 @@ async fn send_soland_account_register(
     Ok((status, body))
 }
 
+async fn send_soland_primary_localpart(
+    http_client: &reqwest::Client,
+    endpoint: &url::Url,
+    bearer: &str,
+    localpart: &str,
+) -> Result<(reqwest::StatusCode, String), String> {
+    let body = AccountLocalpartAddRequestBody {
+        localpart: localpart.to_owned(),
+        is_primary: Some(true),
+    };
+    let response = outbound_http::send_with_policy(
+        outbound_http::soland_policy("account_primary_localpart_sync"),
+        || {
+            http_client
+                .post(endpoint.clone())
+                .bearer_auth(bearer)
+                .json(&body)
+        },
+    )
+    .await
+    .map_err(|error| format!("principal account primary localpart sync failed: {error}"))?;
+    let status = response.status();
+    if status.is_success() {
+        return Ok((status, String::new()));
+    }
+    let body = response.text().await.unwrap_or_default();
+    Ok((status, body))
+}
+
 fn soland_account_register_failure(status: reqwest::StatusCode, body: &str) -> String {
     format!(
         "principal account register returned {status}: {}",
+        body.chars().take(256).collect::<String>()
+    )
+}
+
+fn soland_account_localpart_failure(status: reqwest::StatusCode, body: &str) -> String {
+    format!(
+        "principal account primary localpart sync returned {status}: {}",
         body.chars().take(256).collect::<String>()
     )
 }
@@ -267,10 +323,15 @@ pub(crate) async fn ensure_soland_account_registered(
     operation_bearer: Option<&str>,
     display_name: Option<&str>,
     device_id: Option<&str>,
+    primary_localpart: &str,
 ) -> Result<(), String> {
     let Some(principal_endpoint) = principal_endpoint else {
         return Ok(());
     };
+    let primary_localpart = primary_localpart.trim();
+    if primary_localpart.is_empty() {
+        return Err("principal account primary localpart is required".to_owned());
+    }
     let bearer = operation_bearer
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -282,10 +343,16 @@ pub(crate) async fn ensure_soland_account_registered(
     let request_body = soland_account_register_body(principal_did, display_name, device_id)?;
     let (status, response_body) =
         send_soland_account_register(http_client, &endpoint, bearer, &request_body).await?;
+    if !status.is_success() {
+        return Err(soland_account_register_failure(status, &response_body));
+    }
+    let endpoint = soland_account_localparts_endpoint(principal_endpoint, principal_did)?;
+    let (status, response_body) =
+        send_soland_primary_localpart(http_client, &endpoint, bearer, primary_localpart).await?;
     if status.is_success() {
         return Ok(());
     }
-    Err(soland_account_register_failure(status, &response_body))
+    Err(soland_account_localpart_failure(status, &response_body))
 }
 
 /// Account Authority OIDC authorization-code → `ak.session.grant` exchange.
@@ -678,6 +745,7 @@ async fn exchange_oidc_code(
             operation_bearer,
             user.display_name.as_deref(),
             Some(device_id.as_str()),
+            user.localpart.as_str(),
         )
         .await
         .map_err(|message| {
@@ -1171,6 +1239,7 @@ async fn exchange_oidc_code(
         operation_bearer,
         user.display_name.as_deref(),
         Some(device_id.as_str()),
+        user.localpart.as_str(),
     )
     .await
     .map_err(|message| OidcExchangeError::new("principal_account_registration_failed", message))?;
@@ -1444,8 +1513,20 @@ mod tests {
         );
     }
 
+    #[test]
+    fn soland_account_localparts_endpoint_encodes_principal_did_segment() {
+        let endpoint =
+            soland_account_localparts_endpoint("https://local.host/base/path", TEST_PRINCIPAL_DID)
+                .unwrap();
+
+        assert_eq!(
+            endpoint.as_str(),
+            "https://local.host/_soland/accounts/did:webvh:scid:local.host:webvh:01k/localparts"
+        );
+    }
+
     #[tokio::test]
-    async fn soland_account_register_uses_canonical_bearer_without_handle() {
+    async fn soland_account_projection_registers_account_then_syncs_primary_localpart() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
@@ -1460,6 +1541,32 @@ mod tests {
             .expect(1)
             .mount(&server)
             .await;
+        let localparts_path = soland_account_localparts_endpoint(&server.uri(), TEST_PRINCIPAL_DID)
+            .unwrap()
+            .path()
+            .to_owned();
+        Mock::given(method("POST"))
+            .and(path(localparts_path))
+            .and(request_has_bearer(TEST_OPERATION_BEARER))
+            .and(|request: &WiremockRequest| {
+                request_json(request)
+                    == serde_json::json!({
+                        "localpart": "alice",
+                        "is_primary": true,
+                    })
+            })
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "localpart": {
+                    "id": "01964137-0000-7000-8000-000000000002",
+                    "localpart": "alice",
+                    "is_primary": true,
+                    "created_at": "2026-07-23T00:00:00.000Z",
+                    "updated_at": "2026-07-23T00:00:00.000Z"
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
 
         ensure_soland_account_registered(
             &reqwest::Client::new(),
@@ -1468,6 +1575,7 @@ mod tests {
             Some(TEST_OPERATION_BEARER),
             Some("Alice"),
             Some(TEST_DEVICE_ID),
+            "alice",
         )
         .await
         .expect("canonical account projection should succeed");
@@ -1493,11 +1601,76 @@ mod tests {
             Some(TEST_OPERATION_BEARER),
             Some("Alice"),
             Some(TEST_DEVICE_ID),
+            "alice",
         )
         .await
         .expect_err("registration policy failures must block grant issuance");
 
         assert!(error.contains("account registration is closed"));
+    }
+
+    #[tokio::test]
+    async fn soland_primary_localpart_conflict_blocks_grant_issuance() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(ACCOUNT_REGISTER_PATH))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "principal_id": TEST_PRINCIPAL_DID,
+                "state": "active",
+                "devices": [],
+                "handle_claim_digests": []
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let localparts_path = soland_account_localparts_endpoint(&server.uri(), TEST_PRINCIPAL_DID)
+            .unwrap()
+            .path()
+            .to_owned();
+        Mock::given(method("POST"))
+            .and(path(localparts_path))
+            .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
+                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
+                "localpart is already assigned",
+            )))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let error = ensure_soland_account_registered(
+            &reqwest::Client::new(),
+            Some(&server.uri()),
+            TEST_PRINCIPAL_DID,
+            Some(TEST_OPERATION_BEARER),
+            Some("Alice"),
+            Some(TEST_DEVICE_ID),
+            "alice",
+        )
+        .await
+        .expect_err("primary localpart conflicts must block grant issuance");
+
+        assert!(error.contains("primary localpart sync returned"));
+        assert!(error.contains("localpart is already assigned"));
+    }
+
+    #[tokio::test]
+    async fn soland_account_projection_rejects_empty_primary_localpart_before_registration() {
+        let server = MockServer::start().await;
+
+        let error = ensure_soland_account_registered(
+            &reqwest::Client::new(),
+            Some(&server.uri()),
+            TEST_PRINCIPAL_DID,
+            Some(TEST_OPERATION_BEARER),
+            Some("Alice"),
+            Some(TEST_DEVICE_ID),
+            " ",
+        )
+        .await
+        .expect_err("an empty primary localpart must fail before any projection request");
+
+        assert_eq!(error, "principal account primary localpart is required");
+        assert!(server.received_requests().await.unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -1510,6 +1683,7 @@ mod tests {
             None,
             Some("Alice"),
             Some(TEST_DEVICE_ID),
+            "alice",
         )
         .await
         .expect_err("missing deployment bearer must fail closed");
