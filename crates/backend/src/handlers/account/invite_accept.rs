@@ -225,7 +225,7 @@ pub async fn post_verify_invite(
                 inviter_did: verified.inviter_did,
                 invitee_promise_did: verified.invitee_promise_did,
                 verification_proof_jti: verified.verification_proof_jti,
-                effective_expires_at: arkret_core::canonical::format_timestamp_canonical(
+                effective_expires_at: arkret_canonical::format_timestamp_canonical(
                     verified.effective_expires_at,
                 ),
             }));

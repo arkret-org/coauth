@@ -79,8 +79,8 @@ fn oauth_session_detail_response(detail: OAuthSessionDetailData) -> OAuthSession
         last_active_ip: session.last_active_ip.map(|ip| ip.to_string()),
         last_active_at: session
             .last_active_at
-            .map(arkret_core::canonical::format_timestamp_canonical),
-        created_at: Some(arkret_core::canonical::format_timestamp_canonical(
+            .map(arkret_canonical::format_timestamp_canonical),
+        created_at: Some(arkret_canonical::format_timestamp_canonical(
             session.created_at,
         )),
     }
@@ -172,13 +172,13 @@ pub async fn get_session(
                 last_active_ip: session.last_active_ip.map(|ip| ip.to_string()),
                 last_active_at: session
                     .last_active_at
-                    .map(arkret_core::canonical::format_timestamp_canonical),
-                created_at: Some(arkret_core::canonical::format_timestamp_canonical(
+                    .map(arkret_canonical::format_timestamp_canonical),
+                created_at: Some(arkret_canonical::format_timestamp_canonical(
                     session.created_at,
                 )),
                 last_authentication: detail.last_authentication.map(|a| AuthenticationData {
                     id: NodeType::Authentication.serialize(a.id),
-                    created_at: arkret_core::canonical::format_timestamp_canonical(a.created_at),
+                    created_at: arkret_canonical::format_timestamp_canonical(a.created_at),
                 }),
             })
         }
@@ -203,8 +203,8 @@ pub async fn get_session(
                 last_active_ip: session.last_active_ip.map(|ip| ip.to_string()),
                 last_active_at: session
                     .last_active_at
-                    .map(arkret_core::canonical::format_timestamp_canonical),
-                created_at: Some(arkret_core::canonical::format_timestamp_canonical(
+                    .map(arkret_canonical::format_timestamp_canonical),
+                created_at: Some(arkret_canonical::format_timestamp_canonical(
                     session.created_at,
                 )),
             })

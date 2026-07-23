@@ -566,9 +566,9 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         // so persist that same value rather than PostgreSQL's finer-grained
         // representation; otherwise the proof can never equal the durable row.
         let input = IdentityBindingChallengeInput {
-            issued_at: arkret_core::canonical::normalize_timestamp_canonical(input.issued_at),
-            expires_at: arkret_core::canonical::normalize_timestamp_canonical(input.expires_at),
-            lease_expires_at: arkret_core::canonical::normalize_timestamp_canonical(
+            issued_at: arkret_canonical::normalize_timestamp_canonical(input.issued_at),
+            expires_at: arkret_canonical::normalize_timestamp_canonical(input.expires_at),
+            lease_expires_at: arkret_canonical::normalize_timestamp_canonical(
                 input.lease_expires_at,
             ),
             ..input
@@ -1024,7 +1024,7 @@ mod tests {
         };
         assert_eq!(
             issued_challenge.issued_at,
-            arkret_core::canonical::normalize_timestamp_canonical(challenge_issued_at),
+            arkret_canonical::normalize_timestamp_canonical(challenge_issued_at),
             "durable challenge timestamps must exactly match their canonical wire value"
         );
         let wire_challenge: arkret_core::IdentityBindingChallengeOutcome =

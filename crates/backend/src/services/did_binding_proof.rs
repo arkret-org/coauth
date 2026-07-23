@@ -70,7 +70,7 @@
 //! `nonce`. The signature is verified against the verification
 //! service's resolved DID document JWKS.
 
-use arkret_core::canonical::canonical_json_bytes;
+use arkret_canonical::canonical_json_bytes;
 use arkret_signatures::proof::verify_detached_ed25519_signature;
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};

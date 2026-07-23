@@ -4,7 +4,7 @@
 //! `services::user_admin`; durable proposal persistence is tracked in
 //! `_todos.md`.
 
-use arkret_core::canonical::canonical_json_bytes;
+use arkret_canonical::canonical_json_bytes;
 use chrono::{DateTime, Utc};
 use coauth_admin_types::{
     AccountRiskActionApprovalOutcome, AccountRiskActionApprovalRequestBody,

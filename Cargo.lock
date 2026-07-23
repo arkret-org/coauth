@@ -1874,6 +1874,7 @@ name = "coauth-storage-postgres"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "arkret-canonical",
  "arkret-core",
  "arkret-wire",
  "async-trait",
@@ -1915,6 +1916,7 @@ name = "coauth-tasks"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "arkret-canonical",
  "arkret-core",
  "arkret-wire",
  "async-trait",
@@ -8477,6 +8479,7 @@ dependencies = [
 name = "soland-contracts"
 version = "0.3.0"
 dependencies = [
+ "arkret-canonical",
  "arkret-core",
  "chrono",
  "serde",

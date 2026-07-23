@@ -138,9 +138,7 @@ impl PolicyObligation {
         if let Some(expires_at) = self.expires_at {
             obj.insert(
                 "expires_at".to_owned(),
-                Value::String(arkret_core::canonical::format_timestamp_canonical(
-                    expires_at,
-                )),
+                Value::String(arkret_canonical::format_timestamp_canonical(expires_at)),
             );
         }
         if !self.payload.is_null() {

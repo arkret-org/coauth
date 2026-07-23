@@ -50,8 +50,8 @@ pub struct IdentityLinkEnvelope {
     pub encrypted_payload: String,
     /// Wall-clock expiry; receivers MUST reject after this.
     #[serde(
-        serialize_with = "arkret_core::canonical::serialize_canonical_timestamp",
-        deserialize_with = "arkret_core::canonical::deserialize_canonical_timestamp"
+        serialize_with = "arkret_canonical::serialize_canonical_timestamp",
+        deserialize_with = "arkret_canonical::deserialize_canonical_timestamp"
     )]
     pub expires_at: DateTime<Utc>,
 }

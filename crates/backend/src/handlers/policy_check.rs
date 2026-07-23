@@ -34,9 +34,9 @@
 
 use std::time::Duration;
 
+use arkret_canonical::format_timestamp_canonical;
 #[cfg(test)]
 use arkret_core::Did;
-use arkret_core::canonical::format_timestamp_canonical;
 use arkret_core::{
     PolicyCheckBoundTo, PolicyCheckOutcome, PolicyCheckRequestBody, PolicyCheckSignature,
 };
@@ -417,7 +417,7 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
         assert_eq!(format_timestamp_canonical(ts), "2026-05-21T10:11:12.345Z");
-        arkret_core::canonical::validate_timestamp_canonical(&format_timestamp_canonical(ts))
+        arkret_canonical::validate_timestamp_canonical(&format_timestamp_canonical(ts))
             .expect("formatted timestamp is canonical");
     }
 

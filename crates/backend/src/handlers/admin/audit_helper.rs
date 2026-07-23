@@ -5,7 +5,7 @@
 //! repository-generated row id and created_at timestamp, and finally update the
 //! same row's `audit_signature` column.
 
-use arkret_core::canonical::{canonical_json_bytes, format_timestamp_canonical};
+use arkret_canonical::{canonical_json_bytes, format_timestamp_canonical};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::audit::{AdminOperation, AdminOperationLog, NewAdminOperationLog};
 use coauth_data::{BoxRepository, RepositoryAccess, RepositoryError};
@@ -231,7 +231,7 @@ pub fn verify_admin_operation_signature(
 }
 
 /// Canonical-JSON transcript bound to one admin-audit row. Field order is fixed
-/// for readability; `arkret_core::canonical` re-sorts before emitting bytes.
+/// for readability; `arkret_canonical` re-sorts before emitting bytes.
 #[derive(Debug, Serialize)]
 struct AuditTranscript<'a> {
     kind: &'a str,

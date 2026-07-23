@@ -39,11 +39,11 @@ pub(crate) struct SessionGrantRecord {
     device_id: Option<String>,
     audience: String,
     scopes: Vec<String>,
-    #[serde(serialize_with = "arkret_core::canonical::serialize_canonical_timestamp")]
+    #[serde(serialize_with = "arkret_canonical::serialize_canonical_timestamp")]
     created_at: DateTime<Utc>,
-    #[serde(serialize_with = "arkret_core::canonical::serialize_canonical_timestamp")]
+    #[serde(serialize_with = "arkret_canonical::serialize_canonical_timestamp")]
     expires_at: DateTime<Utc>,
-    #[serde(serialize_with = "arkret_core::canonical::serialize_optional_canonical_timestamp")]
+    #[serde(serialize_with = "arkret_canonical::serialize_optional_canonical_timestamp")]
     revoked_at: Option<DateTime<Utc>>,
 }
 
@@ -81,7 +81,7 @@ pub struct PatchPrimaryHandlePreferenceRequestBody {
 #[derive(Debug, Serialize)]
 pub struct PrimaryHandlePreferenceOutcome {
     pub primary_handle: Option<String>,
-    #[serde(serialize_with = "arkret_core::canonical::serialize_canonical_timestamp")]
+    #[serde(serialize_with = "arkret_canonical::serialize_canonical_timestamp")]
     pub effective_at: DateTime<Utc>,
     pub source_claim_id: Option<String>,
     pub source_claim_digest: Option<String>,

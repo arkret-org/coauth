@@ -5,7 +5,7 @@
 use std::str::FromStr as _;
 
 use anyhow::Context;
-use arkret_core::canonical::format_timestamp_canonical;
+use arkret_canonical::format_timestamp_canonical;
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::TokenType;
 use coauth_data::personal::PersonalSessionFilter;

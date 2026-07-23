@@ -1278,7 +1278,7 @@ mod tests {
             exp: iat + chrono::Duration::seconds(5 * 60),
         };
         let header_b64 = Base64UrlUnpadded::encode_string(&serde_json::to_vec(&header).unwrap());
-        let payload = arkret_core::canonical::canonical_json_bytes(&claims).unwrap();
+        let payload = arkret_canonical::canonical_json_bytes(&claims).unwrap();
         let payload_b64 = Base64UrlUnpadded::encode_string(&payload);
         let signing_input = format!("{header_b64}.{payload_b64}");
         let mut rng = state.rng();

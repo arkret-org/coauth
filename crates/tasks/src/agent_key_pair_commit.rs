@@ -1,6 +1,6 @@
 //! Durable retry of the canonical Agent key-pair commit.
 
-use arkret_core::canonical::canonical_sha256;
+use arkret_canonical::canonical_sha256;
 use async_trait::async_trait;
 use coauth_data::RepositoryAccess as _;
 use coauth_data::queue::AgentKeyPairCommitJob;

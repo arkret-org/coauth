@@ -6,7 +6,7 @@
 
 use std::time::Duration;
 
-use arkret_core::canonical::{canonical_json_bytes, sha256_digest};
+use arkret_canonical::{canonical_json_bytes, sha256_digest};
 use arkret_core::{
     HEADER_DESTINATION_TRUST_DOMAIN, HEADER_REQUEST_CANONICAL_DIGEST, HEADER_SOURCE_TRUST_DOMAIN,
     InviteDeliveryOutcome, InviteDeliveryRequest,

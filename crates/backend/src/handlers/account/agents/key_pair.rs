@@ -52,7 +52,7 @@ struct ProofOfPossessionInput {
     challenge: String,
     audience: String,
     request_canonical_digest: String,
-    #[serde(deserialize_with = "arkret_core::canonical::deserialize_canonical_timestamp")]
+    #[serde(deserialize_with = "arkret_canonical::deserialize_canonical_timestamp")]
     expires_at: DateTime<Utc>,
     signature: String,
 }
@@ -946,7 +946,7 @@ fn authorize_event_signature_input(
         ))
     })?;
     let canonical_bytes =
-        arkret_core::canonical::canonical_json_bytes(&digest_payload).map_err(|error| {
+        arkret_canonical::canonical_json_bytes(&digest_payload).map_err(|error| {
             AppError::bad_request(format!(
                 "authorize_event canonical payload could not be encoded: {error}"
             ))
@@ -1428,15 +1428,13 @@ mod tests {
         unsigned_event["proofs"] = json!([]);
         let mut event: arkret_core::Event = serde_json::from_value(unsigned_event).unwrap();
         let canonical_bytes =
-            arkret_core::canonical::canonical_json_bytes(&event.digest_payload().unwrap()).unwrap();
+            arkret_canonical::canonical_json_bytes(&event.digest_payload().unwrap()).unwrap();
         let mut proof = arkret_core::Proof {
             kind: "detached_jws".to_owned(),
             alg: "EdDSA".to_owned(),
             verification_method: verification_method.clone(),
-            event_digest: arkret_core::Hash::new(arkret_core::canonical::sha256_digest(
-                &canonical_bytes,
-            ))
-            .unwrap(),
+            event_digest: arkret_core::Hash::new(arkret_canonical::sha256_digest(&canonical_bytes))
+                .unwrap(),
             created_at: "2026-07-06T00:01:00.000Z".parse().unwrap(),
             domain: None,
             audience: None,

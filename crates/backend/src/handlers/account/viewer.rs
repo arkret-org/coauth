@@ -149,7 +149,7 @@ pub async fn get_viewer(
                         email: e.email,
                         confirmed_at: e
                             .confirmed_at
-                            .map(arkret_core::canonical::format_timestamp_canonical),
+                            .map(arkret_canonical::format_timestamp_canonical),
                         is_primary: e.is_primary,
                     },
                 })
@@ -177,7 +177,7 @@ pub async fn get_viewer(
                     provider_brand: link.provider_brand,
                     subject: link.subject,
                     human_account_name: link.human_account_name,
-                    created_at: arkret_core::canonical::format_timestamp_canonical(link.created_at),
+                    created_at: arkret_canonical::format_timestamp_canonical(link.created_at),
                 })
                 .collect();
 
@@ -192,7 +192,7 @@ pub async fn get_viewer(
                     display_name: profile.profile.display_name,
                     avatar_url: profile.profile.avatar_url,
                     preferred_locale: profile.profile.preferred_locale,
-                    updated_at: arkret_core::canonical::format_timestamp_canonical(
+                    updated_at: arkret_canonical::format_timestamp_canonical(
                         profile.profile.updated_at,
                     ),
                 },
@@ -211,8 +211,8 @@ pub async fn get_viewer(
                 last_active_ip: session.last_active_ip.map(|ip| ip.to_string()),
                 last_active_at: session
                     .last_active_at
-                    .map(arkret_core::canonical::format_timestamp_canonical),
-                created_at: Some(arkret_core::canonical::format_timestamp_canonical(
+                    .map(arkret_canonical::format_timestamp_canonical),
+                created_at: Some(arkret_canonical::format_timestamp_canonical(
                     session.created_at,
                 )),
             };

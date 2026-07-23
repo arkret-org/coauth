@@ -5,7 +5,7 @@
 //! Round 4 `ak.self.policy.query.check` decision signer.
 //!
 //! Pulls the preferred service signing key out of the keystore, signs a
-//! canonical-JSON transcript (RFC 8785 / `arkret_core::canonical`), and
+//! canonical-JSON transcript (RFC 8785 / `arkret_canonical`), and
 //! returns the wire-form `{kid, sig}` payload that
 //! [`crate::handlers::policy_check`] embeds in
 //! [`arkret_core::PolicyCheckOutcome`].
@@ -29,7 +29,7 @@
 //! source, the *audit* sink) lives in sibling services so the signer
 //! stays small and testable.
 
-use arkret_core::canonical::canonical_json_bytes;
+use arkret_canonical::canonical_json_bytes;
 use arkret_core::{AuthzDecision, FreshnessState, Hash, PolicyCheckBoundTo, PolicyCheckSignature};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_jose::constraints::Constrainable as _;
@@ -132,7 +132,7 @@ impl<'a> PolicySigner<'a> {
 
 /// Canonical-JSON transcript bound to a single `ak.self.policy.query.check`
 /// decision. Field order is fixed by the struct, but the canonical
-/// serializer in `arkret_core::canonical` sorts object keys
+/// serializer in `arkret_canonical` sorts object keys
 /// lexicographically before emitting bytes — so reordering fields here
 /// does not change the wire bytes. Every field is either present on the
 /// request or the response so verifiers can rebuild the same transcript

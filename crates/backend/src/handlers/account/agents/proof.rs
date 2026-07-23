@@ -4,7 +4,7 @@
 //! branch (§4.6) sign over the same canonical signed-fields shape, so the
 //! verification routine lives here and is shared by both handlers.
 
-use arkret_core::canonical::{canonical_json_bytes, canonical_sha256};
+use arkret_canonical::{canonical_json_bytes, canonical_sha256};
 use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
@@ -24,7 +24,7 @@ pub(super) struct ProofSignedFields<'a> {
     pub(super) challenge: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) nonce: Option<&'a str>,
-    #[serde(serialize_with = "arkret_core::canonical::serialize_canonical_timestamp")]
+    #[serde(serialize_with = "arkret_canonical::serialize_canonical_timestamp")]
     pub(super) expires_at: DateTime<Utc>,
     pub(super) request_canonical_digest: &'a str,
     pub(super) verification_method: &'a str,

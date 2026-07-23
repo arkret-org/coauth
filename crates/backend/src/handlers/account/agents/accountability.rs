@@ -112,7 +112,7 @@ pub struct AccountabilityGrantOutcome {
     pub reason: Option<String>,
 
     /// Grant issuance timestamp.
-    #[serde(serialize_with = "arkret_core::canonical::serialize_canonical_timestamp")]
+    #[serde(serialize_with = "arkret_canonical::serialize_canonical_timestamp")]
     pub issued_at: DateTime<Utc>,
 }
 

@@ -16,7 +16,7 @@
 //! rejected — closing the previous gap where a forged/garbage proof was
 //! silently accepted and only its presence logged.
 
-use arkret_core::canonical::canonical_json_bytes;
+use arkret_canonical::canonical_json_bytes;
 use serde::Serialize;
 
 use crate::AppError;

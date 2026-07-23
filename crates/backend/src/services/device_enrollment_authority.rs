@@ -80,7 +80,7 @@ impl EnrollmentAuthority {
     /// Stable secret dedicated to Realm-scoped HLC node-id derivation.
     #[must_use]
     pub fn hlc_node_secret(&self) -> [u8; 32] {
-        arkret_core::canonical::sha256_bytes_from_slices(&[
+        arkret_canonical::sha256_bytes_from_slices(&[
             b"coauth-device-enrollment-hlc-v1",
             &self.seed,
         ])

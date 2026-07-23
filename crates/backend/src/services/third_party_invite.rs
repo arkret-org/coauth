@@ -257,7 +257,7 @@ pub fn offline_token_commitment(token: &[u8], salt: &[u8]) -> String {
     let mut buf = Vec::with_capacity(token.len() + salt.len());
     buf.extend_from_slice(token);
     buf.extend_from_slice(salt);
-    arkret_core::canonical::sha256_digest(buf)
+    arkret_canonical::sha256_digest(buf)
 }
 
 /// Helper: schedule a zeroize task for a terminal record. Today this

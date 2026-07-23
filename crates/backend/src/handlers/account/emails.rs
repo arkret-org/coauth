@@ -81,7 +81,7 @@ pub async fn get_email_auth(
         email: auth.email,
         completed_at: auth
             .completed_at
-            .map(arkret_core::canonical::format_timestamp_canonical),
+            .map(arkret_canonical::format_timestamp_canonical),
     }))
 }
 

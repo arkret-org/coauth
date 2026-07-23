@@ -19,7 +19,7 @@
 //! Wire shapes come from [`coauth_admin_types::organization_admin`] and map
 //! explicitly from storage-neutral domain records.
 
-use arkret_core::canonical::{canonical_json_bytes, sha256_digest};
+use arkret_canonical::{canonical_json_bytes, sha256_digest};
 use arkret_core::identifiers::new_prefixed_uuid7;
 use arkret_core::models::{RealmOrganizationPayload, RealmOrganizationStatus};
 use arkret_core::{Did, Hash, RealmId};

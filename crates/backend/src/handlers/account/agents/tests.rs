@@ -1,7 +1,7 @@
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
 mod agent_auth_error_matrix_tests {
-    use arkret_core::canonical::canonical_json_bytes;
+    use arkret_canonical::canonical_json_bytes;
     use chrono::Utc;
     use salvo::prelude::Router;
     use salvo::test::{ResponseExt as _, TestClient};

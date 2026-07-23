@@ -87,7 +87,7 @@ pub async fn patch_profile(
             display_name: user.display_name.clone(),
             avatar_url: user.avatar_url.clone(),
             preferred_locale: user.preferred_locale.clone(),
-            updated_at: arkret_core::canonical::format_timestamp_canonical(user.updated_at),
+            updated_at: arkret_canonical::format_timestamp_canonical(user.updated_at),
         },
         principal: PrincipalUserData {
             principal_id: principal_server.principal_id(&user.localpart),

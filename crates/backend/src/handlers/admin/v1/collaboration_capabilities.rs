@@ -7,7 +7,7 @@
 //! - `POST   /_coauth/admin/collaboration/capabilities`
 //! - `DELETE /_coauth/admin/collaboration/capabilities/{id}`
 
-use arkret_core::canonical::{canonical_json_bytes, canonical_sha256};
+use arkret_canonical::{canonical_json_bytes, canonical_sha256};
 use arkret_core::identifiers::{EventId, GrantId, new_prefixed_uuid7};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};

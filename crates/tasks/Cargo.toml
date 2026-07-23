@@ -39,6 +39,7 @@ coauth-i18n = {workspace = true}
 coauth-messaging = {workspace = true}
 coauth-principal = {workspace = true}
 coauth-templates = {workspace = true}
+arkret-canonical = {workspace = true}
 arkret-core = {workspace = true}
 arkret-wire = {workspace = true}
 cron = {workspace = true}
