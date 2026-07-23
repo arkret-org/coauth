@@ -220,7 +220,7 @@ pub fn normalize_did_for_binding(did: &str) -> Result<String, DidBindingProofErr
             "did must be a non-empty DID URI".to_owned(),
         ));
     }
-    if arkret_core::Did::new(trimmed.to_owned()).is_err() {
+    if arkret_identifiers::Did::new(trimmed.to_owned()).is_err() {
         return Err(DidBindingProofError::InvalidJws(format!(
             "did {trimmed:?} fails round-4 DID regex (^did:[a-z0-9]+:[^\\s]+$)"
         )));
@@ -287,7 +287,7 @@ pub async fn validate_control_proof(
     // refuses BEFORE invoking the resolver chain, so wire-broken DIDs
     // never trigger network I/O. Delegating to the SDK's validator
     // keeps coauth in lockstep with the canonical regex.
-    if arkret_core::Did::new(account_did.to_owned()).is_err() {
+    if arkret_identifiers::Did::new(account_did.to_owned()).is_err() {
         return Err(DidBindingProofError::InvalidJws(format!(
             "account_did {account_did:?} fails round-4 DID regex"
         )));

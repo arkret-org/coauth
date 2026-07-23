@@ -2,16 +2,20 @@
 
 use std::time::Duration;
 
-use arkret_core::{
-    CanonicalServiceUrl, LocalServiceIdentity, ServiceIdentityDiagnostic, ServiceIdentityKeyRef,
-    ServiceIdentityProviderRef, ServiceIdentityState, ServiceRegistrationEnsureRequestBody,
-    ServiceRegistrationKey, ServiceRegistrationOutcome, ServiceType, StoredServiceIdentity,
-};
 use arkret_http_client::{Auth, Client, ClientBuilder};
+use arkret_identity::service_identity::{
+    LocalServiceIdentity, ServiceIdentityDiagnostic, ServiceIdentityKeyRef,
+    ServiceIdentityProviderRef, ServiceIdentityState, StoredServiceIdentity,
+};
+use arkret_models_identity::service_identity::{
+    CanonicalServiceUrl, ServiceRegistrationEnsureRequestBody, ServiceRegistrationKey,
+    ServiceRegistrationOutcome,
+};
 use arkret_signatures::webvh::{
     PreparedInception, ServiceRegistrationInceptionInput,
     prepare_service_registration_inception_with_did_key_seed,
 };
+use arkret_wire::ServiceType;
 use chrono::Utc;
 use coauth_config::{ArkretConfig, RuntimeServiceIdentity};
 use coauth_keystore::Keystore;
@@ -498,7 +502,7 @@ fn stored_from_outcome(
 }
 
 fn assertion_public_key(signing_seed: &[u8; 32]) -> String {
-    arkret_core::ed25519_pubkey_to_did_key_multibase(
+    arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase(
         &ed25519_dalek::SigningKey::from_bytes(signing_seed)
             .verifying_key()
             .to_bytes(),

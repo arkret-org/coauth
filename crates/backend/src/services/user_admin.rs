@@ -1,7 +1,7 @@
 use std::str::FromStr as _;
 
 use anyhow::Error as AnyhowError;
-use arkret_core::AccountStatus;
+use arkret_models_collaboration::objects::account_status::AccountStatus;
 use coauth_data::audit::AdminOperation;
 use coauth_data::queue::{
     AccountProjectionRewriteJob, DeactivateUserJob, QueueJobRepositoryExt as _,

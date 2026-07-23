@@ -39,7 +39,10 @@ coauth-templates = {workspace = true}
 arkret-core = {workspace = true,features = ["salvo"]}
 arkret-hlc = {workspace = true}
 arkret-canonical = {workspace = true}
+arkret-identifiers = {workspace = true}
+arkret-identity = {workspace = true}
 arkret-models-collaboration = {workspace = true}
+arkret-models-crypto = {workspace = true}
 arkret-models-discovery = {workspace = true}
 arkret-models-identity = {workspace = true}
 arkret-policy = {workspace = true}

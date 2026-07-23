@@ -26,10 +26,9 @@
 //! current generation MUST fetch it first; the engine returns
 //! [`CrossSigningPublishError::GenerationUnknown`] rather than guess.
 
-use arkret_core::{
-    CrossSigningPublish, Did, PublishedKey, SubordinateSignedKey, TypedTrustDomainId,
-};
 use arkret_crypto::cross_signing_publish_cell_subject;
+use arkret_identifiers::{Did, TypedTrustDomainId};
+use arkret_models_identity::{CrossSigningPublish, PublishedKey, SubordinateSignedKey};
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
@@ -96,7 +95,8 @@ pub fn publish_cell_subject(principal_id: &Did, expected_previous_generation: u6
 
 #[cfg(test)]
 mod tests {
-    use arkret_core::{KeyFormat, NonEmptyString, SubordinateSignedKeyBinding};
+    use arkret_models_identity::{KeyFormat, SubordinateSignedKeyBinding};
+    use arkret_wire::NonEmptyString;
 
     use super::*;
 

@@ -7,8 +7,7 @@
 use std::time::Duration;
 
 use arkret_canonical::{canonical_json_bytes, sha256_digest};
-use arkret_core::{
-    HEADER_DESTINATION_TRUST_DOMAIN, HEADER_REQUEST_CANONICAL_DIGEST, HEADER_SOURCE_TRUST_DOMAIN,
+use arkret_models_collaboration::governance::invite_addressing::{
     InviteDeliveryOutcome, InviteDeliveryRequest,
 };
 use arkret_signatures::http_signature::{
@@ -16,6 +15,9 @@ use arkret_signatures::http_signature::{
     format_signature_header, parse_signature_input,
 };
 use arkret_state::SnapshotManifest;
+use arkret_wire::{
+    HEADER_DESTINATION_TRUST_DOMAIN, HEADER_REQUEST_CANONICAL_DIGEST, HEADER_SOURCE_TRUST_DOMAIN,
+};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable;
 use coauth_keystore::Keystore;
@@ -259,7 +261,7 @@ impl<'a> PeerProtocolClient<'a> {
             .try_sign_with_rng(&mut rng, &message)
             .map_err(|_| PeerProtocolClientError::Sign)?;
         let sig_bytes: Box<[u8]> = raw.into();
-        let signature = arkret_core::base64_standard_encode(&sig_bytes);
+        let signature = arkret_canonical::base64url::base64_standard_encode(&sig_bytes);
         let signature_header = format_signature_header(SIGNATURE_LABEL, &signature)
             .map_err(|_| PeerProtocolClientError::Sign)?;
 

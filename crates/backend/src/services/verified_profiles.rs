@@ -88,7 +88,7 @@ pub struct VerifiedProfileDescriptor {
     pub verification_run_id: String,
     pub artifact_digest: String,
     pub artifact_ref: String,
-    pub verifier_did: arkret_core::Did,
+    pub verifier_did: arkret_identifiers::Did,
     pub signature: String,
     pub timestamp: DateTime<Utc>,
     pub expires_at: Option<DateTime<Utc>>,
@@ -191,7 +191,7 @@ pub fn load_from_path(path: impl AsRef<Utf8Path>) -> Vec<VerifiedProfileDescript
         else {
             continue;
         };
-        let Ok(verifier_did) = arkret_core::Did::new(verifier_did) else {
+        let Ok(verifier_did) = arkret_identifiers::Did::new(verifier_did) else {
             tracing::warn!(
                 target: "verified_profiles",
                 profile_id = %entry.profile_id,

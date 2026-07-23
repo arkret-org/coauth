@@ -67,7 +67,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use arkret_core::{Did, ThirdPartyInvite, ThirdPartyInviteOobKind, ThirdPartyInviteTerminalState};
+use arkret_identifiers::Did;
+use arkret_models_collaboration::governance::third_party_invite::{
+    ThirdPartyInvite, ThirdPartyInviteOobKind, ThirdPartyInviteTerminalState,
+};
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
@@ -727,7 +730,7 @@ pub use crate::services::did_binding_proof::VerificationServiceProofClaims as Ve
 
 #[cfg(test)]
 mod tests {
-    use arkret_core::Hash;
+    use arkret_identifiers::Hash;
 
     use super::*;
 

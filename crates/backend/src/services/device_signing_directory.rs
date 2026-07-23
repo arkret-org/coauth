@@ -130,12 +130,12 @@ pub async fn resolve_authorized_device_signing_key(
 
     let endpoint = server.endpoint.join(DEVICE_SIGNING_KEY_DIRECTORY_PATH)?;
 
-    let typed_principal = arkret_core::Did::new(principal_id.to_owned()).map_err(|_| {
+    let typed_principal = arkret_identifiers::Did::new(principal_id.to_owned()).map_err(|_| {
         DeviceSigningDirectoryError::DeviceNotAuthorized {
             device_id: device_id.to_owned(),
         }
     })?;
-    let typed_device = arkret_core::DeviceId::new(device_id.to_owned()).map_err(|_| {
+    let typed_device = arkret_identifiers::DeviceId::new(device_id.to_owned()).map_err(|_| {
         DeviceSigningDirectoryError::DeviceNotAuthorized {
             device_id: device_id.to_owned(),
         }

@@ -6,7 +6,7 @@
 //!
 //! The spec [`policy-server.md` §4] defines the decision lattice as
 //! `allow | soft_deny | hard_deny | quarantine | require_review`; the
-//! SDK type [`arkret_core::AuthzDecision`] exposes these as
+//! Wire type [`arkret_wire::AuthzDecision`] exposes these as
 //! `Allow | Deny | Quarantine | RequireReview | SoftFail`. This module
 //! is responsible for picking one of those values, plus the
 //! `reason_code` and the optional `obligations` array, for every
@@ -41,7 +41,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use arkret_core::{AuthzDecision, CapabilityActionId, FreshnessState, PolicyCheckRequestBody};
+use arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody;
+use arkret_wire::{AuthzDecision, CapabilityActionId, FreshnessState};
 use chrono::{DateTime, Utc};
 use coauth_data::collaboration_capability::{
     CollaborationCapabilityAction, CollaborationCapabilityGrant,
@@ -64,7 +65,7 @@ const CANDIDATE_JOIN_POLICY_PROFILE: &str = "ak.profile.candidate.join_policy.v1
 /// media capability actions registered in
 /// `capability-action-registry.json`. CAP-1: capability evaluator MUST
 /// recognise these five actions so deny/review/allow rules can target
-/// them by name. Mirrors `arkret_core::CALL_CAPABILITY_ACTIONS`.
+/// them by name. Mirrors `arkret_wire::CALL_CAPABILITY_ACTIONS`.
 pub const RECOGNISED_CALL_CAPABILITY_ACTIONS: &[&str] = &[
     CapabilityActionId::CALL_JOIN,
     CapabilityActionId::CALL_SCREEN_SHARE,
@@ -88,7 +89,7 @@ pub fn is_recognised_call_capability_action(action: &str) -> bool {
 /// per `resource-selector-grammar.md` §6 (R3).
 #[must_use]
 pub fn is_circle_selector(selector: &str) -> bool {
-    arkret_core::CircleId::new(selector.to_owned()).is_ok()
+    arkret_identifiers::CircleId::new(selector.to_owned()).is_ok()
 }
 
 /// POLICY-1: deployment-level "strict reject" mode for unverified
@@ -131,7 +132,7 @@ pub struct PolicyObligation {
 
 impl PolicyObligation {
     /// Render to the wire form embedded in
-    /// [`arkret_core::PolicyCheckOutcome::obligations`].
+    /// [`arkret_models_collaboration::governance::policy_check::PolicyCheckOutcome::obligations`].
     pub fn to_wire(&self) -> Value {
         let mut obj = serde_json::Map::new();
         obj.insert("kind".to_owned(), Value::String(self.kind.clone()));
@@ -149,7 +150,7 @@ impl PolicyObligation {
 }
 
 /// What the evaluator produces. The handler turns this into the wire
-/// [`arkret_core::PolicyCheckOutcome`].
+/// [`arkret_models_collaboration::governance::policy_check::PolicyCheckOutcome`].
 #[derive(Debug, Clone)]
 pub struct PolicyDecision {
     pub decision: AuthzDecision,
@@ -601,7 +602,8 @@ pub type PolicyEvaluatorHandle = Arc<dyn PolicyEvaluator>;
 
 #[cfg(test)]
 mod tests {
-    use arkret_core::{Did, Hash, PolicyCheckSource, RealmId};
+    use arkret_identifiers::{Did, Hash, RealmId};
+    use arkret_models_collaboration::governance::policy_check::PolicyCheckSource;
 
     use super::*;
 

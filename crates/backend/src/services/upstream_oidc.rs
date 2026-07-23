@@ -652,11 +652,12 @@ mod tests {
         let endpoint = Url::parse(&server.uri()).unwrap();
         let config = principal_server_config_for(endpoint);
         let service_id =
-            arkret_core::Did::new("did:webvh:current:soland.example:webvh:service").unwrap();
-        let description = arkret_core::ServiceDescribe::development(
+            arkret_identifiers::Did::new("did:webvh:current:soland.example:webvh:service").unwrap();
+        let description = arkret_models_discovery::ServiceDescribe::development(
             service_id.clone(),
-            arkret_core::TypedTrustDomainId::new("ak:trust_domain:example".to_owned()).unwrap(),
-            arkret_core::ServiceType::PrincipalServer,
+            arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:example".to_owned())
+                .unwrap(),
+            arkret_wire::ServiceType::PrincipalServer,
         );
         Mock::given(method("GET"))
             .and(path("/_arkret/describe"))

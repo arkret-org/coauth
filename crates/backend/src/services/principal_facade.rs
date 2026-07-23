@@ -137,8 +137,9 @@ async fn submit_agent_key_pair_to_target(
             truncate_response_body(&body)
         );
     }
-    let response: arkret_core::AgentKeyPairOutcome = serde_json::from_slice(&bytes)
-        .with_context(|| format!("decode Agent key-pair response from {}", target.name))?;
+    let response: arkret_models_collaboration::agent_operations::AgentKeyPairOutcome =
+        serde_json::from_slice(&bytes)
+            .with_context(|| format!("decode Agent key-pair response from {}", target.name))?;
     validate_agent_key_pair_response(request, &response)
         .with_context(|| format!("validate Agent key-pair response from {}", target.name))?;
     tracing::info!(
@@ -332,7 +333,7 @@ fn agent_key_pair_url(endpoint: &Url) -> Url {
 
 fn validate_agent_key_pair_response(
     request: &PrincipalAgentKeyPairCommitRequest,
-    response: &arkret_core::AgentKeyPairOutcome,
+    response: &arkret_models_collaboration::agent_operations::AgentKeyPairOutcome,
 ) -> Result<(), anyhow::Error> {
     anyhow::ensure!(
         response.ok,

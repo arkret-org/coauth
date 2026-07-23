@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
 use std::time::{Duration, Instant};
 
-use arkret_core::Did;
+use arkret_identifiers::Did;
 use coauth_config::{ArkretConfig, PrincipalServerConfig};
 use url::Url;
 
@@ -310,7 +310,7 @@ async fn fetch_service_id(http_client: &reqwest::Client, endpoint: &Url) -> Resu
     // `/_arkret/describe` returns `ServerDescribeOutcome(ServiceDescribe)`,
     // a transparent newtype, so the wire body deserializes straight into
     // `ServiceDescribe`.
-    let description: arkret_core::ServiceDescribe =
+    let description: arkret_models_discovery::ServiceDescribe =
         serde_json::from_str(&text).map_err(|error| format!("invalid describe body: {error}"))?;
 
     Ok(description.service_id)
@@ -341,7 +341,7 @@ mod tests {
         assert_eq!(
             effective_audience(&server, &resolved)
                 .as_ref()
-                .map(arkret_core::Did::as_str),
+                .map(arkret_identifiers::Did::as_str),
             Some("did:webvh:current:local.host:webvh:service"),
         );
     }

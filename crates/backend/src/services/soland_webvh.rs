@@ -1,6 +1,6 @@
 //! Submission of client-signed DID operations to an authoritative Principal Server.
 
-use arkret_core::{DidOperationSubmitOutcome, DidOperationSubmitRequestBody};
+use arkret_models_identity::{DidOperationSubmitOutcome, DidOperationSubmitRequestBody};
 use thiserror::Error;
 use url::Url;
 

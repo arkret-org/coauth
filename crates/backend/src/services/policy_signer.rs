@@ -8,7 +8,7 @@
 //! canonical-JSON transcript (RFC 8785 / `arkret_canonical`), and
 //! returns the wire-form `{kid, sig}` payload that
 //! [`crate::handlers::policy_check`] embeds in
-//! [`arkret_core::PolicyCheckOutcome`].
+//! [`arkret_models_collaboration::governance::policy_check::PolicyCheckOutcome`].
 //!
 //! ## Why a dedicated module
 //!
@@ -30,7 +30,11 @@
 //! stays small and testable.
 
 use arkret_canonical::canonical_json_bytes;
-use arkret_core::{AuthzDecision, FreshnessState, Hash, PolicyCheckBoundTo, PolicyCheckSignature};
+use arkret_identifiers::Hash;
+use arkret_models_collaboration::governance::policy_check::{
+    PolicyCheckBoundTo, PolicyCheckSignature,
+};
+use arkret_wire::{AuthzDecision, FreshnessState};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_jose::constraints::Constrainable as _;
 use coauth_keystore::Keystore;
@@ -193,7 +197,7 @@ fn preferred_service_signing_key(
 
 #[cfg(test)]
 mod tests {
-    use arkret_core::{Did, RealmId};
+    use arkret_identifiers::{Did, RealmId};
 
     use super::*;
 

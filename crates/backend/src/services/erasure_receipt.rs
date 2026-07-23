@@ -1,4 +1,5 @@
-use arkret_core::{ErasureReceipt, VerificationStub};
+use arkret_models_collaboration::events_payloads::event_wire::VerificationStub;
+use arkret_models_collaboration::governance::erasure::ErasureReceipt;
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_keystore::Keystore;

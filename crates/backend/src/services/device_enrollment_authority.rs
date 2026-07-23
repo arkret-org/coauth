@@ -21,7 +21,7 @@
 //! `DidKeyResolver` produces.
 
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
-use arkret_core::Did;
+use arkret_identifiers::Did;
 use arkret_signatures::Ed25519MoveSigner;
 use ed25519_dalek::SigningKey;
 
@@ -133,7 +133,7 @@ mod tests {
     fn signer_did_matches_authority_did() {
         let authority = EnrollmentAuthority::from_seed([9u8; 32]);
         let signer = authority.signer();
-        use arkret_core::MoveSigner as _;
+        use arkret_wire::MoveSigner as _;
         assert_eq!(signer.signer_did().as_str(), authority.did());
         assert_eq!(
             signer.verification_method_id(),

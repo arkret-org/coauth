@@ -39,7 +39,7 @@ pub struct DidResolution {
     pub document: DidDocument,
     pub source: DidResolutionSource,
     pub verified_local_binding: bool,
-    pub key_log_head: Option<arkret_core::Hash>,
+    pub key_log_head: Option<arkret_identifiers::Hash>,
     pub method_evidence: Value,
     pub identity_fact_rejection: Option<DidResolutionIdentityFactRejection>,
 }
@@ -376,11 +376,13 @@ async fn parse_resolution_http_response(
     })
 }
 
-fn parse_key_log_head(body: &Value) -> Result<Option<arkret_core::Hash>, DidResolveError> {
+fn parse_key_log_head(body: &Value) -> Result<Option<arkret_identifiers::Hash>, DidResolveError> {
     match body.get("key_log_head") {
-        Some(Value::String(value)) => Ok(Some(arkret_core::Hash::new(value.clone()).map_err(
-            |error| DidResolveError::BadResolverResponse(format!("invalid key_log_head: {error}")),
-        )?)),
+        Some(Value::String(value)) => Ok(Some(
+            arkret_identifiers::Hash::new(value.clone()).map_err(|error| {
+                DidResolveError::BadResolverResponse(format!("invalid key_log_head: {error}"))
+            })?,
+        )),
         Some(_) => Err(DidResolveError::BadResolverResponse(
             "key_log_head must be a string".to_owned(),
         )),
@@ -416,9 +418,9 @@ fn delegated_resolver_request(
     url: &Url,
     did: &str,
 ) -> Result<reqwest::RequestBuilder, DidResolveError> {
-    let typed_did = arkret_core::Did::new(did.to_owned())
+    let typed_did = arkret_identifiers::Did::new(did.to_owned())
         .map_err(|error| DidResolveError::InvalidDid(error.to_string()))?;
-    let body = arkret_core::IdentityResolveRequestBody {
+    let body = arkret_models_identity::IdentityResolveRequestBody {
         did: typed_did,
         requested_evidence_kinds: Vec::new(),
     };
@@ -706,7 +708,7 @@ fn did_method(did: &str) -> Option<String> {
     // any value the SDK validator rejects is wire-broken and MUST NOT
     // be routed by this resolver.
     Some(
-        arkret_core::Did::new(did.to_owned())
+        arkret_identifiers::Did::new(did.to_owned())
             .ok()?
             .method()
             .to_owned(),
@@ -714,7 +716,7 @@ fn did_method(did: &str) -> Option<String> {
 }
 
 fn did_web_document_url(did: &str) -> Result<Url, DidResolveError> {
-    let did = arkret_core::Did::new(did.to_owned())
+    let did = arkret_identifiers::Did::new(did.to_owned())
         .map_err(|_| DidResolveError::InvalidDid(did.to_owned()))?;
     let url = arkret_models_identity::did_web_document_url(&did)
         .map_err(|_| DidResolveError::InvalidDid(did.to_string()))?;

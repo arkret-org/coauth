@@ -4,16 +4,16 @@
 //! that mints a `ak.handle.claim` artefact. A handle claim subject MUST be a holder / principal
 //! DID. It is      NOT a Realm `actor_id` (`ak:actor:`), a server-local `account_id`
 //! (`ak:account:`), a      service DID, or a generic resource id. We delegate to the SDK's
-//!      [`arkret_core::validate_handle_claim_subject`] so the wire code
+//!      [`arkret_models_identity::validate_handle_claim_subject`] so the wire code
 //!      (`handle_claim_subject_not_principal_did`) stays in lockstep with soland / cotest / the
 //!      spec.
 
-use arkret_core::Did;
+use arkret_identifiers::Did;
 use thiserror::Error;
 
 /// Wire-level reason code returned when the handle-claim subject is not a
 /// holder / principal DID. Kept in sync with the SDK validator's
-/// [`arkret_core::validate_handle_claim_subject`] error-message prefix.
+/// [`arkret_models_identity::validate_handle_claim_subject`] error-message prefix.
 pub const HANDLE_CLAIM_SUBJECT_NOT_PRINCIPAL_DID_CODE: &str =
     "handle_claim_subject_not_principal_did";
 
@@ -26,10 +26,10 @@ pub enum HandleClaimSubjectError {
 
 /// HC-COAUTH-2 — reject `ak:actor:` / `ak:account:` / non-DID subjects.
 ///
-/// Delegates to the SDK's [`arkret_core::validate_handle_claim_subject`]
+/// Delegates to the SDK's [`arkret_models_identity::validate_handle_claim_subject`]
 /// so the rejection logic (and thus the wire code) matches the spec and
 /// the other Arkret services. The input is parsed through
-/// [`arkret_core::Did::new`] first; a value that is not even a structural
+/// [`arkret_identifiers::Did::new`] first; a value that is not even a structural
 /// DID is rejected with the same `handle_claim_subject_not_principal_did`
 /// code (a `ak:actor:`/`ak:account:` typed id is not a `did:` and would be
 /// rejected by `Did::new` anyway, but we keep the message explicit).
@@ -43,7 +43,7 @@ pub fn ensure_subject_is_principal_did(subject: &str) -> Result<(), HandleClaimS
             "subject must be a holder/principal DID ({subject}): {error}"
         ))
     })?;
-    arkret_core::validate_handle_claim_subject(&did)
+    arkret_models_identity::validate_handle_claim_subject(&did)
         .map_err(|error| HandleClaimSubjectError::SubjectNotPrincipalDid(error.to_string()))
 }
 

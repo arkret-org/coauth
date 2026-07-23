@@ -13,7 +13,7 @@
 //!
 //! These come from soland's `/_arkret/self/events/frontier?peer_role=
 //! federation_peer` response, which returns
-//! [`arkret_core::EventsFrontierFederationPeerState`] including a
+//! [`arkret_models_collaboration::event_sync::EventsFrontierFederationPeerState`] including a
 //! single `frontier_root`. The federation-peer variant is the only one
 //! that exposes the root commitment; account-client and
 //! anonymous-health variants intentionally omit it.
@@ -37,7 +37,9 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use arkret_core::{EventsFrontierFederationPeerState, FreshnessState, Hash, RealmId};
+use arkret_identifiers::{Hash, RealmId};
+use arkret_models_collaboration::event_sync::EventsFrontierFederationPeerState;
+use arkret_wire::FreshnessState;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 use url::Url;
