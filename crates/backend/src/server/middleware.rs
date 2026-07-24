@@ -10,6 +10,7 @@ use opentelemetry_semantic_conventions::trace::{
 };
 use salvo::cors::{Any, Cors};
 use salvo::prelude::*;
+use tracing::Instrument as _;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::app_state::AppState;
@@ -151,8 +152,9 @@ pub async fn tracing_middleware(
         }
     }
 
-    let _guard = span.enter();
-    ctrl.call_next(req, depot, res).await;
+    ctrl.call_next(req, depot, res)
+        .instrument(span.clone())
+        .await;
 
     let status_code = res.status_code.unwrap_or(StatusCode::OK);
     span.record(HTTP_RESPONSE_STATUS_CODE, status_code.as_u16());
