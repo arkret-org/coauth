@@ -502,6 +502,7 @@ pub(crate) fn service_describe_response(
         service_type: arkret_wire::ServiceType::AuthServer,
         protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
         supported_profiles: Vec::new(),
+        profile_bindings: Default::default(),
         supported_operations: SUPPORTED_OPERATIONS
             .iter()
             .map(|value| (*value).to_owned())
