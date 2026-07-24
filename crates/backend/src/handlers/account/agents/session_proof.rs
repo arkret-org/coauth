@@ -1286,15 +1286,18 @@ pub async fn enforce_authoritative_agent_lifecycle(
     agent_id: &str,
 ) -> Result<arkret_models_collaboration::agent_operations::AgentView, AgentAuthRejection> {
     let (view, _) = fetch_authoritative_agent_view(http_client, arkret_config, agent_id).await?;
+    // Session issuance is governed only by the controller lifecycle intent axis
+    // (key-management.md §3.6.1). The orthogonal runtime_state readiness axis is
+    // never a session gate; an agent that holds no active key simply cannot
+    // produce a valid agent_key_proof.
     match view.status {
-        arkret_models_collaboration::agent_operations::AgentStatus::Active => Ok(view),
-        arkret_models_collaboration::agent_operations::AgentStatus::Paused => {
+        arkret_models_collaboration::agent_operations::AgentLifecycleState::Active => Ok(view),
+        arkret_models_collaboration::agent_operations::AgentLifecycleState::Paused => {
             Err(AgentAuthRejection::AgentPaused)
         }
-        arkret_models_collaboration::agent_operations::AgentStatus::Deactivated => {
+        arkret_models_collaboration::agent_operations::AgentLifecycleState::Deactivated => {
             Err(AgentAuthRejection::AgentDeactivated)
         }
-        _ => Err(AgentAuthRejection::ProofInvalid),
     }
 }
 
@@ -1313,14 +1316,16 @@ pub async fn enforce_authoritative_pairing_handle(
 > {
     let (view, server) =
         fetch_authoritative_agent_view(http_client, arkret_config, agent_id).await?;
+    // Only the terminal lifecycle intent forbids pairing. Both active and
+    // paused agents may complete a (bootstrap or replacement) pairing handle
+    // (key-management.md §3.6.1); handle open/expiry is enforced below via the
+    // authoritative key_state rather than the lifecycle axis.
     match view.status {
-        arkret_models_collaboration::agent_operations::AgentStatus::PendingRuntimeKey
-        | arkret_models_collaboration::agent_operations::AgentStatus::Active
-        | arkret_models_collaboration::agent_operations::AgentStatus::Paused => {}
-        arkret_models_collaboration::agent_operations::AgentStatus::Deactivated => {
+        arkret_models_collaboration::agent_operations::AgentLifecycleState::Active
+        | arkret_models_collaboration::agent_operations::AgentLifecycleState::Paused => {}
+        arkret_models_collaboration::agent_operations::AgentLifecycleState::Deactivated => {
             return Err(AgentAuthRejection::AgentDeactivated);
         }
-        _ => return Err(AgentAuthRejection::PairingRequestExpired),
     }
     let key_state = view
         .key_state
@@ -1375,15 +1380,18 @@ mod tests {
                 "agent": {
                     "agent_id": "did:web:agent.example",
                     "slug": "agent",
-                    "status": status
+                    "status": status,
+                    "runtime_state": "pending_runtime_key"
                 },
                 "status": status,
+                "runtime_state": "pending_runtime_key",
                 "key_state": {
                     "agent_id": "did:web:agent.example",
                     "controller_id": "did:web:controller.example",
                     "principal_control_realm_id": "ak:realm:01999999-0000-7000-8000-000000000010",
                     "controller_authorization_ref": "did:web:agent.example#managed-controller",
                     "status": status,
+                    "runtime_state": "pending_runtime_key",
                     "pcr_recovery": pcr_recovery,
                     "requested_scope": {
                         "actions": ["ak.message.create"],

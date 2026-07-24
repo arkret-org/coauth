@@ -397,6 +397,18 @@ pub async fn post_agent_key_pair(
         "issued_at": issued_at,
         "expires_at": expires_at,
         "superseded_active_keys": superseded_keys,
+        // Two orthogonal axes (key-management.md §3.6.1): the controller
+        // lifecycle intent is preserved by pairing completion (an active agent
+        // needs no resume), while the derived runtime_state advances to ready.
+        "agent_lifecycle": authoritative_view.status.as_wire_str(),
+        "runtime_state_before": if superseded_authorizations.is_empty() {
+            arkret_models_collaboration::agent_operations::AgentRuntimeState::PendingRuntimeKey
+        } else {
+            arkret_models_collaboration::agent_operations::AgentRuntimeState::Replacing
+        }
+        .as_wire_str(),
+        "runtime_state_after":
+            arkret_models_collaboration::agent_operations::AgentRuntimeState::Ready.as_wire_str(),
         "raw_payload_digest": &raw_payload_digest,
         "principal_commit": {
             "state": AccountabilityGrantFanoutState::Queued,
@@ -1125,7 +1137,8 @@ mod tests {
             "controller_id": CONTROLLER,
             "principal_control_realm_id": "ak:realm:01999999-0000-7000-8000-000000000010",
             "controller_authorization_ref": format!("{AGENT}#managed-controller"),
-            "status": "pending_runtime_key",
+            "status": "active",
+            "runtime_state": "pending_runtime_key",
             "pcr_recovery": {
                 "status": "ready",
                 "backup_id": "ak:backup:01999999-0000-7000-8000-000000000020",
