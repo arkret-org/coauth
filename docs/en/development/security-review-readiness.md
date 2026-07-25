@@ -32,7 +32,7 @@ The intended external review scope is the v1.0 coauth service:
 | Account lifecycle | `docs/en/account-lifecycle.md` |
 | R4 wire changes | `docs/en/upgrade-to-r4.md` |
 | Admin API | `docs/en/topics/admin-api.md`, `crates/admin-types/` |
-| Shared admin DTOs | `crates/admin-types/`, `docs/en/development/admin-types-sodmin-status.md` |
+| Shared admin DTOs | `crates/admin-types/`, `docs/architecture/contracts-ownership.md` |
 | Frontend accessibility | `crates/frontend/A11Y.md` |
 | Frontend build/i18n | `crates/frontend/BUILD_CHECKS.md` |
 | Local release artifacts | `docs/en/development/releasing.md`, `scripts/v1-local-milestone.ps1` |

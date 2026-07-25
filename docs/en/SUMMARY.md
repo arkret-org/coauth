@@ -55,7 +55,6 @@
 
 - [Contributing](./development/contributing.md)
 - [Releasing](./development/releasing.md)
-- [Admin types / sodmin pairing status](./development/admin-types-sodmin-status.md)
 - [External security review readiness](./development/security-review-readiness.md)
 - [Architecture](./development/architecture.md)
 - [Database](./development/database.md)
