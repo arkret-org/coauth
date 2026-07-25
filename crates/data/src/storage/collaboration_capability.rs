@@ -3,9 +3,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::Clock;
-use coauth_data::collaboration_capability::{
-    CollaborationCapabilityAction, CollaborationCapabilityGrant,
-};
+use coauth_data::collaboration_capability::{CapabilityActionId, CollaborationCapabilityGrant};
 use rand_core::RngCore;
 
 use crate::repository_impl;
@@ -22,7 +20,7 @@ pub struct NewCollaborationCapabilityGrant {
     /// Realm the grant is scoped to.
     pub realm_id: String,
     /// Capability action authorized by this grant.
-    pub action: CollaborationCapabilityAction,
+    pub action: CapabilityActionId,
     /// Optional expiry. Required by validation for high-risk actions.
     pub expires_at: Option<DateTime<Utc>>,
     /// Approval evidence binding for high-risk actions.
@@ -64,7 +62,7 @@ pub trait CollaborationCapabilityGrantRepository: Send + Sync {
         &mut self,
         subject: &str,
         realm_id: &str,
-        action: CollaborationCapabilityAction,
+        action: CapabilityActionId,
     ) -> Result<Vec<CollaborationCapabilityGrant>, Self::Error>;
 
     /// Revoke an active grant by row id. Returns `None` when the grant is
@@ -89,7 +87,7 @@ repository_impl!(CollaborationCapabilityGrantRepository:
         &mut self,
         subject: &str,
         realm_id: &str,
-        action: CollaborationCapabilityAction,
+        action: CapabilityActionId,
     ) -> Result<Vec<CollaborationCapabilityGrant>, Self::Error>;
     async fn revoke_by_id(
         &mut self,

@@ -20,7 +20,8 @@
 //! are owned here and are populated through explicit domain-to-wire mapping.
 
 use chrono::{DateTime, Utc};
-pub use coauth_data_model::{CircleCapabilityAction, ParseCircleCapabilityActionError, RiskTier};
+pub use coauth_data_model::{CapabilityActionId, CapabilityRiskTier};
+use coauth_data_model::{circle_action_requires_allowed_circle_ids, is_circle_capability_action};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,7 +33,9 @@ pub struct CircleCapabilityGrant {
     pub id: String,
     pub subject: String,
     pub realm_id: String,
-    pub action: CircleCapabilityAction,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub action: CapabilityActionId,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allowed_circle_ids: Vec<String>,
     pub granted_by: String,
@@ -65,7 +68,9 @@ impl From<coauth_data_model::CircleCapabilityGrant> for CircleCapabilityGrant {
 pub struct CreateCircleCapabilityGrant {
     pub subject: String,
     pub realm_id: String,
-    pub action: CircleCapabilityAction,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub action: CapabilityActionId,
     #[serde(default)]
     pub allowed_circle_ids: Vec<String>,
 }
@@ -85,10 +90,18 @@ impl CreateCircleCapabilityGrant {
         if self.realm_id.is_empty() {
             return Err("realm_id is required".into());
         }
-        if self.action.requires_allowed_circle_ids() && self.allowed_circle_ids.is_empty() {
+        if !is_circle_capability_action(self.action) {
+            return Err(format!(
+                "action `{}` is not supported by the Circle grant surface",
+                self.action
+            ));
+        }
+        if circle_action_requires_allowed_circle_ids(self.action)
+            && self.allowed_circle_ids.is_empty()
+        {
             return Err(format!(
                 "action `{}` requires non-empty allowed_circle_ids",
-                self.action.as_action_str()
+                self.action
             ));
         }
         Ok(())
@@ -114,7 +127,7 @@ mod tests {
         let req = CreateCircleCapabilityGrant {
             subject: "user:alice".into(),
             realm_id: "ak:realm:1".into(),
-            action: CircleCapabilityAction::Manage,
+            action: CapabilityActionId::CircleManage,
             allowed_circle_ids: vec![],
         };
         assert!(req.validate().is_err());
@@ -125,9 +138,21 @@ mod tests {
         let req = CreateCircleCapabilityGrant {
             subject: "user:alice".into(),
             realm_id: "ak:realm:1".into(),
-            action: CircleCapabilityAction::Manage,
+            action: CapabilityActionId::CircleManage,
             allowed_circle_ids: vec!["ak:circle:abc".into()],
         };
         assert!(req.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_registered_action_outside_circle_product_subset() {
+        let req = CreateCircleCapabilityGrant {
+            subject: "user:alice".into(),
+            realm_id: "ak:realm:1".into(),
+            action: CapabilityActionId::PinAdd,
+            allowed_circle_ids: vec![],
+        };
+
+        assert!(req.validate().is_err());
     }
 }

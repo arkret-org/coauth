@@ -45,7 +45,7 @@ use arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBod
 use arkret_wire::{AuthzDecision, CapabilityActionId, FreshnessState};
 use chrono::{DateTime, Utc};
 use coauth_data::collaboration_capability::{
-    CollaborationCapabilityAction, CollaborationCapabilityGrant,
+    CollaborationCapabilityGrant, is_collaboration_capability_action,
 };
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess as _};
 use serde_json::Value;
@@ -272,11 +272,10 @@ impl PolicyEvaluator for RuleEvaluator {
                     .get()
                     .await
                     .map_err(|e| EvaluatorError::Backend(e.to_string()))?;
-                let collaboration_grants = if let Ok(action) = request
-                    .action
-                    .as_str()
-                    .parse::<CollaborationCapabilityAction>(
-                ) {
+                let collaboration_grants = if let Some(action) =
+                    CapabilityActionId::from_wire(request.action.as_str())
+                        .filter(|action| is_collaboration_capability_action(*action))
+                {
                     repo.collaboration_capability_grant()
                         .list_active_for_subject_action(
                             request.actor_id.as_str(),
@@ -444,7 +443,9 @@ fn match_rules_with_grants(
         }
     }
 
-    if let Ok(action) = action_str.parse::<CollaborationCapabilityAction>() {
+    if let Some(action) = CapabilityActionId::from_wire(action_str)
+        .filter(|action| is_collaboration_capability_action(*action))
+    {
         if collaboration_grants.iter().any(|grant| {
             collaboration_grant_matches_request(grant, request, action, chrono::Utc::now())
         }) {
@@ -467,7 +468,7 @@ fn match_rules_with_grants(
 fn collaboration_grant_matches_request(
     grant: &CollaborationCapabilityGrant,
     request: &PolicyCheckRequestBody,
-    action: CollaborationCapabilityAction,
+    action: CapabilityActionId,
     now: DateTime<Utc>,
 ) -> bool {
     grant.revoked_at.is_none()
@@ -637,7 +638,7 @@ mod tests {
         }
     }
 
-    fn collaboration_grant(action: CollaborationCapabilityAction) -> CollaborationCapabilityGrant {
+    fn collaboration_grant(action: CapabilityActionId) -> CollaborationCapabilityGrant {
         CollaborationCapabilityGrant {
             id: "01HY0000000000000000000000".to_owned(),
             capability_grant_id: "ak:grant:01904100-0000-7000-8000-000000000010".to_owned(),
@@ -745,7 +746,7 @@ mod tests {
         assert!(matches!(missing_grant.decision, AuthzDecision::HardDeny));
         assert_eq!(missing_grant.reason_code, "capability_denied");
 
-        let grant = collaboration_grant(CollaborationCapabilityAction::PinAdd);
+        let grant = collaboration_grant(CapabilityActionId::PinAdd);
         let allowed = match_rules_with_grants(
             &serde_json::json!({
                 "enabled_profile_refs": ["ak.profile.pinned_items.v1"]
@@ -762,7 +763,7 @@ mod tests {
     #[test]
     fn expired_collaboration_capability_grant_denies() {
         let r = req("did:web:alice.example", "ak.pin.add");
-        let mut grant = collaboration_grant(CollaborationCapabilityAction::PinAdd);
+        let mut grant = collaboration_grant(CapabilityActionId::PinAdd);
         grant.expires_at = Some(Utc::now() - chrono::Duration::seconds(1));
 
         let denied = match_rules_with_grants(

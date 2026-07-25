@@ -22,6 +22,7 @@ default = []
 schema = ["dep:schemars", "dep:salvo", "coauth-data-model/schema"]
 
 [dependencies]
+arkret-schema = {workspace = true}
 chrono = {workspace = true,features = ["serde"]}
 coauth-data-model = {workspace = true}
 arkret-models-collaboration = {workspace = true}

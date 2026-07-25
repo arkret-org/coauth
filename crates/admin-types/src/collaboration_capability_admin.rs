@@ -7,10 +7,11 @@
 //! tooling MUST NOT grant umbrella strings such as `ak.pin.*`.
 
 use chrono::{DateTime, Utc};
-pub use coauth_data_model::{
-    CapabilityCategory, CollaborationCapabilityAction, ParseCollaborationCapabilityActionError,
-    RiskTier,
+use coauth_data_model::{
+    COLLABORATION_CAPABILITY_ACTIONS, collaboration_action_requires_approval,
+    is_collaboration_capability_action,
 };
+pub use coauth_data_model::{CapabilityActionId, CapabilityRiskTier};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,7 +27,9 @@ pub struct CollaborationCapabilityGrant {
     pub revoke_event_id: Option<String>,
     pub subject: String,
     pub realm_id: String,
-    pub action: CollaborationCapabilityAction,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub action: CapabilityActionId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -66,38 +69,54 @@ impl From<coauth_data_model::CollaborationCapabilityGrant> for CollaborationCapa
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
 pub struct CollaborationCapabilityTemplate {
-    pub action: CollaborationCapabilityAction,
-    pub category: CapabilityCategory,
-    pub risk_tier: RiskTier,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub action: CapabilityActionId,
+    pub category: String,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub risk_tier: CapabilityRiskTier,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub required_constraints: Vec<String>,
     pub target_event_kinds: Vec<String>,
-    pub profile: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
     pub event_mapping_kind: String,
     pub requires_approval: bool,
     pub requires_expires_at: bool,
 }
 
-impl From<CollaborationCapabilityAction> for CollaborationCapabilityTemplate {
-    fn from(action: CollaborationCapabilityAction) -> Self {
+impl From<CapabilityActionId> for CollaborationCapabilityTemplate {
+    fn from(action: CapabilityActionId) -> Self {
+        let descriptor = arkret_schema::capability_action_descriptor(action);
+        let requires_approval = collaboration_action_requires_approval(action);
         Self {
             action,
-            category: action.category(),
-            risk_tier: action.risk_tier(),
-            required_constraints: Vec::new(),
-            target_event_kinds: vec![action.target_event_kind().to_owned()],
-            profile: action.profile().to_owned(),
-            event_mapping_kind: "same_name".to_owned(),
-            requires_approval: action.requires_approval(),
-            requires_expires_at: action.requires_expires_at(),
+            category: descriptor.category.to_owned(),
+            risk_tier: descriptor.risk_tier,
+            required_constraints: descriptor
+                .required_constraints
+                .iter()
+                .map(|value| (*value).to_owned())
+                .collect(),
+            target_event_kinds: descriptor
+                .target_event_kinds
+                .iter()
+                .map(|value| (*value).to_owned())
+                .collect(),
+            profile: descriptor.profile.map(str::to_owned),
+            event_mapping_kind: descriptor.event_mapping_kind.to_owned(),
+            requires_approval,
+            requires_expires_at: requires_approval,
         }
     }
 }
 
 #[must_use]
 pub fn collaboration_capability_templates() -> Vec<CollaborationCapabilityTemplate> {
-    CollaborationCapabilityAction::all()
-        .into_iter()
+    COLLABORATION_CAPABILITY_ACTIONS
+        .iter()
+        .copied()
         .map(CollaborationCapabilityTemplate::from)
         .collect()
 }
@@ -110,7 +129,9 @@ pub fn collaboration_capability_templates() -> Vec<CollaborationCapabilityTempla
 pub struct CreateCollaborationCapabilityGrant {
     pub subject: String,
     pub realm_id: String,
-    pub action: CollaborationCapabilityAction,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub action: CapabilityActionId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -135,13 +156,16 @@ impl CreateCollaborationCapabilityGrant {
         if self.realm_id.is_empty() {
             return Err("realm_id is required".into());
         }
-        if self.action.requires_expires_at() && self.expires_at.is_none() {
+        if !is_collaboration_capability_action(self.action) {
             return Err(format!(
-                "action `{}` requires expires_at",
-                self.action.as_action_str()
+                "action `{}` is not supported by the collaboration grant surface",
+                self.action
             ));
         }
-        if self.action.requires_approval()
+        if collaboration_action_requires_approval(self.action) && self.expires_at.is_none() {
+            return Err(format!("action `{}` requires expires_at", self.action));
+        }
+        if collaboration_action_requires_approval(self.action)
             && match self.approval_evidence_ref.as_deref() {
                 Some(value) => value.is_empty(),
                 None => true,
@@ -149,7 +173,7 @@ impl CreateCollaborationCapabilityGrant {
         {
             return Err(format!(
                 "action `{}` requires approval_evidence_ref",
-                self.action.as_action_str()
+                self.action
             ));
         }
         Ok(())
@@ -180,9 +204,10 @@ mod tests {
 
     #[test]
     fn registry_action_strings_match_spec() {
-        let actual: Vec<_> = CollaborationCapabilityAction::all()
-            .into_iter()
-            .map(|action| action.as_action_str())
+        let actual: Vec<_> = COLLABORATION_CAPABILITY_ACTIONS
+            .iter()
+            .copied()
+            .map(CapabilityActionId::as_str)
             .collect();
         assert_eq!(
             actual,
@@ -203,36 +228,42 @@ mod tests {
         assert_eq!(templates.len(), 6);
 
         let rsvp = &templates[0];
-        assert_eq!(rsvp.action, CollaborationCapabilityAction::RsvpSet);
-        assert_eq!(rsvp.category, CapabilityCategory::Discussion);
-        assert_eq!(rsvp.risk_tier, RiskTier::Low);
+        assert_eq!(rsvp.action, CapabilityActionId::RsvpSet);
+        assert_eq!(rsvp.category, "discussion");
+        assert_eq!(rsvp.risk_tier, CapabilityRiskTier::Low);
         assert!(rsvp.required_constraints.is_empty());
         assert_eq!(rsvp.target_event_kinds, vec!["ak.rsvp.set"]);
-        assert_eq!(rsvp.profile, "ak.profile.calendar_event.v1");
+        assert_eq!(
+            rsvp.profile.as_deref(),
+            Some("ak.profile.calendar_event.v1")
+        );
         assert_eq!(rsvp.event_mapping_kind, "same_name");
 
         let search_policy = templates.last().unwrap();
-        assert_eq!(
-            search_policy.action,
-            CollaborationCapabilityAction::RealmSearchPolicy
-        );
-        assert_eq!(search_policy.category, CapabilityCategory::Management);
-        assert_eq!(search_policy.risk_tier, RiskTier::High);
+        assert_eq!(search_policy.action, CapabilityActionId::RealmSearchPolicy);
+        assert_eq!(search_policy.category, "management");
+        assert_eq!(search_policy.risk_tier, CapabilityRiskTier::High);
         assert_eq!(
             search_policy.target_event_kinds,
             vec!["ak.realm.search_policy"]
         );
-        assert_eq!(search_policy.profile, "ak.profile.search.blind_index.v1");
+        assert_eq!(
+            search_policy.profile.as_deref(),
+            Some("ak.profile.search.blind_index.v1")
+        );
         assert!(search_policy.requires_approval);
         assert!(search_policy.requires_expires_at);
     }
 
     #[test]
     fn wildcard_actions_are_not_grantable() {
-        use std::str::FromStr;
+        let body = r#"{
+            "subject":"did:web:alice.example",
+            "realm_id":"ak:realm:demo",
+            "action":"ak.pin.*"
+        }"#;
 
-        assert!(CollaborationCapabilityAction::from_str("ak.pin.*").is_err());
-        assert!(CollaborationCapabilityAction::from_str("ak.realm.*").is_err());
+        assert!(serde_json::from_str::<CreateCollaborationCapabilityGrant>(body).is_err());
     }
 
     #[test]
@@ -240,7 +271,7 @@ mod tests {
         let req = CreateCollaborationCapabilityGrant {
             subject: "did:web:admin.example".into(),
             realm_id: "ak:realm:01JS0SP000000000000000000".into(),
-            action: CollaborationCapabilityAction::RealmDisappearingPolicy,
+            action: CapabilityActionId::RealmDisappearingPolicy,
             expires_at: None,
             approval_evidence_ref: None,
         };
@@ -260,10 +291,10 @@ mod tests {
     #[test]
     fn low_and_medium_actions_do_not_require_approval() {
         for action in [
-            CollaborationCapabilityAction::RsvpSet,
-            CollaborationCapabilityAction::PinAdd,
-            CollaborationCapabilityAction::PinRemove,
-            CollaborationCapabilityAction::PinReorder,
+            CapabilityActionId::RsvpSet,
+            CapabilityActionId::PinAdd,
+            CapabilityActionId::PinRemove,
+            CapabilityActionId::PinReorder,
         ] {
             let req = CreateCollaborationCapabilityGrant {
                 subject: "did:web:alice.example".into(),
@@ -274,5 +305,18 @@ mod tests {
             };
             assert!(req.validate().is_ok(), "{action} should validate");
         }
+    }
+
+    #[test]
+    fn registered_action_outside_product_subset_is_rejected() {
+        let req = CreateCollaborationCapabilityGrant {
+            subject: "did:web:alice.example".into(),
+            realm_id: "ak:realm:01JS0SP000000000000000000".into(),
+            action: CapabilityActionId::MessageCreate,
+            expires_at: None,
+            approval_evidence_ref: None,
+        };
+
+        assert!(req.validate().is_err());
     }
 }

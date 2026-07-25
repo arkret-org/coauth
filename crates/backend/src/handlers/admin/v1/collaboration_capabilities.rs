@@ -12,15 +12,15 @@ use arkret_identifiers::{EventId, GrantId, new_prefixed_uuid7};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_admin_types::collaboration_capability_admin::{
-    CollaborationCapabilityGrant, CreateCollaborationCapabilityGrant,
+    CapabilityRiskTier, CollaborationCapabilityGrant, CreateCollaborationCapabilityGrant,
     ListCollaborationCapabilityGrantsOutcome, ListCollaborationCapabilityTemplatesOutcome,
-    RiskTier, collaboration_capability_templates,
+    collaboration_capability_templates,
 };
 use coauth_config::ArkretConfig;
 use coauth_data::queue::{CollaborationCapabilityFanoutJob, QueueJobRepositoryExt as _};
 use coauth_data::{
-    CollaborationCapabilityAction, CollaborationCapabilityRevokeFanout,
-    NewCollaborationCapabilityGrant, RepositoryAccess,
+    CapabilityActionId, CollaborationCapabilityRevokeFanout, NewCollaborationCapabilityGrant,
+    RepositoryAccess, capability_action_risk_tier,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable as _;
@@ -93,8 +93,8 @@ pub async fn create_handler(
         return Err(AppError::bad_request(msg));
     }
 
-    let tier = body.action.risk_tier();
-    let approved_proposal = if tier == RiskTier::High {
+    let tier = capability_action_risk_tier(body.action);
+    let approved_proposal = if tier == CapabilityRiskTier::High {
         let proposal_id_raw = req
             .query::<String>("risk_action_proposal_id")
             .or_else(|| req.header::<String>("x-coauth-risk-action-proposal-id"))
@@ -311,7 +311,7 @@ fn build_grant_fanout_payload(
     capability_grant_id: &str,
     subject: &str,
     realm_id: &str,
-    action: CollaborationCapabilityAction,
+    action: CapabilityActionId,
     expires_at: Option<DateTime<Utc>>,
     approval_evidence_ref: Option<&str>,
     issued_at: DateTime<Utc>,
@@ -325,7 +325,7 @@ fn build_grant_fanout_payload(
         "realm_id": realm_id,
         "issuer": service_id,
         "subject": subject,
-        "actions": [action.as_action_str()],
+        "actions": [action.as_str()],
         "resources": [{ "kind": "realm", "realm_id": realm_id }],
         "issued_at": issued_at,
     });
@@ -523,7 +523,7 @@ fn principal_servers(arkret_config: &ArkretConfig) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone as _;
-    use coauth_admin_types::collaboration_capability_admin::CollaborationCapabilityAction;
+    use coauth_admin_types::collaboration_capability_admin::CapabilityActionId;
     use coauth_config::{ArkretConfig, PrincipalServerConfig};
     use coauth_keystore::{JsonWebKeySet, Keystore, PrivateKey};
     use rand_chacha::ChaChaRng;
@@ -536,7 +536,7 @@ mod tests {
         let req = CreateCollaborationCapabilityGrant {
             subject: "did:web:alice.example".into(),
             realm_id: "ak:realm:demo".into(),
-            action: CollaborationCapabilityAction::RealmSearchPolicy,
+            action: CapabilityActionId::RealmSearchPolicy,
             expires_at: None,
             approval_evidence_ref: None,
         };
@@ -574,7 +574,7 @@ mod tests {
             "ak:grant:01904100-0000-7000-8000-000000000010",
             "did:web:alice.example",
             "ak:realm:01904100-0000-7000-8000-000000000001",
-            CollaborationCapabilityAction::PinAdd,
+            CapabilityActionId::PinAdd,
             None,
             None,
             issued_at,

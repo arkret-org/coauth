@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use coauth_data::Clock;
-use coauth_data::circle_capability::{CircleCapabilityAction, CircleCapabilityGrant};
+use coauth_data::circle_capability::{CapabilityActionId, CircleCapabilityGrant};
 use rand_core::RngCore;
 
 use crate::repository_impl;
@@ -15,7 +15,7 @@ pub struct NewCircleCapabilityGrant {
     /// Realm the grant is scoped to.
     pub realm_id: String,
     /// Capability action authorized by this grant.
-    pub action: CircleCapabilityAction,
+    pub action: CapabilityActionId,
     /// Canonical sorted/deduplicated Circle IDs allowed by the grant.
     pub allowed_circle_ids: Vec<String>,
     /// Admin/service actor that created the grant.

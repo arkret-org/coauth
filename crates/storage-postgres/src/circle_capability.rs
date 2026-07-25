@@ -3,8 +3,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::circle_capability::{
-    CircleCapabilityAction, CircleCapabilityGrant, CircleCapabilityGrantRepository,
-    NewCircleCapabilityGrant,
+    CapabilityActionId, CircleCapabilityGrant, CircleCapabilityGrantRepository,
+    NewCircleCapabilityGrant, is_circle_capability_action,
 };
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
@@ -47,14 +47,16 @@ impl TryFrom<CircleCapabilityGrantRow> for CircleCapabilityGrant {
 
     fn try_from(value: CircleCapabilityGrantRow) -> Result<Self, Self::Error> {
         let id = Ulid::from(value.id);
-        let action = value
-            .action
-            .parse::<CircleCapabilityAction>()
-            .map_err(|e| {
+        let action = CapabilityActionId::from_wire(&value.action)
+            .filter(|action| is_circle_capability_action(*action))
+            .ok_or_else(|| {
                 DatabaseInconsistencyError::on("circle_capability_grants")
                     .column("action")
                     .row(id)
-                    .source(e)
+                    .source(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("unknown or non-Circle capability action: {}", value.action),
+                    ))
             })?;
 
         Ok(Self {
@@ -179,7 +181,7 @@ impl CircleCapabilityGrantRepository for PgCircleCapabilityGrantRepository<'_> {
 
 #[cfg(test)]
 mod tests {
-    use coauth_data::circle_capability::CircleCapabilityAction;
+    use coauth_data::circle_capability::CapabilityActionId;
     use coauth_data::clock::MockClock;
     use coauth_data::{RepositoryAccess as _, RepositoryFactory as _};
     use rand_chacha::ChaChaRng;
@@ -192,7 +194,7 @@ mod tests {
         NewCircleCapabilityGrant {
             subject: format!("did:web:{label}.example"),
             realm_id: format!("ak:realm:{label}"),
-            action: CircleCapabilityAction::Manage,
+            action: CapabilityActionId::CircleManage,
             allowed_circle_ids: vec![format!("ak:circle:{label}")],
             granted_by: "did:web:admin.example".to_owned(),
         }

@@ -136,14 +136,16 @@ pub use self::accountability::{
 };
 pub use self::audit::{AccountSecurityEvent, AdminOperation, AdminOperationLog, SecurityEventType};
 pub use self::circle_capability::{
-    CircleCapabilityAction, CircleCapabilityGrant, CircleCapabilityGrantRepository,
-    NewCircleCapabilityGrant, ParseCircleCapabilityActionError, RiskTier,
+    CIRCLE_CAPABILITY_ACTIONS, CapabilityActionId, CapabilityRiskTier, CircleCapabilityGrant,
+    CircleCapabilityGrantRepository, NewCircleCapabilityGrant, capability_action_risk_tier,
+    circle_action_requires_allowed_circle_ids, is_circle_capability_action,
 };
 pub use self::clock::{Clock, SystemClock};
 pub use self::collaboration_capability::{
-    CapabilityCategory, CollaborationCapabilityAction, CollaborationCapabilityGrant,
+    COLLABORATION_CAPABILITY_ACTIONS, CollaborationCapabilityGrant,
     CollaborationCapabilityGrantRepository, CollaborationCapabilityRevokeFanout,
-    NewCollaborationCapabilityGrant, ParseCollaborationCapabilityActionError,
+    NewCollaborationCapabilityGrant, collaboration_action_requires_approval,
+    is_collaboration_capability_action,
 };
 pub use self::dpop_replay::{DpopReplayRepository, NewDpopJtiReplay};
 pub use self::notification::{

@@ -3,9 +3,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::collaboration_capability::{
-    CollaborationCapabilityAction, CollaborationCapabilityGrant,
-    CollaborationCapabilityGrantRepository, CollaborationCapabilityRevokeFanout,
-    NewCollaborationCapabilityGrant,
+    CapabilityActionId, CollaborationCapabilityGrant, CollaborationCapabilityGrantRepository,
+    CollaborationCapabilityRevokeFanout, NewCollaborationCapabilityGrant,
+    is_collaboration_capability_action,
 };
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
@@ -54,14 +54,19 @@ impl TryFrom<CollaborationCapabilityGrantRow> for CollaborationCapabilityGrant {
 
     fn try_from(value: CollaborationCapabilityGrantRow) -> Result<Self, Self::Error> {
         let id = Ulid::from(value.id);
-        let action = value
-            .action
-            .parse::<CollaborationCapabilityAction>()
-            .map_err(|e| {
+        let action = CapabilityActionId::from_wire(&value.action)
+            .filter(|action| is_collaboration_capability_action(*action))
+            .ok_or_else(|| {
                 DatabaseInconsistencyError::on("collaboration_capability_grants")
                     .column("action")
                     .row(id)
-                    .source(e)
+                    .source(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "unknown or non-collaboration capability action: {}",
+                            value.action
+                        ),
+                    ))
             })?;
 
         Ok(Self {
@@ -182,7 +187,7 @@ impl CollaborationCapabilityGrantRepository for PgCollaborationCapabilityGrantRe
         &mut self,
         subject: &str,
         realm_id: &str,
-        action: CollaborationCapabilityAction,
+        action: CapabilityActionId,
     ) -> Result<Vec<CollaborationCapabilityGrant>, Self::Error> {
         collaboration_capability_grants::table
             .filter(collaboration_capability_grants::revoked_at.is_null())
@@ -237,7 +242,7 @@ impl CollaborationCapabilityGrantRepository for PgCollaborationCapabilityGrantRe
 #[cfg(test)]
 mod tests {
     use coauth_data::clock::MockClock;
-    use coauth_data::collaboration_capability::CollaborationCapabilityAction;
+    use coauth_data::collaboration_capability::CapabilityActionId;
     use coauth_data::{RepositoryAccess as _, RepositoryFactory as _};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
@@ -251,7 +256,7 @@ mod tests {
             grant_event_id: format!("ak:event:{label}"),
             subject: format!("did:web:{label}.example"),
             realm_id: format!("ak:realm:{label}"),
-            action: CollaborationCapabilityAction::PinAdd,
+            action: CapabilityActionId::PinAdd,
             expires_at: None,
             approval_evidence_ref: None,
             granted_by: "did:web:admin.example".to_owned(),

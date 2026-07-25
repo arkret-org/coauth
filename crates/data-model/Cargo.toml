@@ -19,6 +19,8 @@ schema = ["dep:salvo", "dep:schemars"]
 
 [dependencies]
 arkret-models-collaboration = {workspace = true}
+arkret-schema = {workspace = true}
+arkret-wire = {workspace = true}
 chrono = {workspace = true,features = ["serde"]}
 serde = {workspace = true,features = ["derive"]}
 salvo = {workspace = true,optional = true}

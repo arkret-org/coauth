@@ -13,9 +13,10 @@
 //! visible across horizontally scaled replicas that share Postgres.
 
 use coauth_admin_types::circle_capability_admin::{
-    CircleCapabilityGrant, CreateCircleCapabilityGrant, ListCircleCapabilityGrantsOutcome, RiskTier,
+    CapabilityRiskTier, CircleCapabilityGrant, CreateCircleCapabilityGrant,
+    ListCircleCapabilityGrantsOutcome,
 };
-use coauth_data::{NewCircleCapabilityGrant, RepositoryAccess};
+use coauth_data::{NewCircleCapabilityGrant, RepositoryAccess, capability_action_risk_tier};
 use salvo::http::StatusCode;
 use salvo::oapi::extract::PathParam;
 use salvo::prelude::*;
@@ -68,8 +69,8 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
     // `risk_action_proposal_id` query parameter or
     // `x-coauth-risk-action-proposal-id` header. The proposal is marked
     // `executed` after the grant is persisted so it cannot be replayed.
-    let tier = body.action.risk_tier();
-    let approved_proposal = if tier == RiskTier::High {
+    let tier = capability_action_risk_tier(body.action);
+    let approved_proposal = if tier == CapabilityRiskTier::High {
         let proposal_id_raw = req
             .query::<String>("risk_action_proposal_id")
             .or_else(|| req.header::<String>("x-coauth-risk-action-proposal-id"))
@@ -188,7 +189,7 @@ fn canonicalize_circle_ids(ids: &mut Vec<String>) {
 
 #[cfg(test)]
 mod tests {
-    use coauth_admin_types::circle_capability_admin::CircleCapabilityAction;
+    use coauth_admin_types::circle_capability_admin::CapabilityActionId;
 
     use super::*;
 
@@ -208,7 +209,7 @@ mod tests {
         let req = CreateCircleCapabilityGrant {
             subject: "user:alice".into(),
             realm_id: "ak:realm:demo".into(),
-            action: CircleCapabilityAction::Manage,
+            action: CapabilityActionId::CircleManage,
             allowed_circle_ids: vec![],
         };
         assert!(req.validate().is_err());
