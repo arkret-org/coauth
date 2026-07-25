@@ -15,7 +15,6 @@ use ulid::Ulid;
 pub mod defaults;
 pub mod definition;
 mod executor;
-pub mod stages;
 
 pub use self::defaults::{
     default_authentication_strand, default_authorization_strand, default_enrollment_strand,

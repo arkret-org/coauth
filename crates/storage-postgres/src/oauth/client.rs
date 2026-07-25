@@ -60,17 +60,11 @@ impl<'c> PgOAuthClientRepository<'c> {
 
         let mut by_client: BTreeMap<Uuid, LocalizedClientMetadata> = BTreeMap::new();
         for (client_id, locale, field, value) in rows {
-            let Some(field_kind) = LocalizableField::from_str(&field) else {
-                // The CHECK constraint should make this unreachable; if a
-                // future migration adds a new field that this binary does
-                // not yet know about, skip it instead of erroring out so
-                // older deployments can keep serving traffic.
-                tracing::warn!(
-                    %client_id, field = %field,
-                    "Unknown localised metadata field; skipping"
-                );
-                continue;
-            };
+            let field_kind = LocalizableField::from_str(&field).ok_or_else(|| {
+                DatabaseInconsistencyError::on("oauth_client_localized_metadata")
+                    .column("field")
+                    .row(Ulid::from(client_id))
+            })?;
             by_client
                 .entry(client_id)
                 .or_default()
