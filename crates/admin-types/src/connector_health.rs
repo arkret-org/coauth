@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 /// literal `"healthy"` / `"unhealthy"` strings the backend emits — kept
 /// as a typed enum so the admin UI can drive its badge tone without
 /// stringly-typed comparisons.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
@@ -28,27 +28,11 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum ConnectorHealthStatus {
     Healthy,
+    #[default]
     Unhealthy,
 }
 
 impl ConnectorHealthStatus {
-    #[must_use]
-    pub fn label(&self) -> &'static str {
-        match self {
-            ConnectorHealthStatus::Healthy => "Healthy",
-            ConnectorHealthStatus::Unhealthy => "Unhealthy",
-        }
-    }
-
-    #[must_use]
-    pub fn from_wire(s: &str) -> Option<Self> {
-        match s {
-            "healthy" | "ok" => Some(ConnectorHealthStatus::Healthy),
-            "unhealthy" | "down" | "error" => Some(ConnectorHealthStatus::Unhealthy),
-            _ => None,
-        }
-    }
-
     /// True when the provider passed its last probe.
     #[must_use]
     pub fn is_healthy(&self) -> bool {
@@ -60,10 +44,8 @@ impl ConnectorHealthStatus {
 ///
 /// `provider` is the connector name registered in the
 /// `ConnectorRegistry` (e.g. `"soland"`); `principal_authority` is the
-/// authority the provider is pointed at; `status` is the wire
-/// string — use [`ConnectorHealthRow::status_typed`] for the typed
-/// bucket. `error` carries the probe failure message when the provider
-/// is unhealthy.
+/// authority the provider is pointed at. `error` carries the probe failure
+/// message when the provider is unhealthy.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(
     feature = "schema",
@@ -74,24 +56,16 @@ pub struct ConnectorHealthRow {
     pub provider: String,
     #[serde(default)]
     pub principal_authority: String,
-    /// `"healthy"` or `"unhealthy"`. Use [`Self::status_typed`].
     #[serde(default)]
-    pub status: String,
+    pub status: ConnectorHealthStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
 
 impl ConnectorHealthRow {
     #[must_use]
-    pub fn status_typed(&self) -> ConnectorHealthStatus {
-        // Default to Unhealthy on unknown so an unrecognized status code
-        // does not look green to the operator.
-        ConnectorHealthStatus::from_wire(&self.status).unwrap_or(ConnectorHealthStatus::Unhealthy)
-    }
-
-    #[must_use]
     pub fn is_healthy(&self) -> bool {
-        self.status_typed().is_healthy()
+        self.status.is_healthy()
     }
 }
 
@@ -111,31 +85,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn status_wire_round_trip() {
-        for (wire, label) in [("healthy", "Healthy"), ("unhealthy", "Unhealthy")] {
-            let s = ConnectorHealthStatus::from_wire(wire).expect("variant");
-            assert_eq!(s.label(), label);
+    fn status_wire_is_strict_and_missing_is_unhealthy() {
+        assert_eq!(
+            serde_json::from_str::<ConnectorHealthStatus>("\"healthy\"").unwrap(),
+            ConnectorHealthStatus::Healthy
+        );
+        assert_eq!(
+            serde_json::from_str::<ConnectorHealthStatus>("\"unhealthy\"").unwrap(),
+            ConnectorHealthStatus::Unhealthy
+        );
+        for legacy_or_unknown in ["ok", "down", "error", "garbage"] {
+            assert!(
+                serde_json::from_str::<ConnectorHealthStatus>(&format!("\"{legacy_or_unknown}\""))
+                    .is_err(),
+                "{legacy_or_unknown} must not be accepted"
+            );
         }
-        assert!(ConnectorHealthStatus::from_wire("nope").is_none());
-        assert_eq!(
-            ConnectorHealthStatus::from_wire("ok"),
-            Some(ConnectorHealthStatus::Healthy)
-        );
-        assert_eq!(
-            ConnectorHealthStatus::from_wire("down"),
-            Some(ConnectorHealthStatus::Unhealthy)
-        );
-    }
 
-    #[test]
-    fn unknown_status_falls_back_to_unhealthy() {
-        let row = ConnectorHealthRow {
-            provider: "soland".into(),
-            principal_authority: "soland.example".into(),
-            status: "garbage".into(),
-            error: None,
-        };
-        assert_eq!(row.status_typed(), ConnectorHealthStatus::Unhealthy);
+        let row: ConnectorHealthRow =
+            serde_json::from_str(r#"{"provider":"soland","principal_authority":"soland.example"}"#)
+                .unwrap();
+        assert_eq!(row.status, ConnectorHealthStatus::Unhealthy);
         assert!(!row.is_healthy());
     }
 
@@ -144,7 +114,7 @@ mod tests {
         let row = ConnectorHealthRow {
             provider: "soland".into(),
             principal_authority: "soland.example".into(),
-            status: "healthy".into(),
+            status: ConnectorHealthStatus::Healthy,
             error: None,
         };
         let s = serde_json::to_string(&row).unwrap();
@@ -157,7 +127,7 @@ mod tests {
         let row = ConnectorHealthRow {
             provider: "soland".into(),
             principal_authority: "soland.example".into(),
-            status: "unhealthy".into(),
+            status: ConnectorHealthStatus::Unhealthy,
             error: Some("probe timed out".into()),
         };
         let s = serde_json::to_string(&row).unwrap();
@@ -171,13 +141,13 @@ mod tests {
                 ConnectorHealthRow {
                     provider: "soland".into(),
                     principal_authority: "soland-a.example".into(),
-                    status: "healthy".into(),
+                    status: ConnectorHealthStatus::Healthy,
                     error: None,
                 },
                 ConnectorHealthRow {
                     provider: "secondary".into(),
                     principal_authority: "soland-b.example".into(),
-                    status: "unhealthy".into(),
+                    status: ConnectorHealthStatus::Unhealthy,
                     error: Some("connection refused".into()),
                 },
             ],
