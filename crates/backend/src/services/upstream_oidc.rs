@@ -276,16 +276,8 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
                 let Some(effective) = effective_audience(server, resolved) else {
                     continue;
                 };
-                let matches = effective.as_str() == requested_audience
-                    || principal_endpoint_matches_audience(&server.endpoint, requested_audience);
-                if matches {
+                if effective.as_str() == requested_audience {
                     return Ok(UpstreamOidcSessionGrantTarget {
-                        // Prefer the resolved/pinned service DID so the grant is
-                        // stamped with the Principal Server's CURRENT audience —
-                        // soland verifies `aud == its live service_id`. The
-                        // endpoint URL remains a legacy request alias only while
-                        // an authoritative audience is available; an unresolved
-                        // or expired dynamic audience fails closed.
                         audience: effective.to_string(),
                         principal_server_name: Some(server.name.clone()),
                         principal_server_endpoint: Some(server.endpoint.to_string()),
@@ -489,16 +481,6 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
     }
 }
 
-fn principal_endpoint_matches_audience(endpoint: &url::Url, requested_audience: &str) -> bool {
-    let requested_audience = requested_audience.trim().trim_end_matches('/');
-    if requested_audience.is_empty() {
-        return false;
-    }
-
-    let endpoint_base = endpoint.as_str().trim_end_matches('/');
-    requested_audience == endpoint_base || requested_audience == format!("{endpoint_base}/api")
-}
-
 async fn fetch_oidc_userinfo(
     http_client: &reqwest::Client,
     userinfo_endpoint: &Url,
@@ -572,18 +554,11 @@ pub fn default_upstream_oidc_service() -> UpstreamOidcServiceHandle {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use coauth_config::PrincipalServerConfig;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
-
-    fn principal_server_config() -> (ArkretConfig, Url) {
-        let endpoint = Url::parse("https://soland.example/").unwrap();
-        (principal_server_config_for(endpoint.clone()), endpoint)
-    }
 
     fn principal_server_config_for(endpoint: Url) -> ArkretConfig {
         ArkretConfig {
@@ -595,54 +570,6 @@ mod tests {
             }],
             ..ArkretConfig::default()
         }
-    }
-
-    #[tokio::test]
-    async fn endpoint_alias_uses_a_fresh_authoritative_audience() {
-        let (config, endpoint) = principal_server_config();
-        let resolved = ResolvedPrincipalAudiences::new();
-        resolved.insert_for_test(&endpoint, "did:webvh:current:soland.example:webvh:service");
-        let url_builder = UrlBuilder::new("https://auth.example/".parse().unwrap(), None, None);
-        let http_client = reqwest::Client::new();
-
-        let target = DefaultUpstreamOidcService
-            .session_grant_target_for_requested_audience(
-                &http_client,
-                &url_builder,
-                &config,
-                &resolved,
-                Some("https://soland.example/api"),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(
-            target.audience,
-            "did:webvh:current:soland.example:webvh:service"
-        );
-    }
-
-    #[tokio::test]
-    async fn endpoint_alias_fails_closed_when_dynamic_audience_is_expired() {
-        let server = MockServer::start().await;
-        let endpoint = Url::parse(&server.uri()).unwrap();
-        let config = principal_server_config_for(endpoint.clone());
-        let resolved = ResolvedPrincipalAudiences::with_max_trusted_age_for_test(Duration::ZERO);
-        resolved.insert_for_test(&endpoint, "did:webvh:stale:soland.example:webvh:service");
-        let url_builder = UrlBuilder::new("https://auth.example/".parse().unwrap(), None, None);
-        let http_client = reqwest::Client::new();
-
-        let result = DefaultUpstreamOidcService
-            .session_grant_target_for_requested_audience(
-                &http_client,
-                &url_builder,
-                &config,
-                &resolved,
-                Some("https://soland.example/api"),
-            )
-            .await;
-
-        assert!(result.is_err());
     }
 
     #[tokio::test]

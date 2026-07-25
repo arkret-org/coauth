@@ -88,14 +88,6 @@ impl ResolvedPrincipalAudiences {
         Self::default()
     }
 
-    #[cfg(test)]
-    pub(crate) fn with_max_trusted_age_for_test(max_trusted_age: Duration) -> Self {
-        Self {
-            inner: Arc::default(),
-            max_trusted_age,
-        }
-    }
-
     /// Current resolved `service_id` for `endpoint`, if a describe probe has
     /// succeeded within [`MAX_TRUSTED_AUDIENCE_AGE`]. Synchronous — safe to
     /// call from the request-path audience checks. Returns `None` before the
