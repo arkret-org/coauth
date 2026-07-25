@@ -914,11 +914,6 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
         assert_eq!(body["approval_state"], "approved");
-        assert_eq!(
-            body["state_store_kind"],
-            "pg_risk_action_proposals_with_admin_audit_trail"
-        );
-
         let persisted = proposals.get(proposal_ulid).await.unwrap().unwrap();
         assert_eq!(persisted.state.as_str(), "approved");
         assert_eq!(persisted.approval_proofs.len(), 1);

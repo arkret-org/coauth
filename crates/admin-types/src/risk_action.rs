@@ -62,7 +62,7 @@ pub struct AccountRiskActionApprovalRequestBody {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approved_by: Option<String>,
 
-    /// Human approval note for the scaffold audit trail.
+    /// Human approval note for the audit trail.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_note: Option<String>,
 
@@ -92,7 +92,7 @@ pub struct AccountRiskActionExecuteRequestBody {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ticket: Option<String>,
 
-    /// Human execution note for the scaffold trail.
+    /// Human execution note for the audit trail.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution_note: Option<String>,
 }
@@ -137,11 +137,11 @@ pub struct AccountRiskActionProposalOutcome {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_at: Option<DateTime<Utc>>,
 
-    /// Admin identifier that submitted the proposal scaffold, if available.
+    /// Admin identifier that submitted the proposal, if available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_by: Option<String>,
 
-    /// Admin handle that submitted the proposal scaffold, if available.
+    /// Admin handle that submitted the proposal, if available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_by_handle: Option<String>,
 
@@ -149,7 +149,7 @@ pub struct AccountRiskActionProposalOutcome {
     #[serde(default)]
     pub previous_state: String,
 
-    /// Proposal state reported by the scaffold contract.
+    /// Proposal state reported by the workflow.
     #[serde(default)]
     pub proposal_state: String,
 
@@ -157,7 +157,7 @@ pub struct AccountRiskActionProposalOutcome {
     #[serde(default)]
     pub state_revision: u64,
 
-    /// Explicit transition kind written by this scaffold.
+    /// Explicit transition kind written by the workflow.
     #[serde(default)]
     pub transition_kind: String,
 
@@ -168,18 +168,6 @@ pub struct AccountRiskActionProposalOutcome {
     /// Allowed next transitions from this proposal state.
     #[serde(default)]
     pub allowed_next_transitions: Vec<String>,
-
-    /// Final execution endpoint that would perform the mutation after approval.
-    #[serde(default)]
-    pub execution_endpoint: String,
-
-    /// How this scaffold persists the state machine today.
-    #[serde(default)]
-    pub state_store_kind: String,
-
-    /// Remaining implementation work for this scaffold.
-    #[serde(default)]
-    pub todo: String,
 }
 
 /// Outcome of approving a previously staged risk-action proposal.
@@ -214,7 +202,7 @@ pub struct AccountRiskActionApprovalOutcome {
     #[serde(default)]
     pub previous_state: String,
 
-    /// Approval state reported by the scaffold contract.
+    /// Approval state reported by the workflow.
     #[serde(default)]
     pub approval_state: String,
 
@@ -222,7 +210,7 @@ pub struct AccountRiskActionApprovalOutcome {
     #[serde(default)]
     pub state_revision: u64,
 
-    /// Explicit transition kind written by this scaffold.
+    /// Explicit transition kind written by the workflow.
     #[serde(default)]
     pub transition_kind: String,
 
@@ -238,25 +226,13 @@ pub struct AccountRiskActionApprovalOutcome {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approved_by_handle: Option<String>,
 
-    /// Human approval note for the scaffold trail.
+    /// Human approval note for the audit trail.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_note: Option<String>,
-
-    /// Final execution endpoint that would perform the mutation after approval.
-    #[serde(default)]
-    pub execution_endpoint: String,
 
     /// Allowed next transitions from this approved state.
     #[serde(default)]
     pub allowed_next_transitions: Vec<String>,
-
-    /// How this scaffold persists the state machine today.
-    #[serde(default)]
-    pub state_store_kind: String,
-
-    /// Remaining implementation work for this scaffold.
-    #[serde(default)]
-    pub todo: String,
 }
 
 /// Current risk-action lifecycle snapshot for one account.
@@ -286,7 +262,7 @@ pub struct AccountRiskActionCurrentOutcome {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<String>,
 
-    /// Current lifecycle state derived from the latest scaffold record.
+    /// Current lifecycle state derived from the latest workflow record.
     #[serde(default)]
     pub lifecycle_state: String,
 
@@ -325,22 +301,6 @@ pub struct AccountRiskActionCurrentOutcome {
     /// Admin handle associated with the latest state record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recorded_by_handle: Option<String>,
-
-    /// Execution endpoint referenced by the latest proposal/approval state.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub execution_endpoint: Option<String>,
-
-    /// Mutation endpoint referenced by the latest execute state.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mutation_endpoint: Option<String>,
-
-    /// How this scaffold persists the state machine today.
-    #[serde(default)]
-    pub state_store_kind: String,
-
-    /// Remaining implementation work for this scaffold state.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub todo: Option<String>,
 }
 
 impl Resource for AccountRiskActionCurrentOutcome {
@@ -416,7 +376,7 @@ pub struct AccountRiskActionTransitionRecord {
     /// When the transition record was written.
     ///
     /// Wire-side this is always present, but is `Option` here so a
-    /// scaffold backend that cannot supply it deserializes cleanly.
+    /// backend that cannot supply it deserializes cleanly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recorded_at: Option<DateTime<Utc>>,
 
@@ -428,14 +388,6 @@ pub struct AccountRiskActionTransitionRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recorded_by_handle: Option<String>,
 
-    /// Execution endpoint referenced by this transition, if any.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub execution_endpoint: Option<String>,
-
-    /// Mutation endpoint referenced by this transition, if any.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mutation_endpoint: Option<String>,
-
     /// Approval note captured by this transition, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_note: Option<String>,
@@ -443,12 +395,4 @@ pub struct AccountRiskActionTransitionRecord {
     /// Execution note captured by this transition, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution_note: Option<String>,
-
-    /// How this scaffold persists the state machine today.
-    #[serde(default)]
-    pub state_store_kind: String,
-
-    /// Remaining implementation work captured on this transition, if any.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub todo: Option<String>,
 }

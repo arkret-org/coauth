@@ -1,8 +1,8 @@
 //! Risk-action proposal/approval/execute workflow for admin account mutations.
 //!
 //! Split from `admin/v1/accounts.rs`. The execute step applies mutations via
-//! `services::user_admin`; durable proposal persistence is tracked in
-//! `_todos.md`.
+//! `services::user_admin`; proposals are persisted before approval and
+//! execution, with each transition recorded in the signed admin audit trail.
 
 use arkret_canonical::canonical_json_bytes;
 use chrono::{DateTime, Utc};
@@ -32,7 +32,6 @@ use crate::services::risk_action_proposals::{
     ApprovalProof, CreateProposal, ProposalState, RiskActionProposalRecord,
     RiskActionProposalsError, required_approvals_for,
 };
-use crate::services::risk_action_state::RiskActionStateService;
 use crate::{AppError, JsonResult};
 
 #[derive(Serialize, JsonSchema, ToSchema)]
@@ -56,7 +55,7 @@ pub struct AccountRiskActionExecuteOutcome {
     /// Previous lifecycle state before this transition.
     previous_state: String,
 
-    /// Execution state reported by the scaffold contract.
+    /// Execution state reported by the workflow.
     execution_state: String,
 
     /// Account mutation kind performed by the controlled executor.
@@ -65,32 +64,20 @@ pub struct AccountRiskActionExecuteOutcome {
     /// Monotonic state-machine revision.
     state_revision: u64,
 
-    /// Explicit transition kind written by this scaffold.
+    /// Explicit transition kind written by the workflow.
     transition_kind: String,
 
     /// When the execute step was recorded.
     executed_at: DateTime<Utc>,
 
-    /// How the execute scaffold expects the final mutation to run.
-    execution_mode: String,
-
-    /// Human execution note for the scaffold trail.
+    /// Human execution note for the audit trail.
     execution_note: Option<String>,
 
     /// Account state after the mutation was applied.
     account: SingleOutcome<super::AccountRecord>,
 
-    /// Mutation endpoint equivalent to the controlled execute path.
-    mutation_endpoint: String,
-
     /// Allowed next transitions from this execution state.
     allowed_next_transitions: Vec<String>,
-
-    /// How this scaffold persists the state machine today.
-    state_store_kind: String,
-
-    /// Remaining implementation work for this scaffold.
-    todo: String,
 }
 
 // `impl Resource for AccountRiskActionCurrentOutcome` lives next to the
@@ -130,15 +117,6 @@ impl AccountRiskActionMutation {
                 ..
             }
         )
-    }
-
-    fn execution_mode(&self) -> &'static str {
-        match self.operation {
-            AccountRiskActionOperation::PatchUser { .. } => "services.user_admin.patch_user",
-            AccountRiskActionOperation::TerminateSessions => {
-                "repository.browser_session.finish_bulk"
-            }
-        }
     }
 }
 
@@ -492,10 +470,7 @@ pub async fn propose(
         .map_err(map_risk_action_proposals_error)?;
     let proposal_id = proposal.id.to_string();
     let state_record_id = risk_action_state.record_id(account.id, &proposal_id);
-    let execution_endpoint = risk_action_state.execution_endpoint(&params.action, account.id)?;
     let allowed_next_transitions = risk_action_state.allowed_next_transitions("draft");
-    let state_store_kind = risk_action_state.state_store_kind();
-    let todo = "Durable proposal record persisted; execute requires explicit persisted approval and consumes this proposal before mutation.".to_owned();
 
     if admin_user.is_some() {
         let mut rng = crate::handlers::account::make_rng();
@@ -512,7 +487,6 @@ pub async fn propose(
             Some(account.id),
             serde_json::json!({
                 "state_record_id": state_record_id,
-                "state_store_kind": state_store_kind,
                 "state_revision": 1_u64,
                 "proposal_id": proposal_id,
                 "action": params.action,
@@ -524,9 +498,7 @@ pub async fn propose(
                 "approved_by": params.approved_by,
                 "requested_by": requested_by,
                 "requested_by_handle": requested_by_handle,
-                "execution_endpoint": execution_endpoint,
                 "allowed_next_transitions": allowed_next_transitions.clone(),
-                "todo": todo,
             }),
         )
         .await?;
@@ -552,9 +524,6 @@ pub async fn propose(
         transition_kind: "proposal_requested".to_owned(),
         approval_mode: "durable_proposal_required".to_owned(),
         allowed_next_transitions,
-        execution_endpoint,
-        state_store_kind: state_store_kind.to_owned(),
-        todo,
     }))
 }
 
@@ -658,15 +627,8 @@ pub async fn approve(
         .await
         .map_err(map_risk_action_proposals_error)?;
     let state_record_id = risk_action_state.record_id(account.id, &proposal_id);
-    let execution_endpoint = risk_action_state.execution_endpoint(&params.action, account.id)?;
     let allowed_next_transitions =
         risk_action_state.allowed_next_transitions(approved.state.as_str());
-    let state_store_kind = risk_action_state.state_store_kind();
-    let todo = format!(
-        "Durable approval recorded ({}/{}); execute is allowed only after state reaches approved.",
-        approved.approval_proofs.len(),
-        approved.required_approvals
-    );
     let state_revision = state_revision_for(&approved);
     let transition_kind = transition_for_state(approved.state).to_owned();
 
@@ -685,7 +647,6 @@ pub async fn approve(
             Some(account.id),
             serde_json::json!({
                 "state_record_id": state_record_id,
-                "state_store_kind": state_store_kind,
                 "state_revision": state_revision,
                 "proposal_id": proposal_id,
                 "action": params.action,
@@ -697,9 +658,7 @@ pub async fn approve(
                 "approval_verification_method": verification_method,
                 "approved_by_handle": admin_user.as_ref().map(|user| user.localpart.as_str()),
                 "approval_note": params.approval_note,
-                "execution_endpoint": execution_endpoint,
                 "allowed_next_transitions": allowed_next_transitions.clone(),
-                "todo": todo,
             }),
         )
         .await?;
@@ -722,10 +681,7 @@ pub async fn approve(
         approved_by: Some(approved_by),
         approved_by_handle: admin_user.as_ref().map(|user| user.localpart.clone()),
         approval_note: params.approval_note,
-        execution_endpoint,
         allowed_next_transitions,
-        state_store_kind: state_store_kind.to_owned(),
-        todo,
     }))
 }
 
@@ -845,15 +801,11 @@ pub async fn execute(
         .await
         .map_err(map_risk_action_proposals_error)?;
     let state_record_id = risk_action_state.record_id(account.id, &proposal_id);
-    let mutation_endpoint = risk_action_state.execution_endpoint(&params.action, account.id)?;
     let allowed_next_transitions = risk_action_state.allowed_next_transitions("mutation_recorded");
-    let state_store_kind = risk_action_state.state_store_kind();
     let state_revision = state_revision_for(&executed_proposal);
-    let todo = "Durable proposal consumed before controlled account mutation.".to_owned();
     let mut rng = crate::handlers::account::make_rng();
     let mut sessions_terminated = None;
     let principal_erase = mutation.principal_erase();
-    let execution_mode = mutation.execution_mode();
     let updated_account = match mutation.operation {
         AccountRiskActionOperation::PatchUser {
             patch,
@@ -894,7 +846,6 @@ pub async fn execute(
         Some(account.id),
         serde_json::json!({
             "state_record_id": state_record_id,
-            "state_store_kind": state_store_kind,
             "state_revision": state_revision,
             "proposal_id": proposal_id,
             "action": params.action,
@@ -909,9 +860,7 @@ pub async fn execute(
             "executed_by": admin_user.as_ref().map(|user| user.id.to_string()),
             "executed_by_handle": admin_user.as_ref().map(|user| user.localpart.as_str()),
             "execution_note": params.execution_note,
-            "mutation_endpoint": mutation_endpoint,
             "allowed_next_transitions": allowed_next_transitions.clone(),
-            "todo": todo,
         }),
     )
     .await?;
@@ -933,13 +882,9 @@ pub async fn execute(
         state_revision,
         transition_kind: "proposal_executed".to_owned(),
         executed_at,
-        execution_mode: execution_mode.to_owned(),
         execution_note: params.execution_note,
         account: account_response,
-        mutation_endpoint,
         allowed_next_transitions,
-        state_store_kind: state_store_kind.to_owned(),
-        todo,
     }))
 }
 
@@ -949,7 +894,6 @@ pub async fn list_history(
     req: &mut Request,
     depot: &Depot,
 ) -> JsonResult<AccountRiskActionHistoryOutcome> {
-    let risk_action_state = depot.risk_action_state_service()?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } =
         extract_call_context(req, depot).await?;
     let id = extract_ulid_param(req)?;
@@ -973,7 +917,7 @@ pub async fn list_history(
     let data = logs
         .into_iter()
         .filter(|log| is_account_risk_action_log(log, id))
-        .map(|log| risk_action_transition_record(id, &log, risk_action_state.as_ref()))
+        .map(|log| risk_action_transition_record(id, &log))
         .collect();
 
     Ok(Json(AccountRiskActionHistoryOutcome { data }))
@@ -1032,11 +976,6 @@ pub async fn get_current(
             recorded_by_handle: risk_action_detail_string(&log.details, "requested_by_handle")
                 .or_else(|| risk_action_detail_string(&log.details, "approved_by_handle"))
                 .or_else(|| risk_action_detail_string(&log.details, "executed_by_handle")),
-            execution_endpoint: risk_action_detail_string(&log.details, "execution_endpoint"),
-            mutation_endpoint: risk_action_detail_string(&log.details, "mutation_endpoint"),
-            state_store_kind: risk_action_detail_string(&log.details, "state_store_kind")
-                .unwrap_or_else(|| risk_action_state.state_store_kind().to_owned()),
-            todo: risk_action_detail_string(&log.details, "todo"),
         })
         .unwrap_or(AccountRiskActionCurrentOutcome {
             account_id: id.to_string(),
@@ -1053,13 +992,6 @@ pub async fn get_current(
             recorded_at: None,
             recorded_by: None,
             recorded_by_handle: None,
-            execution_endpoint: None,
-            mutation_endpoint: None,
-            state_store_kind: risk_action_state.state_store_kind().to_owned(),
-            todo: Some(
-                "No risk-action state-machine record has been persisted for this account yet."
-                    .to_owned(),
-            ),
         });
 
     Ok(Json(SingleOutcome::new_canonical(current)))
@@ -1093,7 +1025,6 @@ fn risk_action_operation_name(operation: &coauth_data::audit::AdminOperation) ->
 fn risk_action_transition_record(
     account_id: Ulid,
     log: &coauth_data::audit::AdminOperationLog,
-    risk_action_state: &dyn RiskActionStateService,
 ) -> AccountRiskActionTransitionRecord {
     AccountRiskActionTransitionRecord {
         account_id: account_id.to_string(),
@@ -1114,13 +1045,8 @@ fn risk_action_transition_record(
         recorded_by_handle: risk_action_detail_string(&log.details, "requested_by_handle")
             .or_else(|| risk_action_detail_string(&log.details, "approved_by_handle"))
             .or_else(|| risk_action_detail_string(&log.details, "executed_by_handle")),
-        execution_endpoint: risk_action_detail_string(&log.details, "execution_endpoint"),
-        mutation_endpoint: risk_action_detail_string(&log.details, "mutation_endpoint"),
         approval_note: risk_action_detail_string(&log.details, "approval_note"),
         execution_note: risk_action_detail_string(&log.details, "execution_note"),
-        state_store_kind: risk_action_detail_string(&log.details, "state_store_kind")
-            .unwrap_or_else(|| risk_action_state.state_store_kind().to_owned()),
-        todo: risk_action_detail_string(&log.details, "todo"),
     }
 }
 
