@@ -172,9 +172,11 @@ pub async fn post_agent_key_pair(
                 arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
                     ok: true,
                     authorized_event_ref,
+                    signing_key_binding: stored_body.signing_key_binding,
                 },
             ));
         }
+        let signing_key_binding = stored_body.signing_key_binding.clone();
         let (_, authoritative_server) = super::session_proof::fetch_authoritative_agent_view(
             &http_client,
             &arkret_config,
@@ -195,6 +197,7 @@ pub async fn post_agent_key_pair(
             arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
                 ok: true,
                 authorized_event_ref,
+                signing_key_binding,
             },
         ));
     }
@@ -286,6 +289,7 @@ pub async fn post_agent_key_pair(
         &agent_id,
         &body.verification_method,
         &runtime_public_key_digest,
+        &body.signing_key_binding,
         &body.pairing_request_id,
         &pop.audience,
         authoritative_key_state,
@@ -296,6 +300,26 @@ pub async fn post_agent_key_pair(
         &authorize_event_value,
         &agent_id,
         &authorize_event.controller_id,
+        &pop.audience,
+        &http_client,
+        &url_builder,
+        &arkret_config,
+        &key_store,
+        &mut repo,
+        did_resolver.as_ref(),
+    )
+    .await
+    {
+        repo.cancel().await.ok();
+        return Err(error.into());
+    }
+    if let Err(error) = verify_pairing_signing_key_binding(
+        &body.signing_key_binding,
+        &authorize_event.controller_id,
+        &body.agent_id,
+        &body.verification_method,
+        &body.authorize_event.event_id,
+        &authorize_event.signing_key_binding_digest,
         &pop.audience,
         &http_client,
         &url_builder,
@@ -448,6 +472,7 @@ pub async fn post_agent_key_pair(
         .await?;
     repo.save().await?;
 
+    let signing_key_binding = body.signing_key_binding.clone();
     commit_and_mark_agent_key_authorization(
         depot,
         &authorized_event_id,
@@ -462,6 +487,7 @@ pub async fn post_agent_key_pair(
         arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
             ok: true,
             authorized_event_ref: outcome_event_id,
+            signing_key_binding,
         },
     ))
 }
@@ -472,6 +498,7 @@ struct ValidatedAuthorizeEvent<'a> {
     key_id: String,
     agent_key_scope: &'a Value,
     issued_at: DateTime<Utc>,
+    signing_key_binding_digest: arkret_identifiers::Hash,
     /// Optional authorization expiry (key-management §3.6.1): absent means
     /// the key authorization never expires by time and is governed solely by
     /// the revocation chain.
@@ -524,6 +551,7 @@ fn validate_controller_authorize_event<'a>(
     agent_id: &str,
     verification_method: &str,
     runtime_public_key_digest: &str,
+    signing_key_binding: &arkret_models_collaboration::agent_signer_evidence::AgentSigningKeyBinding,
     pairing_request_id: &str,
     audience: &str,
     authoritative_key_state: &arkret_models_collaboration::agent_operations::KeyState,
@@ -611,6 +639,37 @@ fn validate_controller_authorize_event<'a>(
             "authorize_event.payload.public_key_digest must bind the runtime public_key",
         ));
     }
+    let signing_key_binding_digest = payload
+        .get("signing_key_binding_digest")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            AppError::bad_request("authorize_event.payload.signing_key_binding_digest is required")
+        })
+        .and_then(|value| {
+            arkret_identifiers::Hash::new(value.to_owned()).map_err(|error| {
+                AppError::bad_request(format!(
+                    "authorize_event.payload.signing_key_binding_digest invalid: {error}"
+                ))
+            })
+        })?;
+    let actual_binding_digest =
+        arkret_signatures::agent_evidence::agent_signing_key_binding_digest(signing_key_binding)
+            .map_err(|reason| AppError::bad_request(reason.as_str()))?;
+    if signing_key_binding_digest != actual_binding_digest {
+        return Err(AppError::bad_request(
+            "authorize_event.payload.signing_key_binding_digest must bind signing_key_binding",
+        ));
+    }
+    if signing_key_binding.agent_id.as_str() != agent_id
+        || signing_key_binding.verification_method.as_str() != verification_method
+        || signing_key_binding.agent_key_authorize_event_id.as_str() != event_id
+        || signing_key_binding.public_key_digest.as_str() != runtime_public_key_digest
+        || signing_key_binding.controller_id.as_str() != controller_id
+    {
+        return Err(AppError::bad_request(
+            "signing_key_binding does not match the pairing authorization",
+        ));
+    }
     let payload_audience = payload
         .get("audience")
         .and_then(Value::as_array)
@@ -665,6 +724,11 @@ fn validate_controller_authorize_event<'a>(
             ));
         }
     }
+    if signing_key_binding.issued_at != issued_at || signing_key_binding.expires_at != expires_at {
+        return Err(AppError::bad_request(
+            "signing_key_binding validity must match the authorize Event",
+        ));
+    }
     let approval = payload.get("approval_evidence").ok_or_else(|| {
         AppError::bad_request("authorize_event.payload.approval_evidence is required")
     })?;
@@ -703,6 +767,7 @@ fn validate_controller_authorize_event<'a>(
         key_id: key_id.to_owned(),
         agent_key_scope,
         issued_at,
+        signing_key_binding_digest,
         expires_at,
     })
 }
@@ -941,6 +1006,97 @@ fn verify_authorize_event_controller_signature_with_methods(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+async fn verify_pairing_signing_key_binding(
+    binding: &arkret_models_collaboration::agent_signer_evidence::AgentSigningKeyBinding,
+    expected_controller_id: &str,
+    agent_id: &arkret_identifiers::Did,
+    verification_method: &arkret_wire::DidUrl,
+    authorize_event_id: &arkret_identifiers::EventId,
+    expected_binding_digest: &arkret_identifiers::Hash,
+    audience: &str,
+    http_client: &reqwest::Client,
+    url_builder: &UrlBuilder,
+    arkret_config: &ArkretConfig,
+    key_store: &Keystore,
+    repo: &mut BoxRepository,
+    did_resolver: &dyn DidResolverService,
+) -> Result<(), AppError> {
+    let controller_id = expected_controller_id;
+    let expected_controller = arkret_identifiers::Did::new(controller_id.to_owned())
+        .map_err(|error| AppError::bad_request(format!("controller DID invalid: {error}")))?;
+    let controller_method = binding.controller_proof.verification_method.as_str();
+    let public_key = if let Some(device_id) = verification_method_device_id(controller_method) {
+        let resolved = resolve_authorized_device_signing_key(
+            http_client,
+            arkret_config,
+            crate::services::resolved_principal_audiences::shared(),
+            audience,
+            controller_id,
+            &device_id,
+        )
+        .await
+        .map_err(|error| {
+            AppError::unauthorized(format!(
+                "agent_signing_key_mismatch: controller device key could not be resolved: {error}"
+            ))
+        })?;
+        PublicKeyMaterial::Ed25519Multibase {
+            value: resolved.multibase,
+        }
+    } else {
+        let resolution = did_resolver
+            .resolve_did_document(
+                http_client,
+                url_builder,
+                arkret_config,
+                key_store,
+                repo,
+                controller_id,
+            )
+            .await
+            .map_err(|error| {
+                AppError::unauthorized(format!(
+                    "agent_signing_key_mismatch: controller DID could not be resolved: {error}"
+                ))
+            })?;
+        if let Some(rejection) = resolution.identity_fact_rejection() {
+            return Err(AppError::unauthorized(format!(
+                "agent_signing_key_mismatch: controller DID resolution is degraded: {}",
+                rejection.as_str()
+            )));
+        }
+        resolution
+            .document
+            .verification_method
+            .iter()
+            .find(|method| method.id == controller_method)
+            .ok_or_else(|| {
+                AppError::unauthorized(
+                    "agent_signing_key_mismatch: controller verification method is absent",
+                )
+            })?
+            .public_key_material()
+            .map_err(|error| {
+                AppError::bad_request(format!(
+                    "agent_signing_key_mismatch: controller verification method invalid: {error}"
+                ))
+            })?
+    };
+    arkret_signatures::agent_evidence::verify_agent_signing_key_binding(
+        binding,
+        agent_id,
+        &expected_controller,
+        verification_method,
+        authorize_event_id,
+        &binding.public_key_digest,
+        expected_binding_digest,
+        &public_key,
+    )
+    .map(|_| ())
+    .map_err(|reason| AppError::unauthorized(reason.as_str()))
+}
+
 fn authorize_event_signature_input(
     envelope: &Value,
     agent_id: &str,
@@ -1163,7 +1319,37 @@ mod tests {
         .unwrap()
     }
 
+    fn valid_signing_key_binding()
+    -> arkret_models_collaboration::agent_signer_evidence::AgentSigningKeyBinding {
+        serde_json::from_value(json!({
+            "schema": "ak.schema.agent_signing_key_binding.v1",
+            "agent_id": AGENT,
+            "verification_method": VM,
+            "public_key": {
+                "kty": "OKP",
+                "alg": "Ed25519",
+                "key": Base64UrlUnpadded::encode_string(&[42u8; 32])
+            },
+            "public_key_digest": PUBLIC_KEY_DIGEST,
+            "agent_key_authorize_event_id":
+                "ak:event:01999999-0000-7000-8000-000000000001",
+            "issued_at": "2026-07-06T00:00:00.000Z",
+            "expires_at": "2026-07-06T00:10:00.000Z",
+            "controller_id": CONTROLLER,
+            "controller_proof": {
+                "kind": "detached_jws",
+                "verification_method": "did:web:controller.example#key-1",
+                "jws": "header..signature"
+            }
+        }))
+        .unwrap()
+    }
+
     fn valid_authorize_event(pairing_request_id: &str) -> Value {
+        let binding_digest = arkret_signatures::agent_evidence::agent_signing_key_binding_digest(
+            &valid_signing_key_binding(),
+        )
+        .unwrap();
         json!({
             "event_id": "ak:event:01999999-0000-7000-8000-000000000001",
             "kind": "ak.agent.key.authorize",
@@ -1180,6 +1366,7 @@ mod tests {
                 "key_id": "runtime-key-1",
                 "verification_method": VM,
                 "public_key_digest": PUBLIC_KEY_DIGEST,
+                "signing_key_binding_digest": binding_digest,
                 "accountable_principal_id": CONTROLLER,
                 "agent_key_scope": {
                     "actions": [
@@ -1221,11 +1408,13 @@ mod tests {
 
     #[test]
     fn agent_key_pair_rejects_missing_authorize_event() {
+        let binding = valid_signing_key_binding();
         let err = validate_controller_authorize_event(
             &Value::Null,
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
+            &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
             &authoritative_key_state(),
@@ -1246,11 +1435,13 @@ mod tests {
 
     #[test]
     fn authorize_event_binds_body_pairing_request_id() {
+        let binding = valid_signing_key_binding();
         validate_controller_authorize_event(
             &valid_authorize_event(PAIRING_REQUEST_ID),
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
+            &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
             &authoritative_key_state(),
@@ -1263,6 +1454,7 @@ mod tests {
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
+            &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
             &authoritative_key_state(),
@@ -1317,6 +1509,7 @@ mod tests {
 
     #[test]
     fn authorize_event_pairing_evidence_rejects_durable_ref() {
+        let binding = valid_signing_key_binding();
         let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
         event["payload"]["approval_evidence"]["evidence_ref"] =
             json!("ak:event:01999999-0000-7000-8000-000000000099");
@@ -1326,6 +1519,7 @@ mod tests {
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
+            &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
             &authoritative_key_state(),
@@ -1338,17 +1532,23 @@ mod tests {
 
     #[test]
     fn authorize_event_accepts_absent_expires_at_as_non_expiring() {
+        let mut binding = valid_signing_key_binding();
         let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
         event["payload"]
             .as_object_mut()
             .unwrap()
             .remove("expires_at");
+        binding.expires_at = None;
+        event["payload"]["signing_key_binding_digest"] = json!(
+            arkret_signatures::agent_evidence::agent_signing_key_binding_digest(&binding).unwrap()
+        );
 
         let validated = validate_controller_authorize_event(
             &event,
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
+            &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
             &authoritative_key_state(),
@@ -1361,6 +1561,7 @@ mod tests {
 
     #[test]
     fn authorize_event_rejects_malformed_expires_at() {
+        let binding = valid_signing_key_binding();
         let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
         event["payload"]["expires_at"] = json!("not-a-timestamp");
 
@@ -1369,6 +1570,7 @@ mod tests {
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
+            &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
             &authoritative_key_state(),
@@ -1381,14 +1583,24 @@ mod tests {
 
     #[test]
     fn authorize_event_accepts_lifetime_longer_than_session_ttl() {
+        let mut binding = valid_signing_key_binding();
         let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
         event["payload"]["expires_at"] = json!("2026-08-05T00:00:00.000Z");
+        binding.expires_at = Some(
+            DateTime::parse_from_rfc3339("2026-08-05T00:00:00.000Z")
+                .unwrap()
+                .with_timezone(&Utc),
+        );
+        event["payload"]["signing_key_binding_digest"] = json!(
+            arkret_signatures::agent_evidence::agent_signing_key_binding_digest(&binding).unwrap()
+        );
 
         validate_controller_authorize_event(
             &event,
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
+            &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
             &authoritative_key_state(),
@@ -1399,15 +1611,24 @@ mod tests {
 
     #[test]
     fn authorize_event_rejects_non_positive_authorization_lifetime() {
+        let mut binding = valid_signing_key_binding();
         let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
         event["payload"]["issued_at"] = json!("2026-07-06T00:06:00.000Z");
         event["payload"]["expires_at"] = json!("2026-07-06T00:06:00.000Z");
+        binding.issued_at = DateTime::parse_from_rfc3339("2026-07-06T00:06:00.000Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        binding.expires_at = Some(binding.issued_at);
+        event["payload"]["signing_key_binding_digest"] = json!(
+            arkret_signatures::agent_evidence::agent_signing_key_binding_digest(&binding).unwrap()
+        );
 
         let err = validate_controller_authorize_event(
             &event,
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
+            &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
             &authoritative_key_state(),
