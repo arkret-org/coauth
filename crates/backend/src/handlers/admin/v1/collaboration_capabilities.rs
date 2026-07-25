@@ -527,7 +527,6 @@ mod tests {
     use coauth_config::{ArkretConfig, PrincipalServerConfig};
     use coauth_keystore::{JsonWebKeySet, Keystore, PrivateKey};
     use rand_chacha::ChaChaRng;
-    use rand_core::SeedableRng as _;
 
     use super::*;
 

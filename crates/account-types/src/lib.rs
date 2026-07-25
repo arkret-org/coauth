@@ -219,8 +219,6 @@ pub struct UpdateNotificationPreferencesOutcome {
     pub preferences: Vec<ChannelPreference>,
 }
 
-pub type PatchNotificationPreferencesOutcome = UpdateNotificationPreferencesOutcome;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 pub struct RegisterOutcome {

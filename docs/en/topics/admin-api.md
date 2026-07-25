@@ -63,7 +63,6 @@ schema, backend response, and Rust consumers share one source of truth.
   "account_detail_path_template": "/_coauth/admin/accounts/{account_id}",
   "account_dids_path_template": "/_coauth/admin/accounts/{account_id}/dids",
   "account_claims_path_template": "/_coauth/admin/accounts/{account_id}/claims",
-  "account_session_grants_path_template": "/_coauth/admin/accounts/{account_id}/session-grants",
   "risk_action_path_template": "/_coauth/admin/accounts/{account_id}/risk-action",
   "risk_action_current_path_template": "/_coauth/admin/accounts/{account_id}/risk-action/current",
   "risk_action_history_path_template": "/_coauth/admin/accounts/{account_id}/risk-action/history",
@@ -376,7 +375,6 @@ realm classes explicit. Every admin route belongs to one of them:
 | `/_coauth/admin/users/*`                                   | Principal Control      |
 | `/_coauth/admin/accounts/{id}/dids`                        | Principal Control      |
 | `/_coauth/admin/accounts/{id}/claims`                      | Principal Control      |
-| `/_coauth/admin/accounts/{id}/session-grants`              | Principal Control      |
 | `/_coauth/admin/accounts/{id}/risk-action*`                | Principal Control      |
 | `/_coauth/admin/oauth-clients*`                            | Principal Control      |
 | `/_coauth/admin/upstream-oauth-*`                          | Principal Control      |

@@ -345,12 +345,11 @@ fn parse_audit_signature(value: &str) -> Result<ParsedAuditSignature<'_>, ()> {
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone as _;
+    use coauth_data::RepositoryFactory as _;
     use coauth_data::audit::{AdminOperation, AdminOperationFilter, AdminOperationLog};
     use coauth_data::clock::MockClock;
-    use coauth_data::{RepositoryAccess as _, RepositoryFactory as _};
     use coauth_keystore::{JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
     use rand_chacha::ChaChaRng;
-    use rand_core::SeedableRng as _;
 
     use super::*;
 

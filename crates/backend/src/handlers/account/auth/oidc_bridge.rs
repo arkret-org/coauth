@@ -1355,12 +1355,6 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 path: "/_coauth/admin/accounts/{account_id}/claims".to_owned(),
                 contract: "arkret.rest.coauth_account_claims.v1".to_owned(),
             },
-            IntegrationManifestSurface {
-                name: "account_session_grants".to_owned(),
-                method: "GET".to_owned(),
-                path: "/_coauth/admin/accounts/{account_id}/session-grants".to_owned(),
-                contract: "arkret.rest.coauth_account_session_grants.v1".to_owned(),
-            },
         ],
     }))
 }

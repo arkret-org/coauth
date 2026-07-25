@@ -1268,7 +1268,7 @@ fn pairing_superseded_event_refs(
 
 #[cfg(test)]
 mod tests {
-    use base64ct::{Base64UrlUnpadded, Encoding as _};
+    use base64ct::Base64UrlUnpadded;
     use chrono::DateTime;
     use serde_json::json;
 

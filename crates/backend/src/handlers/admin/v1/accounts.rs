@@ -14,7 +14,6 @@ pub mod update;
 #[cfg(test)]
 mod api_tests;
 
-use chrono::{DateTime, Utc};
 use coauth_admin_types::{
     AdminAccountAttributes, AdminAccountClaimRecord as AccountClaimRecord,
     AdminAccountClaimsOutcome as AccountClaimsOutcome, AdminAccountStatus as AccountStatus,
@@ -35,7 +34,7 @@ use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_u
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
-use crate::handlers::admin::v1::account_dids::{preview_bindings_for_user, primary_did_for_user};
+use crate::handlers::admin::v1::account_dids::primary_did_for_user;
 use crate::handlers::arkret::service_id_for;
 use crate::handlers::common::DepotExt;
 use crate::services::account_claims::{
@@ -52,20 +51,6 @@ use crate::{AppError, JsonResult};
 // `reason`/`ticket`/`approved_by`/`approval_note`/`execution_note`
 // fields the SPA wants to render. The endpoint below now returns the
 // shared `AdminBridgeDescribe` directly.
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AccountSessionGrantsOutcome {
-    data: Vec<AccountSessionGrantRecord>,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AccountSessionGrantRecord {
-    grant_id: String,
-    subject: Option<String>,
-    scope: Option<String>,
-    state: Option<String>,
-    issued_at: Option<DateTime<Utc>>,
-}
 
 /// Backend wrapper that owns the resource ID + JSON:API attributes. The
 /// attributes block is the shared `AdminAccountAttributes` from
@@ -98,22 +83,9 @@ impl AccountRecord {
         let did_resolver = depot.did_resolver_service()?;
         let mut repo = depot.repo().await?;
         let status = admin_account_status(user.status);
-        let principal_id_bindings =
-            preview_bindings_for_user(&mut repo, &user, &arkret_config, did_resolver.as_ref())
-                .await;
-        let primary_principal_binding = principal_id_bindings
-            .iter()
-            .find(|binding| binding.primary)
-            .cloned();
-        let principal_ids = principal_id_bindings
-            .iter()
-            .map(|binding| binding.did.clone())
-            .collect();
         let primary_principal_id =
-            primary_did_for_user(&mut repo, &user, &arkret_config, did_resolver.as_ref())
-                .await
-                .ok()
-                .flatten();
+            primary_did_for_user(&mut repo, &user, &arkret_config, did_resolver.as_ref()).await?;
+        let principal_ids = primary_principal_id.iter().cloned().collect();
         repo.cancel().await?;
 
         Ok(Self {
@@ -131,20 +103,8 @@ impl AccountRecord {
                 preferred_locale: user.preferred_locale,
                 primary_principal_id,
                 principal_ids,
-                primary_principal_binding,
-                principal_id_bindings,
             },
         })
-    }
-
-    /// Convenience accessor used by mutation paths that need to peek at
-    /// the primary DID after rebuilding from a fresh `User`.
-    pub(crate) fn primary_principal_id(&self) -> Option<&str> {
-        self.attributes.primary_principal_id.as_deref()
-    }
-
-    pub(crate) fn updated_at(&self) -> Option<DateTime<Utc>> {
-        self.attributes.updated_at
     }
 }
 
@@ -367,26 +327,6 @@ pub async fn list_account_claims(
         .collect();
 
     Ok(Json(AccountClaimsOutcome { data }))
-}
-
-#[endpoint]
-#[tracing::instrument(name = "handler.admin.v1.accounts.session_grants", skip_all)]
-pub async fn list_account_session_grants(
-    req: &mut Request,
-    depot: &Depot,
-) -> JsonResult<AccountSessionGrantsOutcome> {
-    let call_context = extract_call_context(req, depot).await?;
-    let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
-    let id = extract_ulid_param(req)?;
-    let account = repo
-        .user()
-        .lookup(id)
-        .await?
-        .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
-    let record = AccountRecord::from_user(account, depot).await?;
-    Ok(Json(AccountSessionGrantsOutcome {
-        data: admin_session_grant_records(&record),
-    }))
 }
 
 #[endpoint]
@@ -694,16 +634,6 @@ fn account_claim_value(payload: &serde_json::Value) -> Option<String> {
             serde_json::Value::Null => None,
             value => Some(value.to_string()),
         })
-}
-
-fn admin_session_grant_records(account: &AccountRecord) -> Vec<AccountSessionGrantRecord> {
-    vec![AccountSessionGrantRecord {
-        grant_id: format!("sg-scaffold-{}", account.id),
-        subject: account.primary_principal_id().map(str::to_owned),
-        scope: Some("urn:arkret:principal-server:session.bind".to_owned()),
-        state: Some("inventory_scaffold".to_owned()),
-        issued_at: account.updated_at(),
-    }]
 }
 
 #[cfg(test)]

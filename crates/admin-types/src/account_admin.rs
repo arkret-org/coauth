@@ -18,15 +18,11 @@
 //! lifecycle state surfaces as a compile error rather than a silent
 //! `is_locked = false` UI fallback.
 //!
-//! The sodmin shim was also missing `locked_at`, `deactivated_at`,
-//! `principal_id_bindings`, and `primary_principal_binding` — fields
-//! the backend has been emitting since the DID binding preview landed.
-//! The shared shape now carries them explicitly.
+//! The sodmin shim was also missing `locked_at` and `deactivated_at`, which
+//! the backend emits as part of the current account lifecycle projection.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-
-use crate::did_binding_admin::AccountDidBindingPreview;
 
 /// Lifecycle bucket for a coauth account. Wire format is the canonical
 /// account-lifecycle `status` axis from
@@ -171,14 +167,6 @@ pub struct AdminAccountAttributes {
     /// Bound principal identifiers.
     #[serde(default)]
     pub principal_ids: Vec<String>,
-
-    /// Richer placeholder contract for the primary DID binding.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub primary_principal_binding: Option<AccountDidBindingPreview>,
-
-    /// Richer placeholder contract for downstream admin/OpenAPI integrations.
-    #[serde(default)]
-    pub principal_id_bindings: Vec<AccountDidBindingPreview>,
 }
 
 impl AdminAccountAttributes {
@@ -225,8 +213,6 @@ mod tests {
         let a = AdminAccountAttributes::default();
         assert_eq!(a.status, AdminAccountStatus::Active);
         assert!(a.principal_ids.is_empty());
-        assert!(a.principal_id_bindings.is_empty());
-        assert!(a.primary_principal_binding.is_none());
     }
 
     #[test]
@@ -255,7 +241,6 @@ mod tests {
         assert!(!s.contains("\"created_at\""));
         assert!(!s.contains("\"updated_at\""));
         assert!(!s.contains("\"display_name\""));
-        assert!(!s.contains("\"primary_principal_binding\""));
     }
 
     #[test]
@@ -273,9 +258,7 @@ mod tests {
             "avatar_url": null,
             "preferred_locale": null,
             "primary_principal_id": null,
-            "principal_ids": [],
-            "primary_principal_binding": null,
-            "principal_id_bindings": []
+            "principal_ids": []
         }"#;
         let a: AdminAccountAttributes = serde_json::from_str(wire).unwrap();
         assert_eq!(a.status, AdminAccountStatus::Locked);

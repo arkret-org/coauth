@@ -3,7 +3,7 @@
 use std::sync::{Arc, OnceLock};
 
 use coauth_admin_types::{
-    AccountDidBindingPreview, AdminAccountDidBinding as AccountDidBinding,
+    AdminAccountDidBinding as AccountDidBinding,
     AdminAccountDidBindingsMeta as AccountDidBindingsMeta,
     AdminAccountDidBindingsOutcome as AccountDidBindingsOutcome, DidBindingKind,
     DidBindingResolverDescriptor, DidBindingResolverMode, DidBindingState,
@@ -668,26 +668,6 @@ async fn enforce_did_binding_rate_limit(
         .check_did_binding(requester, account_id)
         .await
         .map_err(|error| AppError::too_many_requests(error.to_string()))
-}
-
-pub(crate) async fn preview_bindings_for_user(
-    repo: &mut BoxRepository,
-    user: &User,
-    arkret_config: &ArkretConfig,
-    did_resolver: &dyn DidResolverService,
-) -> Vec<AccountDidBindingPreview> {
-    binding_records_for_user(repo, user, arkret_config, did_resolver)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(|binding| AccountDidBindingPreview {
-            did: binding.did,
-            kind: binding.kind,
-            state: binding.state,
-            primary: binding.primary,
-            active: binding.active,
-        })
-        .collect()
 }
 
 pub(crate) async fn primary_did_for_user(

@@ -19,8 +19,6 @@ pub const ADMIN_BRIDGE_ACCOUNT_DIDS_PATH_TEMPLATE: &str =
     "/_coauth/admin/accounts/{account_id}/dids";
 pub const ADMIN_BRIDGE_ACCOUNT_CLAIMS_PATH_TEMPLATE: &str =
     "/_coauth/admin/accounts/{account_id}/claims";
-pub const ADMIN_BRIDGE_ACCOUNT_SESSION_GRANTS_PATH_TEMPLATE: &str =
-    "/_coauth/admin/accounts/{account_id}/session-grants";
 pub const ADMIN_BRIDGE_RISK_ACTION_PATH_TEMPLATE: &str =
     "/_coauth/admin/accounts/{account_id}/risk-action";
 pub const ADMIN_BRIDGE_RISK_ACTION_CURRENT_PATH_TEMPLATE: &str =
@@ -66,10 +64,6 @@ pub struct AdminBridgeDescribe {
     /// Template path for claim inventory.
     #[serde(default)]
     pub account_claims_path_template: String,
-
-    /// Template path for session-grant inventory.
-    #[serde(default)]
-    pub account_session_grants_path_template: String,
 
     /// Template path for staging a risk action proposal.
     #[serde(default)]
@@ -200,8 +194,6 @@ pub fn admin_bridge_describe() -> AdminBridgeDescribe {
         account_detail_path_template: ADMIN_BRIDGE_ACCOUNT_DETAIL_PATH_TEMPLATE.to_owned(),
         account_dids_path_template: ADMIN_BRIDGE_ACCOUNT_DIDS_PATH_TEMPLATE.to_owned(),
         account_claims_path_template: ADMIN_BRIDGE_ACCOUNT_CLAIMS_PATH_TEMPLATE.to_owned(),
-        account_session_grants_path_template: ADMIN_BRIDGE_ACCOUNT_SESSION_GRANTS_PATH_TEMPLATE
-            .to_owned(),
         risk_action_path_template: ADMIN_BRIDGE_RISK_ACTION_PATH_TEMPLATE.to_owned(),
         risk_action_current_path_template: ADMIN_BRIDGE_RISK_ACTION_CURRENT_PATH_TEMPLATE
             .to_owned(),

@@ -6,7 +6,7 @@
 
 use coauth_account_types::{
     ChannelAvailability, ChannelPreference, NotificationPreferencesOutcome,
-    PatchNotificationPreferencesOutcome,
+    UpdateNotificationPreferencesOutcome,
 };
 use salvo::prelude::*;
 use serde::Deserialize;
@@ -83,7 +83,7 @@ pub async fn get_notification_preferences(
 pub async fn patch_notification_preferences(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<PatchNotificationPreferencesOutcome>, RouteError> {
+) -> Result<Json<UpdateNotificationPreferencesOutcome>, RouteError> {
     let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let clock = make_clock();
@@ -129,7 +129,7 @@ pub async fn patch_notification_preferences(
 
     repo.save().await?;
 
-    Ok(Json(PatchNotificationPreferencesOutcome {
+    Ok(Json(UpdateNotificationPreferencesOutcome {
         preferences: updated
             .preferences
             .into_iter()

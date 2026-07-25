@@ -223,45 +223,6 @@ pub struct DidBindingResolverDescriptor {
     pub proof_required_for_pairwise: bool,
 }
 
-/// Compact DID binding preview embedded in `AdminAccountAttributes`
-/// (`primary_principal_binding` / `principal_id_bindings`).
-///
-/// Carries just enough state for an account-list row to render a
-/// primary-DID badge without fetching the full per-binding inventory.
-/// Schema derives are enabled via the `schema` feature so the backend
-/// can plumb this type into `#[salvo::endpoint]` annotations.
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
-#[cfg_attr(
-    feature = "schema",
-    derive(schemars::JsonSchema, salvo::oapi::ToSchema)
-)]
-pub struct AccountDidBindingPreview {
-    /// Bound principal DID.
-    #[serde(default)]
-    pub did: String,
-
-    /// Binding purpose.
-    #[serde(default)]
-    pub kind: DidBindingKind,
-
-    /// High-level lifecycle state for downstream admin/UI surfaces.
-    ///
-    /// HINT ONLY, NOT AUTHORITATIVE — verifier MUST first-party verify
-    /// the DID Document for trust decisions. See [`DidBindingState`]
-    /// docs for the full cache-vs-authority split (spec
-    /// `identity/identity-handles.md` §6.0).
-    #[serde(default)]
-    pub state: DidBindingState,
-
-    /// Whether this binding is the account's current primary DID.
-    #[serde(default)]
-    pub primary: bool,
-
-    /// Whether this binding is currently active.
-    #[serde(default)]
-    pub active: bool,
-}
-
 /// Full DID binding row returned by `GET .../accounts/{id}/dids`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(
@@ -480,21 +441,5 @@ mod tests {
         assert!(back.data[0].primary);
         assert!(!back.meta.supports_write_operations);
         assert_eq!(back.meta.supported_verification_methods.len(), 2);
-    }
-
-    #[test]
-    fn account_did_binding_preview_round_trip() {
-        let p = AccountDidBindingPreview {
-            did: "did:web:bob.example".into(),
-            kind: DidBindingKind::Recovery,
-            state: DidBindingState::PendingProof,
-            primary: false,
-            active: false,
-        };
-        let s = serde_json::to_string(&p).unwrap();
-        let back: AccountDidBindingPreview = serde_json::from_str(&s).unwrap();
-        assert_eq!(p, back);
-        assert!(s.contains("\"kind\":\"recovery\""));
-        assert!(s.contains("\"state\":\"pending_proof\""));
     }
 }
