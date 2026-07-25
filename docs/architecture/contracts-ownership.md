@@ -36,6 +36,23 @@ Arkret protocol commitment.
 | `resource_models` | `UserEmail`, `OAuthSession`, `UserSession`, `UpstreamOAuthLink`, `UserRegistrationToken`, `UpstreamOAuthProvider`, `PersonalSession` | Coauth backend, Sodmin | Coauth persistence-backed admin resources projected as product DTOs; secrets are excluded from the wire shapes. |
 | `risk_action` | `AccountRiskActionProposalRequestBody`, `AccountRiskActionApprovalRequestBody`, `AccountRiskActionExecuteRequestBody`, `AccountRiskActionProposalOutcome`, `AccountRiskActionApprovalOutcome`, `AccountRiskActionCurrentOutcome`, `AccountRiskActionHistoryOutcome`, `AccountRiskActionTransitionRecord` | Coauth backend, Sodmin | Durable Coauth operator workflow DTOs; state-store implementation details are not part of the contract. |
 
+### Audited provider-local dependencies
+
+`coauth-admin-types` depends on `coauth-data-model`. This dependency is allowed
+because the latter is a storage-neutral model leaf: its dependency closure
+contains SDK/schema models, serde/chrono, and optional schema derives, but no
+database adapter, network client, queue, repository implementation, or service
+crate. The admin contract uses it only for:
+
+- canonical SDK-backed `CapabilityActionId` / `CapabilityRiskTier` identities;
+- pure Circle/collaboration product-subset rules;
+- organization lifecycle enums and explicit domain-record-to-wire mappings.
+
+The full domain grant and organization records are not publicly re-exported by
+`coauth-admin-types`. Any new provider-local dependency, or any implementation
+dependency introduced transitively beneath `coauth-data-model`, requires a new
+audit and allowlist update.
+
 When the spec or SDK adds an equivalent canonical type, the matching local type
 must be removed or reduced to a product-only wrapper that directly contains the
 SDK type. Adding a public type requires updating this ledger in the same change;

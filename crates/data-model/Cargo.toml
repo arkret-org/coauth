@@ -25,4 +25,3 @@ chrono = {workspace = true,features = ["serde"]}
 serde = {workspace = true,features = ["derive"]}
 salvo = {workspace = true,optional = true}
 schemars = {workspace = true,optional = true}
-thiserror = {workspace = true}
