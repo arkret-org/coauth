@@ -412,6 +412,7 @@ dependencies = [
  "arkret-models-collaboration",
  "arkret-models-discovery",
  "arkret-models-identity",
+ "arkret-state",
  "arkret-wire",
  "base64 0.22.1",
  "chrono",

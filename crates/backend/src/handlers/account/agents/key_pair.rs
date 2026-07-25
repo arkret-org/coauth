@@ -317,6 +317,7 @@ pub async fn post_agent_key_pair(
         &body.signing_key_binding,
         &authorize_event.controller_id,
         &body.agent_id,
+        &authorize_event.key_id,
         &body.verification_method,
         &body.authorize_event.event_id,
         &authorize_event.signing_key_binding_digest,
@@ -688,6 +689,11 @@ fn validate_controller_authorize_event<'a>(
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| AppError::bad_request("authorize_event.payload.key_id is required"))?;
+    if signing_key_binding.agent_key_id.as_str() != key_id {
+        return Err(AppError::bad_request(
+            "signing_key_binding.agent_key_id must match authorize_event.payload.key_id",
+        ));
+    }
     validate_authorize_event_supersedes(payload, authoritative_key_state)?;
     let agent_key_scope = payload.get("agent_key_scope").ok_or_else(|| {
         AppError::bad_request("authorize_event.payload.agent_key_scope is required")
@@ -1011,6 +1017,7 @@ async fn verify_pairing_signing_key_binding(
     binding: &arkret_models_collaboration::agent_signer_evidence::AgentSigningKeyBinding,
     expected_controller_id: &str,
     agent_id: &arkret_identifiers::Did,
+    agent_key_id: &str,
     verification_method: &arkret_wire::DidUrl,
     authorize_event_id: &arkret_identifiers::EventId,
     expected_binding_digest: &arkret_identifiers::Hash,
@@ -1086,6 +1093,9 @@ async fn verify_pairing_signing_key_binding(
     arkret_signatures::agent_evidence::verify_agent_signing_key_binding(
         binding,
         agent_id,
+        &arkret_wire::NonEmptyString::new(agent_key_id.to_owned()).map_err(|error| {
+            AppError::bad_request(format!("authorize_event payload key_id invalid: {error}"))
+        })?,
         &expected_controller,
         verification_method,
         authorize_event_id,
@@ -1324,6 +1334,7 @@ mod tests {
         serde_json::from_value(json!({
             "schema": "ak.schema.agent_signing_key_binding.v1",
             "agent_id": AGENT,
+            "agent_key_id": "runtime-key-1",
             "verification_method": VM,
             "public_key": {
                 "kty": "OKP",
