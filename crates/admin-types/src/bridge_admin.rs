@@ -6,27 +6,12 @@
 //!   `coauth/crates/backend/src/handlers/admin/v1/accounts.rs`, bundled with the
 //!   `AdminBridgeRiskAction*Example` request examples.
 //!
-//! Round-34 (C34.2): lifted out of the inline
-//! `AdminBridgeDescribeResponse` / `AdminBridgeRiskActionExamples` /
-//! `AdminBridgeRiskAction{Proposal,Approval,Execute}Example` definitions
-//! on the backend and the divergent `CoauthAdminBridgeDescribe` /
-//! `CoauthAdminBridgeRiskActionExamples` decoder shims in
-//! `sodmin/src/api/coauth.rs`. The sodmin shim collapsed the three
-//! example payloads down to opaque `serde_json::Value`, silently dropping
-//! the typed structure (`action`, `reason`, `ticket`, `approved_by`,
-//! `approval_note`, `execution_note`) that the backend actually emits and
-//! that the admin SPA needs to render the example payloads as anything
-//! more than a JSON blob in a `<span>`. The shared shape now carries
-//! every field, and the sodmin formatter formats the typed shape into
-//! the same display string the SPA was rendering before. The example
-//! constructors below are intentionally part of the shared crate so the
-//! backend OpenAPI surface and admin bridge consumers see the same
-//! discovery payload.
+//! The request examples are typed so the backend OpenAPI surface and
+//! sodmin consume the same product contract.
 
 use serde::{Deserialize, Serialize};
 
 pub const ADMIN_BRIDGE_CONTRACT: &str = "ak.contract.coauth_admin_bridge.v1";
-pub const ADMIN_BRIDGE_VERSION: &str = "0.2.0-durable-proposals";
 pub const ADMIN_BRIDGE_API_BASE_PATH: &str = "/_coauth/admin";
 pub const ADMIN_BRIDGE_ACCOUNTS_PATH: &str = "/_coauth/admin/accounts";
 pub const ADMIN_BRIDGE_ACCOUNT_DETAIL_PATH_TEMPLATE: &str = "/_coauth/admin/accounts/{account_id}";
@@ -58,13 +43,9 @@ pub const ADMIN_BRIDGE_RISK_ACTION_APPROVAL_MODE: &str = "durable_proposal_requi
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
 pub struct AdminBridgeDescribe {
-    /// Scaffold contract identifier for coauth admin integration discovery.
+    /// Contract identifier for coauth admin integration discovery.
     #[serde(default)]
     pub contract: String,
-
-    /// Scaffold contract version.
-    #[serde(default)]
-    pub version: String,
 
     /// Base path for this admin REST surface.
     #[serde(default)]
@@ -110,11 +91,7 @@ pub struct AdminBridgeDescribe {
     #[serde(default)]
     pub risk_action_execute_path_template: String,
 
-    /// How the current scaffold persists risk-action state.
-    #[serde(default)]
-    pub risk_action_state_store_kind: String,
-
-    /// Approval mode exposed by the current scaffold.
+    /// Approval mode exposed by the risk-action workflow.
     #[serde(default)]
     pub risk_action_approval_mode: String,
 
@@ -125,10 +102,6 @@ pub struct AdminBridgeDescribe {
         schemars(example = admin_bridge_risk_action_examples())
     )]
     pub risk_action_examples: AdminBridgeRiskActionExamples,
-
-    /// Remaining scaffold tasks.
-    #[serde(default)]
-    pub todos: Vec<String>,
 }
 
 /// Bundle of three example payloads — one per risk-action verb.
@@ -219,12 +192,9 @@ pub struct AdminBridgeRiskActionExecuteExample {
 }
 
 #[must_use]
-pub fn admin_bridge_describe(
-    risk_action_state_store_kind: impl Into<String>,
-) -> AdminBridgeDescribe {
+pub fn admin_bridge_describe() -> AdminBridgeDescribe {
     AdminBridgeDescribe {
         contract: ADMIN_BRIDGE_CONTRACT.to_owned(),
-        version: ADMIN_BRIDGE_VERSION.to_owned(),
         api_base_path: ADMIN_BRIDGE_API_BASE_PATH.to_owned(),
         accounts_path: ADMIN_BRIDGE_ACCOUNTS_PATH.to_owned(),
         account_detail_path_template: ADMIN_BRIDGE_ACCOUNT_DETAIL_PATH_TEMPLATE.to_owned(),
@@ -241,16 +211,14 @@ pub fn admin_bridge_describe(
             .to_owned(),
         risk_action_execute_path_template: ADMIN_BRIDGE_RISK_ACTION_EXECUTE_PATH_TEMPLATE
             .to_owned(),
-        risk_action_state_store_kind: risk_action_state_store_kind.into(),
         risk_action_approval_mode: ADMIN_BRIDGE_RISK_ACTION_APPROVAL_MODE.to_owned(),
         risk_action_examples: admin_bridge_risk_action_examples(),
-        todos: Vec::new(),
     }
 }
 
 #[must_use]
 pub fn admin_bridge_describe_example() -> AdminBridgeDescribe {
-    admin_bridge_describe("pg_risk_action_proposals_with_admin_audit_trail")
+    admin_bridge_describe()
 }
 
 #[must_use]
@@ -310,11 +278,6 @@ mod tests {
         let wire = serde_json::to_string(&admin_bridge_describe_example()).unwrap();
         let d: AdminBridgeDescribe = serde_json::from_str(&wire).unwrap();
         assert_eq!(d.contract, ADMIN_BRIDGE_CONTRACT);
-        assert_eq!(d.version, ADMIN_BRIDGE_VERSION);
-        assert_eq!(
-            d.risk_action_state_store_kind,
-            "pg_risk_action_proposals_with_admin_audit_trail"
-        );
         assert_eq!(d.risk_action_examples.proposal_request.action, "lock");
         assert_eq!(d.risk_action_examples.proposal_request.approved_by, None);
         assert_eq!(
@@ -325,7 +288,6 @@ mod tests {
             d.risk_action_examples.execute_request.execution_note,
             "execute via controlled mutation worker"
         );
-        assert!(d.todos.is_empty());
     }
 
     #[test]

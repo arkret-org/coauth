@@ -5,19 +5,9 @@
 //! - `GET /_coauth/gate/account/integration/describe` — `IntegrationManifestResponse` from
 //!   `coauth/crates/backend/src/handlers/account/auth/oidc_bridge.rs`.
 //!
-//! Round-34 (C34.2): lifted out of the inline
-//! `IntegrationManifestResponse` / `IntegrationManifestDependency` /
-//! `IntegrationManifestSurface` definitions on the backend and the
-//! divergent `CoauthIntegrationManifest` / `CoauthIntegrationDependency` /
-//! `CoauthIntegrationSurface` decoder shims in `sodmin/src/api/coauth.rs`.
-//!
-//! Wire-drift caught: the sodmin shim was **missing the `examples` field
-//! entirely** — the backend has been emitting a JSON object that
-//! describes the multi-step compose strand (oidc browser bridge →
-//! exchange → soland session-grant → push register-device), and the
-//! sodmin decoder silently dropped it on the floor every call. The
-//! shared shape now decodes it as `serde_json::Value` so the SPA can
-//! render it in a future panel iteration without another migration.
+//! These types contain only stable discovery data consumed by sodmin.
+//! Historical rollout metadata, TODO text, and example payloads belong
+//! in documentation or OpenAPI rather than the runtime contract.
 
 use serde::{Deserialize, Serialize};
 
@@ -34,8 +24,6 @@ pub struct IntegrationManifest {
     #[serde(default)]
     pub contract: String,
     #[serde(default)]
-    pub version: String,
-    #[serde(default)]
     pub service: String,
     #[serde(default)]
     pub service_kind: String,
@@ -47,15 +35,6 @@ pub struct IntegrationManifest {
     pub dependencies: Vec<IntegrationManifestDependency>,
     #[serde(default)]
     pub surfaces: Vec<IntegrationManifestSurface>,
-    /// Compose-strand examples (multi-service step graph). The backend
-    /// emits this as a free-form JSON object so the SPA can render it
-    /// without locking the schema down before the compose contract
-    /// stabilizes — but **the field has to be on the wire shape** so it
-    /// stops being silently dropped.
-    #[serde(default)]
-    pub examples: serde_json::Value,
-    #[serde(default)]
-    pub todos: Vec<String>,
 }
 
 /// One declared dependency on another arkret service or external
@@ -93,10 +72,6 @@ pub struct IntegrationManifestSurface {
     pub path: String,
     #[serde(default)]
     pub contract: String,
-    #[serde(default)]
-    pub stability: String,
-    #[serde(default)]
-    pub todo: String,
 }
 
 #[cfg(test)]
@@ -112,13 +87,9 @@ mod tests {
     }
 
     #[test]
-    fn manifest_decodes_backend_wire_payload_with_examples() {
-        // Mirrors what `oidc_bridge::integration_describe` actually emits
-        // — including the multi-step compose-strand `examples` block that
-        // the prior sodmin shim was silently dropping on the floor.
+    fn manifest_decodes_backend_wire_payload() {
         let wire = r#"{
             "contract": "arkret.rest.integration_manifest.v1",
-            "version": "2026-05-04-scaffold",
             "service": "coauth",
             "service_kind": "account_authority",
             "api_base_path": "/_coauth",
@@ -137,18 +108,9 @@ mod tests {
                     "name": "auth_bridge",
                     "method": "GET",
                     "path": "/_coauth/gate/account/auth/bridge/describe",
-                    "contract": "arkret.rest.auth_bridge.v1",
-                    "stability": "scaffold",
-                    "todo": "TODO: keep aligned"
+                    "contract": "arkret.rest.auth_bridge.v1"
                 }
-            ],
-            "examples": {
-                "compose_strand": {
-                    "step_1": {"service": "coauth", "path": "/_coauth/gate/account/auth/oidc/browser-bridge/session", "method": "POST"},
-                    "step_2": {"service": "coauth", "path": "/_coauth/gate/account/auth/oidc/exchange", "method": "POST"}
-                }
-            },
-            "todos": ["TODO: persist things"]
+            ]
         }"#;
         let m: IntegrationManifest = serde_json::from_str(wire).unwrap();
         assert_eq!(m.service, "coauth");
@@ -157,10 +119,6 @@ mod tests {
         assert_eq!(m.dependencies[0].service, "soland");
         assert_eq!(m.surfaces.len(), 1);
         assert_eq!(m.surfaces[0].name, "auth_bridge");
-        // The previously-dropped `examples` field — now visible.
-        assert!(m.examples.is_object());
-        assert!(m.examples.get("compose_strand").is_some());
-        assert_eq!(m.todos.len(), 1);
     }
 
     #[test]
@@ -184,8 +142,6 @@ mod tests {
             method: "GET".into(),
             path: "/_coauth/admin/bridge/describe".into(),
             contract: "arkret.rest.coauth_admin_bridge.v1".into(),
-            stability: "scaffold".into(),
-            todo: "TODO".into(),
         };
         let s = serde_json::to_string(&s_in).unwrap();
         let back: IntegrationManifestSurface = serde_json::from_str(&s).unwrap();

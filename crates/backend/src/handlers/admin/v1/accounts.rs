@@ -278,21 +278,17 @@ pub async fn admin_bridge_describe(
     req: &mut Request,
     depot: &Depot,
 ) -> JsonResult<AdminBridgeDescribe> {
-    // SEC-ADMIN-NOAUTH: this endpoint discloses deployment fingerprint
-    // (risk-action state-store kind / bridge capabilities), so it MUST be
-    // gated behind the same admin authorization as every other admin
-    // handler. `extract_call_context` validates the bearer token, its
-    // session, expiry, and the `urn:coauth:admin` / `urn:arkret:admin:*`
-    // scope before we read any deployment state. We drop the repository
-    // transaction immediately since this handler does no DB work.
+    // SEC-ADMIN-NOAUTH: this endpoint discloses bridge capabilities, so it
+    // MUST be gated behind the same admin authorization as every other
+    // admin handler. `extract_call_context` validates the bearer token,
+    // its session, expiry, and the `urn:coauth:admin` /
+    // `urn:arkret:admin:*` scope. We drop the repository transaction
+    // immediately since this handler does no DB work.
     let crate::handlers::admin::call_context::CallContext { repo, .. } =
         extract_call_context(req, depot).await?;
     repo.cancel().await?;
-    let risk_action_state = depot.risk_action_state_service()?;
 
-    Ok(Json(coauth_admin_types::admin_bridge_describe(
-        risk_action_state.state_store_kind(),
-    )))
+    Ok(Json(coauth_admin_types::admin_bridge_describe()))
 }
 
 #[endpoint]

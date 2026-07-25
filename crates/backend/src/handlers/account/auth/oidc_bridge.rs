@@ -1310,7 +1310,6 @@ fn validate_expected_principal(
 pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteError> {
     Ok(Json(IntegrationManifest {
         contract: "arkret.rest.integration_manifest.v1".to_owned(),
-        version: "2026-05-17-validated".to_owned(),
         service: "coauth".to_owned(),
         service_kind: "account_authority".to_owned(),
         api_base_path: "/_coauth".to_owned(),
@@ -1337,70 +1336,32 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 method: "POST".to_owned(),
                 path: "/_arkret/gate/account/session-grants".to_owned(),
                 contract: "ak.gate.account.command.issue_session_grant".to_owned(),
-                stability: "validated".to_owned(),
-                todo: "canonical Account Authority grant issuance; proof.proof_kind=oidc_code_exchange exchanges the OIDC authorization code, validates issuer/state/nonce/redirect_uri/principal/device/audience, and mints the device-bound ak.session.grant.".to_owned(),
             },
             IntegrationManifestSurface {
                 name: "passkey_auth".to_owned(),
                 method: "POST".to_owned(),
                 path: "/_coauth/account/auth/passkey/{register,auth}/{start,finish}".to_owned(),
                 contract: "arkret.rest.passkey_auth.v1".to_owned(),
-                stability: "preview".to_owned(),
-                todo: "WebAuthn challenge and finish use the production passkey service; finish currently returns credential identity and still relies on the session-grant follow-up path.".to_owned(),
             },
             IntegrationManifestSurface {
                 name: "admin_bridge".to_owned(),
                 method: "GET".to_owned(),
                 path: "/_coauth/admin/bridge/describe".to_owned(),
                 contract: "arkret.rest.coauth_admin_bridge.v1".to_owned(),
-                stability: "validated".to_owned(),
-                todo: "risk-action proposals and approvals are persisted with admin audit trail.".to_owned(),
             },
             IntegrationManifestSurface {
                 name: "account_claims".to_owned(),
                 method: "GET".to_owned(),
                 path: "/_coauth/admin/accounts/{account_id}/claims".to_owned(),
                 contract: "arkret.rest.coauth_account_claims.v1".to_owned(),
-                stability: "preview".to_owned(),
-                todo: "claim inventory is backed by account-claims service and subject to PG isolation coverage.".to_owned(),
             },
             IntegrationManifestSurface {
                 name: "account_session_grants".to_owned(),
                 method: "GET".to_owned(),
                 path: "/_coauth/admin/accounts/{account_id}/session-grants".to_owned(),
                 contract: "arkret.rest.coauth_account_session_grants.v1".to_owned(),
-                stability: "preview".to_owned(),
-                todo: "session-grant inventory exposes persisted grant metadata and will gain broader PG isolation coverage.".to_owned(),
             },
         ],
-        examples: serde_json::json!({
-            "compose_strand": {
-                "step_1": {
-                    "service": "principal_server",
-                    "path": "/_arkret/describe",
-                    "method": "GET",
-                    "note": "read auth_metadata.account_authority + methods[].oidc"
-                },
-                "step_2": {
-                    "service": "oidc_issuer",
-                    "path": "{methods[].oidc.openid_configuration}",
-                    "method": "GET",
-                    "note": "standard OIDC discovery -> PKCE authorize -> callback code"
-                },
-                "step_3": {
-                    "service": "account_authority",
-                    "path": "/_arkret/gate/account/session-grants",
-                    "method": "POST",
-                    "note": "proof.proof_kind=oidc_code_exchange"
-                },
-                "step_4": {
-                    "service": "principal_server",
-                    "path": "/_arkret/edge/push/register-device",
-                    "method": "POST"
-                }
-            }
-        }),
-        todos: vec![],
     }))
 }
 

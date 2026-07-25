@@ -58,7 +58,6 @@ schema, backend response, and Rust consumers share one source of truth.
 ```json
 {
   "contract": "ak.contract.coauth_admin_bridge.v1",
-  "version": "0.2.0-durable-proposals",
   "api_base_path": "/_coauth/admin",
   "accounts_path": "/_coauth/admin/accounts",
   "account_detail_path_template": "/_coauth/admin/accounts/{account_id}",
@@ -70,7 +69,6 @@ schema, backend response, and Rust consumers share one source of truth.
   "risk_action_history_path_template": "/_coauth/admin/accounts/{account_id}/risk-action/history",
   "risk_action_approve_path_template": "/_coauth/admin/accounts/{account_id}/risk-action/{proposal_id}/approve",
   "risk_action_execute_path_template": "/_coauth/admin/accounts/{account_id}/risk-action/{proposal_id}/execute",
-  "risk_action_state_store_kind": "pg_risk_action_proposals_with_admin_audit_trail",
   "risk_action_approval_mode": "durable_proposal_required",
   "risk_action_examples": {
     "proposal_request": {
@@ -90,8 +88,7 @@ schema, backend response, and Rust consumers share one source of truth.
       "ticket": "INC-2026-0504",
       "execution_note": "execute via controlled mutation worker"
     }
-  },
-  "todos": []
+  }
 }
 ```
 
