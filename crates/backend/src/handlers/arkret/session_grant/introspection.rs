@@ -1,6 +1,6 @@
 use arkret_identifiers::{DeviceId, Did};
 use arkret_models_collaboration::session_grant_bodies::{
-    SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_TYPE, SessionGrantIntrospectGrant,
+    SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND, SessionGrantIntrospectGrant,
     SessionGrantIntrospectOutcome, SessionGrantIntrospectRequestBody, SessionGrantIntrospectStatus,
     SessionGrantIntrospectionProof, SessionGrantIntrospectionProofClaims, SessionGrantScopeDetails,
 };
@@ -194,7 +194,7 @@ fn verify_session_grant_introspection_proof(
 
     let claims = jwt.payload();
     let max_future_skew = Duration::try_seconds(30).unwrap();
-    if claims.kind != SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_TYPE
+    if claims.kind != SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND
         || claims.grant_id != grant.grant_id.to_string()
         || claims.grant_jwt_hash != session_grant_jwt_hash(&grant.grant_jwt)
         || claims.audience.as_str() != grant.audience

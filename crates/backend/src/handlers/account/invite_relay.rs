@@ -90,8 +90,9 @@ pub struct InviteRelayRequestBody {
     /// Typed v1 invite-delivery body for `POST /_arkret/peer/invites`.
     /// When omitted, the endpoint runs as a consent gate check only.
     #[serde(default)]
-    pub invite_delivery:
-        Option<arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequest>,
+    pub invite_delivery: Option<
+        arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBodyBody,
+    >,
 }
 
 fn default_require_consent() -> bool {
@@ -177,7 +178,7 @@ pub async fn relay_invite_with(
     require_consent: bool,
     peer_protocol_client: Option<&PeerProtocolClient<'_>>,
     invite_delivery: Option<
-        &arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequest,
+        &arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBodyBody,
     >,
     http_client: &reqwest::Client,
 ) -> Result<RelayOutcome, RouteError> {
@@ -405,8 +406,9 @@ mod tests {
     }
 
     fn invite_delivery()
-    -> arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequest {
-        arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequest::new(
+    -> arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBodyBody
+    {
+        arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBodyBody::new(
             arkret_wire::Event::new(
                 arkret_wire::events::EventKind::INVITE_CREATE,
                 arkret_identifiers::RealmId::new(

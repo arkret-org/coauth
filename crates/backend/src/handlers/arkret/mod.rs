@@ -118,7 +118,7 @@ pub enum ArkretRouteError {
     /// controller approval flow. It renders as a closed `claim_required`
     /// details object and never as a browser challenge.
     #[error("controller approval required")]
-    HumanApprovalRequired(arkret_wire::AgentHumanApprovalErrorDetails),
+    HumanApprovalRequired(arkret_wire::AgentHumanApprovalProblem),
 
     /// Caller did not present a usable bearer token. Renders as `401`.
     #[error("{0}")]

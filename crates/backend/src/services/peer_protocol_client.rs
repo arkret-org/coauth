@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use arkret_canonical::{canonical_json_bytes, sha256_digest};
 use arkret_models_collaboration::governance::invite_addressing::{
-    InviteDeliveryOutcome, InviteDeliveryRequest,
+    InviteDeliveryOutcome, InviteDeliveryRequestBodyBody,
 };
 use arkret_signatures::http_signature::{
     Component, ContentDigest, ContentDigestAlgorithm, SignedRequestParts, canonical_message,
@@ -104,7 +104,7 @@ impl<'a> PeerProtocolClient<'a> {
 
     pub async fn post_invite_delivery(
         &self,
-        request: &InviteDeliveryRequest,
+        request: &InviteDeliveryRequestBodyBody,
     ) -> Result<InviteDeliveryOutcome, PeerProtocolClientError> {
         let url = self.join_absolute("/_arkret/peer/invites")?;
         self.post_json(

@@ -486,7 +486,7 @@ fn enforce_did_continuity_for_primary_upgrade(
         ));
     }
     if proof
-        .transfer_evidence
+        .transfer_proof
         .user_oob_confirmation_id
         .trim()
         .is_empty()
@@ -496,7 +496,7 @@ fn enforce_did_continuity_for_primary_upgrade(
         ));
     }
     let fingerprint = proof
-        .transfer_evidence
+        .transfer_proof
         .inception_public_key_fingerprint
         .as_str();
     if !fingerprint.starts_with("sha256:") {

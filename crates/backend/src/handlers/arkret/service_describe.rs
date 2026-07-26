@@ -499,7 +499,7 @@ pub(crate) fn service_describe_response(
             arkret_config,
         ))
         .expect("validated coauth trust domain"),
-        service_type: arkret_wire::ServiceType::AuthServer,
+        service_kind: arkret_wire::ServiceKind::AuthServer,
         protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
         supported_profiles: Vec::new(),
         profile_bindings: Default::default(),
@@ -537,7 +537,7 @@ pub(crate) fn service_describe_response(
         rate_limit_policy: Some(arkret_models_discovery::RateLimitPolicy::unspecified()),
         rate_limit_policy_id: None,
         egress_network_policy: None,
-        resource_types: Vec::new(),
+        resource_kinds: Vec::new(),
         discovery_profiles: Vec::new(),
         restricted_query_proof: None,
         ingest_modes: Vec::new(),
@@ -568,13 +568,13 @@ pub async fn server_describe(
     depot: &Depot,
     req: &Request,
 ) -> Result<Json<ServiceDescribeOutcome>, ArkretRouteError> {
-    if let Some(service_type) = req.query::<String>("service_type")
-        && service_type != arkret_wire::ServiceType::AuthServer.as_str()
+    if let Some(service_kind) = req.query::<String>("service_kind")
+        && service_kind != arkret_wire::ServiceKind::AuthServer.as_str()
     {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             arkret_wire::ErrorCode::INVALID_PARAM,
-            format!("service_type {service_type:?} is not available on this binding"),
+            format!("service_kind {service_kind:?} is not available on this binding"),
         ));
     }
     let url_builder = depot.url_builder()?;

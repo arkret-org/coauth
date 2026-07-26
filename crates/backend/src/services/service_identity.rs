@@ -15,7 +15,7 @@ use arkret_signatures::webvh::{
     PreparedInception, ServiceRegistrationInceptionInput,
     prepare_service_registration_inception_with_did_key_seed,
 };
-use arkret_wire::ServiceType;
+use arkret_wire::ServiceKind;
 use chrono::Utc;
 use coauth_config::{ArkretConfig, RuntimeServiceIdentity};
 use coauth_keystore::Keystore;
@@ -85,7 +85,7 @@ pub async fn initialize_and_spawn(
         }
     };
     let registration_key = ServiceRegistrationKey::new(
-        ServiceType::AuthServer,
+        ServiceKind::AuthServer,
         CanonicalServiceUrl::canonicalize(public_base.as_str())
             .map_err(|error| anyhow::anyhow!(error.to_string()))?,
     )

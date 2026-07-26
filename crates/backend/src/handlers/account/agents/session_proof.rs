@@ -103,7 +103,7 @@ pub enum AgentSessionProofError {
     /// Canonical fail-closed rejection (proof_invalid / agent_paused / …).
     Rejection(AgentAuthRejection),
     /// `claim_required` / `human_approval_required` structured error.
-    HumanApprovalRequired(arkret_wire::AgentHumanApprovalErrorDetails),
+    HumanApprovalRequired(arkret_wire::AgentHumanApprovalProblem),
 }
 
 impl From<AgentAuthRejection> for AgentSessionProofError {
@@ -316,7 +316,7 @@ pub async fn validate_agent_session_proof(
         // Opaque UUIDv7 artifact id (AKP-0008 §4.6); the controller resolves it
         // out-of-band, the agent runtime never renders a UI for it.
         let approval_request_id = new_prefixed_uuid7("");
-        let details = arkret_wire::AgentHumanApprovalErrorDetails::new(approval_request_id)
+        let details = arkret_wire::AgentHumanApprovalProblem::new(approval_request_id)
             .map_err(|_| AgentAuthRejection::ProofInvalid)?;
         return Err(AgentSessionProofError::HumanApprovalRequired(details));
     }
@@ -354,7 +354,7 @@ pub async fn validate_agent_session_proof(
     .inspect_err(|error| {
         tracing::warn!(
             agent_id,
-            rejection_code = error.code(),
+            rejection_reason_code = error.code(),
             requested_scope = ?body.requested_scope,
             agent_key_scope = %authorization.agent_key_scope,
             "agent_key_proof rejected: effective scope intersection failed"

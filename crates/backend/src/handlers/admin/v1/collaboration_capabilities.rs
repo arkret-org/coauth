@@ -334,7 +334,7 @@ fn build_grant_fanout_payload(
     }
     if let Some(approval_evidence_ref) = approval_evidence_ref {
         grant["constraints"] = json!([{
-            "constraint_type": "approval",
+            "constraint_kind": "approval",
             "effect": "allow",
             "approval_evidence_ref": approval_evidence_ref,
         }]);

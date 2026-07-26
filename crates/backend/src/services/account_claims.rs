@@ -215,7 +215,7 @@ impl PgAccountClaimsService {
             INSERT INTO account_claims (
                 id,
                 account_id,
-                claim_type,
+                claim_kind,
                 subject,
                 issuer,
                 verifier_did,
@@ -230,7 +230,7 @@ impl PgAccountClaimsService {
             RETURNING
                 id,
                 account_id,
-                claim_type AS claim_kind,
+                claim_kind,
                 subject,
                 issuer,
                 verifier_did,
@@ -275,7 +275,7 @@ impl PgAccountClaimsService {
             SELECT
                 id,
                 account_id,
-                claim_type AS claim_kind,
+                claim_kind,
                 subject,
                 issuer,
                 verifier_did,
@@ -288,7 +288,7 @@ impl PgAccountClaimsService {
             FROM account_claims
             WHERE ($1::UUID IS NULL OR account_id = $1)
               AND ($2::TEXT IS NULL OR subject = $2)
-              AND ($3::TEXT IS NULL OR claim_type = $3)
+              AND ($3::TEXT IS NULL OR claim_kind = $3)
               AND (
                     $4::TEXT IS NULL
                     OR ($4 = 'active' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > $5))
@@ -329,7 +329,7 @@ impl PgAccountClaimsService {
             RETURNING
                 id,
                 account_id,
-                claim_type AS claim_kind,
+                claim_kind,
                 subject,
                 issuer,
                 verifier_did,

@@ -220,7 +220,7 @@ diesel::table! {
     account_claims (id) {
         id -> Uuid,
         account_id -> Nullable<Uuid>,
-        claim_type -> Text,
+        claim_kind -> Text,
         subject -> Text,
         issuer -> Text,
         verifier_did -> Text,
@@ -571,7 +571,7 @@ diesel::table! {
         code_challenge -> Nullable<Text>,
         response_type_code -> Bool,
         response_type_id_token -> Bool,
-        requires_consent -> Bool,
+        consent_required -> Bool,
         created_at -> Timestamptz,
         fulfilled_at -> Nullable<Timestamptz>,
         cancelled_at -> Nullable<Timestamptz>,

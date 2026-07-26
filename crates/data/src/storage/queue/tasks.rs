@@ -792,8 +792,8 @@ impl ExpireInactiveOAuthSessionsJob {
 
     /// Get the pagination cursor
     #[must_use]
-    pub fn pagination(&self, batch_size: usize) -> Pagination {
-        let pagination = Pagination::first(batch_size);
+    pub fn pagination(&self, batch_item_count: usize) -> Pagination {
+        let pagination = Pagination::first(batch_item_count);
         if let Some(after) = self.after {
             pagination.after(after)
         } else {
@@ -849,8 +849,8 @@ impl ExpireInactiveUserSessionsJob {
 
     /// Get the pagination cursor
     #[must_use]
-    pub fn pagination(&self, batch_size: usize) -> Pagination {
-        let pagination = Pagination::first(batch_size);
+    pub fn pagination(&self, batch_item_count: usize) -> Pagination {
+        let pagination = Pagination::first(batch_item_count);
         if let Some(after) = self.after {
             pagination.after(after)
         } else {

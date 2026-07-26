@@ -583,7 +583,7 @@ mod tests {
             service_id.clone(),
             arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:example".to_owned())
                 .unwrap(),
-            arkret_wire::ServiceType::PrincipalServer,
+            arkret_wire::ServiceKind::PrincipalServer,
         );
         Mock::given(method("GET"))
             .and(path("/_arkret/describe"))

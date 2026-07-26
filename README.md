@@ -101,7 +101,7 @@ The canonical wire behavior lives in the v1 spec artifacts and prose under
   is strictly `current + 1`.
 - **`/policy/check` v2** — request switches to `PolicyCheckRequestBody`
   (`signed_transport` + `source_ip_digest` + `source.{service_id,
-  service_type}`); response is `PolicyCheckOutcome` carrying the
+  service_kind}`); response is `PolicyCheckOutcome` carrying the
   `bound_to{realm_id, actor_id, action, request_canonical_digest,
   policy_server_id}` envelope plus `auth_state_digest` /
   `policy_frontier_digest` / `membership_frontier_digest` and a signed

@@ -1,6 +1,6 @@
 use arkret_identifiers::Did;
 use arkret_models_collaboration::session_grant_bodies::{
-    SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_TYPE, SessionGrantIntrospectStatus,
+    SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND, SessionGrantIntrospectStatus,
     SessionGrantIntrospectionProofClaims,
 };
 use arkret_models_identity::SignedSessionGrantClaims;
@@ -29,7 +29,7 @@ use crate::salvo_utils::SessionInfoExt;
 #[salvo::handler]
 async fn human_approval_error_fixture() -> Result<(), ArkretRouteError> {
     Err(ArkretRouteError::HumanApprovalRequired(
-        arkret_wire::AgentHumanApprovalErrorDetails::new("approval-opaque-01").unwrap(),
+        arkret_wire::AgentHumanApprovalProblem::new("approval-opaque-01").unwrap(),
     ))
 }
 
@@ -238,7 +238,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         "did:webvh:ztest:auth.example.com:webvh:service"
     );
     assert_eq!(body["trust_domain"], "ak:trust_domain:auth.example.com");
-    assert_eq!(body["service_type"], "auth_server");
+    assert_eq!(body["service_kind"], "auth_server");
     assert_eq!(
         body["auth_metadata"]["account_authority"]["enrollment_authority_did"],
         test_enrollment_authority_did().as_str()
@@ -1090,7 +1090,7 @@ fn session_grant_introspection_proof(
         .unwrap();
     let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::EdDsa);
     let claims = SessionGrantIntrospectionProofClaims {
-        kind: SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_TYPE.to_owned(),
+        kind: SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND.to_owned(),
         grant_id: grant.grant_id.to_string(),
         grant_jwt_hash: session_grant_jwt_hash(&material.grant_jwt),
         audience: Did::new(grant.audience.clone()).unwrap(),
@@ -1727,7 +1727,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
 
     let hint = arkret_models_identity::DeliveryBindingHint {
         recipient_service_id: arkret_identifiers::Did::new("did:web:soland.example").unwrap(),
-        recipient_service_type: arkret_models_identity::RecipientServiceType::PrincipalServer,
+        recipient_service_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
         binding_source: arkret_models_identity::HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: [arkret_models_identity::DeliveryMode::Events]
             .into_iter()
@@ -1831,7 +1831,7 @@ fn issue_handle_claim_rejects_did_web_subject_without_explicit_personal_node_gat
     let key_store = test_keystore();
     let hint = arkret_models_identity::DeliveryBindingHint {
         recipient_service_id: arkret_identifiers::Did::new("did:web:soland.example").unwrap(),
-        recipient_service_type: arkret_models_identity::RecipientServiceType::PrincipalServer,
+        recipient_service_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
         binding_source: arkret_models_identity::HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: [arkret_models_identity::DeliveryMode::Events]
             .into_iter()
@@ -1872,7 +1872,7 @@ fn issue_handle_claim_accepts_organization_handle_claim_kind() {
 
     let hint = arkret_models_identity::DeliveryBindingHint {
         recipient_service_id: arkret_identifiers::Did::new("did:web:soland.example").unwrap(),
-        recipient_service_type: arkret_models_identity::RecipientServiceType::PrincipalServer,
+        recipient_service_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
         binding_source: arkret_models_identity::HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: [arkret_models_identity::DeliveryMode::Events]
             .into_iter()

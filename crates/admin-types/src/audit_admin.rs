@@ -24,7 +24,7 @@ pub struct AuditEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub admin_user_id: Option<String>,
     pub operation: String,
-    pub resource_type: String,
+    pub resource_kind: String,
     pub resource_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<serde_json::Value>,

@@ -62,7 +62,7 @@ const OOB_ALPHABET_BYTES: &[u8] = OOB_ALPHABET;
 /// Number of characters in a Form 1 (offline-verifiable) code. 26 chars
 /// from the 31-symbol alphabet yield 26·log2(31) ≈ 128.8 bits, which
 /// clears the **≥128-bit entropy floor** the spec requires for production
-/// offline OOB codes (`security-closure-vectors.json`: "production offline
+/// offline OOB codes (`security-closure-fixture.json`: "production offline
 /// OOB code must have at least 128 bits of entropy"). The spec states the
 /// requirement as an entropy floor, not a fixed character count; with this
 /// restricted 31-symbol alphabet (log2(31) ≈ 4.954 bits/char) 26 chars is

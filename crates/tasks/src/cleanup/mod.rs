@@ -58,7 +58,7 @@ macro_rules! cleanup_time_cursor_job {
                         .repository()
                         .await
                         .map_err(crate::new_queue::JobError::retry)?;
-                    let (batch_size, next_cursor) = {
+                    let (batch_item_count, next_cursor) = {
                         let mut store = repo.$repo();
                         store.$method(cursor, cutoff, super::BATCH_SIZE).await
                     }
@@ -67,10 +67,10 @@ macro_rules! cleanup_time_cursor_job {
                     repo.save()
                         .await
                         .map_err(crate::new_queue::JobError::retry)?;
-                    processed += batch_size;
+                    processed += batch_item_count;
                     cursor = next_cursor;
 
-                    if batch_size < super::BATCH_SIZE {
+                    if batch_item_count < super::BATCH_SIZE {
                         break;
                     }
                 }
@@ -116,7 +116,7 @@ macro_rules! cleanup_ulid_cursor_job {
                         .repository()
                         .await
                         .map_err(crate::new_queue::JobError::retry)?;
-                    let (batch_size, next_cursor) = {
+                    let (batch_item_count, next_cursor) = {
                         let mut store = repo.$repo();
                         store.$method(cursor, upper_bound, super::BATCH_SIZE).await
                     }
@@ -125,10 +125,10 @@ macro_rules! cleanup_ulid_cursor_job {
                     repo.save()
                         .await
                         .map_err(crate::new_queue::JobError::retry)?;
-                    processed += batch_size;
+                    processed += batch_item_count;
                     cursor = next_cursor;
 
-                    if batch_size < super::BATCH_SIZE {
+                    if batch_item_count < super::BATCH_SIZE {
                         break;
                     }
                 }

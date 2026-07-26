@@ -5,7 +5,7 @@ use arkret_identity::service_identity::{
     LocalServiceIdentity, ServiceIdentityDiagnostic, ServiceIdentityKeyRef, ServiceIdentityState,
 };
 use arkret_models_identity::service_identity::{CanonicalServiceUrl, ServiceRegistrationKey};
-use arkret_wire::ServiceType;
+use arkret_wire::ServiceKind;
 use chrono::Duration;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -159,7 +159,7 @@ impl RuntimeServiceIdentity {
             identity: LocalServiceIdentity {
                 service_id: Did::new(service_id.to_owned()).expect("fixture service DID"),
                 registration_key: ServiceRegistrationKey::new(
-                    ServiceType::AuthServer,
+                    ServiceKind::AuthServer,
                     CanonicalServiceUrl::canonicalize("https://auth.test/")
                         .expect("fixture public base"),
                 )
