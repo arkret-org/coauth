@@ -16,7 +16,12 @@ or LDAP backend then you need to pair coauth with a separate service (such as
 [Dex](https://dexidp.io) or [Keycloak](https://www.keycloak.org)) which does that
 translation for you.
 
-If you need some other feature that coauth doesn't support (such as TOTP or WebAuthn), then you should consider pairing coauth with another IdP that does support the features you need.
+Coauth supports username-first WebAuthn / passkey login and self-service
+credential management. Ceremony state and credential metadata are stored in
+PostgreSQL so horizontally scaled instances share the same single-use state.
+Coauth does not currently provide TOTP or enterprise authenticator-attestation
+policy; deployments that require those controls should pair Coauth with an
+appropriate upstream IdP.
 
 ## Workspace and crate split
 

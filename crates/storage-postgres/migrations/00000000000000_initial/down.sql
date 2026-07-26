@@ -62,6 +62,7 @@ DROP TABLE IF EXISTS user_totp_configs CASCADE;
 DROP TABLE IF EXISTS user_unsupported_third_party_ids CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS webauthn_credentials CASCADE;
+DROP TABLE IF EXISTS webauthn_ceremonies CASCADE;
 DROP TABLE IF EXISTS workflow_audit_logs CASCADE;
 DROP TABLE IF EXISTS workflow_deadlines CASCADE;
 DROP TABLE IF EXISTS workflow_events CASCADE;

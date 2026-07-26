@@ -174,6 +174,7 @@ fn LoginFormBasic(error_msg: Option<String>) -> Element {
             providers: ProvidersOutcome {
                 providers: vec![],
                 password_login_enabled: true,
+                passkey_login_enabled: false,
                 password_registration_enabled: false,
                 account_recovery_allowed: true,
                 login_hint: None,
@@ -213,8 +214,11 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
     let mut submitting = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
     let nav = navigator();
+    let password_nav = nav;
+    let passkey_nav = nav;
     let has_providers = !providers.providers.is_empty();
     let password_enabled = providers.password_login_enabled;
+    let passkey_enabled = providers.passkey_login_enabled;
     let registration_enabled = providers.password_registration_enabled;
     let recovery_enabled = providers.account_recovery_allowed;
     let error_text = error.read().clone();
@@ -235,7 +239,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                     }
                 }
 
-                if password_enabled {
+                if password_enabled || passkey_enabled {
                     if current_account_matches_hint && step() == LoginStep::Identifier {
                         div { class: "form-root",
                             button {
@@ -321,14 +325,19 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                     return;
                                 }
 
-                                if pass.is_empty() {
+                                if password_enabled && pass.is_empty() {
                                     error.set(Some(crate::translations::t("coauth-errors-password-required")));
+                                    return;
+                                }
+
+                                if !password_enabled {
                                     return;
                                 }
 
                                 submitting.set(true);
                                 error.set(None);
 
+                                let nav = password_nav;
                                 spawn(async move {
                                     let result = crate::api::api_post::<LoginOutcome>(
                                         "/account/auth/login",
@@ -384,37 +393,96 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                             }
 
                             div { class: "form-field",
-                                label { class: "form-label", r#for: LOGIN_PASSWORD_ID, {crate::translations::t("common-password")} }
-                                div { class: "password-input-wrapper",
-                                    input {
-                                        id: LOGIN_PASSWORD_ID,
-                                        class: "form-input",
-                                        r#type: if show_password() { "text" } else { "password" },
-                                        autocomplete: "current-password",
-                                        required: true,
-                                        "aria-invalid": if has_error { "true" } else { "false" },
-                                        "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
-                                        placeholder: crate::translations::t("common-password"),
-                                        value: "{password}",
-                                        autofocus: true,
-                                        oninput: move |e| password.set(e.value()),
+                                if password_enabled {
+                                    label { class: "form-label", r#for: LOGIN_PASSWORD_ID, {crate::translations::t("common-password")} }
+                                    div { class: "password-input-wrapper",
+                                        input {
+                                            id: LOGIN_PASSWORD_ID,
+                                            class: "form-input",
+                                            r#type: if show_password() { "text" } else { "password" },
+                                            autocomplete: "current-password",
+                                            required: true,
+                                            "aria-invalid": if has_error { "true" } else { "false" },
+                                            "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
+                                            placeholder: crate::translations::t("common-password"),
+                                            value: "{password}",
+                                            autofocus: true,
+                                            oninput: move |e| password.set(e.value()),
+                                        }
+                                        PasswordVisibilityToggle { visible: show_password }
                                     }
-                                    PasswordVisibilityToggle { visible: show_password }
                                 }
                             }
 
-                            button {
-                                class: "btn btn-primary btn-block",
-                                r#type: "submit",
-                                // Stable hook for e2e (cotest oidc-login-flow.spec.ts);
-                                // the button carries no id otherwise.
-                                "data-testid": "coauth-login-submit",
-                                disabled: submitting(),
-                                "aria-busy": if submitting() { "true" } else { "false" },
-                                if submitting() {
-                                    LoadingSpinner { inline: true }
+                            if password_enabled {
+                                button {
+                                    class: "btn btn-primary btn-block",
+                                    r#type: "submit",
+                                    // Stable hook for e2e (cotest oidc-login-flow.spec.ts);
+                                    // the button carries no id otherwise.
+                                    "data-testid": "coauth-login-submit",
+                                    disabled: submitting(),
+                                    "aria-busy": if submitting() { "true" } else { "false" },
+                                    if submitting() {
+                                        LoadingSpinner { inline: true }
+                                    }
+                                    {crate::translations::t("action-sign-in")}
                                 }
-                                {crate::translations::t("action-sign-in")}
+                            }
+
+                            if passkey_enabled {
+                                if password_enabled {
+                                    div { class: "login-divider",
+                                        span { {crate::translations::t("coauth-login-separator")} }
+                                    }
+                                }
+                                button {
+                                    class: "btn btn-secondary btn-block",
+                                    r#type: "button",
+                                    "data-testid": "coauth-login-passkey",
+                                    disabled: submitting(),
+                                    "aria-busy": if submitting() { "true" } else { "false" },
+                                    onclick: move |_| {
+                                        let user = handle.to_string();
+                                        if user.trim().is_empty() {
+                                            error.set(Some(crate::translations::t("coauth-errors-identifier-required")));
+                                            step.set(LoginStep::Identifier);
+                                            return;
+                                        }
+                                        submitting.set(true);
+                                        error.set(None);
+                                        let nav = passkey_nav;
+                                        spawn(async move {
+                                            let result = crate::passkey::authenticate(user).await;
+                                            submitting.set(false);
+                                            match result {
+                                                Ok(_) => {
+                                                    let continuation =
+                                                        get_query_param("kind").zip(get_query_param("id"));
+                                                    clear_preserved_login_query();
+                                                    if let Some((kind, id)) = continuation {
+                                                        if kind == "continue_authorization_grant" {
+                                                            nav.push(Route::OAuthApproval { grant_id: id });
+                                                        } else {
+                                                            nav.push(Route::AccountOverview {});
+                                                        }
+                                                    } else {
+                                                        nav.push(Route::AccountOverview {});
+                                                    }
+                                                }
+                                                Err(message) => {
+                                                    let message = if message == "NotAllowedError" {
+                                                        "Passkey sign-in was cancelled or no matching authenticator was available.".to_owned()
+                                                    } else {
+                                                        message
+                                                    };
+                                                    error.set(Some(message));
+                                                }
+                                            }
+                                        });
+                                    },
+                                    "Sign in with a passkey"
+                                }
                             }
 
                             if !has_login_hint {

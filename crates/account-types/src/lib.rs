@@ -138,6 +138,8 @@ impl LogoutOutcome {
 pub struct ProvidersOutcome {
     pub providers: Vec<ProviderInfo>,
     pub password_login_enabled: bool,
+    #[serde(default)]
+    pub passkey_login_enabled: bool,
     pub password_registration_enabled: bool,
     #[serde(default)]
     pub account_recovery_allowed: bool,

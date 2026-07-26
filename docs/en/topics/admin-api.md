@@ -380,7 +380,6 @@ realm classes explicit. Every admin route belongs to one of them:
 | `/_coauth/admin/upstream-oauth-*`                          | Principal Control      |
 | `/_coauth/admin/user-registration-tokens*`                 | Principal Control      |
 | `/_coauth/admin/devices`                                   | Principal Control      |
-| `/_coauth/admin/passkeys`                                  | Principal Control      |
 | `/_coauth/admin/personal-sessions`                         | Principal Control      |
 | `/_coauth/admin/user-sessions`                             | Principal Control      |
 | `/_coauth/admin/oauth-sessions`                            | Principal Control      |

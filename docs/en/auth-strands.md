@@ -73,8 +73,9 @@ Browser                                 coauth-frontend         coauth-backend
    |                                          |                       |
    | 1. user clicks "Sign in with passkey"    |                       |
    |----------------------------------------->|                       |
-   |                                          | 2. POST /webauthn/    |
-   |                                          |       options         |
+   |                                          | 2. POST /_coauth/     |
+   |                                          | account/auth/passkey/ |
+   |                                          | auth/start + handle   |
    |                                          |---------------------->|
    |                                          |  3. challenge,        |
    |                                          |     rp_id,            |
@@ -85,10 +86,11 @@ Browser                                 coauth-frontend         coauth-backend
    | 5. authenticator signs challenge         |                       |
    |    with stored private key               |                       |
    |----------------------------------------->|                       |
-   |                                          | 6. POST /webauthn/    |
-   |                                          |       verify          |
-   |                                          |    {assertion,        |
-   |                                          |     client_data}      |
+   |                                          | 6. POST /_coauth/     |
+   |                                          | account/auth/passkey/ |
+   |                                          | auth/finish           |
+   |                                          | {ceremony_id,         |
+   |                                          |  assertion}           |
    |                                          |---------------------->|
    |                                          |    verify origin,     |
    |                                          |    rp_id, signature   |
@@ -98,6 +100,19 @@ Browser                                 coauth-frontend         coauth-backend
    | 8. authenticated session                 |                       |
    |<-----------------------------------------|                       |
 ```
+
+The start response carries an opaque ceremony id. Its serialised
+`webauthn-rs` state is stored in PostgreSQL with a ten-minute expiry and a
+separate encrypted browser-cookie binding. Finish atomically deletes that row,
+so a second finish, a different browser, an expired ceremony, or a
+registration/authentication purpose swap fails closed. The account at finish
+comes from the stored ceremony, not from request input.
+
+A verified assertion must include user verification (UV). It creates the same
+browser-session cookie used by password and upstream OIDC login, records the
+passkey authentication method, and then resumes the existing authorization
+continuation in the frontend. It does not mint an unbound bearer credential and
+does not replace Arkret principal, device, DPoP, or agent proofs.
 
 ## Account recovery (passwordless reset)
 

@@ -415,6 +415,9 @@ pub struct ResendEmailAuthCodePayload {
 
 // ── Auth API types ────────────────────────────────────────────
 
+pub use coauth_account_types::passkey::{
+    PasskeyListOutcome, PasskeyMutationOutcome, PasskeySummary,
+};
 pub use coauth_account_types::{CurrentAccountInfo, LoginOutcome, ProvidersOutcome};
 
 // ── Registration API types ────────────────────────────────────

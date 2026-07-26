@@ -24,8 +24,9 @@ pub use oidc_bridge::integration_describe;
 use opentelemetry::metrics::Counter;
 use opentelemetry::{Key, KeyValue};
 pub use passkey::{
-    auth_finish as passkey_auth_finish, auth_start as passkey_auth_start,
+    auth_finish as passkey_auth_finish, auth_start as passkey_auth_start, list as passkey_list,
     register_finish as passkey_register_finish, register_start as passkey_register_start,
+    rename as passkey_rename, revoke as passkey_revoke,
 };
 use salvo::prelude::*;
 use serde::Deserialize;
@@ -576,6 +577,7 @@ pub async fn providers(
     Ok(Json(ProvidersOutcome {
         providers: provider_list,
         password_login_enabled: site_config.password_login_enabled,
+        passkey_login_enabled: depot.webauthn_service().is_ok(),
         password_registration_enabled: site_config.password_registration_enabled,
         account_recovery_allowed: site_config.account_recovery_allowed,
         login_hint,

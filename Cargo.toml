@@ -395,6 +395,7 @@ web-sys = {version = "0.3",features = [
     "MediaQueryList",
 ]}
 webauthn-rs = {version = "0.5",features = ["danger-allow-state-serialisation"]}
+webauthn-rs-proto = "0.5"
 wiremock = "0.6.5"
 woothee = "0.13.0"
 writeable = "0.6.3"

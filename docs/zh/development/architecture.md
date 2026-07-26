@@ -6,9 +6,14 @@ coauth 是 Arkret 的 Auth Server，负责账号认证、OAuth/OIDC、会话授�
 
 - 面向 Arkret / Soland 的账号认证与 session grant 签发
 - 支持标准 OAuth / OIDC，同时提供独立的用户运营能力
+- 支持 username-first WebAuthn / Passkey 登录与用户自助凭据管理；ceremony
+  状态持久化在 PostgreSQL 中，可供水平扩展实例原子单次消费
 - 工作流驱动的业务流程管理
 - 统一通知中心
 - 可插拔的外部系统连接器
+
+当前不提供 TOTP、企业级 authenticator attestation allow-list 或 AAL3
+声明；需要这些控制的部署应接入合适的上游 IdP。
 
 ## Crate 结构
 

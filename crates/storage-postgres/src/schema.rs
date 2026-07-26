@@ -236,6 +236,18 @@ diesel::table! {
 }
 
 diesel::table! {
+    webauthn_ceremonies (id) {
+        id -> Uuid,
+        account_id -> Uuid,
+        kind -> Text,
+        binding_id -> Text,
+        state -> Jsonb,
+        created_at -> Timestamptz,
+        expires_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     webauthn_credentials (id) {
         id -> Uuid,
         account_id -> Uuid,
@@ -351,6 +363,7 @@ diesel::table! {
         user_session_id -> Uuid,
         user_password_id -> Nullable<Uuid>,
         upstream_oauth_authorization_session_id -> Nullable<Uuid>,
+        webauthn_credential_id -> Nullable<Uuid>,
         created_at -> Timestamptz,
         authentication_source -> Nullable<Text>,
     }
@@ -1019,6 +1032,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     account_claims,
     risk_action_proposals,
     webauthn_credentials,
+    webauthn_ceremonies,
     invite_quarantine_queue,
     user_passwords,
     user_totp_configs,

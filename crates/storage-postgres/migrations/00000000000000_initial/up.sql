@@ -839,8 +839,16 @@ CREATE TABLE public.user_session_authentications (
     user_session_id uuid NOT NULL,
     user_password_id uuid,
     upstream_oauth_authorization_session_id uuid,
+    webauthn_credential_id uuid,
     created_at timestamp with time zone NOT NULL,
-    authentication_source text
+    authentication_source text,
+    CONSTRAINT user_session_authentications_single_method_check CHECK (
+        num_nonnulls(
+            user_password_id,
+            upstream_oauth_authorization_session_id,
+            webauthn_credential_id
+        ) <= 1
+    )
 );
 
 CREATE TABLE public.user_sessions (
@@ -899,7 +907,7 @@ CREATE TABLE public.webauthn_credentials (
     account_id uuid NOT NULL,
     credential_id bytea NOT NULL,
     public_key jsonb NOT NULL,
-    sign_count bigint DEFAULT 0 NOT NULL,
+    sign_count bigint DEFAULT 0 NOT NULL CHECK (sign_count BETWEEN 0 AND 4294967295),
     transports text[] DEFAULT ARRAY[]::text[] NOT NULL,
     aaguid uuid,
     backup_eligible boolean DEFAULT false NOT NULL,
@@ -909,6 +917,17 @@ CREATE TABLE public.webauthn_credentials (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     last_used_at timestamp with time zone,
     revoked_at timestamp with time zone
+);
+
+CREATE TABLE public.webauthn_ceremonies (
+    id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    kind text NOT NULL CHECK (kind = ANY (ARRAY['registration'::text, 'authentication'::text])),
+    binding_id text NOT NULL,
+    state jsonb NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT webauthn_ceremonies_expiry_check CHECK (expires_at > created_at)
 );
 
 CREATE TABLE public.workflow_audit_logs (
@@ -1269,6 +1288,9 @@ ALTER TABLE ONLY public.users
 ALTER TABLE ONLY public.webauthn_credentials
     ADD CONSTRAINT webauthn_credentials_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY public.webauthn_ceremonies
+    ADD CONSTRAINT webauthn_ceremonies_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY public.workflow_audit_logs
     ADD CONSTRAINT workflow_audit_logs_pkey PRIMARY KEY (id);
 
@@ -1431,6 +1453,8 @@ CREATE INDEX user_primary_handle_preferences_handle_idx ON public.user_primary_h
 CREATE INDEX webauthn_credentials_account_idx ON public.webauthn_credentials USING btree (account_id, created_at DESC) WHERE (revoked_at IS NULL);
 
 CREATE UNIQUE INDEX webauthn_credentials_credential_idx ON public.webauthn_credentials USING btree (credential_id);
+
+CREATE INDEX webauthn_ceremonies_expiry_idx ON public.webauthn_ceremonies USING btree (expires_at);
 
 CREATE INDEX workflow_audit_logs_instance_idx ON public.workflow_audit_logs USING btree (workflow_instance_id, id);
 
@@ -1650,6 +1674,12 @@ ALTER TABLE ONLY public.user_unsupported_third_party_ids
 
 ALTER TABLE ONLY public.webauthn_credentials
     ADD CONSTRAINT webauthn_credentials_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.webauthn_ceremonies
+    ADD CONSTRAINT webauthn_ceremonies_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.user_session_authentications
+    ADD CONSTRAINT user_session_authentications_webauthn_credential_id_fkey FOREIGN KEY (webauthn_credential_id) REFERENCES public.webauthn_credentials(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY public.workflow_audit_logs
     ADD CONSTRAINT workflow_audit_logs_workflow_instance_id_fkey FOREIGN KEY (workflow_instance_id) REFERENCES public.workflow_instances(id) ON DELETE CASCADE;

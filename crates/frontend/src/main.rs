@@ -8,6 +8,7 @@ mod api;
 mod components;
 mod config;
 mod pages;
+mod passkey;
 mod translations;
 mod utils;
 

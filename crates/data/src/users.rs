@@ -330,6 +330,7 @@ pub struct Authentication {
 pub enum AuthenticationMethod {
     Password { user_password_id: Ulid },
     UpstreamOAuth { upstream_oauth_session_id: Ulid },
+    Passkey { webauthn_credential_id: Ulid },
     Unknown,
 }
 

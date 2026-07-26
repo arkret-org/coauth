@@ -25,6 +25,7 @@
 - [Use the Admin API](./topics/admin-api.md)
 - [Get an access token](./topics/access-token.md)
 - [Password reset](./topics/password-reset.md)
+- [Passkeys](./topics/passkeys.md)
 - [Agent runtime status](./topics/agent_runtime.md)
 - [Handle-claim ledger](./topics/handle-claim-ledger.md)
 - [Deployment hardening](./topics/deployment_hardening.md)

@@ -148,6 +148,14 @@ pub struct HandleAuditEvent {
 pub enum SecurityEventType {
     /// A successful login.
     LoginSuccess,
+    /// A successful passkey login.
+    PasskeyLoginSuccess,
+    /// A passkey was registered.
+    PasskeyRegistered,
+    /// A passkey's user-facing label was changed.
+    PasskeyRenamed,
+    /// A passkey was revoked.
+    PasskeyRevoked,
     /// A failed login attempt.
     LoginFailed,
     /// A user changed their password.

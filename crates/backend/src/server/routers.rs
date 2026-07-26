@@ -269,6 +269,12 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                 .push(Router::with_path("workflow-inbox").get(viewer::get_workflow_inbox)),
         )
         .push(Router::with_path("self/bootstrap-admin-status").get(bootstrap_admin_status::get))
+        .push(
+            Router::with_path("self/passkeys")
+                .get(auth::passkey_list)
+                .push(Router::with_path("{id}").patch(auth::passkey_rename))
+                .push(Router::with_path("{id}/revoke").post(auth::passkey_revoke)),
+        )
         // Site config
         .push(Router::with_path("self/site-config").get(site_config::get))
         // Sessions
@@ -506,9 +512,9 @@ pub(super) fn build_admin_router(router: Router) -> Router {
         account_dids, accounts, audit_feed, circle_capabilities, claims,
         collaboration_capabilities, connector_health, devices, invite_quarantine,
         notification_channels, notification_templates, oauth_clients, oauth_clients_i18n,
-        oauth_clients_register, oauth_sessions, organizations, passkeys, personal_sessions,
-        policy_checks, policy_data, site_config, upstream_oauth_links, upstream_oauth_providers,
-        user_emails, user_registration_tokens, user_sessions, version,
+        oauth_clients_register, oauth_sessions, organizations, personal_sessions, policy_checks,
+        policy_data, site_config, upstream_oauth_links, upstream_oauth_providers, user_emails,
+        user_registration_tokens, user_sessions, version,
     };
 
     let admin_router = Router::with_path("/_coauth/admin")
@@ -650,19 +656,6 @@ pub(super) fn build_admin_router(router: Router) -> Router {
                                     Router::with_path("{device_id}/revoke")
                                         .post(devices::revoke_account_device),
                                 ),
-                        )
-                        .push(
-                            Router::with_path("passkeys")
-                                .push(
-                                    Router::with_path("register/start")
-                                        .post(passkeys::register_start),
-                                )
-                                .push(
-                                    Router::with_path("register/finish")
-                                        .post(passkeys::register_finish),
-                                )
-                                .push(Router::with_path("auth/start").post(passkeys::auth_start))
-                                .push(Router::with_path("auth/finish").post(passkeys::auth_finish)),
                         ),
                 ),
         )

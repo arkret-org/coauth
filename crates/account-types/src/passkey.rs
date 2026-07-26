@@ -9,10 +9,12 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Account-selection hint accepted by the passkey ceremony start endpoints and
-/// flattened into the finish request bodies. All fields are optional; the
-/// backend resolves the target account from whichever hint is present.
-#[derive(Default, Debug, Clone, Deserialize, Serialize)]
+/// Account-selection hint accepted by the passkey authentication start
+/// endpoint. The backend accepts `account_id`, `handle`, or `login_hint`;
+/// `display_name` remains a legacy wire field and is not used for account
+/// selection. Finish endpoints derive the account from server-side ceremony
+/// state instead of trusting another caller-supplied hint.
+#[derive(Default, Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 #[serde(rename = "AuthPasskeyAccountHint")]
 pub struct PasskeyAccountHint {
@@ -26,48 +28,59 @@ pub struct PasskeyAccountHint {
     pub display_name: Option<String>,
 }
 
-/// Body for `passkey/register/finish`: the account hint plus the browser
+/// Body for `passkey/register/start`.
+///
+/// The account is never caller-selected: the backend derives it from the
+/// authenticated browser session. `display_name` only controls the
+/// human-readable name shown by the authenticator.
+#[derive(Default, Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+#[serde(rename = "AuthPasskeyRegisterStartRequest")]
+pub struct PasskeyRegisterStartRequestBody {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+}
+
+/// Body for `passkey/register/finish`: the opaque ceremony id plus the browser
 /// attestation produced by `navigator.credentials.create`.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 #[serde(rename = "AuthPasskeyRegisterFinishRequest")]
 pub struct PasskeyRegisterFinishRequestBody {
-    #[serde(flatten)]
-    pub hint: PasskeyAccountHint,
+    pub ceremony_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     pub attestation: serde_json::Value,
 }
 
-/// Body for `passkey/auth/finish`: the account hint plus the browser assertion
-/// produced by `navigator.credentials.get`.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+/// Body for `passkey/auth/finish`: the opaque ceremony id plus the browser
+/// assertion produced by `navigator.credentials.get`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 #[serde(rename = "AuthPasskeyAuthFinishRequest")]
 pub struct PasskeyAuthFinishRequestBody {
-    #[serde(flatten)]
-    pub hint: PasskeyAccountHint,
+    pub ceremony_id: String,
     pub assertion: serde_json::Value,
 }
 
 /// Outcome of `passkey/register/start`: the resolved account plus the
 /// `CreationChallengeResponse` JSON the browser feeds into
 /// `navigator.credentials.create({ publicKey: ... })`.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 pub struct PasskeyRegisterStartOutcome {
+    pub ceremony_id: String,
     pub account_id: String,
     pub handle: String,
     pub challenge: serde_json::Value,
 }
 
 /// Outcome of `passkey/register/finish`: the persisted credential.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 pub struct PasskeyRegisterFinishOutcome {
     pub account_id: String,
     pub id: String,
-    pub credential_id_b64: String,
     #[serde(default)]
     pub label: Option<String>,
 }
@@ -75,9 +88,10 @@ pub struct PasskeyRegisterFinishOutcome {
 /// Outcome of `passkey/auth/start`: the resolved account plus the
 /// `RequestChallengeResponse` JSON the browser feeds into
 /// `navigator.credentials.get({ publicKey: ... })`.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 pub struct PasskeyAuthStartOutcome {
+    pub ceremony_id: String,
     pub account_id: String,
     pub handle: String,
     pub challenge: serde_json::Value,
@@ -85,9 +99,46 @@ pub struct PasskeyAuthStartOutcome {
 
 /// Outcome of `passkey/auth/finish`: the credential id that satisfied the
 /// assertion.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 pub struct PasskeyAuthFinishOutcome {
+    pub status: String,
     pub account_id: String,
-    pub credential_id_b64: String,
+    pub passkey_id: String,
+}
+
+/// User-facing credential metadata. Credential public keys and full credential
+/// ids are deliberately not exposed.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct PasskeySummary {
+    pub id: String,
+    #[serde(default)]
+    pub label: Option<String>,
+    pub backup_eligible: bool,
+    pub backup_state: bool,
+    pub user_verified: bool,
+    pub created_at: String,
+    #[serde(default)]
+    pub last_used_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct PasskeyListOutcome {
+    pub passkeys: Vec<PasskeySummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct PasskeyRenameRequestBody {
+    #[serde(default)]
+    pub label: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct PasskeyMutationOutcome {
+    pub status: String,
+    pub id: String,
 }

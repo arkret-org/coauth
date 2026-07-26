@@ -108,6 +108,7 @@ struct AuthenticationLookup {
     created_at: DateTime<Utc>,
     user_password_id: Option<Uuid>,
     upstream_oauth_authorization_session_id: Option<Uuid>,
+    webauthn_credential_id: Option<Uuid>,
 }
 
 impl TryFrom<AuthenticationLookup> for Authentication {
@@ -120,12 +121,18 @@ impl TryFrom<AuthenticationLookup> for Authentication {
             value
                 .upstream_oauth_authorization_session_id
                 .map(Into::into),
+            value.webauthn_credential_id.map(Into::into),
         ) {
-            (Some(user_password_id), None) => AuthenticationMethod::Password { user_password_id },
-            (None, Some(upstream_oauth_session_id)) => AuthenticationMethod::UpstreamOAuth {
+            (Some(user_password_id), None, None) => {
+                AuthenticationMethod::Password { user_password_id }
+            }
+            (None, Some(upstream_oauth_session_id), None) => AuthenticationMethod::UpstreamOAuth {
                 upstream_oauth_session_id,
             },
-            (None, None) => AuthenticationMethod::Unknown,
+            (None, None, Some(webauthn_credential_id)) => AuthenticationMethod::Passkey {
+                webauthn_credential_id,
+            },
+            (None, None, None) => AuthenticationMethod::Unknown,
             _ => {
                 return Err(DatabaseInconsistencyError::on("user_session_authentications").row(id));
             }
@@ -167,6 +174,15 @@ struct NewSessionAuthenticationUpstream {
     user_session_id: Uuid,
     created_at: DateTime<Utc>,
     upstream_oauth_authorization_session_id: Option<Uuid>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = user_session_authentications)]
+struct NewSessionAuthenticationPasskey {
+    id: Uuid,
+    user_session_id: Uuid,
+    webauthn_credential_id: Option<Uuid>,
+    created_at: DateTime<Utc>,
 }
 
 /// Result row for cleanup/batch queries using raw SQL
@@ -542,6 +558,51 @@ impl BrowserSessionRepository for PgBrowserSessionRepository<'_> {
             created_at,
             authentication_method: AuthenticationMethod::UpstreamOAuth {
                 upstream_oauth_session_id: upstream_oauth_session.id,
+            },
+        })
+    }
+
+    #[tracing::instrument(
+        name = "db.browser_session.authenticate_with_passkey",
+        skip_all,
+        fields(
+            %user_session.id,
+            %webauthn_credential_id,
+            user_session_authentication.id,
+        ),
+        err,
+    )]
+    async fn authenticate_with_passkey(
+        &mut self,
+        rng: &mut (dyn RngCore + Send),
+        clock: &dyn Clock,
+        user_session: &BrowserSession,
+        webauthn_credential_id: Ulid,
+    ) -> Result<Authentication, Self::Error> {
+        let created_at = clock.now();
+        let id = new_id(created_at, rng);
+        tracing::Span::current().record(
+            "user_session_authentication.id",
+            tracing::field::display(id),
+        );
+
+        let new_auth = NewSessionAuthenticationPasskey {
+            id: Uuid::from(id),
+            user_session_id: Uuid::from(user_session.id),
+            webauthn_credential_id: Some(Uuid::from(webauthn_credential_id)),
+            created_at,
+        };
+
+        diesel::insert_into(user_session_authentications::table)
+            .values(&new_auth)
+            .execute(self.conn)
+            .await?;
+
+        Ok(Authentication {
+            id,
+            created_at,
+            authentication_method: AuthenticationMethod::Passkey {
+                webauthn_credential_id,
             },
         })
     }

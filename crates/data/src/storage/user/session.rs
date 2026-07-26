@@ -272,6 +272,15 @@ pub trait BrowserSessionRepository: Send + Sync {
         upstream_oauth_session: &UpstreamOAuthAuthorizationSession,
     ) -> Result<Authentication, Self::Error>;
 
+    /// Authenticate a browser session with a verified WebAuthn credential.
+    async fn authenticate_with_passkey(
+        &mut self,
+        rng: &mut (dyn RngCore + Send),
+        clock: &dyn Clock,
+        user_session: &BrowserSession,
+        webauthn_credential_id: Ulid,
+    ) -> Result<Authentication, Self::Error>;
+
     /// Get the last successful authentication for a [`BrowserSession`]
     ///
     /// # Params
@@ -392,6 +401,14 @@ repository_impl!(BrowserSessionRepository:
         clock: &dyn Clock,
         user_session: &BrowserSession,
         upstream_oauth_session: &UpstreamOAuthAuthorizationSession,
+    ) -> Result<Authentication, Self::Error>;
+
+    async fn authenticate_with_passkey(
+        &mut self,
+        rng: &mut (dyn RngCore + Send),
+        clock: &dyn Clock,
+        user_session: &BrowserSession,
+        webauthn_credential_id: Ulid,
     ) -> Result<Authentication, Self::Error>;
 
     async fn get_last_authentication(
