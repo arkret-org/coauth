@@ -304,10 +304,12 @@ pub(crate) async fn require_session_grant_caller(
     // authz only — never `Admin` — so it cannot revoke session grants. The
     // matching server's audience is the only one this caller may read.
     let arkret_config = depot.arkret_config()?;
-    if let Some(audience) =
-        principal_server_static_session_grant_bearer_audience(&arkret_config, token)
-    {
-        return Ok(SessionGrantCaller::principal_server(vec![audience]));
+    let static_bearer_audiences =
+        principal_server_static_session_grant_bearer_audiences(&arkret_config, token);
+    if !static_bearer_audiences.is_empty() {
+        return Ok(SessionGrantCaller::principal_server(
+            static_bearer_audiences,
+        ));
     }
 
     let now = crate::handlers::make_clock().now();
@@ -417,31 +419,33 @@ pub(crate) fn principal_server_static_session_grant_bearer_matches(
     arkret_config: &ArkretConfig,
     token: &str,
 ) -> bool {
-    principal_server_static_session_grant_bearer_audience(arkret_config, token).is_some()
+    !principal_server_static_session_grant_bearer_audiences(arkret_config, token).is_empty()
 }
 
-/// Returns the audience of the principal server whose static
-/// `session_grant_introspection_bearer` matches `token`, or `None` when no
-/// configured static bearer matches. The audience scopes what a static-bearer
-/// Principal Server caller is allowed to read (SEC-SG-ENUM).
-fn principal_server_static_session_grant_bearer_audience(
+/// Returns every Principal Server audience whose static
+/// `session_grant_introspection_bearer` matches `token`. Operators may
+/// deliberately share one deployment credential across a cluster; in that
+/// case the credential is authorized for exactly the matching configured
+/// audiences rather than whichever entry happens to appear first.
+fn principal_server_static_session_grant_bearer_audiences(
     arkret_config: &ArkretConfig,
     token: &str,
-) -> Option<String> {
+) -> Vec<String> {
     if token.trim().is_empty() {
-        return None;
+        return Vec::new();
     }
     arkret_config
         .principal_servers
         .iter()
-        .find(|server| {
+        .filter(|server| {
             server
                 .session_grant_introspection_bearer
                 .as_deref()
                 .is_some_and(|configured| crate::util::constant_time_token_eq(configured, token))
         })
-        .and_then(|server| effective_audience(server, resolved_principal_audiences::shared()))
+        .filter_map(|server| effective_audience(server, resolved_principal_audiences::shared()))
         .map(|audience| audience.to_string())
+        .collect()
 }
 
 impl Scribe for ArkretRouteError {

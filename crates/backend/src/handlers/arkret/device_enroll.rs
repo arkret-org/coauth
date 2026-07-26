@@ -33,7 +33,7 @@ use arkret_models_identity::{
     DeviceEnrollmentAuthorityBindingKind, SignedSessionGrantClaims,
 };
 use arkret_signatures::{SignEventOptions, sign_event};
-use arkret_wire::{Audience, Event, EventRequirements, NonEmptyString};
+use arkret_wire::{Event, EventRequirements, NonEmptyString};
 use chrono::{DateTime, Utc};
 use coauth_data::user::PrincipalDidRepository as _;
 use salvo::prelude::*;
@@ -170,40 +170,37 @@ fn device_enroll_prev_refs(bootstrap_create_event_id: EventId) -> Vec<EventId> {
     vec![bootstrap_create_event_id]
 }
 
-/// Single configured principal-server audience, or an error when the
-/// deployment has zero / multiple (the request body carries no audience, so
-/// disambiguation is impossible — fail closed).
-fn sole_principal_audience(
+/// Resolve the configured Principal Server selected by the authenticated
+/// session grant. The grant audience is already holder-bound and persisted by
+/// coauth, so it is the authoritative discriminator in multi-server
+/// deployments; the enrollment request body does not need a second audience
+/// field.
+fn principal_audience_for_grant(
     arkret_config: &coauth_config::ArkretConfig,
     resolved: &ResolvedPrincipalAudiences,
+    grant_audience: &str,
 ) -> Result<String, ArkretRouteError> {
-    match arkret_config.principal_servers.as_slice() {
-        // Fail closed when the sole server omits `audience` and its describe
-        // probe has not yet landed, rather than enrolling against an unknown
-        // principal-server audience.
-        // This is deliberate fail-closed behavior; see
-        // `services::resolved_principal_audiences`. Do not substitute an
-        // unverified default audience.
-        [server] => effective_audience(server, resolved)
-            .map(|audience| audience.to_string())
-            .ok_or_else(|| {
-                ArkretRouteError::coded(
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
-                    "principal server audience is not yet resolved from /_arkret/describe",
-                )
-            }),
-        [] => Err(ArkretRouteError::coded(
+    if arkret_config.principal_servers.is_empty() {
+        return Err(ArkretRouteError::coded(
             StatusCode::SERVICE_UNAVAILABLE,
             arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
             "no principal server is configured for device enrollment",
-        )),
-        _ => Err(ArkretRouteError::coded(
-            StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::INVALID_PARAM,
-            "multiple principal servers configured; device-enroll cannot pick one",
-        )),
+        ));
     }
+
+    arkret_config
+        .principal_servers
+        .iter()
+        .filter_map(|server| effective_audience(server, resolved))
+        .find(|audience| audience.as_str() == grant_audience)
+        .map(|audience| audience.to_string())
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::BAD_REQUEST,
+                arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
+                "session grant audience is not a configured principal server",
+            )
+        })
 }
 
 /// `POST /_arkret/gate/account/device-enroll`
@@ -355,14 +352,11 @@ pub async fn device_enroll_endpoint(
     // 3. The principal DID is the grant subject. Bind the event proof to the configured principal
     //    server and require the grant to target it.
     let principal_id = grant_payload.subject.clone();
-    let audience = sole_principal_audience(&arkret_config, resolved_principal_audiences::shared())?;
-    if grant_payload.audience != audience {
-        return Err(ArkretRouteError::coded(
-            StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
-            "session grant was not issued for this principal server",
-        ));
-    }
+    let audience = principal_audience_for_grant(
+        &arkret_config,
+        resolved_principal_audiences::shared(),
+        &grant_payload.audience,
+    )?;
 
     // 3. This session's device id (client-supplied; soland projects the device_public_key under it,
     //    matching the id the session/recovery uses). Already a typed `DeviceId` (validated on
@@ -476,18 +470,16 @@ pub async fn device_enroll_endpoint(
     enforce_service_attested_device_authorize_provenance(&event, &payload)?;
 
     // 5. Sign the proof with the persistent enrollment key; the VM maps to `executed_by`
-    //    (device-lifecycle §5.4). Bind the proof to the target principal server
-    //    (`domain`/`audience` = its service DID) so the submitting client's domain-binding check
-    //    passes and the binding is audience-scoped.
+    //    (device-lifecycle §5.4). The authorization is a portable identity fact, so its proof omits
+    //    service-specific domain/audience. The authenticated enrollment request and the principal
+    //    binding still constrain issuance to `audience`; downstream federation independently
+    //    verifies the DID designation and this authority proof.
     let signer = authority.signer();
     sign_event(
         &mut event,
         &signer,
         authority.verification_method(),
-        SignEventOptions::new()
-            .with_created_at(now)
-            .with_domain(audience.clone())
-            .with_audience(Audience::Single(audience.clone())),
+        SignEventOptions::new().with_created_at(now),
     )
     .map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
@@ -528,6 +520,15 @@ pub async fn device_enroll_endpoint(
 mod tests {
     use super::*;
 
+    fn principal_server(name: &str, endpoint: &str) -> coauth_config::PrincipalServerConfig {
+        coauth_config::PrincipalServerConfig {
+            name: name.to_owned(),
+            endpoint: url::Url::parse(endpoint).expect("valid endpoint"),
+            session_grant_introspection_bearer: Some("test-introspection".to_owned()),
+            embedded_webvh_registration_bearer: Some("test-registration".to_owned()),
+        }
+    }
+
     fn event_id(value: &str) -> EventId {
         EventId::new(value).expect("valid event id")
     }
@@ -553,5 +554,32 @@ mod tests {
         let raw = [0x5a_u8; 32];
         let encoded = ed25519_pubkey_to_did_key_multibase(&raw);
         assert_eq!(decode_device_public_key(&encoded).unwrap(), raw);
+    }
+
+    #[test]
+    fn grant_audience_selects_the_matching_principal_server() {
+        let alpha = principal_server("alpha", "https://alpha.example/");
+        let beta = principal_server("beta", "https://beta.example/");
+        let mut config = coauth_config::ArkretConfig::default();
+        config.principal_servers = vec![alpha.clone(), beta.clone()];
+        let resolved = ResolvedPrincipalAudiences::new();
+        resolved.insert_for_test(&alpha.endpoint, "did:web:alpha.example");
+        resolved.insert_for_test(&beta.endpoint, "did:web:beta.example");
+
+        assert_eq!(
+            principal_audience_for_grant(&config, &resolved, "did:web:beta.example").unwrap(),
+            "did:web:beta.example"
+        );
+    }
+
+    #[test]
+    fn unknown_grant_audience_fails_closed() {
+        let alpha = principal_server("alpha", "https://alpha.example/");
+        let mut config = coauth_config::ArkretConfig::default();
+        config.principal_servers = vec![alpha.clone()];
+        let resolved = ResolvedPrincipalAudiences::new();
+        resolved.insert_for_test(&alpha.endpoint, "did:web:alpha.example");
+
+        assert!(principal_audience_for_grant(&config, &resolved, "did:web:other.example").is_err());
     }
 }

@@ -483,6 +483,29 @@ fn principal_server_static_session_grant_bearer_matches_exact_token() {
 }
 
 #[test]
+fn shared_static_bearer_is_scoped_to_every_matching_server() {
+    let mut config = config_with_static_session_grant_bearer("shared-cluster-token");
+    config.principal_servers.push(PrincipalServerConfig {
+        name: "soland-beta".to_owned(),
+        endpoint: "https://session-grant-static-beta.test/".parse().unwrap(),
+        session_grant_introspection_bearer: Some("shared-cluster-token".to_owned()),
+        embedded_webvh_registration_bearer: None,
+    });
+    crate::services::resolved_principal_audiences::shared().insert_for_test(
+        &config.principal_servers[1].endpoint,
+        "did:web:session-grant-static-beta.test",
+    );
+
+    assert_eq!(
+        principal_server_static_session_grant_bearer_audiences(&config, "shared-cluster-token"),
+        vec![
+            "did:web:session-grant-static.test".to_owned(),
+            "did:web:session-grant-static-beta.test".to_owned(),
+        ]
+    );
+}
+
+#[test]
 fn principal_server_static_session_grant_bearer_rejects_other_tokens() {
     let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
     assert!(!principal_server_static_session_grant_bearer_matches(
