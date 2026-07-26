@@ -88,9 +88,21 @@ pub fn SecurityCenter() -> Element {
                                 }
                             },
                             Some(Err(message)) => rsx! {
-                                div { class: "alert alert-critical", role: "alert", "{message}" }
+                                div {
+                                    class: "alert alert-critical",
+                                    role: "alert",
+                                    "aria-live": "assertive",
+                                    "{message}"
+                                }
                             },
-                            None => rsx! { p { class: "text-md text-secondary", "Loading passkeys…" } },
+                            None => rsx! {
+                                p {
+                                    class: "text-md text-secondary",
+                                    role: "status",
+                                    "aria-live": "polite",
+                                    "Loading passkeys…"
+                                }
+                            },
                         }
 
                         div { class: "form-field",

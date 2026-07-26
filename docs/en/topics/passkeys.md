@@ -53,9 +53,29 @@ browser-cookie substitution, purpose substitution, and expiry.
 The Passkey endpoints are same-origin account endpoints, not public
 credentialed-CORS endpoints. Ceremony binding uses an encrypted `HttpOnly`,
 `SameSite=Lax` cookie (`Secure` on HTTPS); mutations require JSON requests and
-an active or recent browser session as applicable. Keep Coauth's CSP enabled,
+an active or recent browser session as applicable. Coauth rejects browser
+requests whose `Origin` or `Sec-Fetch-Site` identifies a different origin.
+Start and finish are subject to the existing per-IP and per-account login
+limits, and each ceremony can be consumed only once. Keep Coauth's CSP enabled,
 do not add third-party scripts to login or Security Center pages, and do not
 configure a wildcard credentialed CORS policy in front of these routes.
+
+Before enabling Passkeys in production, verify all of the following:
+
+- the browser-facing URL uses HTTPS (only literal `localhost` development may
+  use HTTP), remains stable, and exactly matches `http.public_base`;
+- the public hostname is the intended RP ID and is not an IP literal;
+- the reverse proxy preserves the configured external scheme and host, accepts
+  Passkey account routes only from the same browser origin, and does not replace
+  Coauth's CSP or cookie attributes with weaker values;
+- every replica uses the same public URL, cookie secrets, configuration, and
+  PostgreSQL database, while health probes verify each listener separately;
+- a real registration and login are exercised through the production proxy
+  before password/OIDC fallback is restricted.
+
+Invalid public URL/RP configuration fails closed by disabling the advertised
+Passkey capability. Origin substitution, browser-binding substitution, expiry,
+purpose mismatch, and replay fail at the request or ceremony boundary.
 
 ## Threat model and controls
 

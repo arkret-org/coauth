@@ -9,14 +9,51 @@ use coauth_account_types::passkey::{PasskeyAuthStartOutcome, PasskeyRegisterStar
 
 #[cfg(target_arch = "wasm32")]
 fn js_error(value: wasm_bindgen::JsValue) -> String {
-    value
-        .as_string()
-        .or_else(|| {
-            js_sys::Reflect::get(&value, &"name".into())
-                .ok()?
-                .as_string()
-        })
-        .unwrap_or_else(|| "The authenticator request could not be completed.".to_owned())
+    let raw = value.as_string();
+    let name = js_sys::Reflect::get(&value, &"name".into())
+        .ok()
+        .and_then(|value| value.as_string());
+    name.as_deref()
+        .or(raw.as_deref())
+        .map(authenticator_error_message)
+        .unwrap_or_else(|| authenticator_error_message(""))
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+fn authenticator_error_message(name: &str) -> String {
+    match name {
+        "NotAllowedError" | "AbortError" => {
+            "The passkey request was cancelled or timed out. Please try again.".to_owned()
+        }
+        "InvalidStateError" => "This passkey is already registered for this account.".to_owned(),
+        "NotSupportedError" => {
+            "This browser or authenticator does not support the requested passkey operation."
+                .to_owned()
+        }
+        "SecurityError" => {
+            "Passkeys require HTTPS (or localhost) and a matching site origin.".to_owned()
+        }
+        _ => "The authenticator request could not be completed. Please try again.".to_owned(),
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn ensure_webauthn_available() -> Result<web_sys::Window, String> {
+    let window =
+        web_sys::window().ok_or_else(|| "Passkeys require a browser window.".to_owned())?;
+    let secure_context = js_sys::Reflect::get(&window, &"isSecureContext".into())
+        .ok()
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    if !secure_context {
+        return Err("Passkeys require HTTPS (or localhost).".to_owned());
+    }
+    let public_key_credential =
+        js_sys::Reflect::get(&window, &"PublicKeyCredential".into()).unwrap_or_default();
+    if public_key_credential.is_null() || public_key_credential.is_undefined() {
+        return Err("This browser does not support passkeys.".to_owned());
+    }
+    Ok(window)
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -47,6 +84,7 @@ pub async fn authenticate(handle: String) -> Result<PasskeyAuthFinishOutcome, St
     use wasm_bindgen_futures::JsFuture;
     use webauthn_rs_proto::{PublicKeyCredential, RequestChallengeResponse};
 
+    let window = ensure_webauthn_available()?;
     let start = crate::api::api_post::<PasskeyAuthStartOutcome>(
         "/account/auth/passkey/auth/start",
         serde_json::json!({ "handle": handle }),
@@ -55,8 +93,7 @@ pub async fn authenticate(handle: String) -> Result<PasskeyAuthFinishOutcome, St
     let challenge: RequestChallengeResponse = serde_json::from_value(start.challenge)
         .map_err(|error| format!("Invalid WebAuthn challenge: {error}"))?;
     let options: web_sys::CredentialRequestOptions = challenge.into();
-    let credential = web_sys::window()
-        .ok_or_else(|| "WebAuthn requires a browser window.".to_owned())?
+    let credential = window
         .navigator()
         .credentials()
         .get_with_options(&options)
@@ -93,6 +130,7 @@ pub async fn register(
     use wasm_bindgen_futures::JsFuture;
     use webauthn_rs_proto::{CreationChallengeResponse, RegisterPublicKeyCredential};
 
+    let window = ensure_webauthn_available()?;
     let start = crate::api::api_post::<PasskeyRegisterStartOutcome>(
         "/account/auth/passkey/register/start",
         serde_json::json!({ "display_name": display_name }),
@@ -101,8 +139,7 @@ pub async fn register(
     let challenge: CreationChallengeResponse = serde_json::from_value(start.challenge)
         .map_err(|error| format!("Invalid WebAuthn challenge: {error}"))?;
     let options: web_sys::CredentialCreationOptions = challenge.into();
-    let credential = web_sys::window()
-        .ok_or_else(|| "WebAuthn requires a browser window.".to_owned())?
+    let credential = window
         .navigator()
         .credentials()
         .create_with_options(&options)
@@ -135,4 +172,18 @@ pub async fn register(
     _label: Option<String>,
 ) -> Result<PasskeyRegisterFinishOutcome, String> {
     Err("Passkeys are only available in a secure browser context.".to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::authenticator_error_message;
+
+    #[test]
+    fn authenticator_errors_are_actionable_without_exposing_browser_details() {
+        assert!(authenticator_error_message("NotAllowedError").contains("cancelled or timed out"));
+        assert!(authenticator_error_message("InvalidStateError").contains("already registered"));
+        assert!(authenticator_error_message("NotSupportedError").contains("does not support"));
+        assert!(authenticator_error_message("SecurityError").contains("HTTPS"));
+        assert!(!authenticator_error_message("UnknownError").contains("UnknownError"));
+    }
 }

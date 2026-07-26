@@ -570,4 +570,17 @@ mod tests {
             "10.0.0.0/8 default must include addresses outside the former /10"
         );
     }
+
+    #[test]
+    fn default_html_csp_keeps_authentication_pages_same_origin() {
+        let csp = HttpConfig::default().csp_html.unwrap();
+
+        assert!(csp.contains("script-src 'self'"));
+        assert!(csp.contains("connect-src 'self'"));
+        assert!(csp.contains("frame-ancestors 'none'"));
+        assert!(csp.contains("form-action 'self'"));
+        assert!(csp.contains("object-src 'none'"));
+        assert!(!csp.contains("script-src *"));
+        assert!(!csp.contains("connect-src *"));
+    }
 }

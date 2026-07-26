@@ -471,11 +471,6 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                                     }
                                                 }
                                                 Err(message) => {
-                                                    let message = if message == "NotAllowedError" {
-                                                        "Passkey sign-in was cancelled or no matching authenticator was available.".to_owned()
-                                                    } else {
-                                                        message
-                                                    };
                                                     error.set(Some(message));
                                                 }
                                             }

@@ -361,3 +361,50 @@ impl<'ex> Extractible<'ex> for CookieJar {
         Self::extract_from_request(req, depot)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encrypted_cookies_use_the_browser_security_baseline() {
+        let manager = CookieManager::derive_from(
+            Url::parse("https://auth.example.com/coauth/").unwrap(),
+            b"cookie-attribute-test-key-at-least-32-bytes",
+        );
+        let jar = manager.cookie_jar().save(
+            "passkey-binding",
+            &"opaque",
+            CookieExpiration::MaxAge(Duration::minutes(10)),
+        );
+        let cookie = jar.pending_cookies().first().unwrap();
+
+        assert_eq!(cookie.http_only(), Some(true));
+        assert_eq!(cookie.secure(), Some(true));
+        assert_eq!(cookie.same_site(), Some(SameSite::Lax));
+        assert_eq!(cookie.path(), Some("/coauth/"));
+        assert_eq!(
+            cookie.max_age(),
+            Some(time::Duration::seconds(Duration::minutes(10).num_seconds()))
+        );
+    }
+
+    #[test]
+    fn localhost_http_cookie_is_not_mislabeled_secure() {
+        let manager = CookieManager::derive_from(
+            Url::parse("http://localhost:8080/").unwrap(),
+            b"cookie-attribute-test-key-at-least-32-bytes",
+        );
+        let jar =
+            manager
+                .cookie_jar()
+                .save("passkey-binding", &"opaque", CookieExpiration::Session);
+        let cookie = jar.pending_cookies().first().unwrap();
+
+        assert_eq!(cookie.http_only(), Some(true));
+        assert_eq!(cookie.secure(), Some(false));
+        assert_eq!(cookie.same_site(), Some(SameSite::Lax));
+        assert_eq!(cookie.path(), Some("/"));
+        assert_eq!(cookie.max_age(), None);
+    }
+}

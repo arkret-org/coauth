@@ -36,8 +36,24 @@ start/finish 可落到不同副本，也支持多标签页与进程重启；重�
 Passkey 路由是同源账号接口，不是开放 credentialed CORS 的公共接口。
 ceremony 使用加密的 `HttpOnly`、`SameSite=Lax` cookie 绑定浏览器（HTTPS 下
 同时设置 `Secure`）；变更请求使用 JSON，并按操作要求校验有效或 recent
-browser session。应保持 Coauth CSP，不在登录页和安全中心加载第三方脚本，
-也不得在反向代理上为这些路由配置带凭据的通配 CORS。
+browser session。Coauth 会拒绝 `Origin` 或 `Sec-Fetch-Site` 表明请求来自
+不同源的浏览器请求。start/finish 复用现有按 IP 和账号的登录限流，每个
+ceremony 只能消费一次。应保持 Coauth CSP，不在登录页和安全中心加载第三方
+脚本，也不得在反向代理上为这些路由配置带凭据的通配 CORS。
+
+生产启用 Passkey 前必须逐项确认：
+
+- 浏览器可见 URL 使用 HTTPS（仅字面量 `localhost` 开发环境可使用 HTTP）、
+  保持稳定，并与 `http.public_base` 完全一致；
+- 公开主机名就是预期 RP ID，且不是 IP 字面量；
+- 反向代理保持配置的外部 scheme/host，只允许同源浏览器访问 Passkey 账号
+  路由，并且不以更弱的值覆盖 Coauth CSP 或 cookie 属性；
+- 所有副本使用相同公开 URL、cookie secret、配置和 PostgreSQL 数据库，同时
+  对各监听器分别执行健康检查；
+- 在限制密码/OIDC 回退前，先通过生产反向代理完成一次真实注册与登录。
+
+公开 URL/RP 配置无效时，服务通过不发布 Passkey capability 失败关闭；
+Origin、浏览器绑定、用途置换、过期与重放则在请求或 ceremony 边界失败。
 
 ## 威胁模型与控制
 

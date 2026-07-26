@@ -560,8 +560,10 @@ mod tests {
     fn grant_audience_selects_the_matching_principal_server() {
         let alpha = principal_server("alpha", "https://alpha.example/");
         let beta = principal_server("beta", "https://beta.example/");
-        let mut config = coauth_config::ArkretConfig::default();
-        config.principal_servers = vec![alpha.clone(), beta.clone()];
+        let config = coauth_config::ArkretConfig {
+            principal_servers: vec![alpha.clone(), beta.clone()],
+            ..Default::default()
+        };
         let resolved = ResolvedPrincipalAudiences::new();
         resolved.insert_for_test(&alpha.endpoint, "did:web:alpha.example");
         resolved.insert_for_test(&beta.endpoint, "did:web:beta.example");
@@ -575,8 +577,10 @@ mod tests {
     #[test]
     fn unknown_grant_audience_fails_closed() {
         let alpha = principal_server("alpha", "https://alpha.example/");
-        let mut config = coauth_config::ArkretConfig::default();
-        config.principal_servers = vec![alpha.clone()];
+        let config = coauth_config::ArkretConfig {
+            principal_servers: vec![alpha.clone()],
+            ..Default::default()
+        };
         let resolved = ResolvedPrincipalAudiences::new();
         resolved.insert_for_test(&alpha.endpoint, "did:web:alpha.example");
 

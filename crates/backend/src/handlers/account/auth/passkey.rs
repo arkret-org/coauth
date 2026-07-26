@@ -166,6 +166,54 @@ fn parse_credential_path(req: &Request) -> Result<Ulid, AppError> {
         .ok_or_else(|| AppError::bad_request("invalid passkey id"))
 }
 
+fn passkey_request_is_same_origin(
+    public_base: &url::Url,
+    origin: Option<&str>,
+    fetch_site: Option<&str>,
+) -> bool {
+    if fetch_site.is_some_and(|value| {
+        !value.eq_ignore_ascii_case("same-origin") && !value.eq_ignore_ascii_case("none")
+    }) {
+        return false;
+    }
+
+    origin.is_none_or(|value| {
+        url::Url::parse(value).is_ok_and(|candidate| candidate.origin() == public_base.origin())
+    })
+}
+
+fn enforce_passkey_same_origin(req: &Request, depot: &Depot) -> Result<(), AppError> {
+    let origin = req
+        .headers()
+        .get(http::header::ORIGIN)
+        .and_then(|value| value.to_str().ok());
+    let fetch_site = req
+        .headers()
+        .get("sec-fetch-site")
+        .and_then(|value| value.to_str().ok());
+    let public_base = depot.url_builder().map_err(AppError::from)?.http_base();
+    if !passkey_request_is_same_origin(&public_base, origin, fetch_site) {
+        return Err(AppError::forbidden("passkey_same_origin_required"));
+    }
+    Ok(())
+}
+
+async fn enforce_passkey_rate_limit(
+    req: &Request,
+    depot: &Depot,
+    user: &User,
+) -> Result<(), AppError> {
+    let requester = extract_bound_activity_tracker(req, depot)
+        .ip()
+        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
+    depot
+        .limiter()
+        .map_err(AppError::from)?
+        .check_password(requester, user)
+        .await
+        .map_err(|_| AppError::too_many_requests("rate_limited"))
+}
+
 fn load_browser_binding(req: &Request, depot: &Depot) -> Result<Option<String>, AppError> {
     let binding = depot
         .cookie_jar(req)
@@ -209,6 +257,7 @@ pub async fn register_start(
     req: &mut Request,
     depot: &Depot,
 ) -> JsonResult<PasskeyRegisterStartOutcome> {
+    enforce_passkey_same_origin(req, depot)?;
     let body: PasskeyRegisterStartRequestBody = req
         .parse_json()
         .await
@@ -216,6 +265,7 @@ pub async fn register_start(
     let clock = make_clock();
     let now = clock.now();
     let (repo, session) = recently_authenticated_session(req, depot, now).await?;
+    enforce_passkey_rate_limit(req, depot, &session.user).await?;
     let display_name = trimmed(body.display_name.as_ref())
         .or(session.user.display_name.as_deref())
         .unwrap_or(&session.user.localpart);
@@ -248,6 +298,7 @@ pub async fn register_finish(
     req: &mut Request,
     depot: &Depot,
 ) -> JsonResult<PasskeyRegisterFinishOutcome> {
+    enforce_passkey_same_origin(req, depot)?;
     let body: PasskeyRegisterFinishRequestBody = req
         .parse_json()
         .await
@@ -257,6 +308,7 @@ pub async fn register_finish(
     let clock = make_clock();
     let now = clock.now();
     let (mut repo, session) = recently_authenticated_session(req, depot, now).await?;
+    enforce_passkey_rate_limit(req, depot, &session.user).await?;
 
     let record = depot
         .webauthn_service()
@@ -301,6 +353,7 @@ pub async fn auth_start(
     depot: &Depot,
     res: &mut Response,
 ) -> Result<(), AppError> {
+    enforce_passkey_same_origin(req, depot)?;
     let body: PasskeyAccountHint = req
         .parse_json()
         .await
@@ -309,15 +362,7 @@ pub async fn auth_start(
     if !user.is_valid() {
         return Err(AppError::bad_request("passkey_unavailable"));
     }
-    let requester = extract_bound_activity_tracker(req, depot)
-        .ip()
-        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
-    depot
-        .limiter()
-        .map_err(AppError::from)?
-        .check_password(requester, &user)
-        .await
-        .map_err(|_| AppError::too_many_requests("rate_limited"))?;
+    enforce_passkey_rate_limit(req, depot, &user).await?;
 
     let clock = make_clock();
     let now = clock.now();
@@ -357,6 +402,7 @@ pub async fn auth_finish(
     depot: &Depot,
     res: &mut Response,
 ) -> Result<(), AppError> {
+    enforce_passkey_same_origin(req, depot)?;
     let body: PasskeyAuthFinishRequestBody = req
         .parse_json()
         .await
@@ -385,15 +431,7 @@ pub async fn auth_finish(
         .await?
         .filter(User::is_valid)
         .ok_or_else(|| AppError::unauthorized("account unavailable"))?;
-    let requester = extract_bound_activity_tracker(req, depot)
-        .ip()
-        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
-    depot
-        .limiter()
-        .map_err(AppError::from)?
-        .check_password(requester, &user)
-        .await
-        .map_err(|_| AppError::too_many_requests("rate_limited"))?;
+    enforce_passkey_rate_limit(req, depot, &user).await?;
     let user_agent = req
         .headers()
         .get("user-agent")
@@ -507,11 +545,44 @@ mod tests {
             now
         ));
     }
+
+    #[test]
+    fn passkey_origin_policy_accepts_only_same_origin_browser_requests() {
+        let public_base = url::Url::parse("https://auth.example.com/coauth/").unwrap();
+
+        assert!(passkey_request_is_same_origin(
+            &public_base,
+            Some("https://auth.example.com"),
+            Some("same-origin"),
+        ));
+        assert!(passkey_request_is_same_origin(&public_base, None, None));
+        assert!(passkey_request_is_same_origin(
+            &public_base,
+            None,
+            Some("none"),
+        ));
+        assert!(!passkey_request_is_same_origin(
+            &public_base,
+            Some("https://evil.example"),
+            Some("cross-site"),
+        ));
+        assert!(!passkey_request_is_same_origin(
+            &public_base,
+            Some("https://other.example.com"),
+            Some("same-site"),
+        ));
+        assert!(!passkey_request_is_same_origin(
+            &public_base,
+            Some("null"),
+            None,
+        ));
+    }
 }
 
 #[endpoint]
 #[tracing::instrument(name = "handler.account.auth.passkey.list", skip_all)]
 pub async fn list(req: &mut Request, depot: &Depot) -> JsonResult<PasskeyListOutcome> {
+    enforce_passkey_same_origin(req, depot)?;
     let (repo, session) = active_session(req, depot).await?;
     let records = depot
         .webauthn_service()
@@ -540,6 +611,7 @@ pub async fn list(req: &mut Request, depot: &Depot) -> JsonResult<PasskeyListOut
 #[endpoint]
 #[tracing::instrument(name = "handler.account.auth.passkey.rename", skip_all)]
 pub async fn rename(req: &mut Request, depot: &Depot) -> JsonResult<PasskeyMutationOutcome> {
+    enforce_passkey_same_origin(req, depot)?;
     let id = parse_credential_path(req)?;
     let body: PasskeyRenameRequestBody = req
         .parse_json()
@@ -577,6 +649,7 @@ pub async fn rename(req: &mut Request, depot: &Depot) -> JsonResult<PasskeyMutat
 #[endpoint]
 #[tracing::instrument(name = "handler.account.auth.passkey.revoke", skip_all)]
 pub async fn revoke(req: &mut Request, depot: &Depot) -> JsonResult<PasskeyMutationOutcome> {
+    enforce_passkey_same_origin(req, depot)?;
     let id = parse_credential_path(req)?;
     let _: serde_json::Value = req
         .parse_json()
