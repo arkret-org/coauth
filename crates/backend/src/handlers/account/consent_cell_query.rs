@@ -260,7 +260,7 @@ fn normalize_scope(scope: &str) -> String {
 /// lookup result and the requested `(peer_did, scope)` pair.
 ///
 /// `require_consent` mirrors the principal control Realm's
-/// `ak.realm.policy_components.preauth.require_consent` toggle. When `true`
+/// the `ak.realm.policy_bundle` payload path `preauth.require_consent` toggle. When `true`
 /// and the lookup result is `Unknown` or revoked/absent, the invite is
 /// rejected with `ConsentRequired`. When `false` the same condition routes
 /// to a holder-side quarantine (caller decides how to enact that).

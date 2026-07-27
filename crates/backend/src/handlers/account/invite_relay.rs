@@ -82,8 +82,8 @@ pub struct InviteRelayRequestBody {
     /// (`peer=...;scope=<scope>` or `peer=...;scope=any`).
     pub scope: String,
 
-    /// Mirror of the holder's `ak.realm.policy_components.preauth
-    /// .require_consent` policy bit. Defaults to `true` (fail closed).
+    /// Mirror of the holder's `ak.realm.policy_bundle` payload path
+    /// `preauth.require_consent` policy bit. Defaults to `true` (fail closed).
     #[serde(default = "default_require_consent")]
     pub require_consent: bool,
 
