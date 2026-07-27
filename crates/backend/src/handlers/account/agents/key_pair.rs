@@ -787,7 +787,7 @@ fn validate_authorize_event_supersedes(
         .iter()
         .map(|authorization| {
             (
-                authorization.key_id.clone(),
+                authorization.key_id.to_string(),
                 authorization.authorized_event_ref.to_string(),
             )
         })

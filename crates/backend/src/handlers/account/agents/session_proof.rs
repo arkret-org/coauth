@@ -499,7 +499,7 @@ fn validate_authoritative_agent_session_evidence(
         || key_state.controller_id.as_str() != authorization.accountable_principal_id
         || !key_state.active_authorizations.iter().any(|active| {
             active.authorized_event_ref.as_str() == authorization.authorized_event_id
-                && active.verification_method == authorization.verification_method
+                && active.verification_method.as_str() == authorization.verification_method
         })
     {
         return Err(AgentAuthRejection::ProofInvalid);
