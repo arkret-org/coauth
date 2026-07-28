@@ -135,6 +135,18 @@ CREATE TABLE public.dpop_jti_replay (
     created_at timestamp with time zone NOT NULL
 );
 
+CREATE TABLE public.recovery_device_authorizations (
+    ticket_id text NOT NULL,
+    transaction_id text NOT NULL,
+    transaction_request_digest text NOT NULL,
+    did_entry_ref text NOT NULL,
+    did_entry_digest text NOT NULL,
+    authorization_ref text NOT NULL,
+    canonical_request bytea NOT NULL,
+    outcome jsonb NOT NULL,
+    accepted_at timestamp with time zone NOT NULL
+);
+
 CREATE TABLE public.admin_operation_logs (
     id uuid NOT NULL,
     admin_user_id uuid NOT NULL,
@@ -1044,6 +1056,12 @@ ALTER TABLE ONLY public.agent_session_proof_replay
 
 ALTER TABLE ONLY public.dpop_jti_replay
     ADD CONSTRAINT dpop_jti_replay_pkey PRIMARY KEY (jti_digest);
+
+ALTER TABLE ONLY public.recovery_device_authorizations
+    ADD CONSTRAINT recovery_device_authorizations_pkey PRIMARY KEY (ticket_id);
+
+ALTER TABLE ONLY public.recovery_device_authorizations
+    ADD CONSTRAINT recovery_device_authorizations_transaction_key UNIQUE (transaction_id);
 
 ALTER TABLE ONLY public.admin_operation_logs
     ADD CONSTRAINT admin_operation_logs_pkey PRIMARY KEY (id);

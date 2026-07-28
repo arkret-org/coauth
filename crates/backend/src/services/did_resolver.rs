@@ -128,6 +128,68 @@ pub enum DidResolveError {
 /// Hard upper bound on the size of a fetched DID document. The value is
 /// shared with the SDK so all did:web consumers apply the same limit.
 pub const DID_DOCUMENT_MAX_BYTES: usize = arkret_models_identity::DID_WEB_MAX_DOCUMENT_BYTES;
+const DID_WEBVH_LOG_MAX_BYTES: usize = DID_DOCUMENT_MAX_BYTES * 32;
+
+/// Verify an unpublished principal WebVH entry against the independently
+/// fetched current history. This function never writes to the registry.
+pub async fn verify_unpublished_webvh_candidate(
+    http_client: &reqwest::Client,
+    did: &arkret_identifiers::Did,
+    expected_previous_version_id: &str,
+    candidate_entry_bytes: &[u8],
+    expected_candidate_version_id: &str,
+) -> Result<Value, DidResolveError> {
+    let log_url = Url::parse(
+        &arkret_identity::DidWebvhResolver::log_url(did)
+            .map_err(|error| DidResolveError::InvalidDid(error.to_string()))?,
+    )?;
+    enforce_resolver_url_policy(&log_url)?;
+    let pinned_resolution = enforce_resolver_dns_policy(&log_url).await?;
+    let pinned_http_client;
+    let request_client = if let Some((host, addrs)) = pinned_resolution.as_ref() {
+        pinned_http_client =
+            crate::outbound_http::reqwest_client_with_static_resolution(host, addrs);
+        &pinned_http_client
+    } else {
+        http_client
+    };
+    let response = request_client
+        .get(log_url)
+        .send_traced()
+        .await?
+        .error_for_status()?;
+    if response
+        .content_length()
+        .is_some_and(|length| length > DID_WEBVH_LOG_MAX_BYTES as u64)
+    {
+        return Err(DidResolveError::DocumentTooLarge {
+            limit: DID_WEBVH_LOG_MAX_BYTES,
+        });
+    }
+    let mut history = Vec::new();
+    let mut response = response;
+    while let Some(chunk) = response.chunk().await? {
+        if history.len().saturating_add(chunk.len()) > DID_WEBVH_LOG_MAX_BYTES {
+            return Err(DidResolveError::DocumentTooLarge {
+                limit: DID_WEBVH_LOG_MAX_BYTES,
+            });
+        }
+        history.extend_from_slice(&chunk);
+    }
+    arkret_identity::verify_did_webvh_v1_candidate_entry_bytes(
+        did,
+        &history,
+        expected_previous_version_id,
+        candidate_entry_bytes,
+        expected_candidate_version_id,
+    )
+    .map(|verified| verified.head_state)
+    .map_err(|error| {
+        DidResolveError::BadResolverResponse(format!(
+            "unpublished did:webvh recovery candidate failed verification: {error}"
+        ))
+    })
+}
 
 #[async_trait]
 pub trait DidResolverService: Send + Sync {

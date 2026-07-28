@@ -47,6 +47,8 @@ pub mod organization_control;
 pub mod personal;
 /// PostgreSQL queue repositories.
 pub mod queue;
+/// PostgreSQL recovery-authority ticket consumption repository.
+pub mod recovery_authority;
 /// Diesel schema definitions generated from the database
 pub mod schema;
 /// PostgreSQL upstream OAuth repositories.

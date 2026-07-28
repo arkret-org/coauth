@@ -136,6 +136,8 @@ pub mod personal;
 pub mod policy_data;
 /// Queue repositories.
 pub mod queue;
+/// Recovery authority ticket-consumption repositories.
+pub mod recovery_authority;
 /// Upstream OAuth repositories.
 pub mod upstream_oauth;
 /// User repositories.

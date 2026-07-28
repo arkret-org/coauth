@@ -22,6 +22,7 @@ use crate::organization_control::OrganizationControlRepository;
 use crate::personal::{PersonalAccessTokenRepository, PersonalSessionRepository};
 use crate::policy_data::PolicyDataRepository;
 use crate::queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository};
+use crate::storage::recovery_authority::RecoveryAuthorityRepository;
 use crate::upstream_oauth::{
     UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository, UpstreamOAuthSessionRepository,
 };
@@ -180,6 +181,11 @@ pub trait RepositoryAccess: Send {
 
     /// Get a [`DpopReplayRepository`].
     fn dpop_replay<'c>(&'c mut self) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c>;
+
+    /// Get a [`RecoveryAuthorityRepository`].
+    fn recovery_authority<'c>(
+        &'c mut self,
+    ) -> Box<dyn RecoveryAuthorityRepository<Error = Self::Error> + 'c>;
 
     /// Get an [`UpstreamOAuthLinkRepository`]
     fn upstream_oauth_link<'c>(
@@ -349,6 +355,7 @@ mod impls {
     use crate::policy_data::PolicyDataRepository;
     use crate::queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository};
     use crate::storage::notification_template::NotificationTemplateRepository;
+    use crate::storage::recovery_authority::RecoveryAuthorityRepository;
     use crate::upstream_oauth::{
         UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
         UpstreamOAuthSessionRepository,
@@ -460,6 +467,15 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(self.inner.dpop_replay(), &mut self.mapper))
+        }
+
+        fn recovery_authority<'c>(
+            &'c mut self,
+        ) -> Box<dyn RecoveryAuthorityRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(
+                self.inner.recovery_authority(),
+                &mut self.mapper,
+            ))
         }
 
         fn upstream_oauth_link<'c>(
@@ -737,6 +753,12 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c> {
             (**self).dpop_replay()
+        }
+
+        fn recovery_authority<'c>(
+            &'c mut self,
+        ) -> Box<dyn RecoveryAuthorityRepository<Error = Self::Error> + 'c> {
+            (**self).recovery_authority()
         }
 
         fn upstream_oauth_link<'c>(

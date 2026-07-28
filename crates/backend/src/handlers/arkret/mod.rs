@@ -4,6 +4,7 @@ mod device_enroll;
 mod did_document;
 mod handle_claim;
 mod identity;
+mod recovery_authority;
 mod service_describe;
 mod session_grant;
 
@@ -13,6 +14,7 @@ pub use device_enroll::*;
 pub use did_document::*;
 pub use handle_claim::*;
 pub use identity::*;
+pub use recovery_authority::*;
 pub use service_describe::*;
 pub use session_grant::*;
 

@@ -215,6 +215,11 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                 .options(oidc_preflight_handler)
                 .post(arkret::device_enroll_endpoint),
         )
+        .push(
+            Router::with_path("gate/account/recovery-device-authorizations")
+                .options(oidc_preflight_handler)
+                .post(arkret::authorize_recovery_device_endpoint),
+        )
         .push(Router::with_path("self/policy/check").post(policy_check::post_policy_check))
         .push(Router::with_path("{**rest}").goal(arkret_not_found));
 
@@ -497,7 +502,8 @@ fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
         | "/_arkret/gate/account/session-grants/revoke"
         | "/_arkret/gate/account/session-grants"
         | "/_arkret/gate/account/agent-key-pair"
-        | "/_arkret/gate/account/device-enroll" => Some("POST, OPTIONS"),
+        | "/_arkret/gate/account/device-enroll"
+        | "/_arkret/gate/account/recovery-device-authorizations" => Some("POST, OPTIONS"),
         _ => None,
     }
 }

@@ -145,6 +145,20 @@ diesel::table! {
 }
 
 diesel::table! {
+    recovery_device_authorizations (ticket_id) {
+        ticket_id -> Text,
+        transaction_id -> Text,
+        transaction_request_digest -> Text,
+        did_entry_ref -> Text,
+        did_entry_digest -> Text,
+        authorization_ref -> Text,
+        canonical_request -> Bytea,
+        outcome -> Jsonb,
+        accepted_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     circle_capability_grants (id) {
         id -> Uuid,
         subject -> Text,

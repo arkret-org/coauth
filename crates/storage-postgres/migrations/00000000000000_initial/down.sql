@@ -14,6 +14,7 @@ DROP TABLE IF EXISTS collaboration_capability_grants CASCADE;
 DROP TABLE IF EXISTS organization_delegations CASCADE;
 DROP TABLE IF EXISTS organization_principal_controls CASCADE;
 DROP TABLE IF EXISTS dpop_jti_replay CASCADE;
+DROP TABLE IF EXISTS recovery_device_authorizations CASCADE;
 DROP TABLE IF EXISTS handle_audit_log CASCADE;
 DROP TABLE IF EXISTS invite_quarantine_queue CASCADE;
 DROP TABLE IF EXISTS notification_deliveries CASCADE;

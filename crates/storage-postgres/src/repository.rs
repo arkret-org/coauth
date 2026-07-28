@@ -18,6 +18,7 @@ use coauth_data::organization_control::OrganizationControlRepository;
 use coauth_data::personal::PersonalSessionRepository;
 use coauth_data::policy_data::PolicyDataRepository;
 use coauth_data::queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository};
+use coauth_data::storage::recovery_authority::RecoveryAuthorityRepository;
 use coauth_data::upstream_oauth::{
     UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository, UpstreamOAuthSessionRepository,
 };
@@ -62,6 +63,7 @@ use crate::policy_data::PgPolicyDataRepository;
 use crate::queue::job::PgQueueJobRepository;
 use crate::queue::schedule::PgQueueScheduleRepository;
 use crate::queue::worker::PgQueueWorkerRepository;
+use crate::recovery_authority::PgRecoveryAuthorityRepository;
 use crate::telemetry::DB_CLIENT_CONNECTIONS_CREATE_TIME_HISTOGRAM;
 use crate::upstream_oauth::{
     PgUpstreamOAuthLinkRepository, PgUpstreamOAuthProviderRepository,
@@ -247,6 +249,12 @@ impl RepositoryAccess for PgRepository {
 
     fn dpop_replay<'c>(&'c mut self) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c> {
         Box::new(PgDpopReplayRepository::new(&mut self.conn))
+    }
+
+    fn recovery_authority<'c>(
+        &'c mut self,
+    ) -> Box<dyn RecoveryAuthorityRepository<Error = Self::Error> + 'c> {
+        Box::new(PgRecoveryAuthorityRepository::new(&mut self.conn))
     }
 
     fn upstream_oauth_link<'c>(

@@ -275,7 +275,7 @@ impl JtiReplayStore for RepositoryJtiStore {
     }
 }
 
-fn dpop_jti_digest(jti: &str) -> String {
+pub(crate) fn dpop_jti_digest(jti: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(jti.as_bytes());
     format!("sha256:{}", hex::encode(hasher.finalize()))
@@ -346,6 +346,24 @@ impl DpopVerifier {
         now: DateTime<Utc>,
         access_token: Option<&str>,
     ) -> Result<DpopVerification, DpopError> {
+        let verification = Self::verify_without_replay(dpop_header, htm, htu, now, access_token)?;
+        self.jti_store
+            .check_and_record(&verification.claims.jti, now, NONCE_TTL)
+            .await?;
+
+        Ok(verification)
+    }
+
+    /// Verify every cryptographic, target and freshness property without
+    /// consuming the proof JTI. Transactional protocols use this form so the
+    /// durable outcome and JTI replay row can be committed atomically.
+    pub fn verify_without_replay(
+        dpop_header: &str,
+        htm: &str,
+        htu: &str,
+        now: DateTime<Utc>,
+        access_token: Option<&str>,
+    ) -> Result<DpopVerification, DpopError> {
         let trimmed = dpop_header.trim();
         if trimmed.is_empty() {
             return Err(DpopError::Missing);
@@ -376,10 +394,6 @@ impl DpopVerifier {
         )
         .map_err(|error| DpopError::Malformed(error.to_string()))?;
 
-        self.jti_store
-            .check_and_record(&claims.jti, now, NONCE_TTL)
-            .await?;
-
         Ok(DpopVerification { jkt, claims, jwk })
     }
 
@@ -399,6 +413,15 @@ impl DpopVerifier {
                 actual: actual.to_owned(),
             })
         }
+    }
+}
+
+pub(crate) fn dpop_replay_record(jti: &str, now: DateTime<Utc>) -> NewDpopJtiReplay {
+    NewDpopJtiReplay {
+        jti_digest: dpop_jti_digest(jti),
+        seen_at: now,
+        expires_at: now
+            + Duration::from_std(NONCE_TTL).expect("NONCE_TTL fits in chrono::Duration"),
     }
 }
 

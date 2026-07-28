@@ -62,6 +62,8 @@ pub mod policy_data;
 pub mod post_auth_action;
 /// Queue models and repository ports.
 pub mod queue;
+/// Durable recovery-authority ticket consumption outcomes.
+pub mod recovery_authority;
 mod site_config;
 /// Storage repository abstractions and pagination helpers.
 pub mod storage;
@@ -166,6 +168,7 @@ pub use self::organization_control::{
 };
 pub use self::policy_data::{PolicyData, PolicyDataDocument};
 pub use self::post_auth_action::{AccountAction, PostAuthAction};
+pub use self::recovery_authority::{NewRecoveryDeviceAuthorization, RecoveryDeviceAuthorization};
 pub use self::site_config::{
     CaptchaConfig, CaptchaService, SessionExpirationConfig, SessionLimitConfig, SiteConfig,
 };

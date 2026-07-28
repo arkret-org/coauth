@@ -65,7 +65,7 @@ fn bearer_token_from_request(req: &Request) -> Result<String, ArkretRouteError> 
 }
 
 /// Decode `device_public_key` (multibase or base64) into the raw 32-byte key.
-fn decode_device_public_key(input: &str) -> Result<[u8; 32], ArkretRouteError> {
+pub(super) fn decode_device_public_key(input: &str) -> Result<[u8; 32], ArkretRouteError> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Err(ArkretRouteError::BadRequest(
@@ -110,7 +110,7 @@ fn decode_base64_any(input: &str) -> Option<Vec<u8>> {
 /// Truncate to whole seconds so the SDK serializes `created_at`/`not_before` in
 /// the canonical `YYYY-MM-DDTHH:MM:SSZ` form the principal server enforces
 /// (`validate_timestamp_canonical` rejects fractional seconds).
-fn truncate_to_seconds(when: DateTime<Utc>) -> DateTime<Utc> {
+pub(super) fn truncate_to_seconds(when: DateTime<Utc>) -> DateTime<Utc> {
     DateTime::from_timestamp(when.timestamp(), 0).unwrap_or(when)
 }
 
