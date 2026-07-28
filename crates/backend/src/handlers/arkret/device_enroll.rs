@@ -33,7 +33,7 @@ use arkret_models_identity::{
     DeviceEnrollmentAuthorityBindingKind, SignedSessionGrantClaims,
 };
 use arkret_signatures::{SignEventOptions, sign_event};
-use arkret_wire::{Event, EventRequirements, NonEmptyString};
+use arkret_wire::{Event, NonEmptyString, ScopeRef};
 use chrono::{DateTime, Utc};
 use coauth_data::user::PrincipalDidRepository as _;
 use salvo::prelude::*;
@@ -44,8 +44,6 @@ use crate::services::device_enrollment_authority::enrollment_authority;
 use crate::services::resolved_principal_audiences::{
     self, ResolvedPrincipalAudiences, effective_audience,
 };
-
-const DEVICE_AUTHORIZE_KIND: &str = "ak.device.authorize";
 
 /// Extract the `Authorization: Bearer <token>` value (the caller's
 /// `ak.session.grant`), or a 401.
@@ -419,53 +417,30 @@ pub async fn device_enroll_endpoint(
         recovery_session_id: None,
     };
 
-    let content = serde_json::to_value(&payload).map_err(|error| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "failed to serialize device-enroll payload: {error}"
-        )))
-    })?;
-    let content = serde_json::from_value(content).map_err(|error| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "device-enroll payload must serialize as an object: {error}"
-        )))
-    })?;
-
     let hlc = fresh_hlc(&authority, &realm_id, &device_id, now)?;
-    let mut event = Event {
-        event_id: EventId::new(arkret_identifiers::new_prefixed_uuid7("ak:event:")).map_err(
-            |error| {
-                ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
-                    format!("failed to mint event id: {error}"),
-                ))
-            },
-        )?,
-        kind: DEVICE_AUTHORIZE_KIND.into(),
-        realm_id,
-        actor_id: principal_id.clone(),
-        actor_seq: body.actor_seq,
-        created_at: now,
-        hlc: Some(hlc),
-        prev_refs,
-        effective_scope: None,
-        refs: Vec::new(),
-        causal_refs: Vec::new(),
-        preconditions: Vec::new(),
-        effects: Vec::new(),
-        seal_ref: None,
-        conflict_keys_digest: None,
-        auth_context: None,
-        seal_basis: None,
-        requirements: EventRequirements::default(),
-        redacts: None,
-        payload: content,
-        executed_by: Some(authority_did.clone()),
-        authorization_ref: Some(authorization_ref.clone()),
-        applet_id: None,
-        external_ref: None,
-        actor_kind: None,
-        unsigned: std::collections::BTreeMap::new(),
-        proofs: Vec::new(),
-    };
+    let mut event = Event::new_at(
+        "ak.device.authorize",
+        ScopeRef::Realm {
+            realm_id: realm_id.clone(),
+        },
+        principal_id.clone(),
+        body.actor_seq,
+        hlc,
+        serde_json::to_value(&payload).map_err(|error| {
+            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                "failed to serialize device-enroll payload: {error}"
+            )))
+        })?,
+        now,
+    )
+    .map_err(|error| {
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "failed to author device-enroll event: {error}"
+        )))
+    })?;
+    event.prev_refs = prev_refs;
+    event.executed_by = Some(authority_did.clone());
+    event.authorization_ref = Some(authorization_ref.clone());
 
     enforce_service_attested_device_authorize_provenance(&event, &payload)?;
 

@@ -22,11 +22,11 @@
 
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_identifiers::Did;
-use arkret_signatures::Ed25519MoveSigner;
+use arkret_signatures::Ed25519PayloadSigner;
 use ed25519_dalek::SigningKey;
 
 /// Resolved enrollment authority. Carries the raw seed so a
-/// fresh [`Ed25519MoveSigner`] (not `Clone`) can be rebuilt per signing call.
+/// fresh [`Ed25519PayloadSigner`] (not `Clone`) can be rebuilt per signing call.
 #[derive(Clone)]
 pub struct EnrollmentAuthority {
     seed: [u8; 32],
@@ -89,9 +89,9 @@ impl EnrollmentAuthority {
     /// Build a fresh SDK signer bound to this authority's DID + VM. The signer
     /// is consumed by [`arkret_signatures::sign_event`].
     #[must_use]
-    pub fn signer(&self) -> Ed25519MoveSigner {
+    pub fn signer(&self) -> Ed25519PayloadSigner {
         let did = Did::new(self.did.clone()).expect("did:key authority DID is valid");
-        Ed25519MoveSigner::from_did_key_seed(self.seed, did, self.verification_method.clone())
+        Ed25519PayloadSigner::from_did_key_seed(self.seed, did, self.verification_method.clone())
     }
 }
 
@@ -133,7 +133,7 @@ mod tests {
     fn signer_did_matches_authority_did() {
         let authority = EnrollmentAuthority::from_seed([9u8; 32]);
         let signer = authority.signer();
-        use arkret_wire::MoveSigner as _;
+        use arkret_wire::PayloadSigner as _;
         assert_eq!(signer.signer_did().as_str(), authority.did());
         assert_eq!(
             signer.verification_method_id(),

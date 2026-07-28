@@ -411,10 +411,12 @@ mod tests {
         arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBodyBody::new(
             arkret_wire::Event::new(
                 arkret_wire::events::EventKind::INVITE_CREATE,
-                arkret_identifiers::RealmId::new(
-                    "ak:realm:0196419b-0000-7000-8000-000000000001",
-                )
-                .unwrap(),
+                arkret_wire::ScopeRef::Realm {
+                    realm_id: arkret_identifiers::RealmId::new(
+                        "ak:realm:0196419b-0000-7000-8000-000000000001",
+                    )
+                    .unwrap(),
+                },
                 arkret_identifiers::Did::new("did:web:inviter").unwrap(),
                 1,
                 arkret_identifiers::Hlc::new("01970e589d21-0001-a13f9c2e").unwrap(),
