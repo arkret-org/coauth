@@ -169,7 +169,12 @@ fn validate_account_authority_policy(
     )
     .map_err(|error| failed_precondition(error.to_string()))?;
     let rule = policy
-        .validate_reference_and_action(&intent.authority_set_ref, &intent.scope_ref, &intent.action)
+        .validate_reference_and_action(
+            &intent.authority_set_ref,
+            &intent.scope_ref,
+            &intent.authorization_rule_id,
+            &intent.action,
+        )
         .map_err(|error| failed_precondition(error.to_string()))?;
     if policy.authority_set_id != RECOVERY_ACCOUNT_AUTHORITY_SET_ID
         || policy.source.source_kind != AuthoritySetSourceKind::DidDocument
@@ -411,6 +416,7 @@ fn sign_authorization_lease(
         device_id: intent.device_id.clone(),
         scope_ref: intent.scope_ref.clone(),
         action: intent.action.clone(),
+        authorization_rule_id: intent.authorization_rule_id.clone(),
         risk_tier: intent.risk_tier,
         issued_at,
         expires_at: issued_at + Duration::hours(1),
