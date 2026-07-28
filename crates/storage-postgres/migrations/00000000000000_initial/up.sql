@@ -147,6 +147,19 @@ CREATE TABLE public.recovery_device_authorizations (
     accepted_at timestamp with time zone NOT NULL
 );
 
+CREATE TABLE public.recovery_session_grant_promotions (
+    transaction_id text NOT NULL,
+    old_grant_id uuid NOT NULL,
+    transaction_request_digest text NOT NULL,
+    recovery_session_id text NOT NULL,
+    replacement_device_id text NOT NULL,
+    device_authorization_event_id text NOT NULL,
+    model_generation_ref jsonb NOT NULL,
+    canonical_request bytea NOT NULL,
+    outcome jsonb NOT NULL,
+    consumed_at timestamp with time zone NOT NULL
+);
+
 CREATE TABLE public.admin_operation_logs (
     id uuid NOT NULL,
     admin_user_id uuid NOT NULL,
@@ -446,6 +459,12 @@ CREATE TABLE public.oauth_session_grants (
     scope_list text[] NOT NULL,
     grant_jwt text NOT NULL,
     session_public_key text NOT NULL,
+    credential_class text NOT NULL,
+    recovery_session_id text,
+    recovery_policy_id text,
+    recovery_policy_version bigint,
+    device_authorization_event_id text,
+    model_generation_ref jsonb,
     created_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     revoked_at timestamp with time zone
@@ -1063,6 +1082,12 @@ ALTER TABLE ONLY public.recovery_device_authorizations
 ALTER TABLE ONLY public.recovery_device_authorizations
     ADD CONSTRAINT recovery_device_authorizations_transaction_key UNIQUE (transaction_id);
 
+ALTER TABLE ONLY public.recovery_session_grant_promotions
+    ADD CONSTRAINT recovery_session_grant_promotions_pkey PRIMARY KEY (transaction_id, old_grant_id);
+
+ALTER TABLE ONLY public.recovery_session_grant_promotions
+    ADD CONSTRAINT recovery_session_grant_promotions_old_grant_key UNIQUE (old_grant_id);
+
 ALTER TABLE ONLY public.admin_operation_logs
     ADD CONSTRAINT admin_operation_logs_pkey PRIMARY KEY (id);
 
@@ -1551,6 +1576,9 @@ ALTER TABLE ONLY public.oauth_refresh_tokens
 
 ALTER TABLE ONLY public.oauth_session_grants
     ADD CONSTRAINT oauth_session_grants_user_session_id_fkey FOREIGN KEY (user_session_id) REFERENCES public.user_sessions(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.recovery_session_grant_promotions
+    ADD CONSTRAINT recovery_session_grant_promotions_old_grant_id_fkey FOREIGN KEY (old_grant_id) REFERENCES public.oauth_session_grants(grant_id);
 
 ALTER TABLE ONLY public.oauth_sessions
     ADD CONSTRAINT oauth_sessions_oauth_client_id_fkey FOREIGN KEY (oauth_client_id) REFERENCES public.oauth_clients(id);

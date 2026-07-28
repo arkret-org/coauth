@@ -159,6 +159,21 @@ diesel::table! {
 }
 
 diesel::table! {
+    recovery_session_grant_promotions (transaction_id, old_grant_id) {
+        transaction_id -> Text,
+        old_grant_id -> Uuid,
+        transaction_request_digest -> Text,
+        recovery_session_id -> Text,
+        replacement_device_id -> Text,
+        device_authorization_event_id -> Text,
+        model_generation_ref -> Jsonb,
+        canonical_request -> Bytea,
+        outcome -> Jsonb,
+        consumed_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     circle_capability_grants (id) {
         id -> Uuid,
         subject -> Text,
@@ -631,6 +646,12 @@ diesel::table! {
         scope_list -> Array<Text>,
         grant_jwt -> Text,
         session_public_key -> Text,
+        credential_class -> Text,
+        recovery_session_id -> Nullable<Text>,
+        recovery_policy_id -> Nullable<Text>,
+        recovery_policy_version -> Nullable<Int8>,
+        device_authorization_event_id -> Nullable<Text>,
+        model_generation_ref -> Nullable<Jsonb>,
         created_at -> Timestamptz,
         expires_at -> Timestamptz,
         revoked_at -> Nullable<Timestamptz>,

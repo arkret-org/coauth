@@ -1,5 +1,6 @@
 //! Durable recovery-authority authorization outcomes.
 
+use arkret_identifiers::GrantId;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
@@ -47,4 +48,34 @@ pub struct NewRecoveryDeviceAuthorization {
     pub outcome: Value,
     /// Time the authority accepted the request.
     pub accepted_at: DateTime<Utc>,
+}
+
+/// First accepted successor for one `(transaction_id, old_grant_id)` promotion.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RecoverySessionGrantPromotion {
+    pub transaction_id: String,
+    pub old_grant_id: GrantId,
+    pub transaction_request_digest: String,
+    pub recovery_session_id: String,
+    pub replacement_device_id: String,
+    pub device_authorization_event_id: String,
+    pub model_generation_ref: Value,
+    pub canonical_request: Vec<u8>,
+    pub outcome: Value,
+    pub consumed_at: DateTime<Utc>,
+}
+
+/// Parameters for atomically persisting the first promotion outcome.
+#[derive(Clone, Debug)]
+pub struct NewRecoverySessionGrantPromotion {
+    pub transaction_id: String,
+    pub old_grant_id: GrantId,
+    pub transaction_request_digest: String,
+    pub recovery_session_id: String,
+    pub replacement_device_id: String,
+    pub device_authorization_event_id: String,
+    pub model_generation_ref: Value,
+    pub canonical_request: Vec<u8>,
+    pub outcome: Value,
+    pub consumed_at: DateTime<Utc>,
 }

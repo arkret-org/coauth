@@ -168,7 +168,10 @@ pub use self::organization_control::{
 };
 pub use self::policy_data::{PolicyData, PolicyDataDocument};
 pub use self::post_auth_action::{AccountAction, PostAuthAction};
-pub use self::recovery_authority::{NewRecoveryDeviceAuthorization, RecoveryDeviceAuthorization};
+pub use self::recovery_authority::{
+    NewRecoveryDeviceAuthorization, NewRecoverySessionGrantPromotion, RecoveryDeviceAuthorization,
+    RecoverySessionGrantPromotion,
+};
 pub use self::site_config::{
     CaptchaConfig, CaptchaService, SessionExpirationConfig, SessionLimitConfig, SiteConfig,
 };

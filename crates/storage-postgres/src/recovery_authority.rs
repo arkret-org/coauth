@@ -2,14 +2,15 @@
 
 use async_trait::async_trait;
 use coauth_data::recovery_authority::{
-    NewRecoveryDeviceAuthorization, RecoveryDeviceAuthorization,
+    NewRecoveryDeviceAuthorization, NewRecoverySessionGrantPromotion, RecoveryDeviceAuthorization,
+    RecoverySessionGrantPromotion,
 };
 use coauth_data::storage::recovery_authority::RecoveryAuthorityRepository;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
 use crate::DatabaseError;
-use crate::schema::recovery_device_authorizations;
+use crate::schema::{recovery_device_authorizations, recovery_session_grant_promotions};
 
 /// PostgreSQL implementation of [`RecoveryAuthorityRepository`].
 pub struct PgRecoveryAuthorityRepository<'c> {
@@ -68,6 +69,53 @@ struct InsertableRecoveryDeviceAuthorization {
     accepted_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = recovery_session_grant_promotions)]
+struct RecoverySessionGrantPromotionRow {
+    transaction_id: String,
+    old_grant_id: uuid::Uuid,
+    transaction_request_digest: String,
+    recovery_session_id: String,
+    replacement_device_id: String,
+    device_authorization_event_id: String,
+    model_generation_ref: serde_json::Value,
+    canonical_request: Vec<u8>,
+    outcome: serde_json::Value,
+    consumed_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<RecoverySessionGrantPromotionRow> for RecoverySessionGrantPromotion {
+    fn from(value: RecoverySessionGrantPromotionRow) -> Self {
+        Self {
+            transaction_id: value.transaction_id,
+            old_grant_id: arkret_identifiers::GrantId::from_uuid(value.old_grant_id),
+            transaction_request_digest: value.transaction_request_digest,
+            recovery_session_id: value.recovery_session_id,
+            replacement_device_id: value.replacement_device_id,
+            device_authorization_event_id: value.device_authorization_event_id,
+            model_generation_ref: value.model_generation_ref,
+            canonical_request: value.canonical_request,
+            outcome: value.outcome,
+            consumed_at: value.consumed_at,
+        }
+    }
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = recovery_session_grant_promotions)]
+struct InsertableRecoverySessionGrantPromotion {
+    transaction_id: String,
+    old_grant_id: uuid::Uuid,
+    transaction_request_digest: String,
+    recovery_session_id: String,
+    replacement_device_id: String,
+    device_authorization_event_id: String,
+    model_generation_ref: serde_json::Value,
+    canonical_request: Vec<u8>,
+    outcome: serde_json::Value,
+    consumed_at: chrono::DateTime<chrono::Utc>,
+}
+
 #[async_trait]
 impl RecoveryAuthorityRepository for PgRecoveryAuthorityRepository<'_> {
     type Error = DatabaseError;
@@ -123,6 +171,67 @@ impl RecoveryAuthorityRepository for PgRecoveryAuthorityRepository<'_> {
             accepted_at: params.accepted_at,
         };
         let inserted = diesel::insert_into(recovery_device_authorizations::table)
+            .values(row)
+            .on_conflict_do_nothing()
+            .execute(self.conn)
+            .await?;
+        Ok(inserted == 1)
+    }
+
+    #[tracing::instrument(name = "db.recovery_authority.lookup_promotion", skip_all, err)]
+    async fn lookup_promotion(
+        &mut self,
+        transaction_id: &str,
+        old_grant_id: &arkret_identifiers::GrantId,
+    ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error> {
+        recovery_session_grant_promotions::table
+            .filter(recovery_session_grant_promotions::transaction_id.eq(transaction_id))
+            .filter(recovery_session_grant_promotions::old_grant_id.eq(old_grant_id.uuid()))
+            .select(RecoverySessionGrantPromotionRow::as_select())
+            .first(self.conn)
+            .await
+            .optional()
+            .map(|row| row.map(Into::into))
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(
+        name = "db.recovery_authority.lookup_promotion_by_old_grant",
+        skip_all,
+        err
+    )]
+    async fn lookup_promotion_by_old_grant(
+        &mut self,
+        old_grant_id: &arkret_identifiers::GrantId,
+    ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error> {
+        recovery_session_grant_promotions::table
+            .filter(recovery_session_grant_promotions::old_grant_id.eq(old_grant_id.uuid()))
+            .select(RecoverySessionGrantPromotionRow::as_select())
+            .first(self.conn)
+            .await
+            .optional()
+            .map(|row| row.map(Into::into))
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(name = "db.recovery_authority.insert_promotion", skip_all, err)]
+    async fn insert_promotion(
+        &mut self,
+        params: NewRecoverySessionGrantPromotion,
+    ) -> Result<bool, Self::Error> {
+        let row = InsertableRecoverySessionGrantPromotion {
+            transaction_id: params.transaction_id,
+            old_grant_id: params.old_grant_id.uuid(),
+            transaction_request_digest: params.transaction_request_digest,
+            recovery_session_id: params.recovery_session_id,
+            replacement_device_id: params.replacement_device_id,
+            device_authorization_event_id: params.device_authorization_event_id,
+            model_generation_ref: params.model_generation_ref,
+            canonical_request: params.canonical_request,
+            outcome: params.outcome,
+            consumed_at: params.consumed_at,
+        };
+        let inserted = diesel::insert_into(recovery_session_grant_promotions::table)
             .values(row)
             .on_conflict_do_nothing()
             .execute(self.conn)

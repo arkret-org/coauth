@@ -591,6 +591,12 @@ mod tests {
                     scope,
                     grant_jwt: "device-1.jwt",
                     session_public_key: "{\"kty\":\"OKP\"}",
+                    credential_class: "standard",
+                    recovery_session_id: None,
+                    recovery_policy_id: None,
+                    recovery_policy_version: None,
+                    device_authorization_event_id: None,
+                    model_generation_ref: None,
                     expires_at: state.clock.now() + chrono::Duration::try_minutes(5).unwrap(),
                 },
             )

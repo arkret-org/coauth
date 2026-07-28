@@ -1,8 +1,12 @@
 //! Durable recovery-authority authorization repository.
 
+use arkret_identifiers::GrantId;
 use async_trait::async_trait;
 
-use crate::recovery_authority::{NewRecoveryDeviceAuthorization, RecoveryDeviceAuthorization};
+use crate::recovery_authority::{
+    NewRecoveryDeviceAuthorization, NewRecoverySessionGrantPromotion, RecoveryDeviceAuthorization,
+    RecoverySessionGrantPromotion,
+};
 use crate::repository_impl;
 
 /// Persistence boundary for recovery authority ticket consumption and replay.
@@ -29,6 +33,25 @@ pub trait RecoveryAuthorityRepository: Send + Sync {
         &mut self,
         params: NewRecoveryDeviceAuthorization,
     ) -> Result<bool, Self::Error>;
+
+    /// Look up the first promotion by its full protocol identity.
+    async fn lookup_promotion(
+        &mut self,
+        transaction_id: &str,
+        old_grant_id: &GrantId,
+    ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error>;
+
+    /// Look up a promotion by old grant to reject transaction substitution.
+    async fn lookup_promotion_by_old_grant(
+        &mut self,
+        old_grant_id: &GrantId,
+    ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error>;
+
+    /// Insert the first promotion outcome.
+    async fn insert_promotion(
+        &mut self,
+        params: NewRecoverySessionGrantPromotion,
+    ) -> Result<bool, Self::Error>;
 }
 
 repository_impl!(RecoveryAuthorityRepository:
@@ -43,5 +66,18 @@ repository_impl!(RecoveryAuthorityRepository:
     async fn insert_authorization(
         &mut self,
         params: NewRecoveryDeviceAuthorization,
+    ) -> Result<bool, Self::Error>;
+    async fn lookup_promotion(
+        &mut self,
+        transaction_id: &str,
+        old_grant_id: &GrantId,
+    ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error>;
+    async fn lookup_promotion_by_old_grant(
+        &mut self,
+        old_grant_id: &GrantId,
+    ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error>;
+    async fn insert_promotion(
+        &mut self,
+        params: NewRecoverySessionGrantPromotion,
     ) -> Result<bool, Self::Error>;
 );

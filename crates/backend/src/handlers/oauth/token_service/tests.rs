@@ -364,6 +364,12 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
                 scope,
                 grant_jwt: "session-grant-jwt",
                 session_public_key: "session-public-key",
+                credential_class: "standard",
+                recovery_session_id: None,
+                recovery_policy_id: None,
+                recovery_policy_version: None,
+                device_authorization_event_id: None,
+                model_generation_ref: None,
                 expires_at: clock.now() + Duration::try_hours(1).unwrap(),
             },
         )

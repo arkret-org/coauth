@@ -189,6 +189,18 @@ pub struct NewSessionGrant<'a> {
     pub grant_jwt: &'a str,
     /// Public key generated for this session grant.
     pub session_public_key: &'a str,
+    /// Closed signed credential class (`standard` or `recovery_restricted`).
+    pub credential_class: &'a str,
+    /// Recovery-session binding, present only for recovery-restricted grants.
+    pub recovery_session_id: Option<&'a str>,
+    /// Recovery policy binding, present only for recovery-restricted grants.
+    pub recovery_policy_id: Option<&'a str>,
+    /// Positive recovery policy version.
+    pub recovery_policy_version: Option<i64>,
+    /// Accepted authorization Event binding for an authorized standard device grant.
+    pub device_authorization_event_id: Option<&'a str>,
+    /// Typed A/B identity-model generation reference.
+    pub model_generation_ref: Option<Value>,
     /// Grant expiration timestamp.
     pub expires_at: DateTime<Utc>,
 }

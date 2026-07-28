@@ -144,6 +144,9 @@ fn issue_session_grant_for_audience_inner(
         expires_at,
         session_id: browser_session.id.to_string(),
         cnf,
+        credential_class: arkret_models_identity::SessionGrantCredentialClass::Standard,
+        recovery_binding: None,
+        device_binding: None,
         proof_kind: None,
         scope_details: None,
     };
@@ -159,6 +162,12 @@ fn issue_session_grant_for_audience_inner(
         grant_id,
         grant_jwt,
         session_public_key,
+        credential_class: "standard".to_owned(),
+        recovery_session_id: None,
+        recovery_policy_id: None,
+        recovery_policy_version: None,
+        device_authorization_event_id: None,
+        model_generation_ref: None,
         expires_at: format_timestamp_canonical(expires_at),
         expires_at_timestamp: expires_at,
         issuer: issuer.to_string(),
@@ -170,7 +179,71 @@ fn issue_session_grant_for_audience_inner(
     })
 }
 
-async fn persist_session_grant_with_browser_session_id<R>(
+pub(crate) fn mint_promoted_recovery_session_grant(
+    clock: &dyn Clock,
+    arkret_config: &ArkretConfig,
+    key_store: &Keystore,
+    prior_claims: &SignedSessionGrantClaims,
+    session_public_key: String,
+    device_binding: arkret_models_identity::SessionGrantDeviceBinding,
+) -> Result<SessionGrantMaterial, SessionGrantError> {
+    let now = normalize_timestamp_canonical(clock.now());
+    let expires_at = now + arkret_config.session_grant_ttl;
+    let grant_id = new_session_grant_id();
+    let device_scope = format!(
+        "urn:arkret:client:device:{}",
+        device_binding.device_id.as_str()
+    );
+    let scopes = vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(), device_scope];
+    let payload = SignedSessionGrantClaims {
+        kind: "ak.session.grant".to_owned(),
+        grant_id: grant_id.clone(),
+        subject: prior_claims.subject.clone(),
+        audience: prior_claims.audience.clone(),
+        scopes: scopes.clone(),
+        not_before: now,
+        expires_at,
+        session_id: prior_claims.session_id.clone(),
+        cnf: prior_claims.cnf.clone(),
+        credential_class: arkret_models_identity::SessionGrantCredentialClass::Standard,
+        recovery_binding: None,
+        device_binding: Some(device_binding.clone()),
+        proof_kind: prior_claims.proof_kind,
+        scope_details: None,
+    };
+    payload.validate()?;
+
+    let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
+    let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
+    let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id);
+    let signer = key_store.signer_for_algorithm(&alg)?;
+    let grant_jwt = Jwt::sign(header, payload, &*signer)?.into_string();
+    let model_generation_ref = serde_json::to_value(&device_binding.model_generation_ref)?;
+
+    Ok(SessionGrantMaterial {
+        grant_id,
+        grant_jwt,
+        session_public_key,
+        credential_class: "standard".to_owned(),
+        recovery_session_id: None,
+        recovery_policy_id: None,
+        recovery_policy_version: None,
+        device_authorization_event_id: Some(
+            device_binding.authorization_event_id.as_str().to_owned(),
+        ),
+        model_generation_ref: Some(model_generation_ref),
+        expires_at: format_timestamp_canonical(expires_at),
+        expires_at_timestamp: expires_at,
+        issuer: issuer_did_for(arkret_config).to_string(),
+        subject: prior_claims.subject.as_str().to_owned(),
+        device_id: Some(device_binding.device_id.as_str().to_owned()),
+        audience: prior_claims.audience.clone(),
+        scopes,
+        dpop_jkt: Some(prior_claims.cnf.jkt.clone()),
+    })
+}
+
+pub(crate) async fn persist_session_grant_with_browser_session_id<R>(
     repo: &mut R,
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
@@ -208,6 +281,12 @@ where
                 scope,
                 grant_jwt: &material.grant_jwt,
                 session_public_key: &material.session_public_key,
+                credential_class: &material.credential_class,
+                recovery_session_id: material.recovery_session_id.as_deref(),
+                recovery_policy_id: material.recovery_policy_id.as_deref(),
+                recovery_policy_version: material.recovery_policy_version,
+                device_authorization_event_id: material.device_authorization_event_id.as_deref(),
+                model_generation_ref: material.model_generation_ref.clone(),
                 expires_at: material.expires_at_timestamp,
             },
         )
@@ -285,6 +364,9 @@ pub(crate) fn mint_agent_session_grant(
         expires_at,
         session_id,
         cnf,
+        credential_class: arkret_models_identity::SessionGrantCredentialClass::Standard,
+        recovery_binding: None,
+        device_binding: None,
         proof_kind: Some(arkret_models_identity::SessionGrantProofKind::AgentKeyProof),
         scope_details: Some(scope_details),
     };
@@ -300,6 +382,12 @@ pub(crate) fn mint_agent_session_grant(
         grant_id,
         grant_jwt,
         session_public_key,
+        credential_class: "standard".to_owned(),
+        recovery_session_id: None,
+        recovery_policy_id: None,
+        recovery_policy_version: None,
+        device_authorization_event_id: None,
+        model_generation_ref: None,
         expires_at: format_timestamp_canonical(expires_at),
         expires_at_timestamp: expires_at,
         issuer: issuer.to_string(),
