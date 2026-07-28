@@ -132,13 +132,19 @@ const DID_WEBVH_LOG_MAX_BYTES: usize = DID_DOCUMENT_MAX_BYTES * 32;
 
 /// Verify an unpublished principal WebVH entry against the independently
 /// fetched current history. This function never writes to the registry.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VerifiedUnpublishedWebvhCandidate {
+    pub previous_state: Value,
+    pub candidate_state: Value,
+}
+
 pub async fn verify_unpublished_webvh_candidate(
     http_client: &reqwest::Client,
     did: &arkret_identifiers::Did,
     expected_previous_version_id: &str,
     candidate_entry_bytes: &[u8],
     expected_candidate_version_id: &str,
-) -> Result<Value, DidResolveError> {
+) -> Result<VerifiedUnpublishedWebvhCandidate, DidResolveError> {
     let log_url = Url::parse(
         &arkret_identity::DidWebvhResolver::log_url(did)
             .map_err(|error| DidResolveError::InvalidDid(error.to_string()))?,
@@ -176,18 +182,33 @@ pub async fn verify_unpublished_webvh_candidate(
         }
         history.extend_from_slice(&chunk);
     }
-    arkret_identity::verify_did_webvh_v1_candidate_entry_bytes(
+    let previous =
+        arkret_identity::verify_did_webvh_v1_log_bytes(did, &history).map_err(|error| {
+            DidResolveError::BadResolverResponse(format!(
+                "current did:webvh history failed verification: {error}"
+            ))
+        })?;
+    if previous.head_version_id != expected_previous_version_id {
+        return Err(DidResolveError::BadResolverResponse(
+            "current did:webvh head does not equal the transaction-bound previous version"
+                .to_owned(),
+        ));
+    }
+    let candidate = arkret_identity::verify_did_webvh_v1_candidate_entry_bytes(
         did,
         &history,
         expected_previous_version_id,
         candidate_entry_bytes,
         expected_candidate_version_id,
     )
-    .map(|verified| verified.head_state)
     .map_err(|error| {
         DidResolveError::BadResolverResponse(format!(
             "unpublished did:webvh recovery candidate failed verification: {error}"
         ))
+    })?;
+    Ok(VerifiedUnpublishedWebvhCandidate {
+        previous_state: previous.head_state,
+        candidate_state: candidate.head_state,
     })
 }
 

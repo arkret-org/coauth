@@ -1,6 +1,6 @@
 //! Transaction-bound B-model recovery device authorization.
 
-use arkret_identifiers::{DeviceId, Did, Hash, ReceiptId};
+use arkret_identifiers::{AuthorizationLeaseId, DeviceId, Did, Hash, ReceiptId};
 use arkret_models_collaboration::events_payloads::device_identity::{
     DeviceAuthorizePayload, DeviceOrPrincipalRef,
 };
@@ -12,9 +12,11 @@ use arkret_models_identity::{
 use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
 use arkret_signatures::{SignEventOptions, sign_event};
 use arkret_wire::{
-    AuthorizeRecoveryDeviceOutcome, AuthorizeRecoveryDeviceRequest, Event, EventKind,
-    PromoteRecoverySessionGrantOutcome, PromoteRecoverySessionGrantRequest,
-    RecoveryCompletionAttestation, ScopeRef, ServiceSignatureAlgorithm,
+    AuthoritySetIssuerRole, AuthoritySetSourceKind, AuthorizationLease,
+    AuthorizeRecoveryDeviceOutcome, AuthorizeRecoveryDeviceRequest, Event, EventKind, PayloadProof,
+    PayloadSigner, PromoteRecoverySessionGrantOutcome, PromoteRecoverySessionGrantRequest,
+    RECOVERY_ACCOUNT_AUTHORITY_SET_ID, RecoveryCompletionAttestation, ScopeRef,
+    ServiceSignatureAlgorithm, proof_kind,
 };
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::{
@@ -99,19 +101,18 @@ fn did_version_id<'a>(
         .ok_or_else(|| failed_precondition("recovery DID version reference is invalid"))
 }
 
-fn candidate_authorization_ref(
+fn enrollment_delegation(
     state: serde_json::Value,
     principal_id: &arkret_identifiers::Did,
-    authority_did: &str,
-) -> Result<String, ArkretRouteError> {
+) -> Result<(String, String), ArkretRouteError> {
     let document: super::DidDocument = serde_json::from_value(state).map_err(|error| {
         failed_precondition(format!(
-            "candidate DID entry state is not a valid DID document: {error}"
+            "recovery DID entry state is not a valid DID document: {error}"
         ))
     })?;
     if document.id != principal_id.as_str() || !document.capability_delegation.is_empty() {
         return Err(failed_precondition(
-            "candidate DID document is not the transaction principal's B-model document",
+            "recovery DID document is not the transaction principal's B-model document",
         ));
     }
     let mut delegations = document
@@ -120,21 +121,71 @@ fn candidate_authorization_ref(
         .filter(|service| service.kind == "ArkretDeviceEnrollmentAuthority");
     let delegation = delegations.next().ok_or_else(|| {
         failed_precondition(
-            "candidate DID document omits ArkretDeviceEnrollmentAuthority delegation",
+            "recovery DID document omits ArkretDeviceEnrollmentAuthority delegation",
         )
     })?;
     if delegations.next().is_some()
-        || delegation.service_endpoint != authority_did
         || !delegation
             .id
             .strip_prefix(principal_id.as_str())
             .is_some_and(|fragment| fragment.starts_with('#') && fragment.len() > 1)
     {
         return Err(failed_precondition(
-            "candidate DID document enrollment delegation is ambiguous or targets another authority",
+            "recovery DID document enrollment delegation is ambiguous",
         ));
     }
-    Ok(delegation.id.clone())
+    Ok((delegation.id.clone(), delegation.service_endpoint.clone()))
+}
+
+fn pre_fence_authorization_ref(
+    previous_state: serde_json::Value,
+    candidate_state: serde_json::Value,
+    principal_id: &arkret_identifiers::Did,
+    authority_did: &str,
+) -> Result<String, ArkretRouteError> {
+    let previous = enrollment_delegation(previous_state, principal_id)?;
+    let candidate = enrollment_delegation(candidate_state, principal_id)?;
+    if previous.1 != authority_did || candidate != previous {
+        return Err(failed_precondition(
+            "candidate DID document does not preserve the pre-fence Account Authority delegation",
+        ));
+    }
+    Ok(previous.0)
+}
+
+fn validate_account_authority_policy(
+    request: &AuthorizeRecoveryDeviceRequest,
+    previous_state: &serde_json::Value,
+    previous_version_id: &str,
+    authority: &crate::services::device_enrollment_authority::EnrollmentAuthority,
+) -> Result<(), ArkretRouteError> {
+    let intent = &request
+        .authorization_preimage
+        .authorize_event_publication_intent;
+    let policy = &intent.authority_set_policy;
+    let source_digest = Hash::new(
+        arkret_canonical::canonical_sha256(previous_state)
+            .map_err(|error| failed_precondition(error.to_string()))?,
+    )
+    .map_err(|error| failed_precondition(error.to_string()))?;
+    let rule = policy
+        .validate_reference_and_action(&intent.authority_set_ref, &intent.scope_ref, &intent.action)
+        .map_err(|error| failed_precondition(error.to_string()))?;
+    if policy.authority_set_id != RECOVERY_ACCOUNT_AUTHORITY_SET_ID
+        || policy.source.source_kind != AuthoritySetSourceKind::DidDocument
+        || policy.source.source_ref != request.authorization_preimage.registry_previous_head
+        || policy.source.source_digest != source_digest
+        || policy.source.generation_ref != previous_version_id
+        || rule.issuer_role != AuthoritySetIssuerRole::AccountEnrollmentAuthority
+        || rule.threshold != 1
+        || rule.issuers.len() != 1
+        || rule.issuers[0].verification_method.as_str() != authority.verification_method()
+    {
+        return Err(failed_precondition(
+            "recovery publication policy does not resolve from the pre-fence Account Authority delegation",
+        ));
+    }
+    Ok(())
 }
 
 async fn verify_ticket_signature(
@@ -345,6 +396,58 @@ fn validate_fixed_event(
     Ok(event)
 }
 
+fn sign_authorization_lease(
+    request: &AuthorizeRecoveryDeviceRequest,
+    authority: &crate::services::device_enrollment_authority::EnrollmentAuthority,
+    issued_at: DateTime<Utc>,
+) -> Result<AuthorizationLease, ArkretRouteError> {
+    let intent = &request
+        .authorization_preimage
+        .authorize_event_publication_intent;
+    let mut lease = AuthorizationLease {
+        authorization_lease_id: AuthorizationLeaseId::from_uuid(uuid::Uuid::now_v7()),
+        basis_ref: intent.basis_ref.clone(),
+        actor_id: intent.actor_id.clone(),
+        device_id: intent.device_id.clone(),
+        scope_ref: intent.scope_ref.clone(),
+        action: intent.action.clone(),
+        risk_tier: intent.risk_tier,
+        issued_at,
+        expires_at: issued_at + Duration::hours(1),
+        authority_set_ref: intent.authority_set_ref.clone(),
+        authority_set_policy: intent.authority_set_policy.clone(),
+        proofs: Vec::new(),
+    };
+    let payload_digest = lease
+        .lease_digest()
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let mut proof = PayloadProof {
+        kind: proof_kind::DETACHED_JWS.to_owned(),
+        alg: "EdDSA".to_owned(),
+        verification_method: authority.verification_method().to_owned(),
+        payload_digest,
+        created_at: issued_at,
+        domain: None,
+        audience: None,
+        proof_purpose: None,
+        jws: String::new(),
+    };
+    let binding_bytes = lease
+        .proof_binding_bytes(&proof)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let signature = authority
+        .signer()
+        .sign_payload(&binding_bytes)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    proof.alg = signature.alg;
+    proof.jws = signature.jws;
+    lease.proofs.push(proof);
+    lease
+        .validate_structural()
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    Ok(lease)
+}
+
 async fn replay_after_race(
     depot: &Depot,
     request: &AuthorizeRecoveryDeviceRequest,
@@ -458,7 +561,7 @@ pub async fn authorize_recovery_device_endpoint(
         &request.ticket.principal_id,
         &request.authorization_preimage.did_entry_ref,
     )?;
-    let candidate_state = verify_unpublished_webvh_candidate(
+    let verified_candidate = verify_unpublished_webvh_candidate(
         &depot.http_client()?,
         &request.ticket.principal_id,
         previous_version_id,
@@ -470,8 +573,15 @@ pub async fn authorize_recovery_device_endpoint(
         DidResolveError::BadResolverResponse(message) => failed_precondition(message),
         other => super::map_did_resolve_error(other),
     })?;
-    let authorization_ref = candidate_authorization_ref(
-        candidate_state,
+    validate_account_authority_policy(
+        &request,
+        &verified_candidate.previous_state,
+        previous_version_id,
+        &authority,
+    )?;
+    let authorization_ref = pre_fence_authorization_ref(
+        verified_candidate.previous_state.clone(),
+        verified_candidate.candidate_state,
         &request.ticket.principal_id,
         authority.did(),
     )?;
@@ -509,6 +619,7 @@ pub async fn authorize_recovery_device_endpoint(
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let authorization_lease = sign_authorization_lease(&request, &authority, now)?;
     let outcome = AuthorizeRecoveryDeviceOutcome {
         ticket_id: request.ticket.ticket_id.clone(),
         transaction_id: request.ticket.transaction_id.clone(),
@@ -516,9 +627,18 @@ pub async fn authorize_recovery_device_endpoint(
         authorized_event: serde_json::to_value(&event)
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         authorized_event_digest,
+        authorization_lease,
+        cba_proof_bundles: request
+            .authorization_preimage
+            .authorize_event_publication_intent
+            .cba_proof_bundles
+            .clone(),
         authority_receipt_id: ReceiptId::from_uuid(uuid::Uuid::now_v7()),
         accepted_at: now,
     };
+    outcome
+        .validate_against_request(&request)
+        .map_err(|error| failed_precondition(error.to_string()))?;
     let outcome_value = serde_json::to_value(&outcome)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
@@ -1000,7 +1120,7 @@ mod tests {
     }
 
     #[test]
-    fn candidate_delegation_must_be_unique_and_target_this_authority() {
+    fn candidate_delegation_must_preserve_pre_fence_authority() {
         let principal = principal();
         let authority = "did:key:z6MkAuthority";
         let state = json!({
@@ -1012,13 +1132,13 @@ mod tests {
             }]
         });
         assert_eq!(
-            candidate_authorization_ref(state, &principal, authority).unwrap(),
+            pre_fence_authorization_ref(state.clone(), state, &principal, authority).unwrap(),
             format!("{}#arkret-device-enrollment-authority", principal.as_str())
         );
     }
 
     #[test]
-    fn candidate_delegation_rejects_old_or_mixed_model_authority() {
+    fn candidate_delegation_rejects_mixed_model_authority() {
         let principal = principal();
         let state = json!({
             "id": principal.as_str(),
@@ -1031,8 +1151,24 @@ mod tests {
                 "serviceEndpoint": "did:key:z6MkOldAuthority"
             }]
         });
+        assert!(enrollment_delegation(state, &principal).is_err());
+    }
+
+    #[test]
+    fn candidate_only_delegation_cannot_create_pre_fence_authority() {
+        let principal = principal();
+        let previous = json!({"id": principal.as_str(), "service": []});
+        let candidate = json!({
+            "id": principal.as_str(),
+            "service": [{
+                "id": format!("{}#arkret-device-enrollment-authority", principal.as_str()),
+                "type": "ArkretDeviceEnrollmentAuthority",
+                "serviceEndpoint": "did:key:z6MkAuthority"
+            }]
+        });
         assert!(
-            candidate_authorization_ref(state, &principal, "did:key:z6MkNewAuthority").is_err()
+            pre_fence_authorization_ref(previous, candidate, &principal, "did:key:z6MkAuthority")
+                .is_err()
         );
     }
 }
