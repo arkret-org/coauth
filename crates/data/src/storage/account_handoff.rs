@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_data::account_handoff::{IdentityCreationBindingCommit, IdentityCreationRegisterReplay};
 use coauth_data::{
     AccountHandoffCreation, AccountHandoffGrant, AccountHandoffGrantInput,
     IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
@@ -58,6 +59,17 @@ pub trait AccountHandoffRepository: Send + Sync {
         now: DateTime<Utc>,
     ) -> Result<Option<IdentityCreationRegistrationContext>, Self::Error>;
 
+    /// Resolve a completed register request against its exact durable
+    /// handoff/challenge boundary and canonical request digest.
+    async fn registration_replay(
+        &mut self,
+        grant: &AccountHandoffGrant,
+        lease_id: &str,
+        lease_fence: u64,
+        challenge_id: &str,
+        request_digest: &arkret_identifiers::Hash,
+    ) -> Result<IdentityCreationRegisterReplay, Self::Error>;
+
     /// Record that the reserved inception operation has been durably published.
     async fn mark_published(
         &mut self,
@@ -72,8 +84,10 @@ pub trait AccountHandoffRepository: Send + Sync {
         &mut self,
         context: &IdentityCreationRegistrationContext,
         binding_receipt: &arkret_models_identity::AccountBindingReceipt,
+        request_digest: &arkret_identifiers::Hash,
+        outcome: &arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome,
         now: DateTime<Utc>,
-    ) -> Result<bool, Self::Error>;
+    ) -> Result<IdentityCreationBindingCommit, Self::Error>;
 
     /// Atomically gate the one founding-device enrollment authorized by a
     /// verified identity-creation receipt.
@@ -125,6 +139,14 @@ repository_impl!(AccountHandoffRepository:
         challenge_id: &str,
         now: DateTime<Utc>,
     ) -> Result<Option<IdentityCreationRegistrationContext>, Self::Error>;
+    async fn registration_replay(
+        &mut self,
+        grant: &AccountHandoffGrant,
+        lease_id: &str,
+        lease_fence: u64,
+        challenge_id: &str,
+        request_digest: &arkret_identifiers::Hash,
+    ) -> Result<IdentityCreationRegisterReplay, Self::Error>;
     async fn mark_published(
         &mut self,
         context: &IdentityCreationRegistrationContext,
@@ -136,8 +158,10 @@ repository_impl!(AccountHandoffRepository:
         &mut self,
         context: &IdentityCreationRegistrationContext,
         binding_receipt: &arkret_models_identity::AccountBindingReceipt,
+        request_digest: &arkret_identifiers::Hash,
+        outcome: &arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome,
         now: DateTime<Utc>,
-    ) -> Result<bool, Self::Error>;
+    ) -> Result<IdentityCreationBindingCommit, Self::Error>;
     async fn claim_first_device_enrollment(
         &mut self,
         service_account_id: coauth_data::Ulid,

@@ -9,12 +9,14 @@ use arkret_models_identity::{
 };
 use coauth_data::RepositoryAccess as _;
 use coauth_data::account_handoff::{
+    IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
     IdentityCreationRegistrationContext, IdentityCreationSagaState,
 };
 use coauth_data::user::{
     PrincipalDidRepository as _, UserRepository as _, VerifiedPrincipalDidBindingInput,
 };
 use salvo::prelude::*;
+use serde::Deserialize;
 use serde_json::Value;
 
 use super::account_handoff::{authenticate_account_handoff, enforce_handoff_operation};
@@ -32,9 +34,41 @@ pub async fn account_register_endpoint(
         authenticate_account_handoff(req, depot, AccountHandoffAllowedOperation::Register).await?;
     enforce_handoff_operation(&grant, AccountHandoffAllowedOperation::Register)?;
 
-    let body: AccountRegisterRequestBody = req
+    let raw_body: Value = req
         .parse_json()
         .await
+        .map_err(|_| schema_violation("invalid account register body"))?;
+    let request_digest = canonical_register_request_digest(&raw_body)?;
+    let replay_key: AccountRegisterReplayKey = serde_json::from_value(raw_body.clone())
+        .map_err(|_| schema_violation("invalid account register identity_creation key"))?;
+
+    let mut repo = depot.repo().await?;
+    let replay = repo
+        .account_handoff()
+        .registration_replay(
+            &grant,
+            &replay_key.identity_creation.lease_id,
+            replay_key.identity_creation.lease_fence,
+            &replay_key.identity_creation.control_proof.challenge_id,
+            &request_digest,
+        )
+        .await?;
+    match replay {
+        IdentityCreationRegisterReplay::Pending => {
+            repo.cancel().await.ok();
+        }
+        IdentityCreationRegisterReplay::Replay(outcome) => {
+            repo.cancel().await.ok();
+            return Ok(Json(outcome));
+        }
+        IdentityCreationRegisterReplay::DuplicateConflict => {
+            repo.cancel().await.ok();
+            return Err(duplicate_conflict(
+                "identity-creation register request differs from the completed request",
+            ));
+        }
+    }
+    let body: AccountRegisterRequestBody = serde_json::from_value(raw_body)
         .map_err(|_| schema_violation("invalid account register body"))?;
     let identity_creation = body
         .identity_creation
@@ -178,6 +212,17 @@ pub async fn account_register_endpoint(
         operation_digest: validated.operation_digest,
         head_event_digest: head_event_digest.clone(),
     };
+    let outcome = AccountRegisterOutcome {
+        principal_id: body.principal_id.clone(),
+        state: AccountStatus::Active,
+        devices: Vec::new(),
+        primary_handle_claim: None,
+        primary_handle_claim_ref: None,
+        handle_claim_digests: Vec::new(),
+        profile: None,
+        registration_audit: None,
+        binding_receipt: Some(receipt.clone()),
+    };
 
     let key_store = depot.key_store()?;
     let enrollment_authority =
@@ -195,6 +240,29 @@ pub async fn account_register_endpoint(
 
     let mut rng = make_rng();
     let mut repo = depot.repo().await?;
+    let binding_commit = repo
+        .account_handoff()
+        .mark_bound(&context, &receipt, &request_digest, &outcome, now)
+        .await?;
+    match binding_commit {
+        IdentityCreationBindingCommit::Committed => {}
+        IdentityCreationBindingCommit::Replay(stored) => {
+            repo.cancel().await.ok();
+            return Ok(Json(stored));
+        }
+        IdentityCreationBindingCommit::DuplicateConflict => {
+            repo.cancel().await.ok();
+            return Err(duplicate_conflict(
+                "identity-creation register request lost a race to a different canonical request",
+            ));
+        }
+        IdentityCreationBindingCommit::Stale => {
+            repo.cancel().await.ok();
+            return Err(failed_precondition(
+                "published identity could not be atomically finalized as bound",
+            ));
+        }
+    }
     let user = repo
         .user()
         .lookup(grant.service_account_id)
@@ -235,29 +303,9 @@ pub async fn account_register_endpoint(
                 .await?;
         }
     }
-    if !repo
-        .account_handoff()
-        .mark_bound(&context, &receipt, now)
-        .await?
-    {
-        repo.cancel().await.ok();
-        return Err(failed_precondition(
-            "published identity could not be atomically finalized as bound",
-        ));
-    }
     repo.save().await?;
 
-    Ok(Json(AccountRegisterOutcome {
-        principal_id: body.principal_id,
-        state: AccountStatus::Active,
-        devices: Vec::new(),
-        primary_handle_claim: None,
-        primary_handle_claim_ref: None,
-        handle_claim_digests: Vec::new(),
-        profile: None,
-        registration_audit: None,
-        binding_receipt: Some(receipt),
-    }))
+    Ok(Json(outcome))
 }
 
 fn validate_registration_transcript(
@@ -300,6 +348,33 @@ fn validate_registration_transcript(
         ));
     }
     Ok(())
+}
+
+fn canonical_register_request_digest(
+    raw_body: &Value,
+) -> Result<arkret_identifiers::Hash, ArkretRouteError> {
+    arkret_identifiers::Hash::new(
+        arkret_canonical::canonical_sha256(raw_body)
+            .map_err(|_| schema_violation("account register body is not canonicalizable"))?,
+    )
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
+}
+
+#[derive(Deserialize)]
+struct AccountRegisterReplayKey {
+    identity_creation: AccountRegisterIdentityCreationReplayKey,
+}
+
+#[derive(Deserialize)]
+struct AccountRegisterIdentityCreationReplayKey {
+    lease_id: String,
+    lease_fence: u64,
+    control_proof: AccountRegisterControlProofReplayKey,
+}
+
+#[derive(Deserialize)]
+struct AccountRegisterControlProofReplayKey {
+    challenge_id: String,
 }
 
 fn validate_registry_outcome(
@@ -410,6 +485,14 @@ fn failed_precondition(message: impl Into<String>) -> ArkretRouteError {
     )
 }
 
+fn duplicate_conflict(message: impl Into<String>) -> ArkretRouteError {
+    ArkretRouteError::coded(
+        StatusCode::CONFLICT,
+        arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
+        message,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -505,6 +588,7 @@ mod tests {
             registry_receipt: None,
             head_event_digest: None,
             binding_receipt: None,
+            register_ledger: None,
             created_at: now,
             updated_at: now,
         };
@@ -574,5 +658,61 @@ mod tests {
         registration.control_proof.expires_at = oversized_expiry;
 
         assert!(validate_registration_transcript(&context, &registration).is_err());
+    }
+
+    #[test]
+    fn register_request_digest_tracks_the_complete_canonical_json() {
+        let reordered_a: Value =
+            serde_json::from_str(r#"{"principal_id":"did:web:example.com","display_name":"A"}"#)
+                .unwrap();
+        let reordered_b: Value =
+            serde_json::from_str(r#"{"display_name":"A","principal_id":"did:web:example.com"}"#)
+                .unwrap();
+        let explicit_null: Value =
+            serde_json::from_str(r#"{"principal_id":"did:web:example.com","display_name":null}"#)
+                .unwrap();
+        let omitted: Value =
+            serde_json::from_str(r#"{"principal_id":"did:web:example.com"}"#).unwrap();
+
+        assert_eq!(
+            canonical_register_request_digest(&reordered_a).unwrap(),
+            canonical_register_request_digest(&reordered_b).unwrap(),
+        );
+        assert_ne!(
+            canonical_register_request_digest(&explicit_null).unwrap(),
+            canonical_register_request_digest(&omitted).unwrap(),
+            "different canonical request bytes must not collapse through typed reserialization",
+        );
+    }
+
+    #[test]
+    fn replay_key_is_available_before_non_identity_business_validation() {
+        let raw = serde_json::json!({
+            "principal_id": "not-a-did",
+            "device_id": {"invalid": true},
+            "proof": {"invalid": true},
+            "identity_creation": {
+                "lease_id": "lease-for-replay-lookup",
+                "lease_fence": 7,
+                "control_proof": {
+                    "challenge_id": "challenge-for-replay-lookup"
+                }
+            }
+        });
+
+        let replay_key: AccountRegisterReplayKey = serde_json::from_value(raw.clone()).unwrap();
+        assert_eq!(
+            replay_key.identity_creation.lease_id,
+            "lease-for-replay-lookup"
+        );
+        assert_eq!(replay_key.identity_creation.lease_fence, 7);
+        assert_eq!(
+            replay_key.identity_creation.control_proof.challenge_id,
+            "challenge-for-replay-lookup"
+        );
+        assert!(
+            serde_json::from_value::<AccountRegisterRequestBody>(raw).is_err(),
+            "the full DTO remains responsible for Pending-request validation"
+        );
     }
 }

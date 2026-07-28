@@ -105,6 +105,7 @@ pub struct IdentityCreationLeaseRecord {
     pub registry_receipt: Option<serde_json::Value>,
     pub head_event_digest: Option<arkret_identifiers::Hash>,
     pub binding_receipt: Option<arkret_models_identity::AccountBindingReceipt>,
+    pub register_ledger: Option<IdentityCreationRegisterLedger>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -118,6 +119,29 @@ impl IdentityCreationLeaseRecord {
             reserved_identity: self.reserved_identity.clone(),
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct IdentityCreationRegisterLedger {
+    pub handoff_grant_id: Ulid,
+    pub challenge_id: String,
+    pub request_digest: arkret_identifiers::Hash,
+    pub outcome: arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome,
+}
+
+#[derive(Clone, Debug)]
+pub enum IdentityCreationRegisterReplay {
+    Pending,
+    Replay(arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome),
+    DuplicateConflict,
+}
+
+#[derive(Clone, Debug)]
+pub enum IdentityCreationBindingCommit {
+    Committed,
+    Replay(arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome),
+    DuplicateConflict,
+    Stale,
 }
 
 #[derive(Clone, Debug)]

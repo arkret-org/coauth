@@ -5,7 +5,8 @@ use chrono::{DateTime, Utc};
 use coauth_data::account_handoff::{
     AccountHandoffCreation, AccountHandoffGrant, AccountHandoffGrantInput,
     IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityBindingChallengeRecord,
-    IdentityCreationLeaseRecord, IdentityCreationRegistrationContext, IdentityCreationSagaState,
+    IdentityCreationBindingCommit, IdentityCreationLeaseRecord, IdentityCreationRegisterLedger,
+    IdentityCreationRegisterReplay, IdentityCreationRegistrationContext, IdentityCreationSagaState,
 };
 use coauth_data::{AccountHandoffRepository, Ulid};
 use diesel::OptionalExtension as _;
@@ -60,7 +61,8 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let query = format!(
             "SELECT service_account_id, audience, lease_id, holder_jkt, fence, expires_at, \
              reserved_principal_id, reserved_operation_digest, did_operation, state, \
-             registry_receipt, head_event_digest, binding_receipt, created_at, updated_at \
+             registry_receipt, head_event_digest, binding_receipt, register_handoff_grant_id, \
+             register_challenge_id, register_request_digest, register_outcome, created_at, updated_at \
              FROM identity_creation_leases WHERE service_account_id = $1 AND audience = $2{suffix}"
         );
         let row = diesel::sql_query(query)
@@ -113,17 +115,20 @@ impl<'c> PgAccountHandoffRepository<'c> {
     async fn challenge_by_id(
         &mut self,
         challenge_id: &str,
+        for_update: bool,
     ) -> Result<Option<IdentityBindingChallengeRecord>, DatabaseError> {
-        let row = diesel::sql_query(
+        let suffix = if for_update { " FOR UPDATE" } else { "" };
+        let query = format!(
             "SELECT request_id, request_digest, service_account_id, challenge_id, challenge, \
              purpose, principal_id, operation_digest, lease_id, lease_fence, dpop_jkt, audience, \
              origin, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
-             FROM identity_binding_challenges WHERE challenge_id = $1",
-        )
-        .bind::<Text, _>(challenge_id)
-        .get_result::<ChallengeRow>(self.conn)
-        .await
-        .optional()?;
+             FROM identity_binding_challenges WHERE challenge_id = $1{suffix}"
+        );
+        let row = diesel::sql_query(query)
+            .bind::<Text, _>(challenge_id)
+            .get_result::<ChallengeRow>(self.conn)
+            .await
+            .optional()?;
         row.map(challenge_from_row).transpose()
     }
 }
@@ -221,6 +226,14 @@ struct LeaseRow {
     head_event_digest: Option<String>,
     #[diesel(sql_type = Nullable<Jsonb>)]
     binding_receipt: Option<serde_json::Value>,
+    #[diesel(sql_type = Nullable<SqlUuid>)]
+    register_handoff_grant_id: Option<Uuid>,
+    #[diesel(sql_type = Nullable<Text>)]
+    register_challenge_id: Option<String>,
+    #[diesel(sql_type = Nullable<Text>)]
+    register_request_digest: Option<String>,
+    #[diesel(sql_type = Nullable<Jsonb>)]
+    register_outcome: Option<serde_json::Value>,
     #[diesel(sql_type = Timestamptz)]
     created_at: DateTime<Utc>,
     #[diesel(sql_type = Timestamptz)]
@@ -241,6 +254,25 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
                 operation_digest: arkret_identifiers::Hash::new(operation_digest)
                     .map_err(|_| DatabaseError::invalid_operation())?,
                 did_operation: serde_json::from_value(did_operation)
+                    .map_err(|_| DatabaseError::invalid_operation())?,
+            })
+        }
+        _ => return Err(DatabaseError::invalid_operation()),
+    };
+    let register_ledger = match (
+        row.register_handoff_grant_id,
+        row.register_challenge_id,
+        row.register_request_digest,
+        row.register_outcome,
+    ) {
+        (None, None, None, None) => None,
+        (Some(handoff_grant_id), Some(challenge_id), Some(request_digest), Some(outcome)) => {
+            Some(IdentityCreationRegisterLedger {
+                handoff_grant_id: Ulid::from(handoff_grant_id),
+                challenge_id,
+                request_digest: arkret_identifiers::Hash::new(request_digest)
+                    .map_err(|_| DatabaseError::invalid_operation())?,
+                outcome: serde_json::from_value(outcome)
                     .map_err(|_| DatabaseError::invalid_operation())?,
             })
         }
@@ -267,6 +299,7 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
             .map(serde_json::from_value)
             .transpose()
             .map_err(|_| DatabaseError::invalid_operation())?,
+        register_ledger,
         created_at: row.created_at,
         updated_at: row.updated_at,
     })
@@ -343,6 +376,29 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
         consumed_at: row.consumed_at,
         replaced_at: row.replaced_at,
     })
+}
+
+fn challenge_matches_context(
+    challenge: &IdentityBindingChallengeRecord,
+    context: &IdentityCreationRegistrationContext,
+) -> bool {
+    let expected = &context.challenge;
+    challenge.request_id == expected.request_id
+        && challenge.request_digest == expected.request_digest
+        && challenge.service_account_id == context.grant.service_account_id
+        && challenge.challenge_id == expected.challenge_id
+        && challenge.challenge == expected.challenge
+        && challenge.purpose == expected.purpose
+        && challenge.principal_id == expected.principal_id
+        && challenge.operation_digest == expected.operation_digest
+        && challenge.lease_id == context.lease.lease_id
+        && challenge.lease_fence == context.lease.fence
+        && challenge.dpop_jkt == context.grant.cnf_jkt
+        && challenge.audience.as_str() == context.grant.audience
+        && challenge.origin == expected.origin
+        && challenge.trust_domain == expected.trust_domain
+        && challenge.issued_at == expected.issued_at
+        && challenge.expires_at == expected.expires_at
 }
 
 fn retry_after_ms(expires_at: DateTime<Utc>, now: DateTime<Utc>) -> u64 {
@@ -718,7 +774,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         {
             return Ok(None);
         }
-        let Some(challenge) = self.challenge_by_id(challenge_id).await? else {
+        let Some(challenge) = self.challenge_by_id(challenge_id, false).await? else {
             return Ok(None);
         };
         if challenge.service_account_id != grant.service_account_id
@@ -739,6 +795,41 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         }))
     }
 
+    async fn registration_replay(
+        &mut self,
+        grant: &AccountHandoffGrant,
+        lease_id: &str,
+        lease_fence: u64,
+        challenge_id: &str,
+        request_digest: &arkret_identifiers::Hash,
+    ) -> Result<IdentityCreationRegisterReplay, Self::Error> {
+        let Some(lease) = self
+            // Serialize with the final binding transaction so a concurrent
+            // retry cannot observe Published immediately before Bound commits.
+            .lease_for_account(Uuid::from(grant.service_account_id), &grant.audience, true)
+            .await?
+        else {
+            return Ok(IdentityCreationRegisterReplay::Pending);
+        };
+        if lease.state != IdentityCreationSagaState::Bound {
+            return Ok(IdentityCreationRegisterReplay::Pending);
+        }
+        let Some(ledger) = lease.register_ledger else {
+            // Rows bound before the replay ledger migration cannot prove that
+            // an incoming body is byte-for-byte the completed request.
+            return Ok(IdentityCreationRegisterReplay::DuplicateConflict);
+        };
+        if lease.lease_id != lease_id
+            || lease.fence != lease_fence
+            || lease.holder_jkt != grant.cnf_jkt
+            || ledger.challenge_id != challenge_id
+            || ledger.request_digest != *request_digest
+        {
+            return Ok(IdentityCreationRegisterReplay::DuplicateConflict);
+        }
+        Ok(IdentityCreationRegisterReplay::Replay(ledger.outcome))
+    }
+
     async fn mark_published(
         &mut self,
         context: &IdentityCreationRegistrationContext,
@@ -746,20 +837,62 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         head_event_digest: &arkret_identifiers::Hash,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error> {
-        diesel::sql_query(
-            "UPDATE identity_binding_challenges SET consumed_at = COALESCE(consumed_at, $1) \
-             WHERE challenge_id = $2 AND service_account_id = $3 AND lease_id = $4 \
-             AND lease_fence = $5 AND replaced_at IS NULL",
-        )
-        .bind::<Timestamptz, _>(now)
-        .bind::<Text, _>(&context.challenge.challenge_id)
-        .bind::<SqlUuid, _>(Uuid::from(context.grant.service_account_id))
-        .bind::<Text, _>(&context.lease.lease_id)
-        .bind::<BigInt, _>(
-            i64::try_from(context.lease.fence).map_err(|_| DatabaseError::invalid_operation())?,
-        )
-        .execute(self.conn)
-        .await?;
+        let Some(lease) = self
+            .lease_for_account(
+                Uuid::from(context.grant.service_account_id),
+                &context.grant.audience,
+                true,
+            )
+            .await?
+        else {
+            return Ok(false);
+        };
+        if lease.lease_id != context.lease.lease_id
+            || lease.fence != context.lease.fence
+            || lease.holder_jkt != context.grant.cnf_jkt
+            || lease.reserved_identity.as_ref().is_none_or(|reserved| {
+                reserved.operation_digest != context.challenge.operation_digest
+            })
+            || !matches!(
+                lease.state,
+                IdentityCreationSagaState::Reserved | IdentityCreationSagaState::Published
+            )
+        {
+            return Ok(false);
+        }
+        let Some(challenge) = self
+            .challenge_by_id(&context.challenge.challenge_id, true)
+            .await?
+        else {
+            return Ok(false);
+        };
+        if !challenge_matches_context(&challenge, context) || challenge.replaced_at.is_some() {
+            return Ok(false);
+        }
+        match (context.lease.state, lease.state) {
+            (IdentityCreationSagaState::Reserved, IdentityCreationSagaState::Reserved) => {
+                if challenge.consumed_at.is_some() {
+                    return Ok(false);
+                }
+                let consumed = diesel::sql_query(
+                    "UPDATE identity_binding_challenges SET consumed_at = $1 \
+                     WHERE challenge_id = $2 AND consumed_at IS NULL AND replaced_at IS NULL",
+                )
+                .bind::<Timestamptz, _>(now)
+                .bind::<Text, _>(&context.challenge.challenge_id)
+                .execute(self.conn)
+                .await?;
+                if consumed != 1 {
+                    return Ok(false);
+                }
+            }
+            (IdentityCreationSagaState::Published, IdentityCreationSagaState::Published) => {
+                if challenge.consumed_at.is_none() {
+                    return Ok(false);
+                }
+            }
+            _ => return Ok(false),
+        }
         let updated = diesel::sql_query(
             "UPDATE identity_creation_leases SET state = 'published', registry_receipt = $1, \
              head_event_digest = $2, updated_at = $3 \
@@ -787,17 +920,74 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         &mut self,
         context: &IdentityCreationRegistrationContext,
         binding_receipt: &arkret_models_identity::AccountBindingReceipt,
+        request_digest: &arkret_identifiers::Hash,
+        outcome: &arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome,
         now: DateTime<Utc>,
-    ) -> Result<bool, Self::Error> {
+    ) -> Result<IdentityCreationBindingCommit, Self::Error> {
+        let Some(lease) = self
+            .lease_for_account(
+                Uuid::from(context.grant.service_account_id),
+                &context.grant.audience,
+                true,
+            )
+            .await?
+        else {
+            return Ok(IdentityCreationBindingCommit::Stale);
+        };
+        if lease.lease_id != context.lease.lease_id
+            || lease.fence != context.lease.fence
+            || lease.holder_jkt != context.grant.cnf_jkt
+        {
+            return Ok(IdentityCreationBindingCommit::Stale);
+        }
+        if lease.state == IdentityCreationSagaState::Bound {
+            let Some(ledger) = lease.register_ledger else {
+                return Ok(IdentityCreationBindingCommit::DuplicateConflict);
+            };
+            if ledger.challenge_id == context.challenge.challenge_id
+                && ledger.request_digest == *request_digest
+            {
+                return Ok(IdentityCreationBindingCommit::Replay(ledger.outcome));
+            }
+            return Ok(IdentityCreationBindingCommit::DuplicateConflict);
+        }
+        if lease.state != IdentityCreationSagaState::Published
+            || lease.reserved_identity.as_ref().is_none_or(|reserved| {
+                reserved.operation_digest != context.challenge.operation_digest
+            })
+        {
+            return Ok(IdentityCreationBindingCommit::Stale);
+        }
+        let Some(challenge) = self
+            .challenge_by_id(&context.challenge.challenge_id, true)
+            .await?
+        else {
+            return Ok(IdentityCreationBindingCommit::Stale);
+        };
+        if !challenge_matches_context(&challenge, context)
+            || challenge.consumed_at.is_none()
+            || challenge.replaced_at.is_some()
+        {
+            return Ok(IdentityCreationBindingCommit::Stale);
+        }
+
         let receipt = serde_json::to_value(binding_receipt)
             .map_err(|_| DatabaseError::invalid_operation())?;
+        let outcome =
+            serde_json::to_value(outcome).map_err(|_| DatabaseError::invalid_operation())?;
         let updated = diesel::sql_query(
             "UPDATE identity_creation_leases SET state = 'bound', binding_receipt = $1, \
-             updated_at = $2 WHERE service_account_id = $3 AND audience = $4 \
-             AND lease_id = $5 AND fence = $6 AND holder_jkt = $7 \
-             AND reserved_operation_digest = $8 AND state IN ('published', 'bound')",
+             register_handoff_grant_id = $2, register_challenge_id = $3, \
+             register_request_digest = $4, register_outcome = $5, updated_at = $6 \
+             WHERE service_account_id = $7 AND audience = $8 \
+             AND lease_id = $9 AND fence = $10 AND holder_jkt = $11 \
+             AND reserved_operation_digest = $12 AND state = 'published'",
         )
         .bind::<Jsonb, _>(receipt)
+        .bind::<SqlUuid, _>(Uuid::from(context.grant.id))
+        .bind::<Text, _>(&context.challenge.challenge_id)
+        .bind::<Text, _>(request_digest.as_str())
+        .bind::<Jsonb, _>(outcome)
         .bind::<Timestamptz, _>(now)
         .bind::<SqlUuid, _>(Uuid::from(context.grant.service_account_id))
         .bind::<Text, _>(&context.grant.audience)
@@ -809,7 +999,11 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(context.challenge.operation_digest.as_str())
         .execute(self.conn)
         .await?;
-        Ok(updated == 1)
+        Ok(if updated == 1 {
+            IdentityCreationBindingCommit::Committed
+        } else {
+            IdentityCreationBindingCommit::Stale
+        })
     }
 
     async fn claim_first_device_enrollment(
@@ -940,6 +1134,27 @@ mod tests {
         }
     }
 
+    fn register_request_digest(fill: char) -> arkret_identifiers::Hash {
+        arkret_identifiers::Hash::new(format!("sha256:{}", fill.to_string().repeat(64))).unwrap()
+    }
+
+    fn register_outcome(
+        principal_id: arkret_identifiers::Did,
+        binding_receipt: arkret_models_identity::AccountBindingReceipt,
+    ) -> arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome {
+        arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome {
+            principal_id,
+            state: arkret_models_collaboration::objects::account_status::AccountStatus::Active,
+            devices: Vec::new(),
+            primary_handle_claim: None,
+            primary_handle_claim_ref: None,
+            handle_claim_digests: Vec::new(),
+            profile: None,
+            registration_audit: None,
+            binding_receipt: Some(binding_receipt),
+        }
+    }
+
     #[test]
     fn published_saga_can_resume_with_its_consumed_challenge_only() {
         assert!(registration_challenge_state_is_usable(
@@ -962,6 +1177,55 @@ mod tests {
             IdentityCreationSagaState::Bound,
             true,
         ));
+    }
+
+    #[tokio::test]
+    async fn future_bound_rows_require_a_complete_register_ledger() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
+        let clock = MockClock::default();
+        let now = clock.now();
+        let mut rng = test_rng();
+        let label = Uuid::now_v7().simple().to_string();
+        let user = repo
+            .user()
+            .add(&mut rng, &clock, format!("ledger-required-{label}"))
+            .await
+            .unwrap();
+        let created = repo
+            .account_handoff()
+            .create_with_lease(handoff_input(
+                &mut rng,
+                user.id,
+                now,
+                &"L".repeat(43),
+                &unique_lease_id(),
+            ))
+            .await
+            .unwrap();
+        let AccountHandoffCreation::Active { grant, .. } = created else {
+            panic!("identity creation must acquire an active lease");
+        };
+        repo.save().await.unwrap();
+
+        let mut conn = pool.get().await.unwrap();
+        let result = diesel::sql_query(
+            "UPDATE identity_creation_leases SET state = 'bound' \
+             WHERE service_account_id = $1 AND audience = $2",
+        )
+        .bind::<SqlUuid, _>(Uuid::from(user.id))
+        .bind::<Text, _>(&grant.audience)
+        .execute(&mut *conn)
+        .await;
+        assert!(
+            result.is_err(),
+            "a post-migration Bound row without a replay ledger must violate the constraint"
+        );
     }
 
     #[tokio::test]
@@ -1065,7 +1329,10 @@ mod tests {
         assert_eq!(wire_challenge.expires_at, issued_challenge.expires_at);
         repo.save().await.unwrap();
 
-        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
         assert!(matches!(
             repo.account_handoff()
                 .reserve_and_issue_challenge(first_challenge.clone())
@@ -1284,12 +1551,15 @@ mod tests {
             operation_digest: reserved.operation_digest,
             head_event_digest: head,
         };
-        assert!(
+        let request_digest = register_request_digest('6');
+        let outcome = register_outcome(reserved.principal_id.clone(), binding_receipt.clone());
+        assert!(matches!(
             repo.account_handoff()
-                .mark_bound(&context, &binding_receipt, now)
+                .mark_bound(&context, &binding_receipt, &request_digest, &outcome, now)
                 .await
-                .unwrap()
-        );
+                .unwrap(),
+            IdentityCreationBindingCommit::Committed
+        ));
 
         let first_device =
             arkret_identifiers::DeviceId::new(format!("ak:device:{}", Uuid::now_v7())).unwrap();
@@ -1388,15 +1658,59 @@ mod tests {
             expires_at: now + Duration::minutes(5),
             lease_expires_at: lease.expires_at,
         };
-        let issued = match repo
+        let stale_challenge = match repo
             .account_handoff()
-            .reserve_and_issue_challenge(challenge_input)
+            .reserve_and_issue_challenge(challenge_input.clone())
             .await
             .unwrap()
         {
             IdentityBindingChallengeIssue::Issued(challenge) => challenge,
             other => panic!("challenge must be issued, got {other:?}"),
         };
+        let stale_context = repo
+            .account_handoff()
+            .registration_context(
+                &grant,
+                &lease.lease_id,
+                lease.fence,
+                &stale_challenge.challenge_id,
+                now,
+            )
+            .await
+            .unwrap()
+            .expect("fresh challenge must produce registration context");
+        let replacement_input = IdentityBindingChallengeInput {
+            request_id: arkret_identifiers::RequestId::new(format!(
+                "ak:request:{}",
+                Uuid::now_v7()
+            ))
+            .unwrap(),
+            request_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "b".repeat(64)))
+                .unwrap(),
+            challenge_id: Uuid::now_v7().simple().to_string(),
+            challenge: format!("{}{}", Uuid::now_v7().simple(), "R".repeat(11)),
+            issued_at: now + Duration::seconds(1),
+            ..challenge_input
+        };
+        let issued = match repo
+            .account_handoff()
+            .reserve_and_issue_challenge(replacement_input)
+            .await
+            .unwrap()
+        {
+            IdentityBindingChallengeIssue::Issued(challenge) => challenge,
+            other => panic!("replacement challenge must be issued, got {other:?}"),
+        };
+        let head = arkret_identifiers::Hash::new(format!("sha256:{}", "8".repeat(64))).unwrap();
+        let registry_receipt = serde_json::json!({ "status": "accepted" });
+        assert!(
+            !repo
+                .account_handoff()
+                .mark_published(&stale_context, &registry_receipt, &head, now)
+                .await
+                .unwrap(),
+            "a replaced challenge must not publish the reserved operation"
+        );
         let context = repo
             .account_handoff()
             .registration_context(
@@ -1404,16 +1718,19 @@ mod tests {
                 &lease.lease_id,
                 lease.fence,
                 &issued.challenge_id,
-                now,
+                now + Duration::seconds(1),
             )
             .await
             .unwrap()
-            .expect("fresh challenge must produce registration context");
-        let head = arkret_identifiers::Hash::new(format!("sha256:{}", "8".repeat(64))).unwrap();
-        let registry_receipt = serde_json::json!({ "status": "accepted" });
+            .expect("replacement challenge must produce registration context");
         assert!(
             repo.account_handoff()
-                .mark_published(&context, &registry_receipt, &head, now)
+                .mark_published(
+                    &context,
+                    &registry_receipt,
+                    &head,
+                    now + Duration::seconds(1)
+                )
                 .await
                 .unwrap()
         );
@@ -1431,21 +1748,27 @@ mod tests {
             operation_digest: reserved.operation_digest.clone(),
             head_event_digest: head.clone(),
         };
+        let request_digest = register_request_digest('9');
+        let outcome = register_outcome(reserved.principal_id.clone(), binding_receipt.clone());
         let mut repo = PgRepositoryFactory::new(pool.clone())
             .create()
             .await
             .unwrap();
-        assert!(
+        assert!(matches!(
             repo.account_handoff()
-                .mark_bound(&context, &binding_receipt, now)
+                .mark_bound(&context, &binding_receipt, &request_digest, &outcome, now)
                 .await
-                .unwrap()
-        );
+                .unwrap(),
+            IdentityCreationBindingCommit::Committed
+        ));
         repo.cancel().await.unwrap();
 
         // A fresh process recovers the exact published reservation together
         // with its consumed challenge and the durable registry receipt.
-        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
         let recovered = repo
             .account_handoff()
             .registration_context(
@@ -1504,35 +1827,141 @@ mod tests {
             IdentityBindingChallengeIssue::ReservationConflict
         ));
 
+        // The final transaction re-reads the exact challenge, rather than
+        // trusting a stale in-memory context with the same lease fence.
+        let mut foreign_request = recovered.clone();
+        foreign_request.challenge.request_id =
+            arkret_identifiers::RequestId::new(format!("ak:request:{}", Uuid::now_v7())).unwrap();
+        assert!(matches!(
+            repo.account_handoff()
+                .mark_bound(
+                    &foreign_request,
+                    &binding_receipt,
+                    &request_digest,
+                    &outcome,
+                    now
+                )
+                .await
+                .unwrap(),
+            IdentityCreationBindingCommit::Stale
+        ));
+
         // Neither a tampered digest nor a foreign holder can finalize.
         let mut tampered = recovered.clone();
         tampered.challenge.operation_digest =
             arkret_identifiers::Hash::new(format!("sha256:{}", "e".repeat(64))).unwrap();
-        assert!(
-            !repo
-                .account_handoff()
-                .mark_bound(&tampered, &binding_receipt, now)
+        assert!(matches!(
+            repo.account_handoff()
+                .mark_bound(&tampered, &binding_receipt, &request_digest, &outcome, now)
                 .await
-                .unwrap()
-        );
+                .unwrap(),
+            IdentityCreationBindingCommit::Stale
+        ));
         let mut foreign_holder = recovered.clone();
         foreign_holder.grant.cnf_jkt = "Z".repeat(43);
-        assert!(
-            !repo
-                .account_handoff()
-                .mark_bound(&foreign_holder, &binding_receipt, now)
+        assert!(matches!(
+            repo.account_handoff()
+                .mark_bound(
+                    &foreign_holder,
+                    &binding_receipt,
+                    &request_digest,
+                    &outcome,
+                    now
+                )
                 .await
-                .unwrap()
-        );
+                .unwrap(),
+            IdentityCreationBindingCommit::Stale
+        ));
 
         // Only the original context completes the saga, and the founding
         // device claim works solely for the reserved principal.
-        assert!(
+        assert!(matches!(
             repo.account_handoff()
-                .mark_bound(&recovered, &binding_receipt, now)
+                .mark_bound(&recovered, &binding_receipt, &request_digest, &outcome, now)
                 .await
-                .unwrap()
+                .unwrap(),
+            IdentityCreationBindingCommit::Committed
+        ));
+
+        // A second process must wait for the uncommitted Bound transition,
+        // then observe and replay the stored outcome instead of falling back
+        // to a now-stale registration context.
+        let replay_pool = pool.clone();
+        let replay_grant = grant.clone();
+        let replay_lease_id = lease.lease_id.clone();
+        let replay_lease_fence = lease.fence;
+        let replay_challenge_id = issued.challenge_id.clone();
+        let replay_request_digest = request_digest.clone();
+        let mut replay_task = tokio::spawn(async move {
+            let mut replay_repo = PgRepositoryFactory::new(replay_pool)
+                .create()
+                .await
+                .unwrap();
+            let replay = replay_repo
+                .account_handoff()
+                .registration_replay(
+                    &replay_grant,
+                    &replay_lease_id,
+                    replay_lease_fence,
+                    &replay_challenge_id,
+                    &replay_request_digest,
+                )
+                .await
+                .unwrap();
+            replay_repo.cancel().await.unwrap();
+            replay
+        });
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(100), &mut replay_task)
+                .await
+                .is_err(),
+            "the replay lookup must wait on the in-flight binding transaction"
         );
+        repo.save().await.unwrap();
+        let replay = tokio::time::timeout(std::time::Duration::from_secs(5), replay_task)
+            .await
+            .expect("replay lookup must finish after the binding commits")
+            .unwrap();
+        let IdentityCreationRegisterReplay::Replay(stored_outcome) = replay else {
+            panic!("exact cross-process retry must return the stored outcome");
+        };
+        assert_eq!(
+            serde_json::to_value(stored_outcome).unwrap(),
+            serde_json::to_value(&outcome).unwrap()
+        );
+
+        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let mut renewed_grant = grant.clone();
+        renewed_grant.id = new_id(now + Duration::seconds(2), &mut rng);
+        renewed_grant.account_handoff_grant =
+            format!("{}{}", Uuid::now_v7().simple(), "N".repeat(11));
+        assert!(matches!(
+            repo.account_handoff()
+                .registration_replay(
+                    &renewed_grant,
+                    &lease.lease_id,
+                    lease.fence,
+                    &issued.challenge_id,
+                    &request_digest,
+                )
+                .await
+                .unwrap(),
+            IdentityCreationRegisterReplay::Replay(_)
+        ));
+        assert!(matches!(
+            repo.account_handoff()
+                .registration_replay(
+                    &grant,
+                    &lease.lease_id,
+                    lease.fence,
+                    &issued.challenge_id,
+                    &register_request_digest('0'),
+                )
+                .await
+                .unwrap(),
+            IdentityCreationRegisterReplay::DuplicateConflict
+        ));
+
         let foreign_principal =
             arkret_identifiers::Did::new(format!("did:webvh:z{label}f:example.com")).unwrap();
         let device =
