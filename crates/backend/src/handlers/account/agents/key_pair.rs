@@ -65,7 +65,7 @@ struct ProofOfPossessionInput {
 /// canonical operation to the authoritative Principal Server, and returns only
 /// after that server durably accepts the supplied Event and activates the
 /// Agent. Runtime replacement re-pairing is expressed atomically by the
-/// controller-signed `authorize_event.payload.supersedes[]`; Coauth never
+/// controller-signed `authorize_event.event.payload.supersedes[]`; Coauth never
 /// fabricates controller-authored revoke Events. Returns the SDK
 /// [`AgentKeyPairOutcome`] carrying the accepted authorization Event ref.
 #[handler]
@@ -94,9 +94,10 @@ pub async fn post_agent_key_pair(
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| AppError::bad_request("Idempotency-Key is required"))?;
     if idempotency_key != body.authorize_event.event.event_id.as_str() {
-        return Err(
-            AppError::bad_request("Idempotency-Key must equal authorize_event.event_id").into(),
-        );
+        return Err(AppError::bad_request(
+            "Idempotency-Key must equal authorize_event.event.event_id",
+        )
+        .into());
     }
 
     let agent_id = normalize_did_for_binding(body.agent_id.as_str())
@@ -278,7 +279,7 @@ pub async fn post_agent_key_pair(
 
     let runtime_public_key_digest =
         runtime_public_key_digest(&public_key.public_key, body.verification_method.as_str())?;
-    let authorize_event_value = serde_json::to_value(&body.authorize_event)
+    let authorize_event_value = serde_json::to_value(&body.authorize_event.event)
         .map_err(|error| AppError::internal_box(Box::new(error)))?;
     let authoritative_key_state = authoritative_view
         .key_state
@@ -565,7 +566,7 @@ fn validate_controller_authorize_event<'a>(
     }
     if envelope.get("kind").and_then(Value::as_str) != Some("ak.agent.key.authorize") {
         return Err(AppError::bad_request(
-            "authorize_event.kind must be ak.agent.key.authorize",
+            "authorize_event.event.kind must be ak.agent.key.authorize",
         ));
     }
 
@@ -573,21 +574,22 @@ fn validate_controller_authorize_event<'a>(
         .get("event_id")
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| AppError::bad_request("authorize_event.event_id is required"))?;
-    arkret_identifiers::EventId::new(event_id.to_owned())
-        .map_err(|err| AppError::bad_request(format!("authorize_event.event_id invalid: {err}")))?;
+        .ok_or_else(|| AppError::bad_request("authorize_event.event.event_id is required"))?;
+    arkret_identifiers::EventId::new(event_id.to_owned()).map_err(|err| {
+        AppError::bad_request(format!("authorize_event.event.event_id invalid: {err}"))
+    })?;
     if envelope.get("actor_id").and_then(Value::as_str) != Some(agent_id) {
         return Err(AppError::forbidden(
-            "authorize_event.actor_id must equal the managed Agent DID",
+            "authorize_event.event.actor_id must equal the managed Agent DID",
         ));
     }
     let controller_id = envelope
         .get("executed_by")
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| AppError::bad_request("authorize_event.executed_by is required"))?;
+        .ok_or_else(|| AppError::bad_request("authorize_event.event.executed_by is required"))?;
     arkret_identifiers::Did::new(controller_id.to_owned()).map_err(|err| {
-        AppError::bad_request(format!("authorize_event.executed_by invalid: {err}"))
+        AppError::bad_request(format!("authorize_event.event.executed_by invalid: {err}"))
     })?;
     if authoritative_key_state.agent_id.as_str() != agent_id
         || authoritative_key_state.controller_id.as_str() != controller_id
@@ -599,7 +601,7 @@ fn validate_controller_authorize_event<'a>(
     let expected_realm = authoritative_key_state.principal_control_realm_id.as_str();
     if envelope.get("realm_id").and_then(Value::as_str) != Some(expected_realm) {
         return Err(AppError::forbidden(
-            "authorize_event.realm_id must equal the authoritative Agent PCR",
+            "authorize_event.event.realm_id must equal the authoritative Agent PCR",
         ));
     }
     let expected_authorization_ref = authoritative_key_state
@@ -608,22 +610,22 @@ fn validate_controller_authorize_event<'a>(
     if envelope.get("authorization_ref").and_then(Value::as_str) != Some(expected_authorization_ref)
     {
         return Err(AppError::forbidden(
-            "authorize_event.authorization_ref must match the authoritative controller delegation",
+            "authorize_event.event.authorization_ref must match the authoritative controller delegation",
         ));
     }
     ensure_authorize_event_has_controller_signature(envelope, controller_id)?;
 
     let payload = envelope
         .get("payload")
-        .ok_or_else(|| AppError::bad_request("authorize_event.payload is required"))?;
+        .ok_or_else(|| AppError::bad_request("authorize_event.event.payload is required"))?;
     if payload.get("agent_id").and_then(Value::as_str) != Some(agent_id) {
         return Err(AppError::bad_request(
-            "authorize_event.payload.agent_id must match the request",
+            "authorize_event.event.payload.agent_id must match the request",
         ));
     }
     if payload.get("verification_method").and_then(Value::as_str) != Some(verification_method) {
         return Err(AppError::bad_request(
-            "authorize_event.payload.verification_method must match the request",
+            "authorize_event.event.payload.verification_method must match the request",
         ));
     }
     if payload
@@ -632,24 +634,26 @@ fn validate_controller_authorize_event<'a>(
         != Some(controller_id)
     {
         return Err(AppError::forbidden(
-            "authorize_event.payload.accountable_principal_id must match executed_by",
+            "authorize_event.event.payload.accountable_principal_id must match executed_by",
         ));
     }
     if payload.get("public_key_digest").and_then(Value::as_str) != Some(runtime_public_key_digest) {
         return Err(AppError::bad_request(
-            "authorize_event.payload.public_key_digest must bind the runtime public_key",
+            "authorize_event.event.payload.public_key_digest must bind the runtime public_key",
         ));
     }
     let signing_key_binding_digest = payload
         .get("signing_key_binding_digest")
         .and_then(Value::as_str)
         .ok_or_else(|| {
-            AppError::bad_request("authorize_event.payload.signing_key_binding_digest is required")
+            AppError::bad_request(
+                "authorize_event.event.payload.signing_key_binding_digest is required",
+            )
         })
         .and_then(|value| {
             arkret_identifiers::Hash::new(value.to_owned()).map_err(|error| {
                 AppError::bad_request(format!(
-                    "authorize_event.payload.signing_key_binding_digest invalid: {error}"
+                    "authorize_event.event.payload.signing_key_binding_digest invalid: {error}"
                 ))
             })
         })?;
@@ -658,7 +662,7 @@ fn validate_controller_authorize_event<'a>(
             .map_err(|reason| AppError::bad_request(reason.as_str()))?;
     if signing_key_binding_digest != actual_binding_digest {
         return Err(AppError::bad_request(
-            "authorize_event.payload.signing_key_binding_digest must bind signing_key_binding",
+            "authorize_event.event.payload.signing_key_binding_digest must bind signing_key_binding",
         ));
     }
     if signing_key_binding.agent_id.as_str() != agent_id
@@ -674,13 +678,15 @@ fn validate_controller_authorize_event<'a>(
     let payload_audience = payload
         .get("audience")
         .and_then(Value::as_array)
-        .ok_or_else(|| AppError::bad_request("authorize_event.payload.audience is required"))?;
+        .ok_or_else(|| {
+            AppError::bad_request("authorize_event.event.payload.audience is required")
+        })?;
     if !payload_audience
         .iter()
         .any(|value| value.as_str() == Some(audience))
     {
         return Err(AppError::bad_request(
-            "authorize_event.payload.audience must include proof_of_possession.audience",
+            "authorize_event.event.payload.audience must include proof_of_possession.audience",
         ));
     }
 
@@ -688,15 +694,15 @@ fn validate_controller_authorize_event<'a>(
         .get("key_id")
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| AppError::bad_request("authorize_event.payload.key_id is required"))?;
+        .ok_or_else(|| AppError::bad_request("authorize_event.event.payload.key_id is required"))?;
     if signing_key_binding.agent_key_id.as_str() != key_id {
         return Err(AppError::bad_request(
-            "signing_key_binding.agent_key_id must match authorize_event.payload.key_id",
+            "signing_key_binding.agent_key_id must match authorize_event.event.payload.key_id",
         ));
     }
     validate_authorize_event_supersedes(payload, authoritative_key_state)?;
     let agent_key_scope = payload.get("agent_key_scope").ok_or_else(|| {
-        AppError::bad_request("authorize_event.payload.agent_key_scope is required")
+        AppError::bad_request("authorize_event.event.payload.agent_key_scope is required")
     })?;
     ensure_authorize_event_scope_is_action_object(agent_key_scope)?;
     let issued_at = payload
@@ -705,7 +711,7 @@ fn validate_controller_authorize_event<'a>(
         .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
         .map(|timestamp| timestamp.with_timezone(&Utc))
         .ok_or_else(|| {
-            AppError::bad_request("authorize_event.payload.issued_at must be rfc3339")
+            AppError::bad_request("authorize_event.event.payload.issued_at must be rfc3339")
         })?;
     let expires_at = match payload.get("expires_at") {
         None | Some(Value::Null) => None,
@@ -715,7 +721,9 @@ fn validate_controller_authorize_event<'a>(
                 .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
                 .map(|timestamp| timestamp.with_timezone(&Utc))
                 .ok_or_else(|| {
-                    AppError::bad_request("authorize_event.payload.expires_at must be rfc3339")
+                    AppError::bad_request(
+                        "authorize_event.event.payload.expires_at must be rfc3339",
+                    )
                 })?,
         ),
     };
@@ -726,7 +734,7 @@ fn validate_controller_authorize_event<'a>(
         let authorization_lifetime = expires_at.signed_duration_since(issued_at);
         if authorization_lifetime <= chrono::Duration::zero() {
             return Err(AppError::bad_request(
-                "authorize_event.payload.expires_at must be after issued_at",
+                "authorize_event.event.payload.expires_at must be after issued_at",
             ));
         }
     }
@@ -736,16 +744,16 @@ fn validate_controller_authorize_event<'a>(
         ));
     }
     let approval = payload.get("approval_evidence").ok_or_else(|| {
-        AppError::bad_request("authorize_event.payload.approval_evidence is required")
+        AppError::bad_request("authorize_event.event.payload.approval_evidence is required")
     })?;
     if approval.get("kind").and_then(Value::as_str) != Some("pairing_request") {
         return Err(AppError::bad_request(
-            "authorize_event.payload.approval_evidence.kind must be pairing_request",
+            "authorize_event.event.payload.approval_evidence.kind must be pairing_request",
         ));
     }
     if approval.get("evidence_ref").is_some() {
         return Err(AppError::bad_request(
-            "authorize_event.payload.approval_evidence.evidence_ref must be absent for pairing_request evidence",
+            "authorize_event.event.payload.approval_evidence.evidence_ref must be absent for pairing_request evidence",
         ));
     }
     if approval
@@ -754,17 +762,17 @@ fn validate_controller_authorize_event<'a>(
         .is_none()
     {
         return Err(AppError::bad_request(
-            "authorize_event.payload.approval_evidence.request_canonical_digest is required",
+            "authorize_event.event.payload.approval_evidence.request_canonical_digest is required",
         ));
     }
     if approval.get("pairing_request_id").and_then(Value::as_str) != Some(pairing_request_id) {
         return Err(AppError::bad_request(
-            "authorize_event.payload.approval_evidence.pairing_request_id must match the request",
+            "authorize_event.event.payload.approval_evidence.pairing_request_id must match the request",
         ));
     }
     if approval.get("approved_by").and_then(Value::as_str) != Some(controller_id) {
         return Err(AppError::forbidden(
-            "authorize_event.payload.approval_evidence.approved_by must match executed_by",
+            "authorize_event.event.payload.approval_evidence.approved_by must match executed_by",
         ));
     }
 
@@ -802,7 +810,7 @@ fn validate_authorize_event_supersedes(
         Some(Value::Array(values)) => values.as_slice(),
         Some(_) => {
             return Err(AppError::bad_request(
-                "authorize_event.payload.supersedes must be an array",
+                "authorize_event.event.payload.supersedes must be an array",
             ));
         }
     };
@@ -814,7 +822,9 @@ fn validate_authorize_event_supersedes(
                 .and_then(Value::as_str)
                 .filter(|value| !value.is_empty())
                 .ok_or_else(|| {
-                    AppError::bad_request("authorize_event.payload.supersedes[].key_id is required")
+                    AppError::bad_request(
+                        "authorize_event.event.payload.supersedes[].key_id is required",
+                    )
                 })?;
             let event_ref = value
                 .get("authorized_event_ref")
@@ -822,7 +832,7 @@ fn validate_authorize_event_supersedes(
                 .filter(|value| !value.is_empty())
                 .ok_or_else(|| {
                     AppError::bad_request(
-                        "authorize_event.payload.supersedes[].authorized_event_ref is required",
+                        "authorize_event.event.payload.supersedes[].authorized_event_ref is required",
                     )
                 })?;
             Ok((key_id.to_owned(), event_ref.to_owned()))
@@ -830,7 +840,7 @@ fn validate_authorize_event_supersedes(
         .collect::<Result<_, AppError>>()?;
     if supplied.len() != values.len() || supplied != expected {
         return Err(AppError::conflict(
-            "authorize_event.payload.supersedes does not match the authoritative active key set",
+            "authorize_event.event.payload.supersedes does not match the authoritative active key set",
         ));
     }
     Ok(())
@@ -1119,7 +1129,7 @@ fn authorize_event_signature_input(
     })?;
     if event.actor_id.as_str() != agent_id {
         return Err(AppError::bad_request(
-            "authorize_event.actor_id must match the managed Agent DID",
+            "authorize_event.event.actor_id must match the managed Agent DID",
         ));
     }
     if event
@@ -1129,7 +1139,7 @@ fn authorize_event_signature_input(
         != Some(controller_id)
     {
         return Err(AppError::bad_request(
-            "authorize_event.executed_by must match the resolved controller DID",
+            "authorize_event.event.executed_by must match the resolved controller DID",
         ));
     }
     event.validate_proof_bindings().map_err(|error| {
@@ -1173,14 +1183,16 @@ fn ensure_authorize_event_scope_is_action_object(scope: &Value) -> Result<(), Ap
         .and_then(Value::as_array)
         .filter(|actions| !actions.is_empty())
         .ok_or_else(|| {
-            AppError::bad_request("authorize_event.payload.agent_key_scope.actions is required")
+            AppError::bad_request(
+                "authorize_event.event.payload.agent_key_scope.actions is required",
+            )
         })?;
     if actions
         .iter()
         .any(|action| action.as_str().is_none_or(|value| value.trim().is_empty()))
     {
         return Err(AppError::bad_request(
-            "authorize_event.payload.agent_key_scope.actions must be non-empty strings",
+            "authorize_event.event.payload.agent_key_scope.actions must be non-empty strings",
         ));
     }
     Ok(())
@@ -1255,13 +1267,13 @@ fn pairing_superseded_event_refs(
                     .map(ToOwned::to_owned)
                     .ok_or_else(|| {
                         AppError::bad_request(
-                            "authorize_event.payload.supersedes[].authorized_event_ref is required",
+                            "authorize_event.event.payload.supersedes[].authorized_event_ref is required",
                         )
                     })
             })
             .collect(),
         Some(_) => Err(AppError::bad_request(
-            "authorize_event.payload.supersedes must be an array",
+            "authorize_event.event.payload.supersedes must be an array",
         )),
     }
 }
@@ -1365,6 +1377,10 @@ mod tests {
             "event_id": "ak:event:01999999-0000-7000-8000-000000000001",
             "kind": "ak.agent.key.authorize",
             "realm_id": "ak:realm:01999999-0000-7000-8000-000000000010",
+            "scope_ref": {
+                "kind": "realm",
+                "realm_id": "ak:realm:01999999-0000-7000-8000-000000000010"
+            },
             "actor_id": AGENT,
             "executed_by": CONTROLLER,
             "authorization_ref": format!("{AGENT}#managed-controller"),
