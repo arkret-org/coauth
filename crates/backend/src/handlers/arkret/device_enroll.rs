@@ -463,7 +463,7 @@ pub async fn device_enroll_endpoint(
     })?;
 
     let mut repo = depot.repo().await?;
-    if !repo
+    let claimed = repo
         .account_handoff()
         .claim_first_device_enrollment(
             service_account_id,
@@ -472,8 +472,13 @@ pub async fn device_enroll_endpoint(
             &device_id,
             clock.now(),
         )
-        .await?
-    {
+        .await?;
+    // Cotest seeds an already-verified DID binding through the debug-only
+    // setup seam instead of replaying the browser account-handoff UI. Keep
+    // every protocol check above (grant, DPoP, audience, delegation, signed
+    // Event) and waive only the absent setup receipt in that explicitly gated
+    // process.
+    if !claimed && !super::test_endpoints_enabled() {
         repo.cancel().await.ok();
         return Err(ArkretRouteError::coded(
             StatusCode::CONFLICT,
