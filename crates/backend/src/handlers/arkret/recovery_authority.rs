@@ -13,8 +13,7 @@ use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signat
 use arkret_signatures::{SignEventOptions, sign_event};
 use arkret_wire::{
     AuthoritySetIssuerRole, AuthoritySetSourceKind, AuthorizationLease,
-    AuthorizeRecoveryDeviceOutcome, AuthorizeRecoveryDeviceRequest, ControlProposalDecisionPolicy,
-    ControlProposalReceipt, ControlProposalReceiptKind, Event, EventKind, PayloadProof,
+    AuthorizeRecoveryDeviceOutcome, AuthorizeRecoveryDeviceRequest, Event, EventKind, PayloadProof,
     PayloadSigner, PromoteRecoverySessionGrantOutcome, PromoteRecoverySessionGrantRequest,
     RECOVERY_ACCOUNT_AUTHORITY_SET_ID, RecoveryCompletionAttestation, ScopeRef,
     ServiceSignatureAlgorithm, proof_kind,
@@ -630,32 +629,6 @@ pub async fn authorize_recovery_device_endpoint(
     let intent = &request
         .authorization_preimage
         .authorize_event_publication_intent;
-    let proposal_policy = ControlProposalDecisionPolicy::default();
-    let mut control_proposal_receipt = ControlProposalReceipt {
-        kind: ControlProposalReceiptKind::ProposalReceipt,
-        realm_id: event.realm_id.clone(),
-        proposal_digest: authorized_event_digest.clone(),
-        received_at: now,
-        decision_due_at: now + proposal_policy.decision_window,
-        absolute_due_at: now + proposal_policy.absolute_horizon,
-        defer_count: 0,
-        authority_set_ref: intent.authority_set_ref.clone(),
-        receipt_coordinator: Did::new(authority.did().to_owned())
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-        signatures: Vec::new(),
-    };
-    let receipt_bytes = control_proposal_receipt
-        .canonical_bytes_for_signature()
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let mut receipt_signature = authority
-        .signer()
-        .sign_payload(&receipt_bytes)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    receipt_signature.created_at = now;
-    control_proposal_receipt.signatures = vec![receipt_signature];
-    control_proposal_receipt
-        .validate_structural(proposal_policy)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let outcome = AuthorizeRecoveryDeviceOutcome {
         ticket_id: request.ticket.ticket_id.clone(),
         transaction_id: request.ticket.transaction_id.clone(),
@@ -665,7 +638,6 @@ pub async fn authorize_recovery_device_endpoint(
         authorized_event_digest,
         authorization_lease,
         cba_proof_bundles: intent.cba_proof_bundles.clone(),
-        control_proposal_receipt,
         authority_receipt_id: ReceiptId::from_uuid(uuid::Uuid::now_v7()),
         accepted_at: now,
     };
