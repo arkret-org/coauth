@@ -159,11 +159,17 @@ pub async fn verify_unpublished_webvh_candidate(
     } else {
         http_client
     };
-    let response = request_client
-        .get(log_url)
-        .send_traced()
-        .await?
-        .error_for_status()?;
+    let response = request_client.get(log_url.clone()).send_traced().await?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|error| format!("<failed to read response body: {error}>"));
+        return Err(DidResolveError::BadResolverResponse(format!(
+            "current did:webvh history request {log_url} returned {status}: {body}"
+        )));
+    }
     if response
         .content_length()
         .is_some_and(|length| length > DID_WEBVH_LOG_MAX_BYTES as u64)
@@ -182,8 +188,24 @@ pub async fn verify_unpublished_webvh_candidate(
         }
         history.extend_from_slice(&chunk);
     }
+    verify_unpublished_webvh_candidate_from_history(
+        did,
+        expected_previous_version_id,
+        &history,
+        candidate_entry_bytes,
+        expected_candidate_version_id,
+    )
+}
+
+pub fn verify_unpublished_webvh_candidate_from_history(
+    did: &arkret_identifiers::Did,
+    expected_previous_version_id: &str,
+    history: &[u8],
+    candidate_entry_bytes: &[u8],
+    expected_candidate_version_id: &str,
+) -> Result<VerifiedUnpublishedWebvhCandidate, DidResolveError> {
     let previous =
-        arkret_identity::verify_did_webvh_v1_log_bytes(did, &history).map_err(|error| {
+        arkret_identity::verify_did_webvh_v1_log_bytes(did, history).map_err(|error| {
             DidResolveError::BadResolverResponse(format!(
                 "current did:webvh history failed verification: {error}"
             ))
@@ -196,7 +218,7 @@ pub async fn verify_unpublished_webvh_candidate(
     }
     let candidate = arkret_identity::verify_did_webvh_v1_candidate_entry_bytes(
         did,
-        &history,
+        history,
         expected_previous_version_id,
         candidate_entry_bytes,
         expected_candidate_version_id,

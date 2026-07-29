@@ -32,9 +32,123 @@ use super::session_grant::{
 use super::{ArkretRouteError, service_id_for};
 use crate::handlers::common::DepotExt;
 use crate::services::device_enrollment_authority::enrollment_authority;
-use crate::services::did_resolver::{DidResolveError, verify_unpublished_webvh_candidate};
+use crate::services::did_resolver::{
+    DidResolveError, verify_unpublished_webvh_candidate_from_history,
+};
 use crate::services::dpop::{DpopVerifier, dpop_htu, dpop_replay_record};
 use crate::services::resolved_principal_audiences::{effective_audience, shared};
+
+async fn configured_principal_server_document(
+    depot: &Depot,
+    server: &coauth_config::PrincipalServerConfig,
+    expected_did: &str,
+) -> Result<super::DidDocument, ArkretRouteError> {
+    let mut url = server
+        .endpoint
+        .join("/_arkret/root/identity/document")
+        .map_err(|error| {
+            ArkretRouteError::Internal(
+                anyhow::anyhow!(
+                    "configured Principal Server identity endpoint is invalid: {error}"
+                )
+                .into(),
+            )
+        })?;
+    url.query_pairs_mut().append_pair("did", expected_did);
+    let response = depot
+        .http_client()?
+        .get(url.clone())
+        .send()
+        .await
+        .map_err(|error| {
+            ArkretRouteError::Internal(
+                anyhow::anyhow!("configured Principal Server identity request failed: {error}")
+                    .into(),
+            )
+        })?;
+    let status = response.status();
+    let body = response.bytes().await.map_err(|error| {
+        ArkretRouteError::Internal(
+            anyhow::anyhow!("configured Principal Server identity response failed: {error}").into(),
+        )
+    })?;
+    if !status.is_success() {
+        return Err(invalid_signature(format!(
+            "configured Principal Server identity endpoint {url} returned {status}"
+        )));
+    }
+    let view: arkret_models_identity::IdentityDocumentView = serde_json::from_slice(&body)
+        .map_err(|error| {
+            invalid_signature(format!(
+                "configured Principal Server identity response is invalid: {error}"
+            ))
+        })?;
+    let document: super::DidDocument = serde_json::from_value(serde_json::Value::Object(
+        view.did_document.into_iter().collect(),
+    ))
+    .map_err(|error| {
+        invalid_signature(format!(
+            "configured Principal Server DID document is invalid: {error}"
+        ))
+    })?;
+    if document.id != expected_did {
+        return Err(invalid_signature(
+            "configured Principal Server DID document changed service_id",
+        ));
+    }
+    Ok(document)
+}
+
+async fn configured_principal_history(
+    depot: &Depot,
+    server: &coauth_config::PrincipalServerConfig,
+    did: &arkret_identifiers::Did,
+) -> Result<Vec<u8>, ArkretRouteError> {
+    let mut builder = arkret_http_client::Client::builder(server.endpoint.clone())
+        .http_client(depot.http_client()?);
+    if server.endpoint.scheme() == "http" {
+        builder = builder.allow_insecure_localhost();
+    }
+    let client = builder.build().map_err(|error| {
+        ArkretRouteError::Internal(
+            anyhow::anyhow!("configured Principal Server client is invalid: {error}").into(),
+        )
+    })?;
+    let mut cursor = None;
+    let mut history = Vec::new();
+    loop {
+        let page = client
+            .identity_log(did.as_str(), cursor.as_deref(), Some(100))
+            .await
+            .map_err(|error| {
+                failed_precondition(format!(
+                    "configured Principal Server DID history is unavailable: {error}"
+                ))
+            })?;
+        for entry in page.events {
+            history.extend_from_slice(
+                &serde_json::to_vec(&serde_json::Value::Object(entry.operation_body)).map_err(
+                    |error| {
+                        failed_precondition(format!(
+                            "configured Principal Server DID history is invalid: {error}"
+                        ))
+                    },
+                )?,
+            );
+            history.push(b'\n');
+        }
+        if !page.has_more {
+            break;
+        }
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            return Err(failed_precondition(
+                "configured Principal Server DID history pagination omitted next_cursor",
+            ));
+        }
+    }
+    Ok(history)
+}
 
 fn duplicate_conflict(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
@@ -196,7 +310,7 @@ fn validate_account_authority_policy(
 async fn verify_ticket_signature(
     req: &Request,
     depot: &Depot,
-    repo: &mut coauth_data::BoxRepository,
+    _repo: &mut coauth_data::BoxRepository,
     request: &AuthorizeRecoveryDeviceRequest,
     now: DateTime<Utc>,
 ) -> Result<(), ArkretRouteError> {
@@ -223,37 +337,23 @@ async fn verify_ticket_signature(
     }
 
     let arkret_config = depot.arkret_config()?;
-    let trusted_issuer = arkret_config
+    let trusted_server = arkret_config
         .principal_servers
         .iter()
-        .filter_map(|server| effective_audience(server, shared()))
-        .any(|service_id| service_id == ticket.principal_server_id);
-    if !trusted_issuer {
-        return Err(invalid_signature(
-            "ticket principal_server_id is not a configured Principal Server",
-        ));
-    }
-
-    let resolution = depot
-        .did_resolver_service()?
-        .resolve_did_document(
-            &depot.http_client()?,
-            &depot.url_builder()?,
-            &arkret_config,
-            &depot.key_store()?,
-            repo,
-            ticket.principal_server_id.as_str(),
-        )
-        .await
-        .map_err(super::map_did_resolve_error)?;
-    if let Some(rejection) = resolution.identity_fact_rejection() {
-        return Err(invalid_signature(format!(
-            "ticket issuer resolution is not a full identity fact: {}",
-            rejection.as_str()
-        )));
-    }
-    let method = resolution
-        .document
+        .find(|server| {
+            effective_audience(server, shared())
+                .is_some_and(|service_id| service_id == ticket.principal_server_id)
+        })
+        .ok_or_else(|| {
+            invalid_signature("ticket principal_server_id is not a configured Principal Server")
+        })?;
+    let document = configured_principal_server_document(
+        depot,
+        trusted_server,
+        ticket.principal_server_id.as_str(),
+    )
+    .await?;
+    let method = document
         .verification_method
         .iter()
         .find(|method| method.id == ticket.auth_data.verification_method)
@@ -567,14 +667,25 @@ pub async fn authorize_recovery_device_endpoint(
         &request.ticket.principal_id,
         &request.authorization_preimage.did_entry_ref,
     )?;
-    let verified_candidate = verify_unpublished_webvh_candidate(
-        &depot.http_client()?,
+    let principal_server = config
+        .principal_servers
+        .iter()
+        .find(|server| {
+            effective_audience(server, shared())
+                .is_some_and(|service_id| service_id == request.ticket.principal_server_id)
+        })
+        .ok_or_else(|| {
+            invalid_signature("ticket principal_server_id is not a configured Principal Server")
+        })?;
+    let current_history =
+        configured_principal_history(depot, principal_server, &request.ticket.principal_id).await?;
+    let verified_candidate = verify_unpublished_webvh_candidate_from_history(
         &request.ticket.principal_id,
         previous_version_id,
+        &current_history,
         &candidate_entry_bytes,
         candidate_version_id,
     )
-    .await
     .map_err(|error| match error {
         DidResolveError::BadResolverResponse(message) => failed_precondition(message),
         other => super::map_did_resolve_error(other),
