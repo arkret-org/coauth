@@ -24,7 +24,9 @@ mod tests;
 use anyhow::Error as AnyhowError;
 use arkret_wire::ErrorEnvelope;
 use coauth_config::ArkretConfig;
-use coauth_data::user::PrincipalDidRepository as _;
+use coauth_data::user::{
+    PrincipalDidRepository as _, UserRepository as _, VerifiedPrincipalDidBindingInput,
+};
 use coauth_data::{RepositoryAccess, UrlBuilder, User};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable;
@@ -891,6 +893,22 @@ pub struct DebugIssueDpopGrantOutcome {
     pub principal_did: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct DebugBindPrincipalRequestBody {
+    pub actor_id: String,
+    pub audience: String,
+    pub key_log_head: String,
+    pub enrollment_authority_ref: String,
+    pub account_handle: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DebugBindPrincipalOutcome {
+    pub actor_id: String,
+    pub audience: String,
+    pub enrollment_authority_did: String,
+}
+
 /// Returns true when test-only endpoints are explicitly allowed at runtime.
 /// The route is only mounted in debug builds, and this env gate must still
 /// be enabled there.
@@ -902,6 +920,102 @@ pub fn test_endpoints_enabled() -> bool {
             .as_deref(),
         Some("1" | "true" | "yes")
     )
+}
+
+/// Test-only setup seam for a principal whose DID inception was accepted by
+/// the live Principal Server. Recovery behavior still uses the standard
+/// authorization, promotion, and session-grant endpoints.
+#[handler]
+pub async fn debug_bind_principal(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<DebugBindPrincipalOutcome>, ArkretRouteError> {
+    if !test_endpoints_enabled() {
+        return Err(ArkretRouteError::NotFound);
+    }
+    let body: DebugBindPrincipalRequestBody = req
+        .parse_json()
+        .await
+        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
+    let principal_id = arkret_identifiers::Did::new(body.actor_id.clone())
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    let audience = arkret_identifiers::Did::new(body.audience.clone())
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    let key_log_head = arkret_identifiers::Hash::new(body.key_log_head)
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    let authority =
+        crate::services::device_enrollment_authority::enrollment_authority(&depot.key_store()?)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let enrollment_authority_did = arkret_identifiers::Did::new(authority.did().to_owned())
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let expected_ref_prefix = format!("{principal_id}#");
+    if !body
+        .enrollment_authority_ref
+        .starts_with(&expected_ref_prefix)
+    {
+        return Err(ArkretRouteError::BadRequest(
+            "enrollment_authority_ref must be a DID URL under actor_id".to_owned(),
+        ));
+    }
+
+    let clock = crate::handlers::make_clock();
+    let mut rng = crate::handlers::make_rng();
+    let mut repo = depot.repo().await?;
+    let existing_user = {
+        let mut users = repo.user();
+        users.find_by_handle(&body.account_handle).await?
+    };
+    let user = match existing_user {
+        Some(user) => user,
+        None => {
+            repo.user()
+                .add(&mut *rng, &*clock, body.account_handle)
+                .await?
+        }
+    };
+    let existing_binding = {
+        let mut bindings = repo.principal_did();
+        bindings
+            .get_for_user_and_audience(&user, audience.as_str())
+            .await?
+    };
+    match existing_binding {
+        Some(binding)
+            if binding.principal_id == principal_id.as_str()
+                && binding.key_log_head == key_log_head
+                && binding.enrollment_authority_did == enrollment_authority_did
+                && binding.enrollment_authority_ref == body.enrollment_authority_ref => {}
+        Some(_) => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
+                "test principal binding already exists with different facts",
+            ));
+        }
+        None => {
+            repo.principal_did()
+                .add_verified(
+                    &mut *rng,
+                    &*clock,
+                    &user,
+                    VerifiedPrincipalDidBindingInput {
+                        audience: audience.to_string(),
+                        principal_id: principal_id.to_string(),
+                        key_log_head,
+                        enrollment_authority_did: enrollment_authority_did.clone(),
+                        enrollment_authority_ref: body.enrollment_authority_ref,
+                    },
+                )
+                .await?;
+        }
+    }
+    repo.save().await?;
+    Ok(Json(DebugBindPrincipalOutcome {
+        actor_id: principal_id.to_string(),
+        audience: audience.to_string(),
+        enrollment_authority_did: enrollment_authority_did.to_string(),
+    }))
 }
 
 /// `POST /api/v1/test/debug/issue-dpop-grant` — deterministic DPoP-bound
