@@ -315,7 +315,7 @@ impl PrincipalAgentKeyPairCommitRequest {
 
     #[must_use]
     pub fn authorized_event_id(&self) -> &str {
-        self.body.authorize_event.event_id.as_str()
+        self.body.authorize_event.event.event_id.as_str()
     }
 }
 

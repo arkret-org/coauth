@@ -524,7 +524,8 @@ fn validate_authoritative_agent_session_evidence(
     .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
     if paired_request.agent_id.as_str() != authorization.agent_id
         || paired_request.verification_method.as_str() != authorization.verification_method
-        || paired_request.authorize_event.event_id.as_str() != authorization.authorized_event_id
+        || paired_request.authorize_event.event.event_id.as_str()
+            != authorization.authorized_event_id
         || disclosure.agent_id.as_str() != authorization.agent_id
         || disclosure.controller_id.as_str() != authorization.accountable_principal_id
         || disclosure.requested_scope_digest != computed_digest

@@ -25,7 +25,7 @@ impl RunnableJob for AgentKeyPairCommitJob {
                 computed_digest
             )));
         }
-        if self.body().authorize_event.event_id.as_str() != self.authorized_event_id() {
+        if self.body().authorize_event.event.event_id.as_str() != self.authorized_event_id() {
             return Err(JobError::fail(anyhow::anyhow!(
                 "Agent key-pair Event id does not match the queued job"
             )));
@@ -43,7 +43,8 @@ impl RunnableJob for AgentKeyPairCommitJob {
             .await
             .map_err(JobError::retry)?;
 
-        let superseded_event_ids = match self.body().authorize_event.payload.get("supersedes") {
+        let superseded_event_ids = match self.body().authorize_event.event.payload.get("supersedes")
+        {
             None => Vec::new(),
             Some(serde_json::Value::Array(values)) => values
                 .iter()

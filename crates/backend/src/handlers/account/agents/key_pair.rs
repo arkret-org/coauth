@@ -93,7 +93,7 @@ pub async fn post_agent_key_pair(
         .and_then(|value| value.to_str().ok())
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| AppError::bad_request("Idempotency-Key is required"))?;
-    if idempotency_key != body.authorize_event.event_id.as_str() {
+    if idempotency_key != body.authorize_event.event.event_id.as_str() {
         return Err(
             AppError::bad_request("Idempotency-Key must equal authorize_event.event_id").into(),
         );
@@ -134,7 +134,7 @@ pub async fn post_agent_key_pair(
     // current-handle/recovery gates: a successful first commit consumes the
     // handle and advances the Agent PCR frontier to stale, but the identical
     // request must still return the original outcome after a lost response.
-    let authorized_event_id = body.authorize_event.event_id.to_string();
+    let authorized_event_id = body.authorize_event.event.event_id.to_string();
     let request_digest = canonical_digest(&body)?;
     let mut idempotency_repo = depot.repo().await?;
     let existing_authorization = idempotency_repo
@@ -319,7 +319,7 @@ pub async fn post_agent_key_pair(
         &body.agent_id,
         &authorize_event.key_id,
         &body.verification_method,
-        &body.authorize_event.event_id,
+        &body.authorize_event.event.event_id,
         &authorize_event.signing_key_binding_digest,
         &pop.audience,
         &http_client,
@@ -1243,7 +1243,7 @@ async fn commit_and_mark_agent_key_authorization(
 fn pairing_superseded_event_refs(
     body: &arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody,
 ) -> Result<Vec<String>, AppError> {
-    match body.authorize_event.payload.get("supersedes") {
+    match body.authorize_event.event.payload.get("supersedes") {
         None => Ok(Vec::new()),
         Some(Value::Array(values)) => values
             .iter()
