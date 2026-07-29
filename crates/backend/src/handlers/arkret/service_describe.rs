@@ -512,6 +512,7 @@ pub(crate) fn service_describe_response(
                 .with_base_url(url_builder.http_base().to_string()),
         ],
         supported_features: features.clone(),
+        calendar_tzdb_versions: Vec::new(),
         auth_metadata: build_auth_metadata(url_builder, arkret_config, enrollment_authority_did),
         limits: ServerLimits {
             max_get_query_selectors: None,
