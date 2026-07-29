@@ -10,10 +10,9 @@
 use serde::{Deserialize, Serialize};
 
 /// Account-selection hint accepted by the passkey authentication start
-/// endpoint. The backend accepts `account_id`, `handle`, or `login_hint`;
-/// `display_name` remains a legacy wire field and is not used for account
-/// selection. Finish endpoints derive the account from server-side ceremony
-/// state instead of trusting another caller-supplied hint.
+/// endpoint. The backend accepts `account_id`, `handle`, or `login_hint`.
+/// Finish endpoints derive the account from server-side ceremony state
+/// instead of trusting another caller-supplied hint.
 #[derive(Default, Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 #[serde(rename = "AuthPasskeyAccountHint")]
@@ -24,8 +23,6 @@ pub struct PasskeyAccountHint {
     pub handle: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub login_hint: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub display_name: Option<String>,
 }
 
 /// Body for `passkey/register/start`.
