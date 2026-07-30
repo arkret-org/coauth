@@ -7,6 +7,7 @@
 //! `agent_key_proof`, and commits the unchanged signed request to the
 //! authoritative Principal Server before reporting success.
 
+use arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload;
 use arkret_signatures::proof::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
@@ -279,14 +280,12 @@ pub async fn post_agent_key_pair(
 
     let runtime_public_key_digest =
         runtime_public_key_digest(&public_key.public_key, body.verification_method.as_str())?;
-    let authorize_event_value = serde_json::to_value(&body.authorize_event.event)
-        .map_err(|error| AppError::internal_box(Box::new(error)))?;
     let authoritative_key_state = authoritative_view
         .key_state
         .as_ref()
         .ok_or_else(|| AppError::forbidden("authoritative Agent key state is missing"))?;
     let authorize_event = validate_controller_authorize_event(
-        &authorize_event_value,
+        &body.authorize_event.event,
         &agent_id,
         &body.verification_method,
         &runtime_public_key_digest,
@@ -298,7 +297,7 @@ pub async fn post_agent_key_pair(
     )?;
 
     if let Err(error) = verify_authorize_event_controller_signature(
-        &authorize_event_value,
+        &body.authorize_event.event,
         &agent_id,
         &authorize_event.controller_id,
         &pop.audience,
@@ -318,10 +317,10 @@ pub async fn post_agent_key_pair(
         &body.signing_key_binding,
         &authorize_event.controller_id,
         &body.agent_id,
-        &authorize_event.key_id,
+        authorize_event.payload.key_id.as_str(),
         &body.verification_method,
         &body.authorize_event.event.event_id,
-        &authorize_event.signing_key_binding_digest,
+        &authorize_event.payload.signing_key_binding_digest,
         &pop.audience,
         &http_client,
         &url_builder,
@@ -347,9 +346,9 @@ pub async fn post_agent_key_pair(
     // Agent session issuance still performs its required accountability gate.
 
     let mut rng = make_rng();
-    let key_id = authorize_event.key_id.clone();
-    let issued_at = authorize_event.issued_at;
-    let expires_at = authorize_event.expires_at;
+    let key_id = authorize_event.payload.key_id.to_string();
+    let issued_at = authorize_event.payload.issued_at;
+    let expires_at = authorize_event.payload.expires_at;
 
     // Runtime replacement re-pairing (key-management §3.6.1): accepting a new
     // runtime key supersedes every previously accepted active key of the
@@ -370,7 +369,7 @@ pub async fn post_agent_key_pair(
     let fanout_payload =
         serde_json::to_value(&body).map_err(|error| AppError::internal_box(Box::new(error)))?;
     let idempotency_key = authorized_event_id.clone();
-    let agent_key_scope = serde_json::to_string(authorize_event.agent_key_scope)
+    let agent_key_scope = serde_json::to_string(&authorize_event.payload.agent_key_scope)
         .map_err(|err| AppError::internal_box(Box::new(err)))?;
 
     repo.agent_key_authorization()
@@ -494,17 +493,16 @@ pub async fn post_agent_key_pair(
     ))
 }
 
+/// The controller-signed authorize Event after every business-field check.
+///
+/// `payload` is the SDK's closed `ak.agent.key.authorize` type, so the
+/// downstream persistence and audit code reads typed fields — a payload
+/// rename in the spec becomes a compile error here rather than a check that
+/// silently stops matching.
 #[derive(Debug)]
-struct ValidatedAuthorizeEvent<'a> {
+struct ValidatedAuthorizeEvent {
     controller_id: String,
-    key_id: String,
-    agent_key_scope: &'a Value,
-    issued_at: DateTime<Utc>,
-    signing_key_binding_digest: arkret_identifiers::Hash,
-    /// Optional authorization expiry (key-management §3.6.1): absent means
-    /// the key authorization never expires by time and is governed solely by
-    /// the revocation chain.
-    expires_at: Option<DateTime<Utc>>,
+    payload: AgentKeyAuthorizePayload,
 }
 
 fn validate_runtime_public_key(
@@ -548,8 +546,8 @@ fn runtime_public_key_digest(
         .map_err(|error| AppError::bad_request(format!("public_key is invalid: {error}")))
 }
 
-fn validate_controller_authorize_event<'a>(
-    envelope: &'a Value,
+fn validate_controller_authorize_event(
+    event: &arkret_wire::Event,
     agent_id: &str,
     verification_method: &str,
     runtime_public_key_digest: &str,
@@ -558,39 +556,22 @@ fn validate_controller_authorize_event<'a>(
     audience: &str,
     authoritative_key_state: &arkret_models_collaboration::agent_operations::KeyState,
     now: DateTime<Utc>,
-) -> Result<ValidatedAuthorizeEvent<'a>, AppError> {
-    if !envelope.is_object() {
-        return Err(AppError::bad_request(
-            "authorize_event must be a controller-signed event object",
-        ));
-    }
-    if envelope.get("kind").and_then(Value::as_str) != Some("ak.agent.key.authorize") {
-        return Err(AppError::bad_request(
-            "authorize_event.event.kind must be ak.agent.key.authorize",
-        ));
-    }
+) -> Result<ValidatedAuthorizeEvent, AppError> {
+    // Closes the payload once, here. Every business check below reads a typed
+    // field; unknown payload fields are already rejected by the SDK type.
+    let payload = AgentKeyAuthorizePayload::try_from(event)
+        .map_err(|error| AppError::bad_request(format!("authorize_event.event {error}")))?;
 
-    let event_id = envelope
-        .get("event_id")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| AppError::bad_request("authorize_event.event.event_id is required"))?;
-    arkret_identifiers::EventId::new(event_id.to_owned()).map_err(|err| {
-        AppError::bad_request(format!("authorize_event.event.event_id invalid: {err}"))
-    })?;
-    if envelope.get("actor_id").and_then(Value::as_str) != Some(agent_id) {
+    if event.actor_id.as_str() != agent_id {
         return Err(AppError::forbidden(
             "authorize_event.event.actor_id must equal the managed Agent DID",
         ));
     }
-    let controller_id = envelope
-        .get("executed_by")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
+    let controller_id = event
+        .executed_by
+        .as_ref()
+        .map(arkret_identifiers::Did::as_str)
         .ok_or_else(|| AppError::bad_request("authorize_event.event.executed_by is required"))?;
-    arkret_identifiers::Did::new(controller_id.to_owned()).map_err(|err| {
-        AppError::bad_request(format!("authorize_event.event.executed_by invalid: {err}"))
-    })?;
     if authoritative_key_state.agent_id.as_str() != agent_id
         || authoritative_key_state.controller_id.as_str() != controller_id
     {
@@ -598,76 +579,55 @@ fn validate_controller_authorize_event<'a>(
             "authorize_event controller does not match the authoritative Agent binding",
         ));
     }
-    let expected_realm = authoritative_key_state.principal_control_realm_id.as_str();
-    if envelope.get("realm_id").and_then(Value::as_str) != Some(expected_realm) {
+    if event.realm_id.as_str() != authoritative_key_state.principal_control_realm_id.as_str() {
         return Err(AppError::forbidden(
             "authorize_event.event.realm_id must equal the authoritative Agent PCR",
         ));
     }
-    let expected_authorization_ref = authoritative_key_state
-        .controller_authorization_ref
-        .as_str();
-    if envelope.get("authorization_ref").and_then(Value::as_str) != Some(expected_authorization_ref)
+    if event.authorization_ref.as_deref()
+        != Some(
+            authoritative_key_state
+                .controller_authorization_ref
+                .as_str(),
+        )
     {
         return Err(AppError::forbidden(
             "authorize_event.event.authorization_ref must match the authoritative controller delegation",
         ));
     }
-    ensure_authorize_event_has_controller_signature(envelope, controller_id)?;
+    ensure_authorize_event_has_controller_signature(event, controller_id)?;
 
-    let payload = envelope
-        .get("payload")
-        .ok_or_else(|| AppError::bad_request("authorize_event.event.payload is required"))?;
-    if payload.get("agent_id").and_then(Value::as_str) != Some(agent_id) {
+    if payload.agent_id.as_str() != agent_id {
         return Err(AppError::bad_request(
             "authorize_event.event.payload.agent_id must match the request",
         ));
     }
-    if payload.get("verification_method").and_then(Value::as_str) != Some(verification_method) {
+    if payload.verification_method.as_str() != verification_method {
         return Err(AppError::bad_request(
             "authorize_event.event.payload.verification_method must match the request",
         ));
     }
-    if payload
-        .get("accountable_principal_id")
-        .and_then(Value::as_str)
-        != Some(controller_id)
-    {
+    if payload.accountable_principal_id.as_str() != controller_id {
         return Err(AppError::forbidden(
             "authorize_event.event.payload.accountable_principal_id must match executed_by",
         ));
     }
-    if payload.get("public_key_digest").and_then(Value::as_str) != Some(runtime_public_key_digest) {
+    if payload.public_key_digest.as_str() != runtime_public_key_digest {
         return Err(AppError::bad_request(
             "authorize_event.event.payload.public_key_digest must bind the runtime public_key",
         ));
     }
-    let signing_key_binding_digest = payload
-        .get("signing_key_binding_digest")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            AppError::bad_request(
-                "authorize_event.event.payload.signing_key_binding_digest is required",
-            )
-        })
-        .and_then(|value| {
-            arkret_identifiers::Hash::new(value.to_owned()).map_err(|error| {
-                AppError::bad_request(format!(
-                    "authorize_event.event.payload.signing_key_binding_digest invalid: {error}"
-                ))
-            })
-        })?;
     let actual_binding_digest =
         arkret_signatures::agent_evidence::agent_signing_key_binding_digest(signing_key_binding)
             .map_err(|reason| AppError::bad_request(reason.as_str()))?;
-    if signing_key_binding_digest != actual_binding_digest {
+    if payload.signing_key_binding_digest != actual_binding_digest {
         return Err(AppError::bad_request(
             "authorize_event.event.payload.signing_key_binding_digest must bind signing_key_binding",
         ));
     }
     if signing_key_binding.agent_id.as_str() != agent_id
         || signing_key_binding.verification_method.as_str() != verification_method
-        || signing_key_binding.agent_key_authorize_event_id.as_str() != event_id
+        || signing_key_binding.agent_key_authorize_event_id.as_str() != event.event_id.as_str()
         || signing_key_binding.public_key_digest.as_str() != runtime_public_key_digest
         || signing_key_binding.controller_id.as_str() != controller_id
     {
@@ -675,102 +635,83 @@ fn validate_controller_authorize_event<'a>(
             "signing_key_binding does not match the pairing authorization",
         ));
     }
-    let payload_audience = payload
-        .get("audience")
-        .and_then(Value::as_array)
-        .ok_or_else(|| {
-            AppError::bad_request("authorize_event.event.payload.audience is required")
-        })?;
-    if !payload_audience
+    if !payload
+        .audience
         .iter()
-        .any(|value| value.as_str() == Some(audience))
+        .any(|candidate| candidate == audience)
     {
         return Err(AppError::bad_request(
             "authorize_event.event.payload.audience must include proof_of_possession.audience",
         ));
     }
-
-    let key_id = payload
-        .get("key_id")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| AppError::bad_request("authorize_event.event.payload.key_id is required"))?;
-    if signing_key_binding.agent_key_id.as_str() != key_id {
+    if signing_key_binding.agent_key_id.as_str() != payload.key_id.as_str() {
         return Err(AppError::bad_request(
             "signing_key_binding.agent_key_id must match authorize_event.event.payload.key_id",
         ));
     }
-    validate_authorize_event_supersedes(payload, authoritative_key_state)?;
-    let agent_key_scope = payload.get("agent_key_scope").ok_or_else(|| {
-        AppError::bad_request("authorize_event.event.payload.agent_key_scope is required")
-    })?;
-    ensure_authorize_event_scope_is_action_object(agent_key_scope)?;
-    let issued_at = payload
-        .get("issued_at")
-        .and_then(Value::as_str)
-        .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
-        .map(|timestamp| timestamp.with_timezone(&Utc))
-        .ok_or_else(|| {
-            AppError::bad_request("authorize_event.event.payload.issued_at must be rfc3339")
-        })?;
-    let expires_at = match payload.get("expires_at") {
-        None | Some(Value::Null) => None,
-        Some(value) => Some(
-            value
-                .as_str()
-                .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
-                .map(|timestamp| timestamp.with_timezone(&Utc))
-                .ok_or_else(|| {
-                    AppError::bad_request(
-                        "authorize_event.event.payload.expires_at must be rfc3339",
-                    )
-                })?,
-        ),
-    };
-    if let Some(expires_at) = expires_at {
+    validate_authorize_event_supersedes(&payload, authoritative_key_state)?;
+    if payload.agent_key_scope.actions.is_empty()
+        || payload
+            .agent_key_scope
+            .actions
+            .iter()
+            .any(|action| action.trim().is_empty())
+    {
+        return Err(AppError::bad_request(
+            "authorize_event.event.payload.agent_key_scope.actions must be non-empty strings",
+        ));
+    }
+    if let Some(expires_at) = payload.expires_at {
         if expires_at <= now {
             return Err(AgentAuthRejection::PairingRequestExpired.into_app_error());
         }
-        let authorization_lifetime = expires_at.signed_duration_since(issued_at);
-        if authorization_lifetime <= chrono::Duration::zero() {
+        if expires_at <= payload.issued_at {
             return Err(AppError::bad_request(
                 "authorize_event.event.payload.expires_at must be after issued_at",
             ));
         }
     }
-    if signing_key_binding.issued_at != issued_at || signing_key_binding.expires_at != expires_at {
+    if signing_key_binding.issued_at != payload.issued_at
+        || signing_key_binding.expires_at != payload.expires_at
+    {
         return Err(AppError::bad_request(
             "signing_key_binding validity must match the authorize Event",
         ));
     }
-    let approval = payload.get("approval_evidence").ok_or_else(|| {
-        AppError::bad_request("authorize_event.event.payload.approval_evidence is required")
-    })?;
-    if approval.get("kind").and_then(Value::as_str) != Some("pairing_request") {
+    let approval = &payload.approval_evidence;
+    if approval.kind
+        != arkret_models_collaboration::events_payloads::agent::AgentKeyApprovalEvidenceKind::PairingRequest
+    {
         return Err(AppError::bad_request(
             "authorize_event.event.payload.approval_evidence.kind must be pairing_request",
         ));
     }
-    if approval.get("evidence_ref").is_some() {
+    if approval.evidence_ref.is_some() {
         return Err(AppError::bad_request(
             "authorize_event.event.payload.approval_evidence.evidence_ref must be absent for pairing_request evidence",
         ));
     }
-    if approval
-        .get("request_canonical_digest")
-        .and_then(Value::as_str)
-        .is_none()
-    {
+    if approval.request_canonical_digest.is_none() {
         return Err(AppError::bad_request(
             "authorize_event.event.payload.approval_evidence.request_canonical_digest is required",
         ));
     }
-    if approval.get("pairing_request_id").and_then(Value::as_str) != Some(pairing_request_id) {
+    if approval
+        .pairing_request_id
+        .as_ref()
+        .map(|value| value.as_str())
+        != Some(pairing_request_id)
+    {
         return Err(AppError::bad_request(
             "authorize_event.event.payload.approval_evidence.pairing_request_id must match the request",
         ));
     }
-    if approval.get("approved_by").and_then(Value::as_str) != Some(controller_id) {
+    if approval
+        .approved_by
+        .as_ref()
+        .map(arkret_identifiers::Did::as_str)
+        != Some(controller_id)
+    {
         return Err(AppError::forbidden(
             "authorize_event.event.payload.approval_evidence.approved_by must match executed_by",
         ));
@@ -778,16 +719,12 @@ fn validate_controller_authorize_event<'a>(
 
     Ok(ValidatedAuthorizeEvent {
         controller_id: controller_id.to_owned(),
-        key_id: key_id.to_owned(),
-        agent_key_scope,
-        issued_at,
-        signing_key_binding_digest,
-        expires_at,
+        payload,
     })
 }
 
 fn validate_authorize_event_supersedes(
-    payload: &Value,
+    payload: &AgentKeyAuthorizePayload,
     authoritative_key_state: &arkret_models_collaboration::agent_operations::KeyState,
 ) -> Result<(), AppError> {
     let active_authorizations = &authoritative_key_state.active_authorizations;
@@ -805,40 +742,17 @@ fn validate_authorize_event_supersedes(
             "authoritative Agent active authorization set contains duplicates",
         ));
     }
-    let values = match payload.get("supersedes") {
-        None => &[][..],
-        Some(Value::Array(values)) => values.as_slice(),
-        Some(_) => {
-            return Err(AppError::bad_request(
-                "authorize_event.event.payload.supersedes must be an array",
-            ));
-        }
-    };
-    let supplied: std::collections::BTreeSet<(String, String)> = values
+    let supplied: std::collections::BTreeSet<(String, String)> = payload
+        .supersedes
         .iter()
-        .map(|value| {
-            let key_id = value
-                .get("key_id")
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| {
-                    AppError::bad_request(
-                        "authorize_event.event.payload.supersedes[].key_id is required",
-                    )
-                })?;
-            let event_ref = value
-                .get("authorized_event_ref")
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| {
-                    AppError::bad_request(
-                        "authorize_event.event.payload.supersedes[].authorized_event_ref is required",
-                    )
-                })?;
-            Ok((key_id.to_owned(), event_ref.to_owned()))
+        .map(|supersession| {
+            (
+                supersession.key_id.to_string(),
+                supersession.authorized_event_ref.to_string(),
+            )
         })
-        .collect::<Result<_, AppError>>()?;
-    if supplied.len() != values.len() || supplied != expected {
+        .collect();
+    if supplied.len() != payload.supersedes.len() || supplied != expected {
         return Err(AppError::conflict(
             "authorize_event.event.payload.supersedes does not match the authoritative active key set",
         ));
@@ -854,28 +768,18 @@ fn ensure_body_pairing_request_id_present(pairing_request_id: &str) -> Result<()
 }
 
 fn ensure_authorize_event_has_controller_signature(
-    envelope: &Value,
+    event: &arkret_wire::Event,
     controller_id: &str,
 ) -> Result<(), AppError> {
-    let proofs = envelope
-        .get("proofs")
-        .and_then(Value::as_array)
-        .ok_or_else(|| {
-            AppError::bad_request("authorize_event must carry controller signature proofs")
-        })?;
-    if proofs.is_empty() {
+    if event.proofs.is_empty() {
         return Err(AppError::bad_request(
             "authorize_event must carry controller signature proofs",
         ));
     }
-    let signed_by_controller = proofs.iter().any(|proof| {
-        proof
-            .get("verification_method")
-            .and_then(Value::as_str)
-            .is_some_and(|verification_method| {
-                verification_method_controller(verification_method) == controller_id
-            })
-    });
+    let signed_by_controller = event
+        .proofs
+        .iter()
+        .any(|proof| verification_method_controller(&proof.verification_method) == controller_id);
     if !signed_by_controller {
         return Err(AppError::bad_request(
             "authorize_event proof verification_method must be controlled by actor_id",
@@ -886,7 +790,7 @@ fn ensure_authorize_event_has_controller_signature(
 
 #[allow(clippy::too_many_arguments)]
 async fn verify_authorize_event_controller_signature(
-    envelope: &Value,
+    event: &arkret_wire::Event,
     agent_id: &str,
     controller_id: &str,
     audience: &str,
@@ -897,8 +801,7 @@ async fn verify_authorize_event_controller_signature(
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
 ) -> Result<(), AppError> {
-    let (event, canonical_bytes) =
-        authorize_event_signature_input(envelope, agent_id, controller_id)?;
+    let canonical_bytes = authorize_event_signature_input(event, agent_id, controller_id)?;
     let mut has_controller_key_proof = false;
     let mut saw_controller_proof = false;
 
@@ -973,7 +876,7 @@ async fn verify_authorize_event_controller_signature(
         )));
     }
     verify_authorize_event_controller_signature_with_methods(
-        envelope,
+        event,
         agent_id,
         controller_id,
         &resolution.document.verification_method,
@@ -981,13 +884,12 @@ async fn verify_authorize_event_controller_signature(
 }
 
 fn verify_authorize_event_controller_signature_with_methods(
-    envelope: &Value,
+    event: &arkret_wire::Event,
     agent_id: &str,
     controller_id: &str,
     verification_methods: &[VerificationMethod],
 ) -> Result<(), AppError> {
-    let (event, canonical_bytes) =
-        authorize_event_signature_input(envelope, agent_id, controller_id)?;
+    let canonical_bytes = authorize_event_signature_input(event, agent_id, controller_id)?;
 
     let mut saw_controller_proof = false;
     for proof in &event.proofs {
@@ -1117,16 +1019,16 @@ async fn verify_pairing_signing_key_binding(
     .map_err(|reason| AppError::unauthorized(reason.as_str()))
 }
 
+/// Canonical signing transcript for the authorize Event.
+///
+/// Deliberately derived from the caller-supplied Event envelope itself: the
+/// typed payload above is for business checks only and MUST NOT be
+/// re-serialized to stand in for the signed bytes.
 fn authorize_event_signature_input(
-    envelope: &Value,
+    event: &arkret_wire::Event,
     agent_id: &str,
     controller_id: &str,
-) -> Result<(arkret_wire::Event, Vec<u8>), AppError> {
-    let event: arkret_wire::Event = serde_json::from_value(envelope.clone()).map_err(|error| {
-        AppError::bad_request(format!(
-            "authorize_event must be a complete signed Event envelope: {error}"
-        ))
-    })?;
+) -> Result<Vec<u8>, AppError> {
     if event.actor_id.as_str() != agent_id {
         return Err(AppError::bad_request(
             "authorize_event.event.actor_id must match the managed Agent DID",
@@ -1150,13 +1052,11 @@ fn authorize_event_signature_input(
             "authorize_event digest payload could not be built: {error}"
         ))
     })?;
-    let canonical_bytes =
-        arkret_canonical::canonical_json_bytes(&digest_payload).map_err(|error| {
-            AppError::bad_request(format!(
-                "authorize_event canonical payload could not be encoded: {error}"
-            ))
-        })?;
-    Ok((event, canonical_bytes))
+    arkret_canonical::canonical_json_bytes(&digest_payload).map_err(|error| {
+        AppError::bad_request(format!(
+            "authorize_event canonical payload could not be encoded: {error}"
+        ))
+    })
 }
 
 fn verification_method_controller(verification_method: &str) -> &str {
@@ -1175,27 +1075,6 @@ fn verification_method_device_id(verification_method: &str) -> Option<String> {
     arkret_identifiers::DeviceId::new(fragment.to_owned())
         .ok()
         .map(|device_id| device_id.to_string())
-}
-
-fn ensure_authorize_event_scope_is_action_object(scope: &Value) -> Result<(), AppError> {
-    let actions = scope
-        .get("actions")
-        .and_then(Value::as_array)
-        .filter(|actions| !actions.is_empty())
-        .ok_or_else(|| {
-            AppError::bad_request(
-                "authorize_event.event.payload.agent_key_scope.actions is required",
-            )
-        })?;
-    if actions
-        .iter()
-        .any(|action| action.as_str().is_none_or(|value| value.trim().is_empty()))
-    {
-        return Err(AppError::bad_request(
-            "authorize_event.event.payload.agent_key_scope.actions must be non-empty strings",
-        ));
-    }
-    Ok(())
 }
 
 async fn commit_and_mark_agent_key_authorization(
@@ -1255,27 +1134,13 @@ async fn commit_and_mark_agent_key_authorization(
 fn pairing_superseded_event_refs(
     body: &arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody,
 ) -> Result<Vec<String>, AppError> {
-    match body.authorize_event.event.payload.get("supersedes") {
-        None => Ok(Vec::new()),
-        Some(Value::Array(values)) => values
-            .iter()
-            .map(|value| {
-                value
-                    .get("authorized_event_ref")
-                    .and_then(Value::as_str)
-                    .filter(|value| !value.is_empty())
-                    .map(ToOwned::to_owned)
-                    .ok_or_else(|| {
-                        AppError::bad_request(
-                            "authorize_event.event.payload.supersedes[].authorized_event_ref is required",
-                        )
-                    })
-            })
-            .collect(),
-        Some(_) => Err(AppError::bad_request(
-            "authorize_event.event.payload.supersedes must be an array",
-        )),
-    }
+    let payload = AgentKeyAuthorizePayload::try_from(&body.authorize_event.event)
+        .map_err(|error| AppError::bad_request(format!("authorize_event.event {error}")))?;
+    Ok(payload
+        .supersedes
+        .into_iter()
+        .map(|supersession| supersession.authorized_event_ref.to_string())
+        .collect())
 }
 
 #[cfg(test)]
@@ -1433,11 +1298,25 @@ mod tests {
         assert!(err.message().contains("public_key invalid"));
     }
 
+    /// Parse a test envelope into the wire Event the handler actually receives.
+    fn authorize_event(value: Value) -> arkret_wire::Event {
+        serde_json::from_value(value).expect("test authorize_event envelope is a wire Event")
+    }
+
+    /// The closed `ak.agent.key.authorize` payload carried by `value`.
+    fn authorize_payload(value: Value) -> AgentKeyAuthorizePayload {
+        AgentKeyAuthorizePayload::try_from(&authorize_event(value))
+            .expect("test authorize_event carries a valid authorize payload")
+    }
+
     #[test]
-    fn agent_key_pair_rejects_missing_authorize_event() {
+    fn agent_key_pair_rejects_authorize_event_of_another_kind() {
         let binding = valid_signing_key_binding();
+        let mut envelope = valid_authorize_event(PAIRING_REQUEST_ID);
+        envelope["kind"] = json!("ak.agent.key.revoke");
+
         let err = validate_controller_authorize_event(
-            &Value::Null,
+            &authorize_event(envelope),
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
@@ -1447,9 +1326,31 @@ mod tests {
             &authoritative_key_state(),
             test_now(),
         )
-        .expect_err("missing authorize_event must fail closed");
+        .expect_err("an Event of another kind must fail closed");
 
-        assert!(err.message().contains("authorize_event"));
+        assert!(err.message().contains("ak.agent.key.authorize"));
+    }
+
+    #[test]
+    fn agent_key_pair_rejects_unregistered_authorize_payload_field() {
+        let binding = valid_signing_key_binding();
+        let mut envelope = valid_authorize_event(PAIRING_REQUEST_ID);
+        envelope["payload"]["unregistered_field"] = json!(true);
+
+        let err = validate_controller_authorize_event(
+            &authorize_event(envelope),
+            AGENT,
+            VM,
+            PUBLIC_KEY_DIGEST,
+            &binding,
+            PAIRING_REQUEST_ID,
+            AUDIENCE,
+            &authoritative_key_state(),
+            test_now(),
+        )
+        .expect_err("the closed payload type must reject unregistered fields");
+
+        assert!(err.message().contains("payload is invalid"));
     }
 
     #[test]
@@ -1464,7 +1365,7 @@ mod tests {
     fn authorize_event_binds_body_pairing_request_id() {
         let binding = valid_signing_key_binding();
         validate_controller_authorize_event(
-            &valid_authorize_event(PAIRING_REQUEST_ID),
+            &authorize_event(valid_authorize_event(PAIRING_REQUEST_ID)),
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
@@ -1477,7 +1378,7 @@ mod tests {
         .expect("matching pairing_request_id accepts");
 
         let err = validate_controller_authorize_event(
-            &valid_authorize_event("agent_pairing_request:wrong"),
+            &authorize_event(valid_authorize_event("agent_pairing_request:wrong")),
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
@@ -1504,14 +1405,13 @@ mod tests {
             }))
             .unwrap(),
         );
-        let payload = json!({
-            "supersedes": [{
-                "key_id": "runtime-key-1",
-                "authorized_event_ref": old_event,
-            }],
-        });
+        let mut envelope = valid_authorize_event(PAIRING_REQUEST_ID);
+        envelope["payload"]["supersedes"] = json!([{
+            "key_id": "runtime-key-1",
+            "authorized_event_ref": old_event,
+        }]);
 
-        validate_authorize_event_supersedes(&payload, &key_state)
+        validate_authorize_event_supersedes(&authorize_payload(envelope), &key_state)
             .expect("same key_id replacement must observe-remove the old authorization dot");
     }
 
@@ -1527,8 +1427,11 @@ mod tests {
             .unwrap(),
         );
 
-        let err = validate_authorize_event_supersedes(&json!({}), &key_state)
-            .expect_err("omitting the old same-key authorization dot must fail closed");
+        let err = validate_authorize_event_supersedes(
+            &authorize_payload(valid_authorize_event(PAIRING_REQUEST_ID)),
+            &key_state,
+        )
+        .expect_err("omitting the old same-key authorization dot must fail closed");
 
         assert_eq!(err.status(), http::StatusCode::CONFLICT);
         assert!(err.message().contains("active key set"));
@@ -1542,7 +1445,7 @@ mod tests {
             json!("ak:event:01999999-0000-7000-8000-000000000099");
 
         let err = validate_controller_authorize_event(
-            &event,
+            &authorize_event(event),
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
@@ -1571,7 +1474,7 @@ mod tests {
         );
 
         let validated = validate_controller_authorize_event(
-            &event,
+            &authorize_event(event),
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
@@ -1583,7 +1486,7 @@ mod tests {
         )
         .expect("absent expires_at means a non-expiring durable key authorization");
 
-        assert!(validated.expires_at.is_none());
+        assert!(validated.payload.expires_at.is_none());
     }
 
     #[test]
@@ -1593,7 +1496,7 @@ mod tests {
         event["payload"]["expires_at"] = json!("not-a-timestamp");
 
         let err = validate_controller_authorize_event(
-            &event,
+            &authorize_event(event),
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
@@ -1605,7 +1508,7 @@ mod tests {
         )
         .expect_err("present but malformed expires_at must fail closed");
 
-        assert!(err.message().contains("expires_at must be rfc3339"));
+        assert!(err.message().contains("expires_at"));
     }
 
     #[test]
@@ -1623,7 +1526,7 @@ mod tests {
         );
 
         validate_controller_authorize_event(
-            &event,
+            &authorize_event(event),
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
@@ -1651,7 +1554,7 @@ mod tests {
         );
 
         let err = validate_controller_authorize_event(
-            &event,
+            &authorize_event(event),
             AGENT,
             VM,
             PUBLIC_KEY_DIGEST,
@@ -1734,7 +1637,7 @@ mod tests {
         };
 
         verify_authorize_event_controller_signature_with_methods(
-            &serde_json::to_value(event).unwrap(),
+            &event,
             AGENT,
             CONTROLLER,
             &[method],
@@ -1742,9 +1645,9 @@ mod tests {
         .expect("authorized controller device signature accepts");
     }
 
-    fn full_fake_signed_authorize_event() -> Value {
-        let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
-        event["proofs"] = json!([{
+    fn full_fake_signed_authorize_event() -> arkret_wire::Event {
+        let mut envelope = valid_authorize_event(PAIRING_REQUEST_ID);
+        envelope["proofs"] = json!([{
             "kind": "detached_jws",
             "alg": "EdDSA",
             "verification_method": "did:web:controller.example#key-1",
@@ -1752,9 +1655,9 @@ mod tests {
             "created_at": "2026-07-06T00:01:00.000Z",
             "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
         }]);
-        let parsed: arkret_wire::Event = serde_json::from_value(event.clone()).unwrap();
-        event["proofs"][0]["event_digest"] = json!(parsed.event_digest().unwrap());
-        event
+        let parsed = authorize_event(envelope.clone());
+        envelope["proofs"][0]["event_digest"] = json!(parsed.event_digest().unwrap());
+        authorize_event(envelope)
     }
 
     fn controller_verification_method() -> VerificationMethod {
