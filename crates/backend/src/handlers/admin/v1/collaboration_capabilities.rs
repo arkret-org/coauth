@@ -7,8 +7,10 @@
 //! - `POST   /_coauth/admin/collaboration/capabilities`
 //! - `DELETE /_coauth/admin/collaboration/capabilities/{id}`
 
-use arkret_canonical::{canonical_json_bytes, canonical_sha256};
-use arkret_identifiers::{EventId, GrantId, new_prefixed_uuid7};
+use arkret_canonical::{canonical_json_bytes, canonical_sha256, format_timestamp_canonical};
+use arkret_identifiers::{EventId, GrantId, RealmId, new_prefixed_uuid7};
+use arkret_models_collaboration::events_payloads::capability::CapabilityGrantPayload;
+use arkret_models_collaboration::governance::grant_constraint::CapabilityGrant;
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_admin_types::collaboration_capability_admin::{
@@ -32,7 +34,9 @@ use salvo::oapi::extract::PathParam;
 use salvo::prelude::*;
 use serde_json::{Value, json};
 use signature::RandomizedSigner as _;
-use soland_contracts::integration::capability_fanout::CapabilityFanoutBody;
+use soland_contracts::integration::capability_fanout::{
+    CapabilityFanoutBody, CapabilityFanoutProof, capability_fanout_proof_transcript,
+};
 use ulid::Ulid;
 
 use crate::JsonResult;
@@ -319,7 +323,16 @@ fn build_grant_fanout_payload(
     arkret_config: &ArkretConfig,
     key_store: &Keystore,
 ) -> Result<CapabilityFanoutBody, AppError> {
-    let mut grant = json!({
+    let typed_realm_id = RealmId::new(realm_id.to_owned()).map_err(|err| {
+        AppError::new(StatusCode::BAD_REQUEST, format!("invalid realm_id: {err}"))
+    })?;
+    let typed_grant_id = GrantId::new(capability_grant_id.to_owned()).map_err(|err| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("invalid generated capability_grant_id: {err}"),
+        )
+    })?;
+    let mut grant_value = json!({
         "id": capability_grant_id,
         "schema": "ak.schema.capability.v1",
         "realm_id": realm_id,
@@ -327,34 +340,88 @@ fn build_grant_fanout_payload(
         "subject": subject,
         "actions": [action.as_str()],
         "resources": [{ "kind": "realm", "realm_id": realm_id }],
-        "issued_at": issued_at,
+        "issued_at": format_timestamp_canonical(issued_at),
+        "proofs": [],
     });
     if let Some(expires_at) = expires_at {
-        grant["expires_at"] = json!(expires_at);
+        grant_value["expires_at"] = json!(format_timestamp_canonical(expires_at));
     }
     if let Some(approval_evidence_ref) = approval_evidence_ref {
-        grant["constraints"] = json!([{
-            "constraint_kind": "approval",
+        grant_value["constraints"] = json!([{
+            "constraint_kind": "claim_based",
+            "constraint_subkind": "approval",
             "effect": "allow",
-            "approval_evidence_ref": approval_evidence_ref,
+            "approval_required": true,
+            "x_approval_evidence_ref": approval_evidence_ref,
         }]);
     }
 
-    let unsigned_payload = json!({
-        "grant_id": capability_grant_id,
-        "grant": grant,
-    });
-    let proof = sign_fanout_proof(
+    let mut grant: CapabilityGrant = serde_json::from_value(grant_value).map_err(|err| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("generated capability grant is invalid: {err}"),
+        )
+    })?;
+    let verification_method = signing_verification_method(key_store, service_id)?;
+    let grant_payload_digest = grant.payload_digest().map_err(|err| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("capability grant payload digest: {err}"),
+        )
+    })?;
+    let mut protocol_proof = arkret_wire::PayloadProof {
+        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
+        verification_method: verification_method.clone(),
+        alg: "EdDSA".to_owned(),
+        payload_digest: grant_payload_digest,
+        created_at: issued_at,
+        domain: None,
+        audience: None,
+        proof_purpose: Some(arkret_wire::PayloadProofPurpose::IssuerAttestation),
+        jws: String::new(),
+    };
+    let proof_binding_bytes = grant
+        .canonical_proof_binding_bytes(&protocol_proof)
+        .map_err(|err| {
+            AppError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("capability grant proof binding: {err}"),
+            )
+        })?;
+    let (signed_verification_method, grant_proof_jws) =
+        sign_detached_jws(key_store, service_id, &proof_binding_bytes)?;
+    if signed_verification_method != verification_method {
+        return Err(AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "capability grant signing key changed while building proof",
+        ));
+    }
+    protocol_proof.jws = grant_proof_jws;
+    grant.proofs.push(protocol_proof);
+    let payload = serde_json::to_value(CapabilityGrantPayload {
+        grant: Some(grant),
+        grant_id: typed_grant_id,
+        subject: None,
+        actions: None,
+        resources: None,
+    })
+    .map_err(|err| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("capability grant payload serialization failed: {err}"),
+        )
+    })?;
+    let fanout_proof = sign_fanout_proof(
         key_store,
         service_id,
+        "grant",
         "ak.capability.grant",
         grant_event_id,
         capability_grant_id,
-        &unsigned_payload,
+        typed_realm_id.as_str(),
+        &payload,
         issued_at,
     )?;
-    let mut signed_grant = unsigned_payload["grant"].clone();
-    signed_grant["proofs"] = json!([proof]);
 
     Ok(CapabilityFanoutBody {
         kind: soland_contracts::integration::capability_fanout::CAPABILITY_FANOUT_KIND.to_owned(),
@@ -363,10 +430,9 @@ fn build_grant_fanout_payload(
         event_kind: "ak.capability.grant".to_owned(),
         event_id: grant_event_id.to_owned(),
         capability_grant_id: capability_grant_id.to_owned(),
-        payload: json!({
-            "grant_id": capability_grant_id,
-            "grant": signed_grant,
-        }),
+        realm_id: typed_realm_id,
+        payload,
+        proofs: vec![fanout_proof],
         principal_servers: principal_servers(arkret_config),
     })
 }
@@ -380,21 +446,25 @@ fn build_revoke_fanout_payload(
     arkret_config: &ArkretConfig,
     key_store: &Keystore,
 ) -> Result<CapabilityFanoutBody, AppError> {
-    let mut revoke_payload = json!({
+    let typed_realm_id = RealmId::new(realm_id.to_owned()).map_err(|err| {
+        AppError::new(StatusCode::BAD_REQUEST, format!("invalid realm_id: {err}"))
+    })?;
+    let revoke_payload = json!({
         "grant_id": capability_grant_id,
-        "realm_id": realm_id,
-        "revoked_at": revoked_at,
+        "grant_ref": capability_grant_id,
+        "reason": "administrative_revoke",
     });
     let proof = sign_fanout_proof(
         key_store,
         service_id,
+        "revoke",
         "ak.capability.revoke",
         revoke_event_id,
         capability_grant_id,
+        typed_realm_id.as_str(),
         &revoke_payload,
         revoked_at,
     )?;
-    revoke_payload["proofs"] = json!([proof]);
 
     Ok(CapabilityFanoutBody {
         kind: soland_contracts::integration::capability_fanout::CAPABILITY_FANOUT_KIND.to_owned(),
@@ -403,7 +473,9 @@ fn build_revoke_fanout_payload(
         event_kind: "ak.capability.revoke".to_owned(),
         event_id: revoke_event_id.to_owned(),
         capability_grant_id: capability_grant_id.to_owned(),
+        realm_id: typed_realm_id,
         payload: revoke_payload,
+        proofs: vec![proof],
         principal_servers: principal_servers(arkret_config),
     })
 }
@@ -411,19 +483,23 @@ fn build_revoke_fanout_payload(
 fn sign_fanout_proof(
     key_store: &Keystore,
     service_id: &str,
+    operation: &str,
     event_kind: &str,
     event_id: &str,
     capability_grant_id: &str,
+    realm_id: &str,
     payload: &Value,
     created_at: DateTime<Utc>,
-) -> Result<Value, AppError> {
-    let transcript = json!({
-        "kind": "org.arkret.coauth.collaboration_capability.proof.v1",
-        "event_kind": event_kind,
-        "event_id": event_id,
-        "capability_grant_id": capability_grant_id,
-        "payload": payload,
-    });
+) -> Result<CapabilityFanoutProof, AppError> {
+    let transcript = capability_fanout_proof_transcript(
+        operation,
+        service_id,
+        event_kind,
+        event_id,
+        capability_grant_id,
+        realm_id,
+        payload,
+    );
     let transcript_bytes = canonical_json_bytes(&transcript).map_err(|err| {
         AppError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -438,14 +514,19 @@ fn sign_fanout_proof(
     })?;
     let (verification_method, jws) = sign_detached_jws(key_store, service_id, &transcript_bytes)?;
 
-    Ok(json!({
-        "kind": "detached_jws",
-        "alg": "EdDSA",
-        "verification_method": verification_method,
-        "event_digest": event_digest,
-        "created_at": created_at,
-        "jws": jws,
-    }))
+    Ok(CapabilityFanoutProof {
+        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
+        alg: "EdDSA".to_owned(),
+        verification_method,
+        event_digest: arkret_identifiers::Hash::new(event_digest).map_err(|error| {
+            AppError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("capability fanout proof digest invalid: {error}"),
+            )
+        })?,
+        created_at,
+        jws,
+    })
 }
 
 fn sign_detached_jws(
@@ -501,6 +582,23 @@ fn sign_detached_jws(
     let signature = Base64UrlUnpadded::encode_string(&signature_bytes);
 
     Ok((verification_method, format!("{protected}..{signature}")))
+}
+
+fn signing_verification_method(key_store: &Keystore, service_id: &str) -> Result<String, AppError> {
+    let alg = JsonWebSignatureAlg::EdDsa;
+    let key = key_store.signing_key_for_algorithm(&alg).ok_or_else(|| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "no EdDSA service signing key is configured for capability fanout",
+        )
+    })?;
+    let key_id = key.kid().ok_or_else(|| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "capability fanout signing key is missing kid",
+        )
+    })?;
+    Ok(format!("{service_id}#{key_id}"))
 }
 
 fn principal_servers(arkret_config: &ArkretConfig) -> Vec<Value> {
@@ -575,7 +673,7 @@ mod tests {
             "ak:realm:01904100-0000-7000-8000-000000000001",
             CapabilityActionId::PinAdd,
             None,
-            None,
+            Some("ak:event:01904100-0000-7000-8000-000000000099"),
             issued_at,
             "did:web:coauth.example",
             &config(),
@@ -591,6 +689,25 @@ mod tests {
         assert_eq!(payload.payload["grant"]["issuer"], "did:web:coauth.example");
         assert_eq!(payload.payload["grant"]["actions"], json!(["ak.pin.add"]));
         assert_eq!(payload.principal_servers[0]["did"], "did:web:soland.test");
+        let typed_payload: CapabilityGrantPayload =
+            serde_json::from_value(payload.payload.clone()).unwrap();
+        let typed_grant = typed_payload.grant.as_ref().unwrap();
+        let constraint = &typed_grant.constraints[0];
+        assert_eq!(
+            constraint.constraint_kind,
+            arkret_models_collaboration::governance::grant_constraint::GrantConstraintKind::ClaimBased
+        );
+        assert_eq!(
+            constraint.constraint_subkind,
+            Some(
+                arkret_models_collaboration::governance::grant_constraint::GrantConstraintSubkind::Approval
+            )
+        );
+        assert_eq!(constraint.approval_required, Some(true));
+        assert_eq!(
+            constraint.extensions["x_approval_evidence_ref"],
+            "ak:event:01904100-0000-7000-8000-000000000099"
+        );
         let proof = &payload.payload["grant"]["proofs"][0];
         assert_eq!(proof["alg"], "EdDSA");
         assert_eq!(
@@ -600,10 +717,33 @@ mod tests {
         assert_ne!(proof["jws"], "queued-for-service-signature");
         assert!(proof["jws"].as_str().unwrap().contains(".."));
         assert!(
-            proof["event_digest"]
+            proof["payload_digest"]
                 .as_str()
                 .unwrap()
                 .starts_with("sha256:")
+        );
+        assert_eq!(payload.proofs.len(), 1);
+        assert!(
+            payload.proofs[0]
+                .event_digest
+                .as_str()
+                .starts_with("sha256:")
+        );
+        let canonical = canonical_json_bytes(&payload).unwrap();
+        let roundtrip: CapabilityFanoutBody = serde_json::from_slice(&canonical).unwrap();
+        assert_eq!(canonical_json_bytes(&roundtrip).unwrap(), canonical);
+        let transcript = capability_fanout_proof_transcript(
+            &roundtrip.operation,
+            &roundtrip.issuer_service_id,
+            &roundtrip.event_kind,
+            &roundtrip.event_id,
+            &roundtrip.capability_grant_id,
+            roundtrip.realm_id.as_str(),
+            &roundtrip.payload,
+        );
+        assert_eq!(
+            roundtrip.proofs[0].event_digest.as_str(),
+            canonical_sha256(&transcript).unwrap()
         );
     }
 
@@ -628,12 +768,39 @@ mod tests {
             "ak:grant:01904100-0000-7000-8000-000000000010"
         );
         assert_eq!(
-            payload.payload["realm_id"],
+            payload.realm_id.as_str(),
             "ak:realm:01904100-0000-7000-8000-000000000001"
         );
-        let proof = &payload.payload["proofs"][0];
-        assert_eq!(proof["alg"], "EdDSA");
-        assert_ne!(proof["jws"], "queued-for-service-signature");
-        assert!(proof["jws"].as_str().unwrap().contains(".."));
+        assert!(payload.payload.get("realm_id").is_none());
+        assert!(payload.payload.get("proofs").is_none());
+        assert_eq!(payload.proofs[0].alg, "EdDSA");
+        assert_ne!(payload.proofs[0].jws, "queued-for-service-signature");
+        assert!(payload.proofs[0].jws.contains(".."));
+        let transcript = capability_fanout_proof_transcript(
+            &payload.operation,
+            &payload.issuer_service_id,
+            &payload.event_kind,
+            &payload.event_id,
+            &payload.capability_grant_id,
+            payload.realm_id.as_str(),
+            &payload.payload,
+        );
+        assert_eq!(
+            payload.proofs[0].event_digest.as_str(),
+            canonical_sha256(&transcript).unwrap()
+        );
+        let other_realm_transcript = capability_fanout_proof_transcript(
+            &payload.operation,
+            &payload.issuer_service_id,
+            &payload.event_kind,
+            &payload.event_id,
+            &payload.capability_grant_id,
+            "ak:realm:01904100-0000-7000-8000-000000000002",
+            &payload.payload,
+        );
+        assert_ne!(
+            payload.proofs[0].event_digest.as_str(),
+            canonical_sha256(&other_realm_transcript).unwrap()
+        );
     }
 }

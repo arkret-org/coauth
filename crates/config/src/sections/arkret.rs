@@ -269,7 +269,7 @@ pub struct ArkretConfig {
     /// told the trust domain is unset and fail closed.
     ///
     /// Typically provisioned consistently across the deployment.
-    // TODO(round23-T08): once soland exposes a `PATCH /admin/v1/policy/
+    // TODO(trust-domain-runtime-propagation): once soland exposes a `PATCH /admin/v1/policy/
     //  trust_domain` mutation, propagate changes from coauth's runtime
     //  reload through that channel rather than requiring a soland
     //  restart.

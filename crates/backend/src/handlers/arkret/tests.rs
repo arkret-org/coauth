@@ -809,7 +809,10 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
         raw_payload.get("session_public_key").is_none(),
         "session grant JWT must bind grant-binding keys with cnf.jkt, not inline the full JWK"
     );
-    assert_eq!(raw_payload["cnf"]["jkt"], "test-grant-binding-jkt");
+    assert_eq!(
+        raw_payload["cnf"]["jkt"],
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    );
     assert!(
         grant
             .session_public_key
@@ -1200,7 +1203,10 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
         body["grant"]["session_public_key"],
         grant.session_public_key
     );
-    assert_eq!(body["grant"]["cnf_jkt"], "test-grant-binding-jkt");
+    assert_eq!(
+        body["grant"]["cnf_jkt"],
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    );
 
     // A second introspection of the same grant: still active (read-only — the
     // first call did not revoke it).
@@ -1284,7 +1290,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         .await
         .unwrap();
     let session_key = PrivateKey::generate_ed25519(&mut rng);
-    let bound_jkt = "test-dpop-jkt-thumbprint".to_owned();
+    let bound_jkt = "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD".to_owned();
     let grant_config = personal_node_did_web_config();
     let material = issue_session_grant_for_audience(
         &*state.clock,
@@ -1395,7 +1401,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
             .unwrap(),
         audience.clone(),
         vec!["ak.agent.action:message.send".to_owned()],
-        "agent-runtime-dpop-jkt".to_owned(),
+        "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC".to_owned(),
         session_public_key.clone(),
         scope_details.clone(),
         now,
@@ -1411,7 +1417,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     );
     assert_eq!(
         raw_payload["cnf"]["jkt"].as_str(),
-        Some("agent-runtime-dpop-jkt")
+        Some("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC")
     );
     let mut repo = state.repository().await.unwrap();
     let persisted = persist_unbound_session_grant(&mut repo, &mut rng, &*state.clock, &material)
@@ -1452,7 +1458,10 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     assert_eq!(body["grant"]["proof_kind"], "agent_key_proof");
     assert_eq!(body["grant"]["scope_details"], scope_details);
     assert_eq!(body["grant"]["freshness_state"], serde_json::Value::Null);
-    assert_eq!(body["grant"]["cnf_jkt"], "agent-runtime-dpop-jkt");
+    assert_eq!(
+        body["grant"]["cnf_jkt"],
+        "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+    );
     assert_eq!(body["grant"]["session_public_key"], session_public_key);
     assert_eq!(body["grant"]["id"], persisted.grant_id.to_string());
 }

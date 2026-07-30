@@ -68,21 +68,17 @@ pub fn paginated_response_for_page<T: Resource>(
             base,
             Pagination::last(current_pagination.count),
         )),
-        next: page.has_next_page.then(|| {
-            url_with_pagination(
-                base,
-                current_pagination
-                    .clear_before()
-                    .after(page.edges.last().unwrap().cursor),
-            )
-        }),
+        next: if page.has_next_page {
+            page.edges.last().map(|edge| {
+                url_with_pagination(base, current_pagination.clear_before().after(edge.cursor))
+            })
+        } else {
+            None
+        },
         prev: if page.has_previous_page {
-            Some(url_with_pagination(
-                base,
-                current_pagination
-                    .clear_after()
-                    .before(page.edges.first().unwrap().cursor),
-            ))
+            page.edges.first().map(|edge| {
+                url_with_pagination(base, current_pagination.clear_after().before(edge.cursor))
+            })
         } else {
             None
         },
@@ -146,6 +142,18 @@ mod tests {
     use super::*;
 
     #[derive(Debug)]
+    struct TestResource;
+
+    impl Resource for TestResource {
+        const KIND: &'static str = "test";
+        const PATH: &'static str = "/test";
+
+        fn id(&self) -> String {
+            "test".to_owned()
+        }
+    }
+
+    #[derive(Debug)]
     struct Inner;
 
     impl fmt::Display for Inner {
@@ -181,5 +189,19 @@ mod tests {
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0]["title"], "public rejection");
         assert!(!json.to_string().contains("sensitive database detail"));
+    }
+
+    #[test]
+    fn empty_page_with_direction_flags_has_no_cursor_links() {
+        let page = coauth_data::Page {
+            edges: Vec::<Edge<TestResource>>::new(),
+            has_previous_page: true,
+            has_next_page: true,
+        };
+
+        let outcome = paginated_response_for_page(page, Pagination::first(0), None, "/admin/test");
+
+        assert!(outcome.links.next.is_none());
+        assert!(outcome.links.prev.is_none());
     }
 }

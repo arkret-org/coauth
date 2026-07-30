@@ -46,7 +46,7 @@ pub(crate) fn issue_session_grant(
         required_audience_for(url_builder, arkret_config),
         scopes,
         Some(subject),
-        "test-grant-binding-jkt".to_owned(),
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
     )
 }
 

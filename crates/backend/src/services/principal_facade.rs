@@ -567,7 +567,12 @@ mod tests {
             event_kind: "ak.capability.grant".to_owned(),
             event_id: EVENT.to_owned(),
             capability_grant_id: GRANT.to_owned(),
+            realm_id: arkret_identifiers::RealmId::new(
+                "ak:realm:01970000-0000-7000-8000-000000000003",
+            )
+            .unwrap(),
             payload: json!({}),
+            proofs: Vec::new(),
             principal_servers: vec![json!({
                 "name": "soland-dev",
                 "audience": "soland",

@@ -77,9 +77,6 @@ pub const OFFLINE_CODE_LEN: usize = 26;
 /// limit upstream.
 pub const LOOKUP_CODE_LEN: usize = 6;
 
-/// Number of wrong attempts that invalidate a lookup-form code.
-pub const LOOKUP_STRIKE_LIMIT: u8 = 3;
-
 /// Constant response-pad window for all seven failure triggers. The
 /// handler MUST sleep_until(arrival + this) before writing the response
 /// body. ≤50 ms per T15.
@@ -102,8 +99,8 @@ pub enum OobCodeKind {
     /// `coauth-config` `ArkretConfig::validate`, the
     /// "oob_code_kind=lookup is disabled until lookup-mode strike counters
     /// are durable" guard). Every Form-2 code path below
-    /// (`LOOKUP_CODE_LEN`, `LOOKUP_STRIKE_LIMIT`,
-    /// `OobInviteFailure::RateLimitInvalidated`) is therefore unreachable in
+    /// (`LOOKUP_CODE_LEN`, `OobInviteFailure::RateLimitInvalidated`) is
+    /// therefore unreachable in
     /// production until strike-counter persistence lands; do not assume the
     /// lookup wire behaviour is live.
     Lookup,
@@ -210,45 +207,6 @@ pub fn pepper_lookup_code(pepper: &[u8], code: &str) -> [u8; 32] {
     mac.finalize().into_bytes().into()
 }
 
-/// Strike accumulator for lookup-mode codes. Three wrong attempts → the
-/// code MUST be marked `RateLimitInvalidated` and verification MUST
-/// fail thereafter, even with the correct code.
-///
-/// TODO(round23-T15, durable-blocker): wire this into the diesel `oob_codes`
-/// row so the strike counter survives process restarts and horizontal
-/// replicas. This helper is safe only for pure unit tests; production lookup
-/// verification MUST use a durable row transition before enabling lookup-mode
-/// invites.
-#[derive(Debug, Clone, Copy)]
-pub struct LookupStrikes {
-    pub wrong_attempts: u8,
-}
-
-impl LookupStrikes {
-    #[must_use]
-    pub const fn new() -> Self {
-        Self { wrong_attempts: 0 }
-    }
-
-    /// Record a wrong attempt. Returns `true` once the strike limit has
-    /// been hit (the row should be moved to `RateLimitInvalidated`).
-    pub fn record_wrong(&mut self) -> bool {
-        self.wrong_attempts = self.wrong_attempts.saturating_add(1);
-        self.wrong_attempts >= LOOKUP_STRIKE_LIMIT
-    }
-
-    #[must_use]
-    pub const fn is_invalidated(self) -> bool {
-        self.wrong_attempts >= LOOKUP_STRIKE_LIMIT
-    }
-}
-
-impl Default for LookupStrikes {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 // ── internals ──────────────────────────────────────────────────
 
 fn generate_restricted_base32(out_len: usize) -> String {
@@ -316,18 +274,6 @@ mod tests {
         let code = generate_oob_code(OobCodeKind::Lookup);
         assert_eq!(code.len(), LOOKUP_CODE_LEN);
         assert!(is_valid_lookup_code(&code));
-    }
-
-    #[test]
-    fn lookup_code_three_strikes_invalidates() {
-        let mut strikes = LookupStrikes::new();
-        assert!(!strikes.record_wrong());
-        assert!(!strikes.record_wrong());
-        assert!(
-            strikes.record_wrong(),
-            "third wrong attempt MUST signal invalidation"
-        );
-        assert!(strikes.is_invalidated());
     }
 
     #[test]

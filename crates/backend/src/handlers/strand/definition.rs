@@ -42,7 +42,7 @@ pub struct StrandDefinitionFile {
     /// Human-readable title shown in admin UIs.
     pub title: String,
     /// Strand designation — determines when the strand is triggered.
-    pub designation: String,
+    pub designation: StrandDesignation,
     /// Optional template override key. When set, the template engine
     /// looks for templates under this key instead of the default.
     #[serde(default)]
@@ -62,7 +62,7 @@ pub enum StageDefinition {
     Identification {
         order: i32,
         #[serde(default)]
-        user_fields: Option<Vec<String>>,
+        user_fields: Option<Vec<IdentificationField>>,
         #[serde(default)]
         password_stage: Option<bool>,
     },
@@ -124,22 +124,11 @@ impl StrandDefinitionFile {
         let now = Utc::now();
         let strand_id = new_id(now, rng);
 
-        let designation = match self.designation.as_str() {
-            "registration" => StrandDesignation::Registration,
-            "recovery" => StrandDesignation::Recovery,
-            "password_change" => StrandDesignation::PasswordChange,
-            "authentication" => StrandDesignation::Authentication,
-            "authorization" => StrandDesignation::Authorization,
-            "enrollment" => StrandDesignation::Enrollment,
-            "stage_configuration" => StrandDesignation::StageConfiguration,
-            other => panic!("unknown strand designation: {other}"),
-        };
-
         let strand = StrandDefinition {
             id: strand_id,
             slug: self.slug,
             title: self.title,
-            designation,
+            designation: self.designation,
             enabled: true,
             template_override: self.template_override,
             created_at: now,
@@ -175,26 +164,13 @@ impl StageDefinition {
                 order,
                 user_fields,
                 password_stage,
-            } => {
-                let fields = user_fields
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|f| match f.as_str() {
-                        "username" => IdentificationField::Username,
-                        "email" => IdentificationField::Email,
-                        "phone" => IdentificationField::Phone,
-                        other => panic!("unknown identification field: {other}"),
-                    })
-                    .collect();
-
-                (
-                    StageKind::Identification {
-                        user_fields: fields,
-                        password_stage: password_stage.unwrap_or(false),
-                    },
-                    order,
-                )
-            }
+            } => (
+                StageKind::Identification {
+                    user_fields: user_fields.unwrap_or_default(),
+                    password_stage: password_stage.unwrap_or(false),
+                },
+                order,
+            ),
             Self::EmailVerification {
                 order,
                 purpose,
@@ -271,8 +247,40 @@ stages:
         let file = StrandDefinitionFile::parse(yaml).expect("valid YAML");
         assert_eq!(file.slug, "default-registration");
         assert_eq!(file.title, "Default Registration");
-        assert_eq!(file.designation, "registration");
+        assert_eq!(file.designation, StrandDesignation::Registration);
         assert_eq!(file.stages.len(), 2);
+    }
+
+    #[test]
+    fn parse_rejects_unknown_designation() {
+        let yaml = r"
+slug: invalid
+title: Invalid
+designation: registeration
+stages: []
+";
+
+        let error = StrandDefinitionFile::parse(yaml).unwrap_err();
+        assert!(error.to_string().contains("registeration"));
+        assert_eq!(error.location().map(|location| location.line()), Some(4));
+    }
+
+    #[test]
+    fn parse_rejects_unknown_identification_field() {
+        let yaml = r"
+slug: invalid
+title: Invalid
+designation: registration
+stages:
+  - type: identification
+    order: 10
+    user_fields:
+      - e_mail
+";
+
+        let error = StrandDefinitionFile::parse(yaml).unwrap_err();
+        assert!(error.to_string().contains("e_mail"));
+        assert!(error.location().is_some());
     }
 
     #[test]

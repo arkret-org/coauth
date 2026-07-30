@@ -592,7 +592,7 @@ mod tests {
             &DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000006").unwrap(),
             "did:web:soland.example".to_owned(),
             vec!["ak.self.events.stream.subscribe".to_owned()],
-            "runtime-dpop-jkt".to_owned(),
+            "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_owned(),
             "{\"kty\":\"OKP\"}".to_owned(),
             serde_json::json!({
                 "controller_id": controller_id,

@@ -99,10 +99,10 @@ pub fn finalise_oob_failure(
 /// Sleep until `arrival + NON_ENUMERABLE_PAD`. If the handler took
 /// longer than the pad window the function returns immediately (and
 /// the caller MAY emit a `slow_path` metric — see
-/// `TODO(round23-T15)` below). Always-async to keep the timing window
+/// `TODO(oob-slow-path-telemetry)` below). Always-async to keep the timing window
 /// uniform across runtimes.
 ///
-/// TODO(round23-T15, telemetry-followup): emit a
+/// TODO(oob-slow-path-telemetry): emit a
 /// `coauth_oob_failure_slow_path_total` counter when the elapsed > pad
 /// window. This is observability-only: the fail-closed wire behavior is
 /// already uniform (`404`) and the padding still executes for fast paths.

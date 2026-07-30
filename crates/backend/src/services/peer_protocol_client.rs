@@ -10,6 +10,7 @@ use arkret_canonical::{canonical_json_bytes, sha256_digest};
 use arkret_models_collaboration::governance::invite_addressing::{
     InviteDeliveryOutcome, InviteDeliveryRequestBodyBody,
 };
+use arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding;
 use arkret_signatures::http_signature::{
     Component, ContentDigest, ContentDigestAlgorithm, SignedRequestParts, canonical_message,
     format_signature_header, parse_signature_input,
@@ -52,36 +53,11 @@ pub enum PeerProtocolClientError {
     Response(String),
 }
 
-#[derive(Debug, Clone)]
-pub struct PeerProtocolIdentity {
-    pub source_service_id: String,
-    pub destination_service_id: String,
-    pub source_trust_domain: String,
-    pub destination_trust_domain: String,
-}
-
-impl PeerProtocolIdentity {
-    #[must_use]
-    pub fn same_destination(
-        source_service_id: impl Into<String>,
-        source_trust_domain: impl Into<String>,
-    ) -> Self {
-        let source_service_id = source_service_id.into();
-        let source_trust_domain = source_trust_domain.into();
-        Self {
-            destination_service_id: source_service_id.clone(),
-            destination_trust_domain: source_trust_domain.clone(),
-            source_service_id,
-            source_trust_domain,
-        }
-    }
-}
-
 pub struct PeerProtocolClient<'a> {
     base_url: &'a Url,
     http_client: &'a reqwest::Client,
     keystore: &'a Keystore,
-    identity: PeerProtocolIdentity,
+    identity: PeerKeyPackagesClaimTransportBinding,
 }
 
 impl<'a> PeerProtocolClient<'a> {
@@ -89,7 +65,7 @@ impl<'a> PeerProtocolClient<'a> {
         base_url: Option<&'a Url>,
         http_client: &'a reqwest::Client,
         keystore: &'a Keystore,
-        identity: PeerProtocolIdentity,
+        identity: PeerKeyPackagesClaimTransportBinding,
     ) -> Result<Self, PeerProtocolClientError> {
         let Some(base_url) = base_url else {
             return Err(PeerProtocolClientError::BaseUrlNotConfigured);
@@ -190,19 +166,19 @@ impl<'a> PeerProtocolClient<'a> {
         let mut headers = vec![
             (
                 SOURCE_SERVICE_ID_HEADER.to_owned(),
-                self.identity.source_service_id.clone(),
+                self.identity.source_service_id.to_string(),
             ),
             (
                 DESTINATION_SERVICE_ID_HEADER.to_owned(),
-                self.identity.destination_service_id.clone(),
+                self.identity.destination_service_id.to_string(),
             ),
             (
                 HEADER_SOURCE_TRUST_DOMAIN.to_owned(),
-                self.identity.source_trust_domain.clone(),
+                self.identity.source_trust_domain.to_string(),
             ),
             (
                 HEADER_DESTINATION_TRUST_DOMAIN.to_owned(),
-                self.identity.destination_trust_domain.clone(),
+                self.identity.destination_trust_domain.to_string(),
             ),
         ];
 
@@ -352,15 +328,24 @@ mod tests {
         Keystore::new(JsonWebKeySet::new(vec![key]))
     }
 
+    fn peer_identity() -> PeerKeyPackagesClaimTransportBinding {
+        let service_id = arkret_identifiers::Did::new("did:web:auth.example").unwrap();
+        let trust_domain =
+            arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:auth.example").unwrap();
+        PeerKeyPackagesClaimTransportBinding {
+            source_service_id: service_id.clone(),
+            destination_service_id: service_id,
+            source_trust_domain: trust_domain.clone(),
+            destination_trust_domain: trust_domain,
+        }
+    }
+
     #[test]
     fn signed_post_covers_peer_service_headers_and_body_digests() {
         let base = Url::parse("https://server.example/").unwrap();
         let client = reqwest::Client::new();
         let keystore = test_keystore();
-        let identity = PeerProtocolIdentity::same_destination(
-            "did:web:auth.example",
-            "ak:trust_domain:auth.example",
-        );
+        let identity = peer_identity();
         let peer = PeerProtocolClient::new(Some(&base), &client, &keystore, identity).unwrap();
         let body = br#"{"a":1}"#;
         let url = base.join("/_arkret/peer/invites").unwrap();
@@ -401,10 +386,7 @@ mod tests {
         let base = Url::parse("https://server.example/").unwrap();
         let client = reqwest::Client::new();
         let keystore = test_keystore();
-        let identity = PeerProtocolIdentity::same_destination(
-            "did:web:auth.example",
-            "ak:trust_domain:auth.example",
-        );
+        let identity = peer_identity();
         let peer = PeerProtocolClient::new(Some(&base), &client, &keystore, identity).unwrap();
         let url = base
             .join("/_arkret/peer/snapshot/head?realm_id=ak:realm:test")

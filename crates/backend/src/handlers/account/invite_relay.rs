@@ -45,9 +45,7 @@ use crate::handlers::account::consent_cell_query::{
     InviteGateDecision, evaluate_invite_gate, query_consent_cell,
 };
 use crate::handlers::arkret;
-use crate::services::peer_protocol_client::{
-    PeerProtocolClient, PeerProtocolClientError, PeerProtocolIdentity,
-};
+use crate::services::peer_protocol_client::{PeerProtocolClient, PeerProtocolClientError};
 
 // ── Request / response shapes ──────────────────────────────────
 
@@ -326,9 +324,11 @@ pub async fn post_invite_relay(
         || service_id.clone(),
         |delivery| delivery.invite_address.recipient_service_id.clone(),
     );
-    let identity = PeerProtocolIdentity {
-        source_service_id: service_id.to_string(),
-        destination_service_id: destination_service_id.to_string(),
+    let trust_domain = arkret_identifiers::TypedTrustDomainId::new(trust_domain)
+        .map_err(|error| RouteError::Internal(Box::new(error)))?;
+    let identity = arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
+        source_service_id: service_id,
+        destination_service_id,
         source_trust_domain: trust_domain.clone(),
         destination_trust_domain: trust_domain,
     };
@@ -376,11 +376,16 @@ mod tests {
         coauth_keystore::Keystore::new(JsonWebKeySet::new(vec![key]))
     }
 
-    fn peer_identity() -> PeerProtocolIdentity {
-        PeerProtocolIdentity::same_destination(
-            "did:web:auth.example",
-            "ak:trust_domain:auth.example",
-        )
+    fn peer_identity() -> arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
+        let service_id = arkret_identifiers::Did::new("did:web:auth.example").unwrap();
+        let trust_domain =
+            arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:auth.example").unwrap();
+        arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
+            source_service_id: service_id.clone(),
+            destination_service_id: service_id,
+            source_trust_domain: trust_domain.clone(),
+            destination_trust_domain: trust_domain,
+        }
     }
 
     fn payload() -> serde_json::Value {
