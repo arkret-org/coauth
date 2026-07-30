@@ -668,6 +668,22 @@ pub(crate) fn map_oidc_exchange_error(
             StatusCode::NOT_FOUND,
             arkret_wire::ErrorCode::PRINCIPAL_UNKNOWN,
         ),
+        "account_locked" => (
+            StatusCode::FORBIDDEN,
+            arkret_wire::ErrorCode::ACCOUNT_LOCKED,
+        ),
+        "account_suspended" => (
+            StatusCode::FORBIDDEN,
+            arkret_wire::ErrorCode::ACCOUNT_SUSPENDED,
+        ),
+        "account_deactivated" => (
+            StatusCode::FORBIDDEN,
+            arkret_wire::ErrorCode::ACCOUNT_DEACTIVATED,
+        ),
+        "account_erased" => (
+            StatusCode::UNAUTHORIZED,
+            arkret_wire::ErrorCode::ACCOUNT_ERASED,
+        ),
         "account_unavailable" | "principal_account_registration_failed" => (
             StatusCode::SERVICE_UNAVAILABLE,
             arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
@@ -772,6 +788,38 @@ mod tests {
                 }
                 other => panic!("expected coded principal_unknown error, got {other:?}"),
             }
+        }
+    }
+
+    #[test]
+    fn issuance_lifecycle_errors_use_context_specific_statuses() {
+        for (code, expected_status, expected_wire_code) in [
+            (
+                "account_locked",
+                StatusCode::FORBIDDEN,
+                arkret_wire::ErrorCode::ACCOUNT_LOCKED,
+            ),
+            (
+                "account_suspended",
+                StatusCode::FORBIDDEN,
+                arkret_wire::ErrorCode::ACCOUNT_SUSPENDED,
+            ),
+            (
+                "account_deactivated",
+                StatusCode::FORBIDDEN,
+                arkret_wire::ErrorCode::ACCOUNT_DEACTIVATED,
+            ),
+            (
+                "account_erased",
+                StatusCode::UNAUTHORIZED,
+                arkret_wire::ErrorCode::ACCOUNT_ERASED,
+            ),
+        ] {
+            let error = map_oidc_exchange_error(OidcExchangeError {
+                code,
+                message: code.to_owned(),
+            });
+            assert_coded(error, expected_status, expected_wire_code);
         }
     }
 

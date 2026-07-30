@@ -549,6 +549,41 @@ pub async fn refresh_session_grant(
         ));
     }
 
+    let lifecycle_error = match browser_session.user.status {
+        arkret_models_collaboration::objects::account_status::AccountStatus::Locked => Some((
+            StatusCode::FORBIDDEN,
+            arkret_wire::ErrorCode::ACCOUNT_LOCKED,
+        )),
+        arkret_models_collaboration::objects::account_status::AccountStatus::Suspended => Some((
+            StatusCode::FORBIDDEN,
+            arkret_wire::ErrorCode::ACCOUNT_SUSPENDED,
+        )),
+        arkret_models_collaboration::objects::account_status::AccountStatus::Deactivated => Some((
+            StatusCode::FORBIDDEN,
+            arkret_wire::ErrorCode::ACCOUNT_DEACTIVATED,
+        )),
+        arkret_models_collaboration::objects::account_status::AccountStatus::ErasurePending => {
+            Some((
+                StatusCode::UNAUTHORIZED,
+                arkret_wire::ErrorCode::ACCOUNT_ERASED,
+            ))
+        }
+        arkret_models_collaboration::objects::account_status::AccountStatus::Active
+        | arkret_models_collaboration::objects::account_status::AccountStatus::SoftLoggedOut => {
+            None
+        }
+    };
+    if let Some((status, code)) = lifecycle_error {
+        repo.cancel()
+            .await
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        return Err(ArkretRouteError::coded(
+            status,
+            code,
+            "account status forbids session-grant refresh",
+        ));
+    }
+
     // 5. Mint a new grant with the same subject + scope + audience. The
     // audience MUST NOT change across rotation: a client holding a grant for
     // one Principal Server must not be able to rotate it into a grant for a

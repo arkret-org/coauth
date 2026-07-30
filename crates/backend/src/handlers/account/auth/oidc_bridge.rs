@@ -689,11 +689,32 @@ async fn exchange_oidc_code(
                 )
             })?;
         if !user.is_valid() {
+            let code = match user.status {
+                arkret_models_collaboration::objects::account_status::AccountStatus::Locked => {
+                    "account_locked"
+                }
+                arkret_models_collaboration::objects::account_status::AccountStatus::Suspended => {
+                    "account_suspended"
+                }
+                arkret_models_collaboration::objects::account_status::AccountStatus::Deactivated => {
+                    "account_deactivated"
+                }
+                arkret_models_collaboration::objects::account_status::AccountStatus::ErasurePending => {
+                    "account_erased"
+                }
+                arkret_models_collaboration::objects::account_status::AccountStatus::SoftLoggedOut => {
+                    "account_unavailable"
+                }
+                arkret_models_collaboration::objects::account_status::AccountStatus::Active => {
+                    unreachable!("active accounts are valid")
+                }
+            };
             return Err(OidcExchangeError::new(
-                "account_unavailable",
+                code,
                 format!(
-                    "linked local account username={} is locked or deactivated",
-                    user.localpart
+                    "linked local account username={} has status {}",
+                    user.localpart,
+                    user.status.as_str(),
                 ),
             ));
         }

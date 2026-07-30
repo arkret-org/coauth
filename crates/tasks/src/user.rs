@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use coauth_data::oauth::{OAuthSessionFilter, SessionGrantFilter};
 use coauth_data::personal::PersonalSessionFilter;
 use coauth_data::queue::{AccountProjectionRewriteJob, DeactivateUserJob, ReactivateUserJob};
-use coauth_data::user::{BrowserSessionFilter, User, UserEmailFilter, UserRepository};
+use coauth_data::user::{BrowserSessionFilter, User, UserEmailFilter, UserRepository, UserStatus};
 use coauth_data::{BoxRepository, Clock, Pagination, RepositoryAccess};
 use tracing::info;
 
@@ -182,13 +182,18 @@ impl RunnableJob for DeactivateUserJob {
             .context("target user does not exist")
             .map_err(JobError::fail)?;
 
-        // Flip the deactivated flag in our local store.
-        let target = repo
-            .user()
-            .deactivate(wall_clock, target)
-            .await
-            .context("could not mark user as deactivated")
-            .map_err(JobError::retry)?;
+        // The admin transaction may already have advanced the account to
+        // erasure_pending. Never downgrade that terminal state back to
+        // deactivated while executing the shared fanout job.
+        let target = if target.status == UserStatus::ErasurePending {
+            target
+        } else {
+            repo.user()
+                .deactivate(wall_clock, target)
+                .await
+                .context("could not mark user as deactivated")
+                .map_err(JobError::retry)?
+        };
 
         // Revoke / finish every kind of session the user may hold.
         terminate_all_sessions_for(&mut repo, wall_clock, &target).await?;

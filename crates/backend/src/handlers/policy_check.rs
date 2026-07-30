@@ -34,6 +34,7 @@
 
 use std::time::Duration;
 
+#[cfg(test)]
 use arkret_canonical::format_timestamp_canonical;
 #[cfg(test)]
 use arkret_identifiers::Did;
@@ -55,7 +56,7 @@ use crate::services::policy_evaluator::{
     EvaluatorError, PolicyDecision, PolicyEvaluator, PolicyObligation, RuleEvaluator,
 };
 use crate::services::policy_frontier::{Frontier, FrontierSource, SolandFrontierSource};
-use crate::services::policy_signer::{DecisionTranscript, PolicySigner};
+use crate::services::policy_signer::PolicySigner;
 
 /// Maximum wall-clock time the evaluator is given. Spec §6 mandates
 /// fail-closed semantics on timeout; we layer this *outside* the
@@ -245,8 +246,6 @@ pub(crate) async fn build_policy_check_response(
     // five-tuple, not to the TTL alone.
     let expires_at = now + chrono::Duration::seconds(DEFAULT_ALLOW_TTL_SECONDS);
 
-    let expires_at_str = format_timestamp_canonical(expires_at);
-
     let obligations_wire: Vec<Value> = decision
         .obligations
         .iter()
@@ -261,21 +260,25 @@ pub(crate) async fn build_policy_check_response(
     // Step 4 — canonical transcript + detached signature. The transcript
     // captures the request id plus every signed response field, so a
     // verifier can rebuild these bytes from the wire request + response.
-    let transcript = DecisionTranscript {
-        kind: "ak.policy.check.transcript.v1",
-        request_id: request.request_id.as_str(),
-        decision: &decision.decision,
-        bound_to: &bound_to,
-        freshness_state: &frontier.freshness_state,
-        auth_state_digest: &frontier.auth_state_digest,
-        policy_frontier_digest: &frontier.policy_frontier_digest,
-        membership_frontier_digest: &frontier.membership_frontier_digest,
-        reason_code: reason_code.as_str(),
-        expires_at: expires_at_str.as_str(),
-        obligations: &obligations_wire,
+    let mut outcome = PolicyCheckOutcome {
+        request_id: request.request_id.clone(),
+        decision: decision.decision,
+        bound_to,
+        reason_code,
+        freshness_state: frontier.freshness_state,
+        expires_at,
+        auth_state_digest: frontier.auth_state_digest,
+        policy_frontier_digest: frontier.policy_frontier_digest,
+        membership_frontier_digest: frontier.membership_frontier_digest,
+        signature: PolicyCheckSignature {
+            kid: String::new(),
+            sig: String::new(),
+        },
+        next_retry_at: None,
+        obligations: obligations_wire,
     };
     let signer = PolicySigner::new(key_store, policy_server_did.to_string());
-    let signature = match signer.sign_decision(&transcript) {
+    outcome.signature = match signer.sign_decision(&outcome) {
         Ok(sig) => sig,
         Err(e) => {
             // Signing failure is a true server-side fault — we can't
@@ -292,29 +295,15 @@ pub(crate) async fn build_policy_check_response(
     // recorded decision matches the wire response without needing a
     // separate canonicalisation pass. The `policy_audit` target lets
     // operators route these to a dedicated sink.
-    emit_audit_record(&transcript, &signature);
-
-    Ok(PolicyCheckOutcome {
-        request_id: request.request_id.clone(),
-        decision: decision.decision,
-        bound_to,
-        reason_code,
-        freshness_state: frontier.freshness_state,
-        expires_at,
-        auth_state_digest: frontier.auth_state_digest,
-        policy_frontier_digest: frontier.policy_frontier_digest,
-        membership_frontier_digest: frontier.membership_frontier_digest,
-        signature,
-        next_retry_at: None,
-        obligations: obligations_wire,
-    })
+    emit_audit_record(&outcome);
+    Ok(outcome)
 }
 
-fn emit_audit_record(transcript: &DecisionTranscript<'_>, signature: &PolicyCheckSignature) {
+fn emit_audit_record(outcome: &PolicyCheckOutcome) {
     // Use canonical bytes so the audit log records the exact bytes the
     // signature covers; downstream tooling can re-verify the signature
     // against this without re-canonicalising.
-    let canonical_bytes = match PolicySigner::canonical_transcript_bytes(transcript) {
+    let canonical_bytes = match PolicySigner::canonical_transcript_bytes(outcome) {
         Ok(b) => b,
         Err(e) => {
             // If canonicalisation failed here it would also have
@@ -329,17 +318,17 @@ fn emit_audit_record(transcript: &DecisionTranscript<'_>, signature: &PolicyChec
     tracing::info!(
         target: "policy_audit",
         kind = "ak.self.policy.query.check",
-        request_id = transcript.request_id,
-        decision = ?transcript.decision,
-        realm_id = transcript.bound_to.realm_id.as_str(),
-        actor_id = transcript.bound_to.actor_id.as_str(),
-        action = %transcript.bound_to.action,
-        request_canonical_digest = transcript.bound_to.request_canonical_digest.as_str(),
-        policy_server_id = transcript.bound_to.policy_server_id.as_str(),
-        reason_code = transcript.reason_code,
+        request_id = outcome.request_id,
+        decision = ?outcome.decision,
+        realm_id = outcome.bound_to.realm_id.as_str(),
+        actor_id = outcome.bound_to.actor_id.as_str(),
+        action = %outcome.bound_to.action,
+        request_canonical_digest = outcome.bound_to.request_canonical_digest.as_str(),
+        policy_server_id = outcome.bound_to.policy_server_id.as_str(),
+        reason_code = outcome.reason_code,
         canonical_transcript = %canonical_str,
-        signature_kid = %signature.kid,
-        signature_sig = %signature.sig,
+        signature_kid = %outcome.signature.kid,
+        signature_sig = %outcome.signature.sig,
         "policy decision"
     );
 }
@@ -495,20 +484,7 @@ mod tests {
             response_wire["expires_at"],
             serde_json::Value::String(expires_at_str.clone())
         );
-        let transcript = DecisionTranscript {
-            kind: "ak.policy.check.transcript.v1",
-            request_id: request.request_id.as_str(),
-            decision: &response.decision,
-            bound_to: &response.bound_to,
-            freshness_state: &response.freshness_state,
-            auth_state_digest: &response.auth_state_digest,
-            policy_frontier_digest: &response.policy_frontier_digest,
-            membership_frontier_digest: &response.membership_frontier_digest,
-            reason_code: response.reason_code.as_str(),
-            expires_at: expires_at_str.as_str(),
-            obligations: &response.obligations,
-        };
-        let canonical = PolicySigner::canonical_transcript_bytes(&transcript)
+        let canonical = PolicySigner::canonical_transcript_bytes(&response)
             .expect("wire transcript should canonicalize");
 
         let (_did, key_id) = response

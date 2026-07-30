@@ -29,18 +29,14 @@
 //! source, the *audit* sink) lives in sibling services so the signer
 //! stays small and testable.
 
-use arkret_canonical::canonical_json_bytes;
-use arkret_identifiers::Hash;
 use arkret_models_collaboration::governance::policy_check::{
-    PolicyCheckBoundTo, PolicyCheckSignature,
+    PolicyCheckOutcome, PolicyCheckSignature, policy_decision_transcript_bytes,
 };
-use arkret_wire::{AuthzDecision, FreshnessState};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_jose::constraints::Constrainable as _;
 use coauth_keystore::Keystore;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng as _;
-use serde::Serialize;
 use signature::RandomizedSigner as _;
 use thiserror::Error;
 
@@ -93,9 +89,9 @@ impl<'a> PolicySigner<'a> {
     /// that omit them.
     pub fn sign_decision(
         &self,
-        transcript: &DecisionTranscript<'_>,
+        outcome: &PolicyCheckOutcome,
     ) -> Result<PolicyCheckSignature, PolicySignerError> {
-        let canonical = canonical_json_bytes(transcript)
+        let canonical = policy_decision_transcript_bytes(outcome)
             .map_err(|e| PolicySignerError::Canonical(e.to_string()))?;
 
         // Pick the preferred service signing key. Today coauth seeds an
@@ -128,36 +124,11 @@ impl<'a> PolicySigner<'a> {
     /// Used by the audit sink so the recorded transcript bytes are
     /// byte-identical to the bytes the signer actually signed.
     pub fn canonical_transcript_bytes(
-        transcript: &DecisionTranscript<'_>,
+        outcome: &PolicyCheckOutcome,
     ) -> Result<Vec<u8>, PolicySignerError> {
-        canonical_json_bytes(transcript).map_err(|e| PolicySignerError::Canonical(e.to_string()))
+        policy_decision_transcript_bytes(outcome)
+            .map_err(|e| PolicySignerError::Canonical(e.to_string()))
     }
-}
-
-/// Canonical-JSON transcript bound to a single `ak.self.policy.query.check`
-/// decision. Field order is fixed by the struct, but the canonical
-/// serializer in `arkret_canonical` sorts object keys
-/// lexicographically before emitting bytes — so reordering fields here
-/// does not change the wire bytes. Every field is either present on the
-/// request or the response so verifiers can rebuild the same transcript
-/// without consulting coauth internals or audit logs.
-#[derive(Debug, Serialize)]
-pub struct DecisionTranscript<'a> {
-    /// `ak.policy.check.transcript.v1` — version tag to make the
-    /// transcript unmistakable on disk / wire. Future versions MUST
-    /// bump this string and consumers MUST reject unknown tags.
-    pub kind: &'a str,
-    pub request_id: &'a str,
-    pub decision: &'a AuthzDecision,
-    pub bound_to: &'a PolicyCheckBoundTo,
-    pub freshness_state: &'a FreshnessState,
-    pub auth_state_digest: &'a Hash,
-    pub policy_frontier_digest: &'a Hash,
-    pub membership_frontier_digest: &'a Hash,
-    pub reason_code: &'a str,
-    pub expires_at: &'a str,
-    #[serde(skip_serializing_if = "<[_]>::is_empty")]
-    pub obligations: &'a [serde_json::Value],
 }
 
 /// Pick the preferred service signing key from the keystore. Mirrors
@@ -197,7 +168,10 @@ fn preferred_service_signing_key(
 
 #[cfg(test)]
 mod tests {
-    use arkret_identifiers::{Did, RealmId};
+    use arkret_identifiers::{Did, Hash, RealmId};
+    use arkret_models_collaboration::governance::policy_check::PolicyCheckBoundTo;
+    use arkret_wire::{AuthzDecision, FreshnessState};
+    use chrono::{TimeZone as _, Utc};
 
     use super::*;
 
@@ -209,38 +183,38 @@ mod tests {
         .unwrap()
     }
 
-    fn bound_to() -> PolicyCheckBoundTo {
-        PolicyCheckBoundTo {
-            realm_id: RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001").unwrap(),
-            actor_id: Did::new("did:web:alice.example").unwrap(),
-            action: "ak.message.create".into(),
-            request_canonical_digest: empty_sha256(),
-            policy_server_id: Did::new("did:web:coauth.example").unwrap(),
+    fn outcome() -> PolicyCheckOutcome {
+        let digest = empty_sha256();
+        PolicyCheckOutcome {
+            request_id: "req-1".to_owned(),
+            decision: AuthzDecision::Allow,
+            bound_to: PolicyCheckBoundTo {
+                realm_id: RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001").unwrap(),
+                actor_id: Did::new("did:web:alice.example").unwrap(),
+                action: "ak.message.create".into(),
+                request_canonical_digest: digest.clone(),
+                policy_server_id: Did::new("did:web:coauth.example").unwrap(),
+            },
+            reason_code: "ok".to_owned(),
+            freshness_state: FreshnessState::Fresh,
+            expires_at: Utc.with_ymd_and_hms(2026, 5, 21, 0, 1, 0).unwrap(),
+            auth_state_digest: digest.clone(),
+            policy_frontier_digest: digest.clone(),
+            membership_frontier_digest: digest,
+            signature: PolicyCheckSignature {
+                kid: String::new(),
+                sig: String::new(),
+            },
+            next_retry_at: None,
+            obligations: Vec::new(),
         }
     }
 
     #[test]
     fn transcript_canonical_bytes_are_deterministic() {
-        let bound = bound_to();
-        let auth = empty_sha256();
-        let pol = empty_sha256();
-        let mem = empty_sha256();
-        let obligations: Vec<serde_json::Value> = Vec::new();
-        let transcript = DecisionTranscript {
-            kind: "ak.policy.check.transcript.v1",
-            request_id: "req-1",
-            decision: &AuthzDecision::Allow,
-            bound_to: &bound,
-            freshness_state: &FreshnessState::Fresh,
-            auth_state_digest: &auth,
-            policy_frontier_digest: &pol,
-            membership_frontier_digest: &mem,
-            reason_code: "ok",
-            expires_at: "2026-05-21T00:01:00.000Z",
-            obligations: &obligations,
-        };
-        let a = PolicySigner::canonical_transcript_bytes(&transcript).unwrap();
-        let b = PolicySigner::canonical_transcript_bytes(&transcript).unwrap();
+        let outcome = outcome();
+        let a = PolicySigner::canonical_transcript_bytes(&outcome).unwrap();
+        let b = PolicySigner::canonical_transcript_bytes(&outcome).unwrap();
         assert_eq!(a, b);
         // The canonical bytes MUST start with `{` (object) and contain
         // the version tag verbatim.
@@ -255,25 +229,25 @@ mod tests {
 
     #[test]
     fn changing_decision_changes_canonical_bytes() {
-        let bound = bound_to();
-        let h = empty_sha256();
-        let obligations: Vec<serde_json::Value> = Vec::new();
-        let mut transcript = DecisionTranscript {
-            kind: "ak.policy.check.transcript.v1",
-            request_id: "req-1",
-            decision: &AuthzDecision::Allow,
-            bound_to: &bound,
-            freshness_state: &FreshnessState::Fresh,
-            auth_state_digest: &h,
-            policy_frontier_digest: &h,
-            membership_frontier_digest: &h,
-            reason_code: "ok",
-            expires_at: "2026-05-21T00:01:00.000Z",
-            obligations: &obligations,
-        };
-        let allow_bytes = PolicySigner::canonical_transcript_bytes(&transcript).unwrap();
-        transcript.decision = &AuthzDecision::HardDeny;
-        let deny_bytes = PolicySigner::canonical_transcript_bytes(&transcript).unwrap();
+        let mut outcome = outcome();
+        let allow_bytes = PolicySigner::canonical_transcript_bytes(&outcome).unwrap();
+        outcome.decision = AuthzDecision::HardDeny;
+        let deny_bytes = PolicySigner::canonical_transcript_bytes(&outcome).unwrap();
         assert_ne!(allow_bytes, deny_bytes);
+    }
+
+    #[test]
+    fn retry_time_and_obligations_are_signed() {
+        let mut outcome = outcome();
+        let baseline = PolicySigner::canonical_transcript_bytes(&outcome).unwrap();
+        outcome.next_retry_at = Some(Utc.with_ymd_and_hms(2026, 5, 21, 0, 0, 30).unwrap());
+        let retry = PolicySigner::canonical_transcript_bytes(&outcome).unwrap();
+        assert_ne!(baseline, retry);
+
+        outcome.obligations.push(serde_json::json!({
+            "kind": "accountability_grant_required"
+        }));
+        let obligation = PolicySigner::canonical_transcript_bytes(&outcome).unwrap();
+        assert_ne!(retry, obligation);
     }
 }

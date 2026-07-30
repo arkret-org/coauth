@@ -93,6 +93,8 @@ pub async fn patch_user(
         user.status == AccountStatus::Deactivated && next_status == AccountStatus::Active;
     let should_schedule_deactivation = !account_status_needs_deactivation_fanout(user.status)
         && account_status_needs_deactivation_fanout(next_status);
+    let should_schedule_erasure = user.status != AccountStatus::ErasurePending
+        && next_status == AccountStatus::ErasurePending;
 
     let updated = repo
         .user()
@@ -142,15 +144,18 @@ pub async fn patch_user(
                 DeactivateUserJob::new(&updated, principal_erase),
             )
             .await?;
-        if principal_erase || updated.status == AccountStatus::ErasurePending {
-            repo.queue_job()
-                .schedule_job(
-                    rng,
-                    clock,
-                    AccountProjectionRewriteJob::new(&updated, principal_erase),
-                )
-                .await?;
-        }
+    }
+    if should_schedule_erasure || (should_schedule_deactivation && principal_erase) {
+        repo.queue_job()
+            .schedule_job(
+                rng,
+                clock,
+                AccountProjectionRewriteJob::new(
+                    &updated,
+                    principal_erase || should_schedule_erasure,
+                ),
+            )
+            .await?;
     }
 
     let details = serde_json::json!({
@@ -354,4 +359,23 @@ fn account_status_needs_deactivation_fanout(status: AccountStatus) -> bool {
         status,
         AccountStatus::Deactivated | AccountStatus::ErasurePending
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_legal_erasure_source_requires_fanout() {
+        for source in [
+            AccountStatus::Active,
+            AccountStatus::SoftLoggedOut,
+            AccountStatus::Locked,
+            AccountStatus::Suspended,
+            AccountStatus::Deactivated,
+        ] {
+            assert!(source.can_transition_to(AccountStatus::ErasurePending));
+            assert_ne!(source, AccountStatus::ErasurePending);
+        }
+    }
 }
