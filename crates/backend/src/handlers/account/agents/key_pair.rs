@@ -1277,10 +1277,17 @@ mod tests {
                     "approved_by": CONTROLLER
                 }
             },
+            // `event-envelope.schema.json#/$defs/event_proof` requires kind,
+            // verification_method, alg, event_digest, created_at and jws. The
+            // digest here is a placeholder: callers that need a proof actually
+            // bound to this envelope rebind it from `Event::event_digest`.
             "proofs": [{
                 "kind": "detached_jws",
                 "verification_method": "did:web:controller.example#key-1",
-                "jws": "header..signature"
+                "alg": "EdDSA",
+                "event_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "created_at": "2026-07-06T00:01:00.000Z",
+                "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
             }]
         })
     }
@@ -1646,15 +1653,10 @@ mod tests {
     }
 
     fn full_fake_signed_authorize_event() -> arkret_wire::Event {
+        // The fixture already carries a spec-shaped proof; only its digest is a
+        // placeholder. Rebind that one field rather than rebuilding the array,
+        // so this helper cannot drift away from the fixture's proof shape.
         let mut envelope = valid_authorize_event(PAIRING_REQUEST_ID);
-        envelope["proofs"] = json!([{
-            "kind": "detached_jws",
-            "alg": "EdDSA",
-            "verification_method": "did:web:controller.example#key-1",
-            "event_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-            "created_at": "2026-07-06T00:01:00.000Z",
-            "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
-        }]);
         let parsed = authorize_event(envelope.clone());
         envelope["proofs"][0]["event_digest"] = json!(parsed.event_digest().unwrap());
         authorize_event(envelope)

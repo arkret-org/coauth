@@ -198,7 +198,7 @@ async fn issue_pre_registration_handoff_session_grant(
         || body.agent_key_authorization_ref.is_some()
         || body.agent_scope_request.is_some()
         || body.dpop_binding_proof.is_some()
-        || body.applet_delegation.is_some()
+        || body.applet_authority.is_some()
         || proof.verification_method.is_some()
         || proof.issuer.is_some()
         || proof.client_id.is_some()
