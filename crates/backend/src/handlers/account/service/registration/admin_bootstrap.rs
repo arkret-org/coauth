@@ -20,8 +20,11 @@ pub(super) async fn prepare_admin_bootstrap(
     configured_bootstrap_admin_token: Option<&str>,
     requested_bootstrap_admin_token: Option<&str>,
 ) -> Result<bool, PrepareAdminBootstrapError> {
-    repo.user().acquire_bootstrap_admin_lock().await?;
-
+    // The bootstrap lock is deployment-global, so every registration that takes
+    // it serializes against every other one. Only the still-open first-admin
+    // window needs it: an admin that is already committed can never make this
+    // call succeed, and neither can a deployment without a configured token.
+    // Both of those answers are stable without the lock.
     let admin_count = repo
         .user()
         .count(UserFilter::new().can_request_admin_only())
@@ -36,6 +39,19 @@ pub(super) async fn prepare_admin_bootstrap(
     else {
         return Ok(false);
     };
+
+    repo.user().acquire_bootstrap_admin_lock().await?;
+
+    // Re-read under the lock: another registration may have claimed the window
+    // between the unlocked probe and here.
+    if repo
+        .user()
+        .count(UserFilter::new().can_request_admin_only())
+        .await?
+        > 0
+    {
+        return Ok(false);
+    }
 
     match normalize_optional_token(requested_bootstrap_admin_token) {
         Some(requested_bootstrap_admin_token)
