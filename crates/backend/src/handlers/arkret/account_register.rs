@@ -59,7 +59,7 @@ pub async fn account_register_endpoint(
         }
         IdentityCreationRegisterReplay::Replay(outcome) => {
             repo.cancel().await.ok();
-            return Ok(Json(outcome));
+            return Ok(Json(*outcome));
         }
         IdentityCreationRegisterReplay::DuplicateConflict => {
             repo.cancel().await.ok();
@@ -248,7 +248,7 @@ pub async fn account_register_endpoint(
         IdentityCreationBindingCommit::Committed => {}
         IdentityCreationBindingCommit::Replay(stored) => {
             repo.cancel().await.ok();
-            return Ok(Json(stored));
+            return Ok(Json(*stored));
         }
         IdentityCreationBindingCommit::DuplicateConflict => {
             repo.cancel().await.ok();

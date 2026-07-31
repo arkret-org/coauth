@@ -246,6 +246,10 @@ impl VerifiedDidBindingRepository for PgVerifiedDidBindingRepository<'_> {
 
 #[cfg(test)]
 mod tests {
+    // These cases assert against real database `now()` comparisons, so the
+    // fixture time has to be the wall clock rather than a `MockClock`.
+    #![allow(clippy::disallowed_methods)]
+
     use chrono::Duration;
     use coauth_data::{RepositoryAccess as _, RepositoryFactory as _};
 

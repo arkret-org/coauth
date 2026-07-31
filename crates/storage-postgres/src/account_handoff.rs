@@ -827,7 +827,9 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         {
             return Ok(IdentityCreationRegisterReplay::DuplicateConflict);
         }
-        Ok(IdentityCreationRegisterReplay::Replay(ledger.outcome))
+        Ok(IdentityCreationRegisterReplay::Replay(Box::new(
+            ledger.outcome,
+        )))
     }
 
     async fn mark_published(
@@ -947,7 +949,9 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             if ledger.challenge_id == context.challenge.challenge_id
                 && ledger.request_digest == *request_digest
             {
-                return Ok(IdentityCreationBindingCommit::Replay(ledger.outcome));
+                return Ok(IdentityCreationBindingCommit::Replay(Box::new(
+                    ledger.outcome,
+                )));
             }
             return Ok(IdentityCreationBindingCommit::DuplicateConflict);
         }
@@ -1926,7 +1930,7 @@ mod tests {
             panic!("exact cross-process retry must return the stored outcome");
         };
         assert_eq!(
-            serde_json::to_value(stored_outcome).unwrap(),
+            serde_json::to_value(*stored_outcome).unwrap(),
             serde_json::to_value(&outcome).unwrap()
         );
 

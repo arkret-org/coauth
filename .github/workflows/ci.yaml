@@ -85,10 +85,10 @@ jobs:
           assert clippy_pin and clippy_pin.group(1) == expected, "Clippy Rust pin differs from workspace MSRV"
           PY
 
-      - name: Set up Rust 1.96.0 with Clippy
+      - name: Set up Rust 1.97.0 with Clippy
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
-          toolchain: 1.96.0
+          toolchain: 1.97.0
           components: clippy
 
       - name: Configure sccache

@@ -399,7 +399,7 @@ fn validate_fixed_event(
     let actual_algorithms = payload
         .algorithms
         .iter()
-        .map(|value| value.as_str())
+        .map(arkret_wire::NonEmptyString::as_str)
         .collect::<Vec<_>>();
 
     if event.event_id != preimage.authorize_event_id

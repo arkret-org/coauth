@@ -132,14 +132,17 @@ pub struct IdentityCreationRegisterLedger {
 #[derive(Clone, Debug)]
 pub enum IdentityCreationRegisterReplay {
     Pending,
-    Replay(arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome),
+    // Boxed: the outcome is ~1 KiB while every other variant is a unit, so an
+    // inline payload would make each `Pending` cost the same as a full replay.
+    Replay(Box<arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome>),
     DuplicateConflict,
 }
 
 #[derive(Clone, Debug)]
 pub enum IdentityCreationBindingCommit {
     Committed,
-    Replay(arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome),
+    // Boxed for the same reason as `IdentityCreationRegisterReplay::Replay`.
+    Replay(Box<arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome>),
     DuplicateConflict,
     Stale,
 }

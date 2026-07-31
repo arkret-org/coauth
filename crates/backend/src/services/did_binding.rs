@@ -380,7 +380,6 @@ pub const fn status_for(rejection: Option<DidResolutionIdentityFactRejection>) -
 /// it would let a later store hit assert an acceptance that pins nothing, so it
 /// is rejected here rather than downgraded. Every other source is storable; its
 /// trust level is expressed through [`status_for`] and `LimitedTrustReason`.
-#[must_use]
 pub const fn is_storable(resolution: &DidResolution) -> Result<(), &'static str> {
     match (resolution.source, resolution.verified_local_binding) {
         (DidResolutionSource::DidKey, false) => {

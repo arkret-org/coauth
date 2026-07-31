@@ -93,8 +93,10 @@ enum OidcExchangeIntent {
 }
 
 enum OidcExchangeResult {
-    SessionGrant(OidcExchangeSuccess),
-    AccountHandoff(OidcHandoffExchangeSuccess),
+    // Both payloads are boxed: each is several hundred bytes, so an inline
+    // variant would size every exchange result by the larger of the two.
+    SessionGrant(Box<OidcExchangeSuccess>),
+    AccountHandoff(Box<OidcHandoffExchangeSuccess>),
 }
 
 /// Typed failure of the OIDC exchange, carrying the registry error code the
@@ -385,7 +387,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
     )
     .await?
     {
-        OidcExchangeResult::SessionGrant(success) => Ok(success),
+        OidcExchangeResult::SessionGrant(success) => Ok(*success),
         OidcExchangeResult::AccountHandoff(_) => unreachable!("session-grant exchange intent"),
     }
 }
@@ -407,7 +409,7 @@ pub(crate) async fn exchange_oidc_code_for_account_handoff(
     )
     .await?
     {
-        OidcExchangeResult::AccountHandoff(success) => Ok(success),
+        OidcExchangeResult::AccountHandoff(success) => Ok(*success),
         OidcExchangeResult::SessionGrant(_) => unreachable!("account-handoff exchange intent"),
     }
 }
@@ -748,7 +750,7 @@ async fn exchange_oidc_code(
             repo.save()
                 .await
                 .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
-            return Ok(OidcExchangeResult::AccountHandoff(success));
+            return Ok(OidcExchangeResult::AccountHandoff(Box::new(success)));
         }
         let principal_did =
             load_verified_principal_did_committed(depot, &user, &grant_target.audience)
@@ -800,12 +802,14 @@ async fn exchange_oidc_code(
 
         let _ = &service_activity_tracker;
         let _ = &grant_target;
-        return Ok(OidcExchangeResult::SessionGrant(OidcExchangeSuccess {
-            principal_did,
-            device_id,
-            session_grant,
-            persisted_grant_id: persisted.grant_id.to_string(),
-        }));
+        return Ok(OidcExchangeResult::SessionGrant(Box::new(
+            OidcExchangeSuccess {
+                principal_did,
+                device_id,
+                session_grant,
+                persisted_grant_id: persisted.grant_id.to_string(),
+            },
+        )));
     }
 
     // ─── Local coauth issuer branch ─────────────────────────────────────
@@ -1243,7 +1247,7 @@ async fn exchange_oidc_code(
         repo.cancel()
             .await
             .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
-        return Ok(OidcExchangeResult::AccountHandoff(success));
+        return Ok(OidcExchangeResult::AccountHandoff(Box::new(success)));
     }
     let principal_did = load_verified_principal_did_committed(depot, user, &grant_target.audience)
         .await
@@ -1291,12 +1295,14 @@ async fn exchange_oidc_code(
         .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
 
     let _ = &grant_target;
-    Ok(OidcExchangeResult::SessionGrant(OidcExchangeSuccess {
-        principal_did,
-        device_id,
-        session_grant,
-        persisted_grant_id: persisted.grant_id.to_string(),
-    }))
+    Ok(OidcExchangeResult::SessionGrant(Box::new(
+        OidcExchangeSuccess {
+            principal_did,
+            device_id,
+            session_grant,
+            persisted_grant_id: persisted.grant_id.to_string(),
+        },
+    )))
 }
 
 /// The request principal DID must equal the verified service-account binding.

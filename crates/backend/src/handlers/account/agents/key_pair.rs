@@ -704,7 +704,7 @@ fn validate_controller_authorize_event(
     if approval
         .pairing_request_id
         .as_ref()
-        .map(|value| value.as_str())
+        .map(arkret_wire::OpaqueLocalId::as_str)
         != Some(pairing_request_id)
     {
         return Err(AppError::bad_request(

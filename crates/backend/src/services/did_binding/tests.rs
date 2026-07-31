@@ -5,8 +5,21 @@
 //! Negative and mapping coverage for purpose-aware DID bindings
 //! (`did-usage-and-verification.md` §4–§5, task DID-P2-A).
 
-use super::*;
+// The source-scanning cases below walk `std::fs::read_dir`, whose entries are
+// `std::path::PathBuf`; routing them through camino would convert every entry
+// back and forth for no gain in a test that never leaves this crate.
+#![allow(clippy::disallowed_types)]
+
 use arkret_identity::BindingFreshness;
+
+/// A protocol instant is millisecond-precision. `VerifiedDidBinding::new`
+/// floors the freshness window to it, so a raw `Utc::now()` here would leave
+/// the fixture holding sub-millisecond digits the binding cannot round-trip.
+fn protocol_now() -> chrono::DateTime<Utc> {
+    arkret_canonical::canonical::normalize_timestamp_canonical(Utc::now())
+}
+
+use super::*;
 
 fn did() -> Did {
     Did::new("did:web:alice.example").unwrap()
@@ -88,7 +101,7 @@ fn accept(
 
 #[test]
 fn resolution_fields_map_onto_the_shared_binding() {
-    let now = Utc::now();
+    let now = protocol_now();
     let resolution = healthy_resolution("did:web:alice.example");
     let accepted = binding_from_resolution(
         &resolution,
@@ -128,7 +141,7 @@ fn resolution_fields_map_onto_the_shared_binding() {
 
 #[test]
 fn missing_history_head_records_the_wider_limited_trust_reason() {
-    let now = Utc::now();
+    let now = protocol_now();
     let mut resolution = healthy_resolution("did:web:alice.example");
     resolution.key_log_head = None;
     let accepted = binding_from_resolution(
@@ -231,7 +244,7 @@ fn the_evidence_digest_binds_the_document_and_the_policy() {
 
 #[test]
 fn did_key_local_resolution_is_never_stored_as_a_binding() {
-    let now = Utc::now();
+    let now = protocol_now();
     let resolution = test_resolution(
         "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
         DidResolutionSource::DidKey,
@@ -258,7 +271,7 @@ fn did_key_local_resolution_is_never_stored_as_a_binding() {
 
 #[test]
 fn a_binding_accepted_for_one_purpose_does_not_serve_another() {
-    let now = Utc::now();
+    let now = protocol_now();
     let store = DurableVerifiedDidBindingStore::new(16);
     let domain = trust_domain("auth.example");
     let policy = digest('b');
@@ -287,7 +300,7 @@ fn a_binding_accepted_for_one_purpose_does_not_serve_another() {
 
 #[test]
 fn a_binding_accepted_in_one_trust_domain_does_not_serve_another() {
-    let now = Utc::now();
+    let now = protocol_now();
     let store = DurableVerifiedDidBindingStore::new(16);
     let accepted = accept(
         &store,
@@ -308,7 +321,7 @@ fn a_binding_accepted_in_one_trust_domain_does_not_serve_another() {
 
 #[test]
 fn a_policy_change_retires_every_existing_binding() {
-    let now = Utc::now();
+    let now = protocol_now();
     let store = DurableVerifiedDidBindingStore::new(16);
     let accepted = accept(
         &store,
@@ -330,7 +343,7 @@ fn a_policy_change_retires_every_existing_binding() {
 
 #[test]
 fn rotation_invalidation_clears_only_the_rotated_did() {
-    let now = Utc::now();
+    let now = protocol_now();
     let store = DurableVerifiedDidBindingStore::new(16);
     let domain = trust_domain("auth.example");
     let policy = digest('b');
@@ -362,7 +375,7 @@ fn rotation_invalidation_clears_only_the_rotated_did() {
 
 #[test]
 fn a_deactivated_binding_is_never_usable_even_for_ordinary_reads() {
-    let now = Utc::now();
+    let now = protocol_now();
     let store = DurableVerifiedDidBindingStore::new(16);
     let accepted = accept(
         &store,
@@ -385,7 +398,7 @@ fn a_deactivated_binding_is_never_usable_even_for_ordinary_reads() {
 
 #[test]
 fn a_quarantined_resolution_is_stored_but_never_served() {
-    let now = Utc::now();
+    let now = protocol_now();
     let store = DurableVerifiedDidBindingStore::new(16);
     let mut resolution = healthy_resolution("did:web:alice.example");
     resolution.identity_fact_rejection =
@@ -443,7 +456,7 @@ fn is_refreshable(
 
 #[test]
 fn stale_is_readable_for_low_risk_but_rejected_by_high_risk_freshness() {
-    let now = Utc::now();
+    let now = protocol_now();
     let store = DurableVerifiedDidBindingStore::new(16);
     let accepted = accept(
         &store,
@@ -477,7 +490,7 @@ fn stale_is_readable_for_low_risk_but_rejected_by_high_risk_freshness() {
 
 #[test]
 fn hard_expiry_makes_the_entry_disappear_for_readers() {
-    let now = Utc::now();
+    let now = protocol_now();
     let store = DurableVerifiedDidBindingStore::new(16);
     let accepted = accept(
         &store,
@@ -502,7 +515,7 @@ fn hard_expiry_makes_the_entry_disappear_for_readers() {
 /// delegated resolver).
 #[test]
 fn a_fresh_binding_hit_short_circuits_before_the_resolver() {
-    let now = Utc::now();
+    let now = protocol_now();
     for (did, source) in [
         ("did:web:alice.example", DidResolutionSource::DidWeb),
         (
@@ -653,7 +666,7 @@ fn primary_did_for_user_never_resolves() {
 
 #[test]
 fn mirroring_a_purpose_copies_the_evidence_but_not_the_authority() {
-    let now = Utc::now();
+    let now = protocol_now();
     let store = DurableVerifiedDidBindingStore::new(16);
     let source = accept(
         &store,
@@ -700,7 +713,7 @@ fn mirroring_a_purpose_copies_the_evidence_but_not_the_authority() {
 
 #[test]
 fn mirroring_never_upgrades_a_quarantined_acceptance() {
-    let now = Utc::now();
+    let now = protocol_now();
     let store = DurableVerifiedDidBindingStore::new(16);
     let mut resolution = healthy_resolution("did:web:alice.example");
     resolution.identity_fact_rejection = Some(DidResolutionIdentityFactRejection::DidWebFallback);
@@ -833,7 +846,7 @@ fn the_deployment_epoch_retires_every_binding_in_one_step() {
 /// expected upgrade behaviour, not a fault.
 #[test]
 fn an_acceptance_stored_under_an_older_policy_digest_misses_without_panicking() {
-    let now = Utc::now();
+    let now = protocol_now();
     let store = DurableVerifiedDidBindingStore::new(16);
     let accepted = accept(
         &store,
@@ -895,7 +908,10 @@ fn all_six_key_dimensions_project_onto_distinct_columns() {
     assert_eq!(columns.version_id, None);
 
     let method = arkret_wire::DidUrl::new("did:web:alice.example#key-1".to_owned()).unwrap();
-    let variants: [(&str, Box<dyn Fn(&mut VerifiedDidBindingKey)>); 6] = [
+    /// A named single-dimension mutation of the binding key.
+    type NamedKeyMutation = (&'static str, Box<dyn Fn(&mut VerifiedDidBindingKey)>);
+
+    let variants: [NamedKeyMutation; 6] = [
         ("did", Box::new(|key| key.did = other_did())),
         (
             "trust_domain",
@@ -935,7 +951,7 @@ fn all_six_key_dimensions_project_onto_distinct_columns() {
 /// the store key survive.
 #[test]
 fn an_untouched_row_decodes_back_into_the_same_acceptance() {
-    let now = Utc::now();
+    let now = protocol_now();
     let accepted = stored_acceptance(now);
     let key = accepted.binding().key();
     let row = encode_row(&accepted).expect("row encodes");
@@ -959,13 +975,13 @@ fn an_untouched_row_decodes_back_into_the_same_acceptance() {
 /// come back as trusted. Each case below edits exactly one thing.
 #[test]
 fn a_tampered_row_is_discarded_rather_than_trusted() {
-    let now = Utc::now();
+    let now = protocol_now();
     let accepted = stored_acceptance(now);
     let key = accepted.binding().key();
     let pristine = encode_row(&accepted).expect("row encodes");
 
-    // 1. The pinned document was edited: its canonical digest no longer equals
-    //    the digest the binding recorded.
+    // 1. The pinned document was edited: its canonical digest no longer equals the digest the
+    //    binding recorded.
     let mut edited_document = pristine.clone();
     edited_document.accepted["document"]["verificationMethod"][0]["publicKeyMultibase"] =
         serde_json::json!("z6MkfXVRWQNbmDmzZTQ5JuBLTzHtGSCXhhYm8pLTfNfPnYzM");
@@ -982,8 +998,8 @@ fn a_tampered_row_is_discarded_rather_than_trusted() {
         "a document belonging to another DID must be discarded"
     );
 
-    // 3. The acceptance was relocated by editing a key column — here, promoting
-    //    a principal acceptance into an admin-action one.
+    // 3. The acceptance was relocated by editing a key column — here, promoting a principal
+    //    acceptance into an admin-action one.
     let mut relocated = pristine.clone();
     relocated.key.purpose = "admin_action".to_owned();
     assert!(
@@ -999,8 +1015,7 @@ fn a_tampered_row_is_discarded_rather_than_trusted() {
         "a row moved into another trust domain must be discarded"
     );
 
-    // 5. A structurally valid row that simply does not answer the key that was
-    //    asked for.
+    // 5. A structurally valid row that simply does not answer the key that was asked for.
     let mut other_key = key.clone();
     other_key.purpose = DidBindingPurpose::AdminAction;
     assert!(
