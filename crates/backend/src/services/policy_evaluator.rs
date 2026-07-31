@@ -45,7 +45,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody;
-use arkret_wire::{AuthzDecision, CapabilityActionId, FreshnessState};
+use arkret_wire::{AuthzDecision, CapabilityActionId, FreshnessState, ProfileId};
 use chrono::{DateTime, Utc};
 use coauth_data::collaboration_capability::{
     CollaborationCapabilityGrant, is_collaboration_capability_action,
@@ -67,7 +67,6 @@ const REASON_CODE_SPAM_FLOOD: &str = "spam_flood";
 /// Retry window applied when a `throttle_actions` rule names an action but
 /// declares no `retry_after_ms` of its own.
 const DEFAULT_THROTTLE_RETRY_AFTER_MS: u64 = 30_000;
-const CANDIDATE_JOIN_POLICY_PROFILE: &str = "ak.profile.candidate.join_policy.v1";
 
 /// AKP-0010 (R3 spec-sync 2026-05-27, arkret-spec b47ff6ec) — call /
 /// media capability actions registered in
@@ -556,7 +555,7 @@ fn capability_action_gate_decision(
         }
     };
 
-    if descriptor.profile.as_deref() == Some(CANDIDATE_JOIN_POLICY_PROFILE) {
+    if descriptor.profile.as_deref() == Some(ProfileId::CANDIDATE_JOIN_POLICY_V1) {
         return Some(unsupported_feature(policy_version));
     }
     if let Some(profile) = descriptor.profile.as_deref()

@@ -415,7 +415,7 @@ mod tests {
     {
         arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBodyBody::new(
             arkret_wire::Event::new(
-                arkret_wire::events::EventKind::INVITE_CREATE,
+                arkret_wire::EventKind::INVITE_CREATE,
                 arkret_wire::ScopeRef::Realm {
                     realm_id: arkret_identifiers::RealmId::new(
                         "ak:realm:0196419b-0000-7000-8000-000000000001",
