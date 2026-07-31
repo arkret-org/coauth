@@ -117,6 +117,8 @@ pub mod audit;
 pub mod circle_capability;
 /// Collaboration capability grant repositories.
 pub mod collaboration_capability;
+/// Durable accepted DID binding repositories (DID-P2-A).
+pub mod did_binding;
 /// DPoP proof replay repositories.
 pub mod dpop_replay;
 /// Append-only handle audit log repository (T3.2: handle reassignment,

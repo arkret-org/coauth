@@ -2181,7 +2181,9 @@ mod tests {
                 audience: arkret_identifiers::Did::new("did:web:soland.example").unwrap(),
                 expires_at: Some(chrono::Utc::now() + chrono::Duration::minutes(5)),
                 signature: "sig-a".to_owned(),
-                verification_method: Some("did:web:agent.example#runtime-key-1".to_owned()),
+                verification_method: Some(
+                    arkret_wire::DidUrl::new("did:web:agent.example#runtime-key-1").unwrap(),
+                ),
                 issuer: None,
                 client_id: None,
                 redirect_uri: None,

@@ -108,23 +108,33 @@ mod tests {
         TypedTrustDomainId::new("ak:trust_domain:example.net").unwrap()
     }
 
+    /// The PSK `kid` is compared byte-for-byte against
+    /// `SubordinateSignedKeyBinding.verification_method`, which the SDK types as
+    /// `DidUrl` (official fixture instance
+    /// `did:webvh:z6mkfixture:alice.example#psk`; `device-lifecycle.md` §256/§347
+    /// require it to resolve to a `verificationMethod` of the DID head).
+    /// The fixture therefore uses the full DID URL form rather than a bare label.
+    fn psk_kid(label: &str) -> String {
+        format!("did:web:alice.example#{label}")
+    }
+
     fn psk(kid: &str) -> PublishedKey {
         PublishedKey {
-            kid: NonEmptyString::new(kid).unwrap(),
+            kid: NonEmptyString::new(psk_kid(kid)).unwrap(),
             alg: NonEmptyString::new("Ed25519").unwrap(),
             public_key: NonEmptyString::new(format!("pubkey-{kid}")).unwrap(),
             key_format: KeyFormat::RawBase64url,
         }
     }
 
-    fn ssk(kid: &str, psk_kid: &str, pub_suffix: &str) -> SubordinateSignedKey {
+    fn ssk(kid: &str, psk_label: &str, pub_suffix: &str) -> SubordinateSignedKey {
         SubordinateSignedKey {
             kid: NonEmptyString::new(kid).unwrap(),
             alg: NonEmptyString::new("Ed25519").unwrap(),
             public_key: NonEmptyString::new(format!("pubkey-{pub_suffix}")).unwrap(),
             key_format: KeyFormat::RawBase64url,
             binding: SubordinateSignedKeyBinding {
-                verification_method: NonEmptyString::new(psk_kid).unwrap(),
+                verification_method: arkret_wire::DidUrl::new(psk_kid(psk_label)).unwrap(),
                 alg: NonEmptyString::new("Ed25519").unwrap(),
                 signature: NonEmptyString::new("sig").unwrap(),
             },

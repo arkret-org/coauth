@@ -257,6 +257,13 @@ pub async fn inject_app_state(
         TrustedIssuerPolicySet::default(),
     );
     depot.insert("did_resolver_service", default_did_resolver_service());
+    // Purpose-aware accepted DID bindings (DID-P2-A). The handle is an `Arc`
+    // clone of a process-wide store, so a binding accepted by one request is
+    // reused by the next instead of being re-resolved.
+    depot.insert(
+        crate::services::did_binding::DEPOT_KEY,
+        crate::services::did_binding::shared_verified_did_binding_store(),
+    );
     // Build the WebAuthn service from the current URL builder. We only
     // insert the service if construction succeeds; a misconfigured RP
     // origin should not bring the rest of the request pipeline down.

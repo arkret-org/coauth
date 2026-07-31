@@ -103,17 +103,25 @@ pub(super) async fn verify_revocation_approval_proof(
     let payload = canonical_json_bytes(&transcript)
         .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
 
-    let resolution = did_resolver
-        .resolve_did_document(
-            &http_client,
-            &url_builder,
-            &arkret_config,
-            &key_store,
-            repo,
-            &approved_by,
-        )
-        .await
-        .map_err(|error| AppError::bad_request(format!("admin_did_resolve_failed: {error}")))?;
+    // §4 row 7 — an admin revocation approval is a high-risk write, so the
+    // approver's own DID must satisfy `fresh_within(HIGH_RISK_MAX_AGE)` under
+    // the closed `AdminAction` purpose. An acceptance made for the same DID as
+    // a `Principal` (ordinary session subject) never authorizes this path.
+    let resolution = crate::services::did_binding::authority_document(
+        &http_client,
+        &url_builder,
+        &arkret_config,
+        &key_store,
+        repo,
+        did_resolver.as_ref(),
+        depot.verified_did_binding_store()?.as_ref(),
+        &approved_by,
+        arkret_identity::DidBindingPurpose::AdminAction,
+        crate::services::did_binding::HIGH_RISK_MAX_AGE,
+        crate::handlers::make_clock().now(),
+    )
+    .await
+    .map_err(|error| AppError::bad_request(format!("admin_did_resolve_failed: {error}")))?;
     if resolution.document.verification_method.is_empty() {
         return Err(AppError::bad_request(
             "approved_by DID document has no verificationMethod entries",

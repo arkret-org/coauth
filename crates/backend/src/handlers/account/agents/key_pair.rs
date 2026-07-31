@@ -83,6 +83,7 @@ pub async fn post_agent_key_pair(
     let http_client = depot.http_client()?;
     let key_store = depot.key_store()?;
     let did_resolver = depot.did_resolver_service()?;
+    let binding_store = depot.verified_did_binding_store()?;
 
     let body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody = req
         .parse_json()
@@ -307,6 +308,8 @@ pub async fn post_agent_key_pair(
         &key_store,
         &mut repo,
         did_resolver.as_ref(),
+        binding_store.as_ref(),
+        now,
     )
     .await
     {
@@ -328,6 +331,8 @@ pub async fn post_agent_key_pair(
         &key_store,
         &mut repo,
         did_resolver.as_ref(),
+        binding_store.as_ref(),
+        now,
     )
     .await
     {
@@ -800,6 +805,8 @@ async fn verify_authorize_event_controller_signature(
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
+    binding_store: &crate::services::did_binding::DurableVerifiedDidBindingStore,
+    now: DateTime<Utc>,
 ) -> Result<(), AppError> {
     let canonical_bytes = authorize_event_signature_input(event, agent_id, controller_id)?;
     let mut has_controller_key_proof = false;
@@ -854,27 +861,31 @@ async fn verify_authorize_event_controller_signature(
         return Err(AgentAuthRejection::ProofInvalid.into_app_error());
     }
 
-    let resolution = did_resolver
-        .resolve_did_document(
-            http_client,
-            url_builder,
-            arkret_config,
-            key_store,
-            repo,
-            controller_id,
-        )
-        .await
-        .map_err(|error| {
-            AppError::unauthorized(format!(
-                "proof_invalid: authorize_event controller DID could not be resolved: {error}"
-            ))
-        })?;
-    if let Some(rejection) = resolution.identity_fact_rejection() {
-        return Err(AppError::unauthorized(format!(
-            "proof_invalid: authorize_event controller DID resolution is degraded: {}",
-            rejection.as_str()
-        )));
-    }
+    // §4 row 3 — a new agent signer epoch / verification method is an
+    // authority trigger, so this resolves under the closed `Controller`
+    // purpose. Degraded / fallback / unproven-controller evidence lands as
+    // `Stale` / `Quarantined` and fails closed inside `authority_document`,
+    // which subsumes the previous `identity_fact_rejection` gate.
+    let binding = crate::services::did_binding::authority_document(
+        http_client,
+        url_builder,
+        arkret_config,
+        key_store,
+        repo,
+        did_resolver,
+        binding_store,
+        controller_id,
+        arkret_identity::DidBindingPurpose::Controller,
+        crate::services::did_binding::CONTROLLER_MAX_AGE,
+        now,
+    )
+    .await
+    .map_err(|error| {
+        AppError::unauthorized(format!(
+            "proof_invalid: authorize_event controller DID has no fresh accepted binding: {error}"
+        ))
+    })?;
+    let resolution = binding;
     verify_authorize_event_controller_signature_with_methods(
         event,
         agent_id,
@@ -940,6 +951,8 @@ async fn verify_pairing_signing_key_binding(
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
+    binding_store: &crate::services::did_binding::DurableVerifiedDidBindingStore,
+    now: DateTime<Utc>,
 ) -> Result<(), AppError> {
     let controller_id = expected_controller_id;
     let expected_controller = arkret_identifiers::Did::new(controller_id.to_owned())
@@ -964,27 +977,29 @@ async fn verify_pairing_signing_key_binding(
             value: resolved.multibase,
         }
     } else {
-        let resolution = did_resolver
-            .resolve_did_document(
-                http_client,
-                url_builder,
-                arkret_config,
-                key_store,
-                repo,
-                controller_id,
-            )
-            .await
-            .map_err(|error| {
-                AppError::unauthorized(format!(
-                    "agent_signing_key_mismatch: controller DID could not be resolved: {error}"
-                ))
-            })?;
-        if let Some(rejection) = resolution.identity_fact_rejection() {
-            return Err(AppError::unauthorized(format!(
-                "agent_signing_key_mismatch: controller DID resolution is degraded: {}",
-                rejection.as_str()
-            )));
-        }
+        // Same §4 row 3 trigger and same closed `Controller` purpose as
+        // `verify_authorize_event_controller_signature`; within
+        // `CONTROLLER_MAX_AGE` the two share one acceptance and perform a
+        // single network fetch between them.
+        let resolution = crate::services::did_binding::authority_document(
+            http_client,
+            url_builder,
+            arkret_config,
+            key_store,
+            repo,
+            did_resolver,
+            binding_store,
+            controller_id,
+            arkret_identity::DidBindingPurpose::Controller,
+            crate::services::did_binding::CONTROLLER_MAX_AGE,
+            now,
+        )
+        .await
+        .map_err(|error| {
+            AppError::unauthorized(format!(
+                "agent_signing_key_mismatch: controller DID has no fresh accepted binding: {error}"
+            ))
+        })?;
         resolution
             .document
             .verification_method
@@ -1283,8 +1298,8 @@ mod tests {
             // bound to this envelope rebind it from `Event::event_digest`.
             "proofs": [{
                 "kind": "detached_jws",
-                "verification_method": "did:web:controller.example#key-1",
                 "alg": "EdDSA",
+                "verification_method": "did:web:controller.example#key-1",
                 "event_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "created_at": "2026-07-06T00:01:00.000Z",
                 "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
@@ -1515,7 +1530,18 @@ mod tests {
         )
         .expect_err("present but malformed expires_at must fail closed");
 
-        assert!(err.message().contains("expires_at"));
+        // The SDK payload deserializer reports the canonical-timestamp
+        // violation without echoing the field path, so assert the reason
+        // rather than the field name — the point of the test is that a present
+        // but malformed `expires_at` fails closed instead of being treated as
+        // absent (which `authorize_event_accepts_absent_expires_at_as_non_expiring`
+        // shows would mean "non-expiring").
+        assert!(
+            err.message()
+                .contains("canonical millisecond timestamp must be"),
+            "unexpected rejection message: {}",
+            err.message()
+        );
     }
 
     #[test]
@@ -1621,7 +1647,7 @@ mod tests {
             kind: "detached_jws".to_owned(),
             alg: "EdDSA".to_owned(),
             proof_purpose: None,
-            verification_method: verification_method.clone(),
+            verification_method: arkret_wire::DidUrl::new(verification_method.clone()).unwrap(),
             event_digest: arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(
                 &canonical_bytes,
             ))

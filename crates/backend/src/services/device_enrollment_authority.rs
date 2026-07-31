@@ -33,7 +33,7 @@ pub struct EnrollmentAuthority {
     /// `did:key:z<multibase-ed25519-pub>`.
     did: String,
     /// `did:key:z<mb>#z<mb>` — the proof `verification_method`.
-    verification_method: String,
+    verification_method: arkret_wire::DidUrl,
 }
 
 impl std::fmt::Debug for EnrollmentAuthority {
@@ -53,7 +53,11 @@ impl EnrollmentAuthority {
         let verifying_key = SigningKey::from_bytes(&seed).verifying_key();
         let multibase = ed25519_pubkey_to_did_key_multibase(&verifying_key.to_bytes());
         let did = format!("did:key:{multibase}");
-        let verification_method = format!("{did}#{multibase}");
+        // `did:key:z…#z…` is always a syntactically valid DID URL; the
+        // multibase fragment charset is `[A-Za-z0-9]`, well inside the
+        // `DidUrl` fragment grammar.
+        let verification_method = arkret_wire::DidUrl::new(format!("{did}#{multibase}"))
+            .expect("did:key authority verification method is a valid DID URL");
         Self {
             seed,
             did,
@@ -73,7 +77,7 @@ impl EnrollmentAuthority {
     /// The proof `verification_method` (`did:key:z…#z…`). MUST map to
     /// `executed_by` per device-lifecycle §5.4.
     #[must_use]
-    pub fn verification_method(&self) -> &str {
+    pub fn verification_method(&self) -> &arkret_wire::DidUrl {
         &self.verification_method
     }
 
@@ -116,7 +120,7 @@ mod tests {
         // VM form is `did:key:z…#z…` with the same multibase on both sides.
         let multibase = did.strip_prefix("did:key:").unwrap();
         assert_eq!(
-            authority.verification_method(),
+            authority.verification_method().as_str(),
             format!("{did}#{multibase}")
         );
     }

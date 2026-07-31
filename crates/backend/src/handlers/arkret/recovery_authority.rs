@@ -845,24 +845,31 @@ async fn verify_completion_attestation_signature(
             "completion attestation coordinator is not a configured Principal Server",
         ));
     }
-    let resolution = depot
-        .did_resolver_service()?
-        .resolve_did_document(
-            &depot.http_client()?,
-            &depot.url_builder()?,
-            &arkret_config,
-            &depot.key_store()?,
-            repo,
-            expected_coordinator,
-        )
-        .await
-        .map_err(super::map_did_resolve_error)?;
-    if let Some(rejection) = resolution.identity_fact_rejection() {
-        return Err(invalid_signature(format!(
-            "completion coordinator resolution is not a full identity fact: {}",
-            rejection.as_str()
-        )));
-    }
+    // §4 row 4 — recovery / continuity is an authority trigger and a
+    // high-risk write, so the coordinator's key material must satisfy
+    // `fresh_within(HIGH_RISK_MAX_AGE)` under the closed `Recovery` purpose.
+    // Degraded / fallback / unproven-controller evidence maps to
+    // `Stale` / `Quarantined` and fails closed inside `authority_document`,
+    // replacing the previous `identity_fact_rejection` gate.
+    let resolution = crate::services::did_binding::authority_document(
+        &depot.http_client()?,
+        &depot.url_builder()?,
+        &arkret_config,
+        &depot.key_store()?,
+        repo,
+        depot.did_resolver_service()?.as_ref(),
+        depot.verified_did_binding_store()?.as_ref(),
+        expected_coordinator,
+        arkret_identity::DidBindingPurpose::Recovery,
+        crate::services::did_binding::HIGH_RISK_MAX_AGE,
+        crate::handlers::make_clock().now(),
+    )
+    .await
+    .map_err(|error| {
+        invalid_signature(format!(
+            "no fresh accepted recovery binding for the completion coordinator: {error}"
+        ))
+    })?;
     let method = resolution
         .document
         .verification_method

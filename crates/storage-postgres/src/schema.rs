@@ -145,6 +145,22 @@ diesel::table! {
 }
 
 diesel::table! {
+    verified_did_bindings (did, trust_domain, purpose, policy_digest, verification_method, version_id) {
+        did -> Text,
+        trust_domain -> Text,
+        purpose -> Text,
+        policy_digest -> Text,
+        verification_method -> Text,
+        version_id -> Text,
+        history_head -> Nullable<Text>,
+        expires_at -> Nullable<Timestamptz>,
+        accepted -> Jsonb,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     recovery_device_authorizations (ticket_id) {
         ticket_id -> Text,
         transaction_id -> Text,

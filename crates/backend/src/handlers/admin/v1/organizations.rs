@@ -100,19 +100,26 @@ async fn verify_organization_controller_proof(
     let key_store = depot.key_store()?;
     let url_builder = depot.url_builder()?;
     let http_client = depot.http_client().map_err(AppError::internal)?;
-    let resolution = did_resolver
-        .resolve_did_document(
-            &http_client,
-            &url_builder,
-            &arkret_config,
-            &key_store,
-            repo,
-            &body.organization_did,
-        )
-        .await
-        .map_err(|error| {
-            AppError::bad_request(format!("organization_did_resolve_failed: {error}"))
-        })?;
+    // §4 row 1 — an organization DID crossing this trust domain's boundary for
+    // the first time. Bootstrap is a high-risk write, so it demands
+    // `fresh_within(HIGH_RISK_MAX_AGE)` under the closed
+    // `OrganizationRegistry` purpose; an acceptance made for any other purpose
+    // (account binding, admin action, ...) can never satisfy this lookup.
+    let resolution = crate::services::did_binding::authority_document(
+        &http_client,
+        &url_builder,
+        &arkret_config,
+        &key_store,
+        repo,
+        did_resolver.as_ref(),
+        depot.verified_did_binding_store()?.as_ref(),
+        &body.organization_did,
+        arkret_identity::DidBindingPurpose::OrganizationRegistry,
+        crate::services::did_binding::HIGH_RISK_MAX_AGE,
+        crate::handlers::make_clock().now(),
+    )
+    .await
+    .map_err(|error| AppError::bad_request(format!("organization_did_resolve_failed: {error}")))?;
     let payload = organization_controller_bootstrap_transcript_bytes(body)?;
     let verification_method = verify_detached_jws_with_sdk(
         proof_jws,

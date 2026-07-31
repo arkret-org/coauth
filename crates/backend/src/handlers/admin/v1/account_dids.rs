@@ -202,6 +202,7 @@ pub async fn add_account_did(
     let key_store = depot.key_store()?;
     let http_client = depot.http_client()?;
     let did_resolver = depot.did_resolver_service()?;
+    let binding_store = depot.verified_did_binding_store()?;
     let now = clock.now();
     let resolver = resolver_descriptor(&arkret_config, did_resolver.as_ref());
     let events = did_binding_event_logs(&mut repo, id).await?;
@@ -243,6 +244,7 @@ pub async fn add_account_did(
         &key_store,
         &mut repo,
         did_resolver.as_ref(),
+        binding_store.as_ref(),
         nonce_store.as_ref(),
         body.control_proof.jws.as_str(),
         &did,
@@ -253,9 +255,27 @@ pub async fn add_account_did(
     )
     .await
     .map_err(map_did_binding_proof_error)?;
+    // The controller proof just verified over this DID document is also the
+    // moment the principal DID first crosses into this trust domain (§4 row 1),
+    // so file a second, independently scoped `Principal` acceptance from the
+    // same evidence. Zero extra network access, and it is what lets §3 ordinary
+    // reads serve a pinned document — they are not allowed to resolve.
+    crate::services::did_binding::accept_for_additional_purpose(
+        &mut repo,
+        binding_store.as_ref(),
+        &validated_control.binding.accepted,
+        arkret_identity::DidBindingPurpose::Principal,
+        now,
+    )
+    .await
+    .map_err(|error| {
+        AppError::internal(std::io::Error::other(format!(
+            "principal binding acceptance failed: {error}"
+        )))
+    })?;
     let key_log_head = validated_control
-        .resolution
-        .key_log_head
+        .binding
+        .history_head
         .clone()
         .ok_or_else(|| {
             AppError::bad_request(
@@ -267,7 +287,7 @@ pub async fn add_account_did(
     let enrollment_authority_did = arkret_identifiers::Did::new(authority.did().to_owned())
         .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
     if !validated_control
-        .resolution
+        .binding
         .document
         .capability_delegation
         .is_empty()
@@ -278,7 +298,7 @@ pub async fn add_account_did(
     }
     let mut designated_services =
         validated_control
-            .resolution
+            .binding
             .document
             .service
             .iter()
@@ -410,6 +430,13 @@ fn map_did_binding_proof_error(error: DidBindingProofError) -> AppError {
         }
         DidBindingProofError::Resolve(inner) => {
             AppError::bad_request(format!("did_resolver_failed: {inner}"))
+        }
+        // An acceptance that cannot back a *fresh* `AccountBinding` (degraded
+        // resolver, did:web fallback, unproven controller proof, `did:key`
+        // echo) is the same client-visible failure the old
+        // `ResolverNotFullIdentityFact` gate produced.
+        DidBindingProofError::Binding(inner) => {
+            AppError::bad_request(format!("did_resolver_not_full_identity_fact: {inner}"))
         }
     }
 }

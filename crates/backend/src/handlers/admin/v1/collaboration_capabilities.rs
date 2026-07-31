@@ -584,7 +584,10 @@ fn sign_detached_jws(
     Ok((verification_method, format!("{protected}..{signature}")))
 }
 
-fn signing_verification_method(key_store: &Keystore, service_id: &str) -> Result<String, AppError> {
+fn signing_verification_method(
+    key_store: &Keystore,
+    service_id: &str,
+) -> Result<arkret_wire::DidUrl, AppError> {
     let alg = JsonWebSignatureAlg::EdDsa;
     let key = key_store.signing_key_for_algorithm(&alg).ok_or_else(|| {
         AppError::new(
@@ -598,7 +601,12 @@ fn signing_verification_method(key_store: &Keystore, service_id: &str) -> Result
             "capability fanout signing key is missing kid",
         )
     })?;
-    Ok(format!("{service_id}#{key_id}"))
+    arkret_wire::DidUrl::new(format!("{service_id}#{key_id}")).map_err(|error| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("capability fanout verification method is not a DID URL: {error}"),
+        )
+    })
 }
 
 fn principal_servers(arkret_config: &ArkretConfig) -> Vec<Value> {

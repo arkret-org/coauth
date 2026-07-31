@@ -126,6 +126,34 @@ CREATE TABLE public.agent_session_proof_replay (
     created_at timestamp with time zone NOT NULL
 );
 
+-- Accepted DID bindings (`did-usage-and-verification.md` §5). One row is one
+-- acceptance: a verified binding plus the DID document it pins, stored in
+-- `accepted` as the canonical serialization of the shared SDK value object.
+--
+-- The primary key is the full six-dimension store key. `verification_method`
+-- and `version_id` are optional dimensions, but a PostgreSQL primary key
+-- cannot contain NULL, so "absent" is encoded as the empty string — neither a
+-- DID URL nor a method version identifier can be empty, so this is
+-- unambiguous.
+--
+-- `history_head` is not a key dimension but *is* a §5 invalidation dimension
+-- (witness fork), so it gets its own index. `expires_at` bounds how long an
+-- acceptance is readable; expired rows are filtered out on read and dropped
+-- on the next write (see `dpop_jti_replay` for the same lazy-prune pattern).
+CREATE TABLE public.verified_did_bindings (
+    did text NOT NULL,
+    trust_domain text NOT NULL,
+    purpose text NOT NULL,
+    policy_digest text NOT NULL,
+    verification_method text NOT NULL,
+    version_id text NOT NULL,
+    history_head text,
+    expires_at timestamp with time zone,
+    accepted jsonb NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL
+);
+
 -- RFC 9449 DPoP proof replay cache. `jti_digest` is a SHA-256 digest of
 -- the caller-supplied `jti`, bounded for storage and safe for audit logs.
 CREATE TABLE public.dpop_jti_replay (
@@ -1084,6 +1112,9 @@ ALTER TABLE ONLY public.agent_session_proof_replay
 ALTER TABLE ONLY public.dpop_jti_replay
     ADD CONSTRAINT dpop_jti_replay_pkey PRIMARY KEY (jti_digest);
 
+ALTER TABLE ONLY public.verified_did_bindings
+    ADD CONSTRAINT verified_did_bindings_pkey PRIMARY KEY (did, trust_domain, purpose, policy_digest, verification_method, version_id);
+
 ALTER TABLE ONLY public.recovery_device_authorizations
     ADD CONSTRAINT recovery_device_authorizations_pkey PRIMARY KEY (ticket_id);
 
@@ -1388,6 +1419,22 @@ CREATE INDEX agent_key_authorizations_revoked_idx ON public.agent_key_authorizat
 CREATE INDEX agent_session_proof_replay_prune_idx ON public.agent_session_proof_replay USING btree (prune_after);
 
 CREATE INDEX dpop_jti_replay_expires_at_idx ON public.dpop_jti_replay USING btree (expires_at);
+
+-- One index per §5 invalidation dimension that the primary key does not
+-- already serve as a leading prefix. The PK covers `did` (and every prefix of
+-- did, trust_domain, purpose, policy_digest), so only the remaining dimensions
+-- need their own index.
+CREATE INDEX verified_did_bindings_verification_method_idx ON public.verified_did_bindings USING btree (verification_method) WHERE (verification_method <> '');
+
+CREATE INDEX verified_did_bindings_history_head_idx ON public.verified_did_bindings USING btree (history_head) WHERE (history_head IS NOT NULL);
+
+CREATE INDEX verified_did_bindings_trust_domain_idx ON public.verified_did_bindings USING btree (trust_domain);
+
+CREATE INDEX verified_did_bindings_purpose_idx ON public.verified_did_bindings USING btree (purpose);
+
+CREATE INDEX verified_did_bindings_policy_digest_idx ON public.verified_did_bindings USING btree (policy_digest);
+
+CREATE INDEX verified_did_bindings_expires_at_idx ON public.verified_did_bindings USING btree (expires_at) WHERE (expires_at IS NOT NULL);
 
 CREATE INDEX admin_operation_logs_created_idx ON public.admin_operation_logs USING btree (created_at);
 
