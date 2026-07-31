@@ -34,10 +34,9 @@ use crate::schema::verified_did_bindings;
 
 /// Sentinel for an absent optional key dimension.
 ///
-/// A PostgreSQL primary key cannot contain `NULL`, and both optional
-/// dimensions (`verification_method`, `version_id`) are part of the key.
-/// Neither a DID URL nor a method version identifier can be the empty string,
-/// so the empty string is a free, unambiguous encoding of "absent".
+/// A PostgreSQL primary key cannot contain `NULL`, and `verification_method`
+/// is an optional dimension of the key. A DID URL can never be the empty
+/// string, so the empty string is a free, unambiguous encoding of "absent".
 const ABSENT: &str = "";
 
 fn column(value: Option<&String>) -> &str {
@@ -69,7 +68,6 @@ struct VerifiedDidBindingRecord {
     purpose: String,
     policy_digest: String,
     verification_method: String,
-    version_id: String,
     history_head: Option<String>,
     expires_at: Option<DateTime<Utc>>,
     accepted: serde_json::Value,
@@ -84,7 +82,6 @@ impl From<VerifiedDidBindingRecord> for VerifiedDidBindingRow {
                 purpose: record.purpose,
                 policy_digest: record.policy_digest,
                 verification_method: optional(record.verification_method),
-                version_id: optional(record.version_id),
             },
             history_head: record.history_head,
             expires_at: record.expires_at,
@@ -101,7 +98,6 @@ struct InsertableVerifiedDidBinding {
     purpose: String,
     policy_digest: String,
     verification_method: String,
-    version_id: String,
     history_head: Option<String>,
     expires_at: Option<DateTime<Utc>>,
     accepted: serde_json::Value,
@@ -128,7 +124,6 @@ impl VerifiedDidBindingRepository for PgVerifiedDidBindingRepository<'_> {
                 verified_did_bindings::verification_method
                     .eq(column(key.verification_method.as_ref())),
             )
-            .filter(verified_did_bindings::version_id.eq(column(key.version_id.as_ref())))
             // Hard expiry is enforced here, not by the caller: `expires_at`
             // in the past means the acceptance no longer exists for readers.
             .filter(
@@ -167,7 +162,6 @@ impl VerifiedDidBindingRepository for PgVerifiedDidBindingRepository<'_> {
                 .key
                 .verification_method
                 .unwrap_or_else(|| ABSENT.to_owned()),
-            version_id: row.key.version_id.unwrap_or_else(|| ABSENT.to_owned()),
             history_head: row.history_head,
             expires_at: row.expires_at,
             accepted: row.accepted,
@@ -183,7 +177,6 @@ impl VerifiedDidBindingRepository for PgVerifiedDidBindingRepository<'_> {
                 verified_did_bindings::purpose,
                 verified_did_bindings::policy_digest,
                 verified_did_bindings::verification_method,
-                verified_did_bindings::version_id,
             ))
             .do_update()
             .set((
@@ -263,7 +256,6 @@ mod tests {
             purpose: "principal".to_owned(),
             policy_digest: format!("sha256:{}", "ab".repeat(32)),
             verification_method: None,
-            version_id: None,
         }
     }
 
@@ -285,7 +277,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn round_trips_and_upserts_on_the_six_dimension_key() {
+    async fn round_trips_and_upserts_on_the_five_dimension_key() {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };

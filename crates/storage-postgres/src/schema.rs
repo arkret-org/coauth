@@ -145,13 +145,12 @@ diesel::table! {
 }
 
 diesel::table! {
-    verified_did_bindings (did, trust_domain, purpose, policy_digest, verification_method, version_id) {
+    verified_did_bindings (did, trust_domain, purpose, policy_digest, verification_method) {
         did -> Text,
         trust_domain -> Text,
         purpose -> Text,
         policy_digest -> Text,
         verification_method -> Text,
-        version_id -> Text,
         history_head -> Nullable<Text>,
         expires_at -> Nullable<Timestamptz>,
         accepted -> Jsonb,

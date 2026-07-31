@@ -7,8 +7,8 @@
 //! This module is the **only** place in coauth that turns a
 //! [`DidResolution`] into a reusable acceptance. It deliberately owns no
 //! data model of its own: `VerifiedDidBinding`, `AcceptedDidBinding`,
-//! `DidBindingPurpose`, `DidBindingStatus`, `LimitedTrustReason`,
-//! `FreshnessRequirement` and `VerifiedDidBindingStore` all come from
+//! `DidBindingPurpose`, `DidBindingStatus`, `LimitedTrust`,
+//! `FreshnessProfile` and `VerifiedDidBindingStore` all come from
 //! `arkret_identity`. Task DID-P0-B01 forbids service repositories from
 //! inventing an incompatible parallel binding model, so nothing here
 //! re-declares those shapes.
@@ -34,13 +34,19 @@
 //!
 //! ## Digests come from the SDK, not from here
 //!
-//! `policy_digest` and `evidence_digest` are computed with
-//! `arkret_identity::binding_digest` ([`PolicyDigestInput`],
-//! [`EvidenceEnvelope`]) so that five services stop producing five incompatible
-//! values for the same inputs. coauth contributes only its **deployment-local**
-//! dimensions through the extension maps those types expose; the version tag is
-//! the SDK's [`arkret_identity::POLICY_DIGEST_VERSION`], shared across repos and
-//! bumped with the SDK.
+//! `policy_digest` and `evidence_digest` are the digests of the SDK's canonical
+//! §5 contract objects — [`ResolverPolicySnapshot`] and [`EvidenceReceipt`] —
+//! so that five services stop producing five incompatible values for the same
+//! inputs. Neither object has an extension map any more: §5.3 makes the
+//! resolver policy profile a **schema discriminator**, and v1 registers exactly
+//! one profile (`ak.did_resolver_policy_profile.base.v1`) whose `profile_policy`
+//! is the empty object. A deployment-local admissibility dimension is therefore
+//! not expressible here; it needs a profile registered in the Spec and a
+//! corresponding `ResolverPolicyProfile` variant in the SDK. That is why the
+//! former `COAUTH_DID_BINDING_DEPLOYMENT_EPOCH` kill switch and the
+//! `deployment_profile` / `resolver_allow_loopback` / `did_document_max_bytes`
+//! extensions are gone rather than smuggled through a local digest of coauth's
+//! own invention.
 //!
 //! ## What is deliberately NOT here
 //!
@@ -53,11 +59,12 @@ use std::sync::Arc;
 
 use arkret_identifiers::{Did, Hash, TypedTrustDomainId};
 use arkret_identity::{
-    AcceptedDidBinding, BindingInvalidation, DidBindingPurpose, DidBindingStatus, EvidenceEnvelope,
-    FreshnessRequirement, LimitedTrustReason, PolicyDigestInput, ResolverFailMode, ResolverPolicy,
-    VerifiedDidBinding, VerifiedDidBindingDocumentInput, VerifiedDidBindingKey,
-    VerifiedDidBindingStore,
+    AcceptedDidBinding, BindingInvalidation, DidBindingPurpose, DidBindingStatus, EvidenceReceipt,
+    FreshnessProfile, FreshnessRequirement, LimitedTrust, MethodEvidence, ResolverFailMode,
+    ResolverPolicy, ResolverPolicySnapshot, VerifiedDidBinding, VerifiedDidBindingDocumentInput,
+    VerifiedDidBindingKey, VerifiedDidBindingStore,
 };
+use arkret_wire::DidFreshnessProfileId;
 use chrono::{DateTime, Duration, Utc};
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
@@ -131,20 +138,31 @@ pub const CONTROLLER_MAX_AGE: Duration = Duration::minutes(15);
 /// explicit invalidation ever reached this deployment.
 pub const HARD_EXPIRY: Duration = Duration::hours(24);
 
-/// Environment variable carrying the deployment-local binding epoch.
+/// The profile every high-risk authority write references
+/// ([`DidFreshnessProfileId::AuthorityHighRiskV1`], see [`HIGH_RISK_MAX_AGE`]).
 ///
-/// This is the operator kill switch that used to be a local
-/// `POLICY_DIGEST_VERSION` constant. Changing it changes every
-/// [`policy_digest`], which changes every [`VerifiedDidBindingKey`], which
-/// makes every previously accepted binding unreachable in one step — for *this
-/// deployment only*, and without waiting for an SDK release. Use it for
-/// incident response ("distrust everything accepted before now"), not for
-/// routine configuration; ordinary policy changes already move the digest on
-/// their own.
-///
-/// The cross-repository counterpart is the SDK's
-/// [`arkret_identity::POLICY_DIGEST_VERSION`], which coauth no longer shadows.
-pub const DEPLOYMENT_EPOCH_VAR: &str = "COAUTH_DID_BINDING_DEPLOYMENT_EPOCH";
+/// The id comes from the generated registry surface: §5.4 registers the id and
+/// its tier, and the deployment declares only the numbers. coauth therefore
+/// spells neither the token nor the tier.
+#[must_use]
+pub fn high_risk_freshness() -> FreshnessProfile {
+    FreshnessProfile::high_tier(
+        DidFreshnessProfileId::AuthorityHighRiskV1,
+        HIGH_RISK_MAX_AGE,
+        Some(HARD_EXPIRY),
+    )
+}
+
+/// The profile the controller / agent-pairing authority paths reference
+/// ([`DidFreshnessProfileId::AuthorityControllerV1`], see [`CONTROLLER_MAX_AGE`]).
+#[must_use]
+pub fn controller_freshness() -> FreshnessProfile {
+    FreshnessProfile::high_tier(
+        DidFreshnessProfileId::AuthorityControllerV1,
+        CONTROLLER_MAX_AGE,
+        Some(HARD_EXPIRY),
+    )
+}
 
 // ============================================================================
 // Store construction / depot wiring
@@ -198,22 +216,28 @@ pub fn trust_domain_id(
 /// **every** other method — `did:webvh` included, per the CAU-SPEC-02 ruling in
 /// `did_resolver.rs` — to `identity_registry.resolver`. A deployment without a
 /// delegated resolver therefore accepts exactly the native three and fails
-/// closed with `UnsupportedMethod` on anything else, which is what the empty /
-/// non-empty allow list below records.
+/// closed with `UnsupportedMethod` on anything else.
+///
+/// The delegated arm is written out as `did:webvh:` rather than as "any
+/// method": §5.3 rejects an empty `accepted_did_methods` list outright, because
+/// an unrestricted method list is a fail-open policy that a snapshot cannot
+/// honestly declare. `did:webvh` is the one method delegation exists for (the
+/// CAU-SPEC-02 ruling names it), so this list is what the deployment actually
+/// admits today. A future delegated method has to be added here — which changes
+/// the policy digest, and therefore retires every acceptance made under the old
+/// policy, which is exactly the §5.3 obligation.
 fn resolver_policy(arkret_config: &ArkretConfig) -> ResolverPolicy {
     let delegated = delegated_resolver(arkret_config);
+    let mut allowed_methods = vec![
+        "did:web:".to_owned(),
+        "did:plc:".to_owned(),
+        "did:key:".to_owned(),
+    ];
+    if delegated.is_some() {
+        allowed_methods.push("did:webvh:".to_owned());
+    }
     ResolverPolicy {
-        // `[]` is the SDK's "any method" encoding, which is exactly what a
-        // configured delegated resolver means here.
-        allowed_methods: if delegated.is_some() {
-            Vec::new()
-        } else {
-            vec![
-                "did:web:".to_owned(),
-                "did:plc:".to_owned(),
-                "did:key:".to_owned(),
-            ]
-        },
+        allowed_methods,
         default_principal_method: Some(arkret_config.principal_method.as_str().to_owned()),
         // The delegated resolver is the trust root for every method coauth does
         // not resolve itself.
@@ -234,68 +258,38 @@ fn delegated_resolver(arkret_config: &ArkretConfig) -> Option<String> {
         .map(|registry| registry.resolver.to_string())
 }
 
-/// The operator-controlled deployment epoch, when one is set.
-fn deployment_epoch() -> Option<String> {
-    coauth_config::runtime_var_os(DEPLOYMENT_EPOCH_VAR)
-        .and_then(|value| value.into_string().ok())
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
+/// The §5.3 canonical snapshot of the resolver policy in force.
+///
+/// # Errors
+///
+/// Returns [`DidBindingError::Digest`] when the policy is not declarable — the
+/// only such case here is a duplicate entry, since [`resolver_policy`] never
+/// produces an empty method list.
+pub fn policy_snapshot(
+    arkret_config: &ArkretConfig,
+) -> Result<ResolverPolicySnapshot, DidBindingError> {
+    resolver_policy(arkret_config)
+        .policy_snapshot()
+        .map_err(|error| DidBindingError::Digest(error.to_string()))
 }
 
 /// Deterministic digest of the resolver policy in force.
 ///
-/// The interoperable core is the SDK's [`PolicyDigestInput`] over
-/// [`resolver_policy`]; everything below it is a coauth-local dimension carried
-/// in the `deployment` extension map:
-///
-/// | extension | why it belongs in the digest |
-/// | --- | --- |
-/// | `deployment_profile` | gates which principal DID methods are acceptable |
-/// | `principal_method` | the accepted principal DID method |
-/// | `delegated_resolver` | the endpoint every non-`web`/`plc`/`key` method is fetched from |
-/// | `proof_required_for_pairwise` | resolver-policy toggle affecting acceptance |
-/// | `resolver_allow_loopback` | the SSRF relaxation switch; a binding accepted with loopback allowed must never be reused once it is off |
-/// | `did_document_max_bytes` | the document size bound the acceptance was made under |
-///
-/// Plus [`DEPLOYMENT_EPOCH_VAR`] when set, which is the deployment-local
-/// counterpart of the SDK's [`arkret_identity::POLICY_DIGEST_VERSION`].
+/// This is exactly the SDK's §5.3 snapshot digest over [`resolver_policy`] —
+/// the accepted method prefixes, the failure-degradation mode and the trust
+/// roots, under the one registered `base` profile. coauth adds nothing: an
+/// extra admissibility dimension has to be a registered profile (see the module
+/// documentation), not a locally invented digest input.
 ///
 /// "A policy change necessarily changes the digest" holds because the digest is
-/// a canonical-JSON SHA-256 over exactly this object: any differing field
+/// a canonical-JSON SHA-256 over exactly that object: any differing field
 /// produces different canonical bytes.
 ///
 /// # Errors
 ///
 /// Returns [`DidBindingError::Digest`] when the canonical encoding fails.
 pub fn policy_digest(arkret_config: &ArkretConfig) -> Result<Hash, DidBindingError> {
-    let policy = resolver_policy(arkret_config);
-    let deployment_profile = serde_json::to_value(arkret_config.deployment_profile)
-        .map_err(|error| DidBindingError::Digest(error.to_string()))?;
-    let proof_required_for_pairwise = arkret_config
-        .identity_registry
-        .as_ref()
-        .is_some_and(|registry| registry.proof_required_for_pairwise);
-    let allow_loopback =
-        coauth_config::runtime_var_os("COAUTH_DID_RESOLVER_ALLOW_LOOPBACK").is_some();
-
-    let mut input = PolicyDigestInput::new(&policy)
-        .with_extension("deployment_profile", deployment_profile)
-        .with_extension("principal_method", arkret_config.principal_method.as_str())
-        .with_extension(
-            "delegated_resolver",
-            delegated_resolver(arkret_config)
-                .map_or(serde_json::Value::Null, serde_json::Value::String),
-        )
-        .with_extension("proof_required_for_pairwise", proof_required_for_pairwise)
-        .with_extension("resolver_allow_loopback", allow_loopback)
-        .with_extension(
-            "did_document_max_bytes",
-            crate::services::did_resolver::DID_DOCUMENT_MAX_BYTES,
-        );
-    if let Some(epoch) = deployment_epoch() {
-        input = input.with_deployment_epoch(epoch);
-    }
-    input
+    policy_snapshot(arkret_config)?
         .digest()
         .map_err(|error| DidBindingError::Digest(error.to_string()))
 }
@@ -389,41 +383,60 @@ pub const fn is_storable(resolution: &DidResolution) -> Result<(), &'static str>
     }
 }
 
-/// Digest of the method evidence an acceptance rests on.
+/// What the resolved method surfaced, in the SDK's §5.2 shape.
 ///
-/// Built with the SDK's [`EvidenceEnvelope`], so the value always commits to
-/// the pinned document digest **and** the policy digest. The two degenerate
-/// shapes §5 does not forbid explicitly but which several repositories shipped
-/// — `evidence_digest == document_digest`, and `H(did ‖ constant)` — are not
+/// coauth's delegated resolver returns `method_evidence` as an **opaque**
+/// method-specific JSON subtree: it carries degradation flags and a method
+/// label, but never the witness set and witness-proof digest a
+/// `MethodEvidenceProof::WebvhLog` row requires. §5.2 makes that shape
+/// unconstructible on purpose — a receipt row is what the resolver *verified*,
+/// not what it reported — so coauth surfaces the history-head pin and no proof
+/// rows. The degradation flags are not lost: `identity_fact_rejection` already
+/// maps them onto the acceptance [`status_for`], and a `did:webvh` answer with
+/// no history evidence is `Quarantined` before it ever reaches here.
+fn method_evidence(resolution: &DidResolution) -> MethodEvidence {
+    MethodEvidence {
+        proofs: Vec::new(),
+        history_head: resolution
+            .key_log_head
+            .as_ref()
+            .map(|head| head.as_str().to_owned()),
+        // Neither `did:web` / `did:plc` / `did:key` nor coauth's delegated
+        // `IdentityResolveOutcome` exposes a method version identifier.
+        version_id: None,
+    }
+}
+
+/// Whether the DID's own method publishes verifiable evidence.
+///
+/// §5.5 splits an absent pin into `method_unsupported` (terminal property of the
+/// method) and `not_surfaced` (a resolver that failed to deliver evidence its
+/// method supports). `did:webvh` is the one evidence-bearing method coauth ever
+/// sees, and it only ever arrives through the delegated resolver — which does
+/// not hand out witness rows — so its missing pins must record `not_surfaced`
+/// rather than be laundered into a terminal method property.
+fn method_is_evidence_bearing(did: &str) -> bool {
+    did.starts_with("did:webvh:")
+}
+
+/// The §5.2 canonical evidence receipt an acceptance rests on.
+///
+/// Its digest is the binding's `evidence_digest`, and the receipt itself is
+/// retained by [`AcceptedDidBinding`] so an auditor can recompute that digest.
+/// The two degenerate shapes several repositories shipped —
+/// `evidence_digest == document_digest` and `H(did ‖ constant)` — are not
 /// expressible through this API.
-///
-/// The resolver's `method_evidence` is an opaque, method-specific proof subtree
-/// and therefore goes in as a **method proof**, not as an extension. `source`,
-/// `verified_local_binding` and `identity_fact_rejection` are coauth-local
-/// evidence dimensions and go in the extension map, which is what makes the
-/// *same* document served by the delegated resolver and by a plain `did:web`
-/// fetch produce two different evidence digests.
-fn evidence_digest(
+fn evidence_receipt(
     resolution: &DidResolution,
     document: &arkret_models_identity::DidDocument,
-    policy_digest: &Hash,
-) -> Result<Hash, DidBindingError> {
-    EvidenceEnvelope::for_document(document, policy_digest.clone())
-        .map_err(|error| DidBindingError::Digest(error.to_string()))?
-        .with_method_proof(resolution.method_evidence.clone())
-        .with_extension("source", resolution.source.as_str())
-        .with_extension("verified_local_binding", resolution.verified_local_binding)
-        .with_extension(
-            "identity_fact_rejection",
-            resolution
-                .identity_fact_rejection
-                .map(DidResolutionIdentityFactRejection::as_str)
-                .map_or(serde_json::Value::Null, |token| {
-                    serde_json::Value::String(token.to_owned())
-                }),
-        )
-        .digest()
-        .map_err(|error| DidBindingError::Digest(error.to_string()))
+) -> Result<EvidenceReceipt, DidBindingError> {
+    let document_digest = arkret_identity::document_canonical_digest(document)
+        .map_err(|error| DidBindingError::Digest(error.to_string()))?;
+    Ok(EvidenceReceipt::new(
+        document.id.method(),
+        document_digest,
+        &method_evidence(resolution),
+    ))
 }
 
 /// Convert coauth's full-document wire shape into the shared SDK model.
@@ -465,11 +478,11 @@ pub fn from_shared_document(
 /// | `document.id` | `did` + `method` |
 /// | `key_log_head` | `history_head` |
 /// | *(coauth has no method version identifier)* | `version_id = None` |
-/// | `key_log_head.is_some()` | `limited_trust = MethodHasNoVersionId` |
-/// | `key_log_head.is_none()` | `limited_trust = MethodHasNeitherHistoryNorVersion` |
-/// | `method_evidence` (as a method proof) + `source` + `verified_local_binding` + `identity_fact_rejection` (as extensions), over the pinned document digest and the policy digest | `evidence_digest` |
+/// | the pins above, graded by [`method_is_evidence_bearing`] | `limited_trust` |
+/// | [`evidence_receipt`] over the pinned document digest and the surfaced pins | `evidence_digest` + `evidence_dependencies` |
 /// | `identity_fact_rejection` | `status` (see [`status_for`]) |
-/// | *(caller)* | `trust_domain`, `purpose`, `policy_digest`, `verification_method`, `verified_at`, `refresh_after`, `expires_at` |
+/// | *(caller)* | `trust_domain`, `purpose`, `policy_digest`, `verification_method`, `verified_at` |
+/// | *(caller's [`FreshnessProfile`])* | `refresh_after`, `expires_at` |
 #[allow(clippy::too_many_arguments)]
 pub fn binding_from_resolution(
     resolution: &DidResolution,
@@ -477,7 +490,7 @@ pub fn binding_from_resolution(
     purpose: DidBindingPurpose,
     policy_digest: Hash,
     verification_method: Option<arkret_wire::DidUrl>,
-    refresh_interval: Duration,
+    freshness: &FreshnessProfile,
     now: DateTime<Utc>,
 ) -> Result<AcceptedDidBinding, DidBindingError> {
     if let Err(reason) = is_storable(resolution) {
@@ -488,13 +501,20 @@ pub fn binding_from_resolution(
     }
 
     let document = to_shared_document(&resolution.document)?;
-    let evidence_digest = evidence_digest(resolution, &document, &policy_digest)?;
-    let history_head = resolution.key_log_head.clone();
-    // coauth never receives a method `version_id`: `did:web` / `did:plc` have
-    // none, and the delegated resolver's `IdentityResolveOutcome` exposes the
-    // history head only. `LimitedTrustReason::for_pins` therefore always yields
-    // a reason, which `VerifiedDidBinding::new` requires us to record.
-    let limited_trust = LimitedTrustReason::for_pins(history_head.as_ref(), None);
+    let receipt = evidence_receipt(resolution, &document)?;
+    let evidence_digest = receipt
+        .digest()
+        .map_err(|error| DidBindingError::Digest(error.to_string()))?;
+    let evidence_dependencies = receipt
+        .evidence_dependencies()
+        .map_err(|error| DidBindingError::Digest(error.to_string()))?;
+    let evidence = method_evidence(resolution);
+    let pins = (evidence.history_head.as_deref(), evidence.version_id.as_deref());
+    let limited_trust = if method_is_evidence_bearing(&resolution.document.id) {
+        LimitedTrust::for_evidence_bearing_method(pins.0, pins.1)
+    } else {
+        LimitedTrust::for_proofless_method(pins.0, pins.1)
+    };
 
     let binding = VerifiedDidBinding::from_verified_document(
         &document,
@@ -502,20 +522,21 @@ pub fn binding_from_resolution(
             trust_domain,
             purpose,
             verification_method,
-            history_head,
-            version_id: None,
-            limited_trust,
+            history_head: evidence.history_head,
+            version_id: evidence.version_id,
+            limited_trust: limited_trust.record_for(),
             evidence_digest,
+            evidence_dependencies,
             policy_digest,
             verified_at: now,
-            refresh_after: Some(now + refresh_interval),
-            expires_at: Some(now + HARD_EXPIRY),
+            refresh_after: freshness.refresh_after(now),
+            expires_at: freshness.expires_at(now),
             status: status_for(resolution.identity_fact_rejection),
         },
     )
     .map_err(|error| DidBindingError::Binding(error.to_string()))?;
 
-    AcceptedDidBinding::new(binding, document)
+    AcceptedDidBinding::new(binding, document, receipt)
         .map_err(|error| DidBindingError::Store(error.to_string()))
 }
 
@@ -530,17 +551,16 @@ pub struct CoauthBindingRequest<'a> {
     pub purpose: DidBindingPurpose,
     pub policy_digest: Hash,
     pub verification_method: Option<arkret_wire::DidUrl>,
-    pub freshness: FreshnessRequirement,
-    /// Offset from acceptance to the background-refresh point. Callers pass the
-    /// same value they used for `freshness.max_age` so a reused entry is
-    /// exactly as fresh as the call site demanded.
-    pub refresh_interval: Duration,
+    /// The registered §5.4 profile this call site references. It is the single
+    /// freshness threshold: it derives the [`FreshnessRequirement`] a reusable
+    /// entry has to satisfy *and* the `refresh_after` / `expires_at` an
+    /// acceptance is filed with, so the two can no longer drift apart.
+    pub freshness: FreshnessProfile,
 }
 
 impl CoauthBindingRequest<'_> {
     /// The store key this request reads and writes. Mirrors
-    /// `BindingResolveRequest::key`; `version_id` is always `None` for coauth
-    /// (see [`binding_from_resolution`]).
+    /// `BindingResolveRequest::key`.
     pub fn key(&self) -> Result<VerifiedDidBindingKey, DidBindingError> {
         Ok(VerifiedDidBindingKey {
             did: Did::new(self.did.to_owned())
@@ -549,7 +569,6 @@ impl CoauthBindingRequest<'_> {
             purpose: self.purpose,
             policy_digest: self.policy_digest.clone(),
             verification_method: self.verification_method.clone(),
-            version_id: None,
         })
     }
 }
@@ -622,12 +641,12 @@ pub async fn resolve_and_accept_binding(
     now: DateTime<Utc>,
 ) -> Result<AcceptedDidBinding, DidBindingError> {
     let key = request.key()?;
+    let requirement = request.freshness.requirement();
     let held = store.load(repo, &key, now).await?;
-    if let Some(accepted) = held.clone().filter(|accepted| {
-        accepted
-            .binding()
-            .is_usable_for_authority(&request.freshness, now)
-    }) {
+    if let Some(accepted) = held
+        .clone()
+        .filter(|accepted| accepted.binding().is_usable_for_authority(&requirement, now))
+    {
         // Step 2: binding hit. `did_resolver` is not touched — this is the
         // "did:web / did:plc / delegated resolver do not re-fetch" guarantee.
         return Ok(accepted);
@@ -672,7 +691,7 @@ pub async fn resolve_and_accept_binding(
         request.purpose,
         request.policy_digest.clone(),
         request.verification_method.clone(),
-        request.refresh_interval,
+        &request.freshness,
         now,
     )?;
     store.persist(repo, &accepted, now).await?;
@@ -680,10 +699,7 @@ pub async fn resolve_and_accept_binding(
     // Fail closed: an acceptance whose status cannot back the requested
     // freshness is stored (so the invalidation index can find it) but is not
     // handed back as if it were usable.
-    if !accepted
-        .binding()
-        .is_usable_for_authority(&request.freshness, now)
-    {
+    if !accepted.binding().is_usable_for_authority(&requirement, now) {
         return Err(DidBindingError::NotAuthorityGrade {
             did: request.did.to_owned(),
             reason: match accepted.binding().status() {
@@ -702,11 +718,12 @@ pub async fn resolve_and_accept_binding(
 
 /// Ergonomic wrapper used by the authority call sites.
 ///
-/// Derives the deployment trust domain and policy digest, demands
-/// `fresh_within(max_age)` and files the acceptance with the same
-/// `refresh_after` offset — so a second call for the same DID / purpose inside
-/// the window reuses the binding and performs **zero** network fetches, while
-/// a call outside it refreshes exactly once.
+/// Derives the deployment trust domain and policy digest and hands the call
+/// site's registered §5.4 [`FreshnessProfile`] to the binding layer — which is
+/// what makes the reuse window and the filed `refresh_after` the same number.
+/// A second call for the same DID / purpose inside that window reuses the
+/// binding and performs **zero** network fetches; a call outside it refreshes
+/// exactly once.
 ///
 /// Returns the pinned document in coauth's own wire shape so existing
 /// verifiers are untouched.
@@ -721,7 +738,7 @@ pub async fn authority_document(
     store: &DurableVerifiedDidBindingStore,
     did: &str,
     purpose: DidBindingPurpose,
-    max_age: Duration,
+    freshness: FreshnessProfile,
     now: DateTime<Utc>,
 ) -> Result<AuthorityDocument, DidBindingError> {
     let request = CoauthBindingRequest {
@@ -730,8 +747,7 @@ pub async fn authority_document(
         purpose,
         policy_digest: policy_digest(arkret_config)?,
         verification_method: None,
-        freshness: FreshnessRequirement::fresh_within(max_age),
-        refresh_interval: max_age,
+        freshness,
     };
     let accepted = resolve_and_accept_binding(
         http_client,
@@ -747,7 +763,7 @@ pub async fn authority_document(
     .await?;
     Ok(AuthorityDocument {
         document: from_shared_document(accepted.document())?,
-        history_head: accepted.binding().history_head().cloned(),
+        history_head: history_head_digest(&accepted)?,
         accepted,
     })
 }
@@ -758,6 +774,28 @@ pub struct AuthorityDocument {
     pub document: CoauthDidDocument,
     pub history_head: Option<Hash>,
     pub accepted: AcceptedDidBinding,
+}
+
+/// The acceptance's pinned history head as a typed digest.
+///
+/// §5 types `history_head` as a plain string because a `did:webvh` `versionId`
+/// is not a `<algo>:<hex>` digest. Every head coauth files went in as a
+/// [`Hash`] (`DidResolution::key_log_head` is typed that way and
+/// `parse_key_log_head` rejects anything else), and the outward
+/// `IdentityResolveOutcome` / `IdentityDocumentView` shapes are typed as
+/// digests, so the round trip back is total for rows this deployment wrote. A
+/// row that somehow carries a non-digest head is reported rather than silently
+/// dropped: it means the acceptance was written by something other than this
+/// code path.
+fn history_head_digest(accepted: &AcceptedDidBinding) -> Result<Option<Hash>, DidBindingError> {
+    accepted
+        .binding()
+        .history_head()
+        .map(|head| {
+            Hash::new(head.to_owned())
+                .map_err(|error| DidBindingError::Binding(error.to_string()))
+        })
+        .transpose()
 }
 
 /// §3 ordinary read: serve a **previously accepted** binding's pinned document
@@ -789,7 +827,6 @@ pub async fn ordinary_read_document(
         purpose,
         policy_digest: policy_digest(arkret_config)?,
         verification_method: None,
-        version_id: None,
     };
     let accepted = store
         .load(repo, &key, now)
@@ -801,7 +838,7 @@ pub async fn ordinary_read_document(
         })?;
     Ok(AuthorityDocument {
         document: from_shared_document(accepted.document())?,
-        history_head: accepted.binding().history_head().cloned(),
+        history_head: history_head_digest(&accepted)?,
         accepted,
     })
 }
@@ -871,10 +908,11 @@ pub fn mirrored_acceptance(
         method: binding.method().to_owned(),
         verification_method: binding.verification_method().cloned(),
         document_digest: binding.document_digest().clone(),
-        history_head: binding.history_head().cloned(),
+        history_head: binding.history_head().map(ToOwned::to_owned),
         version_id: binding.version_id().map(ToOwned::to_owned),
         limited_trust: binding.limited_trust(),
         evidence_digest: binding.evidence_digest().clone(),
+        evidence_dependencies: binding.evidence_dependencies().clone(),
         policy_digest: binding.policy_digest().clone(),
         verified_at: binding.verified_at(),
         refresh_after: binding.refresh_after(),
@@ -882,9 +920,13 @@ pub fn mirrored_acceptance(
         status: binding.status(),
     })
     .map_err(|error| DidBindingError::Binding(error.to_string()))?;
-    AcceptedDidBinding::new(mirrored, source.document().clone())
-        .map(Some)
-        .map_err(|error| DidBindingError::Store(error.to_string()))
+    AcceptedDidBinding::new(
+        mirrored,
+        source.document().clone(),
+        source.evidence_receipt().clone(),
+    )
+    .map(Some)
+    .map_err(|error| DidBindingError::Store(error.to_string()))
 }
 
 /// Invalidate every binding for `did`, across purposes and trust domains —

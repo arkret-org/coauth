@@ -146,7 +146,6 @@ CREATE TABLE public.verified_did_bindings (
     purpose text NOT NULL,
     policy_digest text NOT NULL,
     verification_method text NOT NULL,
-    version_id text NOT NULL,
     history_head text,
     expires_at timestamp with time zone,
     accepted jsonb NOT NULL,
@@ -1113,7 +1112,7 @@ ALTER TABLE ONLY public.dpop_jti_replay
     ADD CONSTRAINT dpop_jti_replay_pkey PRIMARY KEY (jti_digest);
 
 ALTER TABLE ONLY public.verified_did_bindings
-    ADD CONSTRAINT verified_did_bindings_pkey PRIMARY KEY (did, trust_domain, purpose, policy_digest, verification_method, version_id);
+    ADD CONSTRAINT verified_did_bindings_pkey PRIMARY KEY (did, trust_domain, purpose, policy_digest, verification_method);
 
 ALTER TABLE ONLY public.recovery_device_authorizations
     ADD CONSTRAINT recovery_device_authorizations_pkey PRIMARY KEY (ticket_id);

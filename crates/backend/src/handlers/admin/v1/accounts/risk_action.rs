@@ -379,7 +379,7 @@ async fn verify_approval_proof_jws(
         binding_store,
         approved_by,
         arkret_identity::DidBindingPurpose::AdminAction,
-        crate::services::did_binding::HIGH_RISK_MAX_AGE,
+        crate::services::did_binding::high_risk_freshness(),
         crate::handlers::make_clock().now(),
     )
     .await

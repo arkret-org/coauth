@@ -316,7 +316,7 @@ async fn verify_cross_session_lifecycle_proof(
         binding_store,
         &current_grant.subject,
         arkret_identity::DidBindingPurpose::Principal,
-        crate::services::did_binding::HIGH_RISK_MAX_AGE,
+        crate::services::did_binding::high_risk_freshness(),
         now,
     )
     .await

@@ -87,7 +87,7 @@ pub async fn verify_erasure_receipt(
         binding_store,
         receipt.issuer.as_str(),
         arkret_identity::DidBindingPurpose::Issuer,
-        crate::services::did_binding::HIGH_RISK_MAX_AGE,
+        crate::services::did_binding::high_risk_freshness(),
         now,
     )
     .await

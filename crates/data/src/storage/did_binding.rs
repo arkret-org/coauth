@@ -16,17 +16,22 @@
 //!
 //! | column group | why it is a column and not just JSON |
 //! | --- | --- |
-//! | the six [`VerifiedDidBindingKeyColumns`] dimensions | they are the store key; §5 requires exact lookup and exact invalidation along each of them |
+//! | the five [`VerifiedDidBindingKeyColumns`] dimensions | they are the store key; §5 requires exact lookup and exact invalidation along each of them |
 //! | `history_head` | §5 invalidation dimension (witness fork), not a key dimension |
 //! | `expires_at` | hard expiry must be enforced **in the query**, so an expired row is never handed to a caller |
 //!
 //! # Absent key dimensions
 //!
-//! `verification_method` and `version_id` are optional dimensions of the store
-//! key, but a PostgreSQL primary key cannot contain `NULL`. The backend stores
-//! them as the empty string when absent; neither a DID URL nor a method version
-//! identifier can be empty, so the encoding is unambiguous. That translation is
-//! the storage backend's job — this port keeps them as `Option<String>`.
+//! `verification_method` is an optional dimension of the store key, but a
+//! PostgreSQL primary key cannot contain `NULL`. The backend stores it as the
+//! empty string when absent; a DID URL can never be empty, so the encoding is
+//! unambiguous. That translation is the storage backend's job — this port keeps
+//! it as an `Option<String>`.
+//!
+//! `version_id` is deliberately **not** here. §5.2 makes it a product of the
+//! resolution, so a caller cannot know it before looking the entry up; keying on
+//! it made every lookup miss and filed every rotation as a parallel row nobody
+//! could reach. It stays a binding field inside the payload.
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -52,9 +57,6 @@ pub struct VerifiedDidBindingKeyColumns {
     pub policy_digest: String,
     /// The concrete verification method the acceptance pins, when it pins one.
     pub verification_method: Option<String>,
-    /// The method version identifier the acceptance pins, when the method
-    /// publishes one.
-    pub version_id: Option<String>,
 }
 
 /// One durable acceptance row.

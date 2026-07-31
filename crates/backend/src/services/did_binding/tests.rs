@@ -33,6 +33,25 @@ fn trust_domain(scope: &str) -> TypedTrustDomainId {
     TypedTrustDomainId::new(format!("ak:trust_domain:{scope}")).unwrap()
 }
 
+/// What a §5.4 `low` accepted-only read path demands: any binding that is not
+/// hard-expired, `Stale` included. Written out here rather than taken from a
+/// registered profile because coauth has no `low` authority call site — the §3
+/// ordinary read path uses `is_usable_for_ordinary_verification` and never
+/// builds a requirement at all.
+fn accepted_only_requirement() -> FreshnessRequirement {
+    FreshnessRequirement {
+        max_age: None,
+        require_fresh: false,
+    }
+}
+
+/// `VerifiedDidBinding::new` floors every freshness instant to the canonical
+/// millisecond precision, so a `Utc::now()`-derived expectation has to be
+/// floored the same way before it can be compared.
+fn canonical_instant(at: DateTime<Utc>) -> DateTime<Utc> {
+    arkret_canonical::canonical::normalize_timestamp_canonical(at)
+}
+
 fn digest(byte: char) -> Hash {
     Hash::new(format!("sha256:{}", String::from(byte).repeat(64))).unwrap()
 }
@@ -87,7 +106,7 @@ fn accept(
         purpose,
         policy.clone(),
         None,
-        HIGH_RISK_MAX_AGE,
+        &high_risk_freshness(),
         now,
     )
     .expect("healthy resolution should build a binding");
@@ -109,7 +128,7 @@ fn resolution_fields_map_onto_the_shared_binding() {
         DidBindingPurpose::AccountBinding,
         digest('b'),
         None,
-        HIGH_RISK_MAX_AGE,
+        &high_risk_freshness(),
         now,
     )
     .expect("binding builds");
@@ -121,16 +140,39 @@ fn resolution_fields_map_onto_the_shared_binding() {
     assert_eq!(binding.trust_domain(), &trust_domain("auth.example"));
     assert_eq!(binding.policy_digest(), &digest('b'));
     // key_log_head -> history_head
-    assert_eq!(binding.history_head(), Some(&digest('a')));
+    assert_eq!(binding.history_head(), Some(digest('a').as_str()));
     // coauth never learns a method version id, so limited trust MUST be recorded
     assert_eq!(binding.version_id(), None);
+    // `did:web` publishes no history / version of its own, so the absent pin is
+    // the terminal `method_unsupported`, not a resolver failure.
     assert_eq!(
         binding.limited_trust(),
-        Some(LimitedTrustReason::MethodHasNoVersionId)
+        Some(arkret_identity::LimitedTrust {
+            history_head: arkret_identity::PinState::Pinned,
+            version_id: arkret_identity::PinState::MethodUnsupported,
+        })
     );
     assert_eq!(binding.status(), DidBindingStatus::Active);
-    assert_eq!(binding.refresh_after(), Some(now + HIGH_RISK_MAX_AGE));
-    assert_eq!(binding.expires_at(), Some(now + HARD_EXPIRY));
+    // The profile is the single source of both instants, and the binding floors
+    // them to canonical millisecond precision so the stored form and the value
+    // in memory agree.
+    let profile = high_risk_freshness();
+    assert_eq!(
+        binding.refresh_after(),
+        profile.refresh_after(now).map(canonical_instant)
+    );
+    assert_eq!(
+        binding.expires_at(),
+        profile.expires_at(now).map(canonical_instant)
+    );
+    assert_eq!(
+        binding.refresh_after(),
+        Some(canonical_instant(now + HIGH_RISK_MAX_AGE))
+    );
+    assert_eq!(
+        binding.expires_at(),
+        Some(canonical_instant(now + HARD_EXPIRY))
+    );
     // document_digest is recomputed from the pinned document by
     // `AcceptedDidBinding::new`, so this equality is not tautological.
     assert_eq!(
@@ -150,13 +192,16 @@ fn missing_history_head_records_the_wider_limited_trust_reason() {
         DidBindingPurpose::Principal,
         digest('b'),
         None,
-        HIGH_RISK_MAX_AGE,
+        &high_risk_freshness(),
         now,
     )
     .expect("binding builds");
     assert_eq!(
         accepted.binding().limited_trust(),
-        Some(LimitedTrustReason::MethodHasNeitherHistoryNorVersion)
+        Some(arkret_identity::LimitedTrust {
+            history_head: arkret_identity::PinState::MethodUnsupported,
+            version_id: arkret_identity::PinState::MethodUnsupported,
+        })
     );
 }
 
@@ -183,62 +228,136 @@ fn every_identity_fact_rejection_maps_to_a_closed_status() {
     }
 }
 
-/// `evidence_digest` over the resolution's own document and a fixed policy
-/// digest, so a test varies exactly one input at a time.
-fn evidence_digest_of(resolution: &DidResolution, policy: &Hash) -> Hash {
+/// The §5.2 receipt digest for a resolution, so a test varies exactly one
+/// input at a time.
+fn evidence_digest_of(resolution: &DidResolution) -> Hash {
     let document = to_shared_document(&resolution.document).expect("document converts");
-    evidence_digest(resolution, &document, policy).expect("evidence digest")
+    evidence_receipt(resolution, &document)
+        .expect("evidence receipt")
+        .digest()
+        .expect("receipt digests")
 }
 
+/// §5.2 fixes what the receipt commits to: the DID method and the digest of the
+/// resolver's verified normalized document, plus the registered method-proof
+/// rows. The two degenerate shapes other repositories shipped —
+/// `evidence_digest == document_digest`, and `H(did ‖ constant)` — are not
+/// reachable through this code path.
 #[test]
-fn source_and_evidence_both_bind_into_the_evidence_digest() {
-    let policy = digest('b');
-    let base = healthy_resolution("did:web:alice.example");
-    let mut different_source = healthy_resolution("did:web:alice.example");
-    different_source.source = DidResolutionSource::DidWeb;
-    let mut different_evidence = healthy_resolution("did:web:alice.example");
-    different_evidence.method_evidence = serde_json::json!({"method": "did:web"});
-
-    let base_digest = evidence_digest_of(&base, &policy);
-    assert_ne!(base_digest, evidence_digest_of(&different_source, &policy));
-    assert_ne!(
-        base_digest,
-        evidence_digest_of(&different_evidence, &policy)
-    );
-    // Deterministic.
-    assert_eq!(
-        base_digest,
-        evidence_digest_of(&healthy_resolution("did:web:alice.example"), &policy)
-    );
-}
-
-/// The SDK envelope always commits to the pinned document digest **and** the
-/// policy digest, so the two degenerate shapes other repositories shipped —
-/// `evidence_digest == document_digest`, and a value independent of the policy
-/// — are not reachable through this code path.
-#[test]
-fn the_evidence_digest_binds_the_document_and_the_policy() {
+fn the_evidence_digest_binds_the_method_and_the_pinned_document() {
     let resolution = healthy_resolution("did:web:alice.example");
     let document = to_shared_document(&resolution.document).expect("document converts");
     let document_digest = arkret_identity::document_canonical_digest(&document).unwrap();
+    let base = evidence_digest_of(&resolution);
 
-    let under_one_policy = evidence_digest_of(&resolution, &digest('b'));
-    let under_another_policy = evidence_digest_of(&resolution, &digest('c'));
     assert_ne!(
-        under_one_policy, under_another_policy,
-        "a policy revision must move the evidence digest"
-    );
-    assert_ne!(
-        under_one_policy, document_digest,
+        base, document_digest,
         "the evidence digest must never be the bare document digest"
+    );
+    assert_eq!(
+        base,
+        evidence_digest_of(&healthy_resolution("did:web:alice.example")),
+        "the receipt digest is deterministic"
     );
 
     let mut other_document = healthy_resolution("did:web:alice.example");
     other_document.document.also_known_as = vec!["at://alice.example".to_owned()];
     assert_ne!(
-        under_one_policy,
-        evidence_digest_of(&other_document, &digest('b')),
+        base,
+        evidence_digest_of(&other_document),
         "a different pinned document must move the evidence digest"
+    );
+
+    let mut other_method = healthy_resolution("did:webvh:ztest:alice.example");
+    other_method.document = document_for("did:webvh:ztest:alice.example");
+    assert_ne!(
+        base,
+        evidence_digest_of(&other_method),
+        "a different DID method must move the evidence digest"
+    );
+}
+
+/// The transport that produced a resolution is **not** an evidence dimension.
+///
+/// Before the §5.2 canonical receipt, coauth mixed `source`,
+/// `verified_local_binding` and `identity_fact_rejection` into its own digest
+/// input. §5.2 rejects that: a receipt is what the resolver *verified*, and a
+/// caller-chosen extension map is exactly how one document ended up with two
+/// incompatible evidence digests. Degradation is carried by `status` (see
+/// [`status_for`]) instead, which is a first-class acceptance field rather than
+/// an opaque digest input — so this asserts the values now coincide.
+#[test]
+fn coauth_transport_dimensions_are_not_evidence_digest_inputs() {
+    let base = healthy_resolution("did:web:alice.example");
+    let mut different_source = healthy_resolution("did:web:alice.example");
+    different_source.source = DidResolutionSource::DidWeb;
+    let mut different_report = healthy_resolution("did:web:alice.example");
+    different_report.method_evidence = serde_json::json!({"method": "did:web"});
+    let mut degraded = healthy_resolution("did:web:alice.example");
+    degraded.identity_fact_rejection =
+        Some(DidResolutionIdentityFactRejection::CacheOnlyDegraded);
+
+    let base_digest = evidence_digest_of(&base);
+    assert_eq!(base_digest, evidence_digest_of(&different_source));
+    assert_eq!(base_digest, evidence_digest_of(&different_report));
+    assert_eq!(base_digest, evidence_digest_of(&degraded));
+
+    // ...and the degradation is still recorded, on the acceptance itself.
+    assert_eq!(
+        status_for(degraded.identity_fact_rejection),
+        DidBindingStatus::Stale
+    );
+}
+
+/// §5.2 keeps `policy_digest` **out** of the evidence receipt: a binding carries
+/// both digests side by side, and nesting one inside the other would couple
+/// evidence invalidation to policy rotation. A policy revision still retires the
+/// acceptance — through the store key, not through the evidence digest.
+#[test]
+fn the_policy_digest_is_not_nested_inside_the_evidence_receipt() {
+    let now = Utc::now();
+    let resolution = healthy_resolution("did:web:alice.example");
+    let under_one_policy = binding_from_resolution(
+        &resolution,
+        trust_domain("auth.example"),
+        DidBindingPurpose::Principal,
+        digest('b'),
+        None,
+        &high_risk_freshness(),
+        now,
+    )
+    .expect("binding builds");
+    let under_another_policy = binding_from_resolution(
+        &resolution,
+        trust_domain("auth.example"),
+        DidBindingPurpose::Principal,
+        digest('c'),
+        None,
+        &high_risk_freshness(),
+        now,
+    )
+    .expect("binding builds");
+
+    assert_eq!(
+        under_one_policy.binding().evidence_digest(),
+        under_another_policy.binding().evidence_digest()
+    );
+    assert_ne!(
+        under_one_policy.binding().key(),
+        under_another_policy.binding().key(),
+        "a policy revision must still retire the acceptance"
+    );
+}
+
+/// The receipt is retained, not discarded after digesting: §5.2 makes
+/// "auditable" mean "recomputable".
+#[test]
+fn the_retained_receipt_recomputes_the_evidence_digest() {
+    let now = Utc::now();
+    let accepted = stored_acceptance(now);
+    assert_eq!(
+        &accepted.evidence_receipt().digest().unwrap(),
+        accepted.binding().evidence_digest()
     );
 }
 
@@ -258,7 +377,7 @@ fn did_key_local_resolution_is_never_stored_as_a_binding() {
         DidBindingPurpose::Controller,
         digest('b'),
         None,
-        HIGH_RISK_MAX_AGE,
+        &high_risk_freshness(),
         now,
     )
     .expect_err("did:key echo must not become an authority-grade binding");
@@ -409,7 +528,7 @@ fn a_quarantined_resolution_is_stored_but_never_served() {
         DidBindingPurpose::Principal,
         digest('b'),
         None,
-        HIGH_RISK_MAX_AGE,
+        &high_risk_freshness(),
         now,
     )
     .expect("quarantined resolutions are still representable");
@@ -420,7 +539,7 @@ fn a_quarantined_resolution_is_stored_but_never_served() {
     assert!(
         !accepted
             .binding()
-            .is_usable_for_authority(&FreshnessRequirement::any_accepted(), now)
+            .is_usable_for_authority(&accepted_only_requirement(), now)
     );
     // Terminal, not merely unusable: `resolve_and_accept_binding` refuses
     // before reaching the resolver, so quarantine cannot be re-litigated (and
@@ -476,14 +595,13 @@ fn stale_is_readable_for_low_risk_but_rejected_by_high_risk_freshness() {
     assert_eq!(hit.binding().status(), DidBindingStatus::Stale);
     assert!(
         hit.binding()
-            .is_usable_for_authority(&FreshnessRequirement::any_accepted(), later),
+            .is_usable_for_authority(&accepted_only_requirement(), later),
         "an ordinary read must not be blocked by TTL expiry (spec §5)"
     );
     assert!(
-        !hit.binding().is_usable_for_authority(
-            &FreshnessRequirement::fresh_within(HIGH_RISK_MAX_AGE),
-            later
-        ),
+        !hit
+            .binding()
+            .is_usable_for_authority(&high_risk_freshness().requirement(), later),
         "a high-risk write must refresh or fail closed"
     );
 }
@@ -539,7 +657,7 @@ fn a_fresh_binding_hit_short_circuits_before_the_resolver() {
             now,
         );
         let key = accepted.binding().key();
-        let freshness = FreshnessRequirement::fresh_within(HIGH_RISK_MAX_AGE);
+        let freshness = high_risk_freshness().requirement();
 
         // Inside the window: reused, so `resolve_and_accept_binding` returns
         // at step 2 and performs no fetch.
@@ -723,7 +841,7 @@ fn mirroring_never_upgrades_a_quarantined_acceptance() {
         DidBindingPurpose::AccountBinding,
         digest('b'),
         None,
-        HIGH_RISK_MAX_AGE,
+        &high_risk_freshness(),
         now,
     )
     .expect("quarantined resolutions are representable");
@@ -782,62 +900,73 @@ fn policy_digest_is_deterministic_and_moves_with_the_policy() {
         proof_required_for_pairwise: false,
     });
     let with_resolver = policy_digest(&config).unwrap();
-    assert_ne!(base, with_resolver);
+    assert_ne!(
+        base, with_resolver,
+        "a delegated resolver is both a new trust root and a wider method set"
+    );
 
+    // `proof_required_for_pairwise` is deliberately *not* a digest input: §5.3
+    // fixes the base profile's three security-core members and gives unlisted
+    // deployment switches nowhere to go but a registered profile of their own.
+    // It used to ride in coauth's local extension map, which is exactly the
+    // per-repo digest divergence the canonical snapshot exists to end.
     let mut flipped = config.clone();
     if let Some(registry) = flipped.identity_registry.as_mut() {
         registry.proof_required_for_pairwise = !registry.proof_required_for_pairwise;
     }
-    assert_ne!(with_resolver, policy_digest(&flipped).unwrap());
+    assert_eq!(with_resolver, policy_digest(&flipped).unwrap());
 }
 
-/// The digest is the SDK's, not a coauth-local recipe: it carries the shared
-/// [`arkret_identity::POLICY_DIGEST_VERSION`] tag and coauth's own dimensions
-/// live in the `deployment` extension object the SDK reserves for them.
+/// The digest is the SDK's §5.3 snapshot, not a coauth-local recipe: the three
+/// required security-core members under the one registered `base` profile, with
+/// registered wire tokens rather than `Debug` spellings.
 #[test]
-fn the_policy_digest_uses_the_shared_sdk_encoding() {
+fn the_policy_digest_is_the_shared_sdk_snapshot() {
     let config = ArkretConfig::default();
-    let policy = resolver_policy(&config);
-    let value = PolicyDigestInput::new(&policy)
-        .with_extension("resolver_allow_loopback", false)
-        .canonical_value();
+    let snapshot = policy_snapshot(&config).expect("policy is declarable");
+    let value = snapshot.canonical_value();
 
     assert_eq!(
-        value["version"],
-        serde_json::json!(arkret_identity::POLICY_DIGEST_VERSION)
+        value["kind"],
+        serde_json::json!(arkret_identity::RESOLVER_POLICY_SNAPSHOT_KIND)
+    );
+    assert_eq!(
+        value["policy_profile"],
+        serde_json::json!(arkret_identity::BASE_RESOLVER_POLICY_PROFILE)
     );
     assert_eq!(value["fail_mode"], serde_json::json!("fail_closed"));
-    assert_eq!(
-        value["deployment"]["resolver_allow_loopback"],
-        serde_json::json!(false)
-    );
+    assert_eq!(value["profile_policy"], serde_json::json!({}));
     // Without a delegated resolver the allow list is exactly the three methods
     // coauth resolves natively; CAU-SPEC-02 keeps `did:webvh` out of it.
     assert_eq!(
-        value["allowed_methods"],
+        value["accepted_did_methods"],
         serde_json::json!(["did:key:", "did:plc:", "did:web:"])
     );
+    assert_eq!(snapshot.digest().unwrap(), policy_digest(&config).unwrap());
 }
 
-/// The deployment epoch replaces the removed local `POLICY_DIGEST_VERSION`
-/// constant as the one-step "retire every binding here" switch, and it is
-/// deployment-local: it does not require an SDK release.
+/// §5.3 refuses to declare an unrestricted method list: "any method" is a
+/// fail-open policy a snapshot cannot honestly carry. A delegated resolver
+/// therefore widens the declared set by exactly the method delegation exists
+/// for, and that widening moves the digest.
 #[test]
-fn the_deployment_epoch_retires_every_binding_in_one_step() {
-    let config = ArkretConfig::default();
-    let policy = resolver_policy(&config);
-    let without_epoch = PolicyDigestInput::new(&policy).digest().unwrap();
-    let with_epoch = PolicyDigestInput::new(&policy)
-        .with_deployment_epoch("2026-07-31-incident")
-        .digest()
-        .unwrap();
-    let with_other_epoch = PolicyDigestInput::new(&policy)
-        .with_deployment_epoch("2026-08-01-incident")
-        .digest()
-        .unwrap();
-
-    assert_ne!(without_epoch, with_epoch);
-    assert_ne!(with_epoch, with_other_epoch);
+fn a_delegated_resolver_declares_webvh_rather_than_any_method() {
+    let mut config = ArkretConfig::default();
+    config.identity_registry = Some(coauth_config::IdentityRegistryConfig {
+        resolver: "https://resolver.example/_arkret/root/identity/resolve"
+            .parse()
+            .unwrap(),
+        proof_required_for_pairwise: false,
+    });
+    let snapshot = policy_snapshot(&config).expect("policy is declarable");
+    assert_eq!(
+        snapshot.accepted_did_methods(),
+        ["did:key:", "did:plc:", "did:web:", "did:webvh:"]
+    );
+    assert_eq!(
+        snapshot.trust_roots(),
+        ["https://resolver.example/_arkret/root/identity/resolve"]
+    );
 }
 
 /// Switching the digest algorithm makes every previously stored acceptance
@@ -879,25 +1008,28 @@ fn stored_acceptance(now: DateTime<Utc>) -> AcceptedDidBinding {
         DidBindingPurpose::Principal,
         digest('b'),
         None,
-        HIGH_RISK_MAX_AGE,
+        &high_risk_freshness(),
         now,
     )
     .expect("binding builds")
 }
 
-/// Every one of the six `VerifiedDidBindingKey` dimensions reaches its own
+/// Every one of the five `VerifiedDidBindingKey` dimensions reaches its own
 /// column, and changing any one of them produces a different row key. §5
 /// requires exact invalidation along each dimension, which is impossible if two
 /// distinct keys collapse onto one row.
+///
+/// `version_id` is not among them: §5.2 makes it a product of the resolution, so
+/// a caller cannot know it before the lookup, and keying on it made every lookup
+/// miss and filed every rotation as a parallel row nobody could reach.
 #[test]
-fn all_six_key_dimensions_project_onto_distinct_columns() {
+fn all_five_key_dimensions_project_onto_distinct_columns() {
     let base = VerifiedDidBindingKey {
         did: did(),
         trust_domain: trust_domain("auth.example"),
         purpose: DidBindingPurpose::Principal,
         policy_digest: digest('b'),
         verification_method: None,
-        version_id: None,
     };
     let columns = key_columns(&base);
     assert_eq!(columns.did, "did:web:alice.example");
@@ -905,13 +1037,12 @@ fn all_six_key_dimensions_project_onto_distinct_columns() {
     assert_eq!(columns.purpose, "principal");
     assert_eq!(columns.policy_digest, digest('b').as_str());
     assert_eq!(columns.verification_method, None);
-    assert_eq!(columns.version_id, None);
 
     let method = arkret_wire::DidUrl::new("did:web:alice.example#key-1".to_owned()).unwrap();
     /// A named single-dimension mutation of the binding key.
     type NamedKeyMutation = (&'static str, Box<dyn Fn(&mut VerifiedDidBindingKey)>);
 
-    let variants: [NamedKeyMutation; 6] = [
+    let variants: [NamedKeyMutation; 5] = [
         ("did", Box::new(|key| key.did = other_did())),
         (
             "trust_domain",
@@ -928,10 +1059,6 @@ fn all_six_key_dimensions_project_onto_distinct_columns() {
         (
             "verification_method",
             Box::new(move |key| key.verification_method = Some(method.clone())),
-        ),
-        (
-            "version_id",
-            Box::new(|key| key.version_id = Some("1-abc".to_owned())),
         ),
     ];
     for (dimension, mutate) in variants {
@@ -958,10 +1085,7 @@ fn an_untouched_row_decodes_back_into_the_same_acceptance() {
 
     assert_eq!(row.key, key_columns(&key));
     assert_eq!(row.expires_at, accepted.binding().expires_at());
-    assert_eq!(
-        row.history_head.as_deref(),
-        accepted.binding().history_head().map(Hash::as_str)
-    );
+    assert_eq!(row.history_head.as_deref(), accepted.binding().history_head());
 
     let decoded = decode_row(&key, row).expect("an untouched row decodes");
     assert_eq!(decoded.binding().key(), key);
@@ -1044,7 +1168,7 @@ fn the_invalidation_selector_keeps_its_semantics_in_columns() {
         .with_trust_domain(trust_domain("auth.example"))
         .with_purpose(DidBindingPurpose::Principal)
         .with_policy_digest(digest('b'))
-        .with_history_head(digest('a'))
+        .with_history_head(digest('a').as_str().to_owned())
         .with_verification_method(
             arkret_wire::DidUrl::new("did:web:alice.example#key-1".to_owned()).unwrap(),
         );

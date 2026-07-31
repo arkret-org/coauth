@@ -876,7 +876,7 @@ async fn verify_authorize_event_controller_signature(
         binding_store,
         controller_id,
         arkret_identity::DidBindingPurpose::Controller,
-        crate::services::did_binding::CONTROLLER_MAX_AGE,
+        crate::services::did_binding::controller_freshness(),
         now,
     )
     .await
@@ -991,7 +991,7 @@ async fn verify_pairing_signing_key_binding(
             binding_store,
             controller_id,
             arkret_identity::DidBindingPurpose::Controller,
-            crate::services::did_binding::CONTROLLER_MAX_AGE,
+            crate::services::did_binding::controller_freshness(),
             now,
         )
         .await

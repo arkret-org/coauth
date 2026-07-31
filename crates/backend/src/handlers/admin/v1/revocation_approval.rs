@@ -117,7 +117,7 @@ pub(super) async fn verify_revocation_approval_proof(
         depot.verified_did_binding_store()?.as_ref(),
         &approved_by,
         arkret_identity::DidBindingPurpose::AdminAction,
-        crate::services::did_binding::HIGH_RISK_MAX_AGE,
+        crate::services::did_binding::high_risk_freshness(),
         crate::handlers::make_clock().now(),
     )
     .await

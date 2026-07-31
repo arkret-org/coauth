@@ -305,8 +305,8 @@ pub async fn validate_control_proof(
     // §4 row 2 — "account registration / claim / recovery, or a service
     // account binding a principal DID for the first time" is an authority
     // trigger, and it explicitly requires a *current* control proof. So this
-    // path demands `fresh_within(HIGH_RISK_MAX_AGE)` under the closed
-    // `AccountBinding` purpose; a degraded / fallback / unproven-controller
+    // path references the registered high-risk freshness profile under the
+    // closed `AccountBinding` purpose; a degraded / fallback / unproven-controller
     // resolution lands as `Stale` / `Quarantined` and fails closed there,
     // replacing the previous `ensure_full_identity_fact_resolution` gate.
     let binding = crate::services::did_binding::authority_document(
@@ -319,7 +319,7 @@ pub async fn validate_control_proof(
         binding_store,
         account_did,
         arkret_identity::DidBindingPurpose::AccountBinding,
-        crate::services::did_binding::HIGH_RISK_MAX_AGE,
+        crate::services::did_binding::high_risk_freshness(),
         now,
     )
     .await?;
@@ -646,7 +646,7 @@ mod tests {
             arkret_identity::DidBindingPurpose::AccountBinding,
             arkret_identifiers::Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap(),
             None,
-            did_binding::HIGH_RISK_MAX_AGE,
+            &did_binding::high_risk_freshness(),
             now,
         )
         .expect("a degraded resolution is still representable as a binding");
@@ -656,12 +656,9 @@ mod tests {
             arkret_identity::DidBindingStatus::Stale
         );
         assert!(
-            !accepted.binding().is_usable_for_authority(
-                &arkret_identity::FreshnessRequirement::fresh_within(
-                    did_binding::HIGH_RISK_MAX_AGE
-                ),
-                now
-            ),
+            !accepted
+                .binding()
+                .is_usable_for_authority(&did_binding::high_risk_freshness().requirement(), now),
             "degraded resolver must not back DID binding proof success"
         );
     }

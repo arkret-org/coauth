@@ -861,7 +861,7 @@ async fn verify_completion_attestation_signature(
         depot.verified_did_binding_store()?.as_ref(),
         expected_coordinator,
         arkret_identity::DidBindingPurpose::Recovery,
-        crate::services::did_binding::HIGH_RISK_MAX_AGE,
+        crate::services::did_binding::high_risk_freshness(),
         crate::handlers::make_clock().now(),
     )
     .await

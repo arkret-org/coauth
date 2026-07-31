@@ -115,7 +115,7 @@ async fn verify_organization_controller_proof(
         depot.verified_did_binding_store()?.as_ref(),
         &body.organization_did,
         arkret_identity::DidBindingPurpose::OrganizationRegistry,
-        crate::services::did_binding::HIGH_RISK_MAX_AGE,
+        crate::services::did_binding::high_risk_freshness(),
         crate::handlers::make_clock().now(),
     )
     .await

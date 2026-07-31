@@ -34,10 +34,11 @@
 //!
 //! A row is decoded through [`AcceptedDidBinding`]'s `Deserialize`, which
 //! routes through `AcceptedDidBinding::new` and therefore recomputes the pinned
-//! document's canonical digest and re-checks `document.id == binding.did`. On
-//! top of that, [`decode_row`] requires the row's six key columns to equal the
-//! decoded binding's own key, so a row cannot be *moved* to another purpose,
-//! trust domain or policy digest by editing the columns either.
+//! document's canonical digest, re-checks `document.id == binding.did` and
+//! re-digests the retained evidence receipt. On top of that, [`decode_row`]
+//! requires the row's five key columns to equal the decoded binding's own key,
+//! so a row cannot be *moved* to another purpose, trust domain or policy digest
+//! by editing the columns either.
 //!
 //! A row that fails any of these checks is **discarded**, not surfaced: the
 //! acceptance simply does not exist, so an authority path resolves again and an
@@ -70,7 +71,6 @@ pub fn key_columns(key: &VerifiedDidBindingKey) -> VerifiedDidBindingKeyColumns 
             .verification_method
             .as_ref()
             .map(|method| method.as_str().to_owned()),
-        version_id: key.version_id.clone(),
     }
 }
 
@@ -86,10 +86,7 @@ pub fn invalidation_columns(selector: &BindingInvalidation) -> VerifiedDidBindin
             .verification_method
             .as_ref()
             .map(|method| method.as_str().to_owned()),
-        history_head: selector
-            .history_head
-            .as_ref()
-            .map(|head| head.as_str().to_owned()),
+        history_head: selector.history_head.clone(),
         trust_domain: selector
             .trust_domain
             .as_ref()
@@ -111,7 +108,7 @@ pub fn encode_row(accepted: &AcceptedDidBinding) -> Result<VerifiedDidBindingRow
     let binding = accepted.binding();
     Ok(VerifiedDidBindingRow {
         key: key_columns(&binding.key()),
-        history_head: binding.history_head().map(|head| head.as_str().to_owned()),
+        history_head: binding.history_head().map(ToOwned::to_owned),
         expires_at: binding.expires_at(),
         accepted: serde_json::to_value(accepted)
             .map_err(|error| DidBindingError::Store(error.to_string()))?,
@@ -270,9 +267,9 @@ impl DurableVerifiedDidBindingStore {
 
     /// Drop every mirrored entry that could answer `key`.
     ///
-    /// [`BindingInvalidation`] cannot express "this exact key" — it has no
-    /// `version_id` dimension, and a `None` verification method means
-    /// *unconstrained* rather than *absent*. The selector below is therefore
+    /// [`BindingInvalidation`] cannot express "this exact key" — a `None`
+    /// verification method there means *unconstrained* rather than *absent*.
+    /// The selector below is therefore
     /// deliberately **wider** than the key: it clears every mirrored purpose-
     /// and policy-matched entry for the DID in this trust domain. Over-clearing
     /// the mirror is free (the next `load` re-reads the row); under-clearing it
