@@ -1,6 +1,7 @@
 use arkret_identifiers::GrantId;
 use chrono::{DateTime, Utc};
 use coauth_data::SessionGrant;
+use salvo::http::StatusCode;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
@@ -82,6 +83,21 @@ pub struct PatchPrimaryHandlePreferenceRequestBody {
         deserialize_with = "serde_with::rust::double_option::deserialize"
     )]
     pub primary_handle: Option<Option<String>>,
+}
+
+/// HTTP status the Spec registry assigns `code` in a given entry context.
+///
+/// `error-code-registry.json` carries `http_status_by_context` for the account
+/// lifecycle codes: the same code is `401` when an already-issued session
+/// touches a protected resource and `403` when new session issuance or refresh
+/// is denied by policy. Resolving through the generated table keeps that split
+/// where the Spec defines it instead of duplicating it per call site.
+pub(crate) fn account_lifecycle_status(
+    code: arkret_wire::ErrorCode,
+    context: arkret_wire::ErrorStatusContext,
+) -> StatusCode {
+    StatusCode::from_u16(code.http_status_in(context))
+        .expect("registry http statuses are valid HTTP status codes")
 }
 
 #[derive(Debug, Serialize)]

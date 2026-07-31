@@ -30,6 +30,9 @@
 //!
 //! - `deny_actors[]` — DIDs that are unconditionally denied (`hard_deny`).
 //! - `deny_actions[]` — action tokens that are unconditionally denied.
+//! - `throttle_actions` — actions that are rate limited (`soft_deny` with a signed
+//!   `next_retry_at`); either a bare action list or an object keyed by action carrying
+//!   `retry_after_ms`.
 //! - `require_review_actions[]` — actions that route to manual review.
 //!
 //! When the loose policy data is absent or empty we default to `allow`
@@ -59,6 +62,11 @@ use crate::services::policy_frontier::Frontier;
 /// they are kept as local constants rather than aliased to SDK symbols.
 const REASON_CODE_OK: &str = "ok";
 const REASON_CODE_POLICY_REVIEW_REQUIRED: &str = "policy_review_required";
+/// `policy-server.md` §4 registers `spam_flood` as the throttle reason code.
+const REASON_CODE_SPAM_FLOOD: &str = "spam_flood";
+/// Retry window applied when a `throttle_actions` rule names an action but
+/// declares no `retry_after_ms` of its own.
+const DEFAULT_THROTTLE_RETRY_AFTER_MS: u64 = 30_000;
 const CANDIDATE_JOIN_POLICY_PROFILE: &str = "ak.profile.candidate.join_policy.v1";
 
 /// AKP-0010 (R3 spec-sync 2026-05-27, arkret-spec b47ff6ec) — call /
@@ -159,6 +167,10 @@ pub struct PolicyDecision {
     /// Obligations the calling service MUST execute before / after
     /// applying the decision. Empty for plain `allow` paths.
     pub obligations: Vec<PolicyObligation>,
+    /// Earliest time the caller may retry. [`policy-server.md` §4] keeps
+    /// this to throttle / backoff paths, so every other decision leaves it
+    /// `None` and the signed transcript omits the key entirely.
+    pub next_retry_at: Option<DateTime<Utc>>,
     /// Policy-source revision this decision was computed against. Empty
     /// string when the evaluator runs against the default (no
     /// `policy_data` row yet).
@@ -176,6 +188,7 @@ impl PolicyDecision {
             decision: AuthzDecision::Allow,
             reason_code: REASON_CODE_OK.to_owned(),
             obligations: Vec::new(),
+            next_retry_at: None,
             policy_version,
         }
     }
@@ -188,6 +201,27 @@ impl PolicyDecision {
             decision: AuthzDecision::HardDeny,
             reason_code: reason_code.into(),
             obligations: Vec::new(),
+            next_retry_at: None,
+            policy_version,
+        }
+    }
+
+    /// Throttle path: the actor may retry the same action once
+    /// `next_retry_at` has passed. This is the only decision shape that
+    /// carries a retry time, and the `rate_limit` obligation and the retry
+    /// time are produced together so a caller cannot honour one without the
+    /// other.
+    #[must_use]
+    pub fn throttled(next_retry_at: DateTime<Utc>, bucket: String, policy_version: String) -> Self {
+        Self {
+            decision: AuthzDecision::SoftDeny,
+            reason_code: REASON_CODE_SPAM_FLOOD.to_owned(),
+            obligations: vec![PolicyObligation {
+                kind: "rate_limit".to_owned(),
+                expires_at: Some(next_retry_at),
+                payload: serde_json::json!({"bucket": bucket}),
+            }],
+            next_retry_at: Some(next_retry_at),
             policy_version,
         }
     }
@@ -216,6 +250,7 @@ impl PolicyDecision {
                     "profile": "ak.profile.accountable_principals.strict_reject.v1",
                 }),
             }],
+            next_retry_at: None,
             policy_version,
         }
     }
@@ -400,6 +435,7 @@ fn match_rules_with_grants(
                 decision: AuthzDecision::HardDeny,
                 reason_code: arkret_wire::ErrorCode::POLICY_VIOLATION.to_owned(),
                 obligations: Vec::new(),
+                next_retry_at: None,
                 policy_version: policy_version.to_owned(),
             };
         }
@@ -409,8 +445,19 @@ fn match_rules_with_grants(
                 decision: AuthzDecision::HardDeny,
                 reason_code: arkret_wire::ErrorCode::POLICY_VIOLATION.to_owned(),
                 obligations: Vec::new(),
+                next_retry_at: None,
                 policy_version: policy_version.to_owned(),
             };
+        }
+    }
+
+    for scope in scopes {
+        if let Some(retry_after) = throttle_retry_after(scope, action_str) {
+            return PolicyDecision::throttled(
+                Utc::now() + retry_after,
+                action_str.to_owned(),
+                policy_version.to_owned(),
+            );
         }
     }
 
@@ -428,6 +475,7 @@ fn match_rules_with_grants(
                     "membership_frontier_digest": frontier.membership_frontier_digest,
                 }),
             }],
+            next_retry_at: None,
             policy_version: policy_version.to_owned(),
         };
     }
@@ -438,6 +486,7 @@ fn match_rules_with_grants(
                 decision: AuthzDecision::RequireReview,
                 reason_code: REASON_CODE_POLICY_REVIEW_REQUIRED.to_owned(),
                 obligations: Vec::new(),
+                next_retry_at: None,
                 policy_version: policy_version.to_owned(),
             };
         }
@@ -597,6 +646,29 @@ fn value_contains_str(haystack: Option<&Value>, needle: &str) -> bool {
         .is_some_and(|items| items.iter().any(|v| v.as_str() == Some(needle)))
 }
 
+/// Retry window a `throttle_actions` rule declares for `action`, if any.
+///
+/// The rule is either a bare action list — which takes the deployment default
+/// window — or an object keyed by action carrying its own `retry_after_ms`.
+/// A window of zero would tell the caller to retry immediately, which is not a
+/// throttle, so it is treated as "no rule" rather than silently rounded up.
+fn throttle_retry_after(scope: &Value, action: &str) -> Option<chrono::Duration> {
+    let rule = scope.get("throttle_actions")?;
+    let retry_after_ms = if rule.is_array() {
+        value_contains_str(Some(rule), action).then_some(DEFAULT_THROTTLE_RETRY_AFTER_MS)?
+    } else {
+        let entry = rule.get(action)?;
+        entry
+            .get("retry_after_ms")
+            .and_then(Value::as_u64)
+            .unwrap_or(DEFAULT_THROTTLE_RETRY_AFTER_MS)
+    };
+    if retry_after_ms == 0 {
+        return None;
+    }
+    chrono::Duration::try_milliseconds(i64::try_from(retry_after_ms).ok()?)
+}
+
 /// Type alias for the depot-injected handle. The handler reads it via
 /// `DepotExt::policy_evaluator`.
 pub type PolicyEvaluatorHandle = Arc<dyn PolicyEvaluator>;
@@ -666,6 +738,70 @@ mod tests {
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
         assert_eq!(d.reason_code, "ok");
+        assert!(d.next_retry_at.is_none());
+    }
+
+    #[test]
+    fn throttled_action_carries_a_retry_time_and_a_rate_limit_obligation() {
+        let data = serde_json::json!({
+            "throttle_actions": {"ak.message.create": {"retry_after_ms": 45_000}}
+        });
+        let r = req("did:web:alice.example", "ak.message.create");
+        let before = Utc::now();
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
+
+        assert!(matches!(d.decision, AuthzDecision::SoftDeny));
+        assert_eq!(d.reason_code, "spam_flood");
+        let next_retry_at = d.next_retry_at.expect("throttle must declare a retry time");
+        assert!(next_retry_at >= before + chrono::Duration::milliseconds(45_000));
+        assert_eq!(d.obligations.len(), 1);
+        assert_eq!(d.obligations[0].kind, "rate_limit");
+        assert_eq!(d.obligations[0].expires_at, Some(next_retry_at));
+    }
+
+    #[test]
+    fn bare_throttle_action_list_uses_the_default_window() {
+        let data = serde_json::json!({"throttle_actions": ["ak.message.create"]});
+        let r = req("did:web:alice.example", "ak.message.create");
+        let before = Utc::now();
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
+
+        let next_retry_at = d.next_retry_at.expect("throttle must declare a retry time");
+        assert!(
+            next_retry_at
+                >= before
+                    + chrono::Duration::milliseconds(
+                        i64::try_from(DEFAULT_THROTTLE_RETRY_AFTER_MS).unwrap()
+                    )
+        );
+    }
+
+    #[test]
+    fn unthrottled_actions_and_zero_windows_leave_next_retry_at_absent() {
+        // A zero window would tell the caller to retry immediately, which is
+        // not a throttle — it must not surface as a signed retry time.
+        for data in [
+            serde_json::json!({"throttle_actions": ["ak.message.update"]}),
+            serde_json::json!({"throttle_actions": {"ak.message.create": {"retry_after_ms": 0}}}),
+        ] {
+            let r = req("did:web:alice.example", "ak.message.create");
+            let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
+            assert!(matches!(d.decision, AuthzDecision::Allow), "{data}");
+            assert!(d.next_retry_at.is_none(), "{data}");
+        }
+    }
+
+    #[test]
+    fn deny_rules_outrank_a_throttle_on_the_same_action() {
+        let data = serde_json::json!({
+            "deny_actions": ["ak.message.create"],
+            "throttle_actions": ["ak.message.create"]
+        });
+        let r = req("did:web:alice.example", "ak.message.create");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
+
+        assert!(matches!(d.decision, AuthzDecision::HardDeny));
+        assert!(d.next_retry_at.is_none());
     }
 
     #[test]

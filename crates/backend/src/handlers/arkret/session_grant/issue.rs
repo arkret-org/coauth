@@ -668,22 +668,21 @@ pub(crate) fn map_oidc_exchange_error(
             StatusCode::NOT_FOUND,
             arkret_wire::ErrorCode::PRINCIPAL_UNKNOWN,
         ),
-        "account_locked" => (
-            StatusCode::FORBIDDEN,
-            arkret_wire::ErrorCode::ACCOUNT_LOCKED,
-        ),
-        "account_suspended" => (
-            StatusCode::FORBIDDEN,
-            arkret_wire::ErrorCode::ACCOUNT_SUSPENDED,
-        ),
-        "account_deactivated" => (
-            StatusCode::FORBIDDEN,
-            arkret_wire::ErrorCode::ACCOUNT_DEACTIVATED,
-        ),
-        "account_erased" => (
-            StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::ACCOUNT_ERASED,
-        ),
+        // Account lifecycle statuses are context-dependent: the Spec registry
+        // splits them per entry point, and issuance is the
+        // `session_issuance_or_refresh` context. Read the split from the
+        // generated table rather than restating it here.
+        "account_locked" | "account_suspended" | "account_deactivated" | "account_erased" => {
+            let code = arkret_wire::ErrorCode::from_wire(error.code)
+                .expect("account lifecycle codes are registered");
+            (
+                super::account_lifecycle_status(
+                    code,
+                    arkret_wire::ErrorStatusContext::SessionIssuanceOrRefresh,
+                ),
+                code.as_str(),
+            )
+        }
         "account_unavailable" | "principal_account_registration_failed" => (
             StatusCode::SERVICE_UNAVAILABLE,
             arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,

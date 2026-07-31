@@ -549,37 +549,37 @@ pub async fn refresh_session_grant(
         ));
     }
 
-    let lifecycle_error = match browser_session.user.status {
-        arkret_models_collaboration::objects::account_status::AccountStatus::Locked => Some((
-            StatusCode::FORBIDDEN,
-            arkret_wire::ErrorCode::ACCOUNT_LOCKED,
-        )),
-        arkret_models_collaboration::objects::account_status::AccountStatus::Suspended => Some((
-            StatusCode::FORBIDDEN,
-            arkret_wire::ErrorCode::ACCOUNT_SUSPENDED,
-        )),
-        arkret_models_collaboration::objects::account_status::AccountStatus::Deactivated => Some((
-            StatusCode::FORBIDDEN,
-            arkret_wire::ErrorCode::ACCOUNT_DEACTIVATED,
-        )),
+    // Refresh is the `session_issuance_or_refresh` context, so the per-context
+    // status split lives in the Spec registry, not here — this match only picks
+    // which code the current account status maps to.
+    let lifecycle_code = match browser_session.user.status {
+        arkret_models_collaboration::objects::account_status::AccountStatus::Locked => {
+            Some(arkret_wire::ErrorCode::AccountLocked)
+        }
+        arkret_models_collaboration::objects::account_status::AccountStatus::Suspended => {
+            Some(arkret_wire::ErrorCode::AccountSuspended)
+        }
+        arkret_models_collaboration::objects::account_status::AccountStatus::Deactivated => {
+            Some(arkret_wire::ErrorCode::AccountDeactivated)
+        }
         arkret_models_collaboration::objects::account_status::AccountStatus::ErasurePending => {
-            Some((
-                StatusCode::UNAUTHORIZED,
-                arkret_wire::ErrorCode::ACCOUNT_ERASED,
-            ))
+            Some(arkret_wire::ErrorCode::AccountErased)
         }
         arkret_models_collaboration::objects::account_status::AccountStatus::Active
         | arkret_models_collaboration::objects::account_status::AccountStatus::SoftLoggedOut => {
             None
         }
     };
-    if let Some((status, code)) = lifecycle_error {
+    if let Some(code) = lifecycle_code {
         repo.cancel()
             .await
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
         return Err(ArkretRouteError::coded(
-            status,
-            code,
+            super::account_lifecycle_status(
+                code,
+                arkret_wire::ErrorStatusContext::SessionIssuanceOrRefresh,
+            ),
+            code.as_str(),
             "account status forbids session-grant refresh",
         ));
     }

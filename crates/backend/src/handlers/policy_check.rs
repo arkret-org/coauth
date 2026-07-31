@@ -274,7 +274,7 @@ pub(crate) async fn build_policy_check_response(
             kid: String::new(),
             sig: String::new(),
         },
-        next_retry_at: None,
+        next_retry_at: decision.next_retry_at,
         obligations: obligations_wire,
     };
     let signer = PolicySigner::new(key_store, policy_server_did.to_string());

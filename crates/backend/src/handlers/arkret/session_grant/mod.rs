@@ -25,4 +25,4 @@ pub use session_logout::logout_auth_session;
 pub use types::{
     PatchPrimaryHandlePreferenceRequestBody, PrimaryHandlePreferenceOutcome, SessionGrantMaterial,
 };
-pub(crate) use types::{SessionGrantRecord, SessionGrantTarget};
+pub(crate) use types::{SessionGrantRecord, SessionGrantTarget, account_lifecycle_status};
