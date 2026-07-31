@@ -249,6 +249,7 @@ async fn verify_cross_session_lifecycle_proof(
     key_store: &coauth_keystore::Keystore,
     repo: &mut coauth_data::BoxRepository,
     did_resolver: &dyn crate::services::did_resolver::DidResolverService,
+    binding_store: &crate::services::did_binding::DurableVerifiedDidBindingStore,
     body: &SessionRevokeRequestBody,
     proof: &AccountLifecycleProof,
     current_grant: &SessionGrant,
@@ -300,25 +301,30 @@ async fn verify_cross_session_lifecycle_proof(
         )))
     })?;
 
-    let resolution = did_resolver
-        .resolve_did_document(
-            http_client,
-            url_builder,
-            arkret_config,
-            key_store,
-            repo,
-            &current_grant.subject,
-        )
-        .await
-        .map_err(|error| {
-            lifecycle_proof_invalid(format!("DID document resolution failed: {error}"))
-        })?;
-    if let Some(rejection) = resolution.identity_fact_rejection() {
-        return Err(lifecycle_proof_invalid(format!(
-            "DID resolver result cannot back a full identity fact: {}",
-            rejection.as_str()
-        )));
-    }
+    // §4 row 7 — a cross-session revoke is a high-risk write, so it demands
+    // `fresh_within(HIGH_RISK_MAX_AGE)` under the closed `Principal` purpose.
+    // Degraded / fallback / unproven-controller evidence maps to
+    // `Stale` / `Quarantined` and fails closed inside `authority_document`,
+    // which replaces the previous `identity_fact_rejection` gate.
+    let resolution = crate::services::did_binding::authority_document(
+        http_client,
+        url_builder,
+        arkret_config,
+        key_store,
+        repo,
+        did_resolver,
+        binding_store,
+        &current_grant.subject,
+        arkret_identity::DidBindingPurpose::Principal,
+        crate::services::did_binding::HIGH_RISK_MAX_AGE,
+        now,
+    )
+    .await
+    .map_err(|error| {
+        lifecycle_proof_invalid(format!(
+            "no fresh accepted principal binding for the session subject: {error}"
+        ))
+    })?;
     if resolution.document.verification_method.is_empty() {
         return Err(lifecycle_proof_invalid(
             "DID document has no verificationMethod entries",
@@ -449,6 +455,7 @@ pub async fn revoke_session_grant_endpoint(
     let key_store = depot.key_store()?;
     let http_client = depot.http_client()?;
     let did_resolver = depot.did_resolver_service()?;
+    let binding_store = depot.verified_did_binding_store()?;
     let clock = crate::handlers::make_clock();
 
     let presented_grant_jwt = bearer_session_grant(req)?.to_owned();
@@ -500,6 +507,7 @@ pub async fn revoke_session_grant_endpoint(
             &key_store,
             &mut repo,
             &*did_resolver,
+            binding_store.as_ref(),
             &body,
             proof,
             &current_grant,

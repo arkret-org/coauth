@@ -3,6 +3,7 @@ pub mod cross_signing_publish;
 pub mod device_enrollment_authority;
 pub mod device_revoke;
 pub mod device_signing_directory;
+pub mod did_binding;
 pub mod did_binding_proof;
 pub mod did_resolver;
 pub mod dpop;

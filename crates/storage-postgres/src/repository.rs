@@ -7,6 +7,7 @@ use coauth_data::app_session::AppSessionRepository;
 use coauth_data::audit::{AuditRepository, HandleAuditRepository};
 use coauth_data::circle_capability::CircleCapabilityGrantRepository;
 use coauth_data::collaboration_capability::CollaborationCapabilityGrantRepository;
+use coauth_data::did_binding::VerifiedDidBindingRepository;
 use coauth_data::dpop_replay::DpopReplayRepository;
 use coauth_data::notification::{NotificationRepository, NotificationTemplateRepository};
 use coauth_data::oauth::{
@@ -48,6 +49,7 @@ use crate::app_session::PgAppSessionRepository;
 use crate::audit::PgAuditRepository;
 use crate::circle_capability::PgCircleCapabilityGrantRepository;
 use crate::collaboration_capability::PgCollaborationCapabilityGrantRepository;
+use crate::did_binding::PgVerifiedDidBindingRepository;
 use crate::dpop_replay::PgDpopReplayRepository;
 use crate::handle_audit::PgHandleAuditRepository;
 use crate::notification::PgNotificationRepository;
@@ -245,6 +247,12 @@ impl RepositoryAccess for PgRepository {
         &'c mut self,
     ) -> Box<dyn OrganizationControlRepository<Error = Self::Error> + 'c> {
         Box::new(PgOrganizationControlRepository::new(&mut self.conn))
+    }
+
+    fn verified_did_binding<'c>(
+        &'c mut self,
+    ) -> Box<dyn VerifiedDidBindingRepository<Error = Self::Error> + 'c> {
+        Box::new(PgVerifiedDidBindingRepository::new(&mut self.conn))
     }
 
     fn dpop_replay<'c>(&'c mut self) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c> {

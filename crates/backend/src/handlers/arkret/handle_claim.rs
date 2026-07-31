@@ -39,6 +39,20 @@ fn hash_for_handle_claim(value: impl Into<String>) -> Result<Hash, SessionGrantE
     Hash::new(value).map_err(|error| SessionGrantError::Other(error.into()))
 }
 
+/// `<service DID>#<kid>` as a strongly typed DID URL.
+///
+/// The issuer service id is a DID and the keystore `kid` is the JWS `kid`;
+/// a deployment whose `kid` uses characters outside the spec `did_url`
+/// fragment charset fails closed here instead of emitting a wire-invalid
+/// `verification_method`.
+fn did_url_for_handle_claim(value: String) -> Result<arkret_wire::DidUrl, SessionGrantError> {
+    arkret_wire::DidUrl::new(value).map_err(|error| {
+        SessionGrantError::Other(anyhow::anyhow!(
+            "handle claim verification_method is not a DID URL: {error}"
+        ))
+    })
+}
+
 /// Mint a handle-claim JWT bound to `audience`. The claim's
 /// `member_delivery_binding` MUST come from upstream policy (handed to this
 /// function by the caller); we never default to `did_document_default`.
@@ -117,7 +131,7 @@ pub(crate) fn issue_handle_claim(
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
-    let verification_method = format!("{issuer_service_id}#{key_id}");
+    let verification_method = did_url_for_handle_claim(format!("{issuer_service_id}#{key_id}"))?;
     let proof_payload_digest = hash_for_handle_claim(claim_digest.clone())?;
 
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());

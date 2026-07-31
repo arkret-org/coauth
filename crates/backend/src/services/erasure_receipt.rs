@@ -59,30 +59,41 @@ pub async fn verify_erasure_receipt(
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
+    binding_store: &crate::services::did_binding::DurableVerifiedDidBindingStore,
     receipt: &ErasureReceipt,
     retained_stub: Option<&VerificationStub>,
+    now: chrono::DateTime<chrono::Utc>,
 ) -> Result<(), ErasureReceiptVerificationError> {
     validate_retained_stub(receipt, retained_stub)?;
     let expected_digest = receipt.canonical_payload_digest()?;
     let proof_payload = receipt.canonical_proof_input()?;
 
-    let resolution = did_resolver
-        .resolve_did_document(
-            http_client,
-            url_builder,
-            arkret_config,
-            key_store,
-            repo,
-            receipt.issuer.as_str(),
-        )
-        .await?;
-    if let Some(rejection) = resolution.identity_fact_rejection() {
-        return Err(
-            ErasureReceiptVerificationError::ResolverNotFullIdentityFact(
-                rejection.as_str().to_owned(),
-            ),
-        );
-    }
+    // §4 last row — "verifying a third-party claim / receipt / attestation
+    // when this deployment holds no accepted binding for its issuer key". The
+    // DID resolved here is literally `receipt.issuer`, so the closed purpose is
+    // `Issuer` (not `AdminAction`, which is reserved for the *acting admin's
+    // own* DID in `revocation_approval` / `risk_action`). Erasure is a
+    // high-risk write, hence `fresh_within(HIGH_RISK_MAX_AGE)`; degraded /
+    // fallback / unproven-controller evidence fails closed inside
+    // `authority_document`, replacing the previous `identity_fact_rejection`
+    // gate.
+    let resolution = crate::services::did_binding::authority_document(
+        http_client,
+        url_builder,
+        arkret_config,
+        key_store,
+        repo,
+        did_resolver,
+        binding_store,
+        receipt.issuer.as_str(),
+        arkret_identity::DidBindingPurpose::Issuer,
+        crate::services::did_binding::HIGH_RISK_MAX_AGE,
+        now,
+    )
+    .await
+    .map_err(|error| {
+        ErasureReceiptVerificationError::ResolverNotFullIdentityFact(error.to_string())
+    })?;
     if resolution.document.verification_method.is_empty() {
         return Err(ErasureReceiptVerificationError::NoVerificationMethod);
     }

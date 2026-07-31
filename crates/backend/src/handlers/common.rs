@@ -268,6 +268,10 @@ pub trait DepotExt {
     fn did_resolver_service(
         &self,
     ) -> Result<crate::services::did_resolver::DidResolverServiceHandle, RouteError>;
+    /// Shared store of accepted, purpose-scoped DID bindings (DID-P2-A).
+    fn verified_did_binding_store(
+        &self,
+    ) -> Result<crate::services::did_binding::VerifiedDidBindingStoreHandle, RouteError>;
     fn dpop_verifier(&self) -> Result<DpopVerifier, RouteError>;
     fn webauthn_service(
         &self,
@@ -404,6 +408,12 @@ impl DepotExt for Depot {
         &self,
     ) -> Result<crate::services::did_resolver::DidResolverServiceHandle, RouteError> {
         depot_get(self, "did_resolver_service")
+    }
+
+    fn verified_did_binding_store(
+        &self,
+    ) -> Result<crate::services::did_binding::VerifiedDidBindingStoreHandle, RouteError> {
+        depot_get(self, crate::services::did_binding::DEPOT_KEY)
     }
 
     fn dpop_verifier(&self) -> Result<DpopVerifier, RouteError> {

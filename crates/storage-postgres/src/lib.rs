@@ -33,6 +33,8 @@ pub mod audit;
 pub mod circle_capability;
 /// PostgreSQL collaboration capability grant repository.
 pub mod collaboration_capability;
+/// PostgreSQL accepted-DID-binding repository (DID-P2-A).
+pub mod did_binding;
 /// PostgreSQL DPoP proof replay repository.
 pub mod dpop_replay;
 /// PostgreSQL append-only handle audit log repository (T3.2).

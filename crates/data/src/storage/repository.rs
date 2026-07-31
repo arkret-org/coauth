@@ -11,6 +11,7 @@ use crate::app_session::AppSessionRepository;
 use crate::audit::AuditRepository;
 use crate::circle_capability::CircleCapabilityGrantRepository;
 use crate::collaboration_capability::CollaborationCapabilityGrantRepository;
+use crate::did_binding::VerifiedDidBindingRepository;
 use crate::dpop_replay::DpopReplayRepository;
 use crate::notification::NotificationRepository;
 use crate::oauth::{
@@ -179,6 +180,11 @@ pub trait RepositoryAccess: Send {
         &'c mut self,
     ) -> Box<dyn OrganizationControlRepository<Error = Self::Error> + 'c>;
 
+    /// Get a [`VerifiedDidBindingRepository`].
+    fn verified_did_binding<'c>(
+        &'c mut self,
+    ) -> Box<dyn VerifiedDidBindingRepository<Error = Self::Error> + 'c>;
+
     /// Get a [`DpopReplayRepository`].
     fn dpop_replay<'c>(&'c mut self) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c>;
 
@@ -343,6 +349,7 @@ mod impls {
     use crate::audit::AuditRepository;
     use crate::circle_capability::CircleCapabilityGrantRepository;
     use crate::collaboration_capability::CollaborationCapabilityGrantRepository;
+    use crate::did_binding::VerifiedDidBindingRepository;
     use crate::dpop_replay::DpopReplayRepository;
     use crate::notification::NotificationRepository;
     use crate::oauth::{
@@ -459,6 +466,15 @@ mod impls {
         ) -> Box<dyn CollaborationCapabilityGrantRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(
                 self.inner.collaboration_capability_grant(),
+                &mut self.mapper,
+            ))
+        }
+
+        fn verified_did_binding<'c>(
+            &'c mut self,
+        ) -> Box<dyn VerifiedDidBindingRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(
+                self.inner.verified_did_binding(),
                 &mut self.mapper,
             ))
         }
@@ -747,6 +763,12 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn CollaborationCapabilityGrantRepository<Error = Self::Error> + 'c> {
             (**self).collaboration_capability_grant()
+        }
+
+        fn verified_did_binding<'c>(
+            &'c mut self,
+        ) -> Box<dyn VerifiedDidBindingRepository<Error = Self::Error> + 'c> {
+            (**self).verified_did_binding()
         }
 
         fn dpop_replay<'c>(

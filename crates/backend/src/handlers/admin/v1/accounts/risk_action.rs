@@ -342,6 +342,7 @@ async fn verify_approval_proof_jws(
     key_store: &coauth_keystore::Keystore,
     repo: &mut coauth_data::BoxRepository,
     did_resolver: &dyn DidResolverService,
+    binding_store: &crate::services::did_binding::DurableVerifiedDidBindingStore,
     proof_jws: &str,
     proposal_id: &str,
     account_id: Ulid,
@@ -363,17 +364,26 @@ async fn verify_approval_proof_jws(
         approval_note,
         approved_by,
     )?;
-    let resolution = did_resolver
-        .resolve_did_document(
-            http_client,
-            url_builder,
-            arkret_config,
-            key_store,
-            repo,
-            approved_by,
-        )
-        .await
-        .map_err(|error| AppError::bad_request(format!("admin_did_resolve_failed: {error}")))?;
+    // §4 row 7 — risk actions (`disable` / `erase` / `reset_recovery` /
+    // `lock`) are high-risk writes, so the approving admin's own DID must
+    // satisfy `fresh_within(HIGH_RISK_MAX_AGE)` under the closed `AdminAction`
+    // purpose. Same purpose as `revocation_approval`, so two approvals inside
+    // the window share one acceptance and one network fetch.
+    let resolution = crate::services::did_binding::authority_document(
+        http_client,
+        url_builder,
+        arkret_config,
+        key_store,
+        repo,
+        did_resolver,
+        binding_store,
+        approved_by,
+        arkret_identity::DidBindingPurpose::AdminAction,
+        crate::services::did_binding::HIGH_RISK_MAX_AGE,
+        crate::handlers::make_clock().now(),
+    )
+    .await
+    .map_err(|error| AppError::bad_request(format!("admin_did_resolve_failed: {error}")))?;
     if resolution.document.verification_method.is_empty() {
         return Err(AppError::bad_request(
             "approved_by DID document has no verificationMethod entries",
@@ -605,6 +615,7 @@ pub async fn approve(
         &key_store,
         &mut repo,
         did_resolver.as_ref(),
+        depot.verified_did_binding_store()?.as_ref(),
         &params.approval_proof_jws,
         &proposal_id,
         account.id,

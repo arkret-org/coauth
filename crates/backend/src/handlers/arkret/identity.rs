@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
 use arkret_identifiers::Did;
+use arkret_identity::DidBindingPurpose;
 use arkret_models_discovery::{
     DirectoryHandleResolutionOutcome, DirectoryResolveHandleRequestBody,
 };
@@ -15,6 +16,7 @@ use salvo::prelude::*;
 use super::*;
 use crate::handlers::RequesterFingerprint;
 use crate::handlers::common::{DepotExt, extract_bound_activity_tracker};
+use crate::services::did_binding;
 
 const DIRECTORY_RESOLVE_FAILURE_FLOOR: Duration = Duration::from_millis(25);
 
@@ -49,35 +51,51 @@ pub async fn identity_resolve(
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
-    let key_store = depot.key_store()?;
-    let http_client = depot.http_client()?;
-    let did_resolver = depot.did_resolver_service()?;
+    let binding_store = depot.verified_did_binding_store()?;
     let mut repo = depot.repo().await?;
 
-    // coauth no longer fabricates DID documents for its own users. User
-    // principal DIDs are `did:webvh:…` documents hosted by the principal
-    // server and resolve through the normal chain below.
-    let resolution = did_resolver
-        .resolve_did_document(
-            &http_client,
-            &url_builder,
-            &arkret_config,
-            &key_store,
-            &mut repo,
-            body.did.as_str(),
-        )
-        .await
-        .map_err(map_did_resolve_error)?;
-    repo.cancel()
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    // coauth no longer fabricates DID documents for its own users, and this
+    // endpoint is an ordinary read (`did-usage-and-verification.md` §3): it
+    // serves a *previously accepted* principal binding's pinned document and
+    // never enters the authority path. None of §4's closed triggers is
+    // reachable from a plain resolve request, so a miss is a not-found — the
+    // handler deliberately has no resolver handle to fall back to.
+    let read = did_binding::ordinary_read_document(
+        &url_builder,
+        &arkret_config,
+        &mut repo,
+        binding_store.as_ref(),
+        body.did.as_str(),
+        DidBindingPurpose::Principal,
+        crate::handlers::make_clock().now(),
+    )
+    .await
+    .map_err(map_did_binding_read_error)?;
 
     Ok(Json(IdentityResolveOutcome {
-        did_document: did_document_object(resolution.document)?,
-        key_log_head: resolution.key_log_head,
+        did_document: did_document_object(read.document)?,
+        key_log_head: read.history_head,
         seq: None,
         receipts: Vec::new(),
     }))
+}
+
+/// Ordinary-read binding lookups translate a miss into the same `not_found`
+/// the resolver-backed handler produced for an unknown DID. Anything else is a
+/// deployment/configuration fault.
+fn map_did_binding_read_error(
+    error: crate::services::did_binding::DidBindingError,
+) -> ArkretRouteError {
+    use crate::services::did_binding::DidBindingError;
+    match error {
+        DidBindingError::NoAcceptedBinding { .. } | DidBindingError::NotAuthorityGrade { .. } => {
+            ArkretRouteError::NotFound
+        }
+        DidBindingError::Document(message) => {
+            ArkretRouteError::BadRequest(format!("invalid did: {message}"))
+        }
+        other => ArkretRouteError::Internal(Box::new(other)),
+    }
 }
 
 #[handler]
@@ -91,30 +109,26 @@ pub async fn identity_document(
     let did = parse_did_field("did", did)?;
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
-    let key_store = depot.key_store()?;
-    let http_client = depot.http_client()?;
-    let did_resolver = depot.did_resolver_service()?;
+    let binding_store = depot.verified_did_binding_store()?;
     let mut repo = depot.repo().await?;
 
-    // No local user-document fabrication — see `identity_resolve`.
-    let resolution = did_resolver
-        .resolve_did_document(
-            &http_client,
-            &url_builder,
-            &arkret_config,
-            &key_store,
-            &mut repo,
-            did.as_str(),
-        )
-        .await
-        .map_err(map_did_resolve_error)?;
-    repo.cancel()
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    // Ordinary read — see `identity_resolve`. No local user-document
+    // fabrication and no live resolution.
+    let read = did_binding::ordinary_read_document(
+        &url_builder,
+        &arkret_config,
+        &mut repo,
+        binding_store.as_ref(),
+        did.as_str(),
+        DidBindingPurpose::Principal,
+        crate::handlers::make_clock().now(),
+    )
+    .await
+    .map_err(map_did_binding_read_error)?;
 
     Ok(Json(IdentityDocumentViewOutcome(IdentityDocumentView {
-        did_document: did_document_object(resolution.document)?,
-        head_event_digest: resolution.key_log_head,
+        did_document: did_document_object(read.document)?,
+        head_event_digest: read.history_head,
         seq: None,
         receipts: Vec::new(),
     })))
@@ -133,8 +147,7 @@ pub async fn directory_resolve_handle(
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
-    let http_client = depot.http_client()?;
-    let did_resolver = depot.did_resolver_service()?;
+    let binding_store = depot.verified_did_binding_store()?;
     let limiter = depot.limiter()?;
     let activity_tracker = extract_bound_activity_tracker(req, depot);
     let requester = activity_tracker
@@ -185,21 +198,25 @@ pub async fn directory_resolve_handle(
     if !verified {
         return Err(directory_resolve_not_found(started_at).await);
     }
-    let resolution = did_resolver
-        .resolve_did_document(
-            &http_client,
-            &url_builder,
-            &arkret_config,
-            &key_store,
-            &mut repo,
-            &did,
-        )
-        .await;
-    let Ok(resolution) = resolution else {
+    // §3: directory rendering is an ordinary read. The handle endorsement check
+    // below runs against the *pinned* document of an already accepted principal
+    // binding; a miss is blinded into the same not-found every other
+    // non-disclosable case produces, and never into a live resolution.
+    let read = did_binding::ordinary_read_document(
+        &url_builder,
+        &arkret_config,
+        &mut repo,
+        binding_store.as_ref(),
+        &did,
+        DidBindingPurpose::Principal,
+        crate::handlers::make_clock().now(),
+    )
+    .await;
+    let Ok(read) = read else {
         return Err(directory_resolve_not_found(started_at).await);
     };
     let canonical_handle = user_handle(&url_builder, &user);
-    if !did_document_endorses_handle(&resolution.document, &canonical_handle) {
+    if !did_document_endorses_handle(&read.document, &canonical_handle) {
         return Err(directory_resolve_not_found(started_at).await);
     }
     let clock = crate::handlers::make_clock();

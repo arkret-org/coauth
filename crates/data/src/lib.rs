@@ -47,6 +47,8 @@ pub mod circle_capability;
 pub mod clock;
 /// Durable collaboration capability grants.
 pub mod collaboration_capability;
+/// Durable accepted DID bindings (DID-P2-A).
+pub mod did_binding;
 /// Durable DPoP proof replay keys.
 pub mod dpop_replay;
 /// Persisted notification request, delivery, and audit event models.
@@ -148,6 +150,10 @@ pub use self::collaboration_capability::{
     CollaborationCapabilityGrantRepository, CollaborationCapabilityRevokeFanout,
     NewCollaborationCapabilityGrant, collaboration_action_requires_approval,
     is_collaboration_capability_action,
+};
+pub use self::did_binding::{
+    VerifiedDidBindingInvalidation, VerifiedDidBindingKeyColumns, VerifiedDidBindingRepository,
+    VerifiedDidBindingRow,
 };
 pub use self::dpop_replay::{DpopReplayRepository, NewDpopJtiReplay};
 pub use self::notification::{

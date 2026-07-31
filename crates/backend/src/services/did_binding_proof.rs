@@ -69,8 +69,10 @@ use coauth_keystore::Keystore;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+#[cfg(test)]
+use crate::services::did_resolver::DidResolution;
 use crate::services::did_resolver::{
-    DidResolution, DidResolutionIdentityFactRejection, DidResolveError, DidResolverService,
+    DidResolutionIdentityFactRejection, DidResolveError, DidResolverService,
 };
 
 pub const DID_BINDING_CONTROL_PROOF_SCHEMA: &str = "ak.schema.did_binding_control_proof.v1";
@@ -109,7 +111,11 @@ pub struct BindingStatementClaims {
 
 pub struct ValidatedDidBindingControlProof {
     pub claims: BindingStatementClaims,
-    pub resolution: DidResolution,
+    /// The accepted `AccountBinding` acceptance plus its pinned DID document
+    /// (DID-P2-A). Replaces the previous raw `DidResolution`: the acceptance
+    /// carries the trust domain, purpose, policy digest, evidence digest and
+    /// history head, and is reusable inside its freshness window.
+    pub binding: crate::services::did_binding::AuthorityDocument,
 }
 
 /// Validation errors. All variants are deterministic from the inputs and
@@ -124,6 +130,9 @@ pub enum DidBindingProofError {
 
     #[error("DID resolver failed: {0}")]
     Resolve(#[from] DidResolveError),
+
+    #[error("DID authority binding failed: {0}")]
+    Binding(#[from] crate::services::did_binding::DidBindingError),
 
     #[error("DID document has no verificationMethod entries")]
     NoVerificationKey,
@@ -224,15 +233,6 @@ pub fn normalize_did_for_binding(did: &str) -> Result<String, DidBindingProofErr
     Ok(trimmed.to_owned())
 }
 
-fn ensure_full_identity_fact_resolution(
-    resolution: &DidResolution,
-) -> Result<(), DidResolutionIdentityFactRejection> {
-    match resolution.identity_fact_rejection() {
-        Some(rejection) => Err(rejection),
-        None => Ok(()),
-    }
-}
-
 /// Validate a `control_proof` JWS against the resolved DID document and
 /// the requested binding statement.
 ///
@@ -257,6 +257,7 @@ pub async fn validate_control_proof(
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
+    binding_store: &crate::services::did_binding::DurableVerifiedDidBindingStore,
     nonce_store: &crate::services::nonce_store::NonceStore,
     proof_jws: &str,
     account_did: &str,
@@ -301,21 +302,29 @@ pub async fn validate_control_proof(
     }
     validate_canonical_statement_payload(&payload_bytes, claims)?;
 
-    // Resolve DID document
-    let resolution = did_resolver
-        .resolve_did_document(
-            http_client,
-            url_builder,
-            arkret_config,
-            key_store,
-            repo,
-            account_did,
-        )
-        .await?;
-    ensure_full_identity_fact_resolution(&resolution)
-        .map_err(DidBindingProofError::ResolverNotFullIdentityFact)?;
+    // §4 row 2 — "account registration / claim / recovery, or a service
+    // account binding a principal DID for the first time" is an authority
+    // trigger, and it explicitly requires a *current* control proof. So this
+    // path demands `fresh_within(HIGH_RISK_MAX_AGE)` under the closed
+    // `AccountBinding` purpose; a degraded / fallback / unproven-controller
+    // resolution lands as `Stale` / `Quarantined` and fails closed there,
+    // replacing the previous `ensure_full_identity_fact_resolution` gate.
+    let binding = crate::services::did_binding::authority_document(
+        http_client,
+        url_builder,
+        arkret_config,
+        key_store,
+        repo,
+        did_resolver,
+        binding_store,
+        account_did,
+        arkret_identity::DidBindingPurpose::AccountBinding,
+        crate::services::did_binding::HIGH_RISK_MAX_AGE,
+        now,
+    )
+    .await?;
 
-    let verification_methods = &resolution.document.verification_method;
+    let verification_methods = &binding.document.verification_method;
     if verification_methods.is_empty() {
         return Err(DidBindingProofError::NoVerificationKey);
     }
@@ -352,7 +361,7 @@ pub async fn validate_control_proof(
 
     Ok(ValidatedDidBindingControlProof {
         claims: claims.clone(),
-        resolution,
+        binding,
     })
 }
 
@@ -618,21 +627,43 @@ mod tests {
         }
     }
 
+    /// The degraded-resolver gate moved from the old
+    /// `ensure_full_identity_fact_resolution` helper into the shared binding
+    /// layer (DID-P2-A): a degraded resolution is now accepted into the store
+    /// as `Stale`, which an `AccountBinding` authority path — which always
+    /// demands `fresh_within(HIGH_RISK_MAX_AGE)` — must refuse.
     #[test]
     fn degraded_resolution_cannot_back_full_identity_or_verification_facts() {
+        use crate::services::did_binding;
+
         let resolution = resolution_with_identity_fact_rejection(
             DidResolutionIdentityFactRejection::CacheOnlyDegraded,
         );
+        let now = Utc::now();
+        let accepted = did_binding::binding_from_resolution(
+            &resolution,
+            arkret_identifiers::TypedTrustDomainId::new(TEST_TRUST_DOMAIN).unwrap(),
+            arkret_identity::DidBindingPurpose::AccountBinding,
+            arkret_identifiers::Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap(),
+            None,
+            did_binding::HIGH_RISK_MAX_AGE,
+            now,
+        )
+        .expect("a degraded resolution is still representable as a binding");
 
-        let binding_err = ensure_full_identity_fact_resolution(&resolution)
-            .map_err(DidBindingProofError::ResolverNotFullIdentityFact)
-            .expect_err("degraded resolver must not back DID binding proof success");
-        assert!(matches!(
-            binding_err,
-            DidBindingProofError::ResolverNotFullIdentityFact(
-                DidResolutionIdentityFactRejection::CacheOnlyDegraded
-            )
-        ));
+        assert_eq!(
+            accepted.binding().status(),
+            arkret_identity::DidBindingStatus::Stale
+        );
+        assert!(
+            !accepted.binding().is_usable_for_authority(
+                &arkret_identity::FreshnessRequirement::fresh_within(
+                    did_binding::HIGH_RISK_MAX_AGE
+                ),
+                now
+            ),
+            "degraded resolver must not back DID binding proof success"
+        );
     }
 
     #[test]
