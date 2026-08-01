@@ -964,7 +964,7 @@ CREATE TABLE public.users (
     is_guest boolean DEFAULT false NOT NULL,
     display_name text,
     avatar_url text,
-    preferred_locale text,
+    preferred_locale text CHECK (preferred_locale = ANY (ARRAY['en'::text, 'zh'::text])),
     handle_aliases text[] DEFAULT ARRAY[]::text[] NOT NULL
 );
 

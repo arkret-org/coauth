@@ -171,11 +171,12 @@ impl TryFrom<UserRow> for User {
             is_guest: row.is_guest,
             display_name: row.display_name,
             avatar_url: row.avatar_url,
-            // A row written before the column was constrained can hold
-            // anything (`zh-CN`, `klingon`, an empty string). Parse rather than
-            // trust: an unrenderable value becomes `None` and falls through to
-            // the next resolution tier instead of pinning the UI to a language
-            // no catalogue exists for.
+            // The column is `TEXT` with a CHECK restricting it to the shipped
+            // set, so this is the type conversion at the storage boundary. It
+            // parses rather than unwraps on purpose: if a value ever does get
+            // past the constraint, falling through to the next resolution tier
+            // is better than pinning the UI to a language no catalogue exists
+            // for.
             preferred_locale: row
                 .preferred_locale
                 .as_deref()
