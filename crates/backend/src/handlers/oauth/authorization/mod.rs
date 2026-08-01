@@ -157,15 +157,22 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
         .parse_queries()
         .map_err(|e| RouteError::Internal(Box::new(e)))?;
 
-    // OIDC `ui_locales` is the cross-application source of truth. Fall back
-    // to the request headers when the client did not provide it.
-    let requested_locales = params
-        .auth
-        .ui_locales
-        .iter()
-        .flatten()
-        .filter_map(|language| language.to_string().parse().ok());
-    let locale = crate::handlers::preferred_language_with_requested(req, depot, requested_locales);
+    // OIDC `ui_locales` is a space-separated preference list; hand it over
+    // verbatim, because the shared resolver parses that syntax directly. The
+    // account tier is not consulted here: this runs before the grant is bound
+    // to an authenticated user, so there is no account preference to read yet.
+    // The SPA applies it once the session exists.
+    let requested_locales = params.auth.ui_locales.as_ref().map(|tags| {
+        tags.iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(" ")
+    });
+    let locale = crate::handlers::preferred_language_with_requested(
+        req,
+        depot,
+        requested_locales.as_deref(),
+    );
 
     // Get cookie jar
     let cookie_jar = CookieJar::extract_from_request(req, depot)

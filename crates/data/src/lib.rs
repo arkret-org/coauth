@@ -208,6 +208,7 @@ pub use self::users::{
     UserPhoneAuthentication, UserPhoneAuthenticationCode, UserPrimaryHandlePreference, UserProfile,
     UserProfilePatch, UserRecoverySession, UserRecoveryTicket, UserRegistration,
     UserRegistrationPassword, UserRegistrationToken, UserTotpConfig, VerifiedUserHandleClaim,
+    parse_locale_preference_patch,
 };
 pub use self::utils::{BoxClock, BoxRng};
 pub use self::version::AppVersion;

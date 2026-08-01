@@ -68,6 +68,17 @@ pub fn AccountPage() -> Element {
                     updated_at: String::new(),
                 });
 
+            // Seed the account tier now that the profile is known. Until this
+            // point the SPA has only had the device cache to go on, so the
+            // stored preference could not outrank it — this is what closes the
+            // gap for a user who set their language on another device.
+            let stored_locale = profile
+                .preferred_locale
+                .as_deref()
+                .and_then(crate::translations::UiLocale::from_tag);
+            crate::translations::set_account_locale(stored_locale);
+            crate::translations::adopt_requested_locale_into_account(stored_locale);
+
             let has_plan = result.site_config.plan_management_iframe_uri.is_some();
             let admin_portal_url = if user.can_request_admin {
                 result.site_config.admin_portal_url.clone()

@@ -1,5 +1,6 @@
 use std::net::IpAddr;
 
+use arkret_locale::UiLocale;
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_models_identity::Handle;
 use chrono::{DateTime, Utc};
@@ -37,7 +38,7 @@ pub struct User {
     // Profile fields synced to the downstream principal projection.
     pub display_name: Option<String>,
     pub avatar_url: Option<String>,
-    pub preferred_locale: Option<String>,
+    pub preferred_locale: Option<UiLocale>,
     /// Interop alias handles for this user (e.g. `acct:<local>@<host>`).
     ///
     /// Spec 7157ee8 §3.1 — the canonical Arkret handle form is
@@ -156,7 +157,7 @@ impl User {
         UserProfile {
             display_name: self.display_name.clone(),
             avatar_url: self.avatar_url.clone(),
-            preferred_locale: self.preferred_locale.clone(),
+            preferred_locale: self.preferred_locale,
             updated_at: self.updated_at,
         }
     }
@@ -202,7 +203,7 @@ impl User {
             is_guest: false,
             display_name: Some("John".to_owned()),
             avatar_url: None,
-            preferred_locale: Some("en".to_owned()),
+            preferred_locale: Some(UiLocale::En),
             handle_aliases: Vec::new(),
         }]
     }
@@ -213,7 +214,7 @@ impl User {
 pub struct UserProfile {
     pub display_name: Option<String>,
     pub avatar_url: Option<String>,
-    pub preferred_locale: Option<String>,
+    pub preferred_locale: Option<UiLocale>,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -222,7 +223,7 @@ pub struct UserProfile {
 pub struct UserProfilePatch {
     pub display_name: Option<Option<String>>,
     pub avatar_url: Option<Option<String>>,
-    pub preferred_locale: Option<Option<String>>,
+    pub preferred_locale: Option<Option<UiLocale>>,
 }
 
 impl UserProfilePatch {
@@ -237,7 +238,7 @@ impl UserProfilePatch {
 pub struct UserPatch {
     pub display_name: Option<Option<String>>,
     pub avatar_url: Option<Option<String>>,
-    pub preferred_locale: Option<Option<String>>,
+    pub preferred_locale: Option<Option<UiLocale>>,
     pub can_request_admin: Option<bool>,
     pub status: Option<AccountStatus>,
     pub locked: Option<bool>,
@@ -276,7 +277,7 @@ impl From<UserProfilePatch> for UserPatch {
 pub struct AdminUserPatch {
     pub display_name: Option<Option<String>>,
     pub avatar_url: Option<Option<String>>,
-    pub preferred_locale: Option<Option<String>>,
+    pub preferred_locale: Option<Option<UiLocale>>,
     pub can_request_admin: Option<bool>,
     pub status: Option<AccountStatus>,
     pub locked: Option<bool>,
@@ -620,4 +621,86 @@ pub struct PrincipalDidBinding {
     pub enrollment_authority_ref: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+/// Parse a wire-supplied locale preference into the controlled set.
+///
+/// The column is plain `TEXT` and used to accept whatever a client sent, so
+/// rows exist holding `zh-CN`, and nothing stopped a caller storing a language
+/// the product does not ship. [`UiLocale`] is now the stored type, and this is
+/// the one place a client string may become one.
+///
+/// The three states are distinct and must stay distinct:
+///
+/// * `Ok(None)` — the field was absent from the patch; leave it alone.
+/// * `Ok(Some(None))` — an explicit `null`; clear the preference so the user
+///   falls back to their browser's language.
+/// * `Err(tag)` — a value the product cannot render. Returned as an error, not
+///   folded into "clear it": silently discarding a stated preference would
+///   leave the user's setting mysteriously unsaved, and silently storing it
+///   would put a value in the database that no catalogue can satisfy.
+///
+/// Region and script variants are accepted and folded onto the base language,
+/// so an existing client sending `zh-CN` keeps working and lands on `zh`.
+///
+/// # Errors
+///
+/// Returns the offending tag when it names a language the product does not
+/// ship.
+pub fn parse_locale_preference_patch(
+    raw: Option<Option<String>>,
+) -> Result<Option<Option<UiLocale>>, String> {
+    match raw {
+        None => Ok(None),
+        Some(None) => Ok(Some(None)),
+        Some(Some(tag)) if tag.trim().is_empty() => Ok(Some(None)),
+        Some(Some(tag)) => UiLocale::from_tag(&tag)
+            .map(|locale| Some(Some(locale)))
+            .ok_or(tag),
+    }
+}
+
+#[cfg(test)]
+mod locale_preference_tests {
+    use super::{UiLocale, parse_locale_preference_patch};
+
+    #[test]
+    fn an_absent_field_leaves_the_stored_preference_untouched() {
+        assert_eq!(parse_locale_preference_patch(None), Ok(None));
+    }
+
+    #[test]
+    fn an_explicit_null_clears_the_preference() {
+        assert_eq!(parse_locale_preference_patch(Some(None)), Ok(Some(None)));
+    }
+
+    #[test]
+    fn a_blank_string_is_treated_as_a_clear() {
+        for blank in ["", "   ", "\t"] {
+            assert_eq!(
+                parse_locale_preference_patch(Some(Some(blank.to_owned()))),
+                Ok(Some(None)),
+                "{blank:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn region_variants_fold_onto_the_stored_base_language() {
+        for tag in ["zh", "zh-CN", "zh-Hans", "ZH_TW"] {
+            assert_eq!(
+                parse_locale_preference_patch(Some(Some(tag.to_owned()))),
+                Ok(Some(Some(UiLocale::Zh))),
+                "{tag}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unshipped_language_is_rejected_rather_than_stored_or_dropped() {
+        assert_eq!(
+            parse_locale_preference_patch(Some(Some("fr-CA".to_owned()))),
+            Err("fr-CA".to_owned())
+        );
+    }
 }

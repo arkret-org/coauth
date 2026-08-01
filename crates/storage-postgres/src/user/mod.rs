@@ -1,6 +1,7 @@
 //! A module containing the PostgreSQL implementation of the user-related
 //! repositories
 
+use arkret_locale::UiLocale;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::pagination::PaginationDirection;
@@ -170,7 +171,15 @@ impl TryFrom<UserRow> for User {
             is_guest: row.is_guest,
             display_name: row.display_name,
             avatar_url: row.avatar_url,
-            preferred_locale: row.preferred_locale,
+            // A row written before the column was constrained can hold
+            // anything (`zh-CN`, `klingon`, an empty string). Parse rather than
+            // trust: an unrenderable value becomes `None` and falls through to
+            // the next resolution tier instead of pinning the UI to a language
+            // no catalogue exists for.
+            preferred_locale: row
+                .preferred_locale
+                .as_deref()
+                .and_then(UiLocale::from_tag),
             handle_aliases: row.handle_aliases,
         })
     }
@@ -336,7 +345,7 @@ impl UserRepository for PgUserRepository<'_> {
         }
 
         if let Some(preferred_locale) = patch.preferred_locale.as_ref() {
-            user.preferred_locale = preferred_locale.clone();
+            user.preferred_locale = *preferred_locale;
             changed = true;
         }
 
@@ -368,7 +377,7 @@ impl UserRepository for PgUserRepository<'_> {
                 users::can_request_admin.eq(user.can_request_admin),
                 users::display_name.eq(user.display_name.as_deref()),
                 users::avatar_url.eq(user.avatar_url.as_deref()),
-                users::preferred_locale.eq(user.preferred_locale.as_deref()),
+                users::preferred_locale.eq(user.preferred_locale.map(UiLocale::code)),
             ))
             .execute(self.conn)
             .await?;

@@ -1,3 +1,4 @@
+use arkret_locale::UiLocale;
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -111,14 +112,24 @@ pub async fn start_email_auth(
     let limiter = depot.limiter()?;
     let clock = make_clock();
     let mut rng = make_rng();
-    let notification_language =
-        crate::handlers::notification_language(req, depot, input.language.as_deref());
-
     let activity_tracker = extract_bound_activity_tracker(req, depot);
     let session_info = extract_session_info(req, depot);
 
     let repo = repo_factory.create().await?;
     let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+
+    // Resolved after the requester so the recipient's own stored preference is
+    // the top tier: a verification mail is read later, on whatever device they
+    // open, not necessarily the browser that triggered it.
+    let notification_language = crate::handlers::notification_language(
+        req,
+        depot,
+        requester
+            .user()
+            .and_then(|user| user.preferred_locale)
+            .map(UiLocale::code),
+        input.language.as_deref(),
+    );
 
     match start_email_verification(
         repo,
@@ -268,14 +279,24 @@ pub async fn resend_email_auth_code(
     let limiter = depot.limiter()?;
     let clock = make_clock();
     let mut rng = make_rng();
-    let notification_language =
-        crate::handlers::notification_language(req, depot, input.language.as_deref());
-
     let activity_tracker = extract_bound_activity_tracker(req, depot);
     let session_info = extract_session_info(req, depot);
 
     let repo = repo_factory.create().await?;
     let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+
+    // Resolved after the requester so the recipient's own stored preference is
+    // the top tier: a verification mail is read later, on whatever device they
+    // open, not necessarily the browser that triggered it.
+    let notification_language = crate::handlers::notification_language(
+        req,
+        depot,
+        requester
+            .user()
+            .and_then(|user| user.preferred_locale)
+            .map(UiLocale::code),
+        input.language.as_deref(),
+    );
 
     match resend_email_verification_code(
         repo,

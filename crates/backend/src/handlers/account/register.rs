@@ -66,7 +66,14 @@ pub async fn post_register(
     let limiter = depot.limiter()?;
     let repo_factory = depot.repo_factory()?;
     let url_builder = depot.url_builder()?;
-    let notification_language = crate::handlers::notification_language(req, depot, None);
+    let notification_language = crate::handlers::notification_language(
+        req,
+        depot,
+        // No account tier: this runs before any user is identified, so the
+        // request headers are the only preference available.
+        None,
+        None,
+    );
 
     let clock = make_clock();
     let mut rng = make_rng();
@@ -327,7 +334,14 @@ pub async fn post_resend_verification(
     let limiter = depot.limiter()?;
     let clock = make_clock();
     let mut rng = make_rng();
-    let notification_language = crate::handlers::notification_language(req, depot, None);
+    let notification_language = crate::handlers::notification_language(
+        req,
+        depot,
+        // No account tier: this runs before any user is identified, so the
+        // request headers are the only preference available.
+        None,
+        None,
+    );
 
     let activity_tracker = extract_bound_activity_tracker(req, depot);
     let requester = activity_tracker
@@ -391,7 +405,14 @@ pub async fn post_change_email(
     let limiter = depot.limiter()?;
     let clock = make_clock();
     let mut rng = make_rng();
-    let notification_language = crate::handlers::notification_language(req, depot, None);
+    let notification_language = crate::handlers::notification_language(
+        req,
+        depot,
+        // No account tier: this runs before any user is identified, so the
+        // request headers are the only preference available.
+        None,
+        None,
+    );
 
     let activity_tracker = extract_bound_activity_tracker(req, depot);
     let requester = activity_tracker

@@ -60,6 +60,15 @@ pub fn UserGreeting(
     }
 }
 
+/// A locale's name written in that locale, so a user who cannot read the
+/// current UI language can still find their own.
+fn locale_display_name(locale: arkret_locale::UiLocale) -> &'static str {
+    match locale {
+        arkret_locale::UiLocale::En => "English",
+        arkret_locale::UiLocale::Zh => "中文",
+    }
+}
+
 #[component]
 pub fn EditProfileDialog(
     open: Signal<bool>,
@@ -207,16 +216,28 @@ pub fn EditProfileDialog(
                     span { class: "form-help", "Your display name is shown to other users." }
                 }
 
+                // A free-text box here was the reason this field could hold
+                // values nothing could render. The choice is closed, so the
+                // control is closed: the server now rejects anything else, and
+                // an input that can produce a rejected value is a bug surface,
+                // not a feature.
                 div { class: "form-field",
-                    label { class: "form-label", "Preferred locale" }
-                    input {
+                    label { class: "form-label", r#for: "preferred-locale", {crate::translations::t("common-language")} }
+                    select {
                         class: "form-input",
-                        r#type: "text",
-                        placeholder: "zh-CN",
+                        id: "preferred-locale",
                         value: "{preferred_locale_value}",
-                        oninput: move |e| preferred_locale_value.set(e.value()),
+                        onchange: move |e| preferred_locale_value.set(e.value()),
+                        option { value: "", {crate::translations::t("coauth-profile-locale-automatic")} }
+                        for locale in arkret_locale::SUPPORTED {
+                            option {
+                                value: locale.code(),
+                                selected: preferred_locale_value.read().as_str() == locale.code(),
+                                {locale_display_name(locale)}
+                            }
+                        }
                     }
-                    span { class: "form-help", "Used for localized notifications and future profile settings." }
+                    span { class: "form-help", {crate::translations::t("coauth-profile-locale-help")} }
                 }
 
                 div { class: "form-field",

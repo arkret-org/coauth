@@ -73,10 +73,17 @@ pub async fn update_account(
         })
         .transpose()?;
 
+    let preferred_locale = coauth_data::parse_locale_preference_patch(body.preferred_locale)
+        .map_err(|tag| {
+            AppError::bad_request(format!(
+                "unsupported preferred_locale {tag:?}; this deployment ships en and zh"
+            ))
+        })?;
+
     let patch = coauth_data::AdminUserPatch {
         display_name: body.display_name,
         avatar_url: body.avatar_url,
-        preferred_locale: body.preferred_locale,
+        preferred_locale,
         can_request_admin: body.admin,
         status,
         locked: body.locked,

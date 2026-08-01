@@ -300,6 +300,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkret-locale"
+version = "0.3.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "arkret-models-collaboration"
 version = "0.3.0"
 dependencies = [
@@ -1402,6 +1409,7 @@ dependencies = [
  "arkret-http-client",
  "arkret-identifiers",
  "arkret-identity",
+ "arkret-locale",
  "arkret-models-collaboration",
  "arkret-models-crypto",
  "arkret-models-discovery",
@@ -1560,6 +1568,7 @@ name = "coauth-data"
 version = "0.3.0"
 dependencies = [
  "arkret-identifiers",
+ "arkret-locale",
  "arkret-models-collaboration",
  "arkret-models-identity",
  "arkret-wire",
@@ -1613,6 +1622,7 @@ dependencies = [
 name = "coauth-frontend"
 version = "0.3.0"
 dependencies = [
+ "arkret-locale",
  "chrono",
  "coauth-account-types",
  "dioxus",
@@ -1634,6 +1644,7 @@ dependencies = [
 name = "coauth-i18n"
 version = "0.3.0"
 dependencies = [
+ "arkret-locale",
  "camino",
  "fluent-bundle",
  "icu_calendar",
@@ -1811,6 +1822,7 @@ dependencies = [
  "anyhow",
  "arkret-canonical",
  "arkret-identifiers",
+ "arkret-locale",
  "arkret-models-collaboration",
  "arkret-models-identity",
  "arkret-wire",

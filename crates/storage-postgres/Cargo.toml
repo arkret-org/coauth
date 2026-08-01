@@ -16,6 +16,7 @@ workspace = true
 [dependencies]
 anyhow = {workspace = true}
 arkret-canonical = {workspace = true}
+arkret-locale = {workspace = true}
 arkret-identifiers = {workspace = true}
 arkret-models-collaboration = {workspace = true}
 arkret-models-identity = {workspace = true}

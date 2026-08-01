@@ -185,7 +185,10 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
         session_id: session.id.to_string(),
         name: user.display_name.clone(),
         picture: user.avatar_url.clone(),
-        locale: user.preferred_locale.clone(),
+        // The OIDC `locale` claim is how the account tier reaches a client
+        // that never touches coauth's database. It carries the canonical code,
+        // so inkson can feed it straight into the shared resolver.
+        locale: user.preferred_locale.map(|locale| locale.code().to_owned()),
     };
 
     let client = repo

@@ -34,6 +34,8 @@ branding-terms-and-conditions-link = Terms & Conditions
 
 common-display-name = Display Name
 common-language = Language
+coauth-profile-locale-automatic = Match my browser
+coauth-profile-locale-help = Applies everywhere you sign in, and to the notifications we send you.
 
 coauth-theme-toggle = Toggle light or night theme
 coauth-theme-night = Night

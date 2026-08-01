@@ -3,46 +3,127 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use std::sync::Arc;
+//! The server's single answer to "which language is this response in?".
+//!
+//! Every tier is resolved by [`arkret_locale`], the same crate the SPA and
+//! inkson link, so a request rendered here and a page rendered in the browser
+//! cannot disagree. This module only decides *what to feed it* from a Salvo
+//! request; the precedence rules live in the shared crate.
+//!
+//! Two implementations were removed to get here: a hand-written
+//! `Accept-Language` header parser with its own q-value sorting
+//! (`salvo_utils::language_detection`), and a `zh-CN → zh-Hans` fixup that
+//! existed only because ICU's automatic fallback chain does not make that hop.
+//! Folding region variants onto the base language up front makes both
+//! unnecessary.
 
-use coauth_i18n::{Locale, Translator, locale};
-use headers::HeaderMapExt as _;
+use coauth_i18n::{Locale, LocaleSources, UiLocale, icu_locale_for, resolve};
+use http::header::ACCEPT_LANGUAGE;
 use salvo::prelude::*;
 
-use crate::salvo_utils::language_detection::AcceptLanguage;
+/// The browser's stated language preferences, verbatim.
+///
+/// Returned as the raw header value rather than a parsed list because
+/// [`UiLocale::from_tag_list`] already understands `Accept-Language` syntax,
+/// weights included. A non-UTF-8 header is treated as absent: it cannot
+/// express a preference we could honour, and rejecting the request over a
+/// cosmetic header would be worse than falling through to the next tier.
+fn accept_language(req: &Request) -> Option<&str> {
+    req.headers().get(ACCEPT_LANGUAGE)?.to_str().ok()
+}
 
-pub fn preferred_language(req: &Request, depot: &Depot) -> Locale {
-    preferred_language_with_requested(req, depot, std::iter::empty())
+/// The UI locale for a request, given whatever the caller knows.
+///
+/// * `account` — the signed-in user's stored `preferred_locale`, when the
+///   handler has already loaded it. Pass `None` when there is no session or
+///   the account has not been resolved yet; it is a tier, not a requirement.
+/// * `requested` — an explicit request carried with the navigation, in
+///   practice the OIDC `ui_locales` parameter.
+#[must_use]
+pub fn preferred_ui_locale(
+    req: &Request,
+    account: Option<&str>,
+    requested: Option<&str>,
+) -> UiLocale {
+    resolve(&LocaleSources {
+        account,
+        requested,
+        // A server request has no view of the browser's device cache; the SPA
+        // applies that tier itself once it boots.
+        device_cache: None,
+        platform: accept_language(req),
+    })
+}
+
+/// [`preferred_ui_locale`] as the ICU locale the templates and formatters use.
+#[must_use]
+pub fn preferred_language(req: &Request, _depot: &Depot) -> Locale {
+    icu_locale_for(preferred_ui_locale(req, None, None))
 }
 
 /// Choose a UI locale using explicit OIDC `ui_locales` candidates first,
 /// followed by the browser's `Accept-Language` preferences.
+#[must_use]
 pub fn preferred_language_with_requested(
     req: &Request,
-    depot: &Depot,
-    requested: impl IntoIterator<Item = Locale>,
+    _depot: &Depot,
+    requested: Option<&str>,
 ) -> Locale {
-    let translator = depot
-        .get::<Arc<Translator>>("translator")
-        .cloned()
-        .unwrap_or_else(|_| Arc::new(Translator::default()));
-
-    let accept_language = req.headers().typed_get::<AcceptLanguage>();
-    let requested = requested.into_iter().flat_map(expand_locale);
-    let accepted = accept_language
-        .iter()
-        .flat_map(AcceptLanguage::iter)
-        .cloned()
-        .flat_map(expand_locale);
-
-    translator.choose_locale(requested.chain(accepted))
+    icu_locale_for(preferred_ui_locale(req, None, requested))
 }
 
-fn expand_locale(lang: Locale) -> Vec<Locale> {
-    // `zh-CN` does not fall back to `zh-Hans` through ICU's automatic chain.
-    if lang == locale!("zh-CN") {
-        vec![lang, locale!("zh-Hans")]
-    } else {
-        vec![lang]
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn request_with_accept_language(value: &str) -> Request {
+        let mut req = Request::default();
+        req.headers_mut()
+            .insert(ACCEPT_LANGUAGE, value.parse().expect("test header value"));
+        req
+    }
+
+    #[test]
+    fn accept_language_weights_are_honoured() {
+        let req = request_with_accept_language("en;q=0.4, zh-CN;q=0.9");
+        assert_eq!(preferred_ui_locale(&req, None, None), UiLocale::Zh);
+    }
+
+    #[test]
+    fn ui_locales_outranks_the_browser_header() {
+        let req = request_with_accept_language("en-US,en;q=0.9");
+        assert_eq!(
+            preferred_ui_locale(&req, None, Some("zh-CN")),
+            UiLocale::Zh
+        );
+    }
+
+    #[test]
+    fn the_account_preference_outranks_ui_locales() {
+        let req = request_with_accept_language("en-US");
+        assert_eq!(
+            preferred_ui_locale(&req, Some("zh"), Some("en")),
+            UiLocale::Zh
+        );
+    }
+
+    #[test]
+    fn an_unsupported_header_falls_through_to_english() {
+        let req = request_with_accept_language("fr-FR,fr;q=0.9,de;q=0.8");
+        assert_eq!(preferred_ui_locale(&req, None, None), UiLocale::En);
+    }
+
+    #[test]
+    fn no_header_at_all_is_english() {
+        assert_eq!(
+            preferred_ui_locale(&Request::default(), None, None),
+            UiLocale::En
+        );
+    }
+
+    #[test]
+    fn zh_cn_resolves_without_the_old_zh_hans_expansion() {
+        let req = request_with_accept_language("zh-CN,zh;q=0.9");
+        assert_eq!(preferred_language(&req, &Depot::new()).to_string(), "zh");
     }
 }

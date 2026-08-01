@@ -31,6 +31,8 @@ branding-terms-and-conditions-link = 条款与条件
 
 common-display-name = 显示名称
 common-language = 语言
+coauth-profile-locale-automatic = 跟随浏览器
+coauth-profile-locale-help = 在你登录的所有设备上生效，也用于发送给你的通知。
 
 coauth-theme-toggle = 切换浅色或深色主题
 coauth-theme-night = 深色

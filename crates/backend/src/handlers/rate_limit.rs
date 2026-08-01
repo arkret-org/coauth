@@ -685,7 +685,7 @@ mod tests {
             is_guest: true,
             display_name: Some("alice".to_owned()),
             avatar_url: None,
-            preferred_locale: Some("en".to_owned()),
+            preferred_locale: Some(arkret_locale::UiLocale::En),
             handle_aliases: Vec::new(),
         };
 
@@ -702,7 +702,7 @@ mod tests {
             is_guest: true,
             display_name: Some("bob".to_owned()),
             avatar_url: None,
-            preferred_locale: Some("en".to_owned()),
+            preferred_locale: Some(arkret_locale::UiLocale::En),
             handle_aliases: Vec::new(),
         };
 

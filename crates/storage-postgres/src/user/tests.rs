@@ -560,7 +560,7 @@ async fn test_user_patch_updates_profile_and_state() {
             UserPatch {
                 display_name: Some(Some("Alice Example".to_owned())),
                 avatar_url: Some(Some("mxc://example.com/alice".to_owned())),
-                preferred_locale: Some(Some("zh-CN".to_owned())),
+                preferred_locale: Some(Some(arkret_locale::UiLocale::Zh)),
                 can_request_admin: Some(true),
                 status: None,
                 locked: Some(true),
@@ -575,7 +575,7 @@ async fn test_user_patch_updates_profile_and_state() {
         updated.avatar_url.as_deref(),
         Some("mxc://example.com/alice")
     );
-    assert_eq!(updated.preferred_locale.as_deref(), Some("zh-CN"));
+    assert_eq!(updated.preferred_locale, Some(arkret_locale::UiLocale::Zh));
     assert!(updated.can_request_admin);
     assert!(updated.locked_at.is_some());
     assert!(updated.deactivated_at.is_some());
@@ -586,7 +586,8 @@ async fn test_user_patch_updates_profile_and_state() {
         reloaded.avatar_url.as_deref(),
         Some("mxc://example.com/alice")
     );
-    assert_eq!(reloaded.preferred_locale.as_deref(), Some("zh-CN"));
+    // Round-trips through the `TEXT` column as the canonical `zh`.
+    assert_eq!(reloaded.preferred_locale, Some(arkret_locale::UiLocale::Zh));
     assert!(reloaded.can_request_admin);
     assert!(reloaded.locked_at.is_some());
     assert!(reloaded.deactivated_at.is_some());

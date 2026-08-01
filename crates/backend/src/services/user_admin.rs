@@ -320,7 +320,7 @@ fn validate_admin_patch(patch: &AdminUserPatch) -> Result<(), UserAdminServiceEr
     validate_display_name_patch(&coauth_data::UserProfilePatch {
         display_name: patch.display_name.clone(),
         avatar_url: patch.avatar_url.clone(),
-        preferred_locale: patch.preferred_locale.clone(),
+        preferred_locale: patch.preferred_locale,
     })
     .map_err(|_| UserAdminServiceError::InvalidDisplayName)
 }

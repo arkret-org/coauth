@@ -64,10 +64,17 @@ pub async fn patch_profile(
     let (requester, mut repo) =
         get_requester(&clock, &activity_tracker, repo, &session_info).await?;
 
+    let preferred_locale = coauth_data::parse_locale_preference_patch(input.preferred_locale)
+        .map_err(|tag| {
+            RouteError::BadRequest(
+                format!("unsupported preferred_locale {tag:?}; this deployment ships en and zh"),
+            )
+        })?;
+
     let patch = coauth_data::UserProfilePatch {
         display_name: input.display_name,
         avatar_url: input.avatar_url,
-        preferred_locale: input.preferred_locale,
+        preferred_locale,
     };
 
     let user = user_profile::patch_viewer_profile(
@@ -86,7 +93,7 @@ pub async fn patch_profile(
         profile: ViewerProfileData {
             display_name: user.display_name.clone(),
             avatar_url: user.avatar_url.clone(),
-            preferred_locale: user.preferred_locale.clone(),
+            preferred_locale: user.preferred_locale.map(|locale| locale.code().to_owned()),
             updated_at: arkret_canonical::format_timestamp_canonical(user.updated_at),
         },
         principal: PrincipalUserData {
@@ -265,7 +272,10 @@ mod tests {
 
         assert_eq!(body["profile"]["display_name"], "Alice Example");
         assert_eq!(body["profile"]["avatar_url"], "mxc://example.com/alice");
-        assert_eq!(body["profile"]["preferred_locale"], "zh-CN");
+        // `zh-CN` is accepted and folded onto the stored base language, so the
+        // response echoes the canonical value the server will actually honour
+        // rather than the request string.
+        assert_eq!(body["profile"]["preferred_locale"], "zh");
         assert_eq!(body["principal"]["display_name"], "Alice Example");
 
         let mut repo = state.repository().await.unwrap();
@@ -275,7 +285,7 @@ mod tests {
             stored.avatar_url.as_deref(),
             Some("mxc://example.com/alice")
         );
-        assert_eq!(stored.preferred_locale.as_deref(), Some("zh-CN"));
+        assert_eq!(stored.preferred_locale, Some(arkret_locale::UiLocale::Zh));
 
         let clear_request = cookies.with_cookies(
             Request::patch("/_coauth/self/viewer/profile")

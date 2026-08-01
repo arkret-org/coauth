@@ -35,7 +35,14 @@ pub async fn post_recovery_start(
     let repo_factory = depot.repo_factory()?;
     let limiter = depot.limiter()?;
     let url_builder = depot.url_builder()?;
-    let notification_language = crate::handlers::notification_language(req, depot, None);
+    let notification_language = crate::handlers::notification_language(
+        req,
+        depot,
+        // No account tier: this runs before any user is identified, so the
+        // request headers are the only preference available.
+        None,
+        None,
+    );
 
     let clock = make_clock();
     let mut rng = make_rng();

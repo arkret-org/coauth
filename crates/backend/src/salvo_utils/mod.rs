@@ -11,7 +11,6 @@
 //! - [`jwt`] — JWT creation and verification helpers
 //! - [`session`] — Browser session extraction from cookies
 //! - [`user_authorization`] — Extract and validate user bearer tokens
-//! - [`language_detection`] — Locale detection from `Accept-Language` headers
 //! - [`error_wrapper`] — Wrap internal errors into HTTP responses
 //! - [`fancy_error`] — User-friendly HTML error pages
 //! - [`sentry`] — Sentry error-reporting integration
@@ -28,8 +27,6 @@ pub mod error_wrapper;
 pub mod fancy_error;
 /// JWT (JSON Web Token) creation and verification.
 pub mod jwt;
-/// Detect user locale from `Accept-Language` headers.
-pub mod language_detection;
 /// Sentry error-reporting integration.
 pub mod sentry;
 /// Browser session extraction from encrypted cookies.

@@ -100,7 +100,7 @@ impl AccountRecord {
                 admin: user.can_request_admin,
                 display_name: user.display_name,
                 avatar_url: user.avatar_url,
-                preferred_locale: user.preferred_locale,
+                preferred_locale: user.preferred_locale.map(|locale| locale.code().to_owned()),
                 primary_principal_id,
                 principal_ids,
             },

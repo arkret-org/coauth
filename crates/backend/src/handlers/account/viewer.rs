@@ -191,7 +191,10 @@ pub async fn get_viewer(
                 profile: UserProfileData {
                     display_name: profile.profile.display_name,
                     avatar_url: profile.profile.avatar_url,
-                    preferred_locale: profile.profile.preferred_locale,
+                    preferred_locale: profile
+                        .profile
+                        .preferred_locale
+                        .map(|locale| locale.code().to_owned()),
                     updated_at: arkret_canonical::format_timestamp_canonical(
                         profile.profile.updated_at,
                     ),
