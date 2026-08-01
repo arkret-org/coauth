@@ -71,18 +71,16 @@ pub async fn create_account_handoff(
         .get_by_request_id(&body.request_id)
         .await?;
     if let Some(existing) = existing {
-        let account_handle = replay_repo
+        let user = replay_repo
             .user()
             .lookup(existing.service_account_id)
             .await?
-            .ok_or(ArkretRouteError::NotFound)
-            .and_then(|user| {
-                canonical_account_handle(
-                    &user.localpart,
-                    url_builder.public_hostname(),
-                    arkret_config.trust_domain.as_deref(),
-                )
-            })?;
+            .ok_or(ArkretRouteError::NotFound)?;
+        let account_handle = canonical_account_handle(
+            &user.localpart,
+            url_builder.public_hostname(),
+            arkret_config.trust_domain.as_deref(),
+        )?;
         let creation =
             if existing.request_digest == request_digest && existing.cnf_jkt == dpop_binding.jkt {
                 replay_repo
@@ -93,7 +91,7 @@ pub async fn create_account_handoff(
                 AccountHandoffCreation::DuplicateConflict
             };
         replay_repo.cancel().await.ok();
-        return creation_to_outcome(creation, account_handle).map(Json);
+        return creation_to_outcome(creation, account_handle, user.preferred_locale).map(Json);
     }
     replay_repo.cancel().await.ok();
 
@@ -133,6 +131,7 @@ pub async fn create_account_handoff(
         url_builder.public_hostname(),
         arkret_config.trust_domain.as_deref(),
     )?;
+    let preferred_locale = authenticated.user.preferred_locale;
 
     let mut rng = make_rng();
     let mut repo = depot.repo().await?;
@@ -154,7 +153,7 @@ pub async fn create_account_handoff(
         })
         .await?;
     repo.save().await?;
-    creation_to_outcome(creation, account_handle).map(Json)
+    creation_to_outcome(creation, account_handle, preferred_locale).map(Json)
 }
 
 /// `POST /_arkret/gate/account/identity-binding-challenges`.
@@ -384,6 +383,7 @@ fn verify_handoff_holder_signature(
 fn creation_to_outcome(
     creation: AccountHandoffCreation,
     account_handle: Handle,
+    preferred_locale: Option<arkret_locale::UiLocale>,
 ) -> Result<AccountHandoffOutcome, ArkretRouteError> {
     let (grant, binding) = match creation {
         AccountHandoffCreation::Active { grant, lease } => (
@@ -421,6 +421,7 @@ fn creation_to_outcome(
     let outcome = AccountHandoffOutcome {
         request_id: grant.request_id,
         account_handle,
+        preferred_locale,
         account_handoff_grant: grant.account_handoff_grant,
         expires_at: grant.expires_at,
         allowed_operations: grant.allowed_operations,

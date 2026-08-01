@@ -4,6 +4,7 @@
 //! responses. They replace the server-rendered HTML approval pages.
 
 use coauth_account_types::DeviceLinkOutcome;
+use coauth_data::{RepositoryAccess as _, UserProfilePatch};
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -225,12 +226,35 @@ pub async fn oauth_approval_post(
         return Err(RouteError::BadRequest("invalid action".into()));
     }
 
-    let Some(browser_session) =
+    let Some(mut browser_session) =
         require_authenticated_session(&session_info, &mut repo, &activity_tracker, &clock, res)
             .await?
     else {
         return Ok(());
     };
+
+    // The language switch is usable before the browser has an authenticated
+    // session, so its earlier best-effort profile PATCH normally received a
+    // 401. OAuth approval is the first authenticated request shared by every
+    // login and registration method. Bind the browser's current closed-set
+    // choice to the authenticated account in the same transaction that
+    // fulfills the grant; the subsequent DPoP-bound account handoff can then
+    // return it to inkson without exposing it through a public profile.
+    if let Some(selected) = crate::handlers::preferred_language::selected_ui_locale(req)
+        && browser_session.user.preferred_locale != Some(selected)
+    {
+        browser_session.user = repo
+            .user()
+            .update_profile(
+                &*clock,
+                browser_session.user,
+                UserProfilePatch {
+                    preferred_locale: Some(Some(selected)),
+                    ..UserProfilePatch::default()
+                },
+            )
+            .await?;
+    }
 
     let decision = accept_authorization_consent(
         repo,

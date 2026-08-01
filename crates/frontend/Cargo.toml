@@ -26,6 +26,6 @@ serde_json = {workspace = true}
 wasm-bindgen = {workspace = true}
 wasm-bindgen-futures = {workspace = true}
 unic-langid = {workspace = true}
-web-sys = {workspace = true,features = ["CredentialCreationOptions", "CredentialRequestOptions", "CredentialsContainer", "Navigator", "NodeList", "PublicKeyCredential"]}
+web-sys = {workspace = true,features = ["CredentialCreationOptions", "CredentialRequestOptions", "CredentialsContainer", "HtmlDocument", "Navigator", "NodeList", "PublicKeyCredential"]}
 webauthn-rs-proto = {workspace = true,features = ["wasm"]}
 zxcvbn = {workspace = true}

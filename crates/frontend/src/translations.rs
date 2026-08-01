@@ -14,6 +14,8 @@ pub use arkret_locale::UiLocale;
 
 #[cfg(target_arch = "wasm32")]
 const LOCALE_STORAGE_KEY: &str = "arkret.ui.locale.v1";
+#[cfg(target_arch = "wasm32")]
+const LOCALE_COOKIE_KEY: &str = "arkret.ui.locale.v1";
 
 pub type LocaleSignal = Signal<UiLocale>;
 
@@ -263,6 +265,21 @@ pub fn apply_locale(locale: UiLocale) {
         if let Ok(Some(storage)) = window.local_storage() {
             let _ = storage.set_item(LOCALE_STORAGE_KEY, locale.code());
         }
+        // Unlike localStorage, this same-site, non-sensitive preference is
+        // visible to the server when the user approves the pending OIDC grant.
+        // That is the first authenticated request common to password, passkey,
+        // upstream-OIDC and registration flows, so it is where coauth can bind
+        // a choice made on the signed-out page to the authenticated account.
+        if let Some(document) = window.document().and_then(|document| {
+            use wasm_bindgen::JsCast as _;
+            document.dyn_into::<web_sys::HtmlDocument>().ok()
+        }) {
+            let cookie = format!(
+                "{LOCALE_COOKIE_KEY}={}; Path=/; Max-Age=315360000; SameSite=Lax",
+                locale.code()
+            );
+            let _ = document.set_cookie(&cookie);
+        }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -292,16 +309,17 @@ mod tests {
     #[test]
     fn chinese_variants_render_from_the_chinese_catalogue() {
         for tag in ["zh", "zh-CN", "ZH_hant"] {
-            assert_eq!(render(tag, "action-sign-in").as_deref(), Some("登录"), "{tag}");
+            assert_eq!(
+                render(tag, "action-sign-in").as_deref(),
+                Some("登录"),
+                "{tag}"
+            );
         }
     }
 
     #[test]
     fn an_unsupported_tag_renders_english_rather_than_the_raw_key() {
-        assert_eq!(
-            render("fr", "action-sign-in").as_deref(),
-            Some("Sign in")
-        );
+        assert_eq!(render("fr", "action-sign-in").as_deref(), Some("Sign in"));
     }
 
     #[test]

@@ -21,6 +21,29 @@ use coauth_i18n::{Locale, LocaleSources, UiLocale, icu_locale_for, resolve};
 use http::header::ACCEPT_LANGUAGE;
 use salvo::prelude::*;
 
+pub const UI_LOCALE_COOKIE_KEY: &str = "arkret.ui.locale.v1";
+
+/// The locale selected in coauth's browser UI during the current flow.
+///
+/// This cookie deliberately carries only the closed `en` / `zh` vocabulary;
+/// it is not an authentication credential. The OAuth approval handler reads it
+/// only after authenticating the browser session and persists it on that
+/// session's account.
+#[must_use]
+pub fn selected_ui_locale(req: &Request) -> Option<UiLocale> {
+    req.cookies()
+        .get(UI_LOCALE_COOKIE_KEY)
+        .and_then(|cookie| selected_ui_locale_value(cookie.value()))
+}
+
+fn selected_ui_locale_value(value: &str) -> Option<UiLocale> {
+    match value {
+        "en" => Some(UiLocale::En),
+        "zh" => Some(UiLocale::Zh),
+        _ => None,
+    }
+}
+
 /// The browser's stated language preferences, verbatim.
 ///
 /// Returned as the raw header value rather than a parsed list because
@@ -92,10 +115,7 @@ mod tests {
     #[test]
     fn ui_locales_outranks_the_browser_header() {
         let req = request_with_accept_language("en-US,en;q=0.9");
-        assert_eq!(
-            preferred_ui_locale(&req, None, Some("zh-CN")),
-            UiLocale::Zh
-        );
+        assert_eq!(preferred_ui_locale(&req, None, Some("zh-CN")), UiLocale::Zh);
     }
 
     #[test]
@@ -125,5 +145,14 @@ mod tests {
     fn zh_cn_resolves_without_the_old_zh_hans_expansion() {
         let req = request_with_accept_language("zh-CN,zh;q=0.9");
         assert_eq!(preferred_language(&req, &Depot::new()).to_string(), "zh");
+    }
+
+    #[test]
+    fn browser_locale_cookie_accepts_only_the_shared_vocabulary() {
+        assert_eq!(selected_ui_locale_value("en"), Some(UiLocale::En));
+        assert_eq!(selected_ui_locale_value("zh"), Some(UiLocale::Zh));
+        assert_eq!(selected_ui_locale_value("zh-CN"), None);
+        assert_eq!(selected_ui_locale_value("fr"), None);
+        assert_eq!(selected_ui_locale_value(""), None);
     }
 }
