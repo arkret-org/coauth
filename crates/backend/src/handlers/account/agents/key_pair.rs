@@ -20,11 +20,10 @@ use coauth_data::{BoxRepository, RepositoryAccess, UrlBuilder};
 use coauth_keystore::Keystore;
 use coauth_principal::PrincipalAgentKeyPairCommitRequest;
 use salvo::prelude::*;
-use serde::Deserialize;
 use serde_json::Value;
 
 use super::error_matrix::{AgentAuthRejection, enforce_verification_method_binding};
-use super::proof::{ProofSignedFields, canonical_digest, verify_proof_signature};
+use super::proof::canonical_digest;
 use crate::AppError;
 use crate::handlers::account::{DepotExt, make_clock, make_rng};
 use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
@@ -42,20 +41,7 @@ const AGENT_KEY_PAIR_COMMIT_QUEUE: &str = "principal-agent-key-pair-commit";
 #[derive(Debug)]
 struct ValidatedRuntimePublicKey {
     public_key: Value,
-    verification_public_key: String,
-}
-
-/// Proof-of-possession over the pairing request (AKP-0008 §4.5
-/// `proof_of_possession`). The `signature` covers the canonical bytes of the
-/// remaining fields and is NOT part of those bytes.
-#[derive(Debug, Clone, Deserialize)]
-struct ProofOfPossessionInput {
-    challenge: String,
-    audience: String,
-    request_canonical_digest: String,
-    #[serde(deserialize_with = "arkret_canonical::deserialize_canonical_timestamp")]
-    expires_at: DateTime<Utc>,
-    signature: String,
+    verification_public_key: [u8; 32],
 }
 
 /// `POST /_arkret/gate/account/agent-key-pair`
@@ -114,23 +100,10 @@ pub async fn post_agent_key_pair(
     let public_key =
         validate_runtime_public_key(&public_key_value, body.verification_method.as_str())?;
 
-    let pop: ProofOfPossessionInput =
-        serde_json::from_value(serde_json::to_value(&body.proof_of_possession).map_err(
-            |error| AppError::bad_request(format!("proof_of_possession invalid: {error}")),
-        )?)
-        .map_err(|error| AppError::bad_request(format!("proof_of_possession invalid: {error}")))?;
-    if pop.challenge != body.pairing_request_id.as_str() {
+    let pop = &body.proof_of_possession;
+    if pop.challenge != body.pairing_request_id {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
     }
-
-    // The SDK DTO closes runtime_attestation to the v1 `self_asserted` branch;
-    // unknown kinds and fields already fail during request decoding.
-    let runtime_attestation_value = body
-        .runtime_attestation
-        .as_ref()
-        .map(serde_json::to_value)
-        .transpose()
-        .map_err(|error| AppError::bad_request(format!("runtime_attestation invalid: {error}")))?;
 
     // Final pairing idempotency is the controller-minted authorize Event id,
     // not the one-time pairing handle. Resolve an exact persisted retry before
@@ -149,7 +122,6 @@ pub async fn post_agent_key_pair(
             && existing.verification_method == body.verification_method.as_str()
             && existing.public_key == public_key.public_key
             && existing.pairing_request_id == body.pairing_request_id.as_str()
-            && existing.request_canonical_digest == pop.request_canonical_digest
             && existing.authorized_event_id == authorized_event_id
             && existing.raw_payload_digest == request_digest;
         if !same_request {
@@ -220,71 +192,71 @@ pub async fn post_agent_key_pair(
     .map_err(AgentAuthRejection::into_app_error)?;
 
     // Expiry: a stale pairing PoP is rejected as `pairing_request_expired`.
-    if pop.expires_at <= now {
-        return Err(AgentAuthRejection::PairingRequestExpired
-            .into_app_error()
-            .into());
-    }
-
     // Audience MUST be this service (the coauth issuer audience or a configured
     // principal-server audience).
     if !is_allowed_session_grant_audience(
         &url_builder,
         &arkret_config,
         crate::services::resolved_principal_audiences::shared(),
-        &pop.audience,
+        pop.audience.as_str(),
     ) {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
     }
 
-    // The PoP MUST bind the request canonical digest (AKP-0008 §4.5). It is an
-    // opaque `sha256:<hex>` the client computed over the pairing request body;
-    // we re-bind it into the signed-fields so the signature covers it.
-    if !pop.request_canonical_digest.starts_with("sha256:") {
-        return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
-    }
     let agent_did = arkret_identifiers::Did::new(agent_id.clone())
         .map_err(|error| AppError::bad_request(format!("agent_id invalid: {error}")))?;
-    let expected_pop_digest =
-        arkret_signatures::agent::agent_key_pair_proof_request_binding_digest(
-            &body.pairing_request_id,
+    let expected_binding =
+        arkret_models_collaboration::agent_operations::agent_runtime_key_binding_digest(
             &agent_did,
+            &body.pairing_request_id,
             &body.verification_method,
-            &public_key.public_key,
-            runtime_attestation_value.as_ref(),
+            &body.public_key,
+            body.runtime_attestation.as_ref(),
         )
         .map_err(|error| {
             AppError::bad_request(format!(
-                "proof_of_possession request binding failed: {error}"
+                "proof_of_possession runtime binding failed: {error}"
             ))
         })?;
-    if pop.request_canonical_digest != expected_pop_digest.as_str() {
-        return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
-    }
-
-    let signed_fields = ProofSignedFields {
-        audience: &pop.audience,
-        challenge: &pop.challenge,
-        nonce: None,
-        expires_at: pop.expires_at,
-        request_canonical_digest: &pop.request_canonical_digest,
-        verification_method: &body.verification_method,
-    };
-    verify_proof_signature(
-        &public_key.verification_public_key,
-        &signed_fields,
-        &pop.signature,
-    )
-    .map_err(AgentAuthRejection::into_app_error)?;
+    let authoritative_key_state = authoritative_view
+        .key_state
+        .as_ref()
+        .ok_or_else(|| AppError::forbidden("authoritative Agent key state is missing"))?;
+    let pairing_code = authoritative_key_state
+        .pairing_code
+        .as_deref()
+        .ok_or_else(|| AppError::forbidden("authoritative pairing code is missing"))?;
+    let pairing_expires_at = authoritative_key_state
+        .pairing_expires_at
+        .ok_or_else(|| AppError::forbidden("authoritative pairing expiry is missing"))?;
+    let transcript = pop
+        .validate_shape(
+            &agent_did,
+            &body.pairing_request_id,
+            &body.verification_method,
+            &body.public_key,
+            &expected_binding,
+            pairing_code,
+            pairing_expires_at,
+            now,
+        )
+        .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
+    let verifying_key =
+        ed25519_dalek::VerifyingKey::from_bytes(&public_key.verification_public_key)
+            .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
+    let signature = Base64UrlUnpadded::decode_vec(pop.signature.as_str())
+        .ok()
+        .and_then(|bytes| ed25519_dalek::Signature::from_slice(&bytes).ok())
+        .ok_or_else(|| AgentAuthRejection::ProofInvalid.into_app_error())?;
+    use ed25519_dalek::Verifier as _;
+    verifying_key
+        .verify(&transcript, &signature)
+        .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
 
     let mut repo = depot.repo().await?;
 
     let runtime_public_key_digest =
         runtime_public_key_digest(&public_key.public_key, body.verification_method.as_str())?;
-    let authoritative_key_state = authoritative_view
-        .key_state
-        .as_ref()
-        .ok_or_else(|| AppError::forbidden("authoritative Agent key state is missing"))?;
     let authorize_event = validate_controller_authorize_event(
         &body.authorize_event.event,
         &agent_id,
@@ -292,7 +264,7 @@ pub async fn post_agent_key_pair(
         &runtime_public_key_digest,
         &body.signing_key_binding,
         &body.pairing_request_id,
-        &pop.audience,
+        pop.audience.as_str(),
         authoritative_key_state,
         now,
     )?;
@@ -301,7 +273,7 @@ pub async fn post_agent_key_pair(
         &body.authorize_event.event,
         &agent_id,
         &authorize_event.controller_id,
-        &pop.audience,
+        pop.audience.as_str(),
         &http_client,
         &url_builder,
         &arkret_config,
@@ -324,7 +296,7 @@ pub async fn post_agent_key_pair(
         &body.verification_method,
         &body.authorize_event.event.event_id,
         &authorize_event.payload.signing_key_binding_digest,
-        &pop.audience,
+        pop.audience.as_str(),
         &http_client,
         &url_builder,
         &arkret_config,
@@ -389,11 +361,17 @@ pub async fn post_agent_key_pair(
                 public_key: public_key.public_key.clone(),
                 accountable_principal_id: authorize_event.controller_id.clone(),
                 agent_key_scope,
-                audience: vec![pop.audience.clone()],
+                audience: vec![pop.audience.to_string()],
                 issued_at,
                 expires_at,
                 pairing_request_id: body.pairing_request_id.to_string(),
-                request_canonical_digest: pop.request_canonical_digest.clone(),
+                request_canonical_digest: authorize_event
+                    .payload
+                    .approval_evidence
+                    .request_canonical_digest
+                    .as_ref()
+                    .expect("validated pairing request approval digest")
+                    .to_string(),
                 raw_payload_digest: raw_payload_digest.clone(),
                 soland_fanout_state: AccountabilityGrantFanoutState::Queued,
                 soland_fanout_idempotency_key: idempotency_key.clone(),
@@ -525,10 +503,8 @@ fn validate_runtime_public_key(
             "public_key.kid must match verification_method",
         ));
     }
-    if key.alg.as_str() != "Ed25519" && key.alg.as_str() != "EdDSA" {
-        return Err(AppError::bad_request(
-            "public_key.alg must be Ed25519 or EdDSA",
-        ));
+    if key.alg.as_str() != "EdDSA" {
+        return Err(AppError::bad_request("public_key.alg must be EdDSA"));
     }
     let raw = Base64UrlUnpadded::decode_vec(key.key.as_str())
         .map_err(|_| AppError::bad_request("public_key.key must be base64url"))?;
@@ -537,7 +513,7 @@ fn validate_runtime_public_key(
         .map_err(|_| AppError::bad_request("public_key.key must decode to 32 bytes"))?;
     Ok(ValidatedRuntimePublicKey {
         public_key: public_key.clone(),
-        verification_public_key: arkret_canonical::ed25519_pubkey_to_did_key_multibase(&raw),
+        verification_public_key: raw,
     })
 }
 
@@ -1178,7 +1154,7 @@ mod tests {
         json!({
             "kty": "OKP",
             "kid": VM,
-            "alg": "Ed25519",
+            "alg": "EdDSA",
             "key": Base64UrlUnpadded::encode_string(&[42u8; 32]),
         })
     }

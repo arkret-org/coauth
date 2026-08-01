@@ -99,13 +99,8 @@ const BINDING_STORE_CAPACITY: usize = 4096;
 /// approvals, organization registry bootstrap, erasure receipts and account
 /// DID binding control proofs.
 ///
-/// SPEC GAP: `did-usage-and-verification.md` §4 requires every authority call
-/// site to state a freshness policy but does **not** publish a risk-profile
-/// grading (no numeric tiers anywhere in §4 / §5). The value below is a coauth
-/// deployment choice, registered as a spec gap alongside the (now SDK-owned)
-/// binding digest algorithms.
-///
-/// Rationale for 5 minutes: it is the same order as the deployment's other
+/// The registered `authority_high_risk_v1` profile leaves its concrete window
+/// to the deployment. Five minutes is the same order as the deployment's other
 /// single-shot authority artefacts (`HANDLE_CLAIM_TTL_MINUTES = 5`, the
 /// account-handoff and DPoP nonce windows), so an operator reasoning about
 /// "how stale can the key material behind an admin action be" gets one number,
@@ -117,9 +112,9 @@ pub const HIGH_RISK_MAX_AGE: Duration = Duration::minutes(5);
 /// Freshness demanded by controller / agent-pairing authority paths
 /// (`key_pair.rs`).
 ///
-/// SPEC GAP: same registration as [`HIGH_RISK_MAX_AGE`].
-///
-/// Rationale for 15 minutes: agent pairing and `authorize_event` verification
+/// The registered `authority_controller_v1` profile leaves its concrete window
+/// to the deployment. Fifteen minutes lets agent pairing and `authorize_event`
+/// verification
 /// resolve the *same* controller DID repeatedly across an interactive approval
 /// flow with user-visible retries. §4 row 3 ("new verification method / agent
 /// signer epoch") is still an authority trigger — it is served by the
