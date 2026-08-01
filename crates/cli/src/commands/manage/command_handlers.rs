@@ -14,8 +14,7 @@ use coauth_backend::util::{diesel_pool_from_config, password_manager_from_config
 use coauth_config::{ConfigurationSectionExt, DatabaseConfig, PasswordsConfig};
 use coauth_data::oauth::OAuthSessionFilter;
 use coauth_data::queue::{
-    DeactivateUserJob, ProvisionUserJob, QueueJobRepositoryExt as _, ReactivateUserJob,
-    SyncDevicesJob,
+    DeactivateUserJob, ProvisionUserJob, QueueJobRepositoryExt as _, SyncDevicesJob,
 };
 use coauth_data::user::{
     BrowserSessionFilter, UserEmailRepository, UserFilter, UserPasswordRepository, UserRepository,
@@ -408,11 +407,7 @@ pub(super) async fn handle_lock_user(
 pub(super) async fn handle_unlock_user(
     figment: &Figment,
     handle: String,
-    reactivate: bool,
 ) -> anyhow::Result<ExitCode> {
-    let clock = SystemClock::default();
-    let mut rng = rand_chacha::ChaChaRng::from_entropy();
-
     let _span = info_span!("cli.manage.unlock_user", user.handle = handle).entered();
     let config = DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
     let pool = diesel_pool_from_config(&config).await?;
@@ -428,14 +423,7 @@ pub(super) async fn handle_unlock_user(
         .await?
         .context("User not found")?;
 
-    if reactivate {
-        warn!(%user.id, "Scheduling user reactivation");
-        repo.queue_job()
-            .schedule_job(&mut rng, &clock, ReactivateUserJob::new(&user))
-            .await?;
-    } else {
-        repo.user().unlock(user).await?;
-    }
+    repo.user().unlock(user).await?;
 
     Ok(ExitCode::SUCCESS)
 }

@@ -574,34 +574,6 @@ impl InsertableJob for AccountProjectionRewriteJob {
     const QUEUE_NAME: &'static str = "account-projection-rewrite";
 }
 
-/// A job to reactivate a user
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ReactivateUserJob {
-    user_id: Ulid,
-}
-
-impl ReactivateUserJob {
-    /// Create a new job to reactivate a user
-    ///
-    /// # Parameters
-    ///
-    /// * `user` - The user to reactivate
-    #[must_use]
-    pub fn new(user: &User) -> Self {
-        Self { user_id: user.id }
-    }
-
-    /// The ID of the user to reactivate
-    #[must_use]
-    pub fn user_id(&self) -> Ulid {
-        self.user_id
-    }
-}
-
-impl InsertableJob for ReactivateUserJob {
-    const QUEUE_NAME: &'static str = "reactivate-user";
-}
-
 /// Send account recovery emails
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SendAccountRecoveryEmailsJob {

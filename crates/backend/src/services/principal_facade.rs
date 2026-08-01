@@ -519,10 +519,6 @@ impl ConnectorAdmin for DbConnectorAdmin {
         Ok(())
     }
 
-    async fn reactivate_user(&self, _handle: &str) -> Result<(), anyhow::Error> {
-        Ok(())
-    }
-
     async fn set_displayname(
         &self,
         _handle: &str,

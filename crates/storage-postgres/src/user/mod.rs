@@ -487,39 +487,6 @@ impl UserRepository for PgUserRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.user.reactivate",
-        skip_all,
-        fields(%user.id),
-        err,
-    )]
-    async fn reactivate(&mut self, mut user: User) -> Result<User, Self::Error> {
-        if user.status == UserStatus::Active {
-            return Ok(user);
-        }
-        Self::validate_status_transition(user.status, UserStatus::Active)?;
-        user.status = UserStatus::Active;
-        user.deactivated_at = None;
-        user.locked_at = None;
-        #[allow(clippy::disallowed_methods)] // trait signature doesn't expose a Clock
-        {
-            user.updated_at = Utc::now();
-        }
-
-        let rows_affected = diesel::update(users::table.find(Uuid::from(user.id)))
-            .set((
-                users::status.eq(user.status.as_str()),
-                users::locked_at.eq(None::<DateTime<Utc>>),
-                users::deactivated_at.eq(None::<DateTime<Utc>>),
-                users::updated_at.eq(user.updated_at),
-            ))
-            .execute(self.conn)
-            .await?;
-
-        DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
-        Ok(user)
-    }
-
-    #[tracing::instrument(
         name = "db.user.set_can_request_admin",
         skip_all,
         fields(%user.id, user.can_request_admin = can_request_admin),

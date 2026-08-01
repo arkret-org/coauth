@@ -434,6 +434,12 @@ fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) 
         crate::services::user_admin::UserAdminServiceError::InvalidDisplayName => {
             AppError::bad_request("Invalid display name")
         }
+        crate::services::user_admin::UserAdminServiceError::InvalidStatusTransition {
+            from,
+            to,
+        } => AppError::bad_request(format!(
+            "Unexpected account status transition from {from} to {to}"
+        )),
         crate::services::user_admin::UserAdminServiceError::InvalidEmail { email, .. } => {
             AppError::bad_request(format!("Email {email:?} is not valid"))
         }

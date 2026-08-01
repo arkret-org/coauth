@@ -495,18 +495,6 @@ pub trait ConnectorAdmin: Send + Sync {
     /// could not be deleted.
     async fn delete_user(&self, handle: &str, erase: bool) -> Result<(), anyhow::Error>;
 
-    /// Reactivate a user in the downstream principal system.
-    ///
-    /// # Parameters
-    ///
-    /// * `handle` - The handle of the user to reactivate.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the downstream system is unreachable or the user
-    /// could not be reactivated.
-    async fn reactivate_user(&self, handle: &str) -> Result<(), anyhow::Error>;
-
     /// Set the displayname of a user in the downstream principal system.
     ///
     /// # Parameters
@@ -637,10 +625,6 @@ where
 
     async fn delete_user(&self, handle: &str, erase: bool) -> Result<(), anyhow::Error> {
         self.as_admin().delete_user(handle, erase).await
-    }
-
-    async fn reactivate_user(&self, handle: &str) -> Result<(), anyhow::Error> {
-        self.as_admin().reactivate_user(handle).await
     }
 
     async fn set_displayname(&self, handle: &str, displayname: &str) -> Result<(), anyhow::Error> {

@@ -117,10 +117,6 @@ enum Subcommand {
     UnlockUser {
         /// User to unlock
         handle: String,
-
-        /// Whether to reactivate the user if it had been deactivated
-        #[arg(long)]
-        reactivate: bool,
     },
 
     /// Register a user
@@ -228,8 +224,8 @@ impl Options {
                 command_handlers::handle_lock_user(figment, handle, deactivate).await
             }
 
-            SC::UnlockUser { handle, reactivate } => {
-                command_handlers::handle_unlock_user(figment, handle, reactivate).await
+            SC::UnlockUser { handle } => {
+                command_handlers::handle_unlock_user(figment, handle).await
             }
 
             SC::RegisterUser {

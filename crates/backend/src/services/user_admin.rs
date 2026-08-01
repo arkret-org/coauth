@@ -43,6 +43,12 @@ pub enum UserAdminServiceError {
     #[error("display name is invalid")]
     InvalidDisplayName,
 
+    #[error("account status transition from {from} to {to} is invalid")]
+    InvalidStatusTransition {
+        from: &'static str,
+        to: &'static str,
+    },
+
     #[error("email \"{email}\" is not valid")]
     InvalidEmail {
         email: String,
@@ -89,8 +95,7 @@ pub async fn patch_user(
 
     let display_name_patch = patch.display_name.clone();
     let next_status = account_status_from_admin_patch(user.status, &patch);
-    let should_reactivate =
-        user.status == AccountStatus::Deactivated && next_status == AccountStatus::Active;
+    validate_admin_status_transition(user.status, next_status)?;
     let should_schedule_deactivation = !account_status_needs_deactivation_fanout(user.status)
         && account_status_needs_deactivation_fanout(next_status);
     let should_schedule_erasure = user.status != AccountStatus::ErasurePending
@@ -100,13 +105,6 @@ pub async fn patch_user(
         .user()
         .patch(clock, user.clone(), patch.clone().into())
         .await?;
-
-    if should_reactivate {
-        principal_server
-            .reactivate_user(&updated.localpart)
-            .await
-            .map_err(UserAdminServiceError::PrincipalServer)?;
-    }
 
     if !account_status_needs_deactivation_fanout(updated.status) {
         sync_display_name_patch(principal_server, &updated, display_name_patch)
@@ -361,6 +359,23 @@ fn account_status_needs_deactivation_fanout(status: AccountStatus) -> bool {
     )
 }
 
+fn validate_admin_status_transition(
+    current: AccountStatus,
+    next: AccountStatus,
+) -> Result<(), UserAdminServiceError> {
+    if current == next
+        || current
+            .validate_transition_to(next, next.is_less_strict_than(current))
+            .is_ok()
+    {
+        return Ok(());
+    }
+    Err(UserAdminServiceError::InvalidStatusTransition {
+        from: current.as_str(),
+        to: next.as_str(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -377,5 +392,21 @@ mod tests {
             assert!(source.can_transition_to(AccountStatus::ErasurePending));
             assert_ne!(source, AccountStatus::ErasurePending);
         }
+    }
+
+    #[test]
+    fn deactivated_account_cannot_be_reactivated() {
+        assert!(matches!(
+            validate_admin_status_transition(AccountStatus::Deactivated, AccountStatus::Active),
+            Err(UserAdminServiceError::InvalidStatusTransition {
+                from: "deactivated",
+                to: "active"
+            })
+        ));
+        validate_admin_status_transition(
+            AccountStatus::Deactivated,
+            AccountStatus::ErasurePending,
+        )
+        .unwrap();
     }
 }

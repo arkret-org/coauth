@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-//! Jobs that drive the user lifecycle -- deactivation and reactivation.
+//! Jobs that drive terminal user deactivation and erasure projection cleanup.
 //!
 //! Both jobs follow a two-phase pattern: mutate the local database first,
 //! then propagate changes to the downstream principal system.
@@ -11,7 +11,7 @@ use anyhow::Context;
 use async_trait::async_trait;
 use coauth_data::oauth::{OAuthSessionFilter, SessionGrantFilter};
 use coauth_data::personal::PersonalSessionFilter;
-use coauth_data::queue::{AccountProjectionRewriteJob, DeactivateUserJob, ReactivateUserJob};
+use coauth_data::queue::{AccountProjectionRewriteJob, DeactivateUserJob};
 use coauth_data::user::{BrowserSessionFilter, User, UserEmailFilter, UserRepository, UserStatus};
 use coauth_data::{BoxRepository, Clock, Pagination, RepositoryAccess};
 use tracing::info;
@@ -261,49 +261,6 @@ impl RunnableJob for AccountProjectionRewriteJob {
                 .map_err(JobError::retry)?;
             info!(removed = email_count, "email addresses purged");
         }
-
-        repo.save().await.map_err(JobError::retry)?;
-        Ok(())
-    }
-}
-
-// ---------------------------------------------------------------------------
-// ReactivateUserJob
-// ---------------------------------------------------------------------------
-
-#[async_trait]
-impl RunnableJob for ReactivateUserJob {
-    #[tracing::instrument(
-        name = "job.reactivate_user",
-        fields(user.id = %self.user_id()),
-        skip_all,
-    )]
-    async fn run(&self, state: &State, _ctx: JobContext) -> Result<(), JobError> {
-        let principal = state.principal_connection();
-        let mut repo = state.repository().await.map_err(JobError::retry)?;
-
-        let target = repo
-            .user()
-            .lookup(self.user_id())
-            .await
-            .map_err(JobError::retry)?
-            .context("target user does not exist")
-            .map_err(JobError::fail)?;
-
-        // Re-enable the account on the principal *before* flipping the local
-        // flag -- this way the user cannot authenticate until the downstream
-        // principal system is ready.
-        info!(handle = %target.localpart, "requesting principal reactivation");
-        principal
-            .reactivate_user(&target.localpart)
-            .await
-            .map_err(JobError::retry)?;
-
-        let _reactivated = repo
-            .user()
-            .reactivate(target)
-            .await
-            .map_err(JobError::retry)?;
 
         repo.save().await.map_err(JobError::retry)?;
         Ok(())

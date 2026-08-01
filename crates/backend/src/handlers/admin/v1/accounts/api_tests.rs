@@ -339,7 +339,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_patch_account_reactivate() {
+    async fn test_patch_account_rejects_deactivated_to_active() {
         setup();
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
@@ -378,18 +378,13 @@ mod tests {
             }));
 
         let response = state.request(request).await;
-        response.assert_status(StatusCode::OK);
-        let body: serde_json::Value = response.json();
-        assert_eq!(
-            body["data"]["attributes"]["deactivated_at"],
-            serde_json::Value::Null
-        );
+        response.assert_status(StatusCode::BAD_REQUEST);
 
         let principal_user = state
             .principal_server_admin
             .query_user(&user.localpart)
             .await
             .unwrap();
-        assert!(!principal_user.deactivated);
+        assert!(principal_user.deactivated);
     }
 }
