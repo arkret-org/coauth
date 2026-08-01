@@ -44,8 +44,6 @@ use crate::services::resolved_principal_audiences::{
 
 const ARKRET_PROTOCOL_VERSION: &str = "1.0";
 
-const ARKRET_HTTP_BINDING: &str = "http_json";
-
 pub const CLAIM_PRINCIPAL_ID: &str = "org.arkret.principal_id";
 
 pub const CLAIM_DEVICE_ID: &str = "org.arkret.device_id";

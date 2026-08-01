@@ -508,7 +508,7 @@ pub(crate) fn service_describe_response(
             .map(|value| (*value).to_owned())
             .collect(),
         supported_bindings: vec![
-            SupportedBinding::new(ARKRET_HTTP_BINDING)
+            SupportedBinding::new(arkret_wire::BindingKind::HttpJson)
                 .with_base_url(url_builder.http_base().to_string()),
         ],
         supported_features: features.clone(),
