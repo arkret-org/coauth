@@ -639,6 +639,7 @@ pub async fn server_describe(
             .copied()
             .unwrap_or(true),
     );
+    response.rate_limit_policy = Some(depot.limiter()?.advertised_public_lookup_policy());
     set_auth_metadata_oidc_clients(&mut response.auth_metadata, oidc_clients);
     response
         .validate()

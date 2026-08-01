@@ -57,11 +57,11 @@ fn accept_language(req: &Request) -> Option<&str> {
 
 /// The UI locale for a request, given whatever the caller knows.
 ///
-/// * `account` — the signed-in user's stored `preferred_locale`, when the
-///   handler has already loaded it. Pass `None` when there is no session or
-///   the account has not been resolved yet; it is a tier, not a requirement.
-/// * `requested` — an explicit request carried with the navigation, in
-///   practice the OIDC `ui_locales` parameter.
+/// * `account` — the signed-in user's stored `preferred_locale`, when the handler has already
+///   loaded it. Pass `None` when there is no session or the account has not been resolved yet; it
+///   is a tier, not a requirement.
+/// * `requested` — an explicit request carried with the navigation, in practice the OIDC
+///   `ui_locales` parameter.
 #[must_use]
 pub fn preferred_ui_locale(
     req: &Request,

@@ -633,12 +633,12 @@ pub struct PrincipalDidBinding {
 /// The three states are distinct and must stay distinct:
 ///
 /// * `Ok(None)` — the field was absent from the patch; leave it alone.
-/// * `Ok(Some(None))` — an explicit `null`; clear the preference so the user
-///   falls back to their browser's language.
-/// * `Err(tag)` — a value the product cannot render. Returned as an error, not
-///   folded into "clear it": silently discarding a stated preference would
-///   leave the user's setting mysteriously unsaved, and silently storing it
-///   would put a value in the database that no catalogue can satisfy.
+/// * `Ok(Some(None))` — an explicit `null`; clear the preference so the user falls back to their
+///   browser's language.
+/// * `Err(tag)` — a value the product cannot render. Returned as an error, not folded into "clear
+///   it": silently discarding a stated preference would leave the user's setting mysteriously
+///   unsaved, and silently storing it would put a value in the database that no catalogue can
+///   satisfy.
 ///
 /// Region and script variants are accepted and folded onto the base language,
 /// so an existing client sending `zh-CN` keeps working and lands on `zh`.

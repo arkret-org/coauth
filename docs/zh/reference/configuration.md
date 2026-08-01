@@ -218,7 +218,14 @@ rate_limiting:
     per_account:
       burst: 1800
       per_second: 0.5
+  identity_resolution:
+    per_ip:
+      burst: 60
+      per_second: 1.0
 ```
+
+`identity_resolution` 独立限制公共 DID resolve/document 读取；默认每个来源 IP 每分钟 60 次，
+不会与 handle directory 查询共享配额。
 
 ## `telemetry`
 

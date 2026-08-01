@@ -49,6 +49,7 @@ pub async fn identity_resolve(
         .parse_json()
         .await
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
+    enforce_identity_resolution_rate_limit(req, depot).await?;
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let binding_store = depot.verified_did_binding_store()?;
@@ -103,6 +104,7 @@ pub async fn identity_document(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<IdentityDocumentViewOutcome>, ArkretRouteError> {
+    enforce_identity_resolution_rate_limit(req, depot).await?;
     let did = req
         .query::<String>("did")
         .ok_or_else(|| ArkretRouteError::BadRequest("missing did query parameter".into()))?;
@@ -132,6 +134,26 @@ pub async fn identity_document(
         seq: None,
         receipts: Vec::new(),
     })))
+}
+
+async fn enforce_identity_resolution_rate_limit(
+    req: &Request,
+    depot: &Depot,
+) -> Result<(), ArkretRouteError> {
+    let limiter = depot.limiter()?;
+    let requester = extract_bound_activity_tracker(req, depot)
+        .ip()
+        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
+    limiter
+        .check_identity_resolution(requester)
+        .await
+        .map_err(|error| {
+            ArkretRouteError::coded(
+                StatusCode::TOO_MANY_REQUESTS,
+                arkret_wire::ErrorCode::RATE_LIMITED,
+                error.to_string(),
+            )
+        })
 }
 
 #[handler]

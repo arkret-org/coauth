@@ -95,6 +95,12 @@ pub enum DirectoryLookupLimitedError {
     Requester(RequesterFingerprint),
 }
 
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum IdentityResolutionLimitedError {
+    #[error("Too many identity resolution requests for requester {0}")]
+    Requester(RequesterFingerprint),
+}
+
 #[derive(Debug, Clone, Copy, thiserror::Error)]
 pub enum MfaTotpLimitedError {
     #[error("Too many TOTP attempts for account {0}")]
@@ -397,6 +403,9 @@ struct LimiterInner {
     phone_authentication_sms_per_session: KeyedLimiter<Ulid>,
     phone_authentication_attempt_per_session: KeyedLimiter<Ulid>,
     directory_lookup_per_requester: KeyedLimiter<RequesterFingerprint>,
+    identity_resolution_per_requester: KeyedLimiter<RequesterFingerprint>,
+    identity_resolution_config: RateLimiterConfiguration,
+    directory_lookup_config: RateLimiterConfiguration,
     did_binding_per_requester: KeyedLimiter<RequesterFingerprint>,
     did_binding_per_account: KeyedLimiter<Ulid>,
     mfa_totp_per_account: KeyedLimiter<Ulid>,
@@ -442,6 +451,11 @@ impl LimiterInner {
             directory_lookup_per_requester: KeyedLimiter::from_config(
                 &config.directory_lookup.per_ip,
             )?,
+            identity_resolution_per_requester: KeyedLimiter::from_config(
+                &config.identity_resolution.per_ip,
+            )?,
+            identity_resolution_config: config.identity_resolution.per_ip,
+            directory_lookup_config: config.directory_lookup.per_ip,
             did_binding_per_requester: KeyedLimiter::from_config(&config.did_binding.per_ip)?,
             did_binding_per_account: KeyedLimiter::from_config(&config.did_binding.per_account)?,
             mfa_totp_per_account: KeyedLimiter::from_config(&config.mfa_totp.per_account)?,
@@ -752,6 +766,65 @@ impl Limiter {
         Ok(())
     }
 
+    /// Check whether a public DID resolve/document read may proceed for the
+    /// requester. This is a separate bucket from handle discovery so the two
+    /// public lookup surfaces cannot starve one another.
+    pub async fn check_identity_resolution(
+        &self,
+        requester: RequesterFingerprint,
+    ) -> Result<(), IdentityResolutionLimitedError> {
+        if !self
+            .inner
+            .identity_resolution_per_requester
+            .check(&requester)
+            .await
+        {
+            return Err(IdentityResolutionLimitedError::Requester(requester));
+        }
+        Ok(())
+    }
+
+    /// Describe the public lookup quotas enforced by this limiter. The wire
+    /// declaration is derived from the same config snapshot as the buckets.
+    pub fn advertised_public_lookup_policy(&self) -> arkret_models_discovery::RateLimitPolicy {
+        fn entry(
+            operation_id: &str,
+            config: RateLimiterConfiguration,
+        ) -> arkret_models_discovery::RateLimitEntry {
+            let (limit, period) = config
+                .to_limit_and_period()
+                .expect("validated rate limiter configuration");
+            arkret_models_discovery::RateLimitEntry {
+                operation_id: Some(operation_id.to_owned()),
+                rate_limit_scope: Some(arkret_models_discovery::RateLimitScope::Single(
+                    "ip".to_owned(),
+                )),
+                window_seconds: Some(period.as_secs_f64().ceil().clamp(1.0, u32::MAX as f64) as u32),
+                max_requests: Some(u32::try_from(limit).unwrap_or(u32::MAX)),
+                ..arkret_models_discovery::RateLimitEntry::default()
+            }
+        }
+
+        arkret_models_discovery::RateLimitPolicy {
+            policy_version: Some("1".to_owned()),
+            entries: vec![
+                entry(
+                    arkret_wire::ServiceOperationId::ROOT_IDENTITY_QUERY_RESOLVE,
+                    self.inner.identity_resolution_config,
+                ),
+                entry(
+                    arkret_wire::ServiceOperationId::ROOT_IDENTITY_DOCUMENT_RESOURCE_GET,
+                    self.inner.identity_resolution_config,
+                ),
+                entry(
+                    arkret_wire::ServiceOperationId::FIND_DIRECTORY_QUERY_RESOLVE_HANDLE,
+                    self.inner.directory_lookup_config,
+                ),
+            ],
+            ..arkret_models_discovery::RateLimitPolicy::default()
+        }
+    }
+
     /// Per-IP gate for the unauthenticated device-link user-code lookup
     /// (`device_link_get`, COA-COR-03). The endpoint maps a user code to a
     /// pending device-authorization grant_id with no attempt counter; a per-IP
@@ -944,6 +1017,26 @@ mod tests {
                 .await
                 .is_ok()
         );
+    }
+
+    #[tokio::test]
+    async fn test_identity_resolution_limiter_and_advertisement() {
+        let limiter = Limiter::new(&RateLimitingConfig::default()).unwrap();
+        let requester = RequesterFingerprint::new([203, 0, 113, 12].into());
+
+        for _ in 0..60 {
+            assert!(limiter.check_identity_resolution(requester).await.is_ok());
+        }
+        assert!(limiter.check_identity_resolution(requester).await.is_err());
+
+        let policy = limiter.advertised_public_lookup_policy();
+        assert_eq!(policy.entries.len(), 3);
+        assert!(policy.entries.iter().any(|entry| {
+            entry.operation_id.as_deref()
+                == Some(arkret_wire::ServiceOperationId::ROOT_IDENTITY_QUERY_RESOLVE)
+                && entry.window_seconds == Some(60)
+                && entry.max_requests == Some(60)
+        }));
     }
 
     fn test_user(name: &str) -> User {

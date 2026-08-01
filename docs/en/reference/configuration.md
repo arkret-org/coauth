@@ -232,7 +232,15 @@ rate_limiting:
     per_account:
       burst: 1800
       per_second: 0.5
+  identity_resolution:
+    per_ip:
+      burst: 60
+      per_second: 1.0
 ```
+
+`identity_resolution` independently limits public DID resolve/document reads.
+The default is 60 requests per source IP per minute and does not share a
+bucket with handle-directory lookups.
 
 ## `telemetry`
 

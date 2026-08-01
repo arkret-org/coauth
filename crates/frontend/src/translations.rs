@@ -6,11 +6,10 @@
 //! supplies the browser-side observations (`?ui_locales`, `localStorage`,
 //! `<html lang>`, `navigator.language`) and renders the chosen catalogue.
 
+pub use arkret_locale::UiLocale;
 use dioxus::prelude::*;
 use fluent_bundle::{FluentArgs, FluentBundle, FluentResource, FluentValue};
 use unic_langid::LanguageIdentifier;
-
-pub use arkret_locale::UiLocale;
 
 #[cfg(target_arch = "wasm32")]
 const LOCALE_STORAGE_KEY: &str = "arkret.ui.locale.v1";

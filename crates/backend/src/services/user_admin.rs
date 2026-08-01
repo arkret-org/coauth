@@ -403,10 +403,7 @@ mod tests {
                 to: "active"
             })
         ));
-        validate_admin_status_transition(
-            AccountStatus::Deactivated,
-            AccountStatus::ErasurePending,
-        )
-        .unwrap();
+        validate_admin_status_transition(AccountStatus::Deactivated, AccountStatus::ErasurePending)
+            .unwrap();
     }
 }

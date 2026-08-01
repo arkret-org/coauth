@@ -10,9 +10,9 @@ use crate::handlers::preferred_ui_locale;
 /// resolver as every other surface, which means the returned code is always one
 /// the template catalogues actually carry.
 ///
-/// * `account` — the recipient's stored `preferred_locale`. A notification is
-///   read later, on whatever device the person happens to open, so their
-///   account preference outranks anything about the request that triggered it.
+/// * `account` — the recipient's stored `preferred_locale`. A notification is read later, on
+///   whatever device the person happens to open, so their account preference outranks anything
+///   about the request that triggered it.
 /// * `requested` — an explicit per-message language override.
 #[must_use]
 pub fn notification_language(

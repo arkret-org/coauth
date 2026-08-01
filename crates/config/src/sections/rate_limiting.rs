@@ -35,6 +35,11 @@ pub struct RateLimitingConfig {
     #[serde(default)]
     pub directory_lookup: DirectoryLookupRateLimitingConfig,
 
+    /// Public identity-resolution read limits. Applies to the DID resolve and
+    /// pinned-document compatibility surfaces.
+    #[serde(default)]
+    pub identity_resolution: IdentityResolutionRateLimitingConfig,
+
     /// DID-binding rate limits. Applies to admin-driven attach/remove
     /// of principal DIDs on accounts.
     #[serde(default)]
@@ -74,6 +79,14 @@ pub struct DirectoryLookupRateLimitingConfig {
     /// Controls how many directory handle lookups are permitted from a
     /// single source IP over the sliding window.
     #[serde(default = "default_directory_lookup_per_ip")]
+    pub per_ip: RateLimiterConfiguration,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct IdentityResolutionRateLimitingConfig {
+    /// Controls how many public identity reads are permitted from one source
+    /// IP over the sliding window.
+    #[serde(default = "default_identity_resolution_per_ip")]
     pub per_ip: RateLimiterConfiguration,
 }
 
@@ -341,6 +354,10 @@ impl ConfigurationSection for RateLimitingConfig {
             return Err(error_on_nested_field(error, "directory_lookup", "per_ip").into());
         }
 
+        if let Some(error) = error_on_limiter(&self.identity_resolution.per_ip) {
+            return Err(error_on_nested_field(error, "identity_resolution", "per_ip").into());
+        }
+
         if let Some(error) = error_on_limiter(&self.did_binding.per_ip) {
             return Err(error_on_nested_field(error, "did_binding", "per_ip").into());
         }
@@ -493,6 +510,13 @@ fn default_directory_lookup_per_ip() -> RateLimiterConfiguration {
     }
 }
 
+fn default_identity_resolution_per_ip() -> RateLimiterConfiguration {
+    RateLimiterConfiguration {
+        burst: NonZeroU32::new(60).unwrap(),
+        per_second: 1.0,
+    }
+}
+
 fn default_mfa_totp_per_account() -> RateLimiterConfiguration {
     // 5 attempts every 15 minutes (900 seconds): the burst is 5 and the
     // replenishment rate is 5 / 900 ≈ 0.00555 actions per second.
@@ -525,6 +549,7 @@ impl Default for RateLimitingConfig {
             email_authentication: EmailauthenticationRateLimitingConfig::default(),
             phone_authentication: PhoneAuthenticationRateLimitingConfig::default(),
             directory_lookup: DirectoryLookupRateLimitingConfig::default(),
+            identity_resolution: IdentityResolutionRateLimitingConfig::default(),
             did_binding: DidBindingRateLimitingConfig::default(),
             mfa_totp: MfaTotpRateLimitingConfig::default(),
         }
@@ -552,6 +577,14 @@ impl Default for DirectoryLookupRateLimitingConfig {
     fn default() -> Self {
         DirectoryLookupRateLimitingConfig {
             per_ip: default_directory_lookup_per_ip(),
+        }
+    }
+}
+
+impl Default for IdentityResolutionRateLimitingConfig {
+    fn default() -> Self {
+        IdentityResolutionRateLimitingConfig {
+            per_ip: default_identity_resolution_per_ip(),
         }
     }
 }
