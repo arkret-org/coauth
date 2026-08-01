@@ -66,9 +66,9 @@ pub async fn patch_profile(
 
     let preferred_locale = coauth_data::parse_locale_preference_patch(input.preferred_locale)
         .map_err(|tag| {
-            RouteError::BadRequest(
-                format!("unsupported preferred_locale {tag:?}; this deployment ships en and zh"),
-            )
+            RouteError::BadRequest(format!(
+                "unsupported preferred_locale {tag:?}; this deployment ships en and zh"
+            ))
         })?;
 
     let patch = coauth_data::UserProfilePatch {

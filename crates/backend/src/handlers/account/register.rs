@@ -67,12 +67,10 @@ pub async fn post_register(
     let repo_factory = depot.repo_factory()?;
     let url_builder = depot.url_builder()?;
     let notification_language = crate::handlers::notification_language(
-        req,
-        depot,
+        req, depot,
         // No account tier: this runs before any user is identified, so the
         // request headers are the only preference available.
-        None,
-        None,
+        None, None,
     );
 
     let clock = make_clock();
@@ -335,12 +333,10 @@ pub async fn post_resend_verification(
     let clock = make_clock();
     let mut rng = make_rng();
     let notification_language = crate::handlers::notification_language(
-        req,
-        depot,
+        req, depot,
         // No account tier: this runs before any user is identified, so the
         // request headers are the only preference available.
-        None,
-        None,
+        None, None,
     );
 
     let activity_tracker = extract_bound_activity_tracker(req, depot);
@@ -406,12 +402,10 @@ pub async fn post_change_email(
     let clock = make_clock();
     let mut rng = make_rng();
     let notification_language = crate::handlers::notification_language(
-        req,
-        depot,
+        req, depot,
         // No account tier: this runs before any user is identified, so the
         // request headers are the only preference available.
-        None,
-        None,
+        None, None,
     );
 
     let activity_tracker = extract_bound_activity_tracker(req, depot);

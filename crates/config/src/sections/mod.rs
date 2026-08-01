@@ -58,7 +58,7 @@ pub use self::passwords::{
     Algorithm as PasswordAlgorithm, HashingScheme as PasswordHashingScheme, PasswordsConfig,
 };
 pub use self::policy::{PolicyConfig, PolicyEngine};
-pub use self::rate_limiting::{RateLimiterConfiguration, RateLimitingConfig};
+pub use self::rate_limiting::{LoginLockoutConfig, RateLimiterConfiguration, RateLimitingConfig};
 pub use self::secrets::SecretsConfig;
 pub use self::sms::{
     AliyunSmsProviderConfig, HttpWebhookSmsProviderConfig, PaloudInternalSmsProviderConfig,

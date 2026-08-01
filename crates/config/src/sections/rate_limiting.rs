@@ -98,6 +98,36 @@ pub struct LoginRateLimitingConfig {
     /// change their own password.
     #[serde(default = "default_login_per_account")]
     pub per_account: RateLimiterConfiguration,
+
+    /// Temporary lockout after consecutive failed password logins.
+    #[serde(default)]
+    pub lockout: LoginLockoutConfig,
+}
+
+/// Failed-login lockout for password authentication.
+///
+/// This is not the same control as the sliding-window limiters above and does
+/// not subsume them: a limiter throttles *attempt rate* and spends its
+/// allowance on successful logins too, so a patient attacker who stays under
+/// the rate keeps guessing forever. A lockout counts *consecutive failures*
+/// against one account and stops the guessing outright until the window
+/// elapses or a correct password resets the counter.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct LoginLockoutConfig {
+    /// Consecutive failed password attempts that lock the account. `0`
+    /// disables the lockout.
+    #[serde(default = "default_login_lockout_threshold")]
+    pub consecutive_failures: u32,
+
+    /// How long the account stays locked once the threshold is reached.
+    #[serde(default = "default_login_lockout_seconds")]
+    pub lockout_seconds: u64,
+
+    /// How long a failure counts toward the consecutive total. A failure older
+    /// than this is forgotten, so occasional typos spread over days never
+    /// accumulate into a lockout.
+    #[serde(default = "default_login_lockout_failure_window_seconds")]
+    pub failure_window_seconds: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
@@ -248,6 +278,24 @@ impl ConfigurationSection for RateLimitingConfig {
         if let Some(error) = error_on_limiter(&self.login.per_account) {
             return Err(error_on_nested_field(error, "login", "per_account").into());
         }
+        // A threshold with a zero lockout window would count failures and then
+        // release the account in the same instant — a control that reads as
+        // enabled and stops nothing.
+        if self.login.lockout.consecutive_failures > 0
+            && (self.login.lockout.lockout_seconds == 0
+                || self.login.lockout.failure_window_seconds == 0)
+        {
+            return Err(error_on_nested_field(
+                figment::error::Error::custom(
+                    "`lockout_seconds` and `failure_window_seconds` must be greater than zero \
+                     when `consecutive_failures` is set; use `consecutive_failures = 0` to \
+                     disable the lockout",
+                ),
+                "login",
+                "lockout",
+            )
+            .into());
+        }
 
         if let Some(error) = error_on_limiter(&self.email_authentication.per_ip) {
             return Err(error_on_nested_field(error, "email_authentication", "per_ip").into());
@@ -344,6 +392,21 @@ fn default_login_per_account() -> RateLimiterConfiguration {
         burst: NonZeroU32::new(1800).unwrap(),
         per_second: 1800.0 / 3600.0,
     }
+}
+
+fn default_login_lockout_threshold() -> u32 {
+    // NIST SP 800-63B allows up to 100 consecutive failures when rate limiting
+    // is also in force; 10 is the common operational setting and leaves ample
+    // room for a user who mistypes repeatedly.
+    10
+}
+
+fn default_login_lockout_seconds() -> u64 {
+    900
+}
+
+fn default_login_lockout_failure_window_seconds() -> u64 {
+    3_600
 }
 
 fn default_registration() -> RateLimiterConfiguration {
@@ -498,6 +561,17 @@ impl Default for LoginRateLimitingConfig {
         LoginRateLimitingConfig {
             per_ip: default_login_per_ip(),
             per_account: default_login_per_account(),
+            lockout: LoginLockoutConfig::default(),
+        }
+    }
+}
+
+impl Default for LoginLockoutConfig {
+    fn default() -> Self {
+        LoginLockoutConfig {
+            consecutive_failures: default_login_lockout_threshold(),
+            lockout_seconds: default_login_lockout_seconds(),
+            failure_window_seconds: default_login_lockout_failure_window_seconds(),
         }
     }
 }

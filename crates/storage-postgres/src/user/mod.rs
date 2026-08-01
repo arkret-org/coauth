@@ -177,10 +177,7 @@ impl TryFrom<UserRow> for User {
             // past the constraint, falling through to the next resolution tier
             // is better than pinning the UI to a language no catalogue exists
             // for.
-            preferred_locale: row
-                .preferred_locale
-                .as_deref()
-                .and_then(UiLocale::from_tag),
+            preferred_locale: row.preferred_locale.as_deref().and_then(UiLocale::from_tag),
             handle_aliases: row.handle_aliases,
         })
     }

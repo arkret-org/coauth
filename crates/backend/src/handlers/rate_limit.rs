@@ -101,6 +101,14 @@ pub enum MfaTotpLimitedError {
     Account(Ulid),
 }
 
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[error("Account {account} is locked out after {failures} consecutive failed password logins")]
+pub struct LoginLockedOutError {
+    pub account: Ulid,
+    pub failures: u32,
+    pub retry_after: Duration,
+}
+
 // ---------------------------------------------------------------------------
 // RequesterFingerprint (unchanged)
 // ---------------------------------------------------------------------------
@@ -239,6 +247,132 @@ impl<K: Clone + Eq + Hash + Send + Sync + 'static> KeyedLimiter<K> {
 }
 
 // ---------------------------------------------------------------------------
+// Failed-login lockout
+// ---------------------------------------------------------------------------
+
+/// Consecutive failed password logins per account, and the lockout they earn.
+///
+/// Deliberately a separate control from [`KeyedLimiter`], not a tighter quota
+/// on it. A sliding-window limiter bounds the *rate* of attempts and spends
+/// its allowance on successful logins too, so an attacker who stays under the
+/// rate guesses indefinitely and a legitimate user's own logins pay for the
+/// attacker's traffic. This counts *failures* only, resets on success, and
+/// refuses the account outright once the threshold is reached.
+///
+/// Keyed by account ULID, which is not attacker-mintable (an unknown handle
+/// never reaches here — `login_with_password` returns `InvalidCredentials`
+/// before resolving a user), so the map is bounded by the real account count.
+/// The same `MAX_KEYED_GUARDS` cap and lazy sweep as `KeyedLimiter` apply
+/// anyway, because an unbounded in-memory map is a DoS on the control itself.
+struct FailedLoginTracker {
+    state: Mutex<HashMap<Ulid, FailedLoginState>>,
+    threshold: u32,
+    lockout: Duration,
+    failure_window: Duration,
+}
+
+#[derive(Clone, Copy)]
+struct FailedLoginState {
+    consecutive_failures: u32,
+    last_failure: Instant,
+    locked_until: Option<Instant>,
+}
+
+impl FailedLoginTracker {
+    fn new(config: &coauth_config::LoginLockoutConfig) -> Self {
+        Self {
+            state: Mutex::new(HashMap::new()),
+            threshold: config.consecutive_failures,
+            lockout: Duration::from_secs(config.lockout_seconds),
+            failure_window: Duration::from_secs(config.failure_window_seconds),
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.threshold > 0
+    }
+
+    /// The account's lockout, if it is currently locked out.
+    async fn check(&self, account: Ulid) -> Result<(), LoginLockedOutError> {
+        if !self.enabled() {
+            return Ok(());
+        }
+        let now = Instant::now();
+        let mut state = self.state.lock().await;
+        self.sweep(&mut state, now);
+        let Some(entry) = state.get(&account) else {
+            return Ok(());
+        };
+        match entry.locked_until {
+            Some(until) if until > now => Err(LoginLockedOutError {
+                account,
+                failures: entry.consecutive_failures,
+                retry_after: until.duration_since(now),
+            }),
+            _ => Ok(()),
+        }
+    }
+
+    /// Record one failed password verification, locking at the threshold.
+    async fn record_failure(&self, account: Ulid) {
+        if !self.enabled() {
+            return;
+        }
+        let now = Instant::now();
+        let mut state = self.state.lock().await;
+        self.sweep(&mut state, now);
+        if state.len() >= MAX_KEYED_GUARDS && !state.contains_key(&account) {
+            Self::evict_oldest(&mut state);
+        }
+        let entry = state.entry(account).or_insert(FailedLoginState {
+            consecutive_failures: 0,
+            last_failure: now,
+            locked_until: None,
+        });
+        // A failure older than the window is not part of this run: forgetting
+        // it is what stops occasional typos spread over days from summing into
+        // a lockout.
+        if now.duration_since(entry.last_failure) >= self.failure_window {
+            entry.consecutive_failures = 0;
+        }
+        entry.consecutive_failures = entry.consecutive_failures.saturating_add(1);
+        entry.last_failure = now;
+        if entry.consecutive_failures >= self.threshold {
+            entry.locked_until = Some(now + self.lockout);
+        }
+    }
+
+    /// Clear the run after a correct password.
+    ///
+    /// Callers MUST reach this only after the password verified, and MUST NOT
+    /// reach it when the account is locked out — otherwise an attacker who
+    /// finally guesses right during a lockout would clear their own lockout.
+    async fn record_success(&self, account: Ulid) {
+        if !self.enabled() {
+            return;
+        }
+        self.state.lock().await.remove(&account);
+    }
+
+    /// Drop entries that are neither locked nor inside the failure window.
+    /// Such an entry is indistinguishable from an absent one.
+    fn sweep(&self, state: &mut HashMap<Ulid, FailedLoginState>, now: Instant) {
+        state.retain(|_, entry| {
+            entry.locked_until.is_some_and(|until| until > now)
+                || now.duration_since(entry.last_failure) < self.failure_window
+        });
+    }
+
+    fn evict_oldest(state: &mut HashMap<Ulid, FailedLoginState>) {
+        let target = state.len() / 10 + 1;
+        let mut seen: Vec<Instant> = state.values().map(|entry| entry.last_failure).collect();
+        seen.sort_unstable();
+        let cutoff = seen[target.min(seen.len() - 1)];
+        state.retain(|_, entry| entry.last_failure > cutoff);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Limiter (main public type)
 // ---------------------------------------------------------------------------
 
@@ -266,6 +400,7 @@ struct LimiterInner {
     did_binding_per_requester: KeyedLimiter<RequesterFingerprint>,
     did_binding_per_account: KeyedLimiter<Ulid>,
     mfa_totp_per_account: KeyedLimiter<Ulid>,
+    failed_login: FailedLoginTracker,
 }
 
 impl LimiterInner {
@@ -310,6 +445,7 @@ impl LimiterInner {
             did_binding_per_requester: KeyedLimiter::from_config(&config.did_binding.per_ip)?,
             did_binding_per_account: KeyedLimiter::from_config(&config.did_binding.per_account)?,
             mfa_totp_per_account: KeyedLimiter::from_config(&config.mfa_totp.per_account)?,
+            failed_login: FailedLoginTracker::new(&config.login.lockout),
         })
     }
 }
@@ -397,6 +533,29 @@ impl Limiter {
         }
 
         Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // Failed-login lockout
+    // -----------------------------------------------------------------------
+
+    /// Refuse an account that is serving a failed-login lockout.
+    ///
+    /// Runs before the password is verified, so a locked-out account costs the
+    /// attacker a rejection instead of a password hash — and, more to the
+    /// point, a correct guess made during the lockout does not authenticate.
+    pub async fn check_login_lockout(&self, user: &User) -> Result<(), LoginLockedOutError> {
+        self.inner.failed_login.check(user.id).await
+    }
+
+    /// Count one failed password verification against the account.
+    pub async fn record_failed_login(&self, user: &User) {
+        self.inner.failed_login.record_failure(user.id).await;
+    }
+
+    /// Clear the failure run after a verified password.
+    pub async fn record_successful_login(&self, user: &User) {
+        self.inner.failed_login.record_success(user.id).await;
     }
 
     // -----------------------------------------------------------------------
@@ -785,5 +944,103 @@ mod tests {
                 .await
                 .is_ok()
         );
+    }
+
+    fn test_user(name: &str) -> User {
+        let now = MockClock::default().now();
+        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(u64::from(name.len() as u32));
+        User {
+            id: coauth_data::new_id(now, &mut rng),
+            localpart: name.to_owned(),
+            sub: "123-456".to_owned(),
+            created_at: now,
+            updated_at: now,
+            status: arkret_models_collaboration::objects::account_status::AccountStatus::Active,
+            locked_at: None,
+            deactivated_at: None,
+            can_request_admin: false,
+            is_guest: false,
+            display_name: Some(name.to_owned()),
+            avatar_url: None,
+            preferred_locale: Some(arkret_locale::UiLocale::En),
+            handle_aliases: Vec::new(),
+        }
+    }
+
+    fn lockout_config(consecutive_failures: u32, lockout_seconds: u64) -> RateLimitingConfig {
+        let mut config = RateLimitingConfig::default();
+        config.login.lockout = coauth_config::LoginLockoutConfig {
+            consecutive_failures,
+            lockout_seconds,
+            failure_window_seconds: 3_600,
+        };
+        config
+    }
+
+    /// The control the sliding-window limiters do not provide: consecutive
+    /// failures against one account lock it, and the lock is what a later
+    /// attempt hits — including one carrying the correct password.
+    #[tokio::test]
+    async fn consecutive_failed_logins_lock_the_account() {
+        let limiter = Limiter::new(&lockout_config(3, 900)).unwrap();
+        let alice = test_user("lockout-alice");
+        let bob = test_user("lockout-bob");
+
+        for _ in 0..2 {
+            limiter.record_failed_login(&alice).await;
+            assert!(
+                limiter.check_login_lockout(&alice).await.is_ok(),
+                "below the threshold the account stays usable"
+            );
+        }
+
+        limiter.record_failed_login(&alice).await;
+        let locked = limiter
+            .check_login_lockout(&alice)
+            .await
+            .expect_err("the third consecutive failure locks the account");
+        assert_eq!(locked.failures, 3);
+        assert!(locked.retry_after.as_secs() > 0);
+
+        // The lockout is per account: one account's failures must not deny
+        // service to another.
+        assert!(limiter.check_login_lockout(&bob).await.is_ok());
+    }
+
+    /// A verified password ends the run. Without this a user who mistypes
+    /// twice, logs in, then mistypes once more would be locked out by three
+    /// failures that were never consecutive.
+    #[tokio::test]
+    async fn a_successful_login_clears_the_failure_run() {
+        let limiter = Limiter::new(&lockout_config(3, 900)).unwrap();
+        let alice = test_user("lockout-reset");
+
+        limiter.record_failed_login(&alice).await;
+        limiter.record_failed_login(&alice).await;
+        limiter.record_successful_login(&alice).await;
+
+        limiter.record_failed_login(&alice).await;
+        limiter.record_failed_login(&alice).await;
+        assert!(
+            limiter.check_login_lockout(&alice).await.is_ok(),
+            "the pre-success failures must not count toward the threshold"
+        );
+
+        limiter.record_failed_login(&alice).await;
+        assert!(limiter.check_login_lockout(&alice).await.is_err());
+    }
+
+    /// `consecutive_failures = 0` disables the control outright rather than
+    /// locking on the first failure.
+    #[tokio::test]
+    async fn a_zero_threshold_disables_the_lockout() {
+        let limiter = Limiter::new(&lockout_config(0, 900)).unwrap();
+        let alice = test_user("lockout-disabled");
+
+        for _ in 0..50 {
+            limiter.record_failed_login(&alice).await;
+        }
+
+        assert!(limiter.check_login_lockout(&alice).await.is_ok());
     }
 }

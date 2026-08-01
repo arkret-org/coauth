@@ -509,7 +509,10 @@ pub fn binding_from_resolution(
         .evidence_dependencies()
         .map_err(|error| DidBindingError::Digest(error.to_string()))?;
     let evidence = method_evidence(resolution);
-    let pins = (evidence.history_head.as_deref(), evidence.version_id.as_deref());
+    let pins = (
+        evidence.history_head.as_deref(),
+        evidence.version_id.as_deref(),
+    );
     let limited_trust = if method_is_evidence_bearing(&resolution.document.id) {
         LimitedTrust::for_evidence_bearing_method(pins.0, pins.1)
     } else {
@@ -643,10 +646,11 @@ pub async fn resolve_and_accept_binding(
     let key = request.key()?;
     let requirement = request.freshness.requirement();
     let held = store.load(repo, &key, now).await?;
-    if let Some(accepted) = held
-        .clone()
-        .filter(|accepted| accepted.binding().is_usable_for_authority(&requirement, now))
-    {
+    if let Some(accepted) = held.clone().filter(|accepted| {
+        accepted
+            .binding()
+            .is_usable_for_authority(&requirement, now)
+    }) {
         // Step 2: binding hit. `did_resolver` is not touched — this is the
         // "did:web / did:plc / delegated resolver do not re-fetch" guarantee.
         return Ok(accepted);
@@ -699,7 +703,10 @@ pub async fn resolve_and_accept_binding(
     // Fail closed: an acceptance whose status cannot back the requested
     // freshness is stored (so the invalidation index can find it) but is not
     // handed back as if it were usable.
-    if !accepted.binding().is_usable_for_authority(&requirement, now) {
+    if !accepted
+        .binding()
+        .is_usable_for_authority(&requirement, now)
+    {
         return Err(DidBindingError::NotAuthorityGrade {
             did: request.did.to_owned(),
             reason: match accepted.binding().status() {
@@ -792,8 +799,7 @@ fn history_head_digest(accepted: &AcceptedDidBinding) -> Result<Option<Hash>, Di
         .binding()
         .history_head()
         .map(|head| {
-            Hash::new(head.to_owned())
-                .map_err(|error| DidBindingError::Binding(error.to_string()))
+            Hash::new(head.to_owned()).map_err(|error| DidBindingError::Binding(error.to_string()))
         })
         .transpose()
 }

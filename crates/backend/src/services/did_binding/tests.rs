@@ -294,8 +294,7 @@ fn coauth_transport_dimensions_are_not_evidence_digest_inputs() {
     let mut different_report = healthy_resolution("did:web:alice.example");
     different_report.method_evidence = serde_json::json!({"method": "did:web"});
     let mut degraded = healthy_resolution("did:web:alice.example");
-    degraded.identity_fact_rejection =
-        Some(DidResolutionIdentityFactRejection::CacheOnlyDegraded);
+    degraded.identity_fact_rejection = Some(DidResolutionIdentityFactRejection::CacheOnlyDegraded);
 
     let base_digest = evidence_digest_of(&base);
     assert_eq!(base_digest, evidence_digest_of(&different_source));
@@ -599,8 +598,7 @@ fn stale_is_readable_for_low_risk_but_rejected_by_high_risk_freshness() {
         "an ordinary read must not be blocked by TTL expiry (spec §5)"
     );
     assert!(
-        !hit
-            .binding()
+        !hit.binding()
             .is_usable_for_authority(&high_risk_freshness().requirement(), later),
         "a high-risk write must refresh or fail closed"
     );
@@ -1085,7 +1083,10 @@ fn an_untouched_row_decodes_back_into_the_same_acceptance() {
 
     assert_eq!(row.key, key_columns(&key));
     assert_eq!(row.expires_at, accepted.binding().expires_at());
-    assert_eq!(row.history_head.as_deref(), accepted.binding().history_head());
+    assert_eq!(
+        row.history_head.as_deref(),
+        accepted.binding().history_head()
+    );
 
     let decoded = decode_row(&key, row).expect("an untouched row decodes");
     assert_eq!(decoded.binding().key(), key);
