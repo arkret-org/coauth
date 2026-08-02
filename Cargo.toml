@@ -118,6 +118,7 @@ coauth-templates = {version = "=0.3.0",path = "crates/templates"}
 # `arkret-signatures` (with the `signer` feature) provides the production
 # Ed25519 backend used by `anchor_pending_move`.
 arkret-hlc = {version = "0.3.0",path = "../arkret-rust-sdk/crates/hlc",default-features = false}
+arkret-auth = {version = "0.3.0",path = "../arkret-rust-sdk/crates/auth",default-features = false}
 arkret-canonical = {version = "0.3.0",path = "../arkret-rust-sdk/crates/canonical",default-features = false}
 arkret-locale = {version = "0.3.0",path = "../arkret-rust-sdk/crates/locale",default-features = false,features = ["serde"]}
 arkret-models-collaboration = {version = "0.3.0",path = "../arkret-rust-sdk/crates/models-collaboration",default-features = false}

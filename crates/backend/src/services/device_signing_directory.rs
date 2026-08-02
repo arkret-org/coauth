@@ -72,6 +72,9 @@ pub enum DeviceSigningDirectoryError {
     /// Transport failure talking to the Principal Server.
     #[error("device signing-key directory request failed: {0}")]
     Http(#[from] reqwest::Error),
+    /// The typed request could not be rendered as strict canonical JSON.
+    #[error("device signing-key directory request is not canonically serializable: {0}")]
+    Canonical(String),
     /// Non-2xx response from the Principal Server.
     #[error("device signing-key directory returned status {status}: {body}")]
     DirectoryRejected { status: u16, body: String },
@@ -144,6 +147,8 @@ pub async fn resolve_authorized_device_signing_key(
         principal_id: typed_principal,
         device_ids: vec![typed_device],
     };
+    let body_bytes = arkret_canonical::canonical_json_bytes(&body)
+        .map_err(|error| DeviceSigningDirectoryError::Canonical(error.to_string()))?;
 
     let response = outbound_http::send_with_policy(
         outbound_http::soland_policy("device_signing_keys_query"),
@@ -151,7 +156,8 @@ pub async fn resolve_authorized_device_signing_key(
             http_client
                 .post(endpoint.clone())
                 .bearer_auth(bearer)
-                .json(&body)
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .body(body_bytes.clone())
         },
     )
     .await?;

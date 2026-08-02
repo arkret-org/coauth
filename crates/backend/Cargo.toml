@@ -37,6 +37,7 @@ coauth-principal = {workspace = true}
 coauth-tasks = {workspace = true}
 coauth-templates = {workspace = true}
 arkret-hlc = {workspace = true}
+arkret-auth = {workspace = true}
 arkret-locale = {workspace = true}
 arkret-canonical = {workspace = true}
 arkret-identifiers = {workspace = true}

@@ -1,7 +1,7 @@
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
 mod agent_auth_error_matrix_tests {
-    use arkret_canonical::canonical_json_bytes;
+    use arkret_auth::session_grant::AgentKeyProofSigningInput;
     use chrono::Utc;
     use salvo::prelude::Router;
     use salvo::test::{ResponseExt as _, TestClient};
@@ -21,7 +21,7 @@ mod agent_auth_error_matrix_tests {
         AgentAuthRejection, PAUSED_REVOCATION_FRESHNESS_WINDOW, enforce_agent_lifecycle_gate,
         enforce_paused_revocation_freshness, enforce_verification_method_binding,
     };
-    use super::super::proof::{ProofSignedFields, verify_proof_signature};
+    use super::super::proof::verify_proof_signature_bytes;
     use super::super::session_proof::AGENT_SESSION_MAX_TTL;
 
     #[salvo::handler]
@@ -247,19 +247,24 @@ mod agent_auth_error_matrix_tests {
         let signing_key = derive_ed25519_from_seed(&[7u8; 32]);
         let multibase = multicodec_ed25519_public_key(&signing_key.verifying_key());
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
-        let fields = ProofSignedFields {
-            audience: "https://arkret.example/_arkret",
-            challenge: "challenge-abc",
-            nonce: Some("nonce-abc"),
+        let fields = AgentKeyProofSigningInput {
+            audience: arkret_wire::Did::new("did:web:arkret.example".to_owned()).unwrap(),
+            challenge: "challenge-abc".to_owned(),
+            nonce: Some("nonce-abc".to_owned()),
             expires_at,
-            request_canonical_digest: "sha256:aa",
-            verification_method: "did:web:agent.example#runtime-key-1",
+            request_canonical_digest: arkret_wire::Hash::new(format!("sha256:{}", "a".repeat(64)))
+                .unwrap(),
+            verification_method: arkret_wire::DidUrl::new(
+                "did:web:agent.example#runtime-key-1".to_owned(),
+            )
+            .unwrap(),
         };
-        let message = canonical_json_bytes(&fields).expect("canonical bytes");
+        let message = fields.canonical_bytes().expect("canonical bytes");
         let signature = signing_key.sign(&message);
         let sig_b64 = base64ct::Base64UrlUnpadded::encode_string(&signature.to_bytes());
 
-        verify_proof_signature(&multibase, &fields, &sig_b64).expect("valid signature accepts");
+        verify_proof_signature_bytes(&multibase, &message, &sig_b64)
+            .expect("valid signature accepts");
     }
 
     #[test]
@@ -270,28 +275,29 @@ mod agent_auth_error_matrix_tests {
         let signing_key = derive_ed25519_from_seed(&[9u8; 32]);
         let multibase = multicodec_ed25519_public_key(&signing_key.verifying_key());
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
-        let signed = ProofSignedFields {
-            audience: "https://arkret.example/_arkret",
-            challenge: "challenge-abc",
-            nonce: Some("nonce-abc"),
+        let signed = AgentKeyProofSigningInput {
+            audience: arkret_wire::Did::new("did:web:arkret.example".to_owned()).unwrap(),
+            challenge: "challenge-abc".to_owned(),
+            nonce: Some("nonce-abc".to_owned()),
             expires_at,
-            request_canonical_digest: "sha256:aa",
-            verification_method: "did:web:agent.example#runtime-key-1",
+            request_canonical_digest: arkret_wire::Hash::new(format!("sha256:{}", "a".repeat(64)))
+                .unwrap(),
+            verification_method: arkret_wire::DidUrl::new(
+                "did:web:agent.example#runtime-key-1".to_owned(),
+            )
+            .unwrap(),
         };
-        let message = canonical_json_bytes(&signed).expect("canonical bytes");
+        let message = signed.canonical_bytes().expect("canonical bytes");
         let signature = signing_key.sign(&message);
         let sig_b64 = base64ct::Base64UrlUnpadded::encode_string(&signature.to_bytes());
 
         // A different audience (replay to a different service) must fail closed.
-        let tampered = ProofSignedFields {
-            audience: "https://evil.example/_arkret",
-            challenge: "challenge-abc",
-            nonce: Some("nonce-abc"),
-            expires_at,
-            request_canonical_digest: "sha256:aa",
-            verification_method: "did:web:agent.example#runtime-key-1",
+        let tampered = AgentKeyProofSigningInput {
+            audience: arkret_wire::Did::new("did:web:evil.example".to_owned()).unwrap(),
+            ..signed
         };
-        let err = verify_proof_signature(&multibase, &tampered, &sig_b64)
+        let tampered_message = tampered.canonical_bytes().expect("canonical bytes");
+        let err = verify_proof_signature_bytes(&multibase, &tampered_message, &sig_b64)
             .expect_err("tampered audience must reject");
         assert_eq!(err.reason_code(), Some("proof_invalid"));
     }
@@ -304,23 +310,28 @@ mod agent_auth_error_matrix_tests {
         let signing_key = derive_ed25519_from_seed(&[10u8; 32]);
         let multibase = multicodec_ed25519_public_key(&signing_key.verifying_key());
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
-        let signed = ProofSignedFields {
-            audience: "https://arkret.example/_arkret",
-            challenge: "challenge-abc",
-            nonce: Some("nonce-abc"),
+        let signed = AgentKeyProofSigningInput {
+            audience: arkret_wire::Did::new("did:web:arkret.example".to_owned()).unwrap(),
+            challenge: "challenge-abc".to_owned(),
+            nonce: Some("nonce-abc".to_owned()),
             expires_at,
-            request_canonical_digest: "sha256:aa",
-            verification_method: "did:web:agent.example#runtime-key-1",
+            request_canonical_digest: arkret_wire::Hash::new(format!("sha256:{}", "a".repeat(64)))
+                .unwrap(),
+            verification_method: arkret_wire::DidUrl::new(
+                "did:web:agent.example#runtime-key-1".to_owned(),
+            )
+            .unwrap(),
         };
-        let message = canonical_json_bytes(&signed).expect("canonical bytes");
+        let message = signed.canonical_bytes().expect("canonical bytes");
         let signature = signing_key.sign(&message);
         let sig_b64 = base64ct::Base64UrlUnpadded::encode_string(&signature.to_bytes());
 
-        let tampered = ProofSignedFields {
-            nonce: Some("nonce-def"),
+        let tampered = AgentKeyProofSigningInput {
+            nonce: Some("nonce-def".to_owned()),
             ..signed
         };
-        let err = verify_proof_signature(&multibase, &tampered, &sig_b64)
+        let tampered_message = tampered.canonical_bytes().expect("canonical bytes");
+        let err = verify_proof_signature_bytes(&multibase, &tampered_message, &sig_b64)
             .expect_err("tampered nonce must reject");
         assert_eq!(err.reason_code(), Some("proof_invalid"));
     }

@@ -529,7 +529,15 @@ fn delegated_resolver_request(
         did: typed_did,
         requested_evidence_kinds: Vec::new(),
     };
-    Ok(http_client.post(url.clone()).json(&body))
+    let body_bytes = arkret_canonical::canonical_json_bytes(&body).map_err(|error| {
+        DidResolveError::BadResolverResponse(format!(
+            "DID resolution request is not canonically serializable: {error}"
+        ))
+    })?;
+    Ok(http_client
+        .post(url.clone())
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(body_bytes))
 }
 
 fn parse_resolution_response(

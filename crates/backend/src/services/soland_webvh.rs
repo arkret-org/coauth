@@ -13,6 +13,8 @@ pub enum SolandWebvhError {
     InvalidEndpoint(#[from] url::ParseError),
     #[error("principal-server DID operation submit request failed: {0}")]
     Http(#[from] reqwest::Error),
+    #[error("principal-server DID operation body could not be serialized canonically: {0}")]
+    Canonical(String),
     #[error("principal-server returned status {status}: {body}")]
     SubmitRejected { status: u16, body: String },
 }
@@ -27,11 +29,16 @@ pub async fn submit_did_operation(
     let endpoint = principal_endpoint
         .join("/_arkret/root/identity/submit-did-operation")
         .map_err(SolandWebvhError::InvalidEndpoint)?;
+    let body_bytes = arkret_canonical::canonical_json_bytes(body)
+        .map_err(|error| SolandWebvhError::Canonical(error.to_string()))?;
     let response = outbound_http::send_with_policy(
         outbound_http::soland_policy("identity_submit_did_operation")
             .with_timeout(std::time::Duration::from_secs(15)),
         || {
-            let mut request = http_client.post(endpoint.clone()).json(body);
+            let mut request = http_client
+                .post(endpoint.clone())
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .body(body_bytes.clone());
             if let Some(token) = bearer {
                 request = request.bearer_auth(token);
             }

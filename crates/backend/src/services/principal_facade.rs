@@ -114,11 +114,14 @@ async fn submit_agent_key_pair_to_target(
     request: &PrincipalAgentKeyPairCommitRequest,
 ) -> Result<(), anyhow::Error> {
     let url = agent_key_pair_url(&target.endpoint);
+    let body_bytes = arkret_canonical::canonical_json_bytes(request.body())
+        .context("canonicalize Agent key-pair commit")?;
     let response = http_client
         .post(url.clone())
         .bearer_auth(bearer)
         .header("idempotency-key", request.idempotency_key())
-        .json(request.body())
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(body_bytes)
         .send()
         .await
         .with_context(|| format!("send Agent key-pair commit to {}", target.name))?;
@@ -184,6 +187,8 @@ async fn submit_collaboration_capability_fanout_to_target(
     request: &PrincipalCapabilityFanoutRequest,
 ) -> Result<(), anyhow::Error> {
     let url = capability_fanout_url(&target.endpoint);
+    let body_bytes = arkret_canonical::canonical_json_bytes(request.body())
+        .context("canonicalize capability fanout")?;
     let response = http_client
         .post(url.clone())
         .bearer_auth(&target.bearer)
@@ -197,7 +202,8 @@ async fn submit_collaboration_capability_fanout_to_target(
             "x-arkret-capability-grant-id",
             request.capability_grant_id(),
         )
-        .json(request.body())
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(body_bytes)
         .send()
         .await
         .with_context(|| format!("send capability fanout to {}", target.name))?;

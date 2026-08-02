@@ -223,12 +223,15 @@ async fn send_soland_account_register(
     bearer: &str,
     body: &AccountRegisterRequestBody,
 ) -> Result<(reqwest::StatusCode, String), String> {
+    let body_bytes = arkret_canonical::canonical_json_bytes(body)
+        .map_err(|error| format!("canonicalize principal account register request: {error}"))?;
     let response =
         outbound_http::send_with_policy(outbound_http::soland_policy("account_register"), || {
             http_client
                 .post(endpoint.clone())
                 .bearer_auth(bearer)
-                .json(body)
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .body(body_bytes.clone())
         })
         .await
         .map_err(|error| format!("principal account register request failed: {error}"))?;
@@ -250,13 +253,16 @@ async fn send_soland_primary_localpart(
         localpart: localpart.to_owned(),
         is_primary: Some(true),
     };
+    let body_bytes = arkret_canonical::canonical_json_bytes(&body)
+        .map_err(|error| format!("canonicalize principal localpart request: {error}"))?;
     let response = outbound_http::send_with_policy(
         outbound_http::soland_policy("account_primary_localpart_sync"),
         || {
             http_client
                 .post(endpoint.clone())
                 .bearer_auth(bearer)
-                .json(&body)
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .body(body_bytes.clone())
         },
     )
     .await

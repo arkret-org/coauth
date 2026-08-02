@@ -15,9 +15,7 @@ use serde_json::Value;
 use sha2::Digest as _;
 
 use super::error_matrix::{AgentAuthRejection, enforce_verification_method_binding};
-use super::proof::{
-    ProofSignedFields, runtime_public_key_material_from_spec, verify_proof_signature,
-};
+use super::proof::{runtime_public_key_material_from_spec, verify_proof_signature_bytes};
 use crate::handlers::arkret::is_allowed_session_grant_audience;
 
 /// Replay grace window appended to the proof `expires_at` (AKP-0008 §4.6:
@@ -453,20 +451,25 @@ pub async fn validate_agent_session_proof(
         return Err(error.into());
     }
     validate_authoritative_agent_session_evidence(&authorization, authoritative_agent)?;
-    // Verify the proof signature over the same canonical signed-fields shape
-    // the pairing PoP used, against the authorized public key.
-    let signed_fields = ProofSignedFields {
-        audience: proof.audience.as_str(),
-        challenge: &proof.challenge,
-        nonce: Some(nonce),
+    // Reconstruct the exact SDK-owned signing input used by clients. Keeping
+    // this canonical shape in one owner prevents the session verifier from
+    // silently drifting from the request builder.
+    let signed_fields = arkret_auth::session_grant::AgentKeyProofSigningInput {
+        audience: proof.audience.clone(),
+        challenge: proof.challenge.clone(),
+        nonce: Some(nonce.to_owned()),
         expires_at,
-        request_canonical_digest: proof.request_canonical_digest.as_str(),
-        verification_method,
+        request_canonical_digest: proof.request_canonical_digest.clone(),
+        verification_method: arkret_wire::DidUrl::new(verification_method.to_owned())
+            .map_err(|_| AgentAuthRejection::ProofInvalid)?,
     };
+    let signed_bytes = signed_fields
+        .canonical_bytes()
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
     let verification_public_key =
         runtime_public_key_material_from_spec(&authorization.public_key, verification_method)?;
     if let Err(error) =
-        verify_proof_signature(&verification_public_key, &signed_fields, &proof.signature)
+        verify_proof_signature_bytes(&verification_public_key, &signed_bytes, &proof.signature)
     {
         tracing::warn!(
             agent_id,

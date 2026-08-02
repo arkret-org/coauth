@@ -252,9 +252,9 @@ pub(crate) async fn build_policy_check_response(
         .map(PolicyObligation::to_wire)
         .collect();
     let reason_code = if decision.reason_code.is_empty() {
-        "ok".to_owned()
+        arkret_wire::ReasonCode::from_wire(arkret_wire::ReasonCode::OK)
     } else {
-        decision.reason_code.clone()
+        arkret_wire::ReasonCode::from_wire(&decision.reason_code)
     };
 
     // Step 4 — canonical transcript + detached signature. The transcript
@@ -325,7 +325,7 @@ fn emit_audit_record(outcome: &PolicyCheckOutcome) {
         action = %outcome.bound_to.action,
         request_canonical_digest = outcome.bound_to.request_canonical_digest.as_str(),
         policy_server_id = outcome.bound_to.policy_server_id.as_str(),
-        reason_code = outcome.reason_code,
+        reason_code = %outcome.reason_code.as_str(),
         canonical_transcript = %canonical_str,
         signature_kid = %outcome.signature.kid,
         signature_sig = %outcome.signature.sig,

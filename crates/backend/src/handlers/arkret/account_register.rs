@@ -5,7 +5,7 @@ use arkret_models_collaboration::account_lifecycle::{
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_models_identity::{
     AccountBindingReceipt, AccountBindingState, AccountHandoffAllowedOperation,
-    DidOperationSubmitOutcome, IdentityCreationOperationStatus,
+    DidOperationSubmitOutcome, DidOperationSubmitStatus, IdentityCreationOperationStatus,
 };
 use coauth_data::RepositoryAccess as _;
 use coauth_data::account_handoff::{
@@ -195,9 +195,9 @@ pub async fn account_register_endpoint(
         }
     };
 
-    let operation_status = match registry_outcome.status.as_str() {
-        "accepted" => IdentityCreationOperationStatus::Accepted,
-        "duplicate" => IdentityCreationOperationStatus::Duplicate,
+    let operation_status = match registry_outcome.status {
+        DidOperationSubmitStatus::Accepted => IdentityCreationOperationStatus::Accepted,
+        DidOperationSubmitStatus::Duplicate => IdentityCreationOperationStatus::Duplicate,
         _ => unreachable!("registry outcome validated above"),
     };
     let head_event_digest = registry_outcome
@@ -382,7 +382,10 @@ fn validate_registry_outcome(
     principal_id: &arkret_identifiers::Did,
 ) -> Result<(), ArkretRouteError> {
     if outcome.did != *principal_id
-        || !matches!(outcome.status.as_str(), "accepted" | "duplicate")
+        || !matches!(
+            outcome.status,
+            DidOperationSubmitStatus::Accepted | DidOperationSubmitStatus::Duplicate
+        )
         || outcome.seq != Some(1)
         || outcome.head_event_digest.is_none()
     {

@@ -1,48 +1,29 @@
-//! Shared proof-of-possession signing-fields view and signature verification.
+//! Shared proof-of-possession signature verification.
 //!
-//! Both the pairing PoP (AKP-0008 §4.5) and the `agent_key_proof` session
-//! branch (§4.6) sign over the same canonical signed-fields shape, so the
-//! verification routine lives here and is shared by both handlers.
+//! Protocol-owned signing-input types produce canonical bytes; this module
+//! only verifies those bytes so handlers cannot drift through shadow DTOs.
 
-use arkret_canonical::{canonical_json_bytes, canonical_sha256};
+use arkret_canonical::canonical_sha256;
 use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
-use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
 
 use super::AgentAuthRejection;
 use crate::AppError;
 
-/// Canonical signed-fields view of a proof-of-possession: every field except
-/// the signature, serialized via the SDK canonical JSON helper. Both pairing
-/// PoP and the agent-key-proof session branch sign over this same shape so the
-/// two proof surfaces share one verification routine.
-#[derive(Debug, Serialize)]
-pub(super) struct ProofSignedFields<'a> {
-    pub(super) audience: &'a str,
-    pub(super) challenge: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) nonce: Option<&'a str>,
-    #[serde(serialize_with = "arkret_canonical::serialize_canonical_timestamp")]
-    pub(super) expires_at: DateTime<Utc>,
-    pub(super) request_canonical_digest: &'a str,
-    pub(super) verification_method: &'a str,
-}
-
-/// Verify an Ed25519 PoP signature (base64url, unpadded or padded) over the
-/// canonical signed-fields bytes against a multibase Ed25519 public key.
-pub(super) fn verify_proof_signature(
+/// Verify an Ed25519 proof signature over canonical bytes produced by the
+/// protocol owner. Session-grant proofs use the SDK-owned signing-input type
+/// directly so the issuer and verifier cannot drift through shadow DTOs.
+pub(super) fn verify_proof_signature_bytes(
     verification_public_key: &str,
-    signed_fields: &ProofSignedFields<'_>,
+    message: &[u8],
     signature_b64: &str,
 ) -> Result<(), AgentAuthRejection> {
-    let message =
-        canonical_json_bytes(signed_fields).map_err(|_| AgentAuthRejection::ProofInvalid)?;
     let public_key = PublicKeyMaterial::Ed25519Multibase {
         value: verification_public_key.to_owned(),
     };
-    if verify_detached_ed25519_signature(&public_key, &message, signature_b64) {
+    if verify_detached_ed25519_signature(&public_key, message, signature_b64) {
         Ok(())
     } else {
         Err(AgentAuthRejection::ProofInvalid)
