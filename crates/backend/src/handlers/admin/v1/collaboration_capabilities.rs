@@ -404,11 +404,8 @@ fn build_grant_fanout_payload(
     protocol_proof.jws = grant_proof_jws;
     grant.proofs.push(protocol_proof);
     let payload = serde_json::to_value(CapabilityGrantPayload {
-        grant: Some(grant),
+        grant,
         grant_id: typed_grant_id,
-        subject: None,
-        actions: None,
-        resources: None,
     })
     .map_err(|err| {
         AppError::new(

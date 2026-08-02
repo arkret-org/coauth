@@ -512,6 +512,184 @@ pub async fn refresh_session_grant(
         )
     })?;
 
+    // Audience and stable device binding are common to both human and Agent
+    // grant chains. Check them before dispatching to the credential-specific
+    // fresh-proof validator.
+    if let Some(requested) = body.audience.as_ref()
+        && requested.as_str() != prior_grant.audience
+    {
+        return Err(ArkretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
+            "session-grant rotation MUST NOT change the bound audience",
+        ));
+    }
+    let device_id = require_soft_logout_bound_device_id(
+        body.device_id.as_ref().map(DeviceId::as_str),
+        prior_grant.device_id.as_deref(),
+    )?;
+
+    if prior_payload.proof_kind == Some(SessionGrantProofKind::AgentKeyProof) {
+        use crate::handlers::account::agents::{
+            AGENT_SESSION_MAX_TTL, AgentSessionProofError, enforce_authoritative_agent_lifecycle,
+            validate_agent_session_refresh_proof,
+        };
+
+        let authoritative_agent = match enforce_authoritative_agent_lifecycle(
+            &http_client,
+            &arkret_config,
+            prior_payload.subject.as_str(),
+        )
+        .await
+        {
+            Ok(view) => view,
+            Err(rejection) => {
+                repo.cancel().await.ok();
+                let message = match rejection.reason_code() {
+                    Some(reason) => format!("reason_code={reason}; {}", rejection.code()),
+                    None => rejection.code().to_owned(),
+                };
+                return Err(ArkretRouteError::coded(
+                    rejection.http_status(),
+                    rejection.code(),
+                    message,
+                ));
+            }
+        };
+        let proof = body.proof.as_ref().ok_or_else(|| {
+            did_proof_required("Agent session refresh requires a fresh runtime-key proof")
+        })?;
+        let device_id = DeviceId::new(device_id.to_owned()).map_err(|error| {
+            ArkretRouteError::coded(
+                StatusCode::BAD_REQUEST,
+                arkret_wire::ErrorCode::INVALID_PARAM,
+                format!("device_id is not a protocol device identifier: {error}"),
+            )
+        })?;
+        let authorization = match validate_agent_session_refresh_proof(
+            &mut repo,
+            &mut rng,
+            &*clock,
+            &authoritative_agent,
+            &prior_payload,
+            &body.grant_jwt,
+            &device_id,
+            proof,
+        )
+        .await
+        {
+            Ok(authorization) => authorization,
+            Err(AgentSessionProofError::Rejection(rejection)) => {
+                repo.cancel().await.ok();
+                let message = match rejection.reason_code() {
+                    Some(reason) => format!("reason_code={reason}; {}", rejection.code()),
+                    None => rejection.code().to_owned(),
+                };
+                return Err(ArkretRouteError::coded(
+                    rejection.http_status(),
+                    rejection.code(),
+                    message,
+                ));
+            }
+            Err(AgentSessionProofError::HumanApprovalRequired(_)) => {
+                repo.cancel().await.ok();
+                return Err(did_proof_invalid(
+                    "Agent session refresh cannot request expanded human-approved scope",
+                ));
+            }
+        };
+
+        let controller_binding = repo
+            .principal_did()
+            .get_by_did_and_audience(
+                &authorization.accountable_principal_id,
+                prior_grant.audience.as_str(),
+            )
+            .await
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        let controller_blocked = if let Some(binding) = controller_binding {
+            let user = repo
+                .user()
+                .lookup(binding.user_id)
+                .await
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+            user.is_some_and(|user| user.locked_at.is_some() || user.deactivated_at.is_some())
+        } else {
+            false
+        };
+        if controller_blocked {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::FORBIDDEN,
+                arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                "accountable controller is deactivated or suspended",
+            ));
+        }
+
+        let consumed = repo
+            .oauth_session_grant()
+            .revoke_if_active(&*clock, prior_grant.id)
+            .await
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        if !consumed {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::BAD_REQUEST,
+                arkret_wire::ErrorCode::GRANT_ALREADY_CONSUMED,
+                "session grant already consumed; its rotation chain cannot continue",
+            ));
+        }
+
+        let scopes: Vec<String> = prior_grant
+            .scope
+            .iter()
+            .map(|scope| scope.as_str().to_owned())
+            .collect();
+        let scope_details = prior_payload.scope_details.clone().ok_or_else(|| {
+            did_proof_invalid("Agent session grant is missing its authorization scope binding")
+        })?;
+        let session_public_key = serde_json::to_string(&verification.jwk)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        let now = clock.now();
+        let configured_ttl = arkret_config.session_grant_ttl;
+        let ttl = configured_ttl.min(AGENT_SESSION_MAX_TTL);
+        let new_material = mint_agent_session_grant(
+            &arkret_config,
+            &key_store,
+            prior_payload.subject.as_str(),
+            &device_id,
+            prior_grant.audience.clone(),
+            scopes,
+            verification.jkt.clone(),
+            session_public_key,
+            scope_details,
+            now,
+            now + ttl,
+        )
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        let persisted = persist_unbound_session_grant(&mut repo, &mut rng, &*clock, &new_material)
+            .await
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        repo.save()
+            .await
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        let audience = Did::new(new_material.audience.clone()).map_err(|error| {
+            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                "refreshed Agent grant carried a non-DID audience: {error}"
+            )))
+        })?;
+        return Ok(Json(SessionGrantRefreshOutcome {
+            grant_id: persisted.grant_id,
+            grant_jwt: new_material.grant_jwt,
+            session_public_key: new_material.session_public_key,
+            expires_at: new_material.expires_at_timestamp,
+            audience,
+            scopes: new_material.scopes,
+            dpop_jkt: verification.jkt,
+            previous_grant_id: prior_grant.grant_id,
+        }));
+    }
+
     // 4. Resolve the underlying browser session so the new grant lives under the same
     //    authentication context.
     let browser_session_id = prior_grant.browser_session_id.ok_or_else(|| {
@@ -589,20 +767,6 @@ pub async fn refresh_session_grant(
     // one Principal Server must not be able to rotate it into a grant for a
     // different audience (which it could then exchange there). Ignore any
     // client-supplied audience; reject an explicit mismatch defensively.
-    if let Some(requested) = body.audience.as_ref()
-        && requested.as_str() != prior_grant.audience
-    {
-        return Err(ArkretRouteError::coded(
-            StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
-            "session-grant rotation MUST NOT change the bound audience",
-        ));
-    }
-
-    let device_id = require_soft_logout_bound_device_id(
-        body.device_id.as_ref().map(DeviceId::as_str),
-        prior_grant.device_id.as_deref(),
-    )?;
     verify_soft_logout_did_proof(
         &http_client,
         &arkret_config,

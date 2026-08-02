@@ -12,6 +12,7 @@ use coauth_data::RepositoryAccess;
 use coauth_data::agent_key::NewAgentSessionProofReplay;
 use serde::Deserialize;
 use serde_json::Value;
+use sha2::Digest as _;
 
 use super::error_matrix::{AgentAuthRejection, enforce_verification_method_binding};
 use super::proof::{
@@ -24,6 +25,52 @@ use crate::handlers::arkret::is_allowed_session_grant_audience;
 /// challenge stays in the replay table until `proof.expires_at + this` so a
 /// replay landing right after expiry is still rejected.
 const AGENT_PROOF_REPLAY_GRACE: chrono::Duration = chrono::Duration::minutes(5);
+const AGENT_REFRESH_PROOF_MAX_WINDOW: chrono::Duration = chrono::Duration::minutes(5);
+const AGENT_SESSION_REFRESH_OPERATION: &str = "resume_soft_logged_out_session";
+
+#[derive(serde::Serialize)]
+struct AgentSessionRefreshRequestDigest<'a> {
+    operation: &'static str,
+    grant_jwt_hash: String,
+    principal_id: &'a str,
+    device_id: &'a str,
+    audience: &'a str,
+    grant_binding_key_id: &'a str,
+}
+
+#[derive(serde::Serialize)]
+struct AgentSessionRefreshProofClaims<'a> {
+    principal_id: &'a str,
+    device_id: &'a str,
+    audience: &'a str,
+    challenge: &'a str,
+    request_canonical_digest: &'a str,
+    #[serde(serialize_with = "arkret_canonical::serialize_canonical_timestamp")]
+    issued_at: chrono::DateTime<chrono::Utc>,
+    #[serde(serialize_with = "arkret_canonical::serialize_canonical_timestamp")]
+    expires_at: chrono::DateTime<chrono::Utc>,
+}
+
+fn agent_session_refresh_request_digest(
+    prior_grant_jwt: &str,
+    principal_id: &str,
+    device_id: &str,
+    audience: &str,
+    verification_method: &str,
+) -> Result<String, AgentAuthRejection> {
+    arkret_canonical::canonical_sha256(&AgentSessionRefreshRequestDigest {
+        operation: AGENT_SESSION_REFRESH_OPERATION,
+        grant_jwt_hash: format!(
+            "sha256:{}",
+            hex::encode(sha2::Sha256::digest(prior_grant_jwt.as_bytes()))
+        ),
+        principal_id,
+        device_id,
+        audience,
+        grant_binding_key_id: verification_method,
+    })
+    .map_err(|_| AgentAuthRejection::ProofInvalid)
+}
 
 /// Spec ceiling on the default agent session TTL (AKP-0008 §4.6 / key-management
 /// §3.6.1: default SHOULD be ≤ 15 minutes). coauth caps the agent branch to
@@ -43,11 +90,13 @@ const AGENT_SERVICE_SCOPE_ACTIONS: &[&str] = &[
     "ak.self.events.query.scan",
     "ak.self.events.stream.subscribe",
     "ak.self.events.query.frontier",
+    "ak.self.authorization_leases.command.issue",
     "ak.self.keys.keypackages.upload.create",
     "ak.self.keys.keypackages.command.consume",
     "ak.self.keys.keypackages.command.revoke",
     "ak.self.device_messages.query.list",
     "ak.self.device_messages.command.ack",
+    "ak.self.signal.command.send",
 ];
 
 /// Closed action set of the `limited` tier (AKP-0008 §4.5 baseline). Shared
@@ -61,11 +110,13 @@ pub(super) const LIMITED_AGENT_SCOPE_ACTIONS: &[&str] = &[
     "ak.self.events.query.scan",
     "ak.self.events.stream.subscribe",
     "ak.self.events.query.frontier",
+    "ak.self.authorization_leases.command.issue",
     "ak.self.keys.keypackages.upload.create",
     "ak.self.keys.keypackages.command.consume",
     "ak.self.keys.keypackages.command.revoke",
     "ak.self.device_messages.query.list",
     "ak.self.device_messages.command.ack",
+    "ak.self.signal.command.send",
     "ak.event.read",
     "ak.message.create",
     "ak.reaction.add",
@@ -96,6 +147,156 @@ pub struct AgentSessionAuthorization {
         arkret_models_collaboration::session_grant_bodies::SessionGrantScopeDetails,
     /// Capped agent session TTL (≤ 15 min).
     pub ttl: chrono::Duration,
+}
+
+/// Validate the runtime-key proof used to rotate an existing Agent session.
+/// Unlike initial issuance, refresh preserves the already-materialized scope
+/// and therefore authenticates the current authorization rather than accepting
+/// a new scope request.
+pub async fn validate_agent_session_refresh_proof<R>(
+    repo: &mut R,
+    rng: &mut (dyn rand_core::RngCore + Send),
+    clock: &dyn coauth_data::Clock,
+    authoritative_agent: &arkret_models_collaboration::agent_operations::AgentView,
+    prior_claims: &arkret_models_identity::SignedSessionGrantClaims,
+    prior_grant_jwt: &str,
+    device_id: &arkret_identifiers::DeviceId,
+    proof: &arkret_models_collaboration::session_grant_bodies::SessionGrantRefreshProof,
+) -> Result<coauth_data::agent_key::AgentKeyAuthorization, AgentSessionProofError>
+where
+    R: RepositoryAccess + ?Sized,
+{
+    use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
+
+    if proof.proof_kind != Some(arkret_models_identity::SessionGrantProofKind::AgentKeyProof) {
+        return Err(AgentAuthRejection::ProofInvalid.into());
+    }
+    let challenge = proof
+        .challenge
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    let request_digest = proof
+        .request_canonical_digest
+        .as_ref()
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    let proof_audience = proof
+        .audience
+        .as_ref()
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    let issued_at = proof.issued_at.ok_or(AgentAuthRejection::ProofInvalid)?;
+    let expires_at = proof.expires_at.ok_or(AgentAuthRejection::ProofInvalid)?;
+    let signature = proof
+        .signature
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    let verification_method = proof
+        .verification_method
+        .as_ref()
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    if !agent_runtime_method_matches_endpoint(
+        prior_claims.subject.as_str(),
+        device_id,
+        verification_method.as_str(),
+    ) {
+        return Err(AgentAuthRejection::VerificationMethodPrincipalMismatch.into());
+    }
+    let now = clock.now();
+    if expires_at <= issued_at
+        || expires_at - issued_at > AGENT_REFRESH_PROOF_MAX_WINDOW
+        || issued_at > now + chrono::Duration::seconds(30)
+        || now >= expires_at
+    {
+        return Err(AgentAuthRejection::ProofInvalid.into());
+    }
+    if proof_audience.as_str() != prior_claims.audience.as_str()
+        || prior_claims.proof_kind
+            != Some(arkret_models_identity::SessionGrantProofKind::AgentKeyProof)
+    {
+        return Err(AgentAuthRejection::ProofInvalid.into());
+    }
+
+    let authorization_ref = prior_claims
+        .scope_details
+        .as_ref()
+        .and_then(|details| details.get("agent_key_authorization_ref"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    let authorization = repo
+        .agent_key_authorization()
+        .lookup_by_event_id(authorization_ref)
+        .await
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    validate_agent_key_authorization_binding(
+        &authorization,
+        now,
+        prior_claims.subject.as_str(),
+        verification_method.as_str(),
+        proof_audience.as_str(),
+    )?;
+    validate_authoritative_agent_session_evidence(&authorization, authoritative_agent)?;
+
+    let expected_digest = agent_session_refresh_request_digest(
+        prior_grant_jwt,
+        prior_claims.subject.as_str(),
+        device_id.as_str(),
+        proof_audience.as_str(),
+        verification_method.as_str(),
+    )?;
+    if request_digest.as_str() != expected_digest {
+        return Err(AgentAuthRejection::ProofInvalid.into());
+    }
+    let claims = AgentSessionRefreshProofClaims {
+        principal_id: prior_claims.subject.as_str(),
+        device_id: device_id.as_str(),
+        audience: proof_audience.as_str(),
+        challenge,
+        request_canonical_digest: request_digest.as_str(),
+        issued_at,
+        expires_at,
+    };
+    let message = arkret_canonical::canonical_json_bytes(&claims)
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let public_key = runtime_public_key_material_from_spec(
+        &authorization.public_key,
+        verification_method.as_str(),
+    )?;
+    if !verify_detached_ed25519_signature(
+        &PublicKeyMaterial::Ed25519Multibase { value: public_key },
+        &message,
+        signature,
+    ) {
+        return Err(AgentAuthRejection::ProofInvalid.into());
+    }
+
+    let won = repo
+        .agent_key_authorization()
+        .consume_proof_challenge(
+            rng,
+            clock,
+            NewAgentSessionProofReplay {
+                agent_id: prior_claims.subject.to_string(),
+                verification_method: verification_method.to_string(),
+                challenge: challenge.to_owned(),
+                nonce: challenge.to_owned(),
+                request_canonical_digest: request_digest.to_string(),
+                audience: proof_audience.to_string(),
+                proof_expires_at: expires_at,
+                prune_after: expires_at + AGENT_PROOF_REPLAY_GRACE,
+            },
+        )
+        .await
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    if !won {
+        return Err(AgentAuthRejection::ProofInvalid.into());
+    }
+    Ok(authorization)
 }
 
 /// Either a fail-closed wire rejection or a structured human-approval request.
@@ -163,6 +364,19 @@ pub async fn validate_agent_session_proof(
             "agent_key_proof rejected: verification method principal mismatch"
         );
         return Err(error.into());
+    }
+    let device_id = body
+        .device_id
+        .as_ref()
+        .ok_or(AgentAuthRejection::VerificationMethodPrincipalMismatch)?;
+    if !agent_runtime_method_matches_endpoint(&agent_id, device_id, verification_method) {
+        tracing::warn!(
+            agent_id,
+            verification_method,
+            device_id = %device_id,
+            "agent_key_proof rejected: runtime key is not bound to the stable Agent endpoint"
+        );
+        return Err(AgentAuthRejection::VerificationMethodPrincipalMismatch.into());
     }
 
     // expiry / audience.
@@ -832,6 +1046,14 @@ fn normalize_requested_scope(scope: &[String]) -> Vec<String> {
         .into_iter()
         .map(str::to_owned)
         .collect()
+}
+
+fn agent_runtime_method_matches_endpoint(
+    agent_id: &str,
+    device_id: &arkret_identifiers::DeviceId,
+    verification_method: &str,
+) -> bool {
+    verification_method == format!("{agent_id}#{}", device_id.as_str())
 }
 
 fn normalize_string_set(values: &[String]) -> BTreeSet<String> {
@@ -1682,6 +1904,24 @@ mod tests {
     }
 
     #[test]
+    fn agent_runtime_method_is_bound_to_the_stable_endpoint() {
+        let device_id = arkret_identifiers::DeviceId::new(
+            "ak:device:01964137-0000-7000-8000-000000000008".to_owned(),
+        )
+        .unwrap();
+        assert!(agent_runtime_method_matches_endpoint(
+            "did:web:agent.example",
+            &device_id,
+            "did:web:agent.example#ak:device:01964137-0000-7000-8000-000000000008",
+        ));
+        assert!(!agent_runtime_method_matches_endpoint(
+            "did:web:agent.example",
+            &device_id,
+            "did:web:agent.example#runtime-1",
+        ));
+    }
+
+    #[test]
     fn limited_agent_key_scope_dedupes_and_allows_runtime_scope() {
         let scope = intersect_requested_scope_with_agent_key_scope(
             AGENT_KEY_SCOPE_LIMITED,
@@ -1689,6 +1929,9 @@ mod tests {
                 " ak.self.events.command.submit ".to_owned(),
                 "ak.message.create".to_owned(),
                 "ak.self.events.command.submit".to_owned(),
+                "ak.self.events.query.frontier".to_owned(),
+                "ak.self.authorization_leases.command.issue".to_owned(),
+                "ak.self.signal.command.send".to_owned(),
                 "ak.reaction.add".to_owned(),
                 "ak.self.keys.keypackages.upload.create".to_owned(),
                 "ak.self.keys.keypackages.command.consume".to_owned(),
@@ -1703,11 +1946,14 @@ mod tests {
             vec![
                 "ak.message.create".to_owned(),
                 "ak.reaction.add".to_owned(),
+                "ak.self.authorization_leases.command.issue".to_owned(),
                 "ak.self.device_messages.command.ack".to_owned(),
                 "ak.self.device_messages.query.list".to_owned(),
                 "ak.self.events.command.submit".to_owned(),
+                "ak.self.events.query.frontier".to_owned(),
                 "ak.self.keys.keypackages.command.consume".to_owned(),
                 "ak.self.keys.keypackages.upload.create".to_owned(),
+                "ak.self.signal.command.send".to_owned(),
             ]
         );
     }
@@ -2213,5 +2459,55 @@ mod tests {
             canonical_session_grant_request_digest_without_signature(&scope_changed).unwrap(),
             digest
         );
+    }
+
+    #[test]
+    fn agent_refresh_digest_binds_prior_grant_device_audience_and_runtime_key() {
+        let base = agent_session_refresh_request_digest(
+            "grant.jwt.one",
+            "did:web:agent.example",
+            "ak:device:01970000-0000-7000-8000-000000000001",
+            "did:web:service.example",
+            "did:web:agent.example#runtime-key-1",
+        )
+        .unwrap();
+        assert!(base.starts_with("sha256:"));
+
+        for changed in [
+            agent_session_refresh_request_digest(
+                "grant.jwt.two",
+                "did:web:agent.example",
+                "ak:device:01970000-0000-7000-8000-000000000001",
+                "did:web:service.example",
+                "did:web:agent.example#runtime-key-1",
+            )
+            .unwrap(),
+            agent_session_refresh_request_digest(
+                "grant.jwt.one",
+                "did:web:agent.example",
+                "ak:device:01970000-0000-7000-8000-000000000002",
+                "did:web:service.example",
+                "did:web:agent.example#runtime-key-1",
+            )
+            .unwrap(),
+            agent_session_refresh_request_digest(
+                "grant.jwt.one",
+                "did:web:agent.example",
+                "ak:device:01970000-0000-7000-8000-000000000001",
+                "did:web:other-service.example",
+                "did:web:agent.example#runtime-key-1",
+            )
+            .unwrap(),
+            agent_session_refresh_request_digest(
+                "grant.jwt.one",
+                "did:web:agent.example",
+                "ak:device:01970000-0000-7000-8000-000000000001",
+                "did:web:service.example",
+                "did:web:agent.example#runtime-key-2",
+            )
+            .unwrap(),
+        ] {
+            assert_ne!(changed, base);
+        }
     }
 }
