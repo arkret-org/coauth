@@ -195,7 +195,7 @@ mod tests {
                 request_canonical_digest: digest.clone(),
                 policy_server_id: Did::new("did:web:coauth.example").unwrap(),
             },
-            reason_code: "ok".to_owned(),
+            reason_code: arkret_sdk::ReasonCode::Ok,
             freshness_state: FreshnessState::Fresh,
             expires_at: Utc.with_ymd_and_hms(2026, 5, 21, 0, 1, 0).unwrap(),
             auth_state_digest: digest.clone(),
