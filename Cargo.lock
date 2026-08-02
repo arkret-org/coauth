@@ -1387,6 +1387,7 @@ dependencies = [
 name = "coauth-admin-types"
 version = "0.3.0"
 dependencies = [
+ "arkret-identifiers",
  "arkret-models-collaboration",
  "arkret-schema",
  "chrono",

@@ -6,6 +6,7 @@
 //! These actions intentionally use the exact registry action string; admin
 //! tooling MUST NOT grant umbrella strings such as `ak.pin.*`.
 
+use arkret_models_collaboration::governance::grant_constraint::IssuerAuthorityRef;
 use chrono::{DateTime, Utc};
 use coauth_data_model::{
     COLLABORATION_CAPABILITY_ACTIONS, collaboration_action_requires_approval,
@@ -132,6 +133,12 @@ pub struct CreateCollaborationCapabilityGrant {
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
     pub action: CapabilityActionId,
+    #[cfg_attr(feature = "schema", schemars(with = "Vec<serde_json::Value>"))]
+    #[cfg_attr(
+        feature = "schema",
+        salvo(schema(value_type = Vec<serde_json::Value>))
+    )]
+    pub issuer_authority_refs: Vec<IssuerAuthorityRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -161,6 +168,16 @@ impl CreateCollaborationCapabilityGrant {
                 "action `{}` is not supported by the collaboration grant surface",
                 self.action
             ));
+        }
+        if self.issuer_authority_refs.is_empty() {
+            return Err("issuer_authority_refs is required".into());
+        }
+        for authority_ref in &self.issuer_authority_refs {
+            if let IssuerAuthorityRef::RealmRoot { realm_id, .. } = authority_ref
+                && realm_id.as_str() != self.realm_id
+            {
+                return Err("realm_root authority reference must match realm_id".into());
+            }
         }
         if collaboration_action_requires_approval(self.action) && self.expires_at.is_none() {
             return Err(format!("action `{}` requires expires_at", self.action));
@@ -267,11 +284,47 @@ mod tests {
     }
 
     #[test]
+    fn authority_source_is_required_and_root_must_match_realm() {
+        let mut req = CreateCollaborationCapabilityGrant {
+            subject: "did:web:alice.example".into(),
+            realm_id: "ak:realm:01JS0SP000000000000000000".into(),
+            action: CapabilityActionId::PinAdd,
+            issuer_authority_refs: Vec::new(),
+            expires_at: None,
+            approval_evidence_ref: None,
+        };
+        assert_eq!(
+            req.validate().unwrap_err(),
+            "issuer_authority_refs is required"
+        );
+
+        req.issuer_authority_refs = vec![IssuerAuthorityRef::RealmRoot {
+            realm_id: arkret_identifiers::RealmId::new(
+                "ak:realm:01904100-0000-7000-8000-000000000002",
+            )
+            .unwrap(),
+            cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null".into(),
+            controller_epoch_at_issuance: 0,
+            authority_generation: 0,
+        }];
+        assert_eq!(
+            req.validate().unwrap_err(),
+            "realm_root authority reference must match realm_id"
+        );
+    }
+
+    #[test]
     fn high_risk_policy_actions_require_expiry_and_approval() {
         let req = CreateCollaborationCapabilityGrant {
             subject: "did:web:admin.example".into(),
             realm_id: "ak:realm:01JS0SP000000000000000000".into(),
             action: CapabilityActionId::RealmDisappearingPolicy,
+            issuer_authority_refs: vec![IssuerAuthorityRef::Grant {
+                grant_id: arkret_identifiers::GrantId::new(
+                    "ak:grant:01904100-0000-7000-8000-000000000020",
+                )
+                .unwrap(),
+            }],
             expires_at: None,
             approval_evidence_ref: None,
         };
@@ -300,6 +353,12 @@ mod tests {
                 subject: "did:web:alice.example".into(),
                 realm_id: "ak:realm:01JS0SP000000000000000000".into(),
                 action,
+                issuer_authority_refs: vec![IssuerAuthorityRef::Grant {
+                    grant_id: arkret_identifiers::GrantId::new(
+                        "ak:grant:01904100-0000-7000-8000-000000000020",
+                    )
+                    .unwrap(),
+                }],
                 expires_at: None,
                 approval_evidence_ref: None,
             };
@@ -313,6 +372,12 @@ mod tests {
             subject: "did:web:alice.example".into(),
             realm_id: "ak:realm:01JS0SP000000000000000000".into(),
             action: CapabilityActionId::MessageCreate,
+            issuer_authority_refs: vec![IssuerAuthorityRef::Grant {
+                grant_id: arkret_identifiers::GrantId::new(
+                    "ak:grant:01904100-0000-7000-8000-000000000020",
+                )
+                .unwrap(),
+            }],
             expires_at: None,
             approval_evidence_ref: None,
         };

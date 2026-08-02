@@ -10,7 +10,9 @@
 use arkret_canonical::{canonical_json_bytes, canonical_sha256, format_timestamp_canonical};
 use arkret_identifiers::{EventId, GrantId, RealmId, new_prefixed_uuid7};
 use arkret_models_collaboration::events_payloads::capability::CapabilityGrantPayload;
-use arkret_models_collaboration::governance::grant_constraint::CapabilityGrant;
+use arkret_models_collaboration::governance::grant_constraint::{
+    CapabilityGrant, IssuerAuthorityRef,
+};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_admin_types::collaboration_capability_admin::{
@@ -157,6 +159,7 @@ pub async fn create_handler(
         &body.subject,
         &body.realm_id,
         body.action,
+        &body.issuer_authority_refs,
         body.expires_at,
         body.approval_evidence_ref.as_deref(),
         issued_at,
@@ -316,6 +319,7 @@ fn build_grant_fanout_payload(
     subject: &str,
     realm_id: &str,
     action: CapabilityActionId,
+    issuer_authority_refs: &[IssuerAuthorityRef],
     expires_at: Option<DateTime<Utc>>,
     approval_evidence_ref: Option<&str>,
     issued_at: DateTime<Utc>,
@@ -338,6 +342,7 @@ fn build_grant_fanout_payload(
         "realm_id": realm_id,
         "issuer": service_id,
         "subject": subject,
+        "issuer_authority_refs": issuer_authority_refs,
         "actions": [action.as_str()],
         "resources": [{ "kind": "realm", "realm_id": realm_id }],
         "issued_at": format_timestamp_canonical(issued_at),
@@ -642,6 +647,9 @@ mod tests {
             subject: "did:web:alice.example".into(),
             realm_id: "ak:realm:demo".into(),
             action: CapabilityActionId::RealmSearchPolicy,
+            issuer_authority_refs: vec![IssuerAuthorityRef::Grant {
+                grant_id: GrantId::new("ak:grant:01904100-0000-7000-8000-000000000020").unwrap(),
+            }],
             expires_at: None,
             approval_evidence_ref: None,
         };
@@ -680,6 +688,9 @@ mod tests {
             "did:web:alice.example",
             "ak:realm:01904100-0000-7000-8000-000000000001",
             CapabilityActionId::PinAdd,
+            &[IssuerAuthorityRef::Grant {
+                grant_id: GrantId::new("ak:grant:01904100-0000-7000-8000-000000000020").unwrap(),
+            }],
             None,
             Some("ak:event:01904100-0000-7000-8000-000000000099"),
             issued_at,
@@ -696,6 +707,13 @@ mod tests {
         );
         assert_eq!(payload.payload["grant"]["issuer"], "did:web:coauth.example");
         assert_eq!(payload.payload["grant"]["actions"], json!(["ak.pin.add"]));
+        assert_eq!(
+            payload.payload["grant"]["issuer_authority_refs"],
+            json!([{
+                "kind": "grant",
+                "grant_id": "ak:grant:01904100-0000-7000-8000-000000000020"
+            }])
+        );
         assert_eq!(payload.principal_servers[0]["did"], "did:web:soland.test");
         let typed_payload: CapabilityGrantPayload =
             serde_json::from_value(payload.payload.clone()).unwrap();
