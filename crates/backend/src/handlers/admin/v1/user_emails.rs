@@ -359,7 +359,9 @@ fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) 
             from,
             to,
         } => AppError::bad_request(format!(
-            "Unexpected account status transition from {from} to {to}"
+            "Unexpected account status transition from {} to {}",
+            from.as_str(),
+            to.as_str(),
         )),
         crate::services::user_admin::UserAdminServiceError::UpstreamSubjectAlreadyLinked {
             provider_id,

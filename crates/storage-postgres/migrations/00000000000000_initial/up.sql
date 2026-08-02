@@ -1493,6 +1493,14 @@ CREATE INDEX invite_quarantine_queue_holder_did_idx ON public.invite_quarantine_
 
 CREATE INDEX invite_quarantine_queue_status_created_idx ON public.invite_quarantine_queue USING btree (status, created_at DESC);
 
+CREATE UNIQUE INDEX queue_jobs_account_status_pending_target_event_idx
+    ON public.queue_jobs USING btree (
+        (payload ->> 'destination_name'::text),
+        (payload ->> 'event_id'::text)
+    )
+    WHERE queue_name = 'account-status-publication'::text
+      AND status = ANY (ARRAY['available'::text, 'running'::text, 'scheduled'::text]);
+
 CREATE INDEX notification_deliveries_provider_binding_idx ON public.notification_deliveries USING btree (provider_binding_key) WHERE (provider_binding_key IS NOT NULL);
 
 CREATE UNIQUE INDEX notification_deliveries_provider_message_lookup ON public.notification_deliveries USING btree (provider_binding_key, provider_message_id) WHERE ((provider_binding_key IS NOT NULL) AND (provider_message_id IS NOT NULL));

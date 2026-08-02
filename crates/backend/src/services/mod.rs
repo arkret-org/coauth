@@ -1,4 +1,5 @@
 pub mod account_claims;
+pub mod account_status_publication;
 pub mod cross_signing_publish;
 pub mod device_enrollment_authority;
 pub mod device_revoke;

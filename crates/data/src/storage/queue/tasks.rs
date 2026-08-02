@@ -1,4 +1,6 @@
+use arkret_models_collaboration::account_lifecycle::AccountStatusPublicationRequestBody;
 use arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody;
+use arkret_wire::{EventId, Hash};
 use chrono::{DateTime, Utc};
 use coauth_data::{
     BrowserSession, Session, User, UserEmailAuthentication, UserPhoneAuthentication,
@@ -314,6 +316,71 @@ impl CollaborationCapabilityFanoutJob {
 
 impl InsertableJob for CollaborationCapabilityFanoutJob {
     const QUEUE_NAME: &'static str = "soland-collaboration-capability-fanout";
+}
+
+/// An exact-body durable delivery of an authority-signed account-status
+/// publication to one Principal Server.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AccountStatusPublicationJob {
+    destination_name: String,
+    idempotency_key: String,
+    event_id: EventId,
+    body_digest: Hash,
+    body: AccountStatusPublicationRequestBody,
+}
+
+impl AccountStatusPublicationJob {
+    /// Create one destination-scoped delivery from an already signed body.
+    #[must_use]
+    pub fn new(
+        destination_name: String,
+        idempotency_key: String,
+        body_digest: Hash,
+        body: AccountStatusPublicationRequestBody,
+    ) -> Self {
+        let event_id = body.publication.event().event_id.clone();
+        Self {
+            destination_name,
+            idempotency_key,
+            event_id,
+            body_digest,
+            body,
+        }
+    }
+
+    /// Configured Principal Server target selected when the job was created.
+    #[must_use]
+    pub fn destination_name(&self) -> &str {
+        &self.destination_name
+    }
+
+    /// Destination-scoped protocol idempotency key.
+    #[must_use]
+    pub fn idempotency_key(&self) -> &str {
+        &self.idempotency_key
+    }
+
+    /// Event identifier duplicated from the immutable body for queue indexing.
+    #[must_use]
+    pub fn event_id(&self) -> &EventId {
+        &self.event_id
+    }
+
+    /// Canonical digest of the exact request body.
+    #[must_use]
+    pub fn body_digest(&self) -> &Hash {
+        &self.body_digest
+    }
+
+    /// Exact typed request retried by this job.
+    #[must_use]
+    pub fn body(&self) -> &AccountStatusPublicationRequestBody {
+        &self.body
+    }
+}
+
+impl InsertableJob for AccountStatusPublicationJob {
+    const QUEUE_NAME: &'static str = "account-status-publication";
 }
 
 /// A durable job that delivers one controller-approved Agent key

@@ -27,7 +27,8 @@ use coauth_config::{ArkretConfig, PrincipalServerConfig};
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess};
 use coauth_principal::{
     ConnectorAccountProfile, ConnectorAdmin, ConnectorProvisionRequest,
-    PrincipalAgentKeyPairCommitRequest, PrincipalCapabilityFanoutRequest,
+    PrincipalAccountStatusPublicationRequest, PrincipalAgentKeyPairCommitRequest,
+    PrincipalCapabilityFanoutRequest,
 };
 use soland_contracts::integration::capability_fanout::{
     CapabilityFanoutBody, CapabilityFanoutResponse,
@@ -40,6 +41,14 @@ pub struct DbConnectorAdmin {
     repository_factory: BoxRepositoryFactory,
     arkret_config: ArkretConfig,
     http_client: reqwest::Client,
+    peer_signing: Option<PeerSigningContext>,
+}
+
+#[derive(Clone)]
+struct PeerSigningContext {
+    keystore: coauth_keystore::Keystore,
+    source_service_id: arkret_identifiers::Did,
+    source_trust_domain: arkret_identifiers::TypedTrustDomainId,
 }
 
 impl DbConnectorAdmin {
@@ -57,7 +66,24 @@ impl DbConnectorAdmin {
             repository_factory,
             arkret_config,
             http_client,
+            peer_signing: None,
         }
+    }
+
+    /// Attach the runtime service identity used for RFC 9421 peer requests.
+    #[must_use]
+    pub fn with_peer_signing(
+        mut self,
+        keystore: coauth_keystore::Keystore,
+        source_service_id: arkret_identifiers::Did,
+        source_trust_domain: arkret_identifiers::TypedTrustDomainId,
+    ) -> Self {
+        self.peer_signing = Some(PeerSigningContext {
+            keystore,
+            source_service_id,
+            source_trust_domain,
+        });
+        self
     }
 }
 
@@ -511,6 +537,60 @@ impl ConnectorAdmin for DbConnectorAdmin {
             "submitted collaboration capability fanout through local principal facade"
         );
         Ok(())
+    }
+
+    async fn submit_account_status_publication(
+        &self,
+        request: &PrincipalAccountStatusPublicationRequest,
+    ) -> Result<(), anyhow::Error> {
+        let target = self
+            .arkret_config
+            .principal_servers
+            .iter()
+            .find(|server| server.name == request.destination_name())
+            .context("account-status destination Principal Server is no longer configured")?;
+        let signing = self
+            .peer_signing
+            .as_ref()
+            .context("account-status peer signing identity is unavailable")?;
+        let destination_service_id =
+            crate::services::resolved_principal_audiences::effective_audience_shared(target)
+                .context("account-status destination service identity is unavailable or stale")?;
+        let identity = arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
+            source_service_id: signing.source_service_id.clone(),
+            destination_service_id,
+            source_trust_domain: signing.source_trust_domain.clone(),
+            destination_trust_domain: signing.source_trust_domain.clone(),
+        };
+        let client = crate::services::peer_protocol_client::PeerProtocolClient::new(
+            Some(&target.endpoint),
+            &self.http_client,
+            &signing.keystore,
+            identity,
+        )?;
+        let outcome = client
+            .post_account_status_publication(request.body(), request.idempotency_key())
+            .await?;
+        let event = request.body().publication.event();
+        anyhow::ensure!(
+            outcome.event_id == event.event_id,
+            "response event_id mismatch"
+        );
+        anyhow::ensure!(
+            outcome.account_id == request.body().authority_evidence.account_id,
+            "response account_id mismatch"
+        );
+        anyhow::ensure!(
+            outcome.principal_id == request.body().authority_evidence.principal_id,
+            "response principal_id mismatch"
+        );
+        match outcome.status {
+            arkret_models_collaboration::account_lifecycle::AccountStatusPublicationStatus::Accepted
+            | arkret_models_collaboration::account_lifecycle::AccountStatusPublicationStatus::Duplicate => Ok(()),
+            arkret_models_collaboration::account_lifecycle::AccountStatusPublicationStatus::PendingSeal => {
+                anyhow::bail!("account-status publication is pending Seal acceptance")
+            }
+        }
     }
 
     async fn commit_agent_key_pair(

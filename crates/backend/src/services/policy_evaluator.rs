@@ -45,7 +45,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody;
-use arkret_wire::{AuthzDecision, CapabilityActionId, FreshnessState, ProfileId};
+use arkret_wire::{AuthzDecision, CapabilityActionId, FreshnessState, ProfileId, ReasonCode};
 use chrono::{DateTime, Utc};
 use coauth_data::collaboration_capability::{
     CollaborationCapabilityGrant, is_collaboration_capability_action,
@@ -60,10 +60,6 @@ use crate::services::policy_frontier::Frontier;
 /// are evaluator-internal `reason_code` values that are NOT part of the
 /// canonical `arkret_wire::error_codes::ERROR_CODE_*` wire-error registry, so
 /// they are kept as local constants rather than aliased to SDK symbols.
-const REASON_CODE_OK: &str = "ok";
-const REASON_CODE_POLICY_REVIEW_REQUIRED: &str = "policy_review_required";
-/// `policy-server.md` §4 registers `spam_flood` as the throttle reason code.
-const REASON_CODE_SPAM_FLOOD: &str = "spam_flood";
 /// Retry window applied when a `throttle_actions` rule names an action but
 /// declares no `retry_after_ms` of its own.
 const DEFAULT_THROTTLE_RETRY_AFTER_MS: u64 = 30_000;
@@ -162,7 +158,7 @@ impl PolicyObligation {
 pub struct PolicyDecision {
     pub decision: AuthzDecision,
     /// Stable reason code per [`policy-server.md` §4]. MUST be set.
-    pub reason_code: String,
+    pub reason_code: ReasonCode,
     /// Obligations the calling service MUST execute before / after
     /// applying the decision. Empty for plain `allow` paths.
     pub obligations: Vec<PolicyObligation>,
@@ -185,7 +181,7 @@ impl PolicyDecision {
     pub fn allow(policy_version: String) -> Self {
         Self {
             decision: AuthzDecision::Allow,
-            reason_code: REASON_CODE_OK.to_owned(),
+            reason_code: ReasonCode::from_wire("ok"),
             obligations: Vec::new(),
             next_retry_at: None,
             policy_version,
@@ -195,10 +191,10 @@ impl PolicyDecision {
     /// Convenience: hard deny with a stable reason code. Used by the
     /// fail-closed timeout path in the handler.
     #[must_use]
-    pub fn hard_deny(reason_code: impl Into<String>, policy_version: String) -> Self {
+    pub fn hard_deny(reason_code: ReasonCode, policy_version: String) -> Self {
         Self {
             decision: AuthzDecision::HardDeny,
-            reason_code: reason_code.into(),
+            reason_code,
             obligations: Vec::new(),
             next_retry_at: None,
             policy_version,
@@ -214,7 +210,7 @@ impl PolicyDecision {
     pub fn throttled(next_retry_at: DateTime<Utc>, bucket: String, policy_version: String) -> Self {
         Self {
             decision: AuthzDecision::SoftDeny,
-            reason_code: REASON_CODE_SPAM_FLOOD.to_owned(),
+            reason_code: ReasonCode::from_wire("spam_flood"),
             obligations: vec![PolicyObligation {
                 kind: "rate_limit".to_owned(),
                 expires_at: Some(next_retry_at),
@@ -240,7 +236,7 @@ impl PolicyDecision {
     pub fn strict_reject_accountable_principals(policy_version: String) -> Self {
         Self {
             decision: AuthzDecision::HardDeny,
-            reason_code: arkret_wire::ErrorCode::FAILED_PRECONDITION.to_owned(),
+            reason_code: ReasonCode::from_wire(arkret_wire::ErrorCode::FAILED_PRECONDITION),
             obligations: vec![PolicyObligation {
                 kind: "accountability_grant_required".to_owned(),
                 expires_at: None,
@@ -432,7 +428,7 @@ fn match_rules_with_grants(
         if value_contains_str(scope.get("deny_actors"), actor_str) {
             return PolicyDecision {
                 decision: AuthzDecision::HardDeny,
-                reason_code: arkret_wire::ErrorCode::POLICY_VIOLATION.to_owned(),
+                reason_code: ReasonCode::from_wire(arkret_wire::ErrorCode::POLICY_VIOLATION),
                 obligations: Vec::new(),
                 next_retry_at: None,
                 policy_version: policy_version.to_owned(),
@@ -442,7 +438,7 @@ fn match_rules_with_grants(
         if value_contains_str(scope.get("deny_actions"), action_str) {
             return PolicyDecision {
                 decision: AuthzDecision::HardDeny,
-                reason_code: arkret_wire::ErrorCode::POLICY_VIOLATION.to_owned(),
+                reason_code: ReasonCode::from_wire(arkret_wire::ErrorCode::POLICY_VIOLATION),
                 obligations: Vec::new(),
                 next_retry_at: None,
                 policy_version: policy_version.to_owned(),
@@ -463,7 +459,7 @@ fn match_rules_with_grants(
     if freshness_requires_fail_closed(frontier.freshness_state, action_str) {
         return PolicyDecision {
             decision: AuthzDecision::HardDeny,
-            reason_code: "revocation_freshness_unknown".to_owned(),
+            reason_code: ReasonCode::RevocationFreshnessUnknown,
             obligations: vec![PolicyObligation {
                 kind: "freshness_diagnostic".to_owned(),
                 expires_at: None,
@@ -483,7 +479,7 @@ fn match_rules_with_grants(
         if value_contains_str(scope.get("require_review_actions"), action_str) {
             return PolicyDecision {
                 decision: AuthzDecision::RequireReview,
-                reason_code: REASON_CODE_POLICY_REVIEW_REQUIRED.to_owned(),
+                reason_code: ReasonCode::from_wire("policy_review_required"),
                 obligations: Vec::new(),
                 next_retry_at: None,
                 policy_version: policy_version.to_owned(),
@@ -499,7 +495,10 @@ fn match_rules_with_grants(
         }) {
             return PolicyDecision::allow(policy_version.to_owned());
         }
-        return PolicyDecision::hard_deny("capability_denied", policy_version.to_owned());
+        return PolicyDecision::hard_deny(
+            ReasonCode::from_wire("capability_denied"),
+            policy_version.to_owned(),
+        );
     }
 
     // CAP-1 (R3 spec-sync) — `ak.call.{join,screen_share,record,
@@ -549,7 +548,7 @@ fn capability_action_gate_decision(
                 "policy_evaluator: capability action registry unavailable, fail-closed"
             );
             return Some(PolicyDecision::hard_deny(
-                "policy_evaluator_error",
+                ReasonCode::from_wire("policy_evaluator_error"),
                 policy_version.to_owned(),
             ));
         }
@@ -568,7 +567,7 @@ fn capability_action_gate_decision(
 
 fn unsupported_feature(policy_version: &str) -> PolicyDecision {
     PolicyDecision::hard_deny(
-        arkret_wire::ErrorCode::UNSUPPORTED_FEATURE,
+        ReasonCode::from_wire(arkret_wire::ErrorCode::UNSUPPORTED_FEATURE),
         policy_version.to_owned(),
     )
 }
@@ -736,7 +735,7 @@ mod tests {
         let r = req("did:web:alice.example", "ak.message.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
-        assert_eq!(d.reason_code, "ok");
+        assert_eq!(d.reason_code.as_str(), "ok");
         assert!(d.next_retry_at.is_none());
     }
 
@@ -750,7 +749,7 @@ mod tests {
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
 
         assert!(matches!(d.decision, AuthzDecision::SoftDeny));
-        assert_eq!(d.reason_code, "spam_flood");
+        assert_eq!(d.reason_code.as_str(), "spam_flood");
         let next_retry_at = d.next_retry_at.expect("throttle must declare a retry time");
         assert!(next_retry_at >= before + chrono::Duration::milliseconds(45_000));
         assert_eq!(d.obligations.len(), 1);
@@ -813,7 +812,7 @@ mod tests {
             "default",
         );
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
-        assert_eq!(d.reason_code, "unsupported_feature");
+        assert_eq!(d.reason_code.as_str(), "unsupported_feature");
     }
 
     #[test]
@@ -824,7 +823,7 @@ mod tests {
         let r = req("did:web:alice.example", "ak.realm.join.review");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
-        assert_eq!(d.reason_code, "unsupported_feature");
+        assert_eq!(d.reason_code.as_str(), "unsupported_feature");
     }
 
     #[test]
@@ -836,7 +835,7 @@ mod tests {
         let r = req("did:web:alice.example", "ak.realm.join.review");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
-        assert_eq!(d.reason_code, "unsupported_feature");
+        assert_eq!(d.reason_code.as_str(), "unsupported_feature");
     }
 
     #[test]
@@ -845,7 +844,7 @@ mod tests {
         let r = req("did:web:alice.example", "member.application.review");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
-        assert_eq!(d.reason_code, "unsupported_feature");
+        assert_eq!(d.reason_code.as_str(), "unsupported_feature");
     }
 
     #[test]
@@ -854,7 +853,7 @@ mod tests {
         let r = req("did:web:alice.example", "ak.not_registered.action");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
-        assert_eq!(d.reason_code, "unsupported_feature");
+        assert_eq!(d.reason_code.as_str(), "unsupported_feature");
     }
 
     #[test]
@@ -868,7 +867,7 @@ mod tests {
             "default",
         );
         assert!(matches!(denied.decision, AuthzDecision::HardDeny));
-        assert_eq!(denied.reason_code, "unsupported_feature");
+        assert_eq!(denied.reason_code.as_str(), "unsupported_feature");
 
         let missing_grant = match_rules(
             &serde_json::json!({
@@ -879,7 +878,7 @@ mod tests {
             "v",
         );
         assert!(matches!(missing_grant.decision, AuthzDecision::HardDeny));
-        assert_eq!(missing_grant.reason_code, "capability_denied");
+        assert_eq!(missing_grant.reason_code.as_str(), "capability_denied");
 
         let grant = collaboration_grant(CapabilityActionId::PinAdd);
         let allowed = match_rules_with_grants(
@@ -892,7 +891,7 @@ mod tests {
             &[grant],
         );
         assert!(matches!(allowed.decision, AuthzDecision::Allow));
-        assert_eq!(allowed.reason_code, "ok");
+        assert_eq!(allowed.reason_code.as_str(), "ok");
     }
 
     #[test]
@@ -911,7 +910,7 @@ mod tests {
             &[grant],
         );
         assert!(matches!(denied.decision, AuthzDecision::HardDeny));
-        assert_eq!(denied.reason_code, "capability_denied");
+        assert_eq!(denied.reason_code.as_str(), "capability_denied");
     }
 
     #[test]
@@ -922,7 +921,7 @@ mod tests {
         let r = req("did:web:mallory.example", "ak.message.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
-        assert_eq!(d.reason_code, "policy_violation");
+        assert_eq!(d.reason_code.as_str(), "policy_violation");
     }
 
     #[test]
@@ -943,7 +942,7 @@ mod tests {
         let r = req("did:web:alice.example", "ak.invite.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::RequireReview));
-        assert_eq!(d.reason_code, "policy_review_required");
+        assert_eq!(d.reason_code.as_str(), "policy_review_required");
     }
 
     #[test]
@@ -952,7 +951,7 @@ mod tests {
         let r = req("did:web:alice.example", "ak.capability.revoke");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Unknown), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
-        assert_eq!(d.reason_code, "revocation_freshness_unknown");
+        assert_eq!(d.reason_code.as_str(), "revocation_freshness_unknown");
         assert_eq!(d.obligations[0].kind, "freshness_diagnostic");
     }
 
@@ -962,7 +961,7 @@ mod tests {
         let r = req("did:web:alice.example", "ak.message.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Unknown), "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
-        assert_eq!(d.reason_code, "ok");
+        assert_eq!(d.reason_code.as_str(), "ok");
     }
 
     #[test]
@@ -1001,7 +1000,7 @@ mod tests {
         let r = req("did:web:alice.example", "ak.call.join");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
-        assert_eq!(d.reason_code, "policy_violation");
+        assert_eq!(d.reason_code.as_str(), "policy_violation");
     }
 
     #[test]
@@ -1046,7 +1045,7 @@ mod tests {
         );
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
-        assert_eq!(d.reason_code, "failed_precondition");
+        assert_eq!(d.reason_code.as_str(), "failed_precondition");
         assert_eq!(d.obligations.len(), 1);
         assert_eq!(d.obligations[0].kind, "accountability_grant_required");
     }

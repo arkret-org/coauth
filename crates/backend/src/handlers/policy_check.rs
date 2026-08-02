@@ -207,7 +207,10 @@ pub(crate) async fn build_policy_check_response(
                 action = %request.action,
                 "policy_check: evaluator inner timeout, fail-closed"
             );
-            PolicyDecision::hard_deny("policy_evaluator_timeout", "fail-closed".to_owned())
+            PolicyDecision::hard_deny(
+                arkret_wire::ReasonCode::from_wire("policy_evaluator_timeout"),
+                "fail-closed".to_owned(),
+            )
         }
         Ok(Err(EvaluatorError::Backend(e))) => {
             tracing::warn!(
@@ -215,7 +218,10 @@ pub(crate) async fn build_policy_check_response(
                 realm_id = %request.realm_id.as_str(),
                 "policy_check: evaluator backend failed, fail-closed"
             );
-            PolicyDecision::hard_deny("policy_evaluator_error", "fail-closed".to_owned())
+            PolicyDecision::hard_deny(
+                arkret_wire::ReasonCode::from_wire("policy_evaluator_error"),
+                "fail-closed".to_owned(),
+            )
         }
         Err(_elapsed) => {
             tracing::warn!(
@@ -223,7 +229,10 @@ pub(crate) async fn build_policy_check_response(
                 action = %request.action,
                 "policy_check: evaluator outer deadline elapsed, fail-closed"
             );
-            PolicyDecision::hard_deny("policy_evaluator_timeout", "fail-closed".to_owned())
+            PolicyDecision::hard_deny(
+                arkret_wire::ReasonCode::from_wire("policy_evaluator_timeout"),
+                "fail-closed".to_owned(),
+            )
         }
     };
 
@@ -251,12 +260,6 @@ pub(crate) async fn build_policy_check_response(
         .iter()
         .map(PolicyObligation::to_wire)
         .collect();
-    let reason_code = if decision.reason_code.is_empty() {
-        arkret_wire::ReasonCode::from_wire(arkret_wire::ReasonCode::OK)
-    } else {
-        arkret_wire::ReasonCode::from_wire(&decision.reason_code)
-    };
-
     // Step 4 — canonical transcript + detached signature. The transcript
     // captures the request id plus every signed response field, so a
     // verifier can rebuild these bytes from the wire request + response.
@@ -264,7 +267,7 @@ pub(crate) async fn build_policy_check_response(
         request_id: request.request_id.clone(),
         decision: decision.decision,
         bound_to,
-        reason_code,
+        reason_code: decision.reason_code,
         freshness_state: frontier.freshness_state,
         expires_at,
         auth_state_digest: frontier.auth_state_digest,
@@ -424,9 +427,12 @@ mod tests {
         // resolver, exercised via the salvo integration harness in
         // `handlers::test_utils`. Here we only assert the shape of
         // `PolicyDecision::hard_deny`.
-        let d = PolicyDecision::hard_deny("policy_evaluator_error", "fail-closed".to_owned());
+        let d = PolicyDecision::hard_deny(
+            arkret_wire::ReasonCode::from_wire("policy_evaluator_error"),
+            "fail-closed".to_owned(),
+        );
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
-        assert_eq!(d.reason_code, "policy_evaluator_error");
+        assert_eq!(d.reason_code.as_str(), "policy_evaluator_error");
     }
 
     #[test]

@@ -43,10 +43,10 @@ pub enum UserAdminServiceError {
     #[error("display name is invalid")]
     InvalidDisplayName,
 
-    #[error("account status transition from {from} to {to} is invalid")]
+    #[error("account status transition from {from:?} to {to:?} is invalid")]
     InvalidStatusTransition {
-        from: &'static str,
-        to: &'static str,
+        from: AccountStatus,
+        to: AccountStatus,
     },
 
     #[error("email \"{email}\" is not valid")]
@@ -371,8 +371,8 @@ fn validate_admin_status_transition(
         return Ok(());
     }
     Err(UserAdminServiceError::InvalidStatusTransition {
-        from: current.as_str(),
-        to: next.as_str(),
+        from: current,
+        to: next,
     })
 }
 
@@ -399,8 +399,8 @@ mod tests {
         assert!(matches!(
             validate_admin_status_transition(AccountStatus::Deactivated, AccountStatus::Active),
             Err(UserAdminServiceError::InvalidStatusTransition {
-                from: "deactivated",
-                to: "active"
+                from: AccountStatus::Deactivated,
+                to: AccountStatus::Active,
             })
         ));
         validate_admin_status_transition(AccountStatus::Deactivated, AccountStatus::ErasurePending)

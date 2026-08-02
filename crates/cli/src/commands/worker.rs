@@ -1,6 +1,7 @@
 use std::process::ExitCode;
 use std::time::Duration;
 
+use anyhow::Context as _;
 use clap::Parser;
 use coauth_backend::lifecycle::LifecycleManager;
 use coauth_backend::util::{
@@ -64,11 +65,34 @@ impl Options {
 
         // ── Principal account facade ───────────────────────────────────
         let arkret_http_client = coauth_backend::reqwest_client_for_arkret(&app_cfg.arkret);
+        let key_store = app_cfg
+            .secrets
+            .key_store()
+            .await
+            .context("could not import keys from config")?;
+        coauth_backend::services::service_identity::initialize_and_spawn(
+            PgRepositoryFactory::new(db_pool.clone()),
+            &app_cfg.arkret,
+            &app_cfg.http.public_base,
+            &key_store,
+            arkret_http_client.clone(),
+        )
+        .await
+        .context("could not initialize Provider-backed service identity")?;
+        coauth_backend::services::resolved_principal_audiences::shared()
+            .warm_up_and_spawn(
+                arkret_http_client.clone(),
+                app_cfg.arkret.clone(),
+                coauth_backend::services::resolved_principal_audiences::DEFAULT_REFRESH_INTERVAL,
+            )
+            .await;
         let (principal_conn, _registry) = principal_server_connection_from_config(
             &site_cfg,
             PgRepositoryFactory::new(db_pool.clone()).boxed(),
             app_cfg.arkret.clone(),
             arkret_http_client,
+            &key_store,
+            &urls,
         );
 
         drop(app_cfg);

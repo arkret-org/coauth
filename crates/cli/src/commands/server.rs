@@ -175,6 +175,8 @@ impl Options {
             PgRepositoryFactory::new(pool.clone()).boxed(),
             arkret_config.clone(),
             http_client.clone(),
+            &key_store,
+            &url_builder,
         );
 
         if !self.no_worker {

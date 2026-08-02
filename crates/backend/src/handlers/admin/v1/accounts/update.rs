@@ -4,6 +4,7 @@
 
 //! Update endpoint: `PATCH /accounts/{id}` (profile / lifecycle patch).
 
+use arkret_models_collaboration::objects::account_status::AccountStatus;
 use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -29,7 +30,8 @@ pub struct UpdateRequestBody {
     #[schemars(with = "Option<Option<String>>")]
     preferred_locale: Option<Option<String>>,
     admin: Option<bool>,
-    status: Option<String>,
+    #[schemars(with = "Option<coauth_admin_types::AdminAccountStatus>")]
+    status: Option<AccountStatus>,
     locked: Option<bool>,
     deactivated: Option<bool>,
     principal_erase: Option<bool>,
@@ -64,15 +66,6 @@ pub async fn update_account(
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
 
-    let status = body
-        .status
-        .as_deref()
-        .map(|status| {
-            arkret_models_collaboration::objects::account_status::AccountStatus::from_wire(status)
-                .ok_or_else(|| AppError::bad_request(format!("Unknown account status: {status}")))
-        })
-        .transpose()?;
-
     let preferred_locale = coauth_data::parse_locale_preference_patch(body.preferred_locale)
         .map_err(|tag| {
             AppError::bad_request(format!(
@@ -85,7 +78,7 @@ pub async fn update_account(
         avatar_url: body.avatar_url,
         preferred_locale,
         can_request_admin: body.admin,
-        status,
+        status: body.status,
         locked: body.locked,
         deactivated: body.deactivated,
     };
@@ -143,7 +136,9 @@ pub(super) fn map_service_error(
             from,
             to,
         } => AppError::bad_request(format!(
-            "Account status transition from {from} to {to} is invalid"
+            "Account status transition from {} to {} is invalid",
+            from.as_str(),
+            to.as_str(),
         )),
         crate::services::user_admin::UserAdminServiceError::InvalidEmail { email, .. } => {
             AppError::bad_request(format!("Email {email:?} is not valid"))

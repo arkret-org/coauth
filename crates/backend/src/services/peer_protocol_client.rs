@@ -7,6 +7,9 @@
 use std::time::Duration;
 
 use arkret_canonical::canonical_json_bytes;
+use arkret_models_collaboration::account_lifecycle::{
+    AccountStatusPublicationOutcome, AccountStatusPublicationRequestBody,
+};
 use arkret_models_collaboration::governance::invite_addressing::{
     InviteDeliveryOutcome, InviteDeliveryRequestBodyBody,
 };
@@ -86,6 +89,24 @@ impl<'a> PeerProtocolClient<'a> {
             url,
             request,
             Some(&request.idempotency_key),
+        )
+        .await
+    }
+
+    /// Deliver one exact account-status publication through its dedicated
+    /// peer operation. The idempotency key is a signed header and never part
+    /// of the canonical body.
+    pub async fn post_account_status_publication(
+        &self,
+        request: &AccountStatusPublicationRequestBody,
+        idempotency_key: &str,
+    ) -> Result<AccountStatusPublicationOutcome, PeerProtocolClientError> {
+        let url = self.join_absolute("/_arkret/peer/account-status")?;
+        self.post_json(
+            "peer_account_status_submit",
+            url,
+            request,
+            Some(idempotency_key),
         )
         .await
     }

@@ -215,6 +215,56 @@ pub struct PrincipalCapabilityFanoutRequest {
     body: CapabilityFanoutBody,
 }
 
+/// One exact account-status publication delivery to a configured Principal
+/// Server.
+#[derive(Debug, Clone)]
+pub struct PrincipalAccountStatusPublicationRequest {
+    destination_name: String,
+    idempotency_key: String,
+    body_digest: arkret_wire::Hash,
+    body: arkret_models_collaboration::account_lifecycle::AccountStatusPublicationRequestBody,
+}
+
+impl PrincipalAccountStatusPublicationRequest {
+    /// Build a destination-scoped delivery request.
+    #[must_use]
+    pub fn new(
+        destination_name: String,
+        idempotency_key: String,
+        body_digest: arkret_wire::Hash,
+        body: arkret_models_collaboration::account_lifecycle::AccountStatusPublicationRequestBody,
+    ) -> Self {
+        Self {
+            destination_name,
+            idempotency_key,
+            body_digest,
+            body,
+        }
+    }
+
+    #[must_use]
+    pub fn destination_name(&self) -> &str {
+        &self.destination_name
+    }
+
+    #[must_use]
+    pub fn idempotency_key(&self) -> &str {
+        &self.idempotency_key
+    }
+
+    #[must_use]
+    pub fn body_digest(&self) -> &arkret_wire::Hash {
+        &self.body_digest
+    }
+
+    #[must_use]
+    pub fn body(
+        &self,
+    ) -> &arkret_models_collaboration::account_lifecycle::AccountStatusPublicationRequestBody {
+        &self.body
+    }
+}
+
 impl PrincipalCapabilityFanoutRequest {
     /// Create a new collaboration capability fan-out request.
     #[must_use]
@@ -471,6 +521,16 @@ pub trait ConnectorAdmin: Send + Sync {
         ))
     }
 
+    /// Submit an exact authority-signed account-status publication.
+    async fn submit_account_status_publication(
+        &self,
+        _request: &PrincipalAccountStatusPublicationRequest,
+    ) -> Result<(), anyhow::Error> {
+        Err(anyhow::anyhow!(
+            "account-status publication is not implemented by this principal connector"
+        ))
+    }
+
     /// Deliver a controller-approved Agent key authorization to the
     /// downstream principal system.
     async fn commit_agent_key_pair(
@@ -613,6 +673,15 @@ where
     ) -> Result<(), anyhow::Error> {
         self.as_admin()
             .submit_collaboration_capability_fanout(request)
+            .await
+    }
+
+    async fn submit_account_status_publication(
+        &self,
+        request: &PrincipalAccountStatusPublicationRequest,
+    ) -> Result<(), anyhow::Error> {
+        self.as_admin()
+            .submit_account_status_publication(request)
             .await
     }
 

@@ -691,16 +691,26 @@ pub fn principal_server_connection_from_config(
     repository_factory: BoxRepositoryFactory,
     arkret_config: ArkretConfig,
     http_client: reqwest::Client,
+    key_store: &coauth_keystore::Keystore,
+    url_builder: &UrlBuilder,
 ) -> (Arc<dyn ConnectorAdmin>, ConnectorRegistry) {
     let registry = ConnectorRegistry::new();
 
-    let admin: Arc<dyn ConnectorAdmin> =
-        Arc::new(crate::services::principal_facade::DbConnectorAdmin::new(
+    let source_service_id = crate::handlers::arkret::service_id_for(&arkret_config);
+    let source_trust_domain = arkret_identifiers::TypedTrustDomainId::new(
+        crate::handlers::arkret::trust_domain_for(url_builder, &arkret_config),
+    )
+    .expect("validated Arkret trust domain");
+
+    let admin: Arc<dyn ConnectorAdmin> = Arc::new(
+        crate::services::principal_facade::DbConnectorAdmin::new(
             site_config.server_name.clone(),
             repository_factory,
             arkret_config,
             http_client,
-        ));
+        )
+        .with_peer_signing(key_store.clone(), source_service_id, source_trust_domain),
+    );
     (admin, registry)
 }
 
