@@ -522,7 +522,10 @@ mod consent_gate_tests {
     fn active_cell(peer: &str, scope: &str) -> serde_json::Value {
         serde_json::json!({
             "ok": true,
-            "cell_id": format!("ak:cell:ak.component.consent.grant.v1:c-{scope}"),
+            "cell_id": arkret_wire::subject_cell(
+                arkret_wire::CellFamilyId::CONSENT_GRANT_V1,
+                &format!("c-{scope}"),
+            ),
             "holder_did": "did:web:holder",
             "peer_did": peer,
             "consent_scope": scope,

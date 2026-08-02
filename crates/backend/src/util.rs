@@ -902,8 +902,8 @@ mod tests {
     #[test]
     fn typed_uuid7_rejects_extra_segments() {
         // Cell-family ids have more colons; the basic helper rejects them.
-        let id = Uuid::now_v7();
-        let s = format!("ak:cell:ak.component.consent.grant.v1:{id}");
+        let id = Uuid::now_v7().to_string();
+        let s = arkret_wire::subject_cell(arkret_wire::CellFamilyId::CONSENT_GRANT_V1, &id);
         assert!(!super::is_typed_uuid7(&s, "cell"));
     }
 
