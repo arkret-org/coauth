@@ -6,7 +6,7 @@
 
 use std::time::Duration;
 
-use arkret_canonical::{canonical_json_bytes, sha256_digest};
+use arkret_canonical::canonical_json_bytes;
 use arkret_models_collaboration::governance::invite_addressing::{
     InviteDeliveryOutcome, InviteDeliveryRequestBodyBody,
 };
@@ -16,9 +16,7 @@ use arkret_signatures::http_signature::{
     format_signature_header, parse_signature_input,
 };
 use arkret_state::SnapshotManifest;
-use arkret_wire::{
-    HEADER_DESTINATION_TRUST_DOMAIN, HEADER_REQUEST_CANONICAL_DIGEST, HEADER_SOURCE_TRUST_DOMAIN,
-};
+use arkret_wire::{HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable;
 use coauth_keystore::Keystore;
@@ -196,14 +194,7 @@ impl<'a> PeerProtocolClient<'a> {
             body.map(|bytes| ContentDigest::compute(bytes, ContentDigestAlgorithm::Sha256));
         if let Some(digest) = &body_digest {
             headers.push(("Content-Digest".to_owned(), digest.wire_value.clone()));
-            headers.push((
-                HEADER_REQUEST_CANONICAL_DIGEST.to_owned(),
-                sha256_digest(body.expect("body exists when digest exists")),
-            ));
             covered.push(Component::Header("content-digest".to_owned()));
-            covered.push(Component::Header(
-                HEADER_REQUEST_CANONICAL_DIGEST.to_ascii_lowercase(),
-            ));
         }
 
         if let Some(key) = idempotency_key.filter(|key| !key.trim().is_empty()) {
@@ -341,7 +332,7 @@ mod tests {
     }
 
     #[test]
-    fn signed_post_covers_peer_service_headers_and_body_digests() {
+    fn signed_post_covers_peer_service_headers_and_content_digest() {
         let base = Url::parse("https://server.example/").unwrap();
         let client = reqwest::Client::new();
         let keystore = test_keystore();
@@ -362,11 +353,6 @@ mod tests {
         };
 
         assert_eq!(header("Source-Service-ID"), Some("did:web:auth.example"));
-        let expected_digest = sha256_digest(body);
-        assert_eq!(
-            header(HEADER_REQUEST_CANONICAL_DIGEST),
-            Some(expected_digest.as_str())
-        );
         assert!(header("Content-Digest").is_some());
         assert!(
             header("Signature-Input")
@@ -374,7 +360,7 @@ mod tests {
                 .contains("content-digest")
         );
         assert!(
-            header("Signature-Input")
+            !header("Signature-Input")
                 .unwrap()
                 .contains("request-canonical-digest")
         );
@@ -399,12 +385,6 @@ mod tests {
                 .headers
                 .iter()
                 .all(|(name, _)| !name.eq_ignore_ascii_case("Content-Digest"))
-        );
-        assert!(
-            signed
-                .headers
-                .iter()
-                .all(|(name, _)| !name.eq_ignore_ascii_case(HEADER_REQUEST_CANONICAL_DIGEST))
         );
     }
 }
