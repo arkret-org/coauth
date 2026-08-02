@@ -5,7 +5,9 @@
 //! controller supplies the signed `ak.agent.key.authorize` event; coauth only
 //! validates the request binding, persists the pending local authorization for
 //! `agent_key_proof`, and commits the unchanged signed request to the
-//! authoritative Principal Server before reporting success.
+//! authoritative Principal Server before reporting the Event as durable. The
+//! caller closes it into an accepted Agent-PCR frontier and retries the same
+//! idempotent request before the runtime is reported active.
 
 use arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload;
 use arkret_signatures::proof::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
@@ -139,26 +141,40 @@ pub async fn post_agent_key_pair(
                 )
             })?;
         idempotency_repo.cancel().await?;
-        let authorized_event_ref =
+        let authorize_event_ref =
             arkret_identifiers::EventId::new(existing.authorized_event_id.clone())
                 .map_err(|error| AppError::internal_box(Box::new(error)))?;
+        let (authoritative_view, authoritative_server) =
+            super::session_proof::fetch_authoritative_agent_view(
+                &http_client,
+                &arkret_config,
+                &agent_id,
+            )
+            .await
+            .map_err(AgentAuthRejection::into_app_error)?;
         if existing.soland_fanout_state == AccountabilityGrantFanoutState::Delivered {
+            let activation_state = if authoritative_view.key_state.as_ref().is_some_and(
+                |key_state| {
+                    key_state.active_authorizations.iter().any(|authorization| {
+                        authorization.authorized_event_ref.as_str() == authorize_event_ref.as_str()
+                            && authorization.verification_method == stored_body.verification_method
+                    })
+                },
+            ) {
+                arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Active
+            } else {
+                arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::AwaitingAcceptedFrontier
+            };
             return Ok(Json(
                 arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
                     ok: true,
-                    authorized_event_ref,
+                    activation_state,
+                    authorize_event_ref,
                     signing_key_binding: stored_body.signing_key_binding,
                 },
             ));
         }
         let signing_key_binding = stored_body.signing_key_binding.clone();
-        let (_, authoritative_server) = super::session_proof::fetch_authoritative_agent_view(
-            &http_client,
-            &arkret_config,
-            &agent_id,
-        )
-        .await
-        .map_err(AgentAuthRejection::into_app_error)?;
         commit_and_mark_agent_key_authorization(
             depot,
             &existing.authorized_event_id,
@@ -171,7 +187,8 @@ pub async fn post_agent_key_pair(
         return Ok(Json(
             arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
                 ok: true,
-                authorized_event_ref,
+                activation_state: arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::AwaitingAcceptedFrontier,
+                authorize_event_ref,
                 signing_key_binding,
             },
         ));
@@ -470,7 +487,8 @@ pub async fn post_agent_key_pair(
     Ok(Json(
         arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
             ok: true,
-            authorized_event_ref: outcome_event_id,
+            activation_state: arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::AwaitingAcceptedFrontier,
+            authorize_event_ref: outcome_event_id,
             signing_key_binding,
         },
     ))

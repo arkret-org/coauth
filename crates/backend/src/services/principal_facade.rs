@@ -340,8 +340,8 @@ fn validate_agent_key_pair_response(
         "Agent key-pair commit response is not successful"
     );
     anyhow::ensure!(
-        response.authorized_event_ref.as_str() == request.authorized_event_id(),
-        "response authorized_event_ref mismatch"
+        response.authorize_event_ref.as_str() == request.authorized_event_id(),
+        "response authorize_event_ref mismatch"
     );
     Ok(())
 }

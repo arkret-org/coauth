@@ -346,7 +346,6 @@ fn build_grant_fanout_payload(
         "actions": [action.as_str()],
         "resources": [{ "kind": "realm", "realm_id": realm_id }],
         "issued_at": format_timestamp_canonical(issued_at),
-        "proofs": [],
     });
     if let Some(expires_at) = expires_at {
         grant_value["expires_at"] = json!(format_timestamp_canonical(expires_at));
@@ -361,48 +360,12 @@ fn build_grant_fanout_payload(
         }]);
     }
 
-    let mut grant: CapabilityGrant = serde_json::from_value(grant_value).map_err(|err| {
+    let grant: CapabilityGrant = serde_json::from_value(grant_value).map_err(|err| {
         AppError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("generated capability grant is invalid: {err}"),
         )
     })?;
-    let verification_method = signing_verification_method(key_store, service_id)?;
-    let grant_payload_digest = grant.payload_digest().map_err(|err| {
-        AppError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("capability grant payload digest: {err}"),
-        )
-    })?;
-    let mut protocol_proof = arkret_wire::PayloadProof {
-        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-        verification_method: verification_method.clone(),
-        alg: "EdDSA".to_owned(),
-        payload_digest: grant_payload_digest,
-        created_at: issued_at,
-        domain: None,
-        audience: None,
-        proof_purpose: Some(arkret_wire::PayloadProofPurpose::IssuerAttestation),
-        jws: String::new(),
-    };
-    let proof_binding_bytes = grant
-        .canonical_proof_binding_bytes(&protocol_proof)
-        .map_err(|err| {
-            AppError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("capability grant proof binding: {err}"),
-            )
-        })?;
-    let (signed_verification_method, grant_proof_jws) =
-        sign_detached_jws(key_store, service_id, &proof_binding_bytes)?;
-    if signed_verification_method != verification_method {
-        return Err(AppError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "capability grant signing key changed while building proof",
-        ));
-    }
-    protocol_proof.jws = grant_proof_jws;
-    grant.proofs.push(protocol_proof);
     let payload = serde_json::to_value(CapabilityGrantPayload {
         grant,
         grant_id: typed_grant_id,
@@ -586,31 +549,6 @@ fn sign_detached_jws(
     Ok((verification_method, format!("{protected}..{signature}")))
 }
 
-fn signing_verification_method(
-    key_store: &Keystore,
-    service_id: &str,
-) -> Result<arkret_wire::DidUrl, AppError> {
-    let alg = JsonWebSignatureAlg::EdDsa;
-    let key = key_store.signing_key_for_algorithm(&alg).ok_or_else(|| {
-        AppError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "no EdDSA service signing key is configured for capability fanout",
-        )
-    })?;
-    let key_id = key.kid().ok_or_else(|| {
-        AppError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "capability fanout signing key is missing kid",
-        )
-    })?;
-    arkret_wire::DidUrl::new(format!("{service_id}#{key_id}")).map_err(|error| {
-        AppError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("capability fanout verification method is not a DID URL: {error}"),
-        )
-    })
-}
-
 fn principal_servers(arkret_config: &ArkretConfig) -> Vec<Value> {
     arkret_config
         .principal_servers
@@ -714,7 +652,7 @@ mod tests {
         assert_eq!(payload.principal_servers[0]["did"], "did:web:soland.test");
         let typed_payload: CapabilityGrantPayload =
             serde_json::from_value(payload.payload.clone()).unwrap();
-        let typed_grant = typed_payload.grant.as_ref().unwrap();
+        let typed_grant = &typed_payload.grant;
         let constraint = &typed_grant.constraints[0];
         assert_eq!(
             constraint.constraint_kind,
@@ -731,20 +669,7 @@ mod tests {
             constraint.extensions["x_approval_evidence_ref"],
             "ak:event:01904100-0000-7000-8000-000000000099"
         );
-        let proof = &payload.payload["grant"]["proofs"][0];
-        assert_eq!(proof["alg"], "EdDSA");
-        assert_eq!(
-            proof["verification_method"],
-            "did:web:coauth.example#service-signing"
-        );
-        assert_ne!(proof["jws"], "queued-for-service-signature");
-        assert!(proof["jws"].as_str().unwrap().contains(".."));
-        assert!(
-            proof["payload_digest"]
-                .as_str()
-                .unwrap()
-                .starts_with("sha256:")
-        );
+        assert!(payload.payload["grant"].get("proofs").is_none());
         assert_eq!(payload.proofs.len(), 1);
         assert!(
             payload.proofs[0]

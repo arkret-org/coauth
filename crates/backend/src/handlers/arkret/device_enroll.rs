@@ -33,7 +33,7 @@ use arkret_models_identity::{
     DeviceEnrollmentAuthorityBindingKind, SignedSessionGrantClaims,
 };
 use arkret_signatures::{SignEventOptions, sign_event};
-use arkret_wire::{Event, NonEmptyString, ScopeRef};
+use arkret_wire::{AuthorizationRef, Event, NonEmptyString, ScopeRef};
 use chrono::{DateTime, Utc};
 use coauth_data::user::PrincipalDidRepository as _;
 use salvo::prelude::*;
@@ -440,7 +440,13 @@ pub async fn device_enroll_endpoint(
     })?;
     event.prev_refs = prev_refs;
     event.executed_by = Some(authority_did.clone());
-    event.authorization_ref = Some(authorization_ref.clone());
+    event.authorization_ref = Some(AuthorizationRef::new(authorization_ref.clone()).map_err(
+        |error| {
+            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                "invalid device-enroll authorization reference: {error}"
+            )))
+        },
+    )?);
 
     enforce_service_attested_device_authorize_provenance(&event, &payload)?;
 
