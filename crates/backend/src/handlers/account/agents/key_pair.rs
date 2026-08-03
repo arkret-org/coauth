@@ -425,7 +425,7 @@ pub async fn post_agent_key_pair(
         // Two orthogonal axes (key-management.md §3.6.1): the controller
         // lifecycle intent is preserved by pairing completion (an active agent
         // needs no resume), while the derived runtime_state advances to ready.
-        "agent_lifecycle": authoritative_view.status.as_wire_str(),
+        "agent_lifecycle": authoritative_view.agent.lifecycle.as_wire_str(),
         "runtime_state_before": if superseded_authorizations.is_empty() {
             arkret_models_collaboration::agent_operations::AgentRuntimeState::PendingRuntimeKey
         } else {

@@ -737,6 +737,7 @@ fn validate_authoritative_agent_session_evidence(
         &disclosure.agent_id,
         &disclosure.controller_id,
         &disclosure.requested_scope,
+        disclosure.participation_ceiling,
     )
     .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
     if paired_request.agent_id.as_str() != authorization.agent_id
@@ -1516,7 +1517,7 @@ pub async fn enforce_authoritative_agent_lifecycle(
     // (key-management.md §3.6.1). The orthogonal runtime_state readiness axis is
     // never a session gate; an agent that holds no active key simply cannot
     // produce a valid agent_key_proof.
-    match view.status {
+    match view.agent.lifecycle {
         arkret_models_collaboration::agent_operations::AgentLifecycleState::Active => Ok(view),
         arkret_models_collaboration::agent_operations::AgentLifecycleState::Paused => {
             Err(AgentAuthRejection::AgentPaused)
@@ -1546,7 +1547,7 @@ pub async fn enforce_authoritative_pairing_handle(
     // paused agents may complete a (bootstrap or replacement) pairing handle
     // (key-management.md §3.6.1); handle open/expiry is enforced below via the
     // authoritative key_state rather than the lifecycle axis.
-    match view.status {
+    match view.agent.lifecycle {
         arkret_models_collaboration::agent_operations::AgentLifecycleState::Active
         | arkret_models_collaboration::agent_operations::AgentLifecycleState::Paused => {}
         arkret_models_collaboration::agent_operations::AgentLifecycleState::Deactivated => {

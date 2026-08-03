@@ -195,6 +195,10 @@ pub async fn cache_control_middleware(
         CacheControl::new()
             .with_public()
             .with_max_age(Duration::from_mins(5))
+    } else if req.uri().path().starts_with("/wasm/") {
+        // Debug Dioxus output uses stable, unhashed filenames. Do not let the
+        // browser combine a cached JS glue module with a newer WASM binary.
+        CacheControl::new().with_no_store()
     } else {
         // Cache assets for 1 year
         CacheControl::new()

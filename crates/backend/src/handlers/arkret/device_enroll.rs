@@ -239,6 +239,12 @@ pub async fn device_enroll_endpoint(
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
     let body: AccountDeviceEnrollRequestBody = serde_json::from_value(raw_body.clone())
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
+    let request_digest = arkret_identifiers::Hash::new(
+        arkret_canonical::canonical_sha256(&raw_body).map_err(|_| {
+            ArkretRouteError::BadRequest("device-enroll body is not canonicalizable".to_owned())
+        })?,
+    )
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     // Read `cnf.jkt` from the grant payload; the persisted row is the source of
     // truth (no JWT signature check here — the DB lookup authenticates it).
@@ -468,14 +474,28 @@ pub async fn device_enroll_endpoint(
         )))
     })?;
 
+    let outcome = AccountDeviceEnrollOutcome {
+        principal_id,
+        device_id,
+        authority_did,
+        authorized_event: event,
+    };
+    let encoded_outcome = serde_json::to_value(&outcome).map_err(|error| {
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "failed to encode device-enroll outcome: {error}"
+        )))
+    })?;
+
     let mut repo = depot.repo().await?;
-    let claimed = repo
+    let commit = repo
         .account_handoff()
-        .claim_first_device_enrollment(
+        .commit_first_device_enrollment(
             service_account_id,
             &audience,
-            &principal_id,
-            &device_id,
+            &outcome.principal_id,
+            &outcome.device_id,
+            &request_digest,
+            &encoded_outcome,
             clock.now(),
         )
         .await?;
@@ -484,22 +504,36 @@ pub async fn device_enroll_endpoint(
     // every protocol check above (grant, DPoP, audience, delegation, signed
     // Event) and waive only the absent setup receipt in that explicitly gated
     // process.
-    if !claimed && !super::test_endpoints_enabled() {
-        repo.cancel().await.ok();
-        return Err(ArkretRouteError::coded(
-            StatusCode::CONFLICT,
-            arkret_wire::ErrorCode::FAILED_PRECONDITION,
-            "founding device enrollment requires a verified identity-creation receipt and no existing device",
-        ));
+    match commit {
+        coauth_data::account_handoff::FirstDeviceEnrollmentCommit::Committed => {
+            repo.save().await?;
+            Ok(Json(outcome))
+        }
+        coauth_data::account_handoff::FirstDeviceEnrollmentCommit::Replay(stored) => {
+            let stored =
+                serde_json::from_value::<AccountDeviceEnrollOutcome>(stored).map_err(|error| {
+                    ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                        format!("stored device-enroll outcome is invalid: {error}"),
+                    ))
+                })?;
+            repo.cancel().await.ok();
+            Ok(Json(stored))
+        }
+        coauth_data::account_handoff::FirstDeviceEnrollmentCommit::Conflict
+            if super::test_endpoints_enabled() =>
+        {
+            repo.cancel().await.ok();
+            Ok(Json(outcome))
+        }
+        coauth_data::account_handoff::FirstDeviceEnrollmentCommit::Conflict => {
+            repo.cancel().await.ok();
+            Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::BOOTSTRAP_IDEMPOTENCY_CONFLICT,
+                "founding device enrollment conflicts with the durable bootstrap outcome",
+            ))
+        }
     }
-    repo.save().await?;
-
-    Ok(Json(AccountDeviceEnrollOutcome {
-        principal_id,
-        device_id,
-        authority_did,
-        authorized_event: event,
-    }))
 }
 
 #[cfg(test)]

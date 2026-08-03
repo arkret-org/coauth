@@ -4,9 +4,10 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::account_handoff::{
     AccountHandoffCreation, AccountHandoffGrant, AccountHandoffGrantInput,
-    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityBindingChallengeRecord,
-    IdentityCreationBindingCommit, IdentityCreationLeaseRecord, IdentityCreationRegisterLedger,
-    IdentityCreationRegisterReplay, IdentityCreationRegistrationContext, IdentityCreationSagaState,
+    FirstDeviceEnrollmentCommit, IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
+    IdentityBindingChallengeRecord, IdentityCreationBindingCommit, IdentityCreationLeaseRecord,
+    IdentityCreationRegisterLedger, IdentityCreationRegisterReplay,
+    IdentityCreationRegistrationContext, IdentityCreationSagaState,
 };
 use coauth_data::{AccountHandoffRepository, Ulid};
 use diesel::OptionalExtension as _;
@@ -137,6 +138,16 @@ impl<'c> PgAccountHandoffRepository<'c> {
 struct PrincipalRow {
     #[diesel(sql_type = Text)]
     principal_id: String,
+}
+
+#[derive(QueryableByName)]
+struct FirstDeviceEnrollmentRow {
+    #[diesel(sql_type = Nullable<Text>)]
+    device_id: Option<String>,
+    #[diesel(sql_type = Nullable<Text>)]
+    request_digest: Option<String>,
+    #[diesel(sql_type = Nullable<Jsonb>)]
+    outcome: Option<serde_json::Value>,
 }
 
 #[derive(QueryableByName)]
@@ -1010,29 +1021,61 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         })
     }
 
-    async fn claim_first_device_enrollment(
+    async fn commit_first_device_enrollment(
         &mut self,
         service_account_id: Ulid,
         audience: &str,
         principal_id: &arkret_identifiers::Did,
         device_id: &arkret_identifiers::DeviceId,
+        request_digest: &arkret_identifiers::Hash,
+        outcome: &serde_json::Value,
         now: DateTime<Utc>,
-    ) -> Result<bool, Self::Error> {
+    ) -> Result<FirstDeviceEnrollmentCommit, Self::Error> {
         let updated = diesel::sql_query(
             "UPDATE identity_creation_leases SET first_device_id = $1, \
-             first_device_enrolled_at = $2, updated_at = $2 \
-             WHERE service_account_id = $3 AND audience = $4 AND state = 'bound' \
-             AND binding_receipt IS NOT NULL AND reserved_principal_id = $5 \
+             first_device_request_digest = $2, first_device_outcome = $3, \
+             first_device_enrolled_at = $4, updated_at = $4 \
+             WHERE service_account_id = $5 AND audience = $6 AND state = 'bound' \
+             AND binding_receipt IS NOT NULL AND reserved_principal_id = $7 \
              AND first_device_id IS NULL AND first_device_enrolled_at IS NULL",
         )
         .bind::<Text, _>(device_id.as_str())
+        .bind::<Text, _>(request_digest.as_str())
+        .bind::<Jsonb, _>(outcome)
         .bind::<Timestamptz, _>(now)
         .bind::<SqlUuid, _>(Uuid::from(service_account_id))
         .bind::<Text, _>(audience)
         .bind::<Text, _>(principal_id.as_str())
         .execute(self.conn)
         .await?;
-        Ok(updated == 1)
+        if updated == 1 {
+            return Ok(FirstDeviceEnrollmentCommit::Committed);
+        }
+
+        let stored = diesel::sql_query(
+            "SELECT first_device_id AS device_id, \
+             first_device_request_digest AS request_digest, \
+             first_device_outcome AS outcome \
+             FROM identity_creation_leases \
+             WHERE service_account_id = $1 AND audience = $2 AND state = 'bound' \
+             AND binding_receipt IS NOT NULL AND reserved_principal_id = $3",
+        )
+        .bind::<SqlUuid, _>(Uuid::from(service_account_id))
+        .bind::<Text, _>(audience)
+        .bind::<Text, _>(principal_id.as_str())
+        .get_result::<FirstDeviceEnrollmentRow>(self.conn)
+        .await
+        .optional()?;
+        let Some(stored) = stored else {
+            return Ok(FirstDeviceEnrollmentCommit::Conflict);
+        };
+        if stored.device_id.as_deref() == Some(device_id.as_str())
+            && stored.request_digest.as_deref() == Some(request_digest.as_str())
+            && let Some(outcome) = stored.outcome
+        {
+            return Ok(FirstDeviceEnrollmentCommit::Replay(outcome));
+        }
+        Ok(FirstDeviceEnrollmentCommit::Conflict)
     }
 
     async fn consume_grant(
@@ -1455,7 +1498,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn verified_binding_allows_exactly_one_founding_device_claim() {
+    async fn verified_binding_replays_exact_founding_device_outcome() {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
@@ -1569,30 +1612,57 @@ mod tests {
             arkret_identifiers::DeviceId::new(format!("ak:device:{}", Uuid::now_v7())).unwrap();
         let second_device =
             arkret_identifiers::DeviceId::new(format!("ak:device:{}", Uuid::now_v7())).unwrap();
-        assert!(
+        let enrollment_digest = register_request_digest('7');
+        let enrollment_outcome = serde_json::json!({
+            "device_id": first_device,
+            "authorized_event": { "event_id": format!("ak:event:{}", Uuid::now_v7()) }
+        });
+        assert!(matches!(
             repo.account_handoff()
-                .claim_first_device_enrollment(
+                .commit_first_device_enrollment(
                     user.id,
                     &grant.audience,
                     &reserved.principal_id,
                     &first_device,
+                    &enrollment_digest,
+                    &enrollment_outcome,
                     now
                 )
                 .await
-                .unwrap()
-        );
-        assert!(
-            !repo
-                .account_handoff()
-                .claim_first_device_enrollment(
+                .unwrap(),
+            FirstDeviceEnrollmentCommit::Committed
+        ));
+        assert_eq!(
+            repo.account_handoff()
+                .commit_first_device_enrollment(
                     user.id,
                     &grant.audience,
                     &reserved.principal_id,
-                    &second_device,
+                    &first_device,
+                    &enrollment_digest,
+                    &serde_json::json!({ "newly_minted": "must-not-replace-stored-outcome" }),
                     now + Duration::seconds(1),
                 )
                 .await
                 .unwrap(),
+            FirstDeviceEnrollmentCommit::Replay(enrollment_outcome.clone()),
+        );
+        assert!(
+            matches!(
+                repo.account_handoff()
+                    .commit_first_device_enrollment(
+                        user.id,
+                        &grant.audience,
+                        &reserved.principal_id,
+                        &second_device,
+                        &register_request_digest('8'),
+                        &serde_json::json!({ "device_id": second_device }),
+                        now + Duration::seconds(1),
+                    )
+                    .await
+                    .unwrap(),
+                FirstDeviceEnrollmentCommit::Conflict
+            ),
             "a second device must not reuse the founding-device enrollment endpoint"
         );
 
@@ -1970,31 +2040,38 @@ mod tests {
             arkret_identifiers::Did::new(format!("did:webvh:z{label}f:example.com")).unwrap();
         let device =
             arkret_identifiers::DeviceId::new(format!("ak:device:{}", Uuid::now_v7())).unwrap();
-        assert!(
-            !repo
-                .account_handoff()
-                .claim_first_device_enrollment(
+        let enrollment_digest = register_request_digest('8');
+        let enrollment_outcome = serde_json::json!({ "device_id": device });
+        assert!(matches!(
+            repo.account_handoff()
+                .commit_first_device_enrollment(
                     user.id,
                     &grant.audience,
                     &foreign_principal,
                     &device,
+                    &enrollment_digest,
+                    &enrollment_outcome,
                     now
                 )
                 .await
-                .unwrap()
-        );
-        assert!(
+                .unwrap(),
+            FirstDeviceEnrollmentCommit::Conflict
+        ));
+        assert!(matches!(
             repo.account_handoff()
-                .claim_first_device_enrollment(
+                .commit_first_device_enrollment(
                     user.id,
                     &grant.audience,
                     &reserved.principal_id,
                     &device,
+                    &enrollment_digest,
+                    &enrollment_outcome,
                     now
                 )
                 .await
-                .unwrap()
-        );
+                .unwrap(),
+            FirstDeviceEnrollmentCommit::Committed
+        ));
 
         repo.cancel().await.unwrap();
     }

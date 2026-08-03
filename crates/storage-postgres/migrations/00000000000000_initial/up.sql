@@ -601,6 +601,8 @@ CREATE TABLE public.identity_creation_leases (
     register_request_digest text,
     register_outcome jsonb,
     first_device_id text,
+    first_device_request_digest text,
+    first_device_outcome jsonb,
     first_device_enrolled_at timestamp with time zone,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
@@ -613,10 +615,12 @@ CREATE TABLE public.identity_creation_leases (
     CONSTRAINT identity_creation_leases_register_challenge_id_valid CHECK (((register_challenge_id IS NULL) OR (register_challenge_id ~ '^[A-Za-z0-9_-]{22,128}$'::text))),
     CONSTRAINT identity_creation_leases_register_request_digest_valid CHECK (((register_request_digest IS NULL) OR (register_request_digest ~ '^sha256:[0-9a-f]{64}$'::text))),
     CONSTRAINT identity_creation_leases_register_outcome_object CHECK (((register_outcome IS NULL) OR (jsonb_typeof(register_outcome) = 'object'::text))),
+    CONSTRAINT identity_creation_leases_first_device_request_digest_valid CHECK (((first_device_request_digest IS NULL) OR (first_device_request_digest ~ '^sha256:[0-9a-f]{64}$'::text))),
+    CONSTRAINT identity_creation_leases_first_device_outcome_object CHECK (((first_device_outcome IS NULL) OR (jsonb_typeof(first_device_outcome) = 'object'::text))),
     CONSTRAINT identity_creation_leases_state_valid CHECK ((state = ANY (ARRAY['active'::text, 'reserved'::text, 'published'::text, 'bound'::text]))),
     CONSTRAINT identity_creation_leases_reservation_complete CHECK ((((reserved_principal_id IS NULL) AND (reserved_operation_digest IS NULL) AND (did_operation IS NULL)) OR ((reserved_principal_id IS NOT NULL) AND (reserved_operation_digest IS NOT NULL) AND (did_operation IS NOT NULL)))),
     CONSTRAINT identity_creation_leases_register_ledger_complete CHECK ((((state <> 'bound'::text) AND (register_handoff_grant_id IS NULL) AND (register_challenge_id IS NULL) AND (register_request_digest IS NULL) AND (register_outcome IS NULL)) OR ((state = 'bound'::text) AND (register_handoff_grant_id IS NOT NULL) AND (register_challenge_id IS NOT NULL) AND (register_request_digest IS NOT NULL) AND (register_outcome IS NOT NULL)))),
-    CONSTRAINT identity_creation_leases_first_device_complete CHECK ((((first_device_id IS NULL) AND (first_device_enrolled_at IS NULL)) OR ((first_device_id IS NOT NULL) AND (first_device_enrolled_at IS NOT NULL))))
+    CONSTRAINT identity_creation_leases_first_device_complete CHECK ((((first_device_id IS NULL) AND (first_device_request_digest IS NULL) AND (first_device_outcome IS NULL) AND (first_device_enrolled_at IS NULL)) OR ((first_device_id IS NOT NULL) AND (first_device_request_digest IS NOT NULL) AND (first_device_outcome IS NOT NULL) AND (first_device_enrolled_at IS NOT NULL))))
 );
 
 CREATE TABLE public.identity_binding_challenges (

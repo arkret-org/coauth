@@ -2,7 +2,9 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::account_handoff::{IdentityCreationBindingCommit, IdentityCreationRegisterReplay};
+use coauth_data::account_handoff::{
+    FirstDeviceEnrollmentCommit, IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
+};
 use coauth_data::{
     AccountHandoffCreation, AccountHandoffGrant, AccountHandoffGrantInput,
     IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
@@ -89,16 +91,19 @@ pub trait AccountHandoffRepository: Send + Sync {
         now: DateTime<Utc>,
     ) -> Result<IdentityCreationBindingCommit, Self::Error>;
 
-    /// Atomically gate the one founding-device enrollment authorized by a
-    /// verified identity-creation receipt.
-    async fn claim_first_device_enrollment(
+    /// Atomically persist the one founding-device enrollment authorized by a
+    /// verified identity-creation receipt. An exact request replays the first
+    /// byte-stable outcome; a different request cannot consume the slot.
+    async fn commit_first_device_enrollment(
         &mut self,
         service_account_id: coauth_data::Ulid,
         audience: &str,
         principal_id: &arkret_identifiers::Did,
         device_id: &arkret_identifiers::DeviceId,
+        request_digest: &arkret_identifiers::Hash,
+        outcome: &serde_json::Value,
         now: DateTime<Utc>,
-    ) -> Result<bool, Self::Error>;
+    ) -> Result<FirstDeviceEnrollmentCommit, Self::Error>;
 
     /// Consume a handoff after the first session grant has been issued.
     async fn consume_grant(
@@ -162,14 +167,16 @@ repository_impl!(AccountHandoffRepository:
         outcome: &arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome,
         now: DateTime<Utc>,
     ) -> Result<IdentityCreationBindingCommit, Self::Error>;
-    async fn claim_first_device_enrollment(
+    async fn commit_first_device_enrollment(
         &mut self,
         service_account_id: coauth_data::Ulid,
         audience: &str,
         principal_id: &arkret_identifiers::Did,
         device_id: &arkret_identifiers::DeviceId,
+        request_digest: &arkret_identifiers::Hash,
+        outcome: &serde_json::Value,
         now: DateTime<Utc>,
-    ) -> Result<bool, Self::Error>;
+    ) -> Result<FirstDeviceEnrollmentCommit, Self::Error>;
     async fn consume_grant(
         &mut self,
         grant: &AccountHandoffGrant,

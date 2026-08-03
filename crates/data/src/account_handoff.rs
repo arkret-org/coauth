@@ -5,6 +5,13 @@ use chrono::{DateTime, Utc};
 use crate::Ulid;
 pub use crate::storage::account_handoff::AccountHandoffRepository;
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum FirstDeviceEnrollmentCommit {
+    Committed,
+    Replay(serde_json::Value),
+    Conflict,
+}
+
 #[derive(Clone)]
 pub struct AccountHandoffGrant {
     pub id: Ulid,
