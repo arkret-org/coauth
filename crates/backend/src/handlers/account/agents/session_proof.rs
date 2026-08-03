@@ -528,7 +528,7 @@ pub async fn validate_agent_session_proof(
     let requests_act_on_behalf = scope_request
         .participation
         .iter()
-        .any(|entry| entry.effective.act_on_behalf);
+        .any(|entry| entry.selection.act_on_behalf);
     if requests_act_on_behalf {
         // Opaque UUIDv7 artifact id (AKP-0008 §4.6); the controller resolves it
         // out-of-band, the agent runtime never renders a UI for it.
@@ -737,7 +737,6 @@ fn validate_authoritative_agent_session_evidence(
         &disclosure.agent_id,
         &disclosure.controller_id,
         &disclosure.requested_scope,
-        disclosure.participation_ceiling,
     )
     .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
     if paired_request.agent_id.as_str() != authorization.agent_id
