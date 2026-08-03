@@ -453,10 +453,6 @@ pub(crate) fn service_describe_response(
         serde_json::json!(["auth_server", "identity_resolver", "account_registry"]),
     );
     extensions.insert(
-        "x_coauth_supported_reducer_profiles".to_owned(),
-        serde_json::json!(["ak.reducer.v1"]),
-    );
-    extensions.insert(
         "x_coauth_supported_schema_profiles".to_owned(),
         serde_json::json!(["ak.schema.core.v1", "ak.schema.service_describe.v1"]),
     );
@@ -551,14 +547,13 @@ pub(crate) fn service_describe_response(
         accepted_did_methods: Vec::new(),
         takedown_contact: None,
         rate_limits: None,
-        supported_reducer_profiles: vec!["ak.reducer.v1".to_owned()],
+        supported_reducer_profiles: Vec::new(),
         supported_schema_profiles: vec![
             "ak.schema.core.v1".to_owned(),
             "ak.schema.service_describe.v1".to_owned(),
         ],
         frontier: Vec::new(),
         snapshot_frontier: Vec::new(),
-        reducer_profile: None,
         last_materialized_at: None,
         extensions,
     }

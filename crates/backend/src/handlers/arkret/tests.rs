@@ -291,10 +291,8 @@ fn service_describe_exposes_auth_account_boundary_profile() {
 
     let supported_profiles = body["supported_profiles"].as_array().unwrap();
     assert!(supported_profiles.is_empty());
-    let supported_reducer_profiles = body["x_coauth_supported_reducer_profiles"]
-        .as_array()
-        .unwrap();
-    assert!(supported_reducer_profiles.contains(&serde_json::json!("ak.reducer.v1")));
+    assert_eq!(body["supported_reducer_profiles"], serde_json::json!([]));
+    assert!(body.get("x_coauth_supported_reducer_profiles").is_none());
     // T6.3 — `ak.schema.v1` was a coauth-only placeholder. The actual
     // schemas this surface emits are `ak.schema.core.v1` (umbrella
     // core schemas, soland / SDK convention) and
