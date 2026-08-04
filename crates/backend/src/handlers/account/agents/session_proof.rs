@@ -12,7 +12,6 @@ use coauth_data::RepositoryAccess;
 use coauth_data::agent_key::NewAgentSessionProofReplay;
 use serde::Deserialize;
 use serde_json::Value;
-use sha2::Digest as _;
 
 use super::error_matrix::{AgentAuthRejection, enforce_verification_method_binding};
 use super::proof::{runtime_public_key_material_from_spec, verify_proof_signature_bytes};
@@ -24,31 +23,6 @@ use crate::handlers::arkret::is_allowed_session_grant_audience;
 /// replay landing right after expiry is still rejected.
 const AGENT_PROOF_REPLAY_GRACE: chrono::Duration = chrono::Duration::minutes(5);
 const AGENT_REFRESH_PROOF_MAX_WINDOW: chrono::Duration = chrono::Duration::minutes(5);
-const AGENT_SESSION_REFRESH_OPERATION: &str = "resume_soft_logged_out_session";
-
-#[derive(serde::Serialize)]
-struct AgentSessionRefreshRequestDigest<'a> {
-    operation: &'static str,
-    grant_jwt_hash: String,
-    principal_id: &'a str,
-    device_id: &'a str,
-    audience: &'a str,
-    grant_binding_key_id: &'a str,
-}
-
-#[derive(serde::Serialize)]
-struct AgentSessionRefreshProofClaims<'a> {
-    principal_id: &'a str,
-    device_id: &'a str,
-    audience: &'a str,
-    challenge: &'a str,
-    request_canonical_digest: &'a str,
-    #[serde(serialize_with = "arkret_canonical::serialize_canonical_timestamp")]
-    issued_at: chrono::DateTime<chrono::Utc>,
-    #[serde(serialize_with = "arkret_canonical::serialize_canonical_timestamp")]
-    expires_at: chrono::DateTime<chrono::Utc>,
-}
-
 fn agent_session_refresh_request_digest(
     prior_grant_jwt: &str,
     principal_id: &str,
@@ -56,17 +30,14 @@ fn agent_session_refresh_request_digest(
     audience: &str,
     verification_method: &str,
 ) -> Result<String, AgentAuthRejection> {
-    arkret_canonical::canonical_sha256(&AgentSessionRefreshRequestDigest {
-        operation: AGENT_SESSION_REFRESH_OPERATION,
-        grant_jwt_hash: format!(
-            "sha256:{}",
-            hex::encode(sha2::Sha256::digest(prior_grant_jwt.as_bytes()))
-        ),
+    arkret_models_collaboration::session_grant_bodies::session_grant_refresh_request_digest(
+        prior_grant_jwt,
         principal_id,
         device_id,
         audience,
-        grant_binding_key_id: verification_method,
-    })
+        verification_method,
+    )
+    .map(|digest| digest.as_str().to_owned())
     .map_err(|_| AgentAuthRejection::ProofInvalid)
 }
 
@@ -250,16 +221,16 @@ where
     if request_digest.as_str() != expected_digest {
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
-    let claims = AgentSessionRefreshProofClaims {
-        principal_id: prior_claims.subject.as_str(),
-        device_id: device_id.as_str(),
-        audience: proof_audience.as_str(),
-        challenge,
-        request_canonical_digest: request_digest.as_str(),
-        issued_at,
-        expires_at,
-    };
-    let message = arkret_canonical::canonical_json_bytes(&claims)
+    let message = arkret_models_collaboration::session_grant_bodies::
+        session_grant_refresh_proof_signing_bytes(
+            prior_claims.subject.as_str(),
+            device_id.as_str(),
+            proof_audience.as_str(),
+            challenge,
+            request_digest.as_str(),
+            issued_at,
+            expires_at,
+        )
         .map_err(|_| AgentAuthRejection::ProofInvalid)?;
     let public_key = runtime_public_key_material_from_spec(
         &authorization.public_key,

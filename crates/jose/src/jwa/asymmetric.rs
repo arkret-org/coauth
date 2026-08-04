@@ -51,7 +51,7 @@ pub enum AsymmetricSigningKey {
     Es384(super::Es384SigningKey),
     Es512(super::Es512SigningKey),
     Es256K(super::Es256KSigningKey),
-    EdDsa(super::EdDsaSigningKey),
+    Ed25519(super::Ed25519SigningKey),
 }
 
 impl AsymmetricSigningKey {
@@ -141,11 +141,11 @@ impl AsymmetricSigningKey {
         Self::Es256K(ecdsa::SigningKey::from(key))
     }
 
-    /// Create a new signing key with the `EdDSA` algorithm from the given OKP
+    /// Create a new signing key with the `Ed25519` algorithm from the given OKP
     /// private key.
     #[must_use]
-    pub fn eddsa(key: ed25519_dalek::SigningKey) -> Self {
-        Self::EdDsa(key)
+    pub fn ed25519(key: ed25519_dalek::SigningKey) -> Self {
+        Self::Ed25519(key)
     }
 
     /// Create a new signing key for the given algorithm from the given private
@@ -194,13 +194,13 @@ impl AsymmetricSigningKey {
                 Ok(Self::es256k(params.try_into()?))
             }
 
-            (JsonWebKeyPrivateParameters::Okp(params), JsonWebSignatureAlg::EdDsa)
+            (JsonWebKeyPrivateParameters::Okp(params), JsonWebSignatureAlg::Ed25519)
                 if params.crv == JsonWebKeyOkpEllipticCurve::Ed25519 =>
             {
-                Ok(Self::eddsa(params.try_into()?))
+                Ok(Self::ed25519(params.try_into()?))
             }
 
-            (JsonWebKeyPrivateParameters::Okp(_params), JsonWebSignatureAlg::EdDsa) => {
+            (JsonWebKeyPrivateParameters::Okp(_params), JsonWebSignatureAlg::Ed25519) => {
                 Err(AsymmetricKeyFromJwkError::KeyNotSuitable { alg: alg.clone() })
             }
 
@@ -273,9 +273,9 @@ impl From<super::Es256KSigningKey> for AsymmetricSigningKey {
     }
 }
 
-impl From<super::EdDsaSigningKey> for AsymmetricSigningKey {
-    fn from(key: super::EdDsaSigningKey) -> Self {
-        Self::EdDsa(key)
+impl From<super::Ed25519SigningKey> for AsymmetricSigningKey {
+    fn from(key: super::Ed25519SigningKey) -> Self {
+        Self::Ed25519(key)
     }
 }
 
@@ -326,7 +326,7 @@ impl signature::RandomizedSigner<Signature> for AsymmetricSigningKey {
                 let signature: ecdsa::Signature<_> = key.try_sign_with_rng(rng, msg)?;
                 Ok(Signature::from_signature(&signature))
             }
-            Self::EdDsa(key) => {
+            Self::Ed25519(key) => {
                 let signature: ed25519_dalek::Signature = key.sign(msg);
                 Ok(Signature::from_signature(&signature))
             }
@@ -347,7 +347,7 @@ pub enum AsymmetricVerifyingKey {
     Es384(super::Es384VerifyingKey),
     Es512(super::Es512VerifyingKey),
     Es256K(super::Es256KVerifyingKey),
-    EdDsa(super::EdDsaVerifyingKey),
+    Ed25519(super::Ed25519VerifyingKey),
 }
 
 impl AsymmetricVerifyingKey {
@@ -428,11 +428,11 @@ impl AsymmetricVerifyingKey {
         Self::Es256K(ecdsa::VerifyingKey::from(key))
     }
 
-    /// Create a new verifying key with the `EdDSA` algorithm from the given OKP
+    /// Create a new verifying key with the `Ed25519` algorithm from the given OKP
     /// public key.
     #[must_use]
-    pub fn eddsa(key: ed25519_dalek::VerifyingKey) -> Self {
-        Self::EdDsa(key)
+    pub fn ed25519(key: ed25519_dalek::VerifyingKey) -> Self {
+        Self::Ed25519(key)
     }
 
     /// Create a new verifying key for the given algorithm from the given public
@@ -481,13 +481,13 @@ impl AsymmetricVerifyingKey {
                 Ok(Self::es256k(params.try_into()?))
             }
 
-            (JsonWebKeyPublicParameters::Okp(params), JsonWebSignatureAlg::EdDsa)
+            (JsonWebKeyPublicParameters::Okp(params), JsonWebSignatureAlg::Ed25519)
                 if params.crv == JsonWebKeyOkpEllipticCurve::Ed25519 =>
             {
-                Ok(Self::eddsa(params.try_into()?))
+                Ok(Self::ed25519(params.try_into()?))
             }
 
-            (JsonWebKeyPublicParameters::Okp(_params), JsonWebSignatureAlg::EdDsa) => {
+            (JsonWebKeyPublicParameters::Okp(_params), JsonWebSignatureAlg::Ed25519) => {
                 Err(AsymmetricKeyFromJwkError::KeyNotSuitable { alg: alg.clone() })
             }
 
@@ -560,9 +560,9 @@ impl From<super::Es256KVerifyingKey> for AsymmetricVerifyingKey {
     }
 }
 
-impl From<super::EdDsaVerifyingKey> for AsymmetricVerifyingKey {
-    fn from(key: super::EdDsaVerifyingKey) -> Self {
-        Self::EdDsa(key)
+impl From<super::Ed25519VerifyingKey> for AsymmetricVerifyingKey {
+    fn from(key: super::Ed25519VerifyingKey) -> Self {
+        Self::Ed25519(key)
     }
 }
 
@@ -609,7 +609,7 @@ impl signature::Verifier<Signature> for AsymmetricVerifyingKey {
                 let signature: ecdsa::Signature<_> = signature.to_signature()?;
                 key.verify(msg, &signature)
             }
-            Self::EdDsa(key) => {
+            Self::Ed25519(key) => {
                 let signature: ed25519_dalek::Signature = signature.to_signature()?;
                 key.verify(msg, &signature)
             }
@@ -657,7 +657,7 @@ mod tests {
     }
 
     #[test]
-    fn eddsa_rejects_ed448_public_jwk() {
+    fn ed25519_rejects_ed448_public_jwk() {
         let jwks = load_public_keys();
         let ed448 = jwks
             .iter()
@@ -671,14 +671,14 @@ mod tests {
             .unwrap();
 
         let result =
-            AsymmetricVerifyingKey::from_jwk_and_alg(ed448.params(), &JsonWebSignatureAlg::EdDsa);
+            AsymmetricVerifyingKey::from_jwk_and_alg(ed448.params(), &JsonWebSignatureAlg::Ed25519);
 
         match result {
             Err(AsymmetricKeyFromJwkError::KeyNotSuitable {
-                alg: JsonWebSignatureAlg::EdDsa,
+                alg: JsonWebSignatureAlg::Ed25519,
             }) => {}
             Err(other) => panic!("unexpected error variant: {other:?}"),
-            Ok(_) => panic!("expected EdDSA to reject an Ed448 key"),
+            Ok(_) => panic!("expected Ed25519 to reject an Ed448 key"),
         }
     }
 }

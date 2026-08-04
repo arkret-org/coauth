@@ -69,11 +69,11 @@ async fn human_approval_endpoint_renders_closed_claim_required_details() {
 
 fn test_keystore() -> Keystore {
     let mut rng = ChaChaRng::seed_from_u64(42);
-    let eddsa = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-        .with_kid("test-eddsa");
+    let ed25519 = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+        .with_kid("test-ed25519");
     let enrollment = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
         .with_kid(coauth_keystore::DEVICE_ENROLLMENT_KEY_ID);
-    Keystore::new(JsonWebKeySet::new(vec![eddsa, enrollment]))
+    Keystore::new(JsonWebKeySet::new(vec![ed25519, enrollment]))
 }
 
 fn test_enrollment_authority_did() -> arkret_identifiers::Did {
@@ -87,7 +87,7 @@ fn test_session_public_jwk(session_key: &PrivateKey, kid: impl Into<String>) -> 
     JsonWebKey::new(JsonWebKeyPublicParameters::from(session_key))
         .with_use(JsonWebKeyUse::Sig)
         .with_key_ops(vec![JsonWebKeyOperation::Verify])
-        .with_alg(JsonWebSignatureAlg::EdDsa)
+        .with_alg(JsonWebSignatureAlg::Ed25519)
         .with_kid(kid)
 }
 
@@ -1099,9 +1099,9 @@ fn session_grant_introspection_proof(
 ) -> String {
     let now = Utc::now();
     let signer = session_key
-        .signing_key_for_alg(&JsonWebSignatureAlg::EdDsa)
+        .signing_key_for_alg(&JsonWebSignatureAlg::Ed25519)
         .unwrap();
-    let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::EdDsa);
+    let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::Ed25519);
     let claims = SessionGrantIntrospectionProofClaims {
         kind: SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND.to_owned(),
         grant_id: grant.grant_id.to_string(),

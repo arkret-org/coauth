@@ -84,7 +84,6 @@ impl JsonWebKeyCapability {
             | JsonWebSignatureAlg::Ps256
             | JsonWebSignatureAlg::Ps384
             | JsonWebSignatureAlg::Ps512
-            | JsonWebSignatureAlg::EdDsa
             | JsonWebSignatureAlg::Es256K
             | JsonWebSignatureAlg::Ed25519
             | JsonWebSignatureAlg::Ed448 => Some(Self::Signature),
@@ -792,12 +791,12 @@ mod tests {
 
         let err = p521
             .clone()
-            .try_with_alg(JsonWebSignatureAlg::EdDsa)
+            .try_with_alg(JsonWebSignatureAlg::Ed25519)
             .unwrap_err();
         assert!(matches!(
             err,
             JsonWebKeyValidationError::IncompatibleAlgorithm {
-                alg: JsonWebSignatureAlg::EdDsa,
+                alg: JsonWebSignatureAlg::Ed25519,
                 kty: JsonWebKeyType::Ec,
             }
         ));
@@ -868,7 +867,7 @@ mod tests {
             .try_with_key_ops(vec![JsonWebKeyOperation::Verify])
             .unwrap();
         let ed25519 = ed25519_public_key(&public_jwks)
-            .try_with_alg(JsonWebSignatureAlg::EdDsa)
+            .try_with_alg(JsonWebSignatureAlg::Ed25519)
             .unwrap()
             .try_with_use(JsonWebKeyUse::Sig)
             .unwrap()
@@ -907,7 +906,7 @@ mod tests {
         let sig_only = ed25519_public_key(&public_jwks)
             .try_with_use(JsonWebKeyUse::Sig)
             .unwrap()
-            .try_with_alg(JsonWebSignatureAlg::EdDsa)
+            .try_with_alg(JsonWebSignatureAlg::Ed25519)
             .unwrap()
             .try_with_key_ops(vec![JsonWebKeyOperation::Verify])
             .unwrap();
@@ -915,7 +914,7 @@ mod tests {
 
         assert_eq!(
             jwks.available_signing_algorithms(),
-            vec![JsonWebSignatureAlg::EdDsa]
+            vec![JsonWebSignatureAlg::Ed25519]
         );
     }
 

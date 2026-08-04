@@ -716,7 +716,7 @@ mod tests {
         let signing = SigningKey::generate(&mut OsRng);
         let public_jwk =
             PublicJsonWebKey::new(JsonWebKeyPublicParameters::from(&signing.verifying_key()))
-                .with_alg(JsonWebSignatureAlg::EdDsa);
+                .with_alg(JsonWebSignatureAlg::Ed25519);
         DpopSessionBinding {
             proof_jwt: proof_jwt.to_owned(),
             jkt: "test-jkt".to_owned(),

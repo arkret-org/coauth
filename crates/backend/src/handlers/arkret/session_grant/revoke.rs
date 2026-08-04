@@ -575,9 +575,9 @@ mod tests {
 
     fn test_keystore() -> Keystore {
         let mut rng = ChaChaRng::seed_from_u64(0x4e17);
-        let eddsa = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-            .with_kid("test-eddsa");
-        Keystore::new(JsonWebKeySet::new(vec![eddsa]))
+        let ed25519 = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+            .with_kid("test-ed25519");
+        Keystore::new(JsonWebKeySet::new(vec![ed25519]))
     }
 
     fn personal_did_web_config() -> ArkretConfig {

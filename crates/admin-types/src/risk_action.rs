@@ -66,7 +66,7 @@ pub struct AccountRiskActionApprovalRequestBody {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_note: Option<String>,
 
-    /// Detached EdDSA JWS over the canonical approval transcript.
+    /// Detached Ed25519 JWS over the canonical approval transcript.
     ///
     /// The payload segment MUST be empty (`protected..signature`). The
     /// detached payload is canonical JSON binding

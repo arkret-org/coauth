@@ -282,15 +282,15 @@ impl TestState {
         let rsa = PrivateKey::load_pem(include_str!("../../../keystore/tests/keys/rsa.pkcs1.pem"))
             .unwrap();
         let rsa = JsonWebKey::new(rsa).with_kid("test-rsa");
-        let eddsa = JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(43)))
-            .with_kid("test-eddsa")
-            .with_alg(JsonWebSignatureAlg::EdDsa);
+        let ed25519 = JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(43)))
+            .with_kid("test-ed25519")
+            .with_alg(JsonWebSignatureAlg::Ed25519);
         let enrollment =
             JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(44)))
                 .with_kid(coauth_keystore::DEVICE_ENROLLMENT_KEY_ID)
-                .with_alg(JsonWebSignatureAlg::EdDsa);
+                .with_alg(JsonWebSignatureAlg::Ed25519);
 
-        let jwks = JsonWebKeySet::new(vec![rsa, eddsa, enrollment]);
+        let jwks = JsonWebKeySet::new(vec![rsa, ed25519, enrollment]);
         let key_store = Keystore::new(jwks);
 
         let encrypter = Encrypter::new(&[0x42; 32]);

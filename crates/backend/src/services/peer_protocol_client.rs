@@ -223,7 +223,7 @@ impl<'a> PeerProtocolClient<'a> {
             covered.push(Component::Header("idempotency-key".to_owned()));
         }
 
-        let (kid, signer) = eddsa_signer(self.keystore)?;
+        let (kid, signer) = ed25519_signer(self.keystore)?;
         let created = chrono::Utc::now().timestamp();
         let expires = created.saturating_add(SIGNATURE_WINDOW_SECONDS);
         let covered_wire = covered
@@ -290,7 +290,7 @@ fn request_parts(
     }
 }
 
-fn eddsa_signer(
+fn ed25519_signer(
     keystore: &Keystore,
 ) -> Result<
     (
@@ -300,7 +300,7 @@ fn eddsa_signer(
     PeerProtocolClientError,
 > {
     let key = keystore
-        .signing_key_for_algorithm(&JsonWebSignatureAlg::EdDsa)
+        .signing_key_for_algorithm(&JsonWebSignatureAlg::Ed25519)
         .ok_or(PeerProtocolClientError::NoSigningKey)?;
     let kid = key
         .kid()
@@ -308,7 +308,7 @@ fn eddsa_signer(
         .ok_or(PeerProtocolClientError::NoSigningKey)?
         .to_owned();
     let signer = keystore
-        .signer_for_algorithm(&JsonWebSignatureAlg::EdDsa)
+        .signer_for_algorithm(&JsonWebSignatureAlg::Ed25519)
         .map_err(|_| PeerProtocolClientError::NoSigningKey)?;
     Ok((kid, signer))
 }

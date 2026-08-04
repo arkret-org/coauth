@@ -10,7 +10,7 @@
 //! idempotent request before the runtime is reported active.
 
 use arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload;
-use arkret_signatures::proof::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
+use arkret_signatures::proof::{PublicKeyMaterial, verify_ed25519_detached_jws_proof};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
@@ -22,6 +22,7 @@ use coauth_data::{BoxRepository, RepositoryAccess, UrlBuilder};
 use coauth_keystore::Keystore;
 use coauth_principal::PrincipalAgentKeyPairCommitRequest;
 use salvo::prelude::*;
+#[cfg(test)]
 use serde_json::Value;
 
 use super::error_matrix::{AgentAuthRejection, enforce_verification_method_binding};
@@ -39,12 +40,6 @@ use crate::services::did_resolver::DidResolverService;
 /// Durable retry queue used when the authoritative Principal Server cannot be
 /// reached after the exact pairing request has been persisted locally.
 const AGENT_KEY_PAIR_COMMIT_QUEUE: &str = "principal-agent-key-pair-commit";
-
-#[derive(Debug)]
-struct ValidatedRuntimePublicKey {
-    public_key: Value,
-    verification_public_key: [u8; 32],
-}
 
 /// `POST /_arkret/gate/account/agent-key-pair`
 /// (`ak.gate.account.command.pair_agent_key`).
@@ -99,8 +94,11 @@ pub async fn post_agent_key_pair(
 
     let public_key_value = serde_json::to_value(&body.public_key)
         .map_err(|error| AppError::bad_request(format!("public_key invalid: {error}")))?;
-    let public_key =
-        validate_runtime_public_key(&public_key_value, body.verification_method.as_str())?;
+    let public_key = arkret_signatures::agent::validate_agent_runtime_public_key(
+        &body.public_key,
+        &body.verification_method,
+    )
+    .map_err(|error| AppError::bad_request(format!("public_key invalid: {error}")))?;
 
     let pop = &body.proof_of_possession;
     if pop.challenge != body.pairing_request_id {
@@ -122,7 +120,7 @@ pub async fn post_agent_key_pair(
     if let Some(existing) = existing_authorization {
         let same_request = existing.agent_id == agent_id
             && existing.verification_method == body.verification_method.as_str()
-            && existing.public_key == public_key.public_key
+            && existing.public_key == public_key_value
             && existing.pairing_request_id == body.pairing_request_id.as_str()
             && existing.authorized_event_id == authorized_event_id
             && existing.raw_payload_digest == request_digest;
@@ -258,9 +256,8 @@ pub async fn post_agent_key_pair(
             now,
         )
         .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
-    let verifying_key =
-        ed25519_dalek::VerifyingKey::from_bytes(&public_key.verification_public_key)
-            .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
+    let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(&public_key.raw_public_key)
+        .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
     let signature = Base64UrlUnpadded::decode_vec(pop.signature.as_str())
         .ok()
         .and_then(|bytes| ed25519_dalek::Signature::from_slice(&bytes).ok())
@@ -272,13 +269,11 @@ pub async fn post_agent_key_pair(
 
     let mut repo = depot.repo().await?;
 
-    let runtime_public_key_digest =
-        runtime_public_key_digest(&public_key.public_key, body.verification_method.as_str())?;
     let authorize_event = validate_controller_authorize_event(
         &body.authorize_event.event,
         &agent_id,
         &body.verification_method,
-        &runtime_public_key_digest,
+        &body.public_key,
         &body.signing_key_binding,
         &body.pairing_request_id,
         pop.audience.as_str(),
@@ -312,6 +307,7 @@ pub async fn post_agent_key_pair(
         authorize_event.payload.key_id.as_str(),
         &body.verification_method,
         &body.authorize_event.event.event_id,
+        &authorize_event.payload.public_key_digest,
         &authorize_event.payload.signing_key_binding_digest,
         pop.audience.as_str(),
         &http_client,
@@ -375,7 +371,7 @@ pub async fn post_agent_key_pair(
                 agent_id: agent_id.clone(),
                 key_id: key_id.clone(),
                 verification_method: body.verification_method.to_string(),
-                public_key: public_key.public_key.clone(),
+                public_key: public_key_value.clone(),
                 accountable_principal_id: authorize_event.controller_id.clone(),
                 agent_key_scope,
                 audience: vec![pop.audience.to_string()],
@@ -506,50 +502,11 @@ struct ValidatedAuthorizeEvent {
     payload: AgentKeyAuthorizePayload,
 }
 
-fn validate_runtime_public_key(
-    public_key: &Value,
-    verification_method: &str,
-) -> Result<ValidatedRuntimePublicKey, AppError> {
-    let key: arkret_models_collaboration::governance::agent_artifacts::PublicKey =
-        serde_json::from_value(public_key.clone())
-            .map_err(|error| AppError::bad_request(format!("public_key invalid: {error}")))?;
-    if key.kty.as_str() != "OKP" {
-        return Err(AppError::bad_request("public_key.kty must be OKP"));
-    }
-    if key.kid.as_str() != verification_method {
-        return Err(AppError::bad_request(
-            "public_key.kid must match verification_method",
-        ));
-    }
-    if key.alg.as_str() != "EdDSA" {
-        return Err(AppError::bad_request("public_key.alg must be EdDSA"));
-    }
-    let raw = Base64UrlUnpadded::decode_vec(key.key.as_str())
-        .map_err(|_| AppError::bad_request("public_key.key must be base64url"))?;
-    let raw: [u8; 32] = raw
-        .try_into()
-        .map_err(|_| AppError::bad_request("public_key.key must decode to 32 bytes"))?;
-    Ok(ValidatedRuntimePublicKey {
-        public_key: public_key.clone(),
-        verification_public_key: raw,
-    })
-}
-
-fn runtime_public_key_digest(
-    public_key: &Value,
-    verification_method: &str,
-) -> Result<String, AppError> {
-    validate_runtime_public_key(public_key, verification_method)?;
-    arkret_signatures::agent::agent_runtime_public_key_digest(public_key)
-        .map(|digest| digest.as_str().to_owned())
-        .map_err(|error| AppError::bad_request(format!("public_key is invalid: {error}")))
-}
-
 fn validate_controller_authorize_event(
     event: &arkret_wire::Event,
     agent_id: &str,
     verification_method: &str,
-    runtime_public_key_digest: &str,
+    runtime_public_key: &arkret_models_collaboration::governance::agent_artifacts::PublicKey,
     signing_key_binding: &arkret_models_collaboration::agent_signer_evidence::AgentSigningKeyBinding,
     pairing_request_id: &str,
     audience: &str,
@@ -611,9 +568,18 @@ fn validate_controller_authorize_event(
             "authorize_event.event.payload.accountable_principal_id must match executed_by",
         ));
     }
-    if payload.public_key_digest.as_str() != runtime_public_key_digest {
+    let verification_method =
+        arkret_wire::DidUrl::new(verification_method.to_owned()).map_err(AppError::bad_request)?;
+    let validated_key_material =
+        arkret_signatures::agent_evidence::validate_agent_pairing_key_material(
+            runtime_public_key,
+            &verification_method,
+            signing_key_binding,
+        )
+        .map_err(|reason| AppError::bad_request(reason.as_str()))?;
+    if payload.public_key_digest != validated_key_material.authorization_digest {
         return Err(AppError::bad_request(
-            "authorize_event.event.payload.public_key_digest must bind the runtime public_key",
+            "authorize_event.event.payload.public_key_digest must bind the raw signing key",
         ));
     }
     let actual_binding_digest =
@@ -625,9 +591,9 @@ fn validate_controller_authorize_event(
         ));
     }
     if signing_key_binding.agent_id.as_str() != agent_id
-        || signing_key_binding.verification_method.as_str() != verification_method
+        || signing_key_binding.verification_method != verification_method
         || signing_key_binding.agent_key_authorize_event_id.as_str() != event.event_id.as_str()
-        || signing_key_binding.public_key_digest.as_str() != runtime_public_key_digest
+        || signing_key_binding.public_key_digest != validated_key_material.authorization_digest
         || signing_key_binding.controller_id.as_str() != controller_id
     {
         return Err(AppError::bad_request(
@@ -839,7 +805,7 @@ async fn verify_authorize_event_controller_signature(
         let public_key = PublicKeyMaterial::Ed25519Multibase {
             value: resolved.multibase,
         };
-        if verify_eddsa_detached_jws_proof(proof, &canonical_bytes, &event.actor_id, &public_key)
+        if verify_ed25519_detached_jws_proof(proof, &canonical_bytes, &event.actor_id, &public_key)
             .is_ok()
         {
             return Ok(());
@@ -913,7 +879,7 @@ fn verify_authorize_event_controller_signature_with_methods(
                 "authorize_event controller verification method invalid: {error}"
             ))
         })?;
-        if verify_eddsa_detached_jws_proof(proof, &canonical_bytes, &event.actor_id, &public_key)
+        if verify_ed25519_detached_jws_proof(proof, &canonical_bytes, &event.actor_id, &public_key)
             .is_ok()
         {
             return Ok(());
@@ -937,6 +903,7 @@ async fn verify_pairing_signing_key_binding(
     agent_key_id: &str,
     verification_method: &arkret_wire::DidUrl,
     authorize_event_id: &arkret_identifiers::EventId,
+    expected_public_key_digest: &arkret_identifiers::Hash,
     expected_binding_digest: &arkret_identifiers::Hash,
     audience: &str,
     http_client: &reqwest::Client,
@@ -1020,7 +987,7 @@ async fn verify_pairing_signing_key_binding(
         &expected_controller,
         verification_method,
         authorize_event_id,
-        &binding.public_key_digest,
+        expected_public_key_digest,
         expected_binding_digest,
         &public_key,
     )
@@ -1166,15 +1133,22 @@ mod tests {
     const AUDIENCE: &str = "did:web:soland.local";
     const PAIRING_REQUEST_ID: &str = "agent_pairing_request:01999999-0000-7000-8000-00000000feed";
     const PUBLIC_KEY_DIGEST: &str =
-        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        "sha256:225e8b1ac962ec6c55284d4a00c7e6c484db19fbe7c51abe118f1edc5e04a517";
+    const SIGNING_KEY_PUBLIC_KEY_DIGEST: &str =
+        "sha256:544e62cee8033709e389e5b2755343d0d0fa8c4850215cfb6331717e80d1aea3";
 
     fn valid_public_key() -> Value {
         json!({
             "kty": "OKP",
             "kid": VM,
-            "alg": "EdDSA",
+            "algorithm": "Ed25519",
             "key": Base64UrlUnpadded::encode_string(&[42u8; 32]),
         })
+    }
+
+    fn valid_public_key_typed()
+    -> arkret_models_collaboration::governance::agent_artifacts::PublicKey {
+        serde_json::from_value(valid_public_key()).expect("valid Agent runtime public key")
     }
 
     fn test_now() -> DateTime<Utc> {
@@ -1189,8 +1163,6 @@ mod tests {
             "controller_id": CONTROLLER,
             "principal_control_realm_id": "ak:realm:01999999-0000-7000-8000-000000000010",
             "controller_authorization_ref": format!("{AGENT}#managed-controller"),
-            "status": "active",
-            "runtime_state": "pending_runtime_key",
             "pcr_recovery": {
                 "status": "ready",
                 "backup_id": "ak:backup:01999999-0000-7000-8000-000000000020",
@@ -1224,10 +1196,10 @@ mod tests {
             "verification_method": VM,
             "public_key": {
                 "kty": "OKP",
-                "alg": "Ed25519",
+                "algorithm": "Ed25519",
                 "key": Base64UrlUnpadded::encode_string(&[42u8; 32])
             },
-            "public_key_digest": PUBLIC_KEY_DIGEST,
+            "public_key_digest": SIGNING_KEY_PUBLIC_KEY_DIGEST,
             "agent_key_authorize_event_id":
                 "ak:event:01999999-0000-7000-8000-000000000001",
             "issued_at": "2026-07-06T00:00:00.000Z",
@@ -1266,7 +1238,7 @@ mod tests {
                 "agent_id": AGENT,
                 "key_id": "runtime-key-1",
                 "verification_method": VM,
-                "public_key_digest": PUBLIC_KEY_DIGEST,
+                "public_key_digest": SIGNING_KEY_PUBLIC_KEY_DIGEST,
                 "signing_key_binding_digest": binding_digest,
                 "accountable_principal_id": CONTROLLER,
                 "agent_key_scope": {
@@ -1287,31 +1259,38 @@ mod tests {
                 }
             },
             // `event-envelope.schema.json#/$defs/event_proof` requires kind,
-            // verification_method, alg, event_digest, created_at and jws. The
+            // verification_method, event_digest, created_at and jws. The
             // digest here is a placeholder: callers that need a proof actually
             // bound to this envelope rebind it from `Event::event_digest`.
             "proofs": [{
                 "kind": "detached_jws",
-                "alg": "EdDSA",
                 "verification_method": "did:web:controller.example#key-1",
                 "event_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "created_at": "2026-07-06T00:01:00.000Z",
-                "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
+                "jws": "eyJhbGciOiJFZDI1NTE5In0..c2ln"
             }]
         })
     }
 
     #[test]
     fn runtime_public_key_requires_spec_okp_shape() {
-        validate_runtime_public_key(&valid_public_key(), VM).expect("spec public_key accepts");
+        let verification_method = arkret_wire::DidUrl::new(VM).unwrap();
+        arkret_signatures::agent::validate_agent_runtime_public_key(
+            &valid_public_key_typed(),
+            &verification_method,
+        )
+        .expect("SDK Agent runtime public_key profile accepts");
 
         let legacy = json!({
             "key_type": "Ed25519",
             "public_key_multibase": "z6Mki6bBq1N3X3G3sT2xLwSPrm5Tg7EwjZwJ4oXb9qQ7z1Uu",
         });
-        let err = validate_runtime_public_key(&legacy, VM)
-            .expect_err("legacy multibase pairing key shape must reject");
-        assert!(err.message().contains("public_key invalid"));
+        let err = arkret_signatures::agent::validate_agent_runtime_public_key(
+            &legacy,
+            &verification_method,
+        )
+        .expect_err("legacy multibase pairing key shape must reject");
+        assert!(err.to_string().contains("public_key"));
     }
 
     /// Parse a test envelope into the wire Event the handler actually receives.
@@ -1335,7 +1314,7 @@ mod tests {
             &authorize_event(envelope),
             AGENT,
             VM,
-            PUBLIC_KEY_DIGEST,
+            &valid_public_key_typed(),
             &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
@@ -1357,7 +1336,7 @@ mod tests {
             &authorize_event(envelope),
             AGENT,
             VM,
-            PUBLIC_KEY_DIGEST,
+            &valid_public_key_typed(),
             &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
@@ -1384,7 +1363,7 @@ mod tests {
             &authorize_event(valid_authorize_event(PAIRING_REQUEST_ID)),
             AGENT,
             VM,
-            PUBLIC_KEY_DIGEST,
+            &valid_public_key_typed(),
             &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
@@ -1397,7 +1376,7 @@ mod tests {
             &authorize_event(valid_authorize_event("agent_pairing_request:wrong")),
             AGENT,
             VM,
-            PUBLIC_KEY_DIGEST,
+            &valid_public_key_typed(),
             &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
@@ -1407,6 +1386,25 @@ mod tests {
         .expect_err("authorize_event pairing id mismatch must reject");
 
         assert!(err.message().contains("pairing_request_id"));
+    }
+
+    #[test]
+    fn authorize_event_accepts_distinct_runtime_and_signing_key_public_key_digests() {
+        let binding = valid_signing_key_binding();
+
+        assert_ne!(binding.public_key_digest.as_str(), PUBLIC_KEY_DIGEST);
+        validate_controller_authorize_event(
+            &authorize_event(valid_authorize_event(PAIRING_REQUEST_ID)),
+            AGENT,
+            VM,
+            &valid_public_key_typed(),
+            &binding,
+            PAIRING_REQUEST_ID,
+            AUDIENCE,
+            &authoritative_key_state(),
+            test_now(),
+        )
+        .expect("the raw signing-key disclosure must map back to the runtime JWK digest");
     }
 
     #[test]
@@ -1464,7 +1462,7 @@ mod tests {
             &authorize_event(event),
             AGENT,
             VM,
-            PUBLIC_KEY_DIGEST,
+            &valid_public_key_typed(),
             &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
@@ -1493,7 +1491,7 @@ mod tests {
             &authorize_event(event),
             AGENT,
             VM,
-            PUBLIC_KEY_DIGEST,
+            &valid_public_key_typed(),
             &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
@@ -1515,7 +1513,7 @@ mod tests {
             &authorize_event(event),
             AGENT,
             VM,
-            PUBLIC_KEY_DIGEST,
+            &valid_public_key_typed(),
             &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
@@ -1556,7 +1554,7 @@ mod tests {
             &authorize_event(event),
             AGENT,
             VM,
-            PUBLIC_KEY_DIGEST,
+            &valid_public_key_typed(),
             &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
@@ -1584,7 +1582,7 @@ mod tests {
             &authorize_event(event),
             AGENT,
             VM,
-            PUBLIC_KEY_DIGEST,
+            &valid_public_key_typed(),
             &binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
@@ -1639,7 +1637,6 @@ mod tests {
             arkret_canonical::canonical_json_bytes(&event.digest_payload().unwrap()).unwrap();
         let mut proof = arkret_wire::Proof {
             kind: "detached_jws".to_owned(),
-            alg: "EdDSA".to_owned(),
             proof_purpose: None,
             verification_method: arkret_wire::DidUrl::new(verification_method.clone()).unwrap(),
             event_digest: arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(
@@ -1652,8 +1649,9 @@ mod tests {
             jws: String::new(),
         };
         let binding_bytes = proof.canonical_binding_bytes(&event.actor_id).unwrap();
-        proof.jws = arkret_signatures::proof::sign_eddsa_detached_jws(&signing_key, &binding_bytes)
-            .unwrap();
+        proof.jws =
+            arkret_signatures::proof::sign_ed25519_detached_jws(&signing_key, &binding_bytes)
+                .unwrap();
         event.proofs.push(proof);
         let method = VerificationMethod {
             id: verification_method,

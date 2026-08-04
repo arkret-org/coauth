@@ -38,8 +38,8 @@ pub type Es512SigningKey = p521::ecdsa::SigningKey;
 pub type Es512VerifyingKey = p521::ecdsa::VerifyingKey;
 pub type Es256KSigningKey = ecdsa::SigningKey<k256::Secp256k1>;
 pub type Es256KVerifyingKey = ecdsa::VerifyingKey<k256::Secp256k1>;
-pub type EdDsaSigningKey = ed25519_dalek::SigningKey;
-pub type EdDsaVerifyingKey = ed25519_dalek::VerifyingKey;
+pub type Ed25519SigningKey = ed25519_dalek::SigningKey;
+pub type Ed25519VerifyingKey = ed25519_dalek::VerifyingKey;
 
 /// All the signing algorithms supported by this crate.
 ///
@@ -63,7 +63,7 @@ pub const SUPPORTED_SIGNING_ALGORITHMS: [JsonWebSignatureAlg; 14] = [
     JsonWebSignatureAlg::Es384,
     JsonWebSignatureAlg::Es256K,
     JsonWebSignatureAlg::Es512,
-    JsonWebSignatureAlg::EdDsa,
+    JsonWebSignatureAlg::Ed25519,
 ];
 
 /// Returns `true` when `alg` is in the supported whitelist.

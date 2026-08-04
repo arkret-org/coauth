@@ -664,7 +664,7 @@
           "const": "none"
         },
         {
-          "const": "EdDSA"
+          "const": "Ed25519"
         },
         {
           "const": "ES256K"

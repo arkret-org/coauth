@@ -318,9 +318,9 @@ async fn verify_ticket_signature(
     ticket.validate_structural().map_err(|error| {
         invalid_signature(format!("invalid recovery authority ticket: {error}"))
     })?;
-    if ticket.auth_data.alg != ServiceSignatureAlgorithm::EdDSA {
+    if ticket.auth_data.signature_algorithm != ServiceSignatureAlgorithm::Ed25519 {
         return Err(invalid_signature(
-            "this Account Authority only accepts EdDSA recovery authority tickets",
+            "this Account Authority only accepts Ed25519 recovery authority tickets",
         ));
     }
     if ticket.expires_at <= now || ticket.issued_at > now + Duration::seconds(30) {
@@ -529,7 +529,6 @@ fn sign_authorization_lease(
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let mut proof = PayloadProof {
         kind: proof_kind::DETACHED_JWS.to_owned(),
-        alg: "EdDSA".to_owned(),
         verification_method: authority.verification_method().to_owned(),
         payload_digest,
         created_at: issued_at,
@@ -545,7 +544,6 @@ fn sign_authorization_lease(
         .signer()
         .sign_payload(&binding_bytes)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    proof.alg = signature.alg;
     proof.jws = signature.jws;
     lease.proofs.push(proof);
     lease

@@ -8,7 +8,7 @@
 //! grants. A DPoP proof is a compact-serialisation JWS with:
 //!
 //! * `typ = "dpop+jwt"`
-//! * `alg ∈ { ES256, EdDSA }` — locked down to the asymmetric algs we already support in
+//! * `alg ∈ { ES256, Ed25519 }` — locked down to the asymmetric algs we already support in
 //!   `coauth_jose`.
 //! * `jwk` — the protected-header MUST carry the public key the proof is signed with. We verify the
 //!   JWS using exactly that embedded key, then reconstruct the RFC 7638 JWK SHA-256 thumbprint
@@ -108,7 +108,7 @@ pub enum DpopError {
     #[error("DPoP header `typ` must be `dpop+jwt`")]
     BadTyp,
 
-    #[error("DPoP header `alg` `{0}` is not supported (only EdDSA)")]
+    #[error("DPoP header `alg` `{0}` is not supported (only Ed25519)")]
     BadAlg(String),
 
     #[error("DPoP header is missing the embedded `jwk`")]
@@ -431,7 +431,7 @@ fn map_verification_error(error: DpopVerificationError) -> DpopError {
             DpopError::NotJwt(error.to_string())
         }
         DpopVerificationError::InvalidType => DpopError::BadTyp,
-        DpopVerificationError::InvalidAlgorithm => DpopError::BadAlg("not EdDSA".to_owned()),
+        DpopVerificationError::InvalidAlgorithm => DpopError::BadAlg("not Ed25519".to_owned()),
         DpopVerificationError::InvalidJwk => DpopError::MissingJwk,
         DpopVerificationError::InvalidSignature => DpopError::BadSignature,
         DpopVerificationError::MissingClaim(claim) => DpopError::MissingClaim(claim),
@@ -504,11 +504,11 @@ mod tests {
     fn sign_proof(claims: &DpopClaims, signing: &SigningKey) -> String {
         let verifying = signing.verifying_key();
         let public = PublicJsonWebKey::new(JsonWebKeyPublicParameters::from(&verifying))
-            .with_alg(JsonWebSignatureAlg::EdDsa);
-        let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::EdDsa)
+            .with_alg(JsonWebSignatureAlg::Ed25519);
+        let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::Ed25519)
             .with_typ("dpop+jwt".to_owned())
             .with_jwk(public);
-        let signer = AsymmetricSigningKey::eddsa(signing.clone());
+        let signer = AsymmetricSigningKey::ed25519(signing.clone());
         Jwt::sign(header, claims.clone(), &signer)
             .expect("DPoP sign")
             .into_string()

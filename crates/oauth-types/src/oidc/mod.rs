@@ -355,8 +355,10 @@ mod tests {
         assert_eq!(endpoint, "token_endpoint");
 
         // Ok - Other signing alg values.
-        metadata.token_endpoint_auth_signing_alg_values_supported =
-            Some(vec![JsonWebSignatureAlg::Rs256, JsonWebSignatureAlg::EdDsa]);
+        metadata.token_endpoint_auth_signing_alg_values_supported = Some(vec![
+            JsonWebSignatureAlg::Rs256,
+            JsonWebSignatureAlg::Ed25519,
+        ]);
         metadata.clone().validate(&issuer).unwrap();
 
         // Ok - `client_secret_jwt` with signing alg values.
@@ -562,8 +564,10 @@ mod tests {
         );
 
         // Ok - Present
-        metadata.id_token_signing_alg_values_supported =
-            Some(vec![JsonWebSignatureAlg::Rs256, JsonWebSignatureAlg::EdDsa]);
+        metadata.id_token_signing_alg_values_supported = Some(vec![
+            JsonWebSignatureAlg::Rs256,
+            JsonWebSignatureAlg::Ed25519,
+        ]);
         metadata.validate(&issuer).unwrap();
     }
 

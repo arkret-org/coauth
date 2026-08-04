@@ -147,7 +147,7 @@ fn preferred_service_signing_key(
 )> {
     use coauth_iana::jose::JsonWebSignatureAlg;
     [
-        JsonWebSignatureAlg::EdDsa,
+        JsonWebSignatureAlg::Ed25519,
         JsonWebSignatureAlg::Es512,
         JsonWebSignatureAlg::Es384,
         JsonWebSignatureAlg::Es256,

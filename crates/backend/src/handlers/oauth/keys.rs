@@ -27,8 +27,9 @@ mod tests {
     fn test_depot() -> Depot {
         let mut rng = ChaChaRng::seed_from_u64(42);
         let es512 = JsonWebKey::new(PrivateKey::generate_ec_p521(&mut rng)).with_kid("test-es512");
-        let eddsa = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("test-eddsa");
-        let keystore = Keystore::new(JsonWebKeySet::new(vec![es512, eddsa]));
+        let ed25519 =
+            JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("test-ed25519");
+        let keystore = Keystore::new(JsonWebKeySet::new(vec![es512, ed25519]));
 
         let mut depot = Depot::new();
         depot.insert("keystore", keystore);

@@ -137,7 +137,11 @@ impl ParametersInfo for OkpPublicParameters {
     }
 
     fn possible_algs(&self) -> &[JsonWebSignatureAlg] {
-        &[JsonWebSignatureAlg::EdDsa]
+        match self.crv {
+            JsonWebKeyOkpEllipticCurve::Ed25519 => &[JsonWebSignatureAlg::Ed25519],
+            JsonWebKeyOkpEllipticCurve::Ed448 => &[JsonWebSignatureAlg::Ed448],
+            _ => &[],
+        }
     }
 }
 

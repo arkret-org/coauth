@@ -373,12 +373,7 @@ fn sha_family_for(alg: &JsonWebSignatureAlg) -> Result<ShaFamily, TokenHashError
         Ok(ShaFamily::Sha256)
     } else if name.ends_with("384") {
         Ok(ShaFamily::Sha384)
-    } else if name.ends_with("512")
-        || matches!(
-            alg,
-            JsonWebSignatureAlg::EdDsa | JsonWebSignatureAlg::Ed25519
-        )
-    {
+    } else if name.ends_with("512") || matches!(alg, JsonWebSignatureAlg::Ed25519) {
         Ok(ShaFamily::Sha512)
     } else {
         Err(TokenHashError::UnsupportedAlgorithm)
@@ -890,17 +885,13 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn token_hash_with_eddsa_and_ed25519() {
+    fn token_hash_with_ed25519() {
         let token = "access-token-value";
 
         // Compute expected hash manually with SHA-512, left half
         let full_hash: [u8; 64] = Sha512::digest(token.as_bytes()).into();
         let expected = Base64UrlUnpadded::encode_string(&full_hash[..32]);
 
-        assert_eq!(
-            hash_token(&JsonWebSignatureAlg::EdDsa, token).unwrap(),
-            expected,
-        );
         assert_eq!(
             hash_token(&JsonWebSignatureAlg::Ed25519, token).unwrap(),
             expected,

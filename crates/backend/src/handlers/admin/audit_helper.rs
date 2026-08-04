@@ -309,7 +309,7 @@ fn sign_admin_operation_log(
 
 fn audit_signature_algorithms() -> [JsonWebSignatureAlg; 7] {
     [
-        JsonWebSignatureAlg::EdDsa,
+        JsonWebSignatureAlg::Ed25519,
         JsonWebSignatureAlg::Es512,
         JsonWebSignatureAlg::Es384,
         JsonWebSignatureAlg::Es256,

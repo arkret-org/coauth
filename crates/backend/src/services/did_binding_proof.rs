@@ -143,7 +143,7 @@ pub enum DidBindingProofError {
     #[error("control_proof JWS header is missing a verificationMethod kid")]
     MissingVerificationMethod,
 
-    #[error("control_proof JWS alg must be EdDSA, got {0}")]
+    #[error("control_proof JWS alg must be Ed25519, got {0}")]
     UnsupportedAlgorithm(String),
 
     #[error("control_proof verificationMethod does not match the binding statement")]
@@ -284,7 +284,7 @@ pub async fn validate_control_proof(
     // Parse JWS
     let jwt: Jwt<'_, BindingStatementClaims> =
         Jwt::try_from(proof_jws).map_err(|e| DidBindingProofError::InvalidJws(e.to_string()))?;
-    if jwt.header().alg() != &JsonWebSignatureAlg::EdDsa {
+    if jwt.header().alg() != &JsonWebSignatureAlg::Ed25519 {
         return Err(DidBindingProofError::UnsupportedAlgorithm(
             jwt.header().alg().to_string(),
         ));
@@ -413,7 +413,7 @@ fn validate_canonical_statement_payload(
 pub(crate) enum SdkJwsVerifyError {
     #[error("compact JWS shape is invalid: {0}")]
     InvalidShape(String),
-    #[error("compact JWS alg must be EdDSA, got {0}")]
+    #[error("compact JWS alg must be Ed25519, got {0}")]
     UnsupportedAlgorithm(String),
     #[error("verification_method '{0}' not present in the resolved DID document")]
     MethodNotFound(String),
@@ -459,7 +459,7 @@ pub(crate) fn verify_compact_jws_with_sdk(
     let header: JsonWebSignatureHeader = serde_json::from_slice(&header_bytes).map_err(|err| {
         SdkJwsVerifyError::InvalidShape(format!("invalid protected header: {err}"))
     })?;
-    if header.alg() != &JsonWebSignatureAlg::EdDsa {
+    if header.alg() != &JsonWebSignatureAlg::Ed25519 {
         return Err(SdkJwsVerifyError::UnsupportedAlgorithm(
             header.alg().to_string(),
         ));
@@ -521,7 +521,7 @@ pub(crate) fn verify_detached_jws_with_sdk(
     let header: JsonWebSignatureHeader = serde_json::from_slice(&header_bytes).map_err(|err| {
         SdkJwsVerifyError::InvalidShape(format!("invalid protected header: {err}"))
     })?;
-    if header.alg() != &JsonWebSignatureAlg::EdDsa {
+    if header.alg() != &JsonWebSignatureAlg::Ed25519 {
         return Err(SdkJwsVerifyError::UnsupportedAlgorithm(
             header.alg().to_string(),
         ));
@@ -916,7 +916,7 @@ mod tests {
     }
 
     #[test]
-    fn compact_jws_sdk_verifier_requires_eddsa_alg() {
+    fn compact_jws_sdk_verifier_requires_ed25519_algorithm() {
         let header_b64u = Base64UrlUnpadded::encode_string(
             serde_json::json!({
                 "alg": "HS256",
@@ -930,7 +930,7 @@ mod tests {
         let compact = format!("{header_b64u}.{payload_b64u}.{signature_b64u}");
 
         let err = verify_compact_jws_with_sdk(&compact, &[], "did:web:alice.example#key-1")
-            .expect_err("non-EdDSA alg must reject before key lookup");
+            .expect_err("non-Ed25519 alg must reject before key lookup");
 
         assert!(matches!(
             err,
@@ -1024,7 +1024,7 @@ mod tests {
         let compact = attach_detached_jws(&vector.proof.jws, &vector.detached_payload_b64u);
         let jwt: Jwt<'_, serde_json::Value> = Jwt::try_from(compact.as_str()).unwrap();
         // encoding.md §2: the detached-JWS protected header is fixed to
-        // {"alg":"EdDSA"} with no kid; the verification method is carried in the
+        // {"alg":"Ed25519"} with no kid; the verification method is carried in the
         // proof object and the signed binding, not the header.
         assert!(
             jwt.header().kid().is_none(),

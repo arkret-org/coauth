@@ -337,8 +337,9 @@ mod tests {
     fn test_keystore() -> Keystore {
         let mut rng = ChaChaRng::seed_from_u64(42);
         let es512 = JsonWebKey::new(PrivateKey::generate_ec_p521(&mut rng)).with_kid("test-es512");
-        let eddsa = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("test-eddsa");
-        Keystore::new(JsonWebKeySet::new(vec![es512, eddsa]))
+        let ed25519 =
+            JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("test-ed25519");
+        Keystore::new(JsonWebKeySet::new(vec![es512, ed25519]))
     }
 
     fn test_depot() -> Depot {
@@ -379,7 +380,7 @@ mod tests {
             .collect();
         assert_eq!(id_token_algs.len(), 2);
         assert!(id_token_algs.contains(&"ES512"));
-        assert!(id_token_algs.contains(&"EdDSA"));
+        assert!(id_token_algs.contains(&"Ed25519"));
 
         let userinfo_algs: Vec<_> = body["userinfo_signing_alg_values_supported"]
             .as_array()
@@ -389,7 +390,7 @@ mod tests {
             .collect();
         assert_eq!(userinfo_algs.len(), 2);
         assert!(userinfo_algs.contains(&"ES512"));
-        assert!(userinfo_algs.contains(&"EdDSA"));
+        assert!(userinfo_algs.contains(&"Ed25519"));
     }
 
     #[tokio::test]

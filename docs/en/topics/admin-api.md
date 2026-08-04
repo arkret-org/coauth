@@ -113,7 +113,7 @@ curl -X POST \
   "https://auth.example.com/_coauth/admin/accounts/$ACCOUNT_ID/risk-action/$PROPOSAL_ID/execute"
 ```
 
-`approval_proof_jws` is a detached EdDSA JWS (`protected..signature`) by
+`approval_proof_jws` is a detached Ed25519 JWS (`protected..signature`) by
 `approved_by`. Its detached payload is the canonical JSON transcript binding
 `proposal_id`, `account_id`, `action`, `ticket`, `approval_note`, and
 `approved_by`.

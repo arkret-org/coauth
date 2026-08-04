@@ -60,11 +60,11 @@ fn client_with_auth_method(method: Option<OAuthClientAuthenticationMethod>) -> C
     }
 }
 
-fn eddsa_keystore() -> Keystore {
+fn ed25519_keystore() -> Keystore {
     let mut rng = ChaChaRng::seed_from_u64(701);
     let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-        .with_kid("test-eddsa")
-        .with_alg(JsonWebSignatureAlg::EdDsa);
+        .with_kid("test-ed25519")
+        .with_alg(JsonWebSignatureAlg::Ed25519);
     Keystore::new(JsonWebKeySet::new(vec![key]))
 }
 
@@ -129,7 +129,7 @@ async fn authorization_code_openid_exchange_does_not_require_principal_did_row()
     let url_builder = UrlBuilder::new("https://auth.local.host/".parse().unwrap(), None, None);
     let arkret_config = ArkretConfig::default();
     let templates = test_templates(url_builder.clone()).await;
-    let key_store = eddsa_keystore();
+    let key_store = ed25519_keystore();
     let principal_server: Arc<dyn ConnectorAdmin> = Arc::new(DbConnectorAdmin::new(
         "example.com",
         factory.clone().boxed(),
@@ -157,7 +157,7 @@ async fn authorization_code_openid_exchange_does_not_require_principal_did_row()
             None,
             None,
             None,
-            Some(JsonWebSignatureAlg::EdDsa),
+            Some(JsonWebSignatureAlg::Ed25519),
             None,
             Some(OAuthClientAuthenticationMethod::None),
             None,

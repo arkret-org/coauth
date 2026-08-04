@@ -523,8 +523,8 @@ impl PrivateKey {
                 Some(AsymmetricVerifyingKey::es256k(k.public_key()))
             }
 
-            Self::OkpEd25519(k) if matches!(alg, JsonWebSignatureAlg::EdDsa) => {
-                Some(AsymmetricVerifyingKey::eddsa(k.verifying_key()))
+            Self::OkpEd25519(k) if matches!(alg, JsonWebSignatureAlg::Ed25519) => {
+                Some(AsymmetricVerifyingKey::ed25519(k.verifying_key()))
             }
 
             _ => None,
@@ -578,8 +578,8 @@ impl PrivateKey {
                 Some(AsymmetricSigningKey::es256k(*k.clone()))
             }
 
-            Self::OkpEd25519(k) if matches!(alg, JsonWebSignatureAlg::EdDsa) => {
-                Some(AsymmetricSigningKey::eddsa(k.as_ref().clone()))
+            Self::OkpEd25519(k) if matches!(alg, JsonWebSignatureAlg::Ed25519) => {
+                Some(AsymmetricSigningKey::ed25519(k.as_ref().clone()))
             }
 
             _ => None,
@@ -660,7 +660,7 @@ impl ParametersInfo for PrivateKey {
             Self::EcP384(_) => &[JsonWebSignatureAlg::Es384],
             Self::EcP521(_) => &[JsonWebSignatureAlg::Es512],
             Self::EcK256(_) => &[JsonWebSignatureAlg::Es256K],
-            Self::OkpEd25519(_) => &[JsonWebSignatureAlg::EdDsa],
+            Self::OkpEd25519(_) => &[JsonWebSignatureAlg::Ed25519],
         }
     }
 }

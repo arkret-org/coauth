@@ -251,7 +251,7 @@ fn preferred_service_signing_key(
 )> {
     use coauth_iana::jose::JsonWebSignatureAlg;
     [
-        JsonWebSignatureAlg::EdDsa,
+        JsonWebSignatureAlg::Ed25519,
         JsonWebSignatureAlg::Es512,
         JsonWebSignatureAlg::Es384,
         JsonWebSignatureAlg::Es256,
@@ -295,9 +295,9 @@ mod tests {
         use rand_core::SeedableRng;
 
         let mut rng = ChaChaRng::seed_from_u64(42);
-        let eddsa =
+        let ed25519 =
             JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("service-signing");
-        Keystore::new(JsonWebKeySet::new(vec![eddsa]))
+        Keystore::new(JsonWebKeySet::new(vec![ed25519]))
     }
 
     fn base_request() -> OrganizationStatementRequest {

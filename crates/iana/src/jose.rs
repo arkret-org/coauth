@@ -35,13 +35,11 @@ open_enum! {
         Ps512 => "PS512",
         /// No digital signature or MAC performed
         None => "none",
-        /// EdDSA signature algorithms
-        EdDsa => "EdDSA",
         /// ECDSA using secp256k1 curve and SHA-256
         Es256K => "ES256K",
-        /// EdDSA using Ed25519 curve
+        /// Ed25519 using Ed25519 curve
         Ed25519 => "Ed25519",
-        /// EdDSA using Ed448 curve
+        /// Ed25519 using Ed448 curve
         Ed448 => "Ed448",
     }
 }

@@ -11,8 +11,8 @@ static ES256_JWT: &str = include_str!("./jwts/es256.jwt");
 static ES384_JWT: &str = include_str!("./jwts/es384.jwt");
 static ES512_JWT: &str = include_str!("./jwts/es512.jwt");
 static ES256K_JWT: &str = include_str!("./jwts/es256k.jwt");
-static EDDSA_ED25519_JWT: &str = include_str!("./jwts/eddsa-ed25519.jwt");
-static EDDSA_ED448_JWT: &str = include_str!("./jwts/eddsa-ed448.jwt");
+static ED25519_JWT: &str = include_str!("./jwts/ed25519.jwt");
+static ED448_JWT: &str = include_str!("./jwts/ed448.jwt");
 static OCT_KEY: &[u8] = include_bytes!("./keys/oct.bin");
 
 fn public_jwks() -> coauth_jose::jwk::PublicJsonWebKeySet {
@@ -215,8 +215,8 @@ asymmetric_jwt_test!(es256, Es256, ES256_JWT);
 asymmetric_jwt_test!(es384, Es384, ES384_JWT);
 asymmetric_jwt_test!(es512, Es512, ES512_JWT);
 asymmetric_jwt_test!(es256k, Es256K, ES256K_JWT);
-asymmetric_jwt_test!(eddsa_ed25519, EdDsa, EDDSA_ED25519_JWT);
-asymmetric_jwt_test!(eddsa_ed448, EdDsa, EDDSA_ED448_JWT, supported = false);
+asymmetric_jwt_test!(ed25519, Ed25519, ED25519_JWT);
+asymmetric_jwt_test!(ed448, Ed448, ED448_JWT, supported = false);
 
 #[test]
 fn test_private_to_public_jwks() {

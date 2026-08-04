@@ -450,7 +450,7 @@ mod tests {
         let key_store = Keystore::new(JsonWebKeySet::new(vec![
             JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
                 .with_kid("policy-test-key")
-                .with_alg(JsonWebSignatureAlg::EdDsa),
+                .with_alg(JsonWebSignatureAlg::Ed25519),
         ]));
         let request = req();
         // `service_id` is mandatory (no derived fallback): pin the value the
@@ -505,9 +505,9 @@ mod tests {
             .expect("signature kid should identify the signing key");
         let verifying_key = coauth_jose::jwa::AsymmetricVerifyingKey::from_jwk_and_alg(
             public_key.params(),
-            &JsonWebSignatureAlg::EdDsa,
+            &JsonWebSignatureAlg::Ed25519,
         )
-        .expect("public key should verify EdDSA signatures");
+        .expect("public key should verify Ed25519 signatures");
         let signature = Base64UrlUnpadded::decode_vec(&response.signature.sig)
             .expect("signature should be base64url");
         verifying_key

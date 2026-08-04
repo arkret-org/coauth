@@ -104,7 +104,7 @@ impl WebEncryptionSignatureAlgorithm {
     fn classify_alg_by_reference(&self) -> Option<&'static str> {
         let r = &self.reference;
 
-        // Signature algorithms: RFC 7518 §3, RFC 8037 (EdDSA),
+        // Signature algorithms: RFC 7518 §3, RFC 8037 (Ed25519),
         // RFC 8812 (secp256k1), and Fully-Specified Algorithms §2.
         let is_signature = r.contains("RFC7518, Section 3")
             || r.contains("RFC8037")

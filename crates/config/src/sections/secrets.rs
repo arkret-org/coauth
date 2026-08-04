@@ -365,7 +365,7 @@ mod tests {
         let algs = key_store.available_signing_algorithms();
 
         assert!(algs.contains(&JsonWebSignatureAlg::Es512));
-        assert!(algs.contains(&JsonWebSignatureAlg::EdDsa));
+        assert!(algs.contains(&JsonWebSignatureAlg::Ed25519));
         assert!(key_store.service_identity_seed().is_ok());
         assert!(key_store.device_enrollment_seed().is_ok());
         assert!(

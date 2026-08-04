@@ -1186,7 +1186,7 @@ mod tests {
         nonce: &str,
     ) -> String {
         let alg = [
-            JsonWebSignatureAlg::EdDsa,
+            JsonWebSignatureAlg::Ed25519,
             JsonWebSignatureAlg::Es512,
             JsonWebSignatureAlg::Es384,
             JsonWebSignatureAlg::Es256,
@@ -1274,11 +1274,11 @@ mod tests {
         approval_note: &str,
         approved_by: &str,
     ) -> String {
-        let alg = JsonWebSignatureAlg::EdDsa;
+        let alg = JsonWebSignatureAlg::Ed25519;
         let signer = state
             .key_store
             .signer_for_algorithm(&alg)
-            .expect("test keystore should expose an EdDSA signing key");
+            .expect("test keystore should expose an Ed25519 signing key");
         let header = JsonWebSignatureHeader::new(alg).with_kid(format!("{approved_by}#key-1"));
         let header_b64 = Base64UrlUnpadded::encode_string(&serde_json::to_vec(&header).unwrap());
         let payload = super::risk_action::risk_action_approval_transcript_bytes(

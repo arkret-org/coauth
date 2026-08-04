@@ -191,7 +191,7 @@ mod tests {
         let mut rng = ChaChaRng::seed_from_u64(42);
         let (private_key, kid) = match alg {
             JsonWebSignatureAlg::Es512 => (PrivateKey::generate_ec_p521(&mut rng), "test-es512"),
-            JsonWebSignatureAlg::EdDsa => (PrivateKey::generate_ed25519(&mut rng), "test-eddsa"),
+            JsonWebSignatureAlg::Ed25519 => (PrivateKey::generate_ed25519(&mut rng), "test-ed25519"),
             other => panic!("unsupported test algorithm: {other:?}"),
         };
 
@@ -310,12 +310,12 @@ mod tests {
             .into_iter()
             .next()
             .unwrap();
-        client.id_token_signed_response_alg = Some(JsonWebSignatureAlg::EdDsa);
+        client.id_token_signed_response_alg = Some(JsonWebSignatureAlg::Ed25519);
         let browser_session = BrowserSession::samples(clock.now(), &mut fixture_rng)
             .into_iter()
             .next()
             .unwrap();
-        let (key_store, _) = keystore_for_alg(&JsonWebSignatureAlg::EdDsa);
+        let (key_store, _) = keystore_for_alg(&JsonWebSignatureAlg::Ed25519);
 
         let encoded = generate_id_token(
             &mut rng,
@@ -347,8 +347,8 @@ mod tests {
     }
 
     #[test]
-    fn generate_id_token_supports_eddsa() {
-        assert_generated_id_token_works(JsonWebSignatureAlg::EdDsa);
+    fn generate_id_token_supports_ed25519() {
+        assert_generated_id_token_works(JsonWebSignatureAlg::Ed25519);
     }
 }
 

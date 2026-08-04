@@ -481,7 +481,6 @@ fn sign_fanout_proof(
 
     Ok(CapabilityFanoutProof {
         kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-        alg: "EdDSA".to_owned(),
         verification_method,
         event_digest: arkret_identifiers::Hash::new(event_digest).map_err(|error| {
             AppError::new(
@@ -499,11 +498,11 @@ fn sign_detached_jws(
     service_id: &str,
     payload_bytes: &[u8],
 ) -> Result<(String, String), AppError> {
-    let alg = JsonWebSignatureAlg::EdDsa;
+    let alg = JsonWebSignatureAlg::Ed25519;
     let key = key_store.signing_key_for_algorithm(&alg).ok_or_else(|| {
         AppError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
-            "no EdDSA service signing key is configured for capability fanout",
+            "no Ed25519 service signing key is configured for capability fanout",
         )
     })?;
     let key_id = key.kid().ok_or_else(|| {
@@ -608,9 +607,9 @@ mod tests {
 
     fn key_store() -> Keystore {
         let mut rng = ChaChaRng::seed_from_u64(42);
-        let eddsa = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+        let ed25519 = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
             .with_kid("service-signing");
-        Keystore::new(JsonWebKeySet::new(vec![eddsa]))
+        Keystore::new(JsonWebKeySet::new(vec![ed25519]))
     }
 
     #[test]
@@ -721,7 +720,6 @@ mod tests {
         );
         assert!(payload.payload.get("realm_id").is_none());
         assert!(payload.payload.get("proofs").is_none());
-        assert_eq!(payload.proofs[0].alg, "EdDSA");
         assert_ne!(payload.proofs[0].jws, "queued-for-service-signature");
         assert!(payload.proofs[0].jws.contains(".."));
         let transcript = capability_fanout_proof_transcript(

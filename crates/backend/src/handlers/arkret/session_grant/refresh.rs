@@ -1,16 +1,15 @@
 use std::sync::{Arc, OnceLock};
 
-use arkret_canonical::{canonical_json_bytes, canonical_sha256};
 use arkret_identifiers::{DeviceId, Did, Hash};
 use arkret_models_collaboration::session_grant_bodies::{
-    SessionGrantRefreshOutcome, SessionGrantRefreshProof, SessionGrantRefreshRequestBody,
+    SESSION_GRANT_REFRESH_OPERATION, SessionGrantRefreshOutcome, SessionGrantRefreshProof,
+    SessionGrantRefreshRequestBody, session_grant_refresh_proof_signing_bytes,
+    session_grant_refresh_request_digest,
 };
 use arkret_models_identity::SessionGrantProofKind;
 use chrono::{DateTime, Utc};
 use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
-use serde::Serialize;
-use sha2::Digest as _;
 
 use super::*;
 use crate::handlers::arkret::*;
@@ -18,32 +17,8 @@ use crate::services::device_signing_directory::resolve_authorized_device_signing
 use crate::services::nonce_store::NonceStore;
 use crate::services::resolved_principal_audiences;
 
-const SOFT_LOGOUT_RESTORE_OPERATION: &str = "resume_soft_logged_out_session";
 const SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS: i64 = 300;
 const SOFT_LOGOUT_DID_PROOF_REPLAY_REASON: &str = "did_proof_replay_window_exceeded";
-
-#[derive(Debug, Serialize)]
-struct SoftLogoutDidProofClaims<'a> {
-    pub principal_id: &'a str,
-    pub device_id: &'a str,
-    pub audience: &'a str,
-    pub challenge: &'a str,
-    pub request_canonical_digest: &'a str,
-    #[serde(serialize_with = "arkret_canonical::serialize_canonical_timestamp")]
-    pub issued_at: DateTime<Utc>,
-    #[serde(serialize_with = "arkret_canonical::serialize_canonical_timestamp")]
-    pub expires_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize)]
-struct SoftLogoutRestoreRequestDigest<'a> {
-    pub operation: &'static str,
-    pub grant_jwt_hash: String,
-    pub principal_id: &'a str,
-    pub device_id: &'a str,
-    pub audience: &'a str,
-    pub grant_binding_key_id: &'a str,
-}
 
 fn shared_soft_logout_did_proof_nonce_store() -> &'static Arc<NonceStore> {
     static STORE: OnceLock<Arc<NonceStore>> = OnceLock::new();
@@ -203,13 +178,6 @@ fn validate_soft_logout_did_proof_window(
     Ok(())
 }
 
-fn session_grant_jwt_hash(grant_jwt: &str) -> String {
-    format!(
-        "sha256:{}",
-        hex::encode(sha2::Sha256::digest(grant_jwt.as_bytes()))
-    )
-}
-
 fn soft_logout_restore_request_canonical_digest(
     grant_jwt: &str,
     principal_id: &str,
@@ -217,14 +185,14 @@ fn soft_logout_restore_request_canonical_digest(
     audience: &str,
     grant_binding_key_id: &str,
 ) -> Result<String, ArkretRouteError> {
-    canonical_sha256(&SoftLogoutRestoreRequestDigest {
-        operation: SOFT_LOGOUT_RESTORE_OPERATION,
-        grant_jwt_hash: session_grant_jwt_hash(grant_jwt),
+    session_grant_refresh_request_digest(
+        grant_jwt,
         principal_id,
         device_id,
         audience,
         grant_binding_key_id,
-    })
+    )
+    .map(|digest| digest.as_str().to_owned())
     .map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "soft logout restore request canonicalization failed: {error}"
@@ -293,16 +261,16 @@ async fn verify_soft_logout_did_proof(
 
     validate_soft_logout_did_proof_window(issued_at, expires_at, now)?;
 
-    let claims = SoftLogoutDidProofClaims {
-        principal_id: &prior_grant.subject,
+    let payload = session_grant_refresh_proof_signing_bytes(
+        &prior_grant.subject,
         device_id,
-        audience: proof_audience,
+        proof_audience,
         challenge,
         request_canonical_digest,
         issued_at,
         expires_at,
-    };
-    let payload = canonical_json_bytes(&claims).map_err(|error| {
+    )
+    .map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "soft logout DID proof canonicalization failed: {error}"
         )))
@@ -378,7 +346,7 @@ async fn verify_soft_logout_did_proof(
 
     let replay_key = format!(
         "{}|{}|{}|{}|{}|{}",
-        SOFT_LOGOUT_RESTORE_OPERATION,
+        SESSION_GRANT_REFRESH_OPERATION,
         prior_grant.subject,
         device_id,
         proof_audience,

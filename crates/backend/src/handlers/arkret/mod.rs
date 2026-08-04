@@ -830,7 +830,7 @@ fn preferred_signing_key(
     &coauth_keystore::JsonWebKey<coauth_keystore::PrivateKey>,
 )> {
     [
-        JsonWebSignatureAlg::EdDsa,
+        JsonWebSignatureAlg::Ed25519,
         JsonWebSignatureAlg::Es512,
         JsonWebSignatureAlg::Es384,
         JsonWebSignatureAlg::Es256,

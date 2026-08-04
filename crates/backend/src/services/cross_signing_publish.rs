@@ -121,7 +121,7 @@ mod tests {
     fn psk(kid: &str) -> PublishedKey {
         PublishedKey {
             kid: arkret_wire::DidUrl::new(psk_kid(kid)).unwrap(),
-            alg: NonEmptyString::new("Ed25519").unwrap(),
+            algorithm: NonEmptyString::new("Ed25519").unwrap(),
             public_key: NonEmptyString::new(format!("pubkey-{kid}")).unwrap(),
             key_format: KeyFormat::RawBase64url,
         }
@@ -130,12 +130,12 @@ mod tests {
     fn ssk(kid: &str, psk_label: &str, pub_suffix: &str) -> SubordinateSignedKey {
         SubordinateSignedKey {
             kid: arkret_wire::DidUrl::new(psk_kid(kid)).unwrap(),
-            alg: NonEmptyString::new("Ed25519").unwrap(),
+            algorithm: NonEmptyString::new("Ed25519").unwrap(),
             public_key: NonEmptyString::new(format!("pubkey-{pub_suffix}")).unwrap(),
             key_format: KeyFormat::RawBase64url,
             binding: SubordinateSignedKeyBinding {
                 verification_method: arkret_wire::DidUrl::new(psk_kid(psk_label)).unwrap(),
-                alg: NonEmptyString::new("Ed25519").unwrap(),
+                signature_algorithm: NonEmptyString::new("Ed25519").unwrap(),
                 signature: NonEmptyString::new("sig").unwrap(),
             },
         }

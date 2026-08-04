@@ -279,7 +279,7 @@ fn generate_sign_and_verify() {
         JsonWebSignatureAlg::Es384,
         JsonWebSignatureAlg::Es256K,
         JsonWebSignatureAlg::Es512,
-        JsonWebSignatureAlg::EdDsa,
+        JsonWebSignatureAlg::Ed25519,
     ];
 
     for alg in all_algs {

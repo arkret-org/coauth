@@ -139,7 +139,6 @@ pub(crate) fn issue_handle_claim(
     let unsigned_payload = HandleClaimPayload {
         proofs: vec![PayloadProof {
             kind: proof_kind::DETACHED_JWS.to_owned(),
-            alg: alg.to_string(),
             verification_method: verification_method.clone(),
             payload_digest: proof_payload_digest.clone(),
             created_at: now,
@@ -156,7 +155,6 @@ pub(crate) fn issue_handle_claim(
     let final_payload = HandleClaimPayload {
         proofs: vec![PayloadProof {
             kind: proof_kind::DETACHED_JWS.to_owned(),
-            alg: alg.to_string(),
             verification_method,
             payload_digest: proof_payload_digest,
             created_at: now,
