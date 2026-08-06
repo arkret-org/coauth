@@ -39,7 +39,6 @@ use std::time::Duration;
 
 use arkret_identifiers::{Hash, RealmId};
 use arkret_models_collaboration::event_query::PeerEventsFrontierRequestBody;
-use arkret_models_collaboration::event_sync::EventsFrontierFederationPeerState;
 use arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding;
 use arkret_wire::FreshnessState;
 use chrono::{DateTime, Utc};
