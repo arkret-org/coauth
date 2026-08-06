@@ -119,9 +119,28 @@ pub async fn post_policy_check(
     // don't bother caching them in AppState — keeping AppState's shape
     // stable means parallel agents working on other handlers don't have
     // to rebase.
+    let frontier_signing = arkret_config
+        .principal_servers
+        .first()
+        .and_then(crate::services::resolved_principal_audiences::effective_audience_shared)
+        .and_then(|destination_service_id| {
+            let trust_domain =
+                arkret_identifiers::TypedTrustDomainId::new(arkret_config.trust_domain.clone()?)
+                    .ok()?;
+            Some((
+                key_store.clone(),
+                arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
+                    source_service_id: arkret::service_id_for(&arkret_config),
+                    destination_service_id,
+                    source_trust_domain: trust_domain.clone(),
+                    destination_trust_domain: trust_domain,
+                },
+            ))
+        });
     let frontier_source = SolandFrontierSource::new(
         arkret_config.primary_principal_server_url().cloned(),
         http_client.clone(),
+        frontier_signing,
     );
     let evaluator = RuleEvaluator::new(repo_factory);
 

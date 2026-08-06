@@ -138,14 +138,6 @@ pub(crate) const fn oidc_upstream_policy(operation: &'static str) -> OutboundReq
         .with_backoff(Duration::from_millis(100))
 }
 
-#[must_use]
-pub(crate) const fn policy_frontier_policy() -> OutboundRequestPolicy {
-    OutboundRequestPolicy::new("policy_frontier", "fetch")
-        .with_timeout(Duration::from_millis(1_500))
-        .with_max_attempts(2)
-        .with_backoff(Duration::from_millis(50))
-}
-
 struct TracingResolver {
     inner: GaiResolver,
     allow_loopback: bool,

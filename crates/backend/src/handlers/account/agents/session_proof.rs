@@ -52,13 +52,13 @@ const AGENT_KEY_SCOPE_APPLET: &str = "applet";
 pub(super) const AGENT_KEY_SCOPE_LIMITED: &str = "limited";
 
 const AGENT_SERVICE_SCOPE_ACTIONS: &[&str] = &[
-    "ak.self.events.query.describe",
+    "ak.self.events.read.describe",
     "ak.self.events.command.submit",
     "ak.self.events.resource.get",
-    "ak.self.events.query.resolve",
-    "ak.self.events.query.scan",
+    "ak.self.events.read.resolve",
+    "ak.self.events.read.scan",
     "ak.self.events.stream.subscribe",
-    "ak.self.events.query.frontier",
+    "ak.self.events.read.frontier",
     "ak.self.authorization_leases.command.issue",
     "ak.self.keys.keypackages.upload.create",
     "ak.self.keys.keypackages.command.consume",
@@ -72,13 +72,13 @@ const AGENT_SERVICE_SCOPE_ACTIONS: &[&str] = &[
 /// with `key_pair.rs`, which projects the same set into the spec-typed
 /// `agent_key_scope.actions` on the `ak.agent.key.authorize` fan-out payload.
 pub(super) const LIMITED_AGENT_SCOPE_ACTIONS: &[&str] = &[
-    "ak.self.events.query.describe",
+    "ak.self.events.read.describe",
     "ak.self.events.command.submit",
     "ak.self.events.resource.get",
-    "ak.self.events.query.resolve",
-    "ak.self.events.query.scan",
+    "ak.self.events.read.resolve",
+    "ak.self.events.read.scan",
     "ak.self.events.stream.subscribe",
-    "ak.self.events.query.frontier",
+    "ak.self.events.read.frontier",
     "ak.self.authorization_leases.command.issue",
     "ak.self.keys.keypackages.upload.create",
     "ak.self.keys.keypackages.command.consume",
@@ -1903,7 +1903,7 @@ mod tests {
                 " ak.self.events.command.submit ".to_owned(),
                 "ak.message.create".to_owned(),
                 "ak.self.events.command.submit".to_owned(),
-                "ak.self.events.query.frontier".to_owned(),
+                "ak.self.events.read.frontier".to_owned(),
                 "ak.self.authorization_leases.command.issue".to_owned(),
                 "ak.self.signal.command.send".to_owned(),
                 "ak.reaction.add".to_owned(),
@@ -1924,7 +1924,7 @@ mod tests {
                 "ak.self.device_messages.command.ack".to_owned(),
                 "ak.self.device_messages.query.list".to_owned(),
                 "ak.self.events.command.submit".to_owned(),
-                "ak.self.events.query.frontier".to_owned(),
+                "ak.self.events.read.frontier".to_owned(),
                 "ak.self.keys.keypackages.command.consume".to_owned(),
                 "ak.self.keys.keypackages.upload.create".to_owned(),
                 "ak.self.signal.command.send".to_owned(),
@@ -2049,7 +2049,7 @@ mod tests {
     fn unknown_agent_key_scope_rejects_fail_closed() {
         let err = intersect_requested_scope_with_agent_key_scope(
             "delegated-root",
-            &["ak.self.events.query.scan".to_owned()],
+            &["ak.self.events.read.scan".to_owned()],
         )
         .expect_err("unknown key tiers must fail closed");
 

@@ -24,7 +24,7 @@
 //! HTTP wiring. Implementations:
 //!
 //! - [`SolandFrontierSource`] — production. Holds the soland base URL + shared `reqwest::Client`;
-//!   performs the GET and maps the result.
+//!   performs canonical QUERY with signed GET compatibility fallback and maps the result.
 //! - [`StaticFrontierSource`] — tests. Returns a fixed frontier so the unit tests in
 //!   `policy_check.rs` can assert byte-equal transcripts without standing up an HTTP mock.
 //!
@@ -38,13 +38,15 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use arkret_identifiers::{Hash, RealmId};
+use arkret_models_collaboration::event_query::PeerEventsFrontierRequestBody;
 use arkret_models_collaboration::event_sync::EventsFrontierFederationPeerState;
+use arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding;
 use arkret_wire::FreshnessState;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 use url::Url;
 
-use crate::outbound_http;
+use crate::services::peer_protocol_client::PeerProtocolClient;
 
 const FRESHNESS_REQUIRED_MS: i64 = 180_000;
 const CLOCK_SKEW_TOLERANCE_MS: i64 = 60_000;
@@ -136,6 +138,10 @@ pub struct SolandFrontierSource {
     base_url: Option<Url>,
     http_client: reqwest::Client,
     request_timeout: Duration,
+    signing: Option<(
+        coauth_keystore::Keystore,
+        PeerKeyPackagesClaimTransportBinding,
+    )>,
 }
 
 impl SolandFrontierSource {
@@ -144,7 +150,14 @@ impl SolandFrontierSource {
     /// [`Frontier::empty`] so the policy-check pipeline still produces
     /// a signed response.
     #[must_use]
-    pub fn new(base_url: Option<Url>, http_client: reqwest::Client) -> Self {
+    pub fn new(
+        base_url: Option<Url>,
+        http_client: reqwest::Client,
+        signing: Option<(
+            coauth_keystore::Keystore,
+            PeerKeyPackagesClaimTransportBinding,
+        )>,
+    ) -> Self {
         Self {
             base_url,
             http_client,
@@ -152,6 +165,7 @@ impl SolandFrontierSource {
             // deadline so the evaluator can time out before the
             // frontier fetch does. Tuneable later from config.
             request_timeout: Duration::from_millis(1_500),
+            signing,
         }
     }
 }
@@ -182,52 +196,20 @@ impl FrontierSource for SolandFrontierSource {
             // path on `principal_server_url` rather than being resolved
             // relative to it (URL relative-resolution would otherwise
             // truncate the last base segment).
-            let mut url = base
-                .join("/_arkret/peer/events/frontier")
-                .map_err(|e| FrontierError::Http(format!("invalid frontier URL: {e}")))?;
-
-            // soland scopes by realm id so receivers only see the
-            // visible events for the realm being evaluated. The
-            // federation-peer role is conveyed by the route itself plus
-            // the signed peer request headers (validate_peer_request on
-            // the soland side), not a query parameter. We build the
-            // query string manually because the `query` builder method
-            // on `reqwest::RequestBuilder` requires the
-            // `serde_urlencoded` dep which isn't enabled in
-            // coauth-backend's reqwest feature set.
-            {
-                let mut pairs = url.query_pairs_mut();
-                pairs.append_pair("realm_id", realm_id.as_str());
-            }
-
-            let response = outbound_http::send_with_policy(
-                outbound_http::policy_frontier_policy().with_timeout(self.request_timeout),
-                || self.http_client.get(url.clone()),
-            )
-            .await
-            .map_err(|e| {
-                if e.is_timeout() {
-                    FrontierError::Timeout
-                } else {
-                    FrontierError::Http(e.to_string())
-                }
+            let (keystore, identity) = self.signing.as_ref().ok_or_else(|| {
+                FrontierError::Http("peer frontier signing identity is unavailable".to_owned())
             })?;
-
-            if !response.status().is_success() {
-                return Err(FrontierError::Http(format!(
-                    "soland frontier returned HTTP {}",
-                    response.status()
-                )));
-            }
-
-            // soland returns the typed `ak.peer.events.query.frontier`
-            // federation-peer response directly (no envelope wrapper). Decode
-            // it strongly; a malformed or incomplete response surfaces as an
-            // error the caller maps to a signed sentinel rather than a 500.
-            let frontier: EventsFrontierFederationPeerState = response
-                .json()
-                .await
-                .map_err(|e| FrontierError::Http(format!("frontier body parse: {e}")))?;
+            let client =
+                PeerProtocolClient::new(Some(base), &self.http_client, keystore, identity.clone())
+                    .map_err(|error| FrontierError::Http(error.to_string()))?;
+            let request = PeerEventsFrontierRequestBody {
+                realm_id: realm_id.clone(),
+            };
+            let frontier =
+                tokio::time::timeout(self.request_timeout, client.read_events_frontier(&request))
+                    .await
+                    .map_err(|_| FrontierError::Timeout)?
+                    .map_err(|error| FrontierError::Http(error.to_string()))?;
 
             let h = frontier.frontier_root.clone();
             let freshness_state = frontier_freshness_state(&frontier.observed_at, Utc::now());
@@ -321,7 +303,7 @@ mod tests {
     #[tokio::test]
     async fn soland_source_with_no_base_url_returns_sentinel() {
         install_crypto_provider();
-        let source = SolandFrontierSource::new(None, reqwest::Client::new());
+        let source = SolandFrontierSource::new(None, reqwest::Client::new(), None);
         let got = source.fetch(&realm()).await.unwrap();
         assert_eq!(got, Frontier::empty());
         assert_eq!(got.freshness_state, FreshnessState::Unknown);

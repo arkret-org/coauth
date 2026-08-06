@@ -10,6 +10,8 @@ use arkret_canonical::canonical_json_bytes;
 use arkret_models_collaboration::account_lifecycle::{
     AccountStatusPublicationOutcome, AccountStatusPublicationRequestBody,
 };
+use arkret_models_collaboration::event_query::PeerEventsFrontierRequestBody;
+use arkret_models_collaboration::event_sync::EventsFrontierFederationPeerState;
 use arkret_models_collaboration::governance::invite_addressing::{
     InviteDeliveryOutcome, InviteDeliveryRequestBodyBody,
 };
@@ -130,6 +132,60 @@ impl<'a> PeerProtocolClient<'a> {
         )
         .await
         .map_err(|error| PeerProtocolClientError::Http(error.to_string()))?;
+
+        parse_json_response(response).await
+    }
+
+    /// Read the peer Event frontier through canonical HTTP QUERY, falling back
+    /// to the deprecated GET binding only when QUERY is explicitly rejected.
+    pub async fn read_events_frontier(
+        &self,
+        request: &PeerEventsFrontierRequestBody,
+    ) -> Result<EventsFrontierFederationPeerState, PeerProtocolClientError> {
+        let url = self.join_absolute("/_arkret/peer/events/frontier")?;
+        let body_bytes = canonical_json_bytes(request)
+            .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
+        let signed = self.signed_request("QUERY", &url, Some(&body_bytes), None)?;
+        let query_method = reqwest::Method::from_bytes(b"QUERY")
+            .map_err(|error| PeerProtocolClientError::InvalidUrl(error.to_string()))?;
+        let mut response = outbound_http::send_with_policy(
+            outbound_http::soland_policy("peer_events_read_frontier")
+                .with_timeout(Duration::from_secs(5)),
+            || {
+                let mut builder = self
+                    .http_client
+                    .request(query_method.clone(), url.clone())
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .body(body_bytes.clone());
+                for (name, value) in &signed.headers {
+                    builder = builder.header(name.as_str(), value.as_str());
+                }
+                builder
+            },
+        )
+        .await
+        .map_err(|error| PeerProtocolClientError::Http(error.to_string()))?;
+
+        if matches!(response.status().as_u16(), 405 | 501) {
+            let mut fallback_url = url;
+            fallback_url
+                .query_pairs_mut()
+                .append_pair("realm_id", request.realm_id.as_str());
+            let fallback_signed = self.signed_request("GET", &fallback_url, None, None)?;
+            response = outbound_http::send_with_policy(
+                outbound_http::soland_policy("peer_events_read_frontier_compat_get")
+                    .with_timeout(Duration::from_secs(5)),
+                || {
+                    let mut builder = self.http_client.get(fallback_url.clone());
+                    for (name, value) in &fallback_signed.headers {
+                        builder = builder.header(name.as_str(), value.as_str());
+                    }
+                    builder
+                },
+            )
+            .await
+            .map_err(|error| PeerProtocolClientError::Http(error.to_string()))?;
+        }
 
         parse_json_response(response).await
     }
@@ -407,5 +463,47 @@ mod tests {
                 .iter()
                 .all(|(name, _)| !name.eq_ignore_ascii_case("Content-Digest"))
         );
+    }
+
+    #[test]
+    fn signed_query_covers_actual_method_target_and_content_digest() {
+        let base = Url::parse("https://server.example/").unwrap();
+        let client = reqwest::Client::new();
+        let keystore = test_keystore();
+        let identity = peer_identity();
+        let peer = PeerProtocolClient::new(Some(&base), &client, &keystore, identity).unwrap();
+        let url = base.join("/_arkret/peer/events/frontier").unwrap();
+        let body = br#"{"realm_id":"ak:realm:01904100-0000-8000-8000-000000000001"}"#;
+
+        let signed = peer
+            .signed_request("QUERY", &url, Some(body), None)
+            .unwrap();
+        let signature_input = signed
+            .headers
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("Signature-Input"))
+            .map(|(_, value)| value.as_str())
+            .unwrap();
+        assert!(signature_input.contains("\"@method\""));
+        assert!(signature_input.contains("\"@target-uri\""));
+        assert!(signature_input.contains("\"content-digest\""));
+        assert!(
+            signed
+                .headers
+                .iter()
+                .any(|(name, _)| name.eq_ignore_ascii_case("Content-Digest"))
+        );
+
+        let query_parts = request_parts(
+            "QUERY",
+            &url,
+            &signed.headers,
+            Some(&ContentDigest::compute(
+                body,
+                ContentDigestAlgorithm::Sha256,
+            )),
+        );
+        assert_eq!(query_parts.method, "QUERY");
+        assert_eq!(query_parts.target_uri, url.as_str());
     }
 }
