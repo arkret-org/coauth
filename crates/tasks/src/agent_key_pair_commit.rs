@@ -30,6 +30,37 @@ impl RunnableJob for AgentKeyPairCommitJob {
                 "Agent key-pair Event id does not match the queued job"
             )));
         }
+        let digest_suite = self
+            .body()
+            .authorize_event
+            .event
+            .event_id
+            .digest_suite_code()
+            .digest_suite();
+        self.body()
+            .authorize_event
+            .event
+            .verify_event_id_matches_content_with_digest_suite(digest_suite)
+            .map_err(|_| JobError::fail(anyhow::anyhow!("event_id_digest_mismatch")))?;
+
+        // A queued retry can outlive discovery of collision evidence. Check
+        // quarantine before performing the external Principal-Server commit.
+        let mut preflight_repo = state.repository().await.map_err(JobError::retry)?;
+        let authorization = preflight_repo
+            .agent_key_authorization()
+            .lookup_by_event_id(self.authorized_event_id())
+            .await
+            .map_err(JobError::retry)?
+            .ok_or_else(|| {
+                JobError::fail(anyhow::anyhow!(
+                    "Agent key authorization is absent before commit"
+                ))
+            })?;
+        let quarantined = authorization.quarantined_at.is_some();
+        preflight_repo.cancel().await.map_err(JobError::retry)?;
+        if quarantined {
+            return Err(JobError::fail(anyhow::anyhow!("witness_disagreement")));
+        }
 
         let request = PrincipalAgentKeyPairCommitRequest::new(
             self.idempotency_key().to_owned(),

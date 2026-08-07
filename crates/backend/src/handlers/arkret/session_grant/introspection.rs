@@ -119,7 +119,7 @@ mod scope_projection_tests {
     fn internal_agent_scope_projects_only_wire_fields() {
         let projected = project_scope_details(&serde_json::json!({
             "controller_id": "did:web:controller.example",
-            "agent_key_authorization_ref": "ak:event:01904100-0000-7000-8000-000000000001",
+            "agent_key_authorization_ref": "ak:event:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
             "realm_ids": [],
             "strand_ids": [],
             "constraints": {"allowed_endpoints": []}

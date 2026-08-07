@@ -480,7 +480,9 @@ mod tests {
         NewOrganizationPrincipalControl {
             organization_did: did.to_owned(),
             principal_control_realm_id: format!("ak:realm:{did}"),
-            control_stream_ref: Some("ak:event:01904100-0000-7000-8000-000000000aaa".to_owned()),
+            control_stream_ref: Some(
+                "ak:event:AQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUF".to_owned(),
+            ),
             pcr_frontier_digest: None,
             bootstrap_authorization: OrganizationBootstrapAuthorization::DidControllerProof,
             bootstrap_delegation_ref: None,

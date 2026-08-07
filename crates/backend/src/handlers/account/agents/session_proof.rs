@@ -391,7 +391,7 @@ pub async fn validate_agent_session_proof(
     // The key MUST be authorized by an accepted, unrevoked (and unexpired,
     // when it declares an `expires_at`)
     // `ak.agent.key.authorize`. Resolve it by the request's
-    // `agent_key_authorization_ref` (the minted authorize event id).
+    // `agent_key_authorization_ref` (the content-bound authorize Event id).
     let authorization_ref = body
         .agent_key_authorization_ref
         .as_deref()
@@ -641,6 +641,9 @@ fn validate_agent_key_authorization_binding(
     verification_method: &str,
     audience: &str,
 ) -> Result<(), AgentAuthRejection> {
+    if authorization.quarantined_at.is_some() {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
     if authorization.soland_fanout_state
         != coauth_data::accountability::AccountabilityGrantFanoutState::Delivered
     {
@@ -1709,7 +1712,7 @@ mod tests {
     ) -> coauth_data::agent_key::AgentKeyAuthorization {
         coauth_data::agent_key::AgentKeyAuthorization {
             id: coauth_data::Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
-            authorized_event_id: "ak:event:01970000-0000-7000-8000-000000000021".to_owned(),
+            authorized_event_id: "ak:event:AQoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoK".to_owned(),
             agent_id: "did:web:agent.example".to_owned(),
             key_id: "runtime-key-1".to_owned(),
             verification_method: "did:web:agent.example#runtime-key-1".to_owned(),
@@ -1728,6 +1731,8 @@ mod tests {
             request_canonical_digest: format!("sha256:{}", "1".repeat(64)),
             revoked_at: None,
             revoked_reason: None,
+            quarantined_at: None,
+            quarantine_reason: None,
             raw_payload_digest: format!("sha256:{}", "2".repeat(64)),
             soland_fanout_state:
                 coauth_data::accountability::AccountabilityGrantFanoutState::Delivered,
@@ -1772,6 +1777,24 @@ mod tests {
         .expect_err("revoked runtime keys must fail closed");
 
         assert_eq!(err, AgentAuthRejection::AgentDeactivated);
+    }
+
+    #[test]
+    fn authorization_binding_rejects_collision_quarantine() {
+        let now = chrono::Utc::now();
+        let mut authorization = agent_key_authorization(now);
+        authorization.quarantined_at = Some(now);
+        authorization.quarantine_reason = Some("event_hash_collision".to_owned());
+
+        let error = validate_agent_key_authorization_binding(
+            &authorization,
+            now,
+            "did:web:agent.example",
+            "did:web:agent.example#runtime-key-1",
+            "https://arkret.example/_arkret",
+        )
+        .expect_err("a quarantined Event cannot authorize sessions");
+        assert_eq!(error, AgentAuthRejection::ProofInvalid);
     }
 
     #[test]
@@ -2379,7 +2402,7 @@ mod tests {
             device_id: None,
             requested_scope: vec!["ak.message.create".to_owned()],
             agent_key_authorization_ref: Some(
-                "ak:event:01970000-0000-7000-8000-000000000021".to_owned(),
+                "ak:event:AQoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoK".to_owned(),
             ),
             agent_scope_request: Some(
                 arkret_models_collaboration::session_grant_bodies::SessionGrantAgentScopeRequest {

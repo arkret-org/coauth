@@ -32,6 +32,17 @@ CREATE TABLE public.account_claims (
     CONSTRAINT account_claims_verifier_did_non_empty CHECK ((btrim(verifier_did) <> ''::text))
 );
 
+-- Full-hash collision evidence for Agent authorization Events. Rows are
+-- append-only variants; the parent authorization is unusable while
+-- quarantined, and neither variant is selected as authoritative by hash.
+CREATE TABLE public.agent_key_authorization_collision_variants (
+    id uuid NOT NULL,
+    authorized_event_id text NOT NULL,
+    canonical_preimage bytea NOT NULL,
+    envelope jsonb NOT NULL,
+    observed_at timestamp with time zone NOT NULL
+);
+
 CREATE TABLE public.account_security_events (
     id uuid NOT NULL,
     user_id uuid NOT NULL,
@@ -97,6 +108,8 @@ CREATE TABLE public.agent_key_authorizations (
     request_canonical_digest text NOT NULL,
     revoked_at timestamp with time zone,
     revoked_reason text,
+    quarantined_at timestamp with time zone,
+    quarantine_reason text,
     raw_payload_digest text NOT NULL,
     soland_fanout_state text NOT NULL,
     soland_fanout_idempotency_key text NOT NULL,
@@ -1102,6 +1115,9 @@ ALTER TABLE ONLY public.agent_key_authorizations
 
 ALTER TABLE ONLY public.agent_key_authorizations
     ADD CONSTRAINT agent_key_authorizations_soland_fanout_idempotency_key_key UNIQUE (soland_fanout_idempotency_key);
+
+ALTER TABLE ONLY public.agent_key_authorization_collision_variants
+    ADD CONSTRAINT agent_key_authorization_collision_variants_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.agent_session_proof_replay
     ADD CONSTRAINT agent_session_proof_replay_pkey PRIMARY KEY (id);

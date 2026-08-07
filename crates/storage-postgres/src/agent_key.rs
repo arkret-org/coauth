@@ -4,8 +4,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::agent_key::{
-    AgentKeyAuthorization, AgentKeyAuthorizationRepository, NewAgentKeyAuthorization,
-    NewAgentSessionProofReplay,
+    AgentEventCollisionVariant, AgentKeyAuthorization, AgentKeyAuthorizationRepository,
+    NewAgentKeyAuthorization, NewAgentSessionProofReplay,
 };
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
@@ -14,7 +14,10 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::schema::{agent_key_authorizations, agent_session_proof_replay};
+use crate::schema::{
+    agent_key_authorization_collision_variants, agent_key_authorizations,
+    agent_session_proof_replay,
+};
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`AgentKeyAuthorizationRepository`].
@@ -132,15 +135,19 @@ mod tests {
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(0xa92e);
         let label = unique_label("agent-same-key-replacement");
-        let first_event = "ak:event:01999999-0000-7000-8000-000000000091";
-        let replacement_event = "ak:event:01999999-0000-7000-8000-000000000092";
-        let newer_event = "ak:event:01999999-0000-7000-8000-000000000093";
+        let first_event = "ak:event:AQsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsL";
+        let replacement_event = "ak:event:AQwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM";
+        let newer_event = "ak:event:AQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0N";
 
         repo.agent_key_authorization()
             .add(
                 &mut rng,
                 &clock,
-                authorization(&label, "01999999-0000-7000-8000-000000000091", &clock),
+                authorization(
+                    &label,
+                    "AQsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsL",
+                    &clock,
+                ),
             )
             .await
             .unwrap();
@@ -148,7 +155,11 @@ mod tests {
             .add(
                 &mut rng,
                 &clock,
-                authorization(&label, "01999999-0000-7000-8000-000000000092", &clock),
+                authorization(
+                    &label,
+                    "AQwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+                    &clock,
+                ),
             )
             .await
             .expect("replacement authorization is a new dot even when key_id is unchanged");
@@ -156,7 +167,11 @@ mod tests {
             .add(
                 &mut rng,
                 &clock,
-                authorization(&label, "01999999-0000-7000-8000-000000000093", &clock),
+                authorization(
+                    &label,
+                    "AQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0N",
+                    &clock,
+                ),
             )
             .await
             .unwrap();
@@ -188,6 +203,67 @@ mod tests {
         );
         repo.cancel().await.unwrap();
     }
+
+    #[tokio::test]
+    async fn collision_quarantine_removes_authorization_from_active_use() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let clock = MockClock::default();
+        let mut rng = ChaChaRng::seed_from_u64(0xa93e);
+        let label = unique_label("agent-event-collision");
+        let token = "AQ8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8P";
+        let event_id = format!("ak:event:{token}");
+
+        repo.agent_key_authorization()
+            .add(&mut rng, &clock, authorization(&label, token, &clock))
+            .await
+            .unwrap();
+        let variants = [
+            AgentEventCollisionVariant {
+                canonical_preimage: br#"{"actor_seq":1}"#.to_vec(),
+                envelope: serde_json::json!({ "variant": 1 }),
+            },
+            AgentEventCollisionVariant {
+                canonical_preimage: br#"{"actor_seq":2}"#.to_vec(),
+                envelope: serde_json::json!({ "variant": 2 }),
+            },
+        ];
+        assert!(
+            repo.agent_key_authorization()
+                .quarantine_event_collision(&mut rng, &clock, &event_id, &variants)
+                .await
+                .unwrap()
+        );
+
+        let quarantined = repo
+            .agent_key_authorization()
+            .lookup_by_event_id(&event_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            quarantined.quarantine_reason.as_deref(),
+            Some("event_hash_collision")
+        );
+        assert!(quarantined.quarantined_at.is_some());
+        assert!(
+            repo.agent_key_authorization()
+                .list_active_for_agent(&format!("did:web:{label}-agent.example"))
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            !repo
+                .agent_key_authorization()
+                .mark_fanout_delivered_and_revoke(&clock, &event_id, &[], "unused")
+                .await
+                .unwrap()
+        );
+        repo.cancel().await.unwrap();
+    }
 }
 
 #[derive(Debug, Clone, Queryable, Selectable)]
@@ -208,6 +284,8 @@ struct AgentKeyAuthorizationRow {
     request_canonical_digest: String,
     revoked_at: Option<DateTime<Utc>>,
     revoked_reason: Option<String>,
+    quarantined_at: Option<DateTime<Utc>>,
+    quarantine_reason: Option<String>,
     raw_payload_digest: String,
     soland_fanout_state: String,
     soland_fanout_idempotency_key: String,
@@ -247,6 +325,8 @@ impl TryFrom<AgentKeyAuthorizationRow> for AgentKeyAuthorization {
             request_canonical_digest: value.request_canonical_digest,
             revoked_at: value.revoked_at,
             revoked_reason: value.revoked_reason,
+            quarantined_at: value.quarantined_at,
+            quarantine_reason: value.quarantine_reason,
             raw_payload_digest: value.raw_payload_digest,
             soland_fanout_state,
             soland_fanout_idempotency_key: value.soland_fanout_idempotency_key,
@@ -301,6 +381,16 @@ struct InsertableProofReplay {
     proof_expires_at: DateTime<Utc>,
     prune_after: DateTime<Utc>,
     created_at: DateTime<Utc>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = agent_key_authorization_collision_variants)]
+struct InsertableAgentEventCollisionVariant {
+    id: Uuid,
+    authorized_event_id: String,
+    canonical_preimage: Vec<u8>,
+    envelope: serde_json::Value,
+    observed_at: DateTime<Utc>,
 }
 
 #[async_trait]
@@ -369,6 +459,8 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
             request_canonical_digest: row.request_canonical_digest,
             revoked_at: None,
             revoked_reason: None,
+            quarantined_at: None,
+            quarantine_reason: None,
             raw_payload_digest: row.raw_payload_digest,
             soland_fanout_state: params.soland_fanout_state,
             soland_fanout_idempotency_key: row.soland_fanout_idempotency_key,
@@ -409,6 +501,7 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
         agent_key_authorizations::table
             .filter(agent_key_authorizations::agent_id.eq(agent_id))
             .filter(agent_key_authorizations::revoked_at.is_null())
+            .filter(agent_key_authorizations::quarantined_at.is_null())
             .order(agent_key_authorizations::issued_at.asc())
             .select(AgentKeyAuthorizationRow::as_select())
             .load::<AgentKeyAuthorizationRow>(self.conn)
@@ -417,6 +510,57 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
             .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()
             .map_err(Into::into)
+    }
+
+    #[tracing::instrument(
+        name = "db.agent_key_authorization.quarantine_event_collision",
+        skip_all,
+        err
+    )]
+    async fn quarantine_event_collision(
+        &mut self,
+        rng: &mut (dyn RngCore + Send),
+        clock: &dyn Clock,
+        authorized_event_id: &str,
+        variants: &[AgentEventCollisionVariant],
+    ) -> Result<bool, Self::Error> {
+        if variants.len() < 2 {
+            return Ok(false);
+        }
+        let now = clock.now();
+        let updated = diesel::update(
+            agent_key_authorizations::table
+                .filter(agent_key_authorizations::authorized_event_id.eq(authorized_event_id)),
+        )
+        .set((
+            agent_key_authorizations::quarantined_at.eq(Some(now)),
+            agent_key_authorizations::quarantine_reason.eq(Some("event_hash_collision")),
+            agent_key_authorizations::soland_fanout_state.eq("dead_letter"),
+            agent_key_authorizations::soland_fanout_next_retry_at.eq(Option::<DateTime<Utc>>::None),
+            agent_key_authorizations::soland_fanout_dead_letter_reason
+                .eq(Some("event_hash_collision".to_owned())),
+            agent_key_authorizations::updated_at.eq(now),
+        ))
+        .execute(self.conn)
+        .await?;
+        if updated != 1 {
+            return Ok(false);
+        }
+
+        for variant in variants {
+            let row = InsertableAgentEventCollisionVariant {
+                id: Uuid::from(new_id(now, rng)),
+                authorized_event_id: authorized_event_id.to_owned(),
+                canonical_preimage: variant.canonical_preimage.clone(),
+                envelope: variant.envelope.clone(),
+                observed_at: now,
+            };
+            diesel::insert_into(agent_key_authorization_collision_variants::table)
+                .values(row)
+                .execute(self.conn)
+                .await?;
+        }
+        Ok(true)
     }
 
     #[tracing::instrument(name = "db.agent_key_authorization.revoke_for_agent", skip_all, err)]
@@ -460,7 +604,8 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
         let now = clock.now();
         let delivered = diesel::update(
             agent_key_authorizations::table
-                .filter(agent_key_authorizations::authorized_event_id.eq(authorized_event_id)),
+                .filter(agent_key_authorizations::authorized_event_id.eq(authorized_event_id))
+                .filter(agent_key_authorizations::quarantined_at.is_null()),
         )
         .set((
             agent_key_authorizations::soland_fanout_state.eq("delivered"),

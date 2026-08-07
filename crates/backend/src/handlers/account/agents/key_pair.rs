@@ -72,6 +72,10 @@ pub async fn post_agent_key_pair(
         .parse_json()
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
+    // The carried Event id is untrusted input. Verify its complete
+    // suite-tagged digest binding before it is used for idempotency or any
+    // repository lookup.
+    verify_authorize_event_identity(&body.authorize_event.event)?;
     let idempotency_key = req
         .headers()
         .get("idempotency-key")
@@ -118,6 +122,55 @@ pub async fn post_agent_key_pair(
         .lookup_by_event_id(&authorized_event_id)
         .await?;
     if let Some(existing) = existing_authorization {
+        if existing.quarantined_at.is_some() {
+            idempotency_repo.cancel().await?;
+            return Err(AppError::conflict("witness_disagreement").into());
+        }
+        let stored_body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody =
+            serde_json::from_value(existing.soland_fanout_payload.clone()).map_err(|error| {
+                AppError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("stored Agent key-pair request is invalid: {error}"),
+                )
+            })?;
+        verify_authorize_event_identity(&stored_body.authorize_event.event).map_err(|_| {
+            AppError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "stored Agent authorization has an invalid Event identity",
+            )
+        })?;
+        let stored_preimage = authorize_event_preimage_bytes(&stored_body.authorize_event.event)?;
+        let incoming_preimage = authorize_event_preimage_bytes(&body.authorize_event.event)?;
+        if stored_preimage != incoming_preimage {
+            let variants = [
+                coauth_data::agent_key::AgentEventCollisionVariant {
+                    canonical_preimage: stored_preimage,
+                    envelope: serde_json::to_value(&stored_body.authorize_event.event)
+                        .map_err(|error| AppError::internal_box(Box::new(error)))?,
+                },
+                coauth_data::agent_key::AgentEventCollisionVariant {
+                    canonical_preimage: incoming_preimage,
+                    envelope: serde_json::to_value(&body.authorize_event.event)
+                        .map_err(|error| AppError::internal_box(Box::new(error)))?,
+                },
+            ];
+            let clock = make_clock();
+            let mut rng = make_rng();
+            let quarantined = idempotency_repo
+                .agent_key_authorization()
+                .quarantine_event_collision(&mut *rng, &*clock, &authorized_event_id, &variants)
+                .await?;
+            if !quarantined {
+                idempotency_repo.cancel().await?;
+                return Err(AppError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Event collision quarantine could not be persisted",
+                )
+                .into());
+            }
+            idempotency_repo.save().await?;
+            return Err(AppError::conflict("witness_disagreement").into());
+        }
         let same_request = existing.agent_id == agent_id
             && existing.verification_method == body.verification_method.as_str()
             && existing.public_key == public_key_value
@@ -131,13 +184,6 @@ pub async fn post_agent_key_pair(
             )
             .into());
         }
-        let stored_body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody =
-            serde_json::from_value(existing.soland_fanout_payload.clone()).map_err(|error| {
-                AppError::new(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("stored Agent key-pair request is invalid: {error}"),
-                )
-            })?;
         idempotency_repo.cancel().await?;
         let authorize_event_ref =
             arkret_identifiers::EventId::new(existing.authorized_event_id.clone())
@@ -688,6 +734,26 @@ fn validate_controller_authorize_event(
     })
 }
 
+fn verify_authorize_event_identity(event: &arkret_wire::Event) -> Result<(), AppError> {
+    let digest_suite = event.event_id.digest_suite_code().digest_suite();
+    event
+        .verify_event_id_matches_content_with_digest_suite(digest_suite)
+        .map_err(|_| AppError::bad_request("event_id_digest_mismatch"))
+}
+
+fn authorize_event_preimage_bytes(event: &arkret_wire::Event) -> Result<Vec<u8>, AppError> {
+    let preimage = event.digest_payload().map_err(|error| {
+        AppError::bad_request(format!(
+            "authorize Event digest preimage is invalid: {error}"
+        ))
+    })?;
+    arkret_canonical::canonical_json_bytes(&preimage).map_err(|error| {
+        AppError::bad_request(format!(
+            "authorize Event preimage is not canonical: {error}"
+        ))
+    })
+}
+
 fn validate_authorize_event_supersedes(
     payload: &AgentKeyAuthorizePayload,
     authoritative_key_state: &arkret_models_collaboration::agent_operations::KeyState,
@@ -1187,8 +1253,8 @@ mod tests {
         .unwrap()
     }
 
-    fn valid_signing_key_binding()
-    -> arkret_models_collaboration::agent_signer_evidence::AgentSigningKeyBinding {
+    fn valid_signing_key_binding_core()
+    -> arkret_models_collaboration::agent_signer_evidence::AgentSigningKeyBindingCore {
         serde_json::from_value(json!({
             "schema": "ak.schema.agent_signing_key_binding.v1",
             "agent_id": AGENT,
@@ -1200,27 +1266,21 @@ mod tests {
                 "key": Base64UrlUnpadded::encode_string(&[42u8; 32])
             },
             "public_key_digest": SIGNING_KEY_PUBLIC_KEY_DIGEST,
-            "agent_key_authorize_event_id":
-                "ak:event:01999999-0000-7000-8000-000000000001",
             "issued_at": "2026-07-06T00:00:00.000Z",
             "expires_at": "2026-07-06T00:10:00.000Z",
-            "controller_id": CONTROLLER,
-            "controller_proof": {
-                "kind": "detached_jws",
-                "verification_method": "did:web:controller.example#key-1",
-                "jws": "header..signature"
-            }
+            "controller_id": CONTROLLER
         }))
         .unwrap()
     }
 
-    fn valid_authorize_event(pairing_request_id: &str) -> Value {
-        let binding_digest = arkret_signatures::agent_evidence::agent_signing_key_binding_digest(
-            &valid_signing_key_binding(),
-        )
-        .unwrap();
-        json!({
-            "event_id": "ak:event:01999999-0000-7000-8000-000000000001",
+    fn valid_authorize_event_typed(pairing_request_id: &str) -> arkret_wire::Event {
+        let binding_digest =
+            arkret_signatures::agent_evidence::agent_signing_key_binding_core_digest(
+                &valid_signing_key_binding_core(),
+            )
+            .unwrap();
+        let mut event: arkret_wire::Event = serde_json::from_value(json!({
+            "event_id": "ak:event:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
             "kind": "ak.agent.key.authorize",
             "realm_id": "ak:realm:01999999-0000-7000-8000-000000000010",
             "scope_ref": {
@@ -1258,10 +1318,6 @@ mod tests {
                     "approved_by": CONTROLLER
                 }
             },
-            // `event-envelope.schema.json#/$defs/event_proof` requires kind,
-            // verification_method, event_digest, created_at and jws. The
-            // digest here is a placeholder: callers that need a proof actually
-            // bound to this envelope rebind it from `Event::event_digest`.
             "proofs": [{
                 "kind": "detached_jws",
                 "verification_method": "did:web:controller.example#key-1",
@@ -1269,7 +1325,49 @@ mod tests {
                 "created_at": "2026-07-06T00:01:00.000Z",
                 "jws": "eyJhbGciOiJFZDI1NTE5In0..c2ln"
             }]
-        })
+        }))
+        .unwrap();
+        event.refresh_content_bound_identity().unwrap();
+        let digest = arkret_identifiers::Hash::new(event.event_digest().unwrap()).unwrap();
+        event.proofs[0].event_digest = digest;
+        event
+    }
+
+    fn valid_signing_key_binding_for(
+        pairing_request_id: &str,
+    ) -> arkret_models_collaboration::agent_signer_evidence::AgentSigningKeyBinding {
+        let event_id = valid_authorize_event_typed(pairing_request_id).event_id;
+        serde_json::from_value(json!({
+            "schema": "ak.schema.agent_signing_key_binding.v1",
+            "agent_id": AGENT,
+            "agent_key_id": "runtime-key-1",
+            "verification_method": VM,
+            "public_key": {
+                "kty": "OKP",
+                "algorithm": "Ed25519",
+                "key": Base64UrlUnpadded::encode_string(&[42u8; 32])
+            },
+            "public_key_digest": SIGNING_KEY_PUBLIC_KEY_DIGEST,
+            "agent_key_authorize_event_id": event_id,
+            "issued_at": "2026-07-06T00:00:00.000Z",
+            "expires_at": "2026-07-06T00:10:00.000Z",
+            "controller_id": CONTROLLER,
+            "controller_proof": {
+                "kind": "detached_jws",
+                "verification_method": "did:web:controller.example#key-1",
+                "jws": "header..signature"
+            }
+        }))
+        .unwrap()
+    }
+
+    fn valid_signing_key_binding()
+    -> arkret_models_collaboration::agent_signer_evidence::AgentSigningKeyBinding {
+        valid_signing_key_binding_for(PAIRING_REQUEST_ID)
+    }
+
+    fn valid_authorize_event(pairing_request_id: &str) -> Value {
+        serde_json::to_value(valid_authorize_event_typed(pairing_request_id)).unwrap()
     }
 
     #[test]
@@ -1302,6 +1400,20 @@ mod tests {
     fn authorize_payload(value: Value) -> AgentKeyAuthorizePayload {
         AgentKeyAuthorizePayload::try_from(&authorize_event(value))
             .expect("test authorize_event carries a valid authorize payload")
+    }
+
+    #[test]
+    fn authorize_event_identity_is_checked_before_idempotency_lookup() {
+        let event = valid_authorize_event_typed(PAIRING_REQUEST_ID);
+        verify_authorize_event_identity(&event).expect("content-bound fixture identity");
+
+        let mut changed = event;
+        changed
+            .payload
+            .insert("key_id".to_owned(), json!("attacker-key"));
+        let error = verify_authorize_event_identity(&changed)
+            .expect_err("covered payload mutation must invalidate the carried Event id");
+        assert_eq!(error.message(), "event_id_digest_mismatch");
     }
 
     #[test]
@@ -1372,12 +1484,14 @@ mod tests {
         )
         .expect("matching pairing_request_id accepts");
 
+        let wrong_pairing_request_id = "agent_pairing_request:wrong";
+        let wrong_binding = valid_signing_key_binding_for(wrong_pairing_request_id);
         let err = validate_controller_authorize_event(
-            &authorize_event(valid_authorize_event("agent_pairing_request:wrong")),
+            &authorize_event(valid_authorize_event(wrong_pairing_request_id)),
             AGENT,
             VM,
             &valid_public_key_typed(),
-            &binding,
+            &wrong_binding,
             PAIRING_REQUEST_ID,
             AUDIENCE,
             &authoritative_key_state(),
@@ -1409,7 +1523,7 @@ mod tests {
 
     #[test]
     fn replacement_pairing_supersedes_same_key_authorization_dot() {
-        let old_event = "ak:event:01999999-0000-7000-8000-000000000099";
+        let old_event = "ak:event:AQ4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4O";
         let mut key_state = authoritative_key_state();
         key_state.active_authorizations.push(
             serde_json::from_value(json!({
@@ -1436,7 +1550,7 @@ mod tests {
             serde_json::from_value(json!({
                 "key_id": "runtime-key-1",
                 "verification_method": VM,
-                "authorized_event_ref": "ak:event:01999999-0000-7000-8000-000000000099",
+                "authorized_event_ref": "ak:event:AQ4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4O",
             }))
             .unwrap(),
         );
@@ -1456,7 +1570,7 @@ mod tests {
         let binding = valid_signing_key_binding();
         let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
         event["payload"]["approval_evidence"]["evidence_ref"] =
-            json!("ak:event:01999999-0000-7000-8000-000000000099");
+            json!("ak:event:AQ4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4O");
 
         let err = validate_controller_authorize_event(
             &authorize_event(event),
@@ -1482,7 +1596,7 @@ mod tests {
             .as_object_mut()
             .unwrap()
             .remove("expires_at");
-        binding.expires_at = None;
+        binding.core.expires_at = None;
         event["payload"]["signing_key_binding_digest"] = json!(
             arkret_signatures::agent_evidence::agent_signing_key_binding_digest(&binding).unwrap()
         );
@@ -1541,7 +1655,7 @@ mod tests {
         let mut binding = valid_signing_key_binding();
         let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
         event["payload"]["expires_at"] = json!("2026-08-05T00:00:00.000Z");
-        binding.expires_at = Some(
+        binding.core.expires_at = Some(
             DateTime::parse_from_rfc3339("2026-08-05T00:00:00.000Z")
                 .unwrap()
                 .with_timezone(&Utc),
@@ -1570,10 +1684,10 @@ mod tests {
         let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
         event["payload"]["issued_at"] = json!("2026-07-06T00:06:00.000Z");
         event["payload"]["expires_at"] = json!("2026-07-06T00:06:00.000Z");
-        binding.issued_at = DateTime::parse_from_rfc3339("2026-07-06T00:06:00.000Z")
+        binding.core.issued_at = DateTime::parse_from_rfc3339("2026-07-06T00:06:00.000Z")
             .unwrap()
             .with_timezone(&Utc);
-        binding.expires_at = Some(binding.issued_at);
+        binding.core.expires_at = Some(binding.issued_at);
         event["payload"]["signing_key_binding_digest"] = json!(
             arkret_signatures::agent_evidence::agent_signing_key_binding_digest(&binding).unwrap()
         );

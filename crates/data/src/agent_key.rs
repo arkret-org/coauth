@@ -19,9 +19,10 @@ pub use crate::storage::agent_key::*;
 pub struct AgentKeyAuthorization {
     /// Storage row id.
     pub id: Ulid,
-    /// Controller-minted `ak:event:<uuid7>` id the Principal Server accepts as
-    /// the durable `ak.agent.key.authorize` Event. The session-grant agent branch
-    /// resolves `agent_key_authorization_ref` against this id.
+    /// Complete suite-tagged content identity of the durable
+    /// `ak.agent.key.authorize` Event accepted by the Principal Server. The
+    /// session-grant agent branch resolves `agent_key_authorization_ref`
+    /// against this id.
     pub authorized_event_id: String,
     /// Agent principal DID the authorized key belongs to.
     pub agent_id: String,
@@ -50,6 +51,11 @@ pub struct AgentKeyAuthorization {
     pub revoked_at: Option<DateTime<Utc>>,
     /// Reason recorded when the authorization was revoked.
     pub revoked_reason: Option<String>,
+    /// Timestamp when full-hash collision evidence quarantined this Event id.
+    pub quarantined_at: Option<DateTime<Utc>>,
+    /// Internal quarantine discriminator. Protocol responses use
+    /// `witness_disagreement`.
+    pub quarantine_reason: Option<String>,
     /// `sha256:<hex>` digest of the canonical fan-out payload.
     pub raw_payload_digest: String,
     /// Current soland fan-out state.

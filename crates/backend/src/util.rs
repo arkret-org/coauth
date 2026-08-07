@@ -103,7 +103,7 @@ pub fn handle_valid(handle: &str) -> bool {
 /// ));
 /// // wrong prefix → false
 /// assert!(!is_typed_uuid7(
-///     "ak:space:0190a3c0-0000-7000-8000-000000000000",
+///     "ak:space:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
 ///     "device"
 /// ));
 /// // ULID body -> false

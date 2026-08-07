@@ -79,6 +79,16 @@ diesel::table! {
 }
 
 diesel::table! {
+    agent_key_authorization_collision_variants (id) {
+        id -> Uuid,
+        authorized_event_id -> Text,
+        canonical_preimage -> Bytea,
+        envelope -> Jsonb,
+        observed_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     accountability_subject_revocations (id) {
         id -> Uuid,
         subject_kind -> Text,
@@ -107,6 +117,8 @@ diesel::table! {
         request_canonical_digest -> Text,
         revoked_at -> Nullable<Timestamptz>,
         revoked_reason -> Nullable<Text>,
+        quarantined_at -> Nullable<Timestamptz>,
+        quarantine_reason -> Nullable<Text>,
         raw_payload_digest -> Text,
         soland_fanout_state -> Text,
         soland_fanout_idempotency_key -> Text,

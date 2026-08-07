@@ -555,7 +555,7 @@ mod tests {
 
     #[test]
     fn first_device_uses_bootstrap_create_predecessor() {
-        let create = event_id("ak:event:01964137-0000-7000-8000-000000000001");
+        let create = event_id("ak:event:AQcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH");
         assert_eq!(device_enroll_prev_refs(create.clone()), vec![create]);
     }
 

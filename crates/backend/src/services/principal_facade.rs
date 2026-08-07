@@ -626,7 +626,7 @@ mod tests {
 
     use super::*;
 
-    const EVENT: &str = "ak:event:01970000-0000-7000-8000-000000000001";
+    const EVENT: &str = "ak:event:AQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJ";
     const GRANT: &str = "ak:grant:01970000-0000-7000-8000-000000000002";
 
     fn arkret_config() -> ArkretConfig {

@@ -151,9 +151,7 @@ pub async fn create_handler(
     let capability_grant_id = GrantId::new(new_prefixed_uuid7("ak:grant:"))
         .map_err(|err| AppError::internal_box(Box::new(err)))?
         .into_string();
-    let grant_event_id = EventId::new(new_prefixed_uuid7("ak:event:"))
-        .map_err(|err| AppError::internal_box(Box::new(err)))?
-        .into_string();
+    let grant_event_id = content_bound_event_authoring_unavailable()?;
     let issued_at = call_context.clock.now();
     let grant_fanout_payload = build_grant_fanout_payload(
         &grant_event_id,
@@ -249,9 +247,7 @@ pub async fn revoke_handler(
     let mut repo = extract_call_context(req, depot).await?.repo;
     let grant_id = grant_id.into_inner();
     let clock = make_clock();
-    let revoke_event_id = EventId::new(new_prefixed_uuid7("ak:event:"))
-        .map_err(|err| AppError::internal_box(Box::new(err)))?
-        .into_string();
+    let revoke_event_id = content_bound_event_authoring_unavailable()?;
 
     let revoked = {
         let mut grants = repo.collaboration_capability_grant();
@@ -313,6 +309,18 @@ pub async fn revoke_handler(
             Err(AppError::new(StatusCode::NOT_FOUND, "grant not found"))
         }
     }
+}
+
+/// Capability fanout currently carries only a projection operation and an
+/// externally supplied Event id. That is insufficient to author the complete
+/// digest preimage required by the content-bound EventId contract. Fail before
+/// mutating grant state or scheduling fanout work until the service contract
+/// accepts a complete signed Event submission.
+fn content_bound_event_authoring_unavailable() -> Result<String, AppError> {
+    Err(AppError::new(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "content_bound_event_authoring_unavailable: capability fanout requires a complete signed Event submission",
+    ))
 }
 
 fn build_grant_fanout_payload(
@@ -625,7 +633,7 @@ mod tests {
         let issued_at = Utc.with_ymd_and_hms(2026, 6, 1, 1, 2, 3).unwrap();
         let key_store = key_store();
         let payload = build_grant_fanout_payload(
-            "ak:event:01904100-0000-7000-8000-000000000011",
+            "ak:event:AQICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC",
             "ak:grant:01904100-0000-7000-8000-000000000010",
             "did:web:alice.example",
             "ak:realm:01904100-0000-7000-8000-000000000001",
@@ -634,7 +642,7 @@ mod tests {
                 grant_id: GrantId::new("ak:grant:01904100-0000-7000-8000-000000000020").unwrap(),
             }],
             None,
-            Some("ak:event:01904100-0000-7000-8000-000000000099"),
+            Some("ak:event:AQQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"),
             issued_at,
             "did:web:coauth.example",
             &config(),
@@ -674,7 +682,7 @@ mod tests {
         assert_eq!(constraint.approval_required, Some(true));
         assert_eq!(
             constraint.extensions["x_approval_evidence_ref"],
-            "ak:event:01904100-0000-7000-8000-000000000099"
+            "ak:event:AQQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
         );
         assert!(payload.payload["grant"].get("proofs").is_none());
         assert_eq!(payload.proofs.len(), 1);
@@ -707,7 +715,7 @@ mod tests {
         let revoked_at = Utc.with_ymd_and_hms(2026, 6, 1, 1, 2, 3).unwrap();
         let key_store = key_store();
         let payload = build_revoke_fanout_payload(
-            "ak:event:01904100-0000-7000-8000-000000000012",
+            "ak:event:AQMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD",
             "ak:grant:01904100-0000-7000-8000-000000000010",
             "ak:realm:01904100-0000-7000-8000-000000000001",
             revoked_at,

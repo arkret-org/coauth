@@ -12,7 +12,7 @@ use crate::repository_impl;
 /// Parameters used to persist an accepted agent key authorization.
 #[derive(Debug, Clone)]
 pub struct NewAgentKeyAuthorization {
-    /// Minted `ak:event:<uuid7>` authorization event id.
+    /// Complete suite-tagged content identity of the authorization Event.
     pub authorized_event_id: String,
     /// Agent principal DID the authorized key belongs to.
     pub agent_id: String,
@@ -75,6 +75,17 @@ pub struct NewAgentSessionProofReplay {
     pub prune_after: DateTime<Utc>,
 }
 
+/// One independently verified canonical Event preimage retained as collision
+/// evidence. Both the previously accepted and newly observed envelopes are
+/// stored when their complete Event ids are equal but their preimages differ.
+#[derive(Debug, Clone)]
+pub struct AgentEventCollisionVariant {
+    /// Canonical JSON bytes of the Event digest preimage.
+    pub canonical_preimage: Vec<u8>,
+    /// Full observed Event envelope, including excluded proof/unsigned data.
+    pub envelope: serde_json::Value,
+}
+
 /// Repository for durable agent key authorizations and the agent-key-proof
 /// single-use replay table.
 #[async_trait]
@@ -90,7 +101,7 @@ pub trait AgentKeyAuthorizationRepository: Send + Sync {
         params: NewAgentKeyAuthorization,
     ) -> Result<AgentKeyAuthorization, Self::Error>;
 
-    /// Look up an authorization by its minted `ak:event:<uuid7>` id.
+    /// Look up an authorization by its complete content-bound Event id.
     async fn lookup_by_event_id(
         &mut self,
         authorized_event_id: &str,
@@ -101,6 +112,16 @@ pub trait AgentKeyAuthorizationRepository: Send + Sync {
         &mut self,
         agent_id: &str,
     ) -> Result<Vec<AgentKeyAuthorization>, Self::Error>;
+
+    /// Quarantine an accepted authorization and retain all verified variants
+    /// after a true full-hash Event collision.
+    async fn quarantine_event_collision(
+        &mut self,
+        rng: &mut (dyn RngCore + Send),
+        clock: &dyn Clock,
+        authorized_event_id: &str,
+        variants: &[AgentEventCollisionVariant],
+    ) -> Result<bool, Self::Error>;
 
     /// Revoke every active authorization for an agent principal.
     async fn revoke_for_agent(
@@ -151,6 +172,13 @@ repository_impl!(AgentKeyAuthorizationRepository:
         &mut self,
         agent_id: &str,
     ) -> Result<Vec<AgentKeyAuthorization>, Self::Error>;
+    async fn quarantine_event_collision(
+        &mut self,
+        rng: &mut (dyn RngCore + Send),
+        clock: &dyn Clock,
+        authorized_event_id: &str,
+        variants: &[AgentEventCollisionVariant],
+    ) -> Result<bool, Self::Error>;
     async fn revoke_for_agent(
         &mut self,
         clock: &dyn Clock,

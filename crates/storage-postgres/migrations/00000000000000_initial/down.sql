@@ -6,6 +6,7 @@ DROP TABLE IF EXISTS identity_creation_leases CASCADE;
 DROP TABLE IF EXISTS account_handoff_grants CASCADE;
 DROP TABLE IF EXISTS accountability_grants CASCADE;
 DROP TABLE IF EXISTS accountability_subject_revocations CASCADE;
+DROP TABLE IF EXISTS agent_key_authorization_collision_variants CASCADE;
 DROP TABLE IF EXISTS agent_key_authorizations CASCADE;
 DROP TABLE IF EXISTS agent_session_proof_replay CASCADE;
 DROP TABLE IF EXISTS admin_operation_logs CASCADE;

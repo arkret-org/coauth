@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Round 4 — pluggable evaluator for `ak.self.policy.read.check`.
+//! Round 4 — pluggable evaluator for `ak.self.policy.query.check`.
 //!
 //! The spec [`policy-server.md` §4] defines the decision lattice as
 //! `allow | soft_deny | hard_deny | quarantine | require_review`; the
@@ -16,7 +16,7 @@
 //!
 //! The pre-round-4 `coauth_policy::PolicyFactory` evaluator only understands
 //! `register` / `email` / `client_registration` / `authorization_grant`
-//! shapes — it predates the round-4 `ak.self.policy.read.check` request and does
+//! shapes — it predates the round-4 `ak.self.policy.query.check` request and does
 //! not know about realm scoping or frontier digests. Bolting a new
 //! method onto it would force every existing handler to re-test. We
 //! ship a dedicated [`PolicyEvaluator`] trait here and leave the
@@ -251,7 +251,7 @@ impl PolicyDecision {
     }
 }
 
-/// Evaluate a `ak.self.policy.read.check` request against the configured rules.
+/// Evaluate a `ak.self.policy.query.check` request against the configured rules.
 /// Object-safe: handlers carry an `Arc<dyn PolicyEvaluator>`.
 pub trait PolicyEvaluator: Send + Sync {
     fn evaluate<'a>(
@@ -712,7 +712,7 @@ mod tests {
         CollaborationCapabilityGrant {
             id: "01HY0000000000000000000000".to_owned(),
             capability_grant_id: "ak:grant:01904100-0000-7000-8000-000000000010".to_owned(),
-            grant_event_id: "ak:event:01904100-0000-7000-8000-000000000011".to_owned(),
+            grant_event_id: "ak:event:AQICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC".to_owned(),
             revoke_event_id: None,
             subject: "did:web:alice.example".to_owned(),
             realm_id: "ak:realm:01904100-0000-7000-8000-000000000001".to_owned(),
@@ -1006,17 +1006,17 @@ mod tests {
     #[test]
     fn cap2_circle_selector_accepts_valid_typed_id() {
         assert!(is_circle_selector(
-            "ak:circle:01904100-0000-7000-8000-000000000001"
+            "ak:circle:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB"
         ));
         assert!(!is_circle_selector("not-a-circle"));
         assert!(!is_circle_selector(
-            "ak:space:01904100-0000-7000-8000-000000000001"
+            "ak:space:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB"
         ));
     }
 
     #[test]
     fn cap2_circle_scoped_deny_overrides_realm_default() {
-        let circle_id = "ak:circle:01904100-0000-7000-8000-000000000002";
+        let circle_id = "ak:circle:AQICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC";
         let data = serde_json::json!({
             "circles": {
                 circle_id: {

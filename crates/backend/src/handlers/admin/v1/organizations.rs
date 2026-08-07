@@ -568,7 +568,9 @@ mod tests {
         BootstrapOrganizationRequest {
             organization_did: organization_did.to_owned(),
             principal_control_realm_id: "ak:realm:01904100-0000-7000-8000-65c7feb295d7".to_owned(),
-            control_stream_ref: Some("ak:event:01904100-0000-7000-8000-75c7feb295d7".to_owned()),
+            control_stream_ref: Some(
+                "ak:event:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG".to_owned(),
+            ),
             pcr_frontier_digest: Some(format!("sha256:{}", "ab".repeat(32))),
             authorization: BootstrapAuthorizationInput::DidControllerProof {
                 proof_jws: "header..signature".to_owned(),

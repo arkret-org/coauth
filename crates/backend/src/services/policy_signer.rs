@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Round 4 `ak.self.policy.read.check` decision signer.
+//! Round 4 `ak.self.policy.query.check` decision signer.
 //!
 //! Pulls the preferred service signing key out of the keystore, signs a
 //! canonical-JSON transcript (RFC 8785 / `arkret_canonical`), and
@@ -52,7 +52,7 @@ pub enum PolicySignerError {
     Sign,
 }
 
-/// Detached signer for `ak.self.policy.read.check` decisions.
+/// Detached signer for `ak.self.policy.query.check` decisions.
 ///
 /// Constructed once per request from the shared [`Keystore`] +
 /// `policy_server_did` (the coauth service DID). The signer is stateless

@@ -445,8 +445,8 @@ mod tests {
             "consent_scope": scope,
             "state": "active",
             "updated_at": "2026-05-01T00:00:00.000Z",
-            "active_grant_dots": ["ak:event:0196419b-0000-7000-8000-000000000001:0"],
-            "grant_dots": ["ak:event:0196419b-0000-7000-8000-000000000001:0"],
+            "active_grant_dots": ["ak:event:AQgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI:0"],
+            "grant_dots": ["ak:event:AQgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI:0"],
             "revoked_dots": [],
         })
     }
