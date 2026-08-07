@@ -949,13 +949,15 @@ fn the_policy_digest_is_the_shared_sdk_snapshot() {
 /// for, and that widening moves the digest.
 #[test]
 fn a_delegated_resolver_declares_webvh_rather_than_any_method() {
-    let mut config = ArkretConfig::default();
-    config.identity_registry = Some(coauth_config::IdentityRegistryConfig {
-        resolver: "https://resolver.example/_arkret/root/identity/resolve"
-            .parse()
-            .unwrap(),
-        proof_required_for_pairwise: false,
-    });
+    let config = ArkretConfig {
+        identity_registry: Some(coauth_config::IdentityRegistryConfig {
+            resolver: "https://resolver.example/_arkret/root/identity/resolve"
+                .parse()
+                .unwrap(),
+            proof_required_for_pairwise: false,
+        }),
+        ..ArkretConfig::default()
+    };
     let snapshot = policy_snapshot(&config).expect("policy is declarable");
     assert_eq!(
         snapshot.accepted_did_methods(),

@@ -489,15 +489,15 @@ pub async fn device_enroll_endpoint(
     let mut repo = depot.repo().await?;
     let commit = repo
         .account_handoff()
-        .commit_first_device_enrollment(
+        .commit_first_device_enrollment(coauth_data::account_handoff::FirstDeviceEnrollmentInput {
             service_account_id,
-            &audience,
-            &outcome.principal_id,
-            &outcome.device_id,
-            &request_digest,
-            &encoded_outcome,
-            clock.now(),
-        )
+            audience: &audience,
+            principal_id: &outcome.principal_id,
+            device_id: &outcome.device_id,
+            request_digest: &request_digest,
+            outcome: &encoded_outcome,
+            now: clock.now(),
+        })
         .await?;
     // Cotest seeds an already-verified DID binding through the debug-only
     // setup seam instead of replaying the browser account-handoff UI. Keep

@@ -191,7 +191,9 @@ mod tests {
         let mut rng = ChaChaRng::seed_from_u64(42);
         let (private_key, kid) = match alg {
             JsonWebSignatureAlg::Es512 => (PrivateKey::generate_ec_p521(&mut rng), "test-es512"),
-            JsonWebSignatureAlg::Ed25519 => (PrivateKey::generate_ed25519(&mut rng), "test-ed25519"),
+            JsonWebSignatureAlg::Ed25519 => {
+                (PrivateKey::generate_ed25519(&mut rng), "test-ed25519")
+            }
             other => panic!("unsupported test algorithm: {other:?}"),
         };
 

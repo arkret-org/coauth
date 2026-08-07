@@ -4,9 +4,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::account_handoff::{
     AccountHandoffCreation, AccountHandoffGrant, AccountHandoffGrantInput,
-    FirstDeviceEnrollmentCommit, IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
-    IdentityBindingChallengeRecord, IdentityCreationBindingCommit, IdentityCreationLeaseRecord,
-    IdentityCreationRegisterLedger, IdentityCreationRegisterReplay,
+    FirstDeviceEnrollmentCommit, FirstDeviceEnrollmentInput, IdentityBindingChallengeInput,
+    IdentityBindingChallengeIssue, IdentityBindingChallengeRecord, IdentityCreationBindingCommit,
+    IdentityCreationLeaseRecord, IdentityCreationRegisterLedger, IdentityCreationRegisterReplay,
     IdentityCreationRegistrationContext, IdentityCreationSagaState,
 };
 use coauth_data::{AccountHandoffRepository, Ulid};
@@ -1023,14 +1023,17 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
 
     async fn commit_first_device_enrollment(
         &mut self,
-        service_account_id: Ulid,
-        audience: &str,
-        principal_id: &arkret_identifiers::Did,
-        device_id: &arkret_identifiers::DeviceId,
-        request_digest: &arkret_identifiers::Hash,
-        outcome: &serde_json::Value,
-        now: DateTime<Utc>,
+        input: FirstDeviceEnrollmentInput<'_>,
     ) -> Result<FirstDeviceEnrollmentCommit, Self::Error> {
+        let FirstDeviceEnrollmentInput {
+            service_account_id,
+            audience,
+            principal_id,
+            device_id,
+            request_digest,
+            outcome,
+            now,
+        } = input;
         let updated = diesel::sql_query(
             "UPDATE identity_creation_leases SET first_device_id = $1, \
              first_device_request_digest = $2, first_device_outcome = $3, \
@@ -1619,30 +1622,30 @@ mod tests {
         });
         assert!(matches!(
             repo.account_handoff()
-                .commit_first_device_enrollment(
-                    user.id,
-                    &grant.audience,
-                    &reserved.principal_id,
-                    &first_device,
-                    &enrollment_digest,
-                    &enrollment_outcome,
-                    now
-                )
+                .commit_first_device_enrollment(FirstDeviceEnrollmentInput {
+                    service_account_id: user.id,
+                    audience: &grant.audience,
+                    principal_id: &reserved.principal_id,
+                    device_id: &first_device,
+                    request_digest: &enrollment_digest,
+                    outcome: &enrollment_outcome,
+                    now,
+                })
                 .await
                 .unwrap(),
             FirstDeviceEnrollmentCommit::Committed
         ));
         assert_eq!(
             repo.account_handoff()
-                .commit_first_device_enrollment(
-                    user.id,
-                    &grant.audience,
-                    &reserved.principal_id,
-                    &first_device,
-                    &enrollment_digest,
-                    &serde_json::json!({ "newly_minted": "must-not-replace-stored-outcome" }),
-                    now + Duration::seconds(1),
-                )
+                .commit_first_device_enrollment(FirstDeviceEnrollmentInput {
+                    service_account_id: user.id,
+                    audience: &grant.audience,
+                    principal_id: &reserved.principal_id,
+                    device_id: &first_device,
+                    request_digest: &enrollment_digest,
+                    outcome: &serde_json::json!({ "newly_minted": "must-not-replace-stored-outcome" }),
+                    now: now + Duration::seconds(1),
+                })
                 .await
                 .unwrap(),
             FirstDeviceEnrollmentCommit::Replay(enrollment_outcome.clone()),
@@ -1650,15 +1653,15 @@ mod tests {
         assert!(
             matches!(
                 repo.account_handoff()
-                    .commit_first_device_enrollment(
-                        user.id,
-                        &grant.audience,
-                        &reserved.principal_id,
-                        &second_device,
-                        &register_request_digest('8'),
-                        &serde_json::json!({ "device_id": second_device }),
-                        now + Duration::seconds(1),
-                    )
+                    .commit_first_device_enrollment(FirstDeviceEnrollmentInput {
+                        service_account_id: user.id,
+                        audience: &grant.audience,
+                        principal_id: &reserved.principal_id,
+                        device_id: &second_device,
+                        request_digest: &register_request_digest('8'),
+                        outcome: &serde_json::json!({ "device_id": second_device }),
+                        now: now + Duration::seconds(1),
+                    })
                     .await
                     .unwrap(),
                 FirstDeviceEnrollmentCommit::Conflict
@@ -2044,30 +2047,30 @@ mod tests {
         let enrollment_outcome = serde_json::json!({ "device_id": device });
         assert!(matches!(
             repo.account_handoff()
-                .commit_first_device_enrollment(
-                    user.id,
-                    &grant.audience,
-                    &foreign_principal,
-                    &device,
-                    &enrollment_digest,
-                    &enrollment_outcome,
-                    now
-                )
+                .commit_first_device_enrollment(FirstDeviceEnrollmentInput {
+                    service_account_id: user.id,
+                    audience: &grant.audience,
+                    principal_id: &foreign_principal,
+                    device_id: &device,
+                    request_digest: &enrollment_digest,
+                    outcome: &enrollment_outcome,
+                    now,
+                })
                 .await
                 .unwrap(),
             FirstDeviceEnrollmentCommit::Conflict
         ));
         assert!(matches!(
             repo.account_handoff()
-                .commit_first_device_enrollment(
-                    user.id,
-                    &grant.audience,
-                    &reserved.principal_id,
-                    &device,
-                    &enrollment_digest,
-                    &enrollment_outcome,
-                    now
-                )
+                .commit_first_device_enrollment(FirstDeviceEnrollmentInput {
+                    service_account_id: user.id,
+                    audience: &grant.audience,
+                    principal_id: &reserved.principal_id,
+                    device_id: &device,
+                    request_digest: &enrollment_digest,
+                    outcome: &enrollment_outcome,
+                    now,
+                })
                 .await
                 .unwrap(),
             FirstDeviceEnrollmentCommit::Committed

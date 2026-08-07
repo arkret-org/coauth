@@ -3,7 +3,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::account_handoff::{
-    FirstDeviceEnrollmentCommit, IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
+    FirstDeviceEnrollmentCommit, FirstDeviceEnrollmentInput, IdentityCreationBindingCommit,
+    IdentityCreationRegisterReplay,
 };
 use coauth_data::{
     AccountHandoffCreation, AccountHandoffGrant, AccountHandoffGrantInput,
@@ -96,13 +97,7 @@ pub trait AccountHandoffRepository: Send + Sync {
     /// byte-stable outcome; a different request cannot consume the slot.
     async fn commit_first_device_enrollment(
         &mut self,
-        service_account_id: coauth_data::Ulid,
-        audience: &str,
-        principal_id: &arkret_identifiers::Did,
-        device_id: &arkret_identifiers::DeviceId,
-        request_digest: &arkret_identifiers::Hash,
-        outcome: &serde_json::Value,
-        now: DateTime<Utc>,
+        input: FirstDeviceEnrollmentInput<'_>,
     ) -> Result<FirstDeviceEnrollmentCommit, Self::Error>;
 
     /// Consume a handoff after the first session grant has been issued.
@@ -169,13 +164,7 @@ repository_impl!(AccountHandoffRepository:
     ) -> Result<IdentityCreationBindingCommit, Self::Error>;
     async fn commit_first_device_enrollment(
         &mut self,
-        service_account_id: coauth_data::Ulid,
-        audience: &str,
-        principal_id: &arkret_identifiers::Did,
-        device_id: &arkret_identifiers::DeviceId,
-        request_digest: &arkret_identifiers::Hash,
-        outcome: &serde_json::Value,
-        now: DateTime<Utc>,
+        input: FirstDeviceEnrollmentInput<'_>,
     ) -> Result<FirstDeviceEnrollmentCommit, Self::Error>;
     async fn consume_grant(
         &mut self,

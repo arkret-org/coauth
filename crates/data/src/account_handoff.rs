@@ -12,6 +12,21 @@ pub enum FirstDeviceEnrollmentCommit {
     Conflict,
 }
 
+/// Borrowed inputs for the founding-device enrollment commit. The slot is
+/// keyed by `(service_account_id, audience, principal_id)` and the replay
+/// decision compares `(device_id, request_digest)`, so the whole tuple travels
+/// together.
+#[derive(Clone, Copy, Debug)]
+pub struct FirstDeviceEnrollmentInput<'a> {
+    pub service_account_id: Ulid,
+    pub audience: &'a str,
+    pub principal_id: &'a arkret_identifiers::Did,
+    pub device_id: &'a arkret_identifiers::DeviceId,
+    pub request_digest: &'a arkret_identifiers::Hash,
+    pub outcome: &'a serde_json::Value,
+    pub now: DateTime<Utc>,
+}
+
 #[derive(Clone)]
 pub struct AccountHandoffGrant {
     pub id: Ulid,

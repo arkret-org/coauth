@@ -799,7 +799,9 @@ impl Limiter {
                 rate_limit_scope: Some(arkret_models_discovery::RateLimitScope::Single(
                     "ip".to_owned(),
                 )),
-                window_seconds: Some(period.as_secs_f64().ceil().clamp(1.0, u32::MAX as f64) as u32),
+                window_seconds: Some(
+                    period.as_secs_f64().ceil().clamp(1.0, f64::from(u32::MAX)) as u32
+                ),
                 max_requests: Some(u32::try_from(limit).unwrap_or(u32::MAX)),
                 ..arkret_models_discovery::RateLimitEntry::default()
             }
