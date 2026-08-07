@@ -8,7 +8,7 @@
 //! - `DELETE /_coauth/admin/collaboration/capabilities/{id}`
 
 use arkret_canonical::{canonical_json_bytes, canonical_sha256, format_timestamp_canonical};
-use arkret_identifiers::{EventId, GrantId, RealmId, new_prefixed_uuid7};
+use arkret_identifiers::{GrantId, RealmId, new_prefixed_uuid7};
 use arkret_models_collaboration::events_payloads::capability::{
     CapabilityGrantCreateBody, CapabilityGrantPayload,
 };

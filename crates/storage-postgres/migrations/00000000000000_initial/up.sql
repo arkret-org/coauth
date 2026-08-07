@@ -189,7 +189,7 @@ CREATE TABLE public.recovery_device_authorizations (
 
 CREATE TABLE public.recovery_session_grant_promotions (
     transaction_id text NOT NULL,
-    old_grant_id uuid NOT NULL,
+    old_grant_id bytea NOT NULL CHECK (octet_length(old_grant_id) = 33),
     transaction_request_digest text NOT NULL,
     recovery_session_id text NOT NULL,
     replacement_device_id text NOT NULL,
@@ -485,7 +485,7 @@ CREATE TABLE public.oauth_refresh_tokens (
 
 CREATE TABLE public.oauth_session_grants (
     id uuid NOT NULL,
-    grant_id uuid NOT NULL,
+    grant_id bytea NOT NULL CHECK (octet_length(grant_id) = 33),
     user_session_id uuid,
     issuer text NOT NULL,
     subject text NOT NULL,

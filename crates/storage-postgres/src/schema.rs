@@ -188,7 +188,7 @@ diesel::table! {
 diesel::table! {
     recovery_session_grant_promotions (transaction_id, old_grant_id) {
         transaction_id -> Text,
-        old_grant_id -> Uuid,
+        old_grant_id -> Binary,
         transaction_request_digest -> Text,
         recovery_session_id -> Text,
         replacement_device_id -> Text,
@@ -659,7 +659,7 @@ diesel::table! {
 diesel::table! {
     oauth_session_grants (id) {
         id -> Uuid,
-        grant_id -> Uuid,
+        grant_id -> Binary,
         user_session_id -> Nullable<Uuid>,
         issuer -> Text,
         subject -> Text,

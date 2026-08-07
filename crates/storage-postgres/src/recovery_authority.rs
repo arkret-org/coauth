@@ -1,5 +1,6 @@
 //! PostgreSQL recovery-authority authorization repository.
 
+use arkret_identifiers::{EventId, IdentifierError, SessionGrantId};
 use async_trait::async_trait;
 use coauth_data::recovery_authority::{
     NewRecoveryDeviceAuthorization, NewRecoverySessionGrantPromotion, RecoveryDeviceAuthorization,
@@ -9,8 +10,8 @@ use coauth_data::storage::recovery_authority::RecoveryAuthorityRepository;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
-use crate::DatabaseError;
 use crate::schema::{recovery_device_authorizations, recovery_session_grant_promotions};
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`RecoveryAuthorityRepository`].
 pub struct PgRecoveryAuthorityRepository<'c> {
@@ -23,6 +24,13 @@ impl<'c> PgRecoveryAuthorityRepository<'c> {
     pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
         Self { conn }
     }
+}
+
+fn session_grant_id_from_bytes(value: &[u8]) -> Result<SessionGrantId, IdentifierError> {
+    let token: [u8; 33] = value.try_into().map_err(|_| {
+        IdentifierError::InvalidId("SessionGrantId storage token must be 33 bytes".to_owned())
+    })?;
+    EventId::from_token_bytes(token).map(|event_id| SessionGrantId::from_event_id(&event_id))
 }
 
 #[derive(Queryable, Selectable)]
@@ -73,7 +81,7 @@ struct InsertableRecoveryDeviceAuthorization {
 #[diesel(table_name = recovery_session_grant_promotions)]
 struct RecoverySessionGrantPromotionRow {
     transaction_id: String,
-    old_grant_id: uuid::Uuid,
+    old_grant_id: Vec<u8>,
     transaction_request_digest: String,
     recovery_session_id: String,
     replacement_device_id: String,
@@ -84,11 +92,18 @@ struct RecoverySessionGrantPromotionRow {
     consumed_at: chrono::DateTime<chrono::Utc>,
 }
 
-impl From<RecoverySessionGrantPromotionRow> for RecoverySessionGrantPromotion {
-    fn from(value: RecoverySessionGrantPromotionRow) -> Self {
-        Self {
+impl TryFrom<RecoverySessionGrantPromotionRow> for RecoverySessionGrantPromotion {
+    type Error = DatabaseInconsistencyError;
+
+    fn try_from(value: RecoverySessionGrantPromotionRow) -> Result<Self, Self::Error> {
+        let old_grant_id = session_grant_id_from_bytes(&value.old_grant_id).map_err(|error| {
+            DatabaseInconsistencyError::on("recovery_session_grant_promotions")
+                .column("old_grant_id")
+                .source(error)
+        })?;
+        Ok(Self {
             transaction_id: value.transaction_id,
-            old_grant_id: arkret_identifiers::SessionGrantId::from_uuid(value.old_grant_id),
+            old_grant_id,
             transaction_request_digest: value.transaction_request_digest,
             recovery_session_id: value.recovery_session_id,
             replacement_device_id: value.replacement_device_id,
@@ -97,7 +112,7 @@ impl From<RecoverySessionGrantPromotionRow> for RecoverySessionGrantPromotion {
             canonical_request: value.canonical_request,
             outcome: value.outcome,
             consumed_at: value.consumed_at,
-        }
+        })
     }
 }
 
@@ -105,7 +120,7 @@ impl From<RecoverySessionGrantPromotionRow> for RecoverySessionGrantPromotion {
 #[diesel(table_name = recovery_session_grant_promotions)]
 struct InsertableRecoverySessionGrantPromotion {
     transaction_id: String,
-    old_grant_id: uuid::Uuid,
+    old_grant_id: Vec<u8>,
     transaction_request_digest: String,
     recovery_session_id: String,
     replacement_device_id: String,
@@ -182,16 +197,21 @@ impl RecoveryAuthorityRepository for PgRecoveryAuthorityRepository<'_> {
     async fn lookup_promotion(
         &mut self,
         transaction_id: &str,
-        old_grant_id: &arkret_identifiers::SessionGrantId,
+        old_grant_id: &SessionGrantId,
     ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error> {
         recovery_session_grant_promotions::table
             .filter(recovery_session_grant_promotions::transaction_id.eq(transaction_id))
-            .filter(recovery_session_grant_promotions::old_grant_id.eq(old_grant_id.uuid()))
+            .filter(
+                recovery_session_grant_promotions::old_grant_id
+                    .eq(old_grant_id.token_bytes().to_vec()),
+            )
             .select(RecoverySessionGrantPromotionRow::as_select())
             .first(self.conn)
             .await
             .optional()
-            .map(|row| row.map(Into::into))
+            .map_err(DatabaseError::from)?
+            .map(RecoverySessionGrantPromotion::try_from)
+            .transpose()
             .map_err(Into::into)
     }
 
@@ -202,15 +222,20 @@ impl RecoveryAuthorityRepository for PgRecoveryAuthorityRepository<'_> {
     )]
     async fn lookup_promotion_by_old_grant(
         &mut self,
-        old_grant_id: &arkret_identifiers::SessionGrantId,
+        old_grant_id: &SessionGrantId,
     ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error> {
         recovery_session_grant_promotions::table
-            .filter(recovery_session_grant_promotions::old_grant_id.eq(old_grant_id.uuid()))
+            .filter(
+                recovery_session_grant_promotions::old_grant_id
+                    .eq(old_grant_id.token_bytes().to_vec()),
+            )
             .select(RecoverySessionGrantPromotionRow::as_select())
             .first(self.conn)
             .await
             .optional()
-            .map(|row| row.map(Into::into))
+            .map_err(DatabaseError::from)?
+            .map(RecoverySessionGrantPromotion::try_from)
+            .transpose()
             .map_err(Into::into)
     }
 
@@ -221,7 +246,7 @@ impl RecoveryAuthorityRepository for PgRecoveryAuthorityRepository<'_> {
     ) -> Result<bool, Self::Error> {
         let row = InsertableRecoverySessionGrantPromotion {
             transaction_id: params.transaction_id,
-            old_grant_id: params.old_grant_id.uuid(),
+            old_grant_id: params.old_grant_id.token_bytes().to_vec(),
             transaction_request_digest: params.transaction_request_digest,
             recovery_session_id: params.recovery_session_id,
             replacement_device_id: params.replacement_device_id,

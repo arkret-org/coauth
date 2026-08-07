@@ -1,4 +1,4 @@
-use arkret_identifiers::SessionGrantId;
+use arkret_identifiers::{EventId, IdentifierError, SessionGrantId};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::oauth::{NewSessionGrant, SessionGrantFilter, SessionGrantRepository};
@@ -27,11 +27,18 @@ impl<'c> PgOAuthSessionGrantRepository<'c> {
     }
 }
 
+fn session_grant_id_from_bytes(value: &[u8]) -> Result<SessionGrantId, IdentifierError> {
+    let token: [u8; 33] = value.try_into().map_err(|_| {
+        IdentifierError::InvalidId("SessionGrantId storage token must be 33 bytes".to_owned())
+    })?;
+    EventId::from_token_bytes(token).map(|event_id| SessionGrantId::from_event_id(&event_id))
+}
+
 #[derive(Debug, Clone, Queryable, Selectable)]
 #[diesel(table_name = oauth_session_grants)]
 struct SessionGrantLookup {
     id: Uuid,
-    grant_id: Uuid,
+    grant_id: Vec<u8>,
     user_session_id: Option<Uuid>,
     issuer: String,
     subject: String,
@@ -67,6 +74,12 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
 
     fn try_from(value: SessionGrantLookup) -> Result<Self, Self::Error> {
         let id = Ulid::from(value.id);
+        let grant_id = session_grant_id_from_bytes(&value.grant_id).map_err(|error| {
+            DatabaseInconsistencyError::on("oauth_session_grants")
+                .column("grant_id")
+                .row(id)
+                .source(error)
+        })?;
         let scope: Result<Scope, _> = value
             .scope_list
             .iter()
@@ -81,7 +94,7 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
 
         Ok(Self {
             id,
-            grant_id: SessionGrantId::from_uuid(value.grant_id),
+            grant_id,
             browser_session_id: value.user_session_id.map(Into::into),
             issuer: value.issuer,
             subject: value.subject,
@@ -112,7 +125,7 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
 #[diesel(table_name = oauth_session_grants)]
 struct NewSessionGrantRow<'a> {
     id: Uuid,
-    grant_id: Uuid,
+    grant_id: Vec<u8>,
     user_session_id: Option<Uuid>,
     issuer: &'a str,
     subject: &'a str,
@@ -217,7 +230,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
 
         let row = NewSessionGrantRow {
             id: Uuid::from(id),
-            grant_id: grant.grant_id.uuid(),
+            grant_id: grant.grant_id.token_bytes().to_vec(),
             user_session_id: grant.browser_session_id.map(Uuid::from),
             issuer: grant.issuer,
             subject: grant.subject,
@@ -296,7 +309,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         grant_id: &SessionGrantId,
     ) -> Result<Option<SessionGrant>, Self::Error> {
         let row = oauth_session_grants::table
-            .filter(oauth_session_grants::grant_id.eq(grant_id.uuid()))
+            .filter(oauth_session_grants::grant_id.eq(grant_id.token_bytes().to_vec()))
             .select(SessionGrantLookup::as_select())
             .first::<SessionGrantLookup>(self.conn)
             .await
