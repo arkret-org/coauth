@@ -58,9 +58,9 @@ struct SessionGrantLookup {
     recovery_policy_version: Option<i64>,
     device_authorization_event_id: Option<String>,
     model_generation_ref: Option<Value>,
-    created_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
     revoked_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 impl Node<Ulid> for SessionGrantLookup {
@@ -145,8 +145,8 @@ struct NewSessionGrantRow<'a> {
     recovery_policy_version: Option<i64>,
     device_authorization_event_id: Option<&'a str>,
     model_generation_ref: Option<Value>,
-    created_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
 }
 
 macro_rules! apply_session_grant_filter {

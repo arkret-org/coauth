@@ -45,7 +45,6 @@ struct ProviderLookup {
     id_token_signed_response_alg: String,
     fetch_userinfo: bool,
     userinfo_signed_response_alg: Option<String>,
-    created_at: DateTime<Utc>,
     disabled_at: Option<DateTime<Utc>>,
     claims_imports: Option<serde_json::Value>,
     jwks_uri_override: Option<String>,
@@ -59,6 +58,7 @@ struct ProviderLookup {
     forward_login_hint: bool,
     on_backchannel_logout: Option<String>,
     source: String,
+    created_at: DateTime<Utc>,
 }
 
 impl Node<Ulid> for ProviderLookup {
@@ -269,8 +269,8 @@ struct NewProvider {
     forward_login_hint: bool,
     ui_order: i32,
     on_backchannel_logout: Option<String>,
-    created_at: DateTime<Utc>,
     source: String,
+    created_at: DateTime<Utc>,
 }
 
 #[async_trait]

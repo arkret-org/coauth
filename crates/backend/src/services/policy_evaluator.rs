@@ -681,7 +681,8 @@ mod tests {
     fn req(actor: &str, action: &str) -> PolicyCheckRequestBody {
         PolicyCheckRequestBody {
             request_id: "req-1".into(),
-            realm_id: RealmId::new("ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO").unwrap(),
+            realm_id: RealmId::new("ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO")
+                .unwrap(),
             actor_id: Did::new(actor.to_owned()).unwrap(),
             device_id: None,
             action: action.to_owned(),

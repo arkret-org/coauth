@@ -43,8 +43,8 @@ struct AdminOperationLogRow {
     details: serde_json::Value,
     ip_address: Option<IpNetwork>,
     user_agent: Option<String>,
-    created_at: DateTime<Utc>,
     audit_signature: Option<String>,
+    created_at: DateTime<Utc>,
 }
 
 impl TryFrom<AdminOperationLogRow> for AdminOperationLog {
@@ -117,8 +117,8 @@ struct InsertableAdminOperationLog {
     details: serde_json::Value,
     ip_address: Option<IpNetwork>,
     user_agent: Option<String>,
-    created_at: DateTime<Utc>,
     audit_signature: Option<String>,
+    created_at: DateTime<Utc>,
 }
 
 #[derive(Insertable)]

@@ -33,8 +33,8 @@ impl<'c> PgPolicyDataRepository<'c> {
 #[diesel(table_name = policy_data)]
 struct PolicyDataRow {
     id: Uuid,
-    created_at: DateTime<Utc>,
     data: Value,
+    created_at: DateTime<Utc>,
 }
 
 impl From<PolicyDataRow> for PolicyData {
@@ -52,8 +52,8 @@ impl From<PolicyDataRow> for PolicyData {
 #[diesel(table_name = policy_data)]
 struct NewPolicyData {
     id: Uuid,
-    created_at: DateTime<Utc>,
     data: Value,
+    created_at: DateTime<Utc>,
 }
 
 #[async_trait]

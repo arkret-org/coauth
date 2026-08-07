@@ -36,7 +36,6 @@ struct OAuthDeviceGrantLookup {
     scope: String,
     device_code: String,
     user_code: String,
-    created_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
     fulfilled_at: Option<DateTime<Utc>>,
     rejected_at: Option<DateTime<Utc>>,
@@ -45,6 +44,7 @@ struct OAuthDeviceGrantLookup {
     oauth_session_id: Option<Uuid>,
     ip_address: Option<IpNetwork>,
     user_agent: Option<String>,
+    created_at: DateTime<Utc>,
 }
 
 impl TryFrom<OAuthDeviceGrantLookup> for DeviceCodeGrant {
@@ -141,10 +141,10 @@ struct NewDeviceCodeGrant {
     scope: String,
     device_code: String,
     user_code: String,
-    created_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
     ip_address: Option<IpNetwork>,
     user_agent: Option<String>,
+    created_at: DateTime<Utc>,
 }
 
 #[async_trait]

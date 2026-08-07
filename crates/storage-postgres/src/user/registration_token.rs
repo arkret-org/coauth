@@ -36,10 +36,10 @@ struct UserRegistrationTokenRow {
     token: String,
     usage_limit: Option<i32>,
     times_used: i32,
-    created_at: DateTime<Utc>,
     last_used_at: Option<DateTime<Utc>>,
     expires_at: Option<DateTime<Utc>>,
     revoked_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 impl Node<Ulid> for UserRegistrationTokenRow {
@@ -92,8 +92,8 @@ struct NewUserRegistrationToken {
     id: Uuid,
     token: String,
     usage_limit: Option<i32>,
-    created_at: DateTime<Utc>,
     expires_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 /// Apply [`UserRegistrationTokenFilter`] to a boxed query.

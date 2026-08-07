@@ -43,10 +43,10 @@ struct PersonalSessionRow {
     actor_user_id: Uuid,
     human_name: String,
     scope_list: Vec<String>,
-    created_at: DateTime<Utc>,
     revoked_at: Option<DateTime<Utc>>,
     last_active_at: Option<DateTime<Utc>>,
     last_active_ip: Option<ipnetwork::IpNetwork>,
+    created_at: DateTime<Utc>,
 }
 
 impl Node<Ulid> for PersonalSessionRow {

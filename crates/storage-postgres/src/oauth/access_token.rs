@@ -31,10 +31,10 @@ struct OAuthAccessTokenRow {
     id: Uuid,
     oauth_session_id: Uuid,
     access_token: String,
-    created_at: DateTime<Utc>,
     expires_at: Option<DateTime<Utc>>,
     revoked_at: Option<DateTime<Utc>>,
     first_used_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 impl From<OAuthAccessTokenRow> for AccessToken {
@@ -63,8 +63,8 @@ struct NewOAuthAccessToken {
     id: Uuid,
     oauth_session_id: Uuid,
     access_token: String,
-    created_at: DateTime<Utc>,
     expires_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 /// Row type for cleanup query results via raw SQL

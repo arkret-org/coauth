@@ -39,11 +39,11 @@ impl<'c> PgBrowserSessionRepository<'c> {
 struct UserSessionRow {
     id: Uuid,
     user_id: Uuid,
-    created_at: DateTime<Utc>,
     finished_at: Option<DateTime<Utc>>,
     user_agent: Option<String>,
     last_active_at: Option<DateTime<Utc>>,
     last_active_ip: Option<ipnetwork::IpNetwork>,
+    created_at: DateTime<Utc>,
 }
 
 macro_rules! select_user_columns {
@@ -105,10 +105,10 @@ impl From<SessionLookup> for BrowserSession {
 #[diesel(table_name = user_session_authentications)]
 struct AuthenticationLookup {
     id: Uuid,
-    created_at: DateTime<Utc>,
     user_password_id: Option<Uuid>,
     upstream_oauth_authorization_session_id: Option<Uuid>,
     webauthn_credential_id: Option<Uuid>,
+    created_at: DateTime<Utc>,
 }
 
 impl TryFrom<AuthenticationLookup> for Authentication {
@@ -152,8 +152,8 @@ impl TryFrom<AuthenticationLookup> for Authentication {
 struct NewUserSession {
     id: Uuid,
     user_id: Uuid,
-    created_at: DateTime<Utc>,
     user_agent: Option<String>,
+    created_at: DateTime<Utc>,
 }
 
 /// Insertable row for creating a new session authentication (password)
@@ -162,8 +162,8 @@ struct NewUserSession {
 struct NewSessionAuthenticationPassword {
     id: Uuid,
     user_session_id: Uuid,
-    created_at: DateTime<Utc>,
     user_password_id: Option<Uuid>,
+    created_at: DateTime<Utc>,
 }
 
 /// Insertable row for creating a new session authentication (upstream)
@@ -172,8 +172,8 @@ struct NewSessionAuthenticationPassword {
 struct NewSessionAuthenticationUpstream {
     id: Uuid,
     user_session_id: Uuid,
-    created_at: DateTime<Utc>,
     upstream_oauth_authorization_session_id: Option<Uuid>,
+    created_at: DateTime<Utc>,
 }
 
 #[derive(Insertable)]

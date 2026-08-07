@@ -35,10 +35,10 @@ struct UserEmailLookup {
     id: Uuid,
     user_id: Uuid,
     email: String,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
     confirmed_at: Option<DateTime<Utc>>,
     is_primary: bool,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 
 impl Node<Ulid> for UserEmailLookup {
@@ -68,8 +68,8 @@ struct UserEmailAuthenticationLookup {
     user_session_id: Option<Uuid>,
     user_registration_id: Option<Uuid>,
     email: String,
-    created_at: DateTime<Utc>,
     completed_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 impl From<UserEmailAuthenticationLookup> for UserEmailAuthentication {
@@ -91,8 +91,8 @@ struct UserEmailAuthenticationCodeLookup {
     id: Uuid,
     user_email_authentication_id: Uuid,
     code: String,
-    created_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
 }
 
 impl From<UserEmailAuthenticationCodeLookup> for UserEmailAuthenticationCode {
@@ -114,10 +114,10 @@ struct NewUserEmail {
     id: Uuid,
     user_id: Uuid,
     email: String,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
     confirmed_at: Option<DateTime<Utc>>,
     is_primary: bool,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 
 /// Insertable row for creating a new user email authentication
@@ -138,8 +138,8 @@ struct NewUserEmailAuthenticationCode {
     id: Uuid,
     user_email_authentication_id: Uuid,
     code: String,
-    created_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
 }
 
 #[async_trait]

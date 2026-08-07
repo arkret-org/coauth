@@ -40,12 +40,12 @@ struct OAuthSessionLookup {
     user_session_id: Option<Uuid>,
     oauth_client_id: Uuid,
     scope_list: Vec<String>,
-    created_at: DateTime<Utc>,
     finished_at: Option<DateTime<Utc>>,
     user_agent: Option<String>,
     last_active_at: Option<DateTime<Utc>>,
     last_active_ip: Option<IpNetwork>,
     human_name: Option<String>,
+    created_at: DateTime<Utc>,
 }
 
 impl Node<Ulid> for OAuthSessionLookup {

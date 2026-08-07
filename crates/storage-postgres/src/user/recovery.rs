@@ -36,8 +36,8 @@ struct UserRecoverySessionRow {
     user_agent: String,
     ip_address: Option<IpNetwork>,
     locale: String,
-    created_at: DateTime<Utc>,
     consumed_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 impl From<UserRecoverySessionRow> for UserRecoverySession {
@@ -61,8 +61,8 @@ struct UserRecoveryTicketRow {
     user_recovery_session_id: Uuid,
     user_email_id: Uuid,
     ticket: String,
-    created_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
 }
 
 impl From<UserRecoveryTicketRow> for UserRecoveryTicket {
@@ -98,8 +98,8 @@ struct NewUserRecoveryTicket {
     user_recovery_session_id: Uuid,
     user_email_id: Uuid,
     ticket: String,
-    created_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
 }
 
 /// Helper struct for extracting UUID from raw SQL RETURNING clause

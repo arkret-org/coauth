@@ -49,8 +49,8 @@ struct UserRegistrationRow {
     hashed_password: Option<String>,
     hashed_password_version: Option<i32>,
     upstream_oauth_authorization_session_id: Option<Uuid>,
-    created_at: DateTime<Utc>,
     completed_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 impl TryFrom<UserRegistrationRow> for UserRegistration {

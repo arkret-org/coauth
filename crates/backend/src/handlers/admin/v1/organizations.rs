@@ -567,7 +567,8 @@ mod tests {
     fn bootstrap_request(organization_did: &str) -> BootstrapOrganizationRequest {
         BootstrapOrganizationRequest {
             organization_did: organization_did.to_owned(),
-            principal_control_realm_id: "ak:realm:AUhJ30wlw7UA5CWJk9HZUsDp0GyhA-QVSF565JjdtLul".to_owned(),
+            principal_control_realm_id: "ak:realm:AUhJ30wlw7UA5CWJk9HZUsDp0GyhA-QVSF565JjdtLul"
+                .to_owned(),
             control_stream_ref: Some(
                 "ak:event:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG".to_owned(),
             ),

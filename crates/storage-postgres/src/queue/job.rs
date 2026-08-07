@@ -135,10 +135,10 @@ struct NewScheduledJob {
     queue_name: String,
     payload: serde_json::Value,
     metadata: serde_json::Value,
-    created_at: DateTime<Utc>,
     scheduled_at: Option<DateTime<Utc>>,
     schedule_name: Option<String>,
     status: String,
+    created_at: DateTime<Utc>,
 }
 
 #[async_trait]

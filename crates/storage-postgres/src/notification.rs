@@ -48,11 +48,11 @@ struct NotificationRequestRow {
     status: String,
     dedupe_key: Option<String>,
     correlation_key: Option<String>,
-    created_at: DateTime<Utc>,
     scheduled_at: DateTime<Utc>,
     started_at: Option<DateTime<Utc>>,
     completed_at: Option<DateTime<Utc>>,
     cancelled_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 impl TryFrom<NotificationRequestRow> for NotificationRequest {
@@ -91,12 +91,12 @@ struct NotificationDeliveryRow {
     attempt_count: i32,
     status: String,
     last_failure: Option<serde_json::Value>,
-    created_at: DateTime<Utc>,
     reserved_at: Option<DateTime<Utc>>,
     sent_at: Option<DateTime<Utc>>,
     delivered_at: Option<DateTime<Utc>>,
     failed_at: Option<DateTime<Utc>>,
     next_retry_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 impl TryFrom<NotificationDeliveryRow> for NotificationDelivery {
@@ -209,11 +209,11 @@ struct NewNotificationRequestRow {
     status: String,
     dedupe_key: Option<String>,
     correlation_key: Option<String>,
-    created_at: DateTime<Utc>,
     scheduled_at: DateTime<Utc>,
     started_at: Option<DateTime<Utc>>,
     completed_at: Option<DateTime<Utc>>,
     cancelled_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 #[derive(Insertable)]
@@ -228,12 +228,12 @@ struct NewNotificationDeliveryRow {
     attempt_count: i32,
     status: String,
     last_failure: Option<serde_json::Value>,
-    created_at: DateTime<Utc>,
     reserved_at: Option<DateTime<Utc>>,
     sent_at: Option<DateTime<Utc>>,
     delivered_at: Option<DateTime<Utc>>,
     failed_at: Option<DateTime<Utc>>,
     next_retry_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 #[derive(Insertable)]

@@ -209,8 +209,8 @@ CREATE TABLE public.admin_operation_logs (
     details jsonb DEFAULT '{}'::jsonb NOT NULL,
     ip_address inet,
     user_agent text,
-    created_at timestamp with time zone NOT NULL,
-    audit_signature text
+    audit_signature text,
+    created_at timestamp with time zone NOT NULL
 );
 
 COMMENT ON COLUMN public.admin_operation_logs.audit_signature IS 'Detached signature (base64url-unpadded) over canonical JSON of the row, signed with the coauth service key. NULL during rollout.';
@@ -257,9 +257,9 @@ CREATE TABLE public.organization_delegations (
     valid_from timestamp with time zone NOT NULL,
     valid_until timestamp with time zone,
     created_by text NOT NULL,
+    revoked_at timestamp with time zone,
     created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    revoked_at timestamp with time zone
+    updated_at timestamp with time zone NOT NULL
 );
 
 COMMENT ON TABLE public.organization_delegations IS 'Organization DID delegations to Account Authority / governance service principals. Backs the SDK RealmOrganizationDelegationResolver and the ak.realm.organization issuance + audit API.';
@@ -301,7 +301,6 @@ CREATE TABLE public.handle_audit_log (
 
 CREATE TABLE public.invite_quarantine_queue (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
     peer_did text NOT NULL,
     target_holder_did text NOT NULL,
     consent_id text NOT NULL,
@@ -311,6 +310,7 @@ CREATE TABLE public.invite_quarantine_queue (
     status text DEFAULT 'pending'::text NOT NULL,
     resolved_at timestamp with time zone,
     resolution_note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT invite_quarantine_queue_consent_id_non_empty CHECK ((btrim(consent_id) <> ''::text)),
     CONSTRAINT invite_quarantine_queue_peer_did_non_empty CHECK ((btrim(peer_did) <> ''::text)),
     CONSTRAINT invite_quarantine_queue_scope_non_empty CHECK ((btrim(scope) <> ''::text)),
@@ -328,12 +328,12 @@ CREATE TABLE public.notification_deliveries (
     attempt_count integer NOT NULL,
     status text NOT NULL,
     last_failure jsonb,
-    created_at timestamp with time zone NOT NULL,
     reserved_at timestamp with time zone,
     sent_at timestamp with time zone,
     delivered_at timestamp with time zone,
     failed_at timestamp with time zone,
-    next_retry_at timestamp with time zone
+    next_retry_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.notification_event_logs (
@@ -364,11 +364,11 @@ CREATE TABLE public.notification_requests (
     status text NOT NULL,
     dedupe_key text,
     correlation_key text,
-    created_at timestamp with time zone NOT NULL,
     scheduled_at timestamp with time zone NOT NULL,
     started_at timestamp with time zone,
     completed_at timestamp with time zone,
-    cancelled_at timestamp with time zone
+    cancelled_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.notification_template_versions (
@@ -379,18 +379,18 @@ CREATE TABLE public.notification_template_versions (
     locale text DEFAULT 'en'::text NOT NULL,
     subject_template text,
     body_template text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    published_at timestamp with time zone
+    published_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.oauth_access_tokens (
     id uuid NOT NULL,
     oauth_session_id uuid NOT NULL,
     access_token text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone,
     revoked_at timestamp with time zone,
-    first_used_at timestamp with time zone
+    first_used_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.oauth_authorization_grants (
@@ -408,12 +408,12 @@ CREATE TABLE public.oauth_authorization_grants (
     response_type_code boolean NOT NULL,
     response_type_id_token boolean NOT NULL,
     consent_required boolean DEFAULT false NOT NULL,
-    created_at timestamp with time zone NOT NULL,
     fulfilled_at timestamp with time zone,
     cancelled_at timestamp with time zone,
     exchanged_at timestamp with time zone,
     login_hint text,
-    locale text
+    locale text,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.oauth_client_localized_metadata (
@@ -447,9 +447,9 @@ CREATE TABLE public.oauth_clients (
     application_type text,
     contacts text[] DEFAULT '{}'::text[] NOT NULL,
     is_static boolean,
-    created_at timestamp with time zone,
     metadata_digest text,
-    i18n jsonb DEFAULT '{}'::jsonb NOT NULL
+    i18n jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone
 );
 
 CREATE TABLE public.oauth_device_code_grant (
@@ -458,7 +458,6 @@ CREATE TABLE public.oauth_device_code_grant (
     scope text NOT NULL,
     user_code text NOT NULL,
     device_code text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     fulfilled_at timestamp with time zone,
     rejected_at timestamp with time zone,
@@ -466,7 +465,8 @@ CREATE TABLE public.oauth_device_code_grant (
     oauth_session_id uuid,
     user_session_id uuid,
     ip_address inet,
-    user_agent text
+    user_agent text,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.oauth_refresh_tokens (
@@ -474,13 +474,13 @@ CREATE TABLE public.oauth_refresh_tokens (
     oauth_session_id uuid NOT NULL,
     oauth_access_token_id uuid,
     refresh_token text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
     consumed_at timestamp with time zone,
     revoked_at timestamp with time zone,
     next_oauth_refresh_token_id uuid,
     chain_root_oauth_refresh_token_id uuid NOT NULL,
     chain_created_at timestamp with time zone NOT NULL,
-    last_seen_at timestamp with time zone NOT NULL
+    last_seen_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.oauth_session_grants (
@@ -505,9 +505,9 @@ CREATE TABLE public.oauth_session_grants (
     recovery_policy_version bigint,
     device_authorization_event_id text,
     model_generation_ref jsonb,
-    created_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
-    revoked_at timestamp with time zone
+    revoked_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.oauth_sessions (
@@ -516,21 +516,21 @@ CREATE TABLE public.oauth_sessions (
     oauth_client_id uuid NOT NULL,
     user_id uuid NOT NULL,
     scope_list text[] NOT NULL,
-    created_at timestamp with time zone NOT NULL,
     finished_at timestamp with time zone,
     user_agent text,
     last_active_at timestamp with time zone,
     last_active_ip inet,
-    human_name text
+    human_name text,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.personal_access_tokens (
     id uuid NOT NULL,
     personal_session_id uuid NOT NULL,
     access_token_sha256 bytea NOT NULL,
-    created_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone,
     revoked_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
     CONSTRAINT personal_access_tokens_access_token_sha256_check CHECK ((length(access_token_sha256) = 32))
 );
 
@@ -541,16 +541,16 @@ CREATE TABLE public.personal_sessions (
     actor_user_id uuid NOT NULL,
     human_name text NOT NULL,
     scope_list text[] NOT NULL,
-    created_at timestamp with time zone NOT NULL,
     revoked_at timestamp with time zone,
     last_active_at timestamp with time zone,
-    last_active_ip inet
+    last_active_ip inet,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.policy_data (
     id uuid NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    data jsonb NOT NULL
+    data jsonb NOT NULL,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.principal_did_owners (
@@ -669,7 +669,6 @@ CREATE TABLE public.identity_binding_challenges (
 CREATE TABLE public.queue_jobs (
     id uuid NOT NULL,
     status text DEFAULT 'available'::text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
     started_at timestamp with time zone,
     started_by uuid,
     completed_at timestamp with time zone,
@@ -681,7 +680,8 @@ CREATE TABLE public.queue_jobs (
     attempt integer DEFAULT 0 NOT NULL,
     next_attempt_id uuid,
     scheduled_at timestamp with time zone,
-    schedule_name text
+    schedule_name text,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE UNLOGGED TABLE public.queue_leader (
@@ -714,11 +714,11 @@ CREATE TABLE public.risk_action_proposals (
     state text DEFAULT 'draft'::text NOT NULL,
     approval_proofs jsonb DEFAULT '[]'::jsonb NOT NULL,
     required_approvals integer NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
     approved_at timestamp with time zone,
     executed_at timestamp with time zone,
     cancelled_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT risk_action_proposals_action_non_empty CHECK ((btrim(action) <> ''::text)),
     CONSTRAINT risk_action_proposals_proposer_did_non_empty CHECK ((btrim(proposer_did) <> ''::text)),
     CONSTRAINT risk_action_proposals_reason_non_empty CHECK ((btrim(reason) <> ''::text)),
@@ -741,14 +741,14 @@ CREATE TABLE public.upstream_oauth_authorization_sessions (
     state text NOT NULL,
     code_challenge_verifier text,
     nonce text,
-    created_at timestamp with time zone NOT NULL,
     completed_at timestamp with time zone,
     consumed_at timestamp with time zone,
     id_token_claims jsonb,
     userinfo jsonb,
     extra_callback_parameters jsonb,
     unlinked_at timestamp with time zone,
-    user_session_id uuid
+    user_session_id uuid,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.upstream_oauth_links (
@@ -756,9 +756,9 @@ CREATE TABLE public.upstream_oauth_links (
     upstream_oauth_provider_id uuid NOT NULL,
     user_id uuid,
     subject text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
     human_account_name text,
     unlinked_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -777,7 +777,6 @@ CREATE TABLE public.upstream_oauth_providers (
     pkce_mode text DEFAULT 'auto'::text NOT NULL,
     human_name text,
     brand_name text,
-    created_at timestamp with time zone NOT NULL,
     claims_imports jsonb,
     disabled_at timestamp with time zone,
     additional_parameters jsonb,
@@ -790,15 +789,16 @@ CREATE TABLE public.upstream_oauth_providers (
     userinfo_signed_response_alg text,
     on_backchannel_logout text,
     forward_login_hint boolean DEFAULT false NOT NULL,
-    source text DEFAULT 'config'::text NOT NULL
+    source text DEFAULT 'config'::text NOT NULL,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.user_email_authentication_codes (
     id uuid NOT NULL,
     user_email_authentication_id uuid CONSTRAINT user_email_authentication_c_user_email_authentication__not_null NOT NULL,
     code text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    expires_at timestamp with time zone NOT NULL
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.user_email_authentications (
@@ -806,43 +806,43 @@ CREATE TABLE public.user_email_authentications (
     user_session_id uuid,
     user_registration_id uuid,
     email text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    completed_at timestamp with time zone
+    completed_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.user_emails (
     id uuid NOT NULL,
     user_id uuid NOT NULL,
     email text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
     confirmed_at timestamp with time zone,
-    is_primary boolean DEFAULT false NOT NULL
+    is_primary boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 CREATE TABLE public.user_passwords (
     id uuid NOT NULL,
     user_id uuid NOT NULL,
     hashed_password text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
     version integer NOT NULL,
-    upgraded_from_id uuid
+    upgraded_from_id uuid,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.user_phone_authentication_codes (
     id uuid NOT NULL,
     user_phone_authentication_id uuid CONSTRAINT user_phone_authentication_c_user_phone_authentication__not_null NOT NULL,
     code text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    expires_at timestamp with time zone NOT NULL
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.user_phone_authentications (
     id uuid NOT NULL,
     user_registration_id uuid,
     phone text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    completed_at timestamp with time zone
+    completed_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.user_phones (
@@ -874,8 +874,8 @@ CREATE TABLE public.user_recovery_sessions (
     user_agent text NOT NULL,
     ip_address inet,
     locale text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    consumed_at timestamp with time zone
+    consumed_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.user_recovery_tickets (
@@ -883,8 +883,8 @@ CREATE TABLE public.user_recovery_tickets (
     user_recovery_session_id uuid NOT NULL,
     user_email_id uuid NOT NULL,
     ticket text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    expires_at timestamp with time zone NOT NULL
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.user_registration_tokens (
@@ -892,10 +892,10 @@ CREATE TABLE public.user_registration_tokens (
     token text NOT NULL,
     usage_limit integer,
     times_used integer DEFAULT 0 NOT NULL,
-    created_at timestamp with time zone NOT NULL,
     last_used_at timestamp with time zone,
     expires_at timestamp with time zone,
-    revoked_at timestamp with time zone
+    revoked_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.user_registrations (
@@ -913,8 +913,8 @@ CREATE TABLE public.user_registrations (
     user_registration_token_id uuid,
     upstream_oauth_authorization_session_id uuid,
     phone_authentication_id uuid,
-    created_at timestamp with time zone NOT NULL,
-    completed_at timestamp with time zone
+    completed_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.user_session_authentications (
@@ -923,8 +923,8 @@ CREATE TABLE public.user_session_authentications (
     user_password_id uuid,
     upstream_oauth_authorization_session_id uuid,
     webauthn_credential_id uuid,
-    created_at timestamp with time zone NOT NULL,
     authentication_source text,
+    created_at timestamp with time zone NOT NULL,
     CONSTRAINT user_session_authentications_single_method_check CHECK (
         num_nonnulls(
             user_password_id,
@@ -937,11 +937,11 @@ CREATE TABLE public.user_session_authentications (
 CREATE TABLE public.user_sessions (
     id uuid NOT NULL,
     user_id uuid NOT NULL,
-    created_at timestamp with time zone NOT NULL,
     finished_at timestamp with time zone,
     user_agent text,
     last_active_at timestamp with time zone,
-    last_active_ip inet
+    last_active_ip inet,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.user_terms (
@@ -972,8 +972,6 @@ CREATE TABLE public.user_unsupported_third_party_ids (
 CREATE TABLE public.users (
     id uuid NOT NULL,
     localpart text NOT NULL CHECK ((char_length(localpart) BETWEEN 1 AND 64) AND (octet_length(localpart) <= 256) AND (localpart !~ '[[:space:][:cntrl:]:@/#?]'::text) AND (POSITION(('\\'::text) IN (localpart)) = 0)),
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
     status text DEFAULT 'active'::text NOT NULL CHECK (status = ANY (ARRAY['active'::text, 'soft_logged_out'::text, 'locked'::text, 'suspended'::text, 'deactivated'::text, 'erasure_pending'::text])),
     locked_at timestamp with time zone,
     deactivated_at timestamp with time zone,
@@ -982,7 +980,9 @@ CREATE TABLE public.users (
     display_name text,
     avatar_url text,
     preferred_locale text CHECK (preferred_locale = ANY (ARRAY['en'::text, 'zh'::text])),
-    handle_aliases text[] DEFAULT ARRAY[]::text[] NOT NULL
+    handle_aliases text[] DEFAULT ARRAY[]::text[] NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 CREATE TABLE public.webauthn_credentials (
@@ -997,9 +997,9 @@ CREATE TABLE public.webauthn_credentials (
     backup_state boolean DEFAULT false NOT NULL,
     user_verified boolean DEFAULT false NOT NULL,
     label text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
     last_used_at timestamp with time zone,
-    revoked_at timestamp with time zone
+    revoked_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 CREATE TABLE public.webauthn_ceremonies (
@@ -1008,8 +1008,8 @@ CREATE TABLE public.webauthn_ceremonies (
     kind text NOT NULL CHECK (kind = ANY (ARRAY['registration'::text, 'authentication'::text])),
     binding_id text NOT NULL,
     state jsonb NOT NULL,
-    created_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone NOT NULL,
     CONSTRAINT webauthn_ceremonies_expiry_check CHECK (expires_at > created_at)
 );
 

@@ -40,11 +40,11 @@ struct AppSessionLookup {
     user_id: Option<Uuid>,
     scope_list: Vec<String>,
     human_name: Option<String>,
-    created_at: DateTime<Utc>,
     finished_at: Option<DateTime<Utc>>,
     user_agent: Option<String>,
     last_active_at: Option<DateTime<Utc>>,
     last_active_ip: Option<ipnetwork::IpNetwork>,
+    created_at: DateTime<Utc>,
 }
 
 impl coauth_data::pagination::Node<Ulid> for AppSessionLookup {

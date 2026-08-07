@@ -114,9 +114,9 @@ struct DelegationRow {
     valid_from: DateTime<Utc>,
     valid_until: Option<DateTime<Utc>>,
     created_by: String,
+    revoked_at: Option<DateTime<Utc>>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
-    revoked_at: Option<DateTime<Utc>>,
 }
 
 impl TryFrom<DelegationRow> for OrganizationDelegation {

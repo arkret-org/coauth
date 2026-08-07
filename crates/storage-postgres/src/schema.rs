@@ -7,8 +7,6 @@ diesel::table! {
     users (id) {
         id -> Uuid,
         localpart -> Text,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
         status -> Text,
         locked_at -> Nullable<Timestamptz>,
         deactivated_at -> Nullable<Timestamptz>,
@@ -18,6 +16,8 @@ diesel::table! {
         avatar_url -> Nullable<Text>,
         preferred_locale -> Nullable<Text>,
         handle_aliases -> Array<Text>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 
@@ -245,9 +245,9 @@ diesel::table! {
         valid_from -> Timestamptz,
         valid_until -> Nullable<Timestamptz>,
         created_by -> Text,
+        revoked_at -> Nullable<Timestamptz>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
-        revoked_at -> Nullable<Timestamptz>,
     }
 }
 
@@ -298,8 +298,8 @@ diesel::table! {
         kind -> Text,
         binding_id -> Text,
         state -> Jsonb,
-        created_at -> Timestamptz,
         expires_at -> Timestamptz,
+        created_at -> Timestamptz,
     }
 }
 
@@ -316,9 +316,9 @@ diesel::table! {
         backup_state -> Bool,
         user_verified -> Bool,
         label -> Nullable<Text>,
-        created_at -> Timestamptz,
         last_used_at -> Nullable<Timestamptz>,
         revoked_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -333,18 +333,17 @@ diesel::table! {
         state -> Text,
         approval_proofs -> Jsonb,
         required_approvals -> Int4,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
         approved_at -> Nullable<Timestamptz>,
         executed_at -> Nullable<Timestamptz>,
         cancelled_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 
 diesel::table! {
     invite_quarantine_queue (id) {
         id -> Uuid,
-        created_at -> Timestamptz,
         peer_did -> Text,
         target_holder_did -> Text,
         consent_id -> Text,
@@ -354,6 +353,7 @@ diesel::table! {
         status -> Text,
         resolved_at -> Nullable<Timestamptz>,
         resolution_note -> Nullable<Text>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -362,9 +362,9 @@ diesel::table! {
         id -> Uuid,
         user_id -> Uuid,
         hashed_password -> Text,
-        created_at -> Timestamptz,
         version -> Int4,
         upgraded_from_id -> Nullable<Uuid>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -373,10 +373,10 @@ diesel::table! {
         id -> Uuid,
         user_id -> Uuid,
         email -> Text,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
         confirmed_at -> Nullable<Timestamptz>,
         is_primary -> Bool,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 
@@ -386,8 +386,8 @@ diesel::table! {
         user_session_id -> Nullable<Uuid>,
         user_registration_id -> Nullable<Uuid>,
         email -> Text,
-        created_at -> Timestamptz,
         completed_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -396,8 +396,8 @@ diesel::table! {
         id -> Uuid,
         user_email_authentication_id -> Uuid,
         code -> Text,
-        created_at -> Timestamptz,
         expires_at -> Timestamptz,
+        created_at -> Timestamptz,
     }
 }
 
@@ -405,11 +405,11 @@ diesel::table! {
     user_sessions (id) {
         id -> Uuid,
         user_id -> Uuid,
-        created_at -> Timestamptz,
         finished_at -> Nullable<Timestamptz>,
         user_agent -> Nullable<Text>,
         last_active_at -> Nullable<Timestamptz>,
         last_active_ip -> Nullable<Inet>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -420,8 +420,8 @@ diesel::table! {
         user_password_id -> Nullable<Uuid>,
         upstream_oauth_authorization_session_id -> Nullable<Uuid>,
         webauthn_credential_id -> Nullable<Uuid>,
-        created_at -> Timestamptz,
         authentication_source -> Nullable<Text>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -432,8 +432,8 @@ diesel::table! {
         user_agent -> Text,
         ip_address -> Nullable<Inet>,
         locale -> Text,
-        created_at -> Timestamptz,
         consumed_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -443,8 +443,8 @@ diesel::table! {
         user_recovery_session_id -> Uuid,
         user_email_id -> Uuid,
         ticket -> Text,
-        created_at -> Timestamptz,
         expires_at -> Timestamptz,
+        created_at -> Timestamptz,
     }
 }
 
@@ -473,8 +473,8 @@ diesel::table! {
         user_registration_token_id -> Nullable<Uuid>,
         upstream_oauth_authorization_session_id -> Nullable<Uuid>,
         phone_authentication_id -> Nullable<Uuid>,
-        created_at -> Timestamptz,
         completed_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -484,10 +484,10 @@ diesel::table! {
         token -> Text,
         usage_limit -> Nullable<Int4>,
         times_used -> Int4,
-        created_at -> Timestamptz,
         last_used_at -> Nullable<Timestamptz>,
         expires_at -> Nullable<Timestamptz>,
         revoked_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -505,8 +505,8 @@ diesel::table! {
         id -> Uuid,
         user_registration_id -> Nullable<Uuid>,
         phone -> Text,
-        created_at -> Timestamptz,
         completed_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -515,8 +515,8 @@ diesel::table! {
         id -> Uuid,
         user_phone_authentication_id -> Uuid,
         code -> Text,
-        created_at -> Timestamptz,
         expires_at -> Timestamptz,
+        created_at -> Timestamptz,
     }
 }
 
@@ -553,9 +553,9 @@ diesel::table! {
         application_type -> Nullable<Text>,
         contacts -> Array<Text>,
         is_static -> Nullable<Bool>,
-        created_at -> Nullable<Timestamptz>,
         metadata_digest -> Nullable<Text>,
         i18n -> Jsonb,
+        created_at -> Nullable<Timestamptz>,
     }
 }
 
@@ -575,12 +575,12 @@ diesel::table! {
         oauth_client_id -> Uuid,
         user_id -> Nullable<Uuid>,
         scope_list -> Array<Text>,
-        created_at -> Timestamptz,
         finished_at -> Nullable<Timestamptz>,
         user_agent -> Nullable<Text>,
         last_active_at -> Nullable<Timestamptz>,
         last_active_ip -> Nullable<Inet>,
         human_name -> Nullable<Text>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -589,10 +589,10 @@ diesel::table! {
         id -> Uuid,
         oauth_session_id -> Uuid,
         access_token -> Text,
-        created_at -> Timestamptz,
         expires_at -> Nullable<Timestamptz>,
         revoked_at -> Nullable<Timestamptz>,
         first_used_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -602,13 +602,13 @@ diesel::table! {
         oauth_session_id -> Uuid,
         oauth_access_token_id -> Nullable<Uuid>,
         refresh_token -> Text,
-        created_at -> Timestamptz,
         consumed_at -> Nullable<Timestamptz>,
         revoked_at -> Nullable<Timestamptz>,
         next_oauth_refresh_token_id -> Nullable<Uuid>,
         chain_root_oauth_refresh_token_id -> Uuid,
         chain_created_at -> Timestamptz,
         last_seen_at -> Timestamptz,
+        created_at -> Timestamptz,
     }
 }
 
@@ -628,12 +628,12 @@ diesel::table! {
         response_type_code -> Bool,
         response_type_id_token -> Bool,
         consent_required -> Bool,
-        created_at -> Timestamptz,
         fulfilled_at -> Nullable<Timestamptz>,
         cancelled_at -> Nullable<Timestamptz>,
         exchanged_at -> Nullable<Timestamptz>,
         login_hint -> Nullable<Text>,
         locale -> Nullable<Text>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -644,7 +644,6 @@ diesel::table! {
         scope -> Text,
         user_code -> Text,
         device_code -> Text,
-        created_at -> Timestamptz,
         expires_at -> Timestamptz,
         fulfilled_at -> Nullable<Timestamptz>,
         rejected_at -> Nullable<Timestamptz>,
@@ -653,6 +652,7 @@ diesel::table! {
         user_session_id -> Nullable<Uuid>,
         ip_address -> Nullable<Inet>,
         user_agent -> Nullable<Text>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -679,9 +679,9 @@ diesel::table! {
         recovery_policy_version -> Nullable<Int8>,
         device_authorization_event_id -> Nullable<Text>,
         model_generation_ref -> Nullable<Jsonb>,
-        created_at -> Timestamptz,
         expires_at -> Timestamptz,
         revoked_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -701,7 +701,6 @@ diesel::table! {
         pkce_mode -> Text,
         human_name -> Nullable<Text>,
         brand_name -> Nullable<Text>,
-        created_at -> Timestamptz,
         claims_imports -> Nullable<Jsonb>,
         disabled_at -> Nullable<Timestamptz>,
         additional_parameters -> Nullable<Jsonb>,
@@ -715,6 +714,7 @@ diesel::table! {
         on_backchannel_logout -> Nullable<Text>,
         forward_login_hint -> Bool,
         source -> Text,
+        created_at -> Timestamptz,
     }
 }
 
@@ -724,10 +724,10 @@ diesel::table! {
         upstream_oauth_provider_id -> Uuid,
         user_id -> Nullable<Uuid>,
         subject -> Text,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
         human_account_name -> Nullable<Text>,
         unlinked_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 
@@ -750,7 +750,6 @@ diesel::table! {
         state -> Text,
         code_challenge_verifier -> Nullable<Text>,
         nonce -> Nullable<Text>,
-        created_at -> Timestamptz,
         completed_at -> Nullable<Timestamptz>,
         consumed_at -> Nullable<Timestamptz>,
         id_token_claims -> Nullable<Jsonb>,
@@ -758,6 +757,7 @@ diesel::table! {
         extra_callback_parameters -> Nullable<Jsonb>,
         userinfo -> Nullable<Jsonb>,
         unlinked_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -783,7 +783,6 @@ diesel::table! {
     queue_jobs (id) {
         id -> Uuid,
         status -> Text,
-        created_at -> Timestamptz,
         started_at -> Nullable<Timestamptz>,
         started_by -> Nullable<Uuid>,
         completed_at -> Nullable<Timestamptz>,
@@ -796,6 +795,7 @@ diesel::table! {
         next_attempt_id -> Nullable<Uuid>,
         scheduled_at -> Nullable<Timestamptz>,
         schedule_name -> Nullable<Text>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -815,10 +815,10 @@ diesel::table! {
         actor_user_id -> Uuid,
         human_name -> Text,
         scope_list -> Array<Text>,
-        created_at -> Timestamptz,
         revoked_at -> Nullable<Timestamptz>,
         last_active_at -> Nullable<Timestamptz>,
         last_active_ip -> Nullable<Inet>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -827,17 +827,17 @@ diesel::table! {
         id -> Uuid,
         personal_session_id -> Uuid,
         access_token_sha256 -> Bytea,
-        created_at -> Timestamptz,
         expires_at -> Nullable<Timestamptz>,
         revoked_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
     }
 }
 
 diesel::table! {
     policy_data (id) {
         id -> Uuid,
-        created_at -> Timestamptz,
         data -> Jsonb,
+        created_at -> Timestamptz,
     }
 }
 
@@ -851,11 +851,11 @@ diesel::table! {
         status -> Text,
         dedupe_key -> Nullable<Text>,
         correlation_key -> Nullable<Text>,
-        created_at -> Timestamptz,
         scheduled_at -> Timestamptz,
         started_at -> Nullable<Timestamptz>,
         completed_at -> Nullable<Timestamptz>,
         cancelled_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -870,12 +870,12 @@ diesel::table! {
         attempt_count -> Int4,
         status -> Text,
         last_failure -> Nullable<Jsonb>,
-        created_at -> Timestamptz,
         reserved_at -> Nullable<Timestamptz>,
         sent_at -> Nullable<Timestamptz>,
         delivered_at -> Nullable<Timestamptz>,
         failed_at -> Nullable<Timestamptz>,
         next_retry_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -985,8 +985,8 @@ diesel::table! {
         details -> Jsonb,
         ip_address -> Nullable<Inet>,
         user_agent -> Nullable<Text>,
-        created_at -> Timestamptz,
         audit_signature -> Nullable<Text>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -1048,8 +1048,8 @@ diesel::table! {
         locale -> Text,
         subject_template -> Nullable<Text>,
         body_template -> Text,
-        created_at -> Timestamptz,
         published_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
     }
 }
 

@@ -33,9 +33,9 @@ impl<'c> PgPersonalAccessTokenRepository<'c> {
 struct PersonalAccessTokenRow {
     id: Uuid,
     personal_session_id: Uuid,
-    created_at: DateTime<Utc>,
     expires_at: Option<DateTime<Utc>>,
     revoked_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 impl From<PersonalAccessTokenRow> for PersonalAccessToken {
@@ -57,8 +57,8 @@ struct NewPersonalAccessToken {
     id: Uuid,
     personal_session_id: Uuid,
     access_token_sha256: Vec<u8>,
-    created_at: DateTime<Utc>,
     expires_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 #[async_trait]

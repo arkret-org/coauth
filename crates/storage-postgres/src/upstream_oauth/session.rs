@@ -41,11 +41,11 @@ struct SessionLookup {
     id_token: Option<String>,
     id_token_claims: Option<serde_json::Value>,
     userinfo: Option<serde_json::Value>,
-    created_at: DateTime<Utc>,
     completed_at: Option<DateTime<Utc>>,
     consumed_at: Option<DateTime<Utc>>,
     extra_callback_parameters: Option<serde_json::Value>,
     unlinked_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 impl Node<Ulid> for SessionLookup {
@@ -152,11 +152,11 @@ struct NewSession {
     state: String,
     code_challenge_verifier: Option<String>,
     nonce: Option<String>,
-    created_at: DateTime<Utc>,
     completed_at: Option<DateTime<Utc>>,
     consumed_at: Option<DateTime<Utc>>,
     id_token: Option<String>,
     userinfo: Option<serde_json::Value>,
+    created_at: DateTime<Utc>,
 }
 
 #[async_trait]

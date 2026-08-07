@@ -37,7 +37,6 @@ impl<'c> PgOAuthAuthorizationGrantRepository<'c> {
 #[diesel(table_name = oauth_authorization_grants)]
 struct GrantLookup {
     id: Uuid,
-    created_at: DateTime<Utc>,
     cancelled_at: Option<DateTime<Utc>>,
     fulfilled_at: Option<DateTime<Utc>>,
     exchanged_at: Option<DateTime<Utc>>,
@@ -55,6 +54,7 @@ struct GrantLookup {
     locale: Option<String>,
     oauth_client_id: Uuid,
     oauth_session_id: Option<Uuid>,
+    created_at: DateTime<Utc>,
 }
 
 impl TryFrom<GrantLookup> for AuthorizationGrant {

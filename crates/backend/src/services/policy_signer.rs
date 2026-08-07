@@ -189,7 +189,8 @@ mod tests {
             request_id: "req-1".to_owned(),
             decision: AuthzDecision::Allow,
             bound_to: PolicyCheckBoundTo {
-                realm_id: RealmId::new("ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO").unwrap(),
+                realm_id: RealmId::new("ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO")
+                    .unwrap(),
                 actor_id: Did::new("did:web:alice.example").unwrap(),
                 action: "ak.message.create".into(),
                 request_canonical_digest: digest.clone(),

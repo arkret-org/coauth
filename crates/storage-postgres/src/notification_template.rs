@@ -41,8 +41,8 @@ struct TemplateVersionRow {
     locale: String,
     subject_template: Option<String>,
     body_template: String,
-    created_at: DateTime<Utc>,
     published_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 fn channel_from_str(s: &str) -> NotificationChannel {
@@ -80,8 +80,8 @@ struct NewTemplateVersion {
     locale: String,
     subject_template: Option<String>,
     body_template: String,
-    created_at: DateTime<Utc>,
     published_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 #[async_trait]

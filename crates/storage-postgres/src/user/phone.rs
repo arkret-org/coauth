@@ -65,8 +65,8 @@ struct UserPhoneAuthenticationRow {
     id: Uuid,
     user_registration_id: Option<Uuid>,
     phone: String,
-    created_at: DateTime<Utc>,
     completed_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 impl From<UserPhoneAuthenticationRow> for UserPhoneAuthentication {
@@ -98,8 +98,8 @@ struct UserPhoneAuthenticationCodeRow {
     id: Uuid,
     user_phone_authentication_id: Uuid,
     code: String,
-    created_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
 }
 
 impl From<UserPhoneAuthenticationCodeRow> for UserPhoneAuthenticationCode {
@@ -121,8 +121,8 @@ struct NewUserPhoneAuthenticationCode {
     id: Uuid,
     user_phone_authentication_id: Uuid,
     code: String,
-    created_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
 }
 
 #[async_trait]

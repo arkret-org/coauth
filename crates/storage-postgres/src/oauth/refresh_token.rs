@@ -33,7 +33,6 @@ impl<'c> PgOAuthRefreshTokenRepository<'c> {
 struct OAuthRefreshTokenRow {
     id: Uuid,
     refresh_token: String,
-    created_at: DateTime<Utc>,
     consumed_at: Option<DateTime<Utc>>,
     revoked_at: Option<DateTime<Utc>>,
     oauth_access_token_id: Option<Uuid>,
@@ -42,6 +41,7 @@ struct OAuthRefreshTokenRow {
     chain_root_oauth_refresh_token_id: Uuid,
     chain_created_at: DateTime<Utc>,
     last_seen_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
 }
 
 impl TryFrom<OAuthRefreshTokenRow> for RefreshToken {
@@ -93,10 +93,10 @@ struct NewOAuthRefreshToken {
     oauth_session_id: Uuid,
     oauth_access_token_id: Uuid,
     refresh_token: String,
-    created_at: DateTime<Utc>,
     chain_root_oauth_refresh_token_id: Uuid,
     chain_created_at: DateTime<Utc>,
     last_seen_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
 }
 
 /// Row type for cleanup query results via raw SQL
