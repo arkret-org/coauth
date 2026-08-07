@@ -7,8 +7,6 @@ pub mod registry;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use soland_contracts::integration::capability_fanout::CapabilityFanoutBody;
-
 pub use self::registry::ConnectorRegistry;
 
 /// Describes what operations a connector provider supports.
@@ -206,15 +204,6 @@ impl ConnectorProvisionRequest {
     }
 }
 
-/// Request to submit a collaboration capability grant/revoke fan-out payload to
-/// the configured principal system.
-#[derive(Debug, Clone)]
-pub struct PrincipalCapabilityFanoutRequest {
-    idempotency_key: String,
-    raw_payload_digest: String,
-    body: CapabilityFanoutBody,
-}
-
 /// One exact account-status publication delivery to a configured Principal
 /// Server.
 #[derive(Debug, Clone)]
@@ -261,58 +250,6 @@ impl PrincipalAccountStatusPublicationRequest {
     pub fn body(
         &self,
     ) -> &arkret_models_collaboration::account_lifecycle::AccountStatusPublicationRequestBody {
-        &self.body
-    }
-}
-
-impl PrincipalCapabilityFanoutRequest {
-    /// Create a new collaboration capability fan-out request.
-    #[must_use]
-    pub fn new(
-        idempotency_key: String,
-        raw_payload_digest: String,
-        body: CapabilityFanoutBody,
-    ) -> Self {
-        Self {
-            idempotency_key,
-            raw_payload_digest,
-            body,
-        }
-    }
-
-    /// Fan-out operation wire value (`grant` / `revoke`).
-    #[must_use]
-    pub fn operation(&self) -> &str {
-        self.body.operation.as_str()
-    }
-
-    /// Idempotency key for downstream delivery.
-    #[must_use]
-    pub fn idempotency_key(&self) -> &str {
-        &self.idempotency_key
-    }
-
-    /// Standard capability grant id.
-    #[must_use]
-    pub fn capability_grant_id(&self) -> &str {
-        self.body.capability_grant_id.as_str()
-    }
-
-    /// Standard capability grant/revoke event id.
-    #[must_use]
-    pub fn event_id(&self) -> &str {
-        self.body.event_id.as_str()
-    }
-
-    /// Canonical digest of [`Self::body`].
-    #[must_use]
-    pub fn raw_payload_digest(&self) -> &str {
-        &self.raw_payload_digest
-    }
-
-    /// Fan-out body to submit.
-    #[must_use]
-    pub fn body(&self) -> &CapabilityFanoutBody {
         &self.body
     }
 }
@@ -512,14 +449,6 @@ pub trait ConnectorAdmin: Send + Sync {
 
     /// Submit a collaboration capability grant/revoke fan-out payload to the
     /// downstream principal system.
-    async fn submit_collaboration_capability_fanout(
-        &self,
-        _request: &PrincipalCapabilityFanoutRequest,
-    ) -> Result<(), anyhow::Error> {
-        Err(anyhow::anyhow!(
-            "collaboration capability fanout is not implemented by this principal connector"
-        ))
-    }
 
     /// Submit an exact authority-signed account-status publication.
     async fn submit_account_status_publication(
@@ -665,15 +594,6 @@ where
         devices: HashSet<String>,
     ) -> Result<(), anyhow::Error> {
         self.as_admin().sync_devices(handle, devices).await
-    }
-
-    async fn submit_collaboration_capability_fanout(
-        &self,
-        request: &PrincipalCapabilityFanoutRequest,
-    ) -> Result<(), anyhow::Error> {
-        self.as_admin()
-            .submit_collaboration_capability_fanout(request)
-            .await
     }
 
     async fn submit_account_status_publication(

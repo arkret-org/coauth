@@ -7,7 +7,6 @@ use coauth_data::{
     UserRecoverySession,
 };
 use serde::{Deserialize, Serialize};
-use soland_contracts::integration::capability_fanout::CapabilityFanoutBody;
 use ulid::Ulid;
 
 use super::InsertableJob;
@@ -179,119 +178,6 @@ impl Default for ProcessNotificationDeliveriesJob {
 
 impl InsertableJob for ProcessNotificationDeliveriesJob {
     const QUEUE_NAME: &'static str = "process-notification-deliveries";
-}
-
-/// Operation carried by a collaboration capability fan-out job.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum CollaborationCapabilityFanoutOperation {
-    /// Materialize a standard `ak.capability.grant` event.
-    Grant,
-    /// Materialize a standard `ak.capability.revoke` event.
-    Revoke,
-}
-
-impl CollaborationCapabilityFanoutOperation {
-    /// Wire value used in queue payloads and downstream audit metadata.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Grant => "grant",
-            Self::Revoke => "revoke",
-        }
-    }
-}
-
-/// A job to materialize a coauth collaboration capability grant/revoke on
-/// the configured principal server.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CollaborationCapabilityFanoutJob {
-    operation: CollaborationCapabilityFanoutOperation,
-    idempotency_key: String,
-    capability_grant_id: String,
-    event_id: String,
-    raw_payload_digest: String,
-    body: CapabilityFanoutBody,
-}
-
-impl CollaborationCapabilityFanoutJob {
-    /// Create a grant fan-out job.
-    #[must_use]
-    pub fn grant(
-        idempotency_key: String,
-        capability_grant_id: String,
-        grant_event_id: String,
-        raw_payload_digest: String,
-        body: CapabilityFanoutBody,
-    ) -> Self {
-        Self {
-            operation: CollaborationCapabilityFanoutOperation::Grant,
-            idempotency_key,
-            capability_grant_id,
-            event_id: grant_event_id,
-            raw_payload_digest,
-            body,
-        }
-    }
-
-    /// Create a revoke fan-out job.
-    #[must_use]
-    pub fn revoke(
-        idempotency_key: String,
-        capability_grant_id: String,
-        revoke_event_id: String,
-        raw_payload_digest: String,
-        body: CapabilityFanoutBody,
-    ) -> Self {
-        Self {
-            operation: CollaborationCapabilityFanoutOperation::Revoke,
-            idempotency_key,
-            capability_grant_id,
-            event_id: revoke_event_id,
-            raw_payload_digest,
-            body,
-        }
-    }
-
-    /// Fan-out operation.
-    #[must_use]
-    pub const fn operation(&self) -> CollaborationCapabilityFanoutOperation {
-        self.operation
-    }
-
-    /// Idempotency key used for downstream delivery.
-    #[must_use]
-    pub fn idempotency_key(&self) -> &str {
-        &self.idempotency_key
-    }
-
-    /// Standard capability grant id.
-    #[must_use]
-    pub fn capability_grant_id(&self) -> &str {
-        &self.capability_grant_id
-    }
-
-    /// Standard grant/revoke event id.
-    #[must_use]
-    pub fn event_id(&self) -> &str {
-        &self.event_id
-    }
-
-    /// Canonical digest of [`Self::body`].
-    #[must_use]
-    pub fn raw_payload_digest(&self) -> &str {
-        &self.raw_payload_digest
-    }
-
-    /// Fan-out body to submit.
-    #[must_use]
-    pub fn body(&self) -> &CapabilityFanoutBody {
-        &self.body
-    }
-}
-
-impl InsertableJob for CollaborationCapabilityFanoutJob {
-    const QUEUE_NAME: &'static str = "soland-collaboration-capability-fanout";
 }
 
 /// An exact-body durable delivery of an authority-signed account-status

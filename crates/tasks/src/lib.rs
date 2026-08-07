@@ -35,7 +35,6 @@ pub use crate::new_queue::QueueWorker;
 mod account_status_publication;
 mod agent_key_pair_commit;
 mod cleanup;
-mod collaboration_capability;
 mod email;
 mod new_queue;
 mod notifications;
@@ -178,7 +177,6 @@ fn register_all_handlers(w: &mut QueueWorker) {
     w.register_handler::<queue::SyncDevicesJob>();
 
     // Collaboration capability fanout
-    w.register_handler::<queue::CollaborationCapabilityFanoutJob>();
 
     // Account lifecycle publication
     w.register_handler::<queue::AccountStatusPublicationJob>();

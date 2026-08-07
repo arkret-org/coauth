@@ -28,10 +28,6 @@ use coauth_data::{BoxRepositoryFactory, RepositoryAccess};
 use coauth_principal::{
     ConnectorAccountProfile, ConnectorAdmin, ConnectorProvisionRequest,
     PrincipalAccountStatusPublicationRequest, PrincipalAgentKeyPairCommitRequest,
-    PrincipalCapabilityFanoutRequest,
-};
-use soland_contracts::integration::capability_fanout::{
-    CapabilityFanoutBody, CapabilityFanoutResponse,
 };
 use url::Url;
 
@@ -85,34 +81,6 @@ impl DbConnectorAdmin {
         });
         self
     }
-}
-
-#[derive(Clone, Debug)]
-struct CapabilityFanoutTarget {
-    name: String,
-    endpoint: Url,
-    bearer: String,
-}
-
-pub(crate) async fn submit_collaboration_capability_fanout_to_principal_servers(
-    http_client: &reqwest::Client,
-    arkret_config: &ArkretConfig,
-    request: &PrincipalCapabilityFanoutRequest,
-) -> Result<(), anyhow::Error> {
-    let targets = capability_fanout_targets(arkret_config, request.body())?;
-    if targets.is_empty() {
-        tracing::warn!(
-            event_id = request.event_id(),
-            capability_grant_id = request.capability_grant_id(),
-            "collaboration capability fanout has no principal_servers targets"
-        );
-        return Ok(());
-    }
-
-    for target in targets {
-        submit_collaboration_capability_fanout_to_target(http_client, &target, request).await?;
-    }
-    Ok(())
 }
 
 pub(crate) async fn commit_agent_key_pair_to_principal_server(
@@ -180,181 +148,6 @@ async fn submit_agent_key_pair_to_target(
     Ok(())
 }
 
-// RULING: this fanout is a
-// deployment-internal server-to-server contract, NOT a protocol responsibility.
-// The soland-private `POST /_soland/root/authz/capability-fanout` edge is the
-// correct, compliant surface — there is nothing to migrate to and nothing to
-// "fix".
-//
-// coauth issues the collaboration capability fanout in its Auth-Server role: it
-// holds no principal session and signs as the issuing *service* DID, not a
-// logged-in principal device. The protocol path `POST /_arkret/self/events`
-// (submitting a `ak.capability.grant` Event) is gated to `user_session` /
-// `device_proof` / a principal-authorised delegated service signature
-// (service-http-binding.md §2.1 row `self/events` + §189; api-conventions.md
-// requires `ak.session.grant` + DPoP). A bare service with no principal context
-// is, by spec, not an eligible caller of that protocol surface. Separately, the
-// DataEvent submit outcome is eventually-consistent (operations-sync.md §3:
-// a DataEvent enters the accepted set without waiting on a Seal), so the generic
-// events outcome cannot express the synchronous "grant became effective" ack
-// that `validate_capability_fanout_response` below requires.
-//
-// Both facts point to the same ruling: this belongs on soland's own
-// negative-space root per service-http-binding.md §2.1.4(b) (product /
-// deployment-private capability MUST NOT occupy a `/_arkret/*` protocol
-// segment). soland exposes it as `org.arkret.soland.root.authz.capability_fanout
-// .submit`, bearer-gated by the shared `embedded_webvh_registration_bearer`,
-// returning an explicit `authz_state` projection ack. The coauth↔soland S2S
-// trust boundary is registered in `docs/{zh,en}/setup/principal-server.md`.
-// No spec change; no new protocol operation.
-async fn submit_collaboration_capability_fanout_to_target(
-    http_client: &reqwest::Client,
-    target: &CapabilityFanoutTarget,
-    request: &PrincipalCapabilityFanoutRequest,
-) -> Result<(), anyhow::Error> {
-    let url = capability_fanout_url(&target.endpoint);
-    let body_bytes = arkret_canonical::canonical_json_bytes(request.body())
-        .context("canonicalize capability fanout")?;
-    let response = http_client
-        .post(url.clone())
-        .bearer_auth(&target.bearer)
-        .header("idempotency-key", request.idempotency_key())
-        .header(
-            "x-arkret-capability-fanout-digest",
-            request.raw_payload_digest(),
-        )
-        .header("x-arkret-capability-event-id", request.event_id())
-        .header(
-            "x-arkret-capability-grant-id",
-            request.capability_grant_id(),
-        )
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body(body_bytes)
-        .send()
-        .await
-        .with_context(|| format!("send capability fanout to {}", target.name))?;
-    let status = response.status();
-    let bytes = response
-        .bytes()
-        .await
-        .with_context(|| format!("read capability fanout response from {}", target.name))?;
-    if !status.is_success() {
-        let body = String::from_utf8_lossy(&bytes);
-        anyhow::bail!(
-            "principal server {} rejected capability fanout {} with status {}: {}",
-            target.name,
-            request.event_id(),
-            status,
-            truncate_response_body(&body)
-        );
-    }
-    let response: CapabilityFanoutResponse = serde_json::from_slice(&bytes)
-        .with_context(|| format!("decode capability fanout response from {}", target.name))?;
-    validate_capability_fanout_response(request, &response)
-        .with_context(|| format!("validate capability fanout response from {}", target.name))?;
-    tracing::info!(
-        principal_server = target.name,
-        endpoint = %url,
-        operation = request.operation(),
-        event_id = request.event_id(),
-        capability_grant_id = request.capability_grant_id(),
-        "delivered collaboration capability fanout to principal server"
-    );
-    Ok(())
-}
-
-fn capability_fanout_targets(
-    arkret_config: &ArkretConfig,
-    body: &CapabilityFanoutBody,
-) -> Result<Vec<CapabilityFanoutTarget>, anyhow::Error> {
-    principal_server_targets(arkret_config, &body.principal_servers)
-}
-
-fn principal_server_targets(
-    arkret_config: &ArkretConfig,
-    entries: &[serde_json::Value],
-) -> Result<Vec<CapabilityFanoutTarget>, anyhow::Error> {
-    if entries.is_empty() {
-        return Ok(Vec::new());
-    }
-    let mut targets = Vec::with_capacity(entries.len());
-    for entry in entries {
-        let object = entry
-            .as_object()
-            .context("principal_servers[] entries must be objects")?;
-        let name = object
-            .get("name")
-            .and_then(serde_json::Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .context("principal_servers[].name is required")?;
-        let endpoint_raw = object
-            .get("endpoint")
-            .and_then(serde_json::Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .context("principal_servers[].endpoint is required")?;
-        let endpoint = Url::parse(endpoint_raw)
-            .with_context(|| format!("principal server {name} endpoint is invalid"))?;
-        let configured = configured_principal_server(arkret_config, name, &endpoint)
-            .with_context(|| format!("principal server {name} is not configured"))?;
-        let bearer = configured
-            .embedded_webvh_registration_bearer
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .with_context(|| {
-                format!("principal server {name} missing embedded_webvh_registration_bearer")
-            })?
-            .to_owned();
-        targets.push(CapabilityFanoutTarget {
-            name: name.to_owned(),
-            endpoint,
-            bearer,
-        });
-    }
-    Ok(targets)
-}
-
-fn configured_principal_server<'a>(
-    arkret_config: &'a ArkretConfig,
-    name: &str,
-    endpoint: &Url,
-) -> Option<&'a PrincipalServerConfig> {
-    arkret_config
-        .principal_servers
-        .iter()
-        .find(|server| server.name == name && endpoint_matches(&server.endpoint, endpoint))
-        .or_else(|| {
-            arkret_config
-                .principal_servers
-                .iter()
-                .find(|server| server.name == name)
-        })
-        .or_else(|| {
-            arkret_config
-                .principal_servers
-                .iter()
-                .find(|server| endpoint_matches(&server.endpoint, endpoint))
-        })
-}
-
-fn endpoint_matches(left: &Url, right: &Url) -> bool {
-    normalized_endpoint(left) == normalized_endpoint(right)
-}
-
-fn normalized_endpoint(url: &Url) -> String {
-    url.as_str().trim_end_matches('/').to_owned()
-}
-
-fn capability_fanout_url(endpoint: &Url) -> Url {
-    let mut url = endpoint.clone();
-    url.set_path("/_soland/root/authz/capability-fanout");
-    url.set_query(None);
-    url.set_fragment(None);
-    url
-}
-
 fn agent_key_pair_url(endpoint: &Url) -> Url {
     let mut url = endpoint.clone();
     url.set_path("/_arkret/gate/account/agent-key-pair");
@@ -375,43 +168,6 @@ fn validate_agent_key_pair_response(
         response.authorize_event_ref.as_str() == request.authorized_event_id(),
         "response authorize_event_ref mismatch"
     );
-    Ok(())
-}
-
-fn validate_capability_fanout_response(
-    request: &PrincipalCapabilityFanoutRequest,
-    response: &CapabilityFanoutResponse,
-) -> Result<(), anyhow::Error> {
-    anyhow::ensure!(
-        response.event_id == request.event_id(),
-        "response event_id mismatch"
-    );
-    anyhow::ensure!(
-        response.capability_grant_id == request.capability_grant_id(),
-        "response capability_grant_id mismatch"
-    );
-    let returned_event = response
-        .accepted
-        .iter()
-        .chain(response.duplicate.iter())
-        .any(|event_id| event_id == request.event_id());
-    anyhow::ensure!(returned_event, "response did not acknowledge event_id");
-    anyhow::ensure!(response.authz_state.projected, "authz state not projected");
-    match request.operation() {
-        "grant" => {
-            anyhow::ensure!(
-                response.authz_state.effective && !response.authz_state.revoked,
-                "grant fanout did not become effective"
-            );
-        }
-        "revoke" => {
-            anyhow::ensure!(
-                response.authz_state.revoked && !response.authz_state.effective,
-                "revoke fanout did not revoke grant"
-            );
-        }
-        operation => anyhow::bail!("unknown fanout operation {operation}"),
-    }
     Ok(())
 }
 
@@ -518,27 +274,6 @@ impl ConnectorAdmin for DbConnectorAdmin {
         Ok(())
     }
 
-    async fn submit_collaboration_capability_fanout(
-        &self,
-        request: &PrincipalCapabilityFanoutRequest,
-    ) -> Result<(), anyhow::Error> {
-        submit_collaboration_capability_fanout_to_principal_servers(
-            &self.http_client,
-            &self.arkret_config,
-            request,
-        )
-        .await?;
-        tracing::info!(
-            operation = request.operation(),
-            idempotency_key = request.idempotency_key(),
-            capability_grant_id = request.capability_grant_id(),
-            event_id = request.event_id(),
-            raw_payload_digest = request.raw_payload_digest(),
-            "submitted collaboration capability fanout through local principal facade"
-        );
-        Ok(())
-    }
-
     async fn submit_account_status_publication(
         &self,
         request: &PrincipalAccountStatusPublicationRequest,
@@ -615,92 +350,5 @@ impl ConnectorAdmin for DbConnectorAdmin {
 
     async fn unset_displayname(&self, _handle: &str) -> Result<(), anyhow::Error> {
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use coauth_config::PrincipalServerConfig;
-    use serde_json::json;
-    use soland_contracts::integration::capability_fanout::CapabilityFanoutAuthzState;
-
-    use super::*;
-
-    const EVENT: &str = "ak:event:AQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJ";
-    const GRANT: &str = "ak:grant:01970000-0000-7000-8000-000000000002";
-
-    fn arkret_config() -> ArkretConfig {
-        ArkretConfig {
-            principal_servers: vec![PrincipalServerConfig {
-                name: "soland-dev".to_owned(),
-                endpoint: Url::parse("http://127.0.0.1:3322").unwrap(),
-                session_grant_introspection_bearer: None,
-                embedded_webvh_registration_bearer: Some("secret".to_owned()),
-            }],
-            ..ArkretConfig::default()
-        }
-    }
-
-    fn body() -> CapabilityFanoutBody {
-        CapabilityFanoutBody {
-            kind: "org.arkret.coauth.collaboration_capability.fanout.v1".to_owned(),
-            operation: "grant".to_owned(),
-            issuer_service_id: "did:web:coauth.example".to_owned(),
-            event_kind: "ak.capability.grant".to_owned(),
-            event_id: EVENT.to_owned(),
-            capability_grant_id: GRANT.to_owned(),
-            realm_id: arkret_identifiers::RealmId::new(
-                "ak:realm:Abou4xUbbu2euk78u2IcqcwVsLtys28VH7sBZmwrdQOn",
-            )
-            .unwrap(),
-            payload: json!({}),
-            proofs: Vec::new(),
-            principal_servers: vec![json!({
-                "name": "soland-dev",
-                "audience": "soland",
-                "endpoint": "http://127.0.0.1:3322/",
-                "did": "did:web:soland.example"
-            })],
-        }
-    }
-
-    fn request() -> PrincipalCapabilityFanoutRequest {
-        PrincipalCapabilityFanoutRequest::new(
-            "capability-fanout:test".to_owned(),
-            "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned(),
-            body(),
-        )
-    }
-
-    #[test]
-    fn fanout_targets_resolve_payload_principal_servers_to_configured_bearer() {
-        let targets = capability_fanout_targets(&arkret_config(), &body()).unwrap();
-
-        assert_eq!(targets.len(), 1);
-        assert_eq!(targets[0].name, "soland-dev");
-        assert_eq!(
-            capability_fanout_url(&targets[0].endpoint).as_str(),
-            "http://127.0.0.1:3322/_soland/root/authz/capability-fanout"
-        );
-        assert_eq!(targets[0].bearer, "secret");
-    }
-
-    #[test]
-    fn grant_response_must_confirm_effective_authz_state() {
-        let response = CapabilityFanoutResponse {
-            accepted: vec![EVENT.to_owned()],
-            duplicate: Vec::new(),
-            event_id: EVENT.to_owned(),
-            capability_grant_id: GRANT.to_owned(),
-            operation: "grant".to_owned(),
-            authz_state: CapabilityFanoutAuthzState {
-                projected: true,
-                effective: false,
-                revoked: false,
-                grant_present: true,
-            },
-        };
-
-        assert!(validate_capability_fanout_response(&request(), &response).is_err());
     }
 }

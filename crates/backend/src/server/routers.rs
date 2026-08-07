@@ -562,15 +562,10 @@ pub(super) fn build_admin_router(router: Router) -> Router {
         .push(
             Router::with_path("collaboration/capabilities")
                 .get(collaboration_capabilities::list_handler)
-                .post(collaboration_capabilities::create_handler)
                 .push(
                     Router::with_path("templates")
                         .get(collaboration_capabilities::templates_handler),
                 )
-                .push(
-                    Router::with_path("{grant_id}")
-                        .delete(collaboration_capabilities::revoke_handler),
-                ),
         )
         // COA-ORG: organization principal control + delegation management.
         // Wire shapes are in coauth-admin-types::organization_admin + the SDK
