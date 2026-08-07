@@ -1,6 +1,6 @@
 use std::sync::{Arc, OnceLock};
 
-use arkret_identifiers::{DeviceId, Did, GrantId};
+use arkret_identifiers::{DeviceId, Did, SessionGrantId};
 use arkret_models_collaboration::account_lifecycle::{
     AccountLifecycleProof, SessionRevokeOutcome, SessionRevokeRequestBody,
 };
@@ -116,7 +116,7 @@ async fn parse_session_revoke_body(
 
 enum RevokeSelector {
     Current,
-    Grant(GrantId),
+    Grant(SessionGrantId),
     Device(DeviceId),
     All,
 }

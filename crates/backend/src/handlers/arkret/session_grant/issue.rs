@@ -86,12 +86,15 @@ pub async fn issue_session_grant_endpoint(
             // overlay and MUST be omitted (None) for human grants — the prior
             // code wrote these three into `scope_details`, violating its
             // `additionalProperties:false` agent-only schema.
-            let grant_id = arkret_identifiers::GrantId::new(success.persisted_grant_id.clone())
-                .map_err(|e| {
-                    ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
-                        format!("issued grant carried a non-protocol grant_id: {e}"),
-                    ))
-                })?;
+            let grant_id =
+                arkret_identifiers::SessionGrantId::new(success.persisted_grant_id.clone())
+                    .map_err(|e| {
+                        ArkretRouteError::Internal(
+                            Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                                "issued grant carried a non-protocol grant_id: {e}"
+                            )),
+                        )
+                    })?;
             let audience = arkret_identifiers::Did::new(success.session_grant.audience.clone())
                 .map_err(|e| {
                     ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
@@ -382,7 +385,7 @@ async fn issue_pre_registration_handoff_session_grant(
             session_grant: material.grant_jwt,
             expires_at: material.expires_at_timestamp,
             grant_id: Some(
-                arkret_identifiers::GrantId::new(persisted.grant_id.to_string())
+                arkret_identifiers::SessionGrantId::new(persisted.grant_id.to_string())
                     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
             ),
             session_public_key: Some(material.session_public_key),
@@ -576,8 +579,8 @@ async fn issue_agent_key_proof_session_grant(
     // agent overlay (AKP-0008 §4.6); the JWT-internal scope details with the
     // canonical constraint projection are already baked into the minted grant
     // above.
-    let grant_id =
-        arkret_identifiers::GrantId::new(persisted.grant_id.to_string()).map_err(|e| {
+    let grant_id = arkret_identifiers::SessionGrantId::new(persisted.grant_id.to_string())
+        .map_err(|e| {
             ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
                 "issued agent grant carried a non-protocol grant_id: {e}"
             )))
@@ -629,6 +632,11 @@ fn map_session_grant_material_error(error: SessionGrantError) -> ArkretRouteErro
             StatusCode::NOT_FOUND,
             arkret_wire::ErrorCode::PRINCIPAL_UNKNOWN,
             "principal_unknown",
+        ),
+        SessionGrantError::EventAcceptanceUnavailable => ArkretRouteError::coded(
+            StatusCode::SERVICE_UNAVAILABLE,
+            arkret_wire::ErrorCode::FRONTIER_UNAVAILABLE,
+            "session_grant_event_acceptance_unavailable",
         ),
         other => ArkretRouteError::Internal(Box::new(other)),
     }

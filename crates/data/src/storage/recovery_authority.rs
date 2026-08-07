@@ -1,6 +1,6 @@
 //! Durable recovery-authority authorization repository.
 
-use arkret_identifiers::GrantId;
+use arkret_identifiers::SessionGrantId;
 use async_trait::async_trait;
 
 use crate::recovery_authority::{
@@ -38,13 +38,13 @@ pub trait RecoveryAuthorityRepository: Send + Sync {
     async fn lookup_promotion(
         &mut self,
         transaction_id: &str,
-        old_grant_id: &GrantId,
+        old_grant_id: &SessionGrantId,
     ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error>;
 
     /// Look up a promotion by old grant to reject transaction substitution.
     async fn lookup_promotion_by_old_grant(
         &mut self,
-        old_grant_id: &GrantId,
+        old_grant_id: &SessionGrantId,
     ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error>;
 
     /// Insert the first promotion outcome.
@@ -70,11 +70,11 @@ repository_impl!(RecoveryAuthorityRepository:
     async fn lookup_promotion(
         &mut self,
         transaction_id: &str,
-        old_grant_id: &GrantId,
+        old_grant_id: &SessionGrantId,
     ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error>;
     async fn lookup_promotion_by_old_grant(
         &mut self,
-        old_grant_id: &GrantId,
+        old_grant_id: &SessionGrantId,
     ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error>;
     async fn insert_promotion(
         &mut self,

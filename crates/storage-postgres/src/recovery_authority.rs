@@ -88,7 +88,7 @@ impl From<RecoverySessionGrantPromotionRow> for RecoverySessionGrantPromotion {
     fn from(value: RecoverySessionGrantPromotionRow) -> Self {
         Self {
             transaction_id: value.transaction_id,
-            old_grant_id: arkret_identifiers::GrantId::from_uuid(value.old_grant_id),
+            old_grant_id: arkret_identifiers::SessionGrantId::from_uuid(value.old_grant_id),
             transaction_request_digest: value.transaction_request_digest,
             recovery_session_id: value.recovery_session_id,
             replacement_device_id: value.replacement_device_id,
@@ -182,7 +182,7 @@ impl RecoveryAuthorityRepository for PgRecoveryAuthorityRepository<'_> {
     async fn lookup_promotion(
         &mut self,
         transaction_id: &str,
-        old_grant_id: &arkret_identifiers::GrantId,
+        old_grant_id: &arkret_identifiers::SessionGrantId,
     ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error> {
         recovery_session_grant_promotions::table
             .filter(recovery_session_grant_promotions::transaction_id.eq(transaction_id))
@@ -202,7 +202,7 @@ impl RecoveryAuthorityRepository for PgRecoveryAuthorityRepository<'_> {
     )]
     async fn lookup_promotion_by_old_grant(
         &mut self,
-        old_grant_id: &arkret_identifiers::GrantId,
+        old_grant_id: &arkret_identifiers::SessionGrantId,
     ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error> {
         recovery_session_grant_promotions::table
             .filter(recovery_session_grant_promotions::old_grant_id.eq(old_grant_id.uuid()))

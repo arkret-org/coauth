@@ -9,7 +9,9 @@
 
 use arkret_canonical::{canonical_json_bytes, canonical_sha256, format_timestamp_canonical};
 use arkret_identifiers::{EventId, GrantId, RealmId, new_prefixed_uuid7};
-use arkret_models_collaboration::events_payloads::capability::CapabilityGrantPayload;
+use arkret_models_collaboration::events_payloads::capability::{
+    CapabilityGrantCreateBody, CapabilityGrantPayload,
+};
 use arkret_models_collaboration::governance::grant_constraint::{
     CapabilityGrant, IssuerAuthorityRef,
 };
@@ -330,12 +332,6 @@ fn build_grant_fanout_payload(
     let typed_realm_id = RealmId::new(realm_id.to_owned()).map_err(|err| {
         AppError::new(StatusCode::BAD_REQUEST, format!("invalid realm_id: {err}"))
     })?;
-    let typed_grant_id = GrantId::new(capability_grant_id.to_owned()).map_err(|err| {
-        AppError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("invalid generated capability_grant_id: {err}"),
-        )
-    })?;
     let mut grant_value = json!({
         "id": capability_grant_id,
         "schema": "ak.schema.capability.v1",
@@ -366,11 +362,23 @@ fn build_grant_fanout_payload(
             format!("generated capability grant is invalid: {err}"),
         )
     })?;
-    let payload = serde_json::to_value(CapabilityGrantPayload {
-        grant,
-        grant_id: typed_grant_id,
-    })
-    .map_err(|err| {
+    let mut create_value = serde_json::to_value(&grant).map_err(|err| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("capability grant create body serialization failed: {err}"),
+        )
+    })?;
+    create_value
+        .as_object_mut()
+        .expect("CapabilityGrant serializes as an object")
+        .remove("id");
+    let grant: CapabilityGrantCreateBody = serde_json::from_value(create_value).map_err(|err| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("generated capability grant create body is invalid: {err}"),
+        )
+    })?;
+    let payload = serde_json::to_value(CapabilityGrantPayload { grant }).map_err(|err| {
         AppError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("capability grant payload serialization failed: {err}"),

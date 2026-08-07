@@ -88,6 +88,9 @@ pub enum SessionGrantError {
     #[error("principal_unknown")]
     PrincipalUnknown,
 
+    #[error("session_grant_event_acceptance_unavailable")]
+    EventAcceptanceUnavailable,
+
     #[error(transparent)]
     Other(#[from] AnyhowError),
 }

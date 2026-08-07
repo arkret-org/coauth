@@ -1,4 +1,4 @@
-use arkret_identifiers::GrantId;
+use arkret_identifiers::SessionGrantId;
 use chrono::{DateTime, Utc};
 use coauth_data::SessionGrant;
 use salvo::http::StatusCode;
@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 pub struct SessionGrantMaterial {
-    pub grant_id: GrantId,
+    pub grant_id: SessionGrantId,
     pub grant_jwt: String,
     pub session_public_key: String,
     pub credential_class: String,
@@ -39,7 +39,7 @@ pub(crate) struct SessionGrantTarget {
 #[derive(Debug, Serialize)]
 pub(crate) struct SessionGrantRecord {
     id: String,
-    grant_id: GrantId,
+    grant_id: SessionGrantId,
     browser_session_id: Option<String>,
     issuer: String,
     subject: String,

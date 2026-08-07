@@ -1,4 +1,4 @@
-use arkret_identifiers::GrantId;
+use arkret_identifiers::SessionGrantId;
 use chrono::{DateTime, Utc};
 use coauth_oauth_types::scope::Scope;
 use serde::Serialize;
@@ -10,7 +10,7 @@ use crate::{Clock, InvalidTransitionError};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SessionGrant {
     pub id: Ulid,
-    pub grant_id: GrantId,
+    pub grant_id: SessionGrantId,
     pub browser_session_id: Option<Ulid>,
     pub issuer: String,
     pub subject: String,

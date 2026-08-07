@@ -1,6 +1,6 @@
 //! Durable recovery-authority authorization outcomes.
 
-use arkret_identifiers::GrantId;
+use arkret_identifiers::SessionGrantId;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
@@ -54,7 +54,7 @@ pub struct NewRecoveryDeviceAuthorization {
 #[derive(Clone, Debug, PartialEq)]
 pub struct RecoverySessionGrantPromotion {
     pub transaction_id: String,
-    pub old_grant_id: GrantId,
+    pub old_grant_id: SessionGrantId,
     pub transaction_request_digest: String,
     pub recovery_session_id: String,
     pub replacement_device_id: String,
@@ -69,7 +69,7 @@ pub struct RecoverySessionGrantPromotion {
 #[derive(Clone, Debug)]
 pub struct NewRecoverySessionGrantPromotion {
     pub transaction_id: String,
-    pub old_grant_id: GrantId,
+    pub old_grant_id: SessionGrantId,
     pub transaction_request_digest: String,
     pub recovery_session_id: String,
     pub replacement_device_id: String,

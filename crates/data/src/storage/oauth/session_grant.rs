@@ -1,4 +1,4 @@
-use arkret_identifiers::GrantId;
+use arkret_identifiers::SessionGrantId;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_oauth_types::scope::Scope;
@@ -162,7 +162,7 @@ impl<'a> SessionGrantFilter<'a> {
 /// Parameters for creating a persisted Arkret session grant.
 pub struct NewSessionGrant<'a> {
     /// Protocol-visible session grant id (`ak:grant:<uuidv7>`).
-    pub grant_id: GrantId,
+    pub grant_id: SessionGrantId,
     /// Browser session that the grant is bound to.
     pub browser_session_id: Option<Ulid>,
     /// DID issuer of the signed grant.
@@ -225,7 +225,7 @@ pub trait SessionGrantRepository: Send + Sync {
     /// Look up a session grant by protocol-visible grant id.
     async fn lookup_by_grant_id(
         &mut self,
-        grant_id: &GrantId,
+        grant_id: &SessionGrantId,
     ) -> Result<Option<SessionGrant>, Self::Error>;
 
     /// Look up a session grant by its signed JWT.
@@ -294,7 +294,7 @@ repository_impl!(SessionGrantRepository:
 
     async fn lookup_by_grant_id(
         &mut self,
-        grant_id: &GrantId,
+        grant_id: &SessionGrantId,
     ) -> Result<Option<SessionGrant>, Self::Error>;
 
     async fn lookup_by_grant_jwt(

@@ -430,8 +430,8 @@ mod tests {
                 &mut rng,
                 &clock,
                 NewSessionGrant {
-                    grant_id: arkret_identifiers::GrantId::new(
-                        "ak:grant:0196419b-0000-7000-8000-000000000201".to_owned(),
+                    grant_id: arkret_identifiers::SessionGrantId::new(
+                        "ak:session_grant:0196419b-0000-8000-8000-000000000201".to_owned(),
                     )
                     .unwrap(),
                     browser_session_id: Some(user_session.id),
@@ -636,8 +636,8 @@ mod tests {
                 &mut rng,
                 &clock,
                 NewSessionGrant {
-                    grant_id: arkret_identifiers::GrantId::new(
-                        "ak:grant:0196419b-0000-7000-8000-000000000202".to_owned(),
+                    grant_id: arkret_identifiers::SessionGrantId::new(
+                        "ak:session_grant:0196419b-0000-8000-8000-000000000202".to_owned(),
                     )
                     .unwrap(),
                     browser_session_id: Some(browser_session.id),

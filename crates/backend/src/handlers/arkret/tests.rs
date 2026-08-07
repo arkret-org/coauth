@@ -916,8 +916,8 @@ fn session_grant_record_exposes_metadata_without_secrets() {
     let now = Utc::now();
     let grant = SessionGrant {
         id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
-        grant_id: arkret_identifiers::GrantId::new(
-            "ak:grant:0196419b-0000-7000-8000-000000000205".to_owned(),
+        grant_id: arkret_identifiers::SessionGrantId::new(
+            "ak:session_grant:0196419b-0000-8000-8000-000000000205".to_owned(),
         )
         .unwrap(),
         browser_session_id: Some(Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap()),
@@ -963,8 +963,8 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
     let mut user = User::samples(now, &mut rng).into_iter().next().unwrap();
     let mut grant = SessionGrant {
         id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
-        grant_id: arkret_identifiers::GrantId::new(
-            "ak:grant:0196419b-0000-7000-8000-000000000206".to_owned(),
+        grant_id: arkret_identifiers::SessionGrantId::new(
+            "ak:session_grant:0196419b-0000-8000-8000-000000000206".to_owned(),
         )
         .unwrap(),
         browser_session_id: Some(Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap()),

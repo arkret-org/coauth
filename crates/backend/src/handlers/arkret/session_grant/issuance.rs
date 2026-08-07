@@ -1,5 +1,5 @@
 use arkret_canonical::{format_timestamp_canonical, normalize_timestamp_canonical};
-use arkret_identifiers::{DeviceId, GrantId, new_prefixed_uuid7};
+use arkret_identifiers::{DeviceId, SessionGrantId};
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
 #[cfg(test)]
@@ -18,9 +18,12 @@ use ulid::Ulid;
 use super::*;
 use crate::handlers::arkret::*;
 
-fn new_session_grant_id() -> GrantId {
-    GrantId::new(new_prefixed_uuid7("ak:grant:"))
-        .expect("generated ak:grant uuidv7 id must be valid")
+fn new_session_grant_id() -> Result<SessionGrantId, SessionGrantError> {
+    // A SessionGrantId may only be obtained from an exact ak.session.grant
+    // Event listed in the Principal Server's durable accepted[] outcome. The
+    // old local UUIDv7 minting path is intentionally fail-closed until the
+    // delegated-service /_arkret/self/events admission client is wired here.
+    Err(SessionGrantError::EventAcceptanceUnavailable)
 }
 
 // Test-only convenience wrapper (re-exported under `#[cfg(test)]` from the
@@ -127,7 +130,7 @@ fn issue_session_grant_for_audience_inner(
 
     let now = normalize_timestamp_canonical(clock.now());
     let expires_at = now + arkret_config.session_grant_ttl;
-    let grant_id = new_session_grant_id();
+    let grant_id = new_session_grant_id()?;
     let device_id = primary_device_id_from_tokens(scopes.iter().map(String::as_str));
     let issuer = issuer_did_for(arkret_config);
     let cnf = SessionGrantCnf {
@@ -136,8 +139,10 @@ fn issue_session_grant_for_audience_inner(
     let payload = SignedSessionGrantClaims {
         kind: "ak.session.grant".to_owned(),
         grant_id: grant_id.clone(),
+        issuer: issuer.clone(),
         subject: arkret_identifiers::Did::new(subject.clone())
             .map_err(|_| SessionGrantError::PrincipalUnknown)?,
+        session_public_key: session_public_key.clone(),
         audience: audience.clone(),
         scopes: scopes.clone(),
         not_before: now,
@@ -189,16 +194,19 @@ pub(crate) fn mint_promoted_recovery_session_grant(
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     let now = normalize_timestamp_canonical(clock.now());
     let expires_at = now + arkret_config.session_grant_ttl;
-    let grant_id = new_session_grant_id();
+    let grant_id = new_session_grant_id()?;
     let device_scope = format!(
         "urn:arkret:client:device:{}",
         device_binding.device_id.as_str()
     );
     let scopes = vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(), device_scope];
+    let issuer = issuer_did_for(arkret_config);
     let payload = SignedSessionGrantClaims {
         kind: "ak.session.grant".to_owned(),
         grant_id: grant_id.clone(),
+        issuer: issuer.clone(),
         subject: prior_claims.subject.clone(),
+        session_public_key: session_public_key.clone(),
         audience: prior_claims.audience.clone(),
         scopes: scopes.clone(),
         not_before: now,
@@ -234,7 +242,7 @@ pub(crate) fn mint_promoted_recovery_session_grant(
         model_generation_ref: Some(model_generation_ref),
         expires_at: format_timestamp_canonical(expires_at),
         expires_at_timestamp: expires_at,
-        issuer: issuer_did_for(arkret_config).to_string(),
+        issuer: issuer.to_string(),
         subject: prior_claims.subject.as_str().to_owned(),
         device_id: Some(device_binding.device_id.as_str().to_owned()),
         audience: prior_claims.audience.clone(),
@@ -347,7 +355,7 @@ pub(crate) fn mint_agent_session_grant(
     let expires_at = normalize_timestamp_canonical(expires_at);
     ensure_principal_did_method_allowed(arkret_config, agent_id)?;
     let issuer = issuer_did_for(arkret_config);
-    let grant_id = new_session_grant_id();
+    let grant_id = new_session_grant_id()?;
     let cnf = SessionGrantCnf {
         jkt: dpop_jkt.clone(),
     };
@@ -356,8 +364,10 @@ pub(crate) fn mint_agent_session_grant(
     let payload = SignedSessionGrantClaims {
         kind: "ak.session.grant".to_owned(),
         grant_id: grant_id.clone(),
+        issuer: issuer.clone(),
         subject: arkret_identifiers::Did::new(agent_id.to_owned())
             .map_err(|_| SessionGrantError::PrincipalUnknown)?,
+        session_public_key: session_public_key.clone(),
         audience: audience.clone(),
         scopes: scopes.clone(),
         not_before: now,
@@ -407,4 +417,17 @@ fn compact_agent_scope_details(mut scope_details: serde_json::Value) -> serde_js
         object.remove("audience");
     }
     scope_details
+}
+
+#[cfg(test)]
+mod acceptance_tests {
+    use super::*;
+
+    #[test]
+    fn local_session_grant_id_minting_is_fail_closed() {
+        assert!(matches!(
+            new_session_grant_id(),
+            Err(SessionGrantError::EventAcceptanceUnavailable)
+        ));
+    }
 }

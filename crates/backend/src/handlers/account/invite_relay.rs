@@ -390,10 +390,6 @@ mod tests {
 
     fn payload() -> serde_json::Value {
         arkret_models_collaboration::governance::membership_invite::InviteCreatePayload::new(
-            arkret_identifiers::InviteId::new(
-                "ak:invite:0196419b-0000-7000-8000-000000000001",
-            )
-            .unwrap(),
             arkret_identifiers::Did::new("did:web:holder").unwrap(),
             arkret_models_collaboration::governance::invite_addressing::InviteDeliveryTarget::principal_server(
                 arkret_identifiers::Did::new("did:web:auth.example").unwrap(),

@@ -1,4 +1,4 @@
-use arkret_identifiers::GrantId;
+use arkret_identifiers::SessionGrantId;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::oauth::{NewSessionGrant, SessionGrantFilter, SessionGrantRepository};
@@ -81,7 +81,7 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
 
         Ok(Self {
             id,
-            grant_id: GrantId::from_uuid(value.grant_id),
+            grant_id: SessionGrantId::from_uuid(value.grant_id),
             browser_session_id: value.user_session_id.map(Into::into),
             issuer: value.issuer,
             subject: value.subject,
@@ -293,7 +293,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
     #[tracing::instrument(name = "db.oauth_session_grant.lookup_by_grant_id", skip_all, err)]
     async fn lookup_by_grant_id(
         &mut self,
-        grant_id: &GrantId,
+        grant_id: &SessionGrantId,
     ) -> Result<Option<SessionGrant>, Self::Error> {
         let row = oauth_session_grants::table
             .filter(oauth_session_grants::grant_id.eq(grant_id.uuid()))
