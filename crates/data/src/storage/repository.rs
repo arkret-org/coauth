@@ -31,7 +31,7 @@ use crate::user::{
     BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository, UserPasswordRepository,
     UserPhoneRepository, UserPrimaryHandlePreferenceRepository, UserRecoveryRepository,
     UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
-    UserTermsRepository, UserTotpRepository,
+    UserTermsRepository,
 };
 use crate::workflow::WorkflowRepository;
 
@@ -238,9 +238,6 @@ pub trait RepositoryAccess: Send {
     /// Get an [`UserTermsRepository`]
     fn user_terms<'c>(&'c mut self) -> Box<dyn UserTermsRepository<Error = Self::Error> + 'c>;
 
-    /// Get an [`UserTotpRepository`]
-    fn user_totp<'c>(&'c mut self) -> Box<dyn UserTotpRepository<Error = Self::Error> + 'c>;
-
     /// Get a [`UserPrimaryHandlePreferenceRepository`].
     fn user_primary_handle_preference<'c>(
         &'c mut self,
@@ -371,7 +368,7 @@ mod impls {
         BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository,
         UserPasswordRepository, UserPhoneRepository, UserPrimaryHandlePreferenceRepository,
         UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
-        UserTermsRepository, UserTotpRepository,
+        UserTermsRepository,
     };
     use crate::workflow::WorkflowRepository;
     use crate::{MapErr, Repository, RepositoryTransaction};
@@ -565,10 +562,6 @@ mod impls {
 
         fn user_terms<'c>(&'c mut self) -> Box<dyn UserTermsRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(self.inner.user_terms(), &mut self.mapper))
-        }
-
-        fn user_totp<'c>(&'c mut self) -> Box<dyn UserTotpRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.user_totp(), &mut self.mapper))
         }
 
         fn user_primary_handle_preference<'c>(
@@ -845,10 +838,6 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn PrincipalDidRepository<Error = Self::Error> + 'c> {
             (**self).principal_did()
-        }
-
-        fn user_totp<'c>(&'c mut self) -> Box<dyn UserTotpRepository<Error = Self::Error> + 'c> {
-            (**self).user_totp()
         }
 
         fn user_primary_handle_preference<'c>(

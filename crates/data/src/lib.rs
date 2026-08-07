@@ -207,7 +207,7 @@ pub use self::users::{
     UserEmailAuthentication, UserEmailAuthenticationCode, UserEmailPatch, UserPatch, UserPhone,
     UserPhoneAuthentication, UserPhoneAuthenticationCode, UserPrimaryHandlePreference, UserProfile,
     UserProfilePatch, UserRecoverySession, UserRecoveryTicket, UserRegistration,
-    UserRegistrationPassword, UserRegistrationToken, UserTotpConfig, VerifiedUserHandleClaim,
+    UserRegistrationPassword, UserRegistrationToken, VerifiedUserHandleClaim,
     parse_locale_preference_patch,
 };
 pub use self::utils::{BoxClock, BoxRng};

@@ -1,8 +1,4 @@
-use anyhow::Context;
-use coauth_data::oauth::OAuthAuthorizationGrantRepository;
-use coauth_data::upstream_oauth::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository};
-use coauth_data::{PostAuthAction, RepositoryAccess, UrlBuilder};
-use coauth_templates::{PostAuthContext, PostAuthContextInner};
+use coauth_data::{PostAuthAction, UrlBuilder};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
@@ -64,68 +60,6 @@ impl OptionalPostAuthAction {
         );
         salvo::writing::Redirect::other(&url)
     }
-
-    #[must_use]
-    pub fn go_next(&self, url_builder: &UrlBuilder) -> salvo::writing::Redirect {
-        self.go_next_or_default(url_builder, "/")
-    }
-
-    pub async fn load_context<'a>(
-        &'a self,
-        repo: &'a mut impl RepositoryAccess,
-    ) -> anyhow::Result<Option<PostAuthContext>> {
-        let Some(action) = self.post_auth_action.clone() else {
-            return Ok(None);
-        };
-        let ctx = match action {
-            PostAuthAction::ContinueAuthorizationGrant { id } => {
-                let grant = repo
-                    .oauth_authorization_grant()
-                    .lookup(id)
-                    .await?
-                    .context("Failed to load authorization grant")?;
-                let grant = Box::new(grant);
-                PostAuthContextInner::ContinueAuthorizationGrant { grant }
-            }
-
-            PostAuthAction::ContinueDeviceCodeGrant { id } => {
-                let grant = repo
-                    .oauth_device_code_grant()
-                    .lookup(id)
-                    .await?
-                    .context("Failed to load device code grant")?;
-                let grant = Box::new(grant);
-                PostAuthContextInner::ContinueDeviceCodeGrant { grant }
-            }
-
-            PostAuthAction::ChangePassword => PostAuthContextInner::ChangePassword,
-
-            PostAuthAction::LinkUpstream { id } => {
-                let link = repo
-                    .upstream_oauth_link()
-                    .lookup(id)
-                    .await?
-                    .context("Failed to load upstream OAuth link")?;
-
-                let provider = repo
-                    .upstream_oauth_provider()
-                    .lookup(link.provider_id)
-                    .await?
-                    .context("Failed to load upstream OAuth provider")?;
-
-                let provider = Box::new(provider);
-                let link = Box::new(link);
-                PostAuthContextInner::LinkUpstream { provider, link }
-            }
-
-            PostAuthAction::ManageAccount { .. } => PostAuthContextInner::ManageAccount,
-        };
-
-        Ok(Some(PostAuthContext {
-            params: action.clone(),
-            ctx,
-        }))
-    }
 }
 
 /// Compute the relative URL for a `PostAuthAction`.
@@ -156,14 +90,4 @@ pub fn post_auth_action_relative_url(action: &PostAuthAction, url_builder: &UrlB
             }
         }
     }
-}
-
-/// Produce a redirect response for a `PostAuthAction`.
-#[must_use]
-pub fn post_auth_action_redirect(
-    action: &PostAuthAction,
-    url_builder: &UrlBuilder,
-) -> salvo::writing::Redirect {
-    let url = post_auth_action_relative_url(action, url_builder);
-    salvo::writing::Redirect::other(&url)
 }

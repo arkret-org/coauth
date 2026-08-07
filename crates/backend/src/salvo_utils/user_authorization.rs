@@ -12,16 +12,12 @@ use http::{HeaderMap, HeaderValue, StatusCode};
 use salvo::extract::{Extractible, Metadata};
 use salvo::prelude::*;
 use serde::Deserialize;
-use serde::de::DeserializeOwned;
 use thiserror::Error;
 
 #[derive(Debug, Deserialize)]
-struct AuthorizedForm<F> {
+struct AuthorizedForm {
     #[serde(default)]
     access_token: Option<String>,
-
-    #[serde(flatten)]
-    inner: F,
 }
 
 #[derive(Debug)]
@@ -58,12 +54,11 @@ impl AccessToken {
 }
 
 #[derive(Debug)]
-pub struct UserAuthorization<F = ()> {
+pub struct UserAuthorization {
     access_token: AccessToken,
-    form: Option<F>,
 }
 
-impl<F: Send> UserAuthorization<F> {
+impl UserAuthorization {
     /// Verify a user authorization and return the session.
     ///
     /// `required_scopes` is an optional list of scopes the caller must have
@@ -259,7 +254,7 @@ where
     }
 }
 
-impl<F: DeserializeOwned + Send> UserAuthorization<F> {
+impl UserAuthorization {
     /// Extract user authorization from a Salvo request
     pub async fn extract_from_request(req: &mut Request) -> Result<Self, UserAuthorizationError> {
         // Take the Authorization header
@@ -289,15 +284,15 @@ impl<F: DeserializeOwned + Send> UserAuthorization<F> {
         let is_form = is_salvo_form_content_type(content_type);
 
         // Take the form value
-        let (token_from_form, form) = if is_form {
-            match req.parse_form::<AuthorizedForm<F>>().await {
-                Ok(form) => (form.access_token, Some(form.inner)),
+        let token_from_form = if is_form {
+            match req.parse_form::<AuthorizedForm>().await {
+                Ok(form) => form.access_token,
                 Err(e) => {
                     return Err(UserAuthorizationError::BadForm(e.to_string()));
                 }
             }
         } else {
-            (None, None)
+            None
         };
 
         let access_token = match (token_from_header, token_from_form) {
@@ -308,7 +303,7 @@ impl<F: DeserializeOwned + Send> UserAuthorization<F> {
             (None, None) => AccessToken::None,
         };
 
-        Ok(UserAuthorization { access_token, form })
+        Ok(UserAuthorization { access_token })
     }
 }
 
@@ -321,10 +316,7 @@ fn is_salvo_form_content_type(content_type: &str) -> bool {
 static USER_AUTHORIZATION_METADATA: LazyLock<Metadata> =
     LazyLock::new(|| Metadata::new("UserAuthorization"));
 
-impl<'ex, F> Extractible<'ex> for UserAuthorization<F>
-where
-    F: DeserializeOwned + Send,
-{
+impl<'ex> Extractible<'ex> for UserAuthorization {
     fn metadata() -> &'static Metadata {
         &USER_AUTHORIZATION_METADATA
     }

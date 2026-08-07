@@ -26,7 +26,6 @@ mod registration;
 mod registration_token;
 mod session;
 mod terms;
-mod totp;
 
 #[cfg(test)]
 mod tests;
@@ -41,7 +40,6 @@ pub use self::registration::PgUserRegistrationRepository;
 pub use self::registration_token::PgUserRegistrationTokenRepository;
 pub use self::session::PgBrowserSessionRepository;
 pub use self::terms::PgUserTermsRepository;
-pub use self::totp::PgUserTotpRepository;
 
 const BOOTSTRAP_ADMIN_LOCK_ID: i64 = 0x7061_7369_6f6e_4144;
 

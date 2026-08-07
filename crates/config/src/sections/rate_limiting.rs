@@ -44,20 +44,6 @@ pub struct RateLimitingConfig {
     /// of principal DIDs on accounts.
     #[serde(default)]
     pub did_binding: DidBindingRateLimitingConfig,
-
-    /// MFA / TOTP verification rate limits. Tightened against
-    /// brute-force attempts on the second-factor input.
-    #[serde(default)]
-    pub mfa_totp: MfaTotpRateLimitingConfig,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
-pub struct MfaTotpRateLimitingConfig {
-    /// Max TOTP attempts per `account_id` over a sliding window.
-    /// Default: 5 attempts per 15 minutes — matches NIST SP 800-63B
-    /// guidance for time-based OTP throttling.
-    #[serde(default = "default_mfa_totp_per_account")]
-    pub per_account: RateLimiterConfiguration,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
@@ -365,10 +351,6 @@ impl ConfigurationSection for RateLimitingConfig {
             return Err(error_on_nested_field(error, "did_binding", "per_account").into());
         }
 
-        if let Some(error) = error_on_limiter(&self.mfa_totp.per_account) {
-            return Err(error_on_nested_field(error, "mfa_totp", "per_account").into());
-        }
-
         Ok(())
     }
 }
@@ -517,15 +499,6 @@ fn default_identity_resolution_per_ip() -> RateLimiterConfiguration {
     }
 }
 
-fn default_mfa_totp_per_account() -> RateLimiterConfiguration {
-    // 5 attempts every 15 minutes (900 seconds): the burst is 5 and the
-    // replenishment rate is 5 / 900 ≈ 0.00555 actions per second.
-    RateLimiterConfiguration {
-        burst: NonZeroU32::new(5).unwrap(),
-        per_second: 5.0 / 900.0,
-    }
-}
-
 fn default_did_binding_per_ip() -> RateLimiterConfiguration {
     RateLimiterConfiguration {
         burst: NonZeroU32::new(5).unwrap(),
@@ -551,15 +524,6 @@ impl Default for RateLimitingConfig {
             directory_lookup: DirectoryLookupRateLimitingConfig::default(),
             identity_resolution: IdentityResolutionRateLimitingConfig::default(),
             did_binding: DidBindingRateLimitingConfig::default(),
-            mfa_totp: MfaTotpRateLimitingConfig::default(),
-        }
-    }
-}
-
-impl Default for MfaTotpRateLimitingConfig {
-    fn default() -> Self {
-        MfaTotpRateLimitingConfig {
-            per_account: default_mfa_totp_per_account(),
         }
     }
 }

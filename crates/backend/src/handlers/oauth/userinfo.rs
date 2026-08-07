@@ -123,7 +123,7 @@ enum UserinfoOutcome {
 }
 
 async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutcome, RouteError> {
-    let user_authorization: UserAuthorization<()> = UserAuthorization::<()>::extract(req, depot)
+    let user_authorization = UserAuthorization::extract(req, depot)
         .await
         .map_err(|e| match e {
             crate::salvo_utils::user_authorization::UserAuthorizationError::Internal(e) => {

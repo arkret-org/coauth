@@ -45,6 +45,7 @@ pub struct LifecycleManager {
     hard_timeout: Duration,
     /// Bound on how long `join_all(reload_handlers)` may run before we
     /// log a warning and continue accepting traffic.
+    #[cfg(unix)]
     reload_timeout: Duration,
     reload_handlers: Vec<Box<dyn Fn() -> BoxFuture<'static, ()>>>,
 }
@@ -94,6 +95,7 @@ impl LifecycleManager {
         let soft_shutdown_token = hard_shutdown_token.child_token();
         let timeout = Duration::from_mins(1);
         let hard_timeout = Duration::from_secs(30);
+        #[cfg(unix)]
         let reload_timeout = Duration::from_secs(30);
         let task_tracker = TaskTracker::new();
 
@@ -119,6 +121,7 @@ impl LifecycleManager {
             sighup,
             timeout,
             hard_timeout,
+            #[cfg(unix)]
             reload_timeout,
             reload_handlers: Vec::new(),
         })

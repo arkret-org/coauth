@@ -65,17 +65,6 @@ impl NewAdminOperationLog {
         self
     }
 
-    /// Attach a base64url-unpadded detached signature over the
-    /// canonical-JSON form of the row. Optional during the staged
-    /// rollout; new signed writers should prefer inserting first and
-    /// then calling [`AuditRepository::set_admin_operation_signature`]
-    /// so the signature can bind repository-generated metadata.
-    #[must_use]
-    pub fn with_audit_signature(mut self, signature: impl Into<String>) -> Self {
-        self.audit_signature = Some(signature.into());
-        self
-    }
-
     /// The detached audit-row signature, if any.
     #[must_use]
     pub fn audit_signature(&self) -> Option<&str> {

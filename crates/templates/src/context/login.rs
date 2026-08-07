@@ -84,11 +84,6 @@ impl LoginContext {
         Self { form, ..self }
     }
 
-    /// Obtain a mutable reference to the form state.
-    pub fn form_state_mut(&mut self) -> &mut FormState<LoginFormField> {
-        &mut self.form
-    }
-
     /// Attach upstream OAuth providers to the context.
     #[must_use]
     pub fn with_upstream_providers(self, providers: Vec<UpstreamOAuthProvider>) -> Self {

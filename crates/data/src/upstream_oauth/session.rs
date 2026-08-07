@@ -263,15 +263,6 @@ impl UpstreamOAuthAuthorizationSessionState {
     pub fn is_consumed(&self) -> bool {
         matches!(self, Self::Consumed { .. })
     }
-
-    /// coauth extension: returns `true` if the upstream OAuth authorization
-    /// session state is [`Unlinked`].
-    ///
-    /// [`Unlinked`]: UpstreamOAuthAuthorizationSessionState::Unlinked
-    #[must_use]
-    pub fn is_unlinked(&self) -> bool {
-        matches!(self, Self::Unlinked { .. })
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

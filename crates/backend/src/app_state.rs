@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use coauth_config::ArkretConfig;
-use coauth_data::{
-    AppVersion, BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, RepositoryFactory,
-    SiteConfig, UrlBuilder,
-};
+use coauth_data::{AppVersion, BoxRepositoryFactory, RepositoryFactory, SiteConfig, UrlBuilder};
 use coauth_i18n::Translator;
 use coauth_keystore::{Encrypter, Keystore};
 use coauth_policy::PolicyFactory;

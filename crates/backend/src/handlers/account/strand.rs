@@ -9,10 +9,10 @@
 use chrono::Utc;
 use coauth_data::new_id;
 use coauth_data::strand::{
-    AuthenticatorType as DomainAuthenticatorType, IdentificationField as DomainIdentificationField,
-    PromptField as DomainPromptField, PromptFieldType as DomainPromptFieldType,
-    StageChallenge as DomainStageChallenge, StageOutcome, StageSubmission as DomainStageSubmission,
-    StageValidationError as DomainStageValidationError, StrandSession, StrandSessionStatus,
+    IdentificationField as DomainIdentificationField, PromptField as DomainPromptField,
+    PromptFieldType as DomainPromptFieldType, StageChallenge as DomainStageChallenge, StageOutcome,
+    StageSubmission as DomainStageSubmission, StageValidationError as DomainStageValidationError,
+    StrandSession, StrandSessionStatus,
 };
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
@@ -50,31 +50,6 @@ impl From<DomainIdentificationField> for IdentificationField {
             DomainIdentificationField::Username => Self::Username,
             DomainIdentificationField::Email => Self::Email,
             DomainIdentificationField::Phone => Self::Phone,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum AuthenticatorType {
-    Totp,
-    WebAuthn,
-}
-
-impl From<DomainAuthenticatorType> for AuthenticatorType {
-    fn from(value: DomainAuthenticatorType) -> Self {
-        match value {
-            DomainAuthenticatorType::Totp => Self::Totp,
-            DomainAuthenticatorType::WebAuthn => Self::WebAuthn,
-        }
-    }
-}
-
-impl From<AuthenticatorType> for DomainAuthenticatorType {
-    fn from(value: AuthenticatorType) -> Self {
-        match value {
-            AuthenticatorType::Totp => Self::Totp,
-            AuthenticatorType::WebAuthn => Self::WebAuthn,
         }
     }
 }
@@ -153,9 +128,6 @@ pub enum StrandChallenge {
     Prompt {
         fields: Vec<PromptField>,
     },
-    AuthenticatorValidate {
-        allowed_types: Vec<AuthenticatorType>,
-    },
     EnrollmentToken {
         required: bool,
     },
@@ -190,11 +162,6 @@ impl From<DomainStageChallenge> for StrandChallenge {
             DomainStageChallenge::Prompt { fields } => Self::Prompt {
                 fields: fields.into_iter().map(Into::into).collect(),
             },
-            DomainStageChallenge::AuthenticatorValidate { allowed_types } => {
-                Self::AuthenticatorValidate {
-                    allowed_types: allowed_types.into_iter().map(Into::into).collect(),
-                }
-            }
             DomainStageChallenge::EnrollmentToken { required } => {
                 Self::EnrollmentToken { required }
             }
@@ -266,10 +233,6 @@ pub enum StrandStageRequestBody {
         #[salvo(schema(value_type = Object))]
         data: Value,
     },
-    AuthenticatorValidate {
-        authenticator_type: AuthenticatorType,
-        code: String,
-    },
     EnrollmentToken {
         token: String,
     },
@@ -303,13 +266,6 @@ impl From<StrandStageRequestBody> for DomainStageSubmission {
             StrandStageRequestBody::Captcha { token } => Self::Captcha { token },
             StrandStageRequestBody::Consent { granted } => Self::Consent { granted },
             StrandStageRequestBody::Prompt { data } => Self::Prompt { data },
-            StrandStageRequestBody::AuthenticatorValidate {
-                authenticator_type,
-                code,
-            } => Self::AuthenticatorValidate {
-                authenticator_type: authenticator_type.into(),
-                code,
-            },
             StrandStageRequestBody::EnrollmentToken { token } => Self::EnrollmentToken { token },
         }
     }

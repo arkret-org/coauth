@@ -137,30 +137,6 @@ impl DispatchNotificationJob {
         Self::ContactVerification { target, language }
     }
 
-    /// Create a new notification dispatch job for email verification.
-    #[must_use]
-    pub fn email_authentication_code(
-        user_email_authentication: &UserEmailAuthentication,
-        language: String,
-    ) -> Self {
-        Self::EmailAuthenticationCode {
-            user_email_authentication_id: user_email_authentication.id,
-            language,
-        }
-    }
-
-    /// Create a new notification dispatch job for SMS verification.
-    #[must_use]
-    pub fn sms_authentication_code(
-        user_phone_authentication: &UserPhoneAuthentication,
-        language: String,
-    ) -> Self {
-        Self::SmsAuthenticationCode {
-            user_phone_authentication_id: user_phone_authentication.id,
-            language,
-        }
-    }
-
     /// Create a new notification dispatch job for account recovery.
     #[must_use]
     pub fn account_recovery(user_recovery_session: &UserRecoverySession) -> Self {

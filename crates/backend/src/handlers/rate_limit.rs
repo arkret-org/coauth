@@ -102,12 +102,6 @@ pub enum IdentityResolutionLimitedError {
 }
 
 #[derive(Debug, Clone, Copy, thiserror::Error)]
-pub enum MfaTotpLimitedError {
-    #[error("Too many TOTP attempts for account {0}")]
-    Account(Ulid),
-}
-
-#[derive(Debug, Clone, Copy, thiserror::Error)]
 #[error("Account {account} is locked out after {failures} consecutive failed password logins")]
 pub struct LoginLockedOutError {
     pub account: Ulid,
@@ -408,7 +402,6 @@ struct LimiterInner {
     directory_lookup_config: RateLimiterConfiguration,
     did_binding_per_requester: KeyedLimiter<RequesterFingerprint>,
     did_binding_per_account: KeyedLimiter<Ulid>,
-    mfa_totp_per_account: KeyedLimiter<Ulid>,
     failed_login: FailedLoginTracker,
 }
 
@@ -458,7 +451,6 @@ impl LimiterInner {
             directory_lookup_config: config.directory_lookup.per_ip,
             did_binding_per_requester: KeyedLimiter::from_config(&config.did_binding.per_ip)?,
             did_binding_per_account: KeyedLimiter::from_config(&config.did_binding.per_account)?,
-            mfa_totp_per_account: KeyedLimiter::from_config(&config.mfa_totp.per_account)?,
             failed_login: FailedLoginTracker::new(&config.login.lockout),
         })
     }
@@ -868,21 +860,6 @@ impl Limiter {
             return Err(DidBindingLimitedError::Account(account_id));
         }
 
-        Ok(())
-    }
-
-    // -----------------------------------------------------------------------
-    // MFA / TOTP attempts
-    // -----------------------------------------------------------------------
-
-    /// Check whether another TOTP verification attempt may proceed for
-    /// `account_id`. Tightened (5 attempts / 15 min by default) to make
-    /// brute-forcing the 6-digit code infeasible — at one attempt every
-    /// 3 minutes the expected time-to-guess is 200 days.
-    pub async fn check_mfa_totp(&self, account_id: Ulid) -> Result<(), MfaTotpLimitedError> {
-        if !self.inner.mfa_totp_per_account.check(&account_id).await {
-            return Err(MfaTotpLimitedError::Account(account_id));
-        }
         Ok(())
     }
 }

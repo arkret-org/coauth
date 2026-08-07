@@ -88,12 +88,6 @@ impl UserRegistrationSessions {
         self.0.contains(&user_registration.id)
     }
 
-    /// Check if the session is in the list by registration ID
-    #[must_use]
-    pub fn contains_id(&self, user_registration_id: Ulid) -> bool {
-        self.0.contains(&user_registration_id)
-    }
-
     /// Mark a link as consumed to avoid replay
     pub fn consume_session(
         mut self,

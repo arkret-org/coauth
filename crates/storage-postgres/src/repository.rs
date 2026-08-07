@@ -27,7 +27,7 @@ use coauth_data::user::{
     BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository, UserPasswordRepository,
     UserPhoneRepository, UserPrimaryHandlePreferenceRepository, UserRecoveryRepository,
     UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
-    UserTermsRepository, UserTotpRepository,
+    UserTermsRepository,
 };
 use coauth_data::workflow::WorkflowRepository;
 use coauth_data::{
@@ -75,7 +75,7 @@ use crate::user::{
     PgBrowserSessionRepository, PgPrincipalDidRepository, PgUserEmailRepository,
     PgUserPasswordRepository, PgUserPhoneRepository, PgUserPrimaryHandlePreferenceRepository,
     PgUserRecoveryRepository, PgUserRegistrationRepository, PgUserRegistrationTokenRepository,
-    PgUserRepository, PgUserTermsRepository, PgUserTotpRepository,
+    PgUserRepository, PgUserTermsRepository,
 };
 use crate::workflow::PgWorkflowRepository;
 
@@ -309,10 +309,6 @@ impl RepositoryAccess for PgRepository {
 
     fn user_terms<'c>(&'c mut self) -> Box<dyn UserTermsRepository<Error = Self::Error> + 'c> {
         Box::new(PgUserTermsRepository::new(&mut self.conn))
-    }
-
-    fn user_totp<'c>(&'c mut self) -> Box<dyn UserTotpRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserTotpRepository::new(&mut self.conn))
     }
 
     fn user_primary_handle_preference<'c>(

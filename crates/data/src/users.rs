@@ -529,13 +529,6 @@ impl UserRegistrationToken {
 
         true
     }
-
-    /// Returns `true` if the token can still be used (not expired and under
-    /// usage limit)
-    #[must_use]
-    pub fn can_be_used(&self, now: DateTime<Utc>) -> bool {
-        self.is_valid(now)
-    }
 }
 
 /// coauth extension: an in-progress user registration.
@@ -587,19 +580,6 @@ pub struct UserPhoneAuthenticationCode {
     pub code: String,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
-}
-
-/// A TOTP authenticator configuration for a user.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct UserTotpConfig {
-    pub id: Ulid,
-    pub user_id: Ulid,
-    pub secret: String,
-    pub algorithm: String,
-    pub digits: i32,
-    pub period: i32,
-    pub confirmed_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
 }
 
 /// Verified binding between a coauth service account and a principal DID.

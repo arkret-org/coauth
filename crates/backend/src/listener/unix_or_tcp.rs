@@ -120,11 +120,6 @@ impl UnixOrTcpListener {
         }
     }
 
-    #[cfg(unix)]
-    pub const fn is_unix(&self) -> bool {
-        matches!(self, Self::Unix { .. })
-    }
-
     pub const fn is_tcp(&self) -> bool {
         matches!(self, Self::Tcp(_))
     }

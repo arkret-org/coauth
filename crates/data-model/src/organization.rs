@@ -34,11 +34,6 @@ impl OrganizationBootstrapAuthorization {
             _ => None,
         }
     }
-
-    #[must_use]
-    pub fn requires_delegation(&self) -> bool {
-        matches!(self, Self::DelegatedGovernance)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

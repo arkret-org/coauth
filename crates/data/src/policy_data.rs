@@ -21,12 +21,6 @@ impl PolicyDataDocument {
     pub fn as_json(&self) -> &serde_json::Value {
         &self.0
     }
-
-    /// Consume the document back into parsed JSON.
-    #[must_use]
-    pub fn into_json(self) -> serde_json::Value {
-        self.0
-    }
 }
 
 impl From<serde_json::Value> for PolicyDataDocument {

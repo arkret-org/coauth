@@ -160,11 +160,6 @@ fn challenge_for_stage(stage: &StageKind, context: &Value) -> StageChallenge {
         StageKind::Prompt { fields } => StageChallenge::Prompt {
             fields: fields.clone(),
         },
-        StageKind::AuthenticatorValidate { allowed_types } => {
-            StageChallenge::AuthenticatorValidate {
-                allowed_types: allowed_types.clone(),
-            }
-        }
         StageKind::EnrollmentToken { required } => StageChallenge::EnrollmentToken {
             required: *required,
         },
@@ -363,25 +358,6 @@ async fn validate_response(
                 StageOutcome::Retry { errors }
             }
         }
-        (
-            StageKind::AuthenticatorValidate { .. },
-            StageSubmission::AuthenticatorValidate { code, .. },
-        ) => {
-            if code.len() != 6 || !code.chars().all(|c| c.is_ascii_digit()) {
-                StageOutcome::Retry {
-                    errors: vec![StageValidationError {
-                        field: Some("code".into()),
-                        message: "Code must be exactly 6 digits".into(),
-                        code: "invalid_totp_code".into(),
-                    }],
-                }
-            } else {
-                if let Some(ctx) = context.as_object_mut() {
-                    ctx.insert("mfa_validated".into(), Value::Bool(true));
-                }
-                StageOutcome::Continue
-            }
-        }
         (StageKind::EnrollmentToken { required }, StageSubmission::EnrollmentToken { token }) => {
             if token.is_empty() && *required {
                 StageOutcome::Retry {
@@ -419,9 +395,6 @@ fn is_stage_satisfied(stage: &StageKind, context: &Value) -> bool {
         }
         StageKind::PasswordWrite { .. } => context.get("password_set") == Some(&Value::Bool(true)),
         StageKind::UserWrite { .. } => context.get("user_created") == Some(&Value::Bool(true)),
-        StageKind::AuthenticatorValidate { .. } => {
-            context.get("mfa_validated") == Some(&Value::Bool(true))
-        }
         StageKind::Captcha => context.get("captcha_verified") == Some(&Value::Bool(true)),
         StageKind::EnrollmentToken { .. } => context.get("enrollment_token_id").is_some(),
         _ => false,

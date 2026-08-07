@@ -167,12 +167,6 @@ impl UrlBuilder {
         self.absolute_url("/oauth/keys.json")
     }
 
-    /// Static asset URL.
-    #[must_use]
-    pub fn static_asset(&self, path: String) -> Url {
-        self.absolute_url(&format!("/assets/{path}"))
-    }
-
     /// Static asset base path.
     #[must_use]
     pub fn assets_base(&self) -> &str {
@@ -183,12 +177,6 @@ impl UrlBuilder {
     #[must_use]
     pub fn upstream_oauth_callback(&self, id: Ulid) -> Url {
         self.absolute_url(&format!("/upstream/callback/{id}"))
-    }
-
-    /// Upstream authorize URI.
-    #[must_use]
-    pub fn upstream_oauth_authorize(&self, id: Ulid) -> Url {
-        self.absolute_url(&format!("/upstream/authorize/{id}"))
     }
 
     /// Account management URI.

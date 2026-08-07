@@ -133,12 +133,6 @@ impl UpstreamRegister {
     }
 
     /// Set the imported handle
-    pub fn set_handle(&mut self, handle: String, force: bool) {
-        self.imported_handle = Some(handle);
-        self.force_handle = force;
-    }
-
-    /// Set the imported handle
     #[must_use]
     pub fn with_handle(self, handle: String, force: bool) -> Self {
         Self {
@@ -154,22 +148,6 @@ impl UpstreamRegister {
         self.force_display_name = force;
     }
 
-    /// Set the imported display name
-    #[must_use]
-    pub fn with_display_name(self, display_name: String, force: bool) -> Self {
-        Self {
-            imported_display_name: Some(display_name),
-            force_display_name: force,
-            ..self
-        }
-    }
-
-    /// Set the imported email
-    pub fn set_email(&mut self, email: String, force: bool) {
-        self.imported_email = Some(email);
-        self.force_email = force;
-    }
-
     /// Set the imported email
     #[must_use]
     pub fn with_email(self, email: String, force: bool) -> Self {
@@ -178,11 +156,6 @@ impl UpstreamRegister {
             force_email: force,
             ..self
         }
-    }
-
-    /// Set the form state
-    pub fn set_form_state(&mut self, form_state: FormState<UpstreamRegisterFormField>) {
-        self.form_state = form_state;
     }
 
     /// Set the form state

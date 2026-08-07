@@ -88,13 +88,6 @@ impl<K> Default for FieldStore<K> {
 }
 
 impl<K: Copy + Eq> FieldStore<K> {
-    fn lookup(&self, key: K) -> Option<&FieldSnapshot> {
-        self.entries
-            .iter()
-            .find(|(k, _)| *k == key)
-            .map(|(_, snap)| snap)
-    }
-
     fn entry_mut(&mut self, key: K) -> &mut FieldSnapshot {
         if let Some(pos) = self.entries.iter().position(|(k, _)| *k == key) {
             return &mut self.entries[pos].1;

@@ -18,7 +18,6 @@ mod registration;
 mod registration_token;
 mod session;
 mod terms;
-mod totp;
 
 pub use self::email::{UserEmailFilter, UserEmailRepository};
 pub use self::password::UserPasswordRepository;
@@ -30,7 +29,6 @@ pub use self::registration::UserRegistrationRepository;
 pub use self::registration_token::{UserRegistrationTokenFilter, UserRegistrationTokenRepository};
 pub use self::session::{BrowserSessionFilter, BrowserSessionRepository};
 pub use self::terms::UserTermsRepository;
-pub use self::totp::UserTotpRepository;
 
 /// Filter parameters for listing users
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]

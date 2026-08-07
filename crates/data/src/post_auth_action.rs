@@ -58,9 +58,4 @@ impl PostAuthAction {
     pub const fn link_upstream(id: Ulid) -> Self {
         PostAuthAction::LinkUpstream { id }
     }
-
-    #[must_use]
-    pub const fn manage_account(action: Option<AccountAction>) -> Self {
-        PostAuthAction::ManageAccount { action }
-    }
 }

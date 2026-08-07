@@ -664,9 +664,6 @@
           "const": "none"
         },
         {
-          "const": "Ed25519"
-        },
-        {
           "const": "ES256K"
         },
         {
@@ -2913,6 +2910,11 @@
             "per_account": {
               "burst": 1800,
               "per_second": 0.5
+            },
+            "lockout": {
+              "consecutive_failures": 10,
+              "lockout_seconds": 900,
+              "failure_window_seconds": 3600
             }
           },
           "allOf": [
@@ -2999,6 +3001,20 @@
             }
           ]
         },
+        "identity_resolution": {
+          "description": "Public identity-resolution read limits. Applies to the DID resolve and\npinned-document compatibility surfaces.",
+          "default": {
+            "per_ip": {
+              "burst": 60,
+              "per_second": 1.0
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/IdentityResolutionRateLimitingConfig"
+            }
+          ]
+        },
         "did_binding": {
           "description": "DID-binding rate limits. Applies to admin-driven attach/remove\nof principal DIDs on accounts.",
           "default": {
@@ -3014,20 +3030,6 @@
           "allOf": [
             {
               "$ref": "#/definitions/DidBindingRateLimitingConfig"
-            }
-          ]
-        },
-        "mfa_totp": {
-          "description": "MFA / TOTP verification rate limits. Tightened against\nbrute-force attempts on the second-factor input.",
-          "default": {
-            "per_account": {
-              "burst": 5,
-              "per_second": 0.005555555555555556
-            }
-          },
-          "allOf": [
-            {
-              "$ref": "#/definitions/MfaTotpRateLimitingConfig"
             }
           ]
         }
@@ -3109,6 +3111,46 @@
               "$ref": "#/definitions/RateLimiterConfiguration"
             }
           ]
+        },
+        "lockout": {
+          "description": "Temporary lockout after consecutive failed password logins.",
+          "default": {
+            "consecutive_failures": 10,
+            "lockout_seconds": 900,
+            "failure_window_seconds": 3600
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/LoginLockoutConfig"
+            }
+          ]
+        }
+      }
+    },
+    "LoginLockoutConfig": {
+      "description": "Failed-login lockout for password authentication.\n\nThis is not the same control as the sliding-window limiters above and does\nnot subsume them: a limiter throttles *attempt rate* and spends its\nallowance on successful logins too, so a patient attacker who stays under\nthe rate keeps guessing forever. A lockout counts *consecutive failures*\nagainst one account and stops the guessing outright until the window\nelapses or a correct password resets the counter.",
+      "type": "object",
+      "properties": {
+        "consecutive_failures": {
+          "description": "Consecutive failed password attempts that lock the account. `0`\ndisables the lockout.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0,
+          "default": 10
+        },
+        "lockout_seconds": {
+          "description": "How long the account stays locked once the threshold is reached.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 900
+        },
+        "failure_window_seconds": {
+          "description": "How long a failure counts toward the consecutive total. A failure older\nthan this is forgotten, so occasional typos spread over days never\naccumulate into a lockout.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 3600
         }
       }
     },
@@ -3235,6 +3277,23 @@
         }
       }
     },
+    "IdentityResolutionRateLimitingConfig": {
+      "type": "object",
+      "properties": {
+        "per_ip": {
+          "description": "Controls how many public identity reads are permitted from one source\nIP over the sliding window.",
+          "default": {
+            "burst": 60,
+            "per_second": 1.0
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        }
+      }
+    },
     "DidBindingRateLimitingConfig": {
       "type": "object",
       "properties": {
@@ -3255,23 +3314,6 @@
           "default": {
             "burst": 3,
             "per_second": 0.01
-          },
-          "allOf": [
-            {
-              "$ref": "#/definitions/RateLimiterConfiguration"
-            }
-          ]
-        }
-      }
-    },
-    "MfaTotpRateLimitingConfig": {
-      "type": "object",
-      "properties": {
-        "per_account": {
-          "description": "Max TOTP attempts per `account_id` over a sliding window.\nDefault: 5 attempts per 15 minutes — matches NIST SP 800-63B\nguidance for time-based OTP throttling.",
-          "default": {
-            "burst": 5,
-            "per_second": 0.005555555555555556
           },
           "allOf": [
             {
