@@ -74,19 +74,6 @@ pub struct DidDocumentMetadata {
     pub primary_handle: Option<String>,
 }
 
-impl DidDocumentMetadata {
-    /// Build the metadata block for a coauth-controlled DID Document's
-    /// *current* version.
-    ///
-    /// The caller supplies the already-resolved preference because current
-    /// DID document handlers read it from the database while pure builders
-    /// used in unit tests can still pass `None`.
-    #[must_use]
-    pub fn current_for_holder(primary_handle: Option<String>) -> Self {
-        Self { primary_handle }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerificationMethod {
     pub id: String,

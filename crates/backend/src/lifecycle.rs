@@ -132,23 +132,6 @@ impl LifecycleManager {
         self
     }
 
-    /// Override the grace period after the hard shutdown token fires before
-    /// `run` returns. Default: 30s.
-    #[must_use]
-    pub fn with_hard_timeout(mut self, timeout: Duration) -> Self {
-        self.hard_timeout = timeout;
-        self
-    }
-
-    /// Override the reload handler timeout. If a single SIGHUP reload handler
-    /// takes longer than this, `run` logs a warning and resumes serving.
-    /// Default: 30s.
-    #[must_use]
-    pub fn with_reload_timeout(mut self, timeout: Duration) -> Self {
-        self.reload_timeout = timeout;
-        self
-    }
-
     /// Add a handler to be called when the server gets a SIGHUP
     pub fn register_reloadable(&mut self, reloadable: &(impl Reloadable + 'static)) {
         let reloadable = reloadable.clone();

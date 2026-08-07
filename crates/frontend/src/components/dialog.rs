@@ -81,20 +81,3 @@ pub fn Dialog(
         }
     }
 }
-
-#[component]
-pub fn DialogTitle(children: Element) -> Element {
-    rsx! {
-        h3 { class: "dialog-title", {children} }
-    }
-}
-
-#[component]
-pub fn DialogClose(open: Signal<bool>, children: Element) -> Element {
-    rsx! {
-        div {
-            onclick: move |_| open.set(false),
-            {children}
-        }
-    }
-}

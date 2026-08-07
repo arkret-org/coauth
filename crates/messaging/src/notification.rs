@@ -69,12 +69,6 @@ impl NotificationCenter {
         Self::new(Some(mailer), None)
     }
 
-    /// Create a notification center configured only for SMS delivery.
-    #[must_use]
-    pub fn sms_only(sender: SmsSender) -> Self {
-        Self::new(None, Some(sender))
-    }
-
     /// Attach an email channel to this notification center.
     #[must_use]
     pub fn with_email(mut self, mailer: Mailer) -> Self {

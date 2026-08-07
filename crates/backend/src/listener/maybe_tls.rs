@@ -173,23 +173,6 @@ impl MaybeTlsAcceptor {
         Self { tls_config }
     }
 
-    #[must_use]
-    pub fn new_secure(tls_config: Arc<ServerConfig>) -> Self {
-        Self {
-            tls_config: Some(tls_config),
-        }
-    }
-
-    #[must_use]
-    pub fn new_insecure() -> Self {
-        Self { tls_config: None }
-    }
-
-    #[must_use]
-    pub const fn is_secure(&self) -> bool {
-        self.tls_config.is_some()
-    }
-
     /// Accept a connection and do the TLS handshake
     ///
     /// # Errors

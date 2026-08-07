@@ -133,16 +133,6 @@ pub enum CookieExpiration {
 }
 
 impl CookieExpiration {
-    /// Long-lived cookie expiring 10 years after `now`.
-    ///
-    /// Convenience constructor for the historical "permanent" cookie used by
-    /// the session and CSRF jars; takes `now` from an injected clock so
-    /// `MockClock`-driven tests can age out the cookie deterministically.
-    #[must_use]
-    pub fn permanent_at(now: DateTime<Utc>) -> Self {
-        Self::ExpiresAt(now + Duration::days(365 * 10))
-    }
-
     /// Long-lived cookie that lasts 10 years, expressed as a `Max-Age`
     /// rather than an absolute `Expires` timestamp. Useful when the caller
     /// does not have a clock in scope (e.g. synchronous extension traits).

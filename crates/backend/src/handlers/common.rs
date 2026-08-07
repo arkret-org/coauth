@@ -123,11 +123,6 @@ impl RequestingEntity {
             _ => false,
         }
     }
-
-    #[must_use]
-    pub fn is_unauthenticated(&self) -> bool {
-        matches!(self, Self::Anonymous)
-    }
 }
 
 impl From<BrowserSession> for RequestingEntity {

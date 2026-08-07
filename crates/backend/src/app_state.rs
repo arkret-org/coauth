@@ -3,11 +3,11 @@ use std::sync::Arc;
 use coauth_config::ArkretConfig;
 use coauth_data::{
     AppVersion, BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, RepositoryFactory,
-    SiteConfig, SystemClock, UrlBuilder,
+    SiteConfig, UrlBuilder,
 };
 use coauth_i18n::Translator;
 use coauth_keystore::{Encrypter, Keystore};
-use coauth_policy::{PolicyFactory, PolicyInstance};
+use coauth_policy::PolicyFactory;
 use coauth_principal::{ConnectorAdmin, ConnectorRegistry};
 use coauth_storage_postgres::PgRepositoryFactory;
 use coauth_templates::Templates;
@@ -15,7 +15,6 @@ use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
 use ipnetwork::IpNetwork;
 use opentelemetry::KeyValue;
-use rand_core::SeedableRng;
 use salvo::prelude::*;
 use tracing::Instrument;
 
@@ -427,43 +426,4 @@ impl DepotExt for Depot {
     fn get_trusted_proxies(&self) -> Option<&Vec<IpNetwork>> {
         self.get::<Vec<IpNetwork>>("trusted_proxies").ok()
     }
-}
-
-/// Extract `BoxClock` from request
-#[must_use]
-pub fn extract_clock() -> BoxClock {
-    let clock = SystemClock::default();
-    Box::new(clock)
-}
-
-/// Extract `BoxRng` from request
-#[must_use]
-pub fn extract_rng() -> BoxRng {
-    let rng = rand_chacha::ChaChaRng::from_rng(rand_core::OsRng).expect("Failed to seed RNG");
-    Box::new(rng)
-}
-
-/// Extract a policy evaluator instance from depot.
-pub async fn extract_policy(
-    depot: &Depot,
-) -> Result<PolicyInstance, coauth_policy::InstantiateError> {
-    let policy_factory = depot.get_policy_factory().ok_or_else(|| {
-        coauth_policy::InstantiateError::Runtime(anyhow::anyhow!(
-            "PolicyFactory not found in depot"
-        ))
-    })?;
-    policy_factory.instantiate().await
-}
-
-/// Extract `BoxRepository` from depot
-pub async fn extract_repository(
-    depot: &Depot,
-) -> Result<BoxRepository, coauth_data::RepositoryError> {
-    let app_state = depot.get::<AppState>("app_state").ok().ok_or_else(|| {
-        coauth_data::RepositoryError::from_error(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "AppState not found in depot",
-        ))
-    })?;
-    app_state.repository_factory.create().await
 }

@@ -46,33 +46,6 @@ impl SocketAddr {
             Self::Unix { .. } => None,
         }
     }
-
-    #[cfg(unix)]
-    #[must_use]
-    pub fn into_unix(self) -> Option<tokio::net::unix::SocketAddr> {
-        match self {
-            Self::Net(_) => None,
-            Self::Unix(socket) => Some(socket),
-        }
-    }
-
-    #[must_use]
-    pub const fn as_net(&self) -> Option<&std::net::SocketAddr> {
-        match self {
-            Self::Net(socket) => Some(socket),
-            #[cfg(unix)]
-            Self::Unix { .. } => None,
-        }
-    }
-
-    #[cfg(unix)]
-    #[must_use]
-    pub const fn as_unix(&self) -> Option<&tokio::net::unix::SocketAddr> {
-        match self {
-            Self::Net(_) => None,
-            Self::Unix(socket) => Some(socket),
-        }
-    }
 }
 
 pub enum UnixOrTcpListener {

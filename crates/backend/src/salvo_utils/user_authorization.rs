@@ -64,38 +64,6 @@ pub struct UserAuthorization<F = ()> {
 }
 
 impl<F: Send> UserAuthorization<F> {
-    /// Verify a user authorization and return the session and the protected
-    /// form value.
-    ///
-    /// `required_scopes` is an optional list of scopes the caller must have
-    /// granted on the underlying session; an empty slice disables the check.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the token is invalid, if the user session ended,
-    /// if the session is missing any of the required scopes, or if the form
-    /// is missing.
-    pub async fn protected_form<E>(
-        self,
-        repo: &mut impl RepositoryAccess<Error = E>,
-        clock: &impl Clock,
-        required_scopes: &[&ScopeToken],
-    ) -> Result<(Session, F), AuthorizationVerificationError<E>> {
-        let Some(form) = self.form else {
-            return Err(AuthorizationVerificationError::MissingForm);
-        };
-
-        let (token, session) = self.access_token.fetch(repo).await?;
-
-        if !token.is_valid(clock.now()) || !session.is_valid() {
-            return Err(AuthorizationVerificationError::InvalidToken);
-        }
-
-        ensure_required_scopes(&session, required_scopes)?;
-
-        Ok((session, form))
-    }
-
     /// Verify a user authorization and return the session.
     ///
     /// `required_scopes` is an optional list of scopes the caller must have

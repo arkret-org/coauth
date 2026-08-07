@@ -13,7 +13,7 @@
 
 use chrono::{DateTime, Utc};
 use coauth_data::oauth::SessionGrantFilter;
-use coauth_data::{BoxClock, BoxRepository, Pagination, RepositoryAccess};
+use coauth_data::{BoxRepository, Pagination, RepositoryAccess};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -76,17 +76,6 @@ pub async fn cascade_revoke_session_grants(
         revoked_session_grants: total,
         revoked_at: now,
     })
-}
-
-/// Convenience wrapper that loads its own clock from the supplied
-/// [`BoxClock`]. Same semantics as
-/// [`cascade_revoke_session_grants`].
-pub async fn cascade_revoke_with_box_clock(
-    repo: &mut BoxRepository,
-    clock: &BoxClock,
-    device_id: &str,
-) -> Result<DeviceRevokeOutcome, DeviceRevokeError> {
-    cascade_revoke_session_grants(repo, &**clock, device_id).await
 }
 
 #[cfg(test)]

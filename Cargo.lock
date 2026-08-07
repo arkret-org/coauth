@@ -239,23 +239,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arkret-crypto"
-version = "0.3.0"
-dependencies = [
- "arkret-canonical",
- "arkret-models-crypto",
- "arkret-models-identity",
- "arkret-signatures",
- "arkret-wire",
- "chrono",
- "hex",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "arkret-egress-policy"
 version = "0.3.0"
 dependencies = [
@@ -298,7 +281,6 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
- "tokio-util",
  "url",
 ]
 
@@ -1471,7 +1453,6 @@ dependencies = [
  "argon2",
  "arkret-auth",
  "arkret-canonical",
- "arkret-crypto",
  "arkret-egress-policy",
  "arkret-hlc",
  "arkret-http-client",
@@ -1511,7 +1492,6 @@ dependencies = [
  "coauth-templates",
  "cookie",
  "cookie_store",
- "data-encoding",
  "deadpool 0.13.0",
  "der",
  "diesel",
@@ -1983,7 +1963,6 @@ dependencies = [
  "tracing",
  "ulid 1.2.1",
  "url",
- "v_htmlescape",
  "walkdir",
 ]
 

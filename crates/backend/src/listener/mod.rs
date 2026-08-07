@@ -64,12 +64,6 @@ impl ConnectionInfo {
         self.net_peer_addr
     }
 
-    /// Whether the connection was established over TLS.
-    #[must_use]
-    pub fn is_tls(&self) -> bool {
-        self.tls.is_some()
-    }
-
     /// The source IP reported by the PROXY protocol, falling back to the
     /// network peer address.
     #[must_use]

@@ -11,25 +11,6 @@ pub fn SessionCardRoot(children: Element) -> Element {
 }
 
 #[component]
-pub fn SessionCardBody(
-    compact: Option<bool>,
-    disabled: Option<bool>,
-    children: Element,
-) -> Element {
-    let mut class = "session-card".to_owned();
-    if compact.unwrap_or(false) {
-        class.push_str(" compact");
-    }
-    if disabled.unwrap_or(false) {
-        class.push_str(" disabled");
-    }
-
-    rsx! {
-        div { class: "{class}", {children} }
-    }
-}
-
-#[component]
 pub fn SessionCardLinkBody(
     to: Route,
     compact: Option<bool>,
@@ -102,12 +83,5 @@ pub fn SessionCardInfo(label: String, children: Element) -> Element {
             div { class: "key", "{label}" }
             div { class: "value", {children} }
         }
-    }
-}
-
-#[component]
-pub fn SessionCardAction(children: Element) -> Element {
-    rsx! {
-        div { class: "session-action", {children} }
     }
 }

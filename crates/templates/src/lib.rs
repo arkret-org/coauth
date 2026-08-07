@@ -47,14 +47,6 @@ pub use self::context::{
 pub use self::forms::{FieldError, FormError, FormField, FormState, ToFormState};
 use crate::context::SampleIdentifier;
 
-/// Escape the given string for use in HTML
-///
-/// It uses the same crate as the one used by the minijinja templates
-#[must_use]
-pub fn escape_html(input: &str) -> String {
-    v_htmlescape::escape(input).to_string()
-}
-
 // ── Error types ─────────────────────────────────────────────────────────────
 
 /// There was an issue while loading the templates

@@ -26,7 +26,6 @@ pub mod services;
 pub mod storage;
 pub mod sync;
 pub mod telemetry;
-pub mod totp;
 pub mod util;
 
 /// HTTP request handlers, service modules, and strand engine.

@@ -109,10 +109,6 @@ impl AppError {
         Self::new(StatusCode::UNPROCESSABLE_ENTITY, message)
     }
 
-    pub fn not_implemented(message: impl Into<String>) -> Self {
-        Self::new(StatusCode::NOT_IMPLEMENTED, message)
-    }
-
     pub fn too_many_requests(message: impl Into<String>) -> Self {
         Self::new(StatusCode::TOO_MANY_REQUESTS, message)
     }

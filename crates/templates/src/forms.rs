@@ -244,13 +244,6 @@ impl<K: FormField> FormState<K> {
         self.fields.entry_mut(field).value = value;
     }
 
-    /// Checks if a field contains a value
-    pub fn has_value(&self, field: K) -> bool {
-        self.fields
-            .lookup(field)
-            .is_some_and(|snap| snap.value.is_some())
-    }
-
     /// Returns `true` if the form has no error attached to it
     #[must_use]
     pub fn is_valid(&self) -> bool {
