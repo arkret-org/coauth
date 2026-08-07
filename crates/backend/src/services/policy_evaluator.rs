@@ -681,7 +681,7 @@ mod tests {
     fn req(actor: &str, action: &str) -> PolicyCheckRequestBody {
         PolicyCheckRequestBody {
             request_id: "req-1".into(),
-            realm_id: RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001").unwrap(),
+            realm_id: RealmId::new("ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO").unwrap(),
             actor_id: Did::new(actor.to_owned()).unwrap(),
             device_id: None,
             action: action.to_owned(),
@@ -715,7 +715,7 @@ mod tests {
             grant_event_id: "ak:event:AQICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC".to_owned(),
             revoke_event_id: None,
             subject: "did:web:alice.example".to_owned(),
-            realm_id: "ak:realm:01904100-0000-7000-8000-000000000001".to_owned(),
+            realm_id: "ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO".to_owned(),
             action,
             expires_at: None,
             approval_evidence_ref: None,
@@ -969,7 +969,7 @@ mod tests {
         let data = serde_json::json!({
             "deny_actors": ["did:web:alice.example"],
             "realms": {
-                "ak:realm:01904100-0000-7000-8000-000000000001": {
+                "ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO": {
                     // Realm-specific scope: NO deny_actors, so alice is
                     // allowed in this realm even though the default
                     // scope would deny her.

@@ -650,7 +650,7 @@ mod tests {
             event_id: EVENT.to_owned(),
             capability_grant_id: GRANT.to_owned(),
             realm_id: arkret_identifiers::RealmId::new(
-                "ak:realm:01970000-0000-7000-8000-000000000003",
+                "ak:realm:Abou4xUbbu2euk78u2IcqcwVsLtys28VH7sBZmwrdQOn",
             )
             .unwrap(),
             payload: json!({}),

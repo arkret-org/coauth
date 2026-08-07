@@ -451,7 +451,7 @@ mod tests {
         let identity = peer_identity();
         let peer = PeerProtocolClient::new(Some(&base), &client, &keystore, identity).unwrap();
         let url = base.join("/_arkret/peer/events/frontier").unwrap();
-        let body = br#"{"realm_id":"ak:realm:01904100-0000-8000-8000-000000000001"}"#;
+        let body = br#"{"realm_id":"ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K"}"#;
 
         let signed = peer
             .signed_request("QUERY", &url, Some(body), None)

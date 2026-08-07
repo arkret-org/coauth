@@ -1594,7 +1594,7 @@ mod tests {
                 "key_state": {
                     "agent_id": "did:web:agent.example",
                     "controller_id": "did:web:controller.example",
-                    "principal_control_realm_id": "ak:realm:01999999-0000-7000-8000-000000000010",
+                    "principal_control_realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG",
                     "controller_authorization_ref": "did:web:agent.example#managed-controller",
                     "pcr_recovery": pcr_recovery,
                     "requested_scope": {
@@ -2408,7 +2408,7 @@ mod tests {
                 arkret_models_collaboration::session_grant_bodies::SessionGrantAgentScopeRequest {
                     realm_ids: vec![
                         arkret_identifiers::RealmId::new(
-                            "ak:realm:01970000-0000-7000-8000-000000000000",
+                            "ak:realm:AR5_BcY29XYrMbX0Y8Qiz4KDnt-NvwrXmij2C3-4UD2c",
                         )
                         .unwrap(),
                     ],

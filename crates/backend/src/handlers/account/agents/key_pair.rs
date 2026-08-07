@@ -1227,7 +1227,7 @@ mod tests {
         serde_json::from_value(json!({
             "agent_id": AGENT,
             "controller_id": CONTROLLER,
-            "principal_control_realm_id": "ak:realm:01999999-0000-7000-8000-000000000010",
+            "principal_control_realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG",
             "controller_authorization_ref": format!("{AGENT}#managed-controller"),
             "pcr_recovery": {
                 "status": "ready",
@@ -1282,10 +1282,10 @@ mod tests {
         let mut event: arkret_wire::Event = serde_json::from_value(json!({
             "event_id": "ak:event:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
             "kind": "ak.agent.key.authorize",
-            "realm_id": "ak:realm:01999999-0000-7000-8000-000000000010",
+            "realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG",
             "scope_ref": {
                 "kind": "realm",
-                "realm_id": "ak:realm:01999999-0000-7000-8000-000000000010"
+                "realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG"
             },
             "actor_id": AGENT,
             "executed_by": CONTROLLER,

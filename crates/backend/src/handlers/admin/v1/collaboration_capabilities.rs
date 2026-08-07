@@ -636,7 +636,7 @@ mod tests {
             "ak:event:AQICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC",
             "ak:grant:01904100-0000-7000-8000-000000000010",
             "did:web:alice.example",
-            "ak:realm:01904100-0000-7000-8000-000000000001",
+            "ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO",
             CapabilityActionId::PinAdd,
             &[IssuerAuthorityRef::Grant {
                 grant_id: GrantId::new("ak:grant:01904100-0000-7000-8000-000000000020").unwrap(),
@@ -717,7 +717,7 @@ mod tests {
         let payload = build_revoke_fanout_payload(
             "ak:event:AQMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD",
             "ak:grant:01904100-0000-7000-8000-000000000010",
-            "ak:realm:01904100-0000-7000-8000-000000000001",
+            "ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO",
             revoked_at,
             "did:web:coauth.example",
             &config(),
@@ -732,7 +732,7 @@ mod tests {
         );
         assert_eq!(
             payload.realm_id.as_str(),
-            "ak:realm:01904100-0000-7000-8000-000000000001"
+            "ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO"
         );
         assert!(payload.payload.get("realm_id").is_none());
         assert!(payload.payload.get("proofs").is_none());
@@ -757,7 +757,7 @@ mod tests {
             &payload.event_kind,
             &payload.event_id,
             &payload.capability_grant_id,
-            "ak:realm:01904100-0000-7000-8000-000000000002",
+            "ak:realm:AT0jIIg6naB0Vkqbb-ip6eunf-bHr5-nh4pz2_kYNyVX",
             &payload.payload,
         );
         assert_ne!(

@@ -414,7 +414,7 @@ mod tests {
                 arkret_wire::EventKind::INVITE_CREATE,
                 arkret_wire::ScopeRef::Realm {
                     realm_id: arkret_identifiers::RealmId::new(
-                        "ak:realm:0196419b-0000-7000-8000-000000000001",
+                        "ak:realm:Acewuy1nKbK90D-V6pWEnoWq1drBx9FVel0gtDQlninN",
                     )
                     .unwrap(),
                 },

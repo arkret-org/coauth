@@ -300,7 +300,7 @@ mod tests {
 
         req.issuer_authority_refs = vec![IssuerAuthorityRef::RealmRoot {
             realm_id: arkret_identifiers::RealmId::new(
-                "ak:realm:01904100-0000-7000-8000-000000000002",
+                "ak:realm:AT0jIIg6naB0Vkqbb-ip6eunf-bHr5-nh4pz2_kYNyVX",
             )
             .unwrap(),
             cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null".into(),

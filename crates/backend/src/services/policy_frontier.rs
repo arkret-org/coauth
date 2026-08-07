@@ -282,7 +282,7 @@ mod tests {
     }
 
     fn realm() -> RealmId {
-        RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001").unwrap()
+        RealmId::new("ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO").unwrap()
     }
 
     fn fixed_now() -> chrono::DateTime<chrono::Utc> {
