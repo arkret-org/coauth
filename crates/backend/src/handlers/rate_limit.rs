@@ -811,7 +811,7 @@ impl Limiter {
             policy_version: Some("1".to_owned()),
             entries: vec![
                 entry(
-                    arkret_wire::ServiceOperationId::ROOT_IDENTITY_QUERY_RESOLVE,
+                    arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE,
                     self.inner.identity_resolution_config,
                 ),
                 entry(
@@ -819,7 +819,7 @@ impl Limiter {
                     self.inner.identity_resolution_config,
                 ),
                 entry(
-                    arkret_wire::ServiceOperationId::FIND_DIRECTORY_QUERY_RESOLVE_HANDLE,
+                    arkret_wire::ServiceOperationId::FIND_DIRECTORY_READ_RESOLVE_HANDLE,
                     self.inner.directory_lookup_config,
                 ),
             ],
@@ -1035,7 +1035,7 @@ mod tests {
         assert_eq!(policy.entries.len(), 3);
         assert!(policy.entries.iter().any(|entry| {
             entry.operation_id.as_deref()
-                == Some(arkret_wire::ServiceOperationId::ROOT_IDENTITY_QUERY_RESOLVE)
+                == Some(arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE)
                 && entry.window_seconds == Some(60)
                 && entry.max_requests == Some(60)
         }));

@@ -136,8 +136,7 @@ impl<'a> PeerProtocolClient<'a> {
         parse_json_response(response).await
     }
 
-    /// Read the peer Event frontier through canonical HTTP QUERY, falling back
-    /// to the deprecated GET binding only when QUERY is explicitly rejected.
+    /// Read the peer Event frontier through its registered HTTP QUERY binding.
     pub async fn read_events_frontier(
         &self,
         request: &PeerEventsFrontierRequestBody,
@@ -148,7 +147,7 @@ impl<'a> PeerProtocolClient<'a> {
         let signed = self.signed_request("QUERY", &url, Some(&body_bytes), None)?;
         let query_method = reqwest::Method::from_bytes(b"QUERY")
             .map_err(|error| PeerProtocolClientError::InvalidUrl(error.to_string()))?;
-        let mut response = outbound_http::send_with_policy(
+        let response = outbound_http::send_with_policy(
             outbound_http::soland_policy("peer_events_read_frontier")
                 .with_timeout(Duration::from_secs(5)),
             || {
@@ -165,27 +164,6 @@ impl<'a> PeerProtocolClient<'a> {
         )
         .await
         .map_err(|error| PeerProtocolClientError::Http(error.to_string()))?;
-
-        if matches!(response.status().as_u16(), 405 | 501) {
-            let mut fallback_url = url;
-            fallback_url
-                .query_pairs_mut()
-                .append_pair("realm_id", request.realm_id.as_str());
-            let fallback_signed = self.signed_request("GET", &fallback_url, None, None)?;
-            response = outbound_http::send_with_policy(
-                outbound_http::soland_policy("peer_events_read_frontier_compat_get")
-                    .with_timeout(Duration::from_secs(5)),
-                || {
-                    let mut builder = self.http_client.get(fallback_url.clone());
-                    for (name, value) in &fallback_signed.headers {
-                        builder = builder.header(name.as_str(), value.as_str());
-                    }
-                    builder
-                },
-            )
-            .await
-            .map_err(|error| PeerProtocolClientError::Http(error.to_string()))?;
-        }
 
         parse_json_response(response).await
     }

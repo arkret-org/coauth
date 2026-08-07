@@ -18,12 +18,12 @@ use crate::handlers::common::DepotExt;
 const CLAIMED_PROFILE_IDS: &[&str] = &["ak.profile.auth_server.v1"];
 
 const SUPPORTED_OPERATIONS: &[&str] = &[
-    arkret_wire::ServiceOperationId::SERVER_QUERY_DESCRIBE,
-    arkret_wire::ServiceOperationId::ROOT_IDENTITY_REGISTRY_QUERY_DESCRIBE,
-    arkret_wire::ServiceOperationId::ROOT_IDENTITY_QUERY_RESOLVE,
+    arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE,
+    arkret_wire::ServiceOperationId::ROOT_IDENTITY_REGISTRY_READ_DESCRIBE,
+    arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE,
     arkret_wire::ServiceOperationId::ROOT_IDENTITY_DOCUMENT_RESOURCE_GET,
-    arkret_wire::ServiceOperationId::FIND_DIRECTORY_QUERY_RESOLVE_HANDLE,
-    arkret_wire::ServiceOperationId::SELF_POLICY_QUERY_CHECK,
+    arkret_wire::ServiceOperationId::FIND_DIRECTORY_READ_RESOLVE_HANDLE,
+    arkret_wire::ServiceOperationId::SELF_POLICY_READ_CHECK,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_EXCHANGE_CREATE_HANDOFF,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER,
@@ -415,17 +415,17 @@ pub(crate) fn service_describe_response(
     let mut claimed_profile = ClaimedProfileEntry::self_claimed(CLAIMED_PROFILE_IDS[0]);
     claimed_profile.notes = Some(
         "Auth-server-shaped profile: issues short-lived audience-bound ak.session.grant, exposes \
-         ak.server.query.describe, MAY expose ak.policy.check. NOT an identity registry (DID \
+         ak.server.read.describe, MAY expose ak.policy.check. NOT an identity registry (DID \
          resolution is delegated; see compat_surfaces)."
             .to_owned(),
     );
     let compat_surfaces = [
         (
-            "ak.root.identity.registry.query.describe",
+            "ak.root.identity.registry.read.describe",
             "delegated-resolver interop: reports the upstream registry coauth proxies to; does not assert canonical ownership.",
         ),
         (
-            "ak.root.identity.query.resolve",
+            "ak.root.identity.read.resolve",
             "delegated-resolver interop: DID resolution is performed against the configured identity_registry_resolver; coauth caches but does not author DID documents.",
         ),
         (
@@ -511,7 +511,6 @@ pub(crate) fn service_describe_response(
         calendar_tzdb_versions: Vec::new(),
         auth_metadata: build_auth_metadata(url_builder, arkret_config, enrollment_authority_did),
         limits: ServerLimits {
-            max_get_query_selectors: None,
             extensions: limits_extensions,
         },
         plaintext_visibility: PlaintextVisibility::none(),

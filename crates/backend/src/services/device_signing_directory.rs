@@ -42,7 +42,7 @@ use crate::services::resolved_principal_audiences::{
 // it is *not* an eligible caller of that protocol operation — by design, not by
 // a missing exemption. There is no spec gap and no protocol S2S directory-read
 // operation to migrate to (decision 4's "already covered by
-// `ak.self.keys.query.lookup`" was over-optimistic; service-http-binding.md
+// `ak.self.keys.read.lookup`" was over-optimistic; service-http-binding.md
 // §2.1.4(b) is the correct framing).
 //
 // soland therefore exposes this as a product-surface S2S contract on its own

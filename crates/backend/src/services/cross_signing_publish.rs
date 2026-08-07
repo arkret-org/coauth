@@ -16,7 +16,7 @@
 //! This module is the **issuance** side: when coauth needs to rotate
 //! or initialise a principal's cross-signing keys it MUST:
 //!   1. Read the principal's current accepted generation (from the principal-server
-//!      `ak.self.account.query.describe` or local cache),
+//!      `ak.self.account.read.describe` or local cache),
 //!   2. Build a [`CrossSigningPublish`] with `expected_previous_generation = current_accepted` and
 //!      `generation = current_accepted + 1`,
 //!   3. Use [`cross_signing_publish_cell_subject(principal_id, expected_previous_generation)`] for

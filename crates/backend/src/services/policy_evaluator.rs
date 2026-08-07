@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Round 4 — pluggable evaluator for `ak.self.policy.query.check`.
+//! Round 4 — pluggable evaluator for `ak.self.policy.read.check`.
 //!
 //! The spec [`policy-server.md` §4] defines the decision lattice as
 //! `allow | soft_deny | hard_deny | quarantine | require_review`; the
@@ -16,7 +16,7 @@
 //!
 //! The pre-round-4 `coauth_policy::PolicyFactory` evaluator only understands
 //! `register` / `email` / `client_registration` / `authorization_grant`
-//! shapes — it predates the round-4 `ak.self.policy.query.check` request and does
+//! shapes — it predates the round-4 `ak.self.policy.read.check` request and does
 //! not know about realm scoping or frontier digests. Bolting a new
 //! method onto it would force every existing handler to re-test. We
 //! ship a dedicated [`PolicyEvaluator`] trait here and leave the
@@ -251,7 +251,7 @@ impl PolicyDecision {
     }
 }
 
-/// Evaluate a `ak.self.policy.query.check` request against the configured rules.
+/// Evaluate a `ak.self.policy.read.check` request against the configured rules.
 /// Object-safe: handlers carry an `Arc<dyn PolicyEvaluator>`.
 pub trait PolicyEvaluator: Send + Sync {
     fn evaluate<'a>(

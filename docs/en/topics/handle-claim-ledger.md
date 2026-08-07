@@ -2,17 +2,17 @@
 
 coauth is a **handle-claim issuer**, not a handle **directory**. This page
 records the R3.2 (arkret-spec @ `b56cab1`) scope decision for the
-`ak.find.directory.query.list_handles_for_subject` directory operation.
+`ak.find.directory.read.list_handles_for_subject` directory operation.
 
-## Decision: coauth does NOT implement `ak.find.directory.query.list_handles_for_subject`
+## Decision: coauth does NOT implement `ak.find.directory.read.list_handles_for_subject`
 
 R3.2 of the Arkret spec introduced
-[`ak.find.directory.query.list_handles_for_subject`][op] — given a known
+[`ak.find.directory.read.list_handles_for_subject`][op] — given a known
 holder/principal DID, return the current context-visible set of signed
 `ak.schema.handle_claim.v1` evidence (the inverse of `resolve_handle`,
 which maps a handle string to a subject).
 
-**`ak.find.directory.query.list_handles_for_subject` is a directory-service
+**`ak.find.directory.read.list_handles_for_subject` is a directory-service
 operation.** In a standard Arkret deployment that role is carried by the
 directory service (teabay), which applies disclosure policy, issuer-trust
 filtering, audience scoping, and `as_of` historical replay across all
@@ -56,7 +56,7 @@ Per the R3.2 issuer hardening:
 > `GET /_coauth/admin/handles?subject=<did>` could let org operators audit
 > which handles coauth currently holds for a subject **within this
 > organization**. This is an issuer-side ledger view, explicitly **not**
-> an implementation of `ak.find.directory.query.list_handles_for_subject` and **not**
+> an implementation of `ak.find.directory.read.list_handles_for_subject` and **not**
 > a directory surface — it would carry no cross-issuer disclosure
 > semantics. It is left as a `TODO(R3.2.1)` because the existing admin
 > claims surface already covers operator audit needs; add it only if a

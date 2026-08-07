@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Round 4 — frontier source for `ak.self.policy.query.check`.
+//! Round 4 — frontier source for `ak.self.policy.read.check`.
 //!
 //! The spec ([`policy-server.md` §4]) requires every signed decision to
 //! carry three frontier digests:
@@ -24,7 +24,7 @@
 //! HTTP wiring. Implementations:
 //!
 //! - [`SolandFrontierSource`] — production. Holds the soland base URL + shared `reqwest::Client`;
-//!   performs canonical QUERY with signed GET compatibility fallback and maps the result.
+//!   performs the registered QUERY operation and maps the result.
 //! - [`StaticFrontierSource`] — tests. Returns a fixed frontier so the unit tests in
 //!   `policy_check.rs` can assert byte-equal transcripts without standing up an HTTP mock.
 //!

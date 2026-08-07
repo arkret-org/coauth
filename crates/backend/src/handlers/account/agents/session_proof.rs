@@ -63,7 +63,7 @@ const AGENT_SERVICE_SCOPE_ACTIONS: &[&str] = &[
     "ak.self.keys.keypackages.upload.create",
     "ak.self.keys.keypackages.command.consume",
     "ak.self.keys.keypackages.command.revoke",
-    "ak.self.device_messages.query.list",
+    "ak.self.device_messages.read.list",
     "ak.self.device_messages.command.ack",
     "ak.self.signal.command.send",
 ];
@@ -83,7 +83,7 @@ pub(super) const LIMITED_AGENT_SCOPE_ACTIONS: &[&str] = &[
     "ak.self.keys.keypackages.upload.create",
     "ak.self.keys.keypackages.command.consume",
     "ak.self.keys.keypackages.command.revoke",
-    "ak.self.device_messages.query.list",
+    "ak.self.device_messages.read.list",
     "ak.self.device_messages.command.ack",
     "ak.self.signal.command.send",
     "ak.event.read",
@@ -1046,7 +1046,7 @@ fn service_surface_scope_token(token: &str) -> bool {
 fn applet_service_scope_token(token: &str) -> bool {
     matches!(
         token,
-        "ak.applet.query.describe"
+        "ak.applet.read.describe"
             | "ak.applet.resource.get"
             | "ak.applet.command.invoke"
             | "ak.applet.action.request"
@@ -1577,18 +1577,22 @@ mod tests {
                 "agent": {
                     "agent_id": "did:web:agent.example",
                     "slug": "agent",
-                    "status": status,
-                    "runtime_state": "pending_runtime_key"
+                    "lifecycle": status,
+                    "readiness": {
+                        "state": "not_ready",
+                        "blockers": ["runtime_key_missing", "pairing_open"]
+                    },
+                    "presence": {
+                        "state": "unknown",
+                        "expires_at": "2099-01-01T00:00:00.000Z",
+                        "refresh_after": "2098-12-31T23:59:00.000Z"
+                    }
                 },
-                "status": status,
-                "runtime_state": "pending_runtime_key",
                 "key_state": {
                     "agent_id": "did:web:agent.example",
                     "controller_id": "did:web:controller.example",
                     "principal_control_realm_id": "ak:realm:01999999-0000-7000-8000-000000000010",
                     "controller_authorization_ref": "did:web:agent.example#managed-controller",
-                    "status": status,
-                    "runtime_state": "pending_runtime_key",
                     "pcr_recovery": pcr_recovery,
                     "requested_scope": {
                         "actions": ["ak.message.create"],
@@ -1596,6 +1600,7 @@ mod tests {
                     },
                     "requested_scope_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "pairing_request_id": pairing_request_id,
+                    "pairing_mode": "bootstrap",
                     "pairing_expires_at": "2099-01-01T00:00:00.000Z",
                     "active_authorizations": []
                 }
@@ -1909,7 +1914,7 @@ mod tests {
                 "ak.reaction.add".to_owned(),
                 "ak.self.keys.keypackages.upload.create".to_owned(),
                 "ak.self.keys.keypackages.command.consume".to_owned(),
-                "ak.self.device_messages.query.list".to_owned(),
+                "ak.self.device_messages.read.list".to_owned(),
                 "ak.self.device_messages.command.ack".to_owned(),
             ],
         )
@@ -1922,7 +1927,7 @@ mod tests {
                 "ak.reaction.add".to_owned(),
                 "ak.self.authorization_leases.command.issue".to_owned(),
                 "ak.self.device_messages.command.ack".to_owned(),
-                "ak.self.device_messages.query.list".to_owned(),
+                "ak.self.device_messages.read.list".to_owned(),
                 "ak.self.events.command.submit".to_owned(),
                 "ak.self.events.read.frontier".to_owned(),
                 "ak.self.keys.keypackages.command.consume".to_owned(),
@@ -1936,7 +1941,7 @@ mod tests {
     fn secure_messaging_service_scope_needs_no_realm_content_grant() {
         let requested_scope = [
             "ak.self.device_messages.command.ack",
-            "ak.self.device_messages.query.list",
+            "ak.self.device_messages.read.list",
             "ak.self.keys.keypackages.command.consume",
             "ak.self.keys.keypackages.upload.create",
         ]

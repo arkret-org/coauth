@@ -72,7 +72,7 @@ const DEFAULT_ALLOW_TTL_SECONDS: i64 = 30;
 
 /// `POST /_arkret/self/policy/check`
 ///
-/// Round 4 `ak.self.policy.query.check` endpoint. Consumes
+/// Round 4 `ak.self.policy.read.check` endpoint. Consumes
 /// [`PolicyCheckRequestBody`], emits a signed [`PolicyCheckOutcome`].
 #[handler]
 pub async fn post_policy_check(
@@ -339,7 +339,7 @@ fn emit_audit_record(outcome: &PolicyCheckOutcome) {
     let canonical_str = String::from_utf8(canonical_bytes).unwrap_or_default();
     tracing::info!(
         target: "policy_audit",
-        kind = "ak.self.policy.query.check",
+        kind = "ak.self.policy.read.check",
         request_id = outcome.request_id,
         decision = ?outcome.decision,
         realm_id = outcome.bound_to.realm_id.as_str(),
