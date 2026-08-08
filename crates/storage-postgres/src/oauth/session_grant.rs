@@ -468,13 +468,11 @@ fn validate_grant_material(
     }
     let bound_device_id = if let Some(binding) = preimage.device_binding.as_ref() {
         Some(binding.device_id.as_str())
-    } else if let Some(binding) = preimage.holder_binding.as_ref() {
-        Some(match binding {
+    } else {
+        Some(match &preimage.holder_binding {
             SessionGrantHolderBinding::HumanDevice { device_binding } => device_binding.as_str(),
             SessionGrantHolderBinding::AgentRuntime { device_id, .. } => device_id.as_str(),
         })
-    } else {
-        None
     };
     if grant.device_id != bound_device_id {
         return Err(DatabaseError::invalid_operation());
@@ -508,7 +506,6 @@ fn validate_refresh_chain(
     if predecessor_preimage.credential_class != SessionGrantCredentialClass::Standard
         || successor_preimage.credential_class != SessionGrantCredentialClass::Standard
         || predecessor_preimage.holder_binding != successor_preimage.holder_binding
-        || predecessor_preimage.recovery_binding != successor_preimage.recovery_binding
         || predecessor_preimage.device_binding != successor_preimage.device_binding
     {
         return Err(DatabaseError::invalid_operation());
