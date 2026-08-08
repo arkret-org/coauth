@@ -25,7 +25,7 @@ mod tests {
         NewSessionGrant, OAuthDeviceCodeGrantParams, OAuthSessionFilter, OAuthSessionRepository,
     };
     use coauth_data::{
-        AuthorizationCode, Clock, Pagination, RefreshTokenState, RepositoryAccess as _,
+        AuthorizationCode, Clock, Pagination, RefreshTokenState, RepositoryAccess,
         RepositoryFactory as _,
     };
     use coauth_oauth_types::requests::{GrantType, ResponseMode};
@@ -35,6 +35,123 @@ mod tests {
     use ulid::Ulid;
 
     use crate::PgRepositoryFactory;
+
+    /// Closed inputs a test needs to land one committed session grant.
+    struct TestSessionGrantSeed<'a> {
+        request_identity: &'a str,
+        grant_id: &'a str,
+        browser_session_id: Option<Ulid>,
+        device_id: &'a str,
+        session_id: &'a str,
+        grant_jwt: &'a str,
+        session_public_key: &'a str,
+        issuance_digest: [u8; 32],
+        scope: Scope,
+    }
+
+    /// Reserve then commit one grant through the issuer-ledger saga.
+    ///
+    /// The repository has no single-call `add`: a grant only becomes durable as
+    /// the committed outcome of a reserved operation, so tests that need a
+    /// persisted grant must walk the same two steps production does.
+    async fn commit_test_session_grant<R>(
+        repo: &mut R,
+        rng: &mut ChaChaRng,
+        clock: &MockClock,
+        seed: TestSessionGrantSeed<'_>,
+    ) -> coauth_data::SessionGrant
+    where
+        R: RepositoryAccess + ?Sized,
+        R::Error: std::fmt::Debug,
+    {
+        let issuer = "did:web:issuer.example";
+        let not_before = clock.now();
+        let expires_at = clock.now() + Duration::try_hours(1).unwrap();
+        let canonical_intent = b"{\"schema\":\"ak.session_grant.issuance.v1\"}";
+
+        let reserved = repo
+            .oauth_session_grant()
+            .reserve_operation(
+                rng,
+                clock,
+                coauth_data::NewSessionGrantOperation {
+                    issuer,
+                    operation_kind: coauth_data::SessionGrantOperationKind::Issue,
+                    proof_kind: None,
+                    request_identity: seed.request_identity,
+                    canonical_intent_digest: seed.issuance_digest,
+                    canonical_intent,
+                    operation_selector: None,
+                    target_grant_id: None,
+                    session_id: Some(seed.session_id),
+                    grant_not_before: Some(not_before),
+                    grant_expires_at: Some(expires_at),
+                    signing_key_id: Some("test-signing-key"),
+                    retained_until: clock.now() + Duration::try_days(7).unwrap(),
+                },
+            )
+            .await
+            .unwrap();
+        let operation_id = match reserved {
+            coauth_data::SessionGrantReserveOutcome::Reserved(operation) => operation.id,
+            other => panic!("expected a fresh reservation, got {other:?}"),
+        };
+
+        let checkpoint = serde_json::json!({"kind": "test"});
+        let committed = repo
+            .oauth_session_grant()
+            .commit_issuance(
+                rng,
+                clock,
+                operation_id,
+                coauth_data::SessionGrantProofAuthorization {
+                    authorization_ref: seed.request_identity,
+                    checkpoint: &checkpoint,
+                    proof_expires_at: clock.now() + Duration::try_minutes(5).unwrap(),
+                },
+                coauth_data::SessionGrantExactOutcome {
+                    canonical_response: canonical_intent,
+                    response_digest: seed.issuance_digest,
+                },
+                NewSessionGrant {
+                    grant_id: arkret_identifiers::SessionGrantId::new(seed.grant_id.to_owned())
+                        .unwrap(),
+                    browser_session_id: seed.browser_session_id,
+                    issuer,
+                    subject: "did:web:subject.example",
+                    device_id: Some(seed.device_id),
+                    applet_id: None,
+                    effective_scope: None,
+                    registration_epoch: None,
+                    service_id: None,
+                    capability_grant_refs: Vec::new(),
+                    audience: "did:web:audience.example",
+                    scope: seed.scope,
+                    grant_jwt: seed.grant_jwt,
+                    session_id: seed.session_id,
+                    issuance_nonce: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+                    issuance_preimage: canonical_intent,
+                    issuance_digest: seed.issuance_digest,
+                    signing_key_id: "test-signing-key",
+                    session_public_key: seed.session_public_key,
+                    credential_class: "standard",
+                    recovery_session_id: None,
+                    recovery_policy_id: None,
+                    recovery_policy_version: None,
+                    device_authorization_event_id: None,
+                    model_generation_ref: None,
+                    not_before,
+                    expires_at,
+                },
+            )
+            .await
+            .unwrap();
+
+        match committed {
+            coauth_data::SessionGrantCommitOutcome::Committed(grant) => grant,
+            other => panic!("expected a first commit, got {other:?}"),
+        }
+    }
 
     #[tokio::test]
     async fn test_repositories() {
@@ -424,40 +541,23 @@ mod tests {
             .await
             .unwrap();
 
-        let session_grant = repo
-            .oauth_session_grant()
-            .add(
-                &mut rng,
-                &clock,
-                NewSessionGrant {
-                    grant_id: arkret_identifiers::SessionGrantId::new(
-                        "ak:session_grant:AVBgYTmzSkzTSd1dlFH4ZADaQRkVcx_iTAvXdxlTfxrg".to_owned(),
-                    )
-                    .unwrap(),
-                    browser_session_id: Some(user_session.id),
-                    issuer: "did:web:issuer.example",
-                    subject: "did:web:subject.example",
-                    device_id: Some("device-1"),
-                    applet_id: None,
-                    effective_scope: None,
-                    registration_epoch: None,
-                    service_id: None,
-                    capability_grant_refs: Vec::new(),
-                    audience: "did:web:audience.example",
-                    scope: scope.clone(),
-                    grant_jwt: "session-grant-jwt",
-                    session_public_key: "session-public-key",
-                    credential_class: "standard",
-                    recovery_session_id: None,
-                    recovery_policy_id: None,
-                    recovery_policy_version: None,
-                    device_authorization_event_id: None,
-                    model_generation_ref: None,
-                    expires_at: clock.now() + Duration::try_hours(1).unwrap(),
-                },
-            )
-            .await
-            .unwrap();
+        let session_grant = commit_test_session_grant(
+            &mut repo,
+            &mut rng,
+            &clock,
+            TestSessionGrantSeed {
+                request_identity: "refresh-chain-issue",
+                grant_id: "ak:session_grant:AVBgYTmzSkzTSd1dlFH4ZADaQRkVcx_iTAvXdxlTfxrg",
+                browser_session_id: Some(user_session.id),
+                device_id: "device-1",
+                session_id: "session-chain-1",
+                grant_jwt: "session-grant-jwt",
+                session_public_key: "session-public-key",
+                issuance_digest: [0x11; 32],
+                scope: scope.clone(),
+            },
+        )
+        .await;
 
         let access_token_1 = repo
             .oauth_access_token()
@@ -630,40 +730,23 @@ mod tests {
             .await
             .unwrap();
         let scope = Scope::from_iter([OPENID]);
-        let grant = repo
-            .oauth_session_grant()
-            .add(
-                &mut rng,
-                &clock,
-                NewSessionGrant {
-                    grant_id: arkret_identifiers::SessionGrantId::new(
-                        "ak:session_grant:AUiTFJVo328Rc7lc2Le2mjzL_ELZ-uQUn1Fq-C1QNAbh".to_owned(),
-                    )
-                    .unwrap(),
-                    browser_session_id: Some(browser_session.id),
-                    issuer: "did:web:issuer.example",
-                    subject: "did:web:subject.example",
-                    device_id: Some("device-cas"),
-                    applet_id: None,
-                    effective_scope: None,
-                    registration_epoch: None,
-                    service_id: None,
-                    capability_grant_refs: Vec::new(),
-                    audience: "did:web:audience.example",
-                    scope,
-                    grant_jwt: "cas-grant-jwt",
-                    session_public_key: "cas-public-key",
-                    credential_class: "standard",
-                    recovery_session_id: None,
-                    recovery_policy_id: None,
-                    recovery_policy_version: None,
-                    device_authorization_event_id: None,
-                    model_generation_ref: None,
-                    expires_at: clock.now() + Duration::try_hours(1).unwrap(),
-                },
-            )
-            .await
-            .unwrap();
+        let grant = commit_test_session_grant(
+            &mut repo,
+            &mut rng,
+            &clock,
+            TestSessionGrantSeed {
+                request_identity: "revoke-if-active-issue",
+                grant_id: "ak:session_grant:AUiTFJVo328Rc7lc2Le2mjzL_ELZ-uQUn1Fq-C1QNAbh",
+                browser_session_id: Some(browser_session.id),
+                device_id: "device-cas",
+                session_id: "session-chain-cas",
+                grant_jwt: "cas-grant-jwt",
+                session_public_key: "cas-public-key",
+                issuance_digest: [0x22; 32],
+                scope,
+            },
+        )
+        .await;
 
         // First consume wins.
         let first = repo

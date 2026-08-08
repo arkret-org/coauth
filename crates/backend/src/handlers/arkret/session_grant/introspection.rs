@@ -2,9 +2,8 @@ use arkret_identifiers::{DeviceId, Did};
 use arkret_models_collaboration::session_grant_bodies::{
     SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND, SessionGrantIntrospectGrant,
     SessionGrantIntrospectOutcome, SessionGrantIntrospectRequestBody, SessionGrantIntrospectStatus,
-    SessionGrantIntrospectionProof, SessionGrantIntrospectionProofClaims, SessionGrantScopeDetails,
+    SessionGrantIntrospectionProof, SessionGrantIntrospectionProofClaims,
 };
-use arkret_wire::FreshnessState;
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::user::PrincipalDidRepository as _;
 use coauth_data::{BrowserSession, SessionGrant, User};
@@ -31,7 +30,7 @@ fn introspection_grant_record(
         )))
     })?;
     let parsed_payload = parsed_jwt.payload().clone();
-    let cnf_jkt = Some(parsed_payload.cnf.jkt.clone());
+    let cnf_jkt = parsed_payload.cnf.jkt.clone();
     let service_account_id = browser_session
         .map(|session| session.user.id.to_string())
         .or_else(|| grant.browser_session_id.map(|id| id.to_string()))
@@ -40,17 +39,6 @@ fn introspection_grant_record(
         || format!("org.arkret.coauth.session_grant:{}", grant.grant_id),
         |id| format!("org.arkret.coauth.browser_session:{id}"),
     );
-    let scope_details = parsed_payload
-        .scope_details
-        .as_ref()
-        .map(project_scope_details)
-        .transpose()
-        .map_err(|error| {
-            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                "stored session grant scope_details is invalid: {error}"
-            )))
-        })?;
-
     let device_id = grant
         .device_id
         .as_ref()
@@ -82,58 +70,16 @@ fn introspection_grant_record(
         expires_at: grant.expires_at,
         revoked_at: grant.revoked_at,
         revocation_ref,
-        session_public_key: grant.session_public_key.clone(),
+        session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
+            &grant.session_public_key,
+        )
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         cnf_jkt,
         credential_class: parsed_payload.credential_class,
         recovery_binding: parsed_payload.recovery_binding,
-        device_binding: parsed_payload.device_binding,
-        proof_kind: parsed_payload.proof_kind,
-        scope_details,
-        freshness_state: None,
+        bootstrap_binding: parsed_payload.bootstrap_binding,
+        holder_binding: parsed_payload.holder_binding,
     })
-}
-
-fn project_scope_details(
-    value: &serde_json::Value,
-) -> serde_json::Result<SessionGrantScopeDetails> {
-    let mut object = value.as_object().cloned().ok_or_else(|| {
-        serde_json::Error::io(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "session grant scope_details must be an object",
-        ))
-    })?;
-    object.retain(|field, _| {
-        matches!(
-            field.as_str(),
-            "realm_ids" | "strand_ids" | "track_names" | "participation"
-        )
-    });
-    serde_json::from_value(serde_json::Value::Object(object))
-}
-
-#[cfg(test)]
-mod scope_projection_tests {
-    use super::*;
-
-    #[test]
-    fn internal_agent_scope_projects_only_wire_fields() {
-        let projected = project_scope_details(&serde_json::json!({
-            "controller_id": "did:web:controller.example",
-            "agent_key_authorization_ref": "ak:event:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
-            "realm_ids": [],
-            "strand_ids": [],
-            "constraints": {"allowed_endpoints": []}
-        }))
-        .unwrap();
-
-        assert!(projected.realm_ids.is_empty());
-        assert!(projected.strand_ids.is_empty());
-    }
-
-    #[test]
-    fn invalid_scope_details_shape_still_fails_closed() {
-        assert!(project_scope_details(&serde_json::json!([])).is_err());
-    }
 }
 
 pub(crate) fn introspection_status(
@@ -146,8 +92,14 @@ pub(crate) fn introspection_status(
         return SessionGrantIntrospectStatus::AudienceMismatch;
     }
 
-    if grant.revoked_at.is_some() {
-        return SessionGrantIntrospectStatus::Revoked;
+    match grant.lifecycle_state {
+        coauth_data::SessionGrantLifecycleState::Revoked => {
+            return SessionGrantIntrospectStatus::Revoked;
+        }
+        coauth_data::SessionGrantLifecycleState::Superseded => {
+            return SessionGrantIntrospectStatus::Superseded;
+        }
+        coauth_data::SessionGrantLifecycleState::Active => {}
     }
 
     if grant.expires_at <= now {
@@ -221,48 +173,29 @@ pub async fn introspect_session_grant(
         .await
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
 
-    // Exactly one of `id` / `grant_jwt` identifies the grant. Reject both
-    // missing AND both present, rather than silently preferring `id` and
-    // ignoring `grant_jwt` — an ambiguous selector should be a hard error so a
-    // caller never believes it introspected the JWT it sent.
-    // The body parsed fine; it just fails the `oneOf` selector constraint, so
-    // this is a schema_violation (not bad_json, which means unparseable JSON).
-    match (body.id.is_some(), body.grant_jwt.is_some()) {
-        (false, false) => {
-            return Err(ArkretRouteError::coded(
-                StatusCode::BAD_REQUEST,
-                arkret_wire::ErrorCode::SCHEMA_VIOLATION,
-                "exactly one of id or grant_jwt is required",
-            ));
-        }
-        (true, true) => {
-            return Err(ArkretRouteError::coded(
-                StatusCode::BAD_REQUEST,
-                arkret_wire::ErrorCode::SCHEMA_VIOLATION,
-                "id and grant_jwt are mutually exclusive",
-            ));
-        }
-        _ => {}
-    }
-
     let caller = require_session_grant_caller(req, depot).await?;
     let clock = crate::handlers::make_clock();
     let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
     let mut repo = depot.repo().await?;
 
-    let grant = if let Some(id) = body.id.as_ref() {
-        repo.oauth_session_grant()
-            .lookup_by_grant_id(id)
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
-    } else if let Some(grant_jwt) = body.grant_jwt.as_deref() {
-        repo.oauth_session_grant()
-            .lookup_by_grant_jwt(grant_jwt)
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
-    } else {
-        None
+    let (grant, requested_audience, presented_proof) = match body {
+        SessionGrantIntrospectRequestBody::ById(body) => (
+            repo.oauth_session_grant()
+                .lookup_by_grant_id(&body.id)
+                .await
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            body.audience,
+            body.proof,
+        ),
+        SessionGrantIntrospectRequestBody::ByJwt(body) => (
+            repo.oauth_session_grant()
+                .lookup_by_grant_jwt(&body.grant_jwt)
+                .await
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            body.audience,
+            body.proof,
+        ),
     };
 
     let Some(grant) = grant else {
@@ -331,11 +264,11 @@ pub async fn introspect_session_grant(
         &grant,
         user.as_ref(),
         clock.now(),
-        body.audience.as_ref().map(Did::as_str),
+        requested_audience.as_ref().map(Did::as_str),
     );
     let mut proof_required = false;
     if status == SessionGrantIntrospectStatus::Active {
-        match body.proof.as_ref() {
+        match presented_proof.as_ref() {
             Some(proof) => {
                 status = verify_session_grant_introspection_proof(&grant, proof, clock.now());
             }
@@ -431,19 +364,10 @@ pub async fn introspect_session_grant(
     // Only NotFound / AudienceMismatch withhold it — a `proof_required` advisory
     // does NOT, or the default grant+DPoP path could never obtain the cnf_jkt it
     // must verify against.
-    let mut grant_record = (status != SessionGrantIntrospectStatus::NotFound
+    let grant_record = (status != SessionGrantIntrospectStatus::NotFound
         && status != SessionGrantIntrospectStatus::AudienceMismatch)
         .then(|| introspection_grant_record(&grant, browser_session.as_ref()))
         .transpose()?;
-    if let Some(record) = grant_record.as_mut()
-        && record.proof_kind == Some(arkret_models_identity::SessionGrantProofKind::AgentKeyProof)
-    {
-        record.freshness_state = Some(if active {
-            FreshnessState::Fresh
-        } else {
-            FreshnessState::Stale
-        });
-    }
 
     // Introspection is READ-ONLY. The session grant is the (minutes-to-hours,
     // multi-day-via-rotation) refresh credential: the legitimate device

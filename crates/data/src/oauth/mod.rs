@@ -15,5 +15,8 @@ pub use self::client::{
 pub use self::device_code_grant::{DeviceCodeGrant, DeviceCodeGrantState};
 pub use self::i18n::{OAuthClientI18n, OAuthClientI18nEntry};
 pub use self::session::{Session, SessionState};
-pub use self::session_grant::SessionGrant;
+pub use self::session_grant::{
+    SessionGrant, SessionGrantLifecycleState, SessionGrantOperation, SessionGrantOperationKind,
+    SessionGrantOperationState,
+};
 pub use crate::storage::oauth::*;

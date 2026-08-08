@@ -1616,6 +1616,7 @@ dependencies = [
 name = "coauth-data"
 version = "0.3.0"
 dependencies = [
+ "arkret-canonical",
  "arkret-identifiers",
  "arkret-locale",
  "arkret-models-collaboration",

@@ -20,6 +20,7 @@ coauth-data-model = {workspace = true}
 coauth-iana = {workspace = true}
 coauth-jose = {workspace = true}
 arkret-locale = {workspace = true,features = ["serde"]}
+arkret-canonical = {workspace = true}
 arkret-identifiers = {workspace = true}
 arkret-models-collaboration = {workspace = true}
 arkret-models-identity = {workspace = true}

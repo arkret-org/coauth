@@ -334,12 +334,12 @@ impl coauth_data::oauth::OAuthRefreshTokenRepository for PgOAuthRefreshTokenRepo
                     ),
                     revoked_session_grants AS (
                         UPDATE oauth_session_grants
-                        SET revoked_at = $2::timestamptz
+                        SET lifecycle_state = 'revoked', revoked_at = $2::timestamptz
                         FROM oauth_sessions
                         JOIN chain ON chain.oauth_session_id = oauth_sessions.id
                         WHERE oauth_sessions.user_session_id IS NOT NULL
                           AND oauth_session_grants.user_session_id = oauth_sessions.user_session_id
-                          AND oauth_session_grants.revoked_at IS NULL
+                          AND oauth_session_grants.lifecycle_state = 'active'
                         RETURNING oauth_session_grants.id
                     )
                 SELECT

@@ -19,7 +19,11 @@ use arkret_models_collaboration::account_lifecycle::AccountRegisterRequestBody;
 use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
 };
-use coauth_data::{RepositoryAccess, UpstreamOAuthProviderDiscoveryMode, User};
+use coauth_data::{
+    BoxRepository, RepositoryAccess, SessionGrantCommitOutcome, SessionGrantExactOutcome,
+    SessionGrantOperation, SessionGrantProofAuthorization, UpstreamOAuthProviderDiscoveryMode,
+    User,
+};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
 use coauth_oauth_types::requests::{
@@ -28,6 +32,7 @@ use coauth_oauth_types::requests::{
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
 use salvo::prelude::*;
+use sha2::Digest as _;
 use soland_contracts::admin::AccountLocalpartAddRequestBody;
 use ulid::Ulid;
 
@@ -76,6 +81,141 @@ pub(crate) struct OidcExchangeSuccess {
     pub device_id: String,
     pub session_grant: SessionGrantMaterial,
     pub persisted_grant_id: String,
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn commit_oidc_session_grant(
+    depot: &Depot,
+    mut repo: BoxRepository,
+    clock: &dyn coauth_data::Clock,
+    operation: &SessionGrantOperation,
+    dpop_binding: &DpopSessionBinding,
+    browser_session_id: Ulid,
+    principal_did: &str,
+    device_id: &str,
+    material: &SessionGrantMaterial,
+) -> Result<coauth_data::SessionGrant, OidcExchangeError> {
+    let principal_id = arkret_identifiers::Did::new(principal_did.to_owned())
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+    let device_id_typed = arkret_identifiers::DeviceId::new(device_id.to_owned())
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+    let audience = arkret_identifiers::Did::new(material.audience.clone())
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+    let session_public_key =
+        arkret_models_identity::CanonicalSessionPublicJwk::new(&material.session_public_key)
+            .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+    let wire_outcome = arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome {
+        principal_id,
+        device_id: Some(device_id_typed),
+        session_grant: material.grant_jwt.clone(),
+        expires_at: material.expires_at_timestamp,
+        grant_id: material.grant_id.clone(),
+        session_public_key,
+        audience,
+        granted_scope: material.scopes.clone(),
+        scope_details: None,
+    };
+    let canonical_outcome = arkret_canonical::canonical_json_bytes(&wire_outcome)
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+    let outcome_digest: [u8; 32] = sha2::Sha256::digest(&canonical_outcome).into();
+    let checkpoint = serde_json::json!({
+        "kind": "oidc_code_exchange",
+        "principal_id": principal_did,
+        "device_id": device_id,
+        "browser_session_id": browser_session_id.to_string(),
+        "grant_id": material.grant_id,
+        "issuance_digest": hex::encode(material.issuance_digest),
+        "material": material,
+        "wire_outcome": wire_outcome,
+    });
+    let authorization_ref = format!("oidc:{}", operation.request_identity);
+    let proof_expires_at = clock.now() + chrono::Duration::minutes(5);
+    let authorization = SessionGrantProofAuthorization {
+        authorization_ref: &authorization_ref,
+        checkpoint: &checkpoint,
+        proof_expires_at,
+    };
+
+    let inserted = repo
+        .dpop_replay()
+        .consume_jti(crate::services::dpop::dpop_replay_record(
+            &dpop_binding.jti,
+            clock.now(),
+        ))
+        .await
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+    if !inserted {
+        return Err(OidcExchangeError::proof_invalid(
+            "grant-binding DPoP proof JTI was already consumed",
+        ));
+    }
+    repo.oauth_session_grant()
+        .checkpoint_authorization(clock, operation.id, authorization)
+        .await
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+    // Once durable, this checkpoint lets Authorized retries finish from the
+    // exact prepared material without calling the token endpoint again. The
+    // unavoidable crash window between an external provider consuming the
+    // code and this save remains fail-closed as indeterminate.
+    repo.save()
+        .await
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+
+    let mut repo = depot
+        .repo()
+        .await
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+    let authorization = SessionGrantProofAuthorization {
+        authorization_ref: &authorization_ref,
+        checkpoint: &checkpoint,
+        proof_expires_at,
+    };
+    let exact_outcome = SessionGrantExactOutcome {
+        canonical_response: &canonical_outcome,
+        response_digest: outcome_digest,
+    };
+    let committed = repo
+        .oauth_session_grant()
+        .commit_issuance(
+            clock,
+            operation.id,
+            authorization,
+            exact_outcome,
+            arkret::new_session_grant_record(Some(browser_session_id), material),
+        )
+        .await
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+    let grant = match committed {
+        SessionGrantCommitOutcome::Committed(grant) => grant,
+        SessionGrantCommitOutcome::Replay(operation) => {
+            let grant_id = operation.result_grant_id.as_ref().ok_or_else(|| {
+                OidcExchangeError::new(
+                    "session_grant_replay_indeterminate",
+                    "committed operation has no result grant identity",
+                )
+            })?;
+            repo.oauth_session_grant()
+                .lookup_by_grant_id(grant_id)
+                .await
+                .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?
+                .ok_or_else(|| {
+                    OidcExchangeError::new(
+                        "session_grant_replay_indeterminate",
+                        "committed result grant is unavailable",
+                    )
+                })?
+        }
+        SessionGrantCommitOutcome::Indeterminate(_) => {
+            return Err(OidcExchangeError::new(
+                "session_grant_replay_indeterminate",
+                "session-grant commit outcome is indeterminate",
+            ));
+        }
+    };
+    repo.save()
+        .await
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+    Ok(grant)
 }
 
 /// Successful OIDC authentication used to create a short-lived account
@@ -383,6 +523,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
     depot: &Depot,
     dpop_binding: Option<DpopSessionBinding>,
     input: OidcCodeExchangeInput,
+    operation: coauth_data::SessionGrantOperation,
 ) -> Result<OidcExchangeSuccess, OidcExchangeError> {
     match exchange_oidc_code(
         req,
@@ -390,6 +531,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         dpop_binding,
         input,
         OidcExchangeIntent::SessionGrant,
+        Some(operation),
     )
     .await?
     {
@@ -412,6 +554,7 @@ pub(crate) async fn exchange_oidc_code_for_account_handoff(
         Some(dpop_binding),
         input,
         OidcExchangeIntent::AccountHandoff,
+        None,
     )
     .await?
     {
@@ -426,6 +569,7 @@ async fn exchange_oidc_code(
     dpop_binding: Option<DpopSessionBinding>,
     input: OidcCodeExchangeInput,
     intent: OidcExchangeIntent,
+    session_grant_operation: Option<coauth_data::SessionGrantOperation>,
 ) -> Result<OidcExchangeResult, OidcExchangeError> {
     let mut rng = make_rng();
     let clock = make_clock();
@@ -781,7 +925,14 @@ async fn exchange_oidc_code(
             OidcExchangeError::new("principal_account_registration_failed", message)
         })?;
 
+        let issuance_seed = arkret::SessionGrantIssuanceSeed::from_operation(
+            session_grant_operation
+                .as_ref()
+                .expect("session grant exchange must carry a reserved operation"),
+        )
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
         let session_grant = arkret::issue_session_grant_for_audience(
+            &issuance_seed,
             &*clock,
             &arkret_config,
             &key_store,
@@ -791,20 +942,23 @@ async fn exchange_oidc_code(
             principal_session_grant_scopes(&device_id),
             Some(&principal_did),
             dpop_binding.jkt.clone(),
+            arkret_models_identity::SessionGrantProofKind::OidcCodeExchange,
         )
         .map_err(|error| OidcExchangeError::new("session_grant_denied", error.to_string()))?;
-        let persisted = arkret::persist_session_grant(
-            &mut repo,
-            &mut rng,
+        let persisted = commit_oidc_session_grant(
+            depot,
+            repo,
             &*clock,
-            &browser_session,
+            session_grant_operation
+                .as_ref()
+                .expect("session grant exchange must carry a reserved operation"),
+            &dpop_binding,
+            browser_session.id,
+            &principal_did,
+            device_id.as_str(),
             &session_grant,
         )
-        .await
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
-        repo.save()
-            .await
-            .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+        .await?;
 
         let _ = &service_activity_tracker;
         let _ = &grant_target;
@@ -1275,7 +1429,14 @@ async fn exchange_oidc_code(
     .await
     .map_err(|message| OidcExchangeError::new("principal_account_registration_failed", message))?;
 
+    let issuance_seed = arkret::SessionGrantIssuanceSeed::from_operation(
+        session_grant_operation
+            .as_ref()
+            .expect("session grant exchange must carry a reserved operation"),
+    )
+    .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
     let session_grant = arkret::issue_session_grant_for_audience(
+        &issuance_seed,
         &clock,
         &arkret_config,
         &key_store,
@@ -1285,20 +1446,23 @@ async fn exchange_oidc_code(
         principal_session_grant_scopes(&device_id),
         Some(&principal_did),
         dpop_binding.jkt,
+        arkret_models_identity::SessionGrantProofKind::OidcCodeExchange,
     )
     .map_err(|error| OidcExchangeError::new("session_grant_denied", error.to_string()))?;
-    let persisted = arkret::persist_session_grant(
-        &mut repo,
-        &mut rng,
+    let persisted = commit_oidc_session_grant(
+        depot,
+        repo,
         &clock,
-        &browser_session,
+        session_grant_operation
+            .as_ref()
+            .expect("session grant exchange must carry a reserved operation"),
+        &dpop_binding,
+        browser_session.id,
+        &principal_did,
+        device_id.as_str(),
         &session_grant,
     )
-    .await
-    .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
-    repo.save()
-        .await
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+    .await?;
 
     let _ = &grant_target;
     Ok(OidcExchangeResult::SessionGrant(Box::new(

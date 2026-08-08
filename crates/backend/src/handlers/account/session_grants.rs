@@ -7,6 +7,7 @@ use coauth_data::Pagination;
 use coauth_data::oauth::SessionGrantFilter;
 use salvo::prelude::*;
 use serde::Serialize;
+use sha2::Digest as _;
 use ulid::Ulid;
 
 use crate::handlers::account::DepotExt as _;
@@ -30,6 +31,7 @@ pub async fn list_session_grants(
     depot: &Depot,
 ) -> Result<Json<SessionGrantListOutcome>, ArkretRouteError> {
     let clock = crate::handlers::make_clock();
+    let mut rng = crate::handlers::make_rng();
     let subject = req.query::<String>("subject");
     let device_id = req.query::<String>("device_id");
     let requested_audience = req.query::<String>("audience");
@@ -90,6 +92,7 @@ pub async fn revoke_session_grant(
     depot: &Depot,
 ) -> Result<Json<SessionGrantRevokeOutcome>, ArkretRouteError> {
     let clock = crate::handlers::make_clock();
+    let mut rng = crate::handlers::make_rng();
     let raw_id = req
         .param::<String>("id")
         .ok_or_else(|| ArkretRouteError::BadRequest("missing session grant id".into()))?;
@@ -114,11 +117,105 @@ pub async fn revoke_session_grant(
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .ok_or(ArkretRouteError::NotFound)?;
 
-    let grant = repo
+    let canonical_intent = arkret_canonical::canonical_json_bytes(&serde_json::json!({
+        "operation": "admin_revoke_session_grant",
+        "grant_id": grant.grant_id,
+    }))
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let canonical_intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_intent).into();
+    let request_identity = format!("admin-revoke:{}", grant.grant_id);
+    let operation_selector = serde_json::json!({"kind":"grant","grant_id":grant.grant_id});
+    let now = clock.now();
+    let reserved = repo
         .oauth_session_grant()
-        .revoke(&clock, grant)
+        .reserve_operation(
+            &mut rng,
+            &clock,
+            coauth_data::NewSessionGrantOperation {
+                issuer: &grant.issuer,
+                operation_kind: coauth_data::SessionGrantOperationKind::Revoke,
+                proof_kind: None,
+                request_identity: &request_identity,
+                canonical_intent_digest,
+                canonical_intent: &canonical_intent,
+                operation_selector: Some(operation_selector),
+                target_grant_id: None,
+                session_id: None,
+                grant_not_before: None,
+                grant_expires_at: None,
+                signing_key_id: None,
+                retained_until: now + chrono::Duration::days(7),
+            },
+        )
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let operation = match reserved {
+        coauth_data::SessionGrantReserveOutcome::Reserved(operation) => Some(operation),
+        coauth_data::SessionGrantReserveOutcome::Pending(operation)
+            if operation.state == coauth_data::SessionGrantOperationState::Reserved =>
+        {
+            Some(operation)
+        }
+        coauth_data::SessionGrantReserveOutcome::Replay(_) => None,
+        coauth_data::SessionGrantReserveOutcome::Conflict(_) => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
+                "admin revoke identity conflicts with a different intent",
+            ));
+        }
+        coauth_data::SessionGrantReserveOutcome::Indeterminate(_) => {
+            repo.save().await?;
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "admin revoke outcome is indeterminate",
+            ));
+        }
+        coauth_data::SessionGrantReserveOutcome::Pending(_) => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "admin revoke authorization is incomplete",
+            ));
+        }
+    };
+    if let Some(operation) = operation {
+        let checkpoint = serde_json::json!({"kind":"admin_session_grant_revoke"});
+        let outcome = repo
+            .oauth_session_grant()
+            .commit_revoke(
+                &clock,
+                operation.id,
+                coauth_data::SessionGrantProofAuthorization {
+                    authorization_ref: &request_identity,
+                    checkpoint: &checkpoint,
+                    proof_expires_at: now + chrono::Duration::days(7),
+                },
+                coauth_data::SessionGrantRevokeSelector::Grant(&grant.grant_id),
+            )
+            .await
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        if matches!(
+            outcome,
+            coauth_data::SessionGrantRevokeOutcome::Indeterminate(_)
+        ) {
+            repo.save().await?;
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "admin revoke commit is indeterminate",
+            ));
+        }
+    }
+    let grant = repo
+        .oauth_session_grant()
+        .lookup(id)
+        .await
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .ok_or(ArkretRouteError::NotFound)?;
     repo.save()
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;

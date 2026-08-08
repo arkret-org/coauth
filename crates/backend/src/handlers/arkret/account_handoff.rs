@@ -19,7 +19,9 @@ use crate::handlers::account::auth::oidc_bridge::{
 };
 use crate::handlers::account::auth::{DpopSessionBinding, extract_dpop_binding_for_kickoff};
 use crate::handlers::{make_clock, make_rng};
-use crate::services::dpop::{DpopVerification, dpop_header_from_request, dpop_htu};
+use crate::services::dpop::{
+    DpopVerification, DpopVerifier, dpop_header_from_request, dpop_htu,
+};
 
 const HANDOFF_TTL: Duration = Duration::minutes(10);
 const IDENTITY_CREATION_LEASE_TTL: Duration = Duration::minutes(15);
@@ -278,6 +280,44 @@ pub(crate) async fn authenticate_account_handoff(
     depot: &Depot,
     operation: AccountHandoffAllowedOperation,
 ) -> Result<(AccountHandoffGrant, DpopVerification), ArkretRouteError> {
+    authenticate_account_handoff_inner(req, depot, operation, true).await
+}
+
+pub(crate) async fn authenticate_account_handoff_without_replay(
+    req: &Request,
+    depot: &Depot,
+    operation: AccountHandoffAllowedOperation,
+) -> Result<(AccountHandoffGrant, DpopVerification), ArkretRouteError> {
+    authenticate_account_handoff_inner(req, depot, operation, false).await
+}
+
+/// Re-authenticate possession of a presented handoff token without requiring
+/// its mutable active/consumed row. Exact replay uses this before consulting
+/// the issuer ledger; only a fresh Reserved operation subsequently loads and
+/// consumes the active handoff row.
+pub(crate) fn verify_account_handoff_holder_without_lookup(
+    req: &Request,
+    depot: &Depot,
+) -> Result<(String, DpopVerification), ArkretRouteError> {
+    let token = account_handoff_authorization(req)?.to_owned();
+    let now = chrono::Utc::now();
+    let dpop = dpop_header_from_request(req)
+        .ok_or_else(|| proof_invalid("account handoff request requires a DPoP proof"))?;
+    let htu = dpop_htu(&depot.url_builder()?.http_base(), req);
+    let verification =
+        DpopVerifier::verify_without_replay(&dpop, req.method().as_str(), &htu, now, Some(&token))
+            .map_err(|error| {
+                proof_invalid(format!("account handoff DPoP proof failed: {error}"))
+            })?;
+    Ok((token, verification))
+}
+
+async fn authenticate_account_handoff_inner(
+    req: &Request,
+    depot: &Depot,
+    operation: AccountHandoffAllowedOperation,
+    consume_jti: bool,
+) -> Result<(AccountHandoffGrant, DpopVerification), ArkretRouteError> {
     let token = account_handoff_authorization(req)?;
     let now = chrono::Utc::now();
     let mut repo = depot.repo().await?;
@@ -298,11 +338,15 @@ pub(crate) async fn authenticate_account_handoff(
     let dpop = dpop_header_from_request(req)
         .ok_or_else(|| proof_invalid("account handoff request requires a DPoP proof"))?;
     let htu = dpop_htu(&depot.url_builder()?.http_base(), req);
-    let verification = depot
-        .dpop_verifier()?
-        .verify(&dpop, req.method().as_str(), &htu, now, Some(token))
-        .await
-        .map_err(|error| proof_invalid(format!("account handoff DPoP proof failed: {error}")))?;
+    let verification = if consume_jti {
+        depot
+            .dpop_verifier()?
+            .verify(&dpop, req.method().as_str(), &htu, now, Some(token))
+            .await
+    } else {
+        DpopVerifier::verify_without_replay(&dpop, req.method().as_str(), &htu, now, Some(token))
+    }
+    .map_err(|error| proof_invalid(format!("account handoff DPoP proof failed: {error}")))?;
     if verification.jkt != grant.cnf_jkt {
         return Err(proof_invalid(
             "account handoff DPoP key does not match the credential cnf.jkt",

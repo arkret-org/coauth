@@ -657,9 +657,40 @@ diesel::table! {
 }
 
 diesel::table! {
+    oauth_session_grant_operations (id) {
+        id -> Uuid,
+        issuer -> Text,
+        operation_kind -> Text,
+        proof_kind -> Nullable<Text>,
+        request_identity -> Text,
+        canonical_intent_digest -> Binary,
+        canonical_intent -> Nullable<Binary>,
+        operation_selector -> Nullable<Jsonb>,
+        issuance_nonce -> Nullable<Text>,
+        session_id -> Nullable<Text>,
+        grant_not_before -> Nullable<Timestamptz>,
+        grant_expires_at -> Nullable<Timestamptz>,
+        signing_key_id -> Nullable<Text>,
+        state -> Text,
+        proof_authorization_ref -> Nullable<Text>,
+        proof_authorization_checkpoint -> Nullable<Jsonb>,
+        proof_expires_at -> Nullable<Timestamptz>,
+        outcome_digest -> Nullable<Binary>,
+        canonical_outcome -> Nullable<Binary>,
+        target_grant_id -> Nullable<Binary>,
+        result_grant_id -> Nullable<Binary>,
+        affected_grant_ids -> Array<Nullable<Binary>>,
+        retained_until -> Timestamptz,
+        committed_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     oauth_session_grants (id) {
         id -> Uuid,
         grant_id -> Binary,
+        issuance_operation_id -> Uuid,
         user_session_id -> Nullable<Uuid>,
         issuer -> Text,
         subject -> Text,
@@ -672,6 +703,11 @@ diesel::table! {
         audience -> Text,
         scope_list -> Array<Text>,
         grant_jwt -> Text,
+        session_id -> Text,
+        issuance_nonce -> Text,
+        issuance_preimage -> Binary,
+        issuance_digest -> Binary,
+        signing_key_id -> Text,
         session_public_key -> Text,
         credential_class -> Text,
         recovery_session_id -> Nullable<Text>,
@@ -680,7 +716,10 @@ diesel::table! {
         device_authorization_event_id -> Nullable<Text>,
         model_generation_ref -> Nullable<Jsonb>,
         expires_at -> Timestamptz,
+        lifecycle_state -> Text,
         revoked_at -> Nullable<Timestamptz>,
+        superseded_at -> Nullable<Timestamptz>,
+        successor_grant_id -> Nullable<Binary>,
         created_at -> Timestamptz,
     }
 }
@@ -1073,6 +1112,7 @@ diesel::joinable!(oauth_access_tokens -> oauth_sessions (oauth_session_id));
 diesel::joinable!(oauth_authorization_grants -> oauth_clients (oauth_client_id));
 diesel::joinable!(oauth_device_code_grant -> oauth_clients (oauth_client_id));
 diesel::joinable!(oauth_session_grants -> user_sessions (user_session_id));
+diesel::joinable!(oauth_session_grants -> oauth_session_grant_operations (issuance_operation_id));
 diesel::joinable!(oauth_client_localized_metadata -> oauth_clients (client_id));
 diesel::joinable!(upstream_oauth_links -> upstream_oauth_providers (upstream_oauth_provider_id));
 diesel::joinable!(upstream_oauth_authorization_sessions -> upstream_oauth_providers (upstream_oauth_provider_id));
@@ -1122,6 +1162,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     oauth_authorization_grants,
     oauth_device_code_grant,
     oauth_session_grants,
+    oauth_session_grant_operations,
     upstream_oauth_providers,
     upstream_oauth_links,
     upstream_oauth_authorization_sessions,

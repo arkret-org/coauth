@@ -30,7 +30,8 @@ use arkret_models_collaboration::events_payloads::device_identity::{
 };
 use arkret_models_identity::{
     AccountDeviceEnrollOutcome, AccountDeviceEnrollRequestBody, DeviceEnrollmentAuthorityBinding,
-    DeviceEnrollmentAuthorityBindingKind, SignedSessionGrantClaims,
+    DeviceEnrollmentAuthorityBindingKind, SessionGrantBootstrapBinding,
+    SessionGrantCredentialClass, SignedSessionGrantClaims,
 };
 use arkret_signatures::{SignEventOptions, sign_event};
 use arkret_wire::{AuthorizationRef, Event, NonEmptyString, ScopeRef};
@@ -269,20 +270,68 @@ pub async fn device_enroll_endpoint(
                 "no session grant matches the presented bearer",
             )
         })?;
-    if grant_row.revoked_at.is_some() {
+    if !grant_row.is_active(&*clock) {
         repo.cancel().await.ok();
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
             arkret_wire::ErrorCode::GRANT_ALREADY_CONSUMED,
-            "session grant has been revoked",
+            "session grant is expired, revoked, or superseded",
         ));
     }
-    if grant_row.expires_at <= clock.now() {
+    let expected_device_scope = format!("urn:arkret:client:device:{}", body.device_id.as_str());
+    let (bootstrap_device_id, allowed_operation_ids, bootstrap_expires_at) =
+        match grant_payload.bootstrap_binding.as_ref() {
+            Some(SessionGrantBootstrapBinding::Founding {
+                device_id,
+                allowed_operation_ids,
+                bootstrap_transaction_expires_at,
+                ..
+            })
+            | Some(SessionGrantBootstrapBinding::SiblingPairing {
+                device_id,
+                allowed_operation_ids,
+                bootstrap_transaction_expires_at,
+                ..
+            }) => (
+                device_id,
+                allowed_operation_ids,
+                bootstrap_transaction_expires_at,
+            ),
+            _ => {
+                repo.cancel().await.ok();
+                return Err(ArkretRouteError::coded(
+                    StatusCode::UNAUTHORIZED,
+                    arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                    "device enrollment requires a closed device_bootstrap binding",
+                ));
+            }
+        };
+    if grant_payload.credential_class != SessionGrantCredentialClass::DeviceBootstrap
+        || grant_payload.holder_binding.is_some()
+        || bootstrap_device_id != &body.device_id
+        || *bootstrap_expires_at <= clock.now()
+        || !allowed_operation_ids.iter().any(|operation| {
+            operation == arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ENROLL_DEVICE
+        })
+        || grant_payload
+            .device_binding
+            .as_ref()
+            .is_some_and(|binding| binding.device_id != body.device_id)
+        || grant_row.device_id.as_deref() != Some(body.device_id.as_str())
+        || !grant_payload
+            .scopes
+            .iter()
+            .any(|scope| scope == &expected_device_scope)
+        || !grant_row
+            .scope
+            .iter()
+            .any(|scope| scope.as_str() == expected_device_scope)
+    {
         repo.cancel().await.ok();
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::SESSION_GRANT_NOT_FOUND,
-            "session grant has expired",
+            arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            "session grant holder/device binding does not authorize this enrollment device",
         ));
     }
     let Some(browser_session_id) = grant_row.browser_session_id else {

@@ -1,6 +1,6 @@
 //! PostgreSQL recovery-authority authorization repository.
 
-use arkret_identifiers::{EventId, IdentifierError, SessionGrantId};
+use arkret_identifiers::SessionGrantId;
 use async_trait::async_trait;
 use coauth_data::recovery_authority::{
     NewRecoveryDeviceAuthorization, NewRecoverySessionGrantPromotion, RecoveryDeviceAuthorization,
@@ -11,6 +11,7 @@ use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
 use crate::schema::{recovery_device_authorizations, recovery_session_grant_promotions};
+use crate::session_grant_codec::session_grant_id_from_bytes;
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`RecoveryAuthorityRepository`].
@@ -24,13 +25,6 @@ impl<'c> PgRecoveryAuthorityRepository<'c> {
     pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
         Self { conn }
     }
-}
-
-fn session_grant_id_from_bytes(value: &[u8]) -> Result<SessionGrantId, IdentifierError> {
-    let token: [u8; 33] = value.try_into().map_err(|_| {
-        IdentifierError::InvalidId("SessionGrantId storage token must be 33 bytes".to_owned())
-    })?;
-    EventId::from_token_bytes(token).map(|event_id| SessionGrantId::from_event_id(&event_id))
 }
 
 #[derive(Queryable, Selectable)]

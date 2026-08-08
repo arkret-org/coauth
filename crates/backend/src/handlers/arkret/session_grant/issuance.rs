@@ -1,5 +1,11 @@
 use arkret_canonical::{format_timestamp_canonical, normalize_timestamp_canonical};
-use arkret_identifiers::{DeviceId, SessionGrantId};
+use arkret_identifiers::{DeviceId, Did, EventId, SessionGrantId};
+use arkret_wire::DidUrl;
+use arkret_models_identity::{
+    CanonicalSessionPublicJwk, SESSION_GRANT_CREDENTIAL_KIND, SESSION_GRANT_ISSUANCE_SCHEMA,
+    SessionGrantCnf, SessionGrantCredentialClass, SessionGrantHolderBinding,
+    SessionGrantIssuancePreimage, SessionGrantProofKind, SignedSessionGrantClaims,
+};
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
 #[cfg(test)]
@@ -18,19 +24,12 @@ use ulid::Ulid;
 use super::*;
 use crate::handlers::arkret::*;
 
-fn new_session_grant_id() -> Result<SessionGrantId, SessionGrantError> {
-    // A SessionGrantId may only be obtained from an exact ak.session.grant
-    // Event listed in the Principal Server's durable accepted[] outcome. The
-    // old local UUIDv7 minting path is intentionally fail-closed until the
-    // delegated-service /_arkret/self/events admission client is wired here.
-    Err(SessionGrantError::EventAcceptanceUnavailable)
-}
-
 // Test-only convenience wrapper (re-exported under `#[cfg(test)]` from the
 // session_grant module); production paths call the audience-explicit forms.
 #[cfg(test)]
 pub(crate) fn issue_session_grant(
     _rng: &mut (dyn CryptoRngCore + Send),
+    issuance_seed: &SessionGrantIssuanceSeed,
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
@@ -39,8 +38,10 @@ pub(crate) fn issue_session_grant(
     session_public_key: PublicJsonWebKey,
     subject: &str,
     scopes: Vec<String>,
+    proof_kind: SessionGrantProofKind,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     issue_session_grant_for_audience(
+        issuance_seed,
         clock,
         arkret_config,
         key_store,
@@ -50,6 +51,7 @@ pub(crate) fn issue_session_grant(
         scopes,
         Some(subject),
         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
+        proof_kind,
     )
 }
 
@@ -57,6 +59,7 @@ pub(crate) fn issue_session_grant(
 // for the target Principal Server audience. Issuance never fabricates a
 // service-local DID when that binding is absent.
 pub(crate) fn issue_session_grant_for_audience(
+    issuance_seed: &SessionGrantIssuanceSeed,
     clock: &dyn Clock,
     arkret_config: &ArkretConfig,
     key_store: &Keystore,
@@ -66,8 +69,10 @@ pub(crate) fn issue_session_grant_for_audience(
     scopes: Vec<String>,
     subject_override: Option<&str>,
     dpop_jkt: String,
+    proof_kind: SessionGrantProofKind,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     issue_session_grant_for_audience_inner(
+        issuance_seed,
         clock,
         arkret_config,
         key_store,
@@ -77,12 +82,14 @@ pub(crate) fn issue_session_grant_for_audience(
         scopes,
         subject_override,
         dpop_jkt,
+        proof_kind,
         true,
     )
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn issue_test_session_grant_for_audience(
+    issuance_seed: &SessionGrantIssuanceSeed,
     clock: &dyn Clock,
     arkret_config: &ArkretConfig,
     key_store: &Keystore,
@@ -92,8 +99,10 @@ pub(crate) fn issue_test_session_grant_for_audience(
     scopes: Vec<String>,
     subject_override: Option<&str>,
     dpop_jkt: String,
+    proof_kind: SessionGrantProofKind,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     issue_session_grant_for_audience_inner(
+        issuance_seed,
         clock,
         arkret_config,
         key_store,
@@ -103,21 +112,24 @@ pub(crate) fn issue_test_session_grant_for_audience(
         scopes,
         subject_override,
         dpop_jkt,
+        proof_kind,
         false,
     )
 }
 
 #[allow(clippy::too_many_arguments)]
 fn issue_session_grant_for_audience_inner(
+    issuance_seed: &SessionGrantIssuanceSeed,
     clock: &dyn Clock,
     arkret_config: &ArkretConfig,
     key_store: &Keystore,
-    browser_session: &BrowserSession,
+    _browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
     audience: String,
     scopes: Vec<String>,
     subject_override: Option<&str>,
     dpop_jkt: String,
+    proof_kind: SessionGrantProofKind,
     enforce_principal_did_method: bool,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     let subject = subject_override
@@ -126,47 +138,83 @@ fn issue_session_grant_for_audience_inner(
     if enforce_principal_did_method {
         ensure_principal_did_method_allowed(arkret_config, &subject)?;
     }
-    let session_public_key = serde_json::to_string(&session_public_key)?;
+    let session_public_key =
+        CanonicalSessionPublicJwk::new(serde_json::to_string(&session_public_key)?)?;
 
-    let now = normalize_timestamp_canonical(clock.now());
-    let expires_at = now + arkret_config.session_grant_ttl;
-    let grant_id = new_session_grant_id()?;
-    let device_id = primary_device_id_from_tokens(scopes.iter().map(String::as_str));
+    let now = issuance_seed.not_before;
+    let expires_at = issuance_seed.expires_at;
+    let device_id = primary_device_id_from_tokens(scopes.iter().map(String::as_str))
+        .ok_or(SessionGrantError::MissingDeviceBinding)?;
     let issuer = issuer_did_for(arkret_config);
     let cnf = SessionGrantCnf {
         jkt: dpop_jkt.clone(),
     };
-    let payload = SignedSessionGrantClaims {
-        kind: "ak.session.grant".to_owned(),
-        grant_id: grant_id.clone(),
+    let subject = Did::new(subject.clone()).map_err(|_| SessionGrantError::PrincipalUnknown)?;
+    let audience_did = Did::new(audience.clone())?;
+    let mut scopes = scopes;
+    scopes.sort_unstable();
+    scopes.dedup();
+    let issuance_nonce = issuance_seed.issuance_nonce.clone();
+    let session_id = issuance_seed.session_id.clone();
+    let preimage = SessionGrantIssuancePreimage {
+        schema: SESSION_GRANT_ISSUANCE_SCHEMA.to_owned(),
         issuer: issuer.clone(),
-        subject: arkret_identifiers::Did::new(subject.clone())
-            .map_err(|_| SessionGrantError::PrincipalUnknown)?,
+        issuance_nonce: issuance_nonce.clone(),
+        subject: subject.clone(),
         session_public_key: session_public_key.clone(),
-        audience: audience.clone(),
+        audience: audience_did.clone(),
         scopes: scopes.clone(),
         not_before: now,
         expires_at,
-        session_id: browser_session.id.to_string(),
-        cnf,
-        credential_class: arkret_models_identity::SessionGrantCredentialClass::Standard,
+        session_id: session_id.clone(),
+        cnf: cnf.clone(),
+        credential_class: SessionGrantCredentialClass::Standard,
+        holder_binding: Some(SessionGrantHolderBinding::HumanDevice {
+            device_binding: device_id.clone(),
+        }),
+        bootstrap_binding: None,
         recovery_binding: None,
         device_binding: None,
-        proof_kind: None,
+        proof_kind: Some(proof_kind),
         scope_details: None,
+    };
+    let issuance_preimage = preimage.canonical_bytes()?;
+    let issuance_digest = preimage.issuance_digest()?;
+    let grant_id = preimage.grant_id()?;
+    let payload = SignedSessionGrantClaims {
+        kind: SESSION_GRANT_CREDENTIAL_KIND.to_owned(),
+        grant_id: grant_id.clone(),
+        issuer: preimage.issuer,
+        issuance_nonce: preimage.issuance_nonce,
+        subject: preimage.subject,
+        session_public_key: preimage.session_public_key.clone(),
+        audience: preimage.audience,
+        scopes: preimage.scopes,
+        not_before: preimage.not_before,
+        expires_at: preimage.expires_at,
+        session_id: preimage.session_id,
+        cnf: preimage.cnf,
+        credential_class: preimage.credential_class,
+        holder_binding: preimage.holder_binding,
+        bootstrap_binding: preimage.bootstrap_binding,
+        recovery_binding: preimage.recovery_binding,
+        device_binding: preimage.device_binding,
+        proof_kind: preimage.proof_kind,
+        scope_details: preimage.scope_details,
     };
     payload.validate()?;
 
-    let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
-    let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
-    let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id);
-    let signer = key_store.signer_for_algorithm(&alg)?;
-    let grant_jwt = Jwt::sign(header, payload, &*signer)?.into_string();
+    let (alg, key) = reserved_signing_key(key_store, &issuance_seed.signing_key_id)
+        .ok_or(SessionGrantError::NoSigningKey)?;
+    let key_id = issuance_seed.signing_key_id.clone();
+    let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
+    let signer = key.params().signing_key_for_alg(&alg)?;
+    let grant_jwt = Jwt::sign(header, payload, &signer)?.into_string();
 
     Ok(SessionGrantMaterial {
         grant_id,
         grant_jwt,
-        session_public_key,
+        session_public_key: session_public_key.into_string(),
         credential_class: "standard".to_owned(),
         recovery_session_id: None,
         recovery_policy_id: None,
@@ -175,16 +223,23 @@ fn issue_session_grant_for_audience_inner(
         model_generation_ref: None,
         expires_at: format_timestamp_canonical(expires_at),
         expires_at_timestamp: expires_at,
+        not_before_timestamp: now,
         issuer: issuer.to_string(),
         subject,
-        device_id,
+        device_id: Some(device_id),
         audience,
         scopes,
         dpop_jkt: Some(dpop_jkt),
+        session_id,
+        issuance_nonce: issuance_nonce.to_string(),
+        issuance_preimage,
+        issuance_digest,
+        signing_key_id: key_id,
     })
 }
 
 pub(crate) fn mint_promoted_recovery_session_grant(
+    issuance_seed: &SessionGrantIssuanceSeed,
     clock: &dyn Clock,
     arkret_config: &ArkretConfig,
     key_store: &Keystore,
@@ -192,46 +247,77 @@ pub(crate) fn mint_promoted_recovery_session_grant(
     session_public_key: String,
     device_binding: arkret_models_identity::SessionGrantDeviceBinding,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
-    let now = normalize_timestamp_canonical(clock.now());
-    let expires_at = now + arkret_config.session_grant_ttl;
-    let grant_id = new_session_grant_id()?;
+    let now = issuance_seed.not_before;
+    let expires_at = issuance_seed.expires_at;
     let device_scope = format!(
         "urn:arkret:client:device:{}",
         device_binding.device_id.as_str()
     );
     let scopes = vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(), device_scope];
     let issuer = issuer_did_for(arkret_config);
-    let payload = SignedSessionGrantClaims {
-        kind: "ak.session.grant".to_owned(),
-        grant_id: grant_id.clone(),
+    let session_public_key = CanonicalSessionPublicJwk::new(session_public_key)?;
+    let issuance_nonce = issuance_seed.issuance_nonce.clone();
+    let session_id = prior_claims.session_id.clone();
+    let preimage = SessionGrantIssuancePreimage {
+        schema: SESSION_GRANT_ISSUANCE_SCHEMA.to_owned(),
         issuer: issuer.clone(),
+        issuance_nonce: issuance_nonce.clone(),
         subject: prior_claims.subject.clone(),
         session_public_key: session_public_key.clone(),
         audience: prior_claims.audience.clone(),
         scopes: scopes.clone(),
         not_before: now,
         expires_at,
-        session_id: prior_claims.session_id.clone(),
+        session_id: session_id.clone(),
         cnf: prior_claims.cnf.clone(),
-        credential_class: arkret_models_identity::SessionGrantCredentialClass::Standard,
+        credential_class: SessionGrantCredentialClass::Standard,
+        holder_binding: Some(SessionGrantHolderBinding::HumanDevice {
+            device_binding: device_binding.device_id.as_str().to_owned(),
+        }),
+        bootstrap_binding: None,
         recovery_binding: None,
         device_binding: Some(device_binding.clone()),
         proof_kind: prior_claims.proof_kind,
         scope_details: None,
     };
+    let issuance_preimage = preimage.canonical_bytes()?;
+    let issuance_digest = preimage.issuance_digest()?;
+    let grant_id = preimage.grant_id()?;
+    let payload = SignedSessionGrantClaims {
+        kind: SESSION_GRANT_CREDENTIAL_KIND.to_owned(),
+        grant_id: grant_id.clone(),
+        issuer: preimage.issuer,
+        issuance_nonce: preimage.issuance_nonce,
+        subject: preimage.subject,
+        session_public_key: preimage.session_public_key.clone(),
+        audience: preimage.audience,
+        scopes: preimage.scopes,
+        not_before: preimage.not_before,
+        expires_at: preimage.expires_at,
+        session_id: preimage.session_id,
+        cnf: preimage.cnf,
+        credential_class: preimage.credential_class,
+        holder_binding: preimage.holder_binding,
+        bootstrap_binding: preimage.bootstrap_binding,
+        recovery_binding: preimage.recovery_binding,
+        device_binding: preimage.device_binding,
+        proof_kind: preimage.proof_kind,
+        scope_details: preimage.scope_details,
+    };
     payload.validate()?;
 
-    let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
-    let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
-    let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id);
-    let signer = key_store.signer_for_algorithm(&alg)?;
-    let grant_jwt = Jwt::sign(header, payload, &*signer)?.into_string();
+    let (alg, key) = reserved_signing_key(key_store, &issuance_seed.signing_key_id)
+        .ok_or(SessionGrantError::NoSigningKey)?;
+    let key_id = issuance_seed.signing_key_id.clone();
+    let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
+    let signer = key.params().signing_key_for_alg(&alg)?;
+    let grant_jwt = Jwt::sign(header, payload, &signer)?.into_string();
     let model_generation_ref = serde_json::to_value(&device_binding.model_generation_ref)?;
 
     Ok(SessionGrantMaterial {
         grant_id,
         grant_jwt,
-        session_public_key,
+        session_public_key: session_public_key.into_string(),
         credential_class: "standard".to_owned(),
         recovery_session_id: None,
         recovery_policy_id: None,
@@ -242,12 +328,18 @@ pub(crate) fn mint_promoted_recovery_session_grant(
         model_generation_ref: Some(model_generation_ref),
         expires_at: format_timestamp_canonical(expires_at),
         expires_at_timestamp: expires_at,
+        not_before_timestamp: now,
         issuer: issuer.to_string(),
         subject: prior_claims.subject.as_str().to_owned(),
         device_id: Some(device_binding.device_id.as_str().to_owned()),
         audience: prior_claims.audience.clone(),
         scopes,
         dpop_jkt: Some(prior_claims.cnf.jkt.clone()),
+        session_id,
+        issuance_nonce: issuance_nonce.to_string(),
+        issuance_preimage,
+        issuance_digest,
+        signing_key_id: key_id,
     })
 }
 
@@ -301,6 +393,86 @@ where
         .await
 }
 
+pub(crate) fn new_session_grant_record(
+    browser_session_id: Option<Ulid>,
+    material: &SessionGrantMaterial,
+) -> NewSessionGrant<'_> {
+    let scope: Scope = material
+        .scopes
+        .iter()
+        .map(|scope| scope.parse::<ScopeToken>())
+        .collect::<Result<Scope, _>>()
+        .expect("signed session grant scopes must be valid OAuth scope tokens");
+
+    NewSessionGrant {
+        grant_id: material.grant_id.clone(),
+        browser_session_id,
+        issuer: &material.issuer,
+        subject: &material.subject,
+        device_id: material.device_id.as_deref(),
+        applet_id: None,
+        effective_scope: None,
+        registration_epoch: None,
+        service_id: None,
+        capability_grant_refs: Vec::new(),
+        audience: &material.audience,
+        scope,
+        grant_jwt: &material.grant_jwt,
+        session_id: &material.session_id,
+        issuance_nonce: &material.issuance_nonce,
+        issuance_preimage: &material.issuance_preimage,
+        issuance_digest: material.issuance_digest,
+        signing_key_id: &material.signing_key_id,
+        session_public_key: &material.session_public_key,
+        credential_class: &material.credential_class,
+        recovery_session_id: material.recovery_session_id.as_deref(),
+        recovery_policy_id: material.recovery_policy_id.as_deref(),
+        recovery_policy_version: material.recovery_policy_version,
+        device_authorization_event_id: material.device_authorization_event_id.as_deref(),
+        model_generation_ref: material.model_generation_ref.clone(),
+        not_before: material.not_before_timestamp,
+        expires_at: material.expires_at_timestamp,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn commit_session_grant_issuance<R>(
+    repo: &mut R,
+    rng: &mut (dyn rand_core::RngCore + Send),
+    clock: &dyn Clock,
+    operation_id: Ulid,
+    authorization_ref: &str,
+    authorization_checkpoint: &serde_json::Value,
+    proof_expires_at: DateTime<Utc>,
+    canonical_outcome: &[u8],
+    browser_session_id: Option<Ulid>,
+    material: &SessionGrantMaterial,
+) -> Result<coauth_data::SessionGrantCommitOutcome, R::Error>
+where
+    R: RepositoryAccess + ?Sized,
+{
+    use sha2::Digest as _;
+
+    let response_digest: [u8; 32] = sha2::Sha256::digest(canonical_outcome).into();
+    repo.oauth_session_grant()
+        .commit_issuance(
+            rng,
+            clock,
+            operation_id,
+            coauth_data::SessionGrantProofAuthorization {
+                authorization_ref,
+                checkpoint: authorization_checkpoint,
+                proof_expires_at,
+            },
+            coauth_data::SessionGrantExactOutcome {
+                canonical_response: canonical_outcome,
+                response_digest,
+            },
+            new_session_grant_record(browser_session_id, material),
+        )
+        .await
+}
+
 pub(crate) async fn persist_session_grant<R>(
     repo: &mut R,
     rng: &mut (dyn RngCore + Send),
@@ -339,6 +511,7 @@ where
 /// uniform without repeating the agent principal DID outside `subject`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn mint_agent_session_grant(
+    issuance_seed: &SessionGrantIssuanceSeed,
     arkret_config: &ArkretConfig,
     key_store: &Keystore,
     agent_id: &str,
@@ -348,50 +521,89 @@ pub(crate) fn mint_agent_session_grant(
     dpop_jkt: String,
     session_public_key: String,
     scope_details: serde_json::Value,
+    agent_key_authorization_ref: EventId,
+    verification_method: DidUrl,
     now: DateTime<Utc>,
     expires_at: DateTime<Utc>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
-    let now = normalize_timestamp_canonical(now);
-    let expires_at = normalize_timestamp_canonical(expires_at);
+    let now = issuance_seed.not_before;
+    let expires_at = issuance_seed.expires_at;
     ensure_principal_did_method_allowed(arkret_config, agent_id)?;
     let issuer = issuer_did_for(arkret_config);
-    let grant_id = new_session_grant_id()?;
     let cnf = SessionGrantCnf {
         jkt: dpop_jkt.clone(),
     };
-    let session_id = grant_id.to_string();
+    let session_id = issuance_seed.session_id.clone();
     let scope_details = compact_agent_scope_details(scope_details);
-    let payload = SignedSessionGrantClaims {
-        kind: "ak.session.grant".to_owned(),
-        grant_id: grant_id.clone(),
+    let session_public_key = CanonicalSessionPublicJwk::new(session_public_key)?;
+    let issuance_nonce = issuance_seed.issuance_nonce.clone();
+    let subject = Did::new(agent_id.to_owned()).map_err(|_| SessionGrantError::PrincipalUnknown)?;
+    let audience_did = Did::new(audience.clone())?;
+    let mut scopes = scopes;
+    scopes.sort_unstable();
+    scopes.dedup();
+    let preimage = SessionGrantIssuancePreimage {
+        schema: SESSION_GRANT_ISSUANCE_SCHEMA.to_owned(),
         issuer: issuer.clone(),
-        subject: arkret_identifiers::Did::new(agent_id.to_owned())
-            .map_err(|_| SessionGrantError::PrincipalUnknown)?,
+        issuance_nonce: issuance_nonce.clone(),
+        subject: subject.clone(),
         session_public_key: session_public_key.clone(),
-        audience: audience.clone(),
+        audience: audience_did,
         scopes: scopes.clone(),
         not_before: now,
         expires_at,
         session_id,
-        cnf,
-        credential_class: arkret_models_identity::SessionGrantCredentialClass::Standard,
+        cnf: cnf.clone(),
+        credential_class: SessionGrantCredentialClass::Standard,
+        holder_binding: Some(SessionGrantHolderBinding::AgentRuntime {
+            agent_id: subject,
+            device_id: device_id.clone(),
+            agent_key_authorization_ref,
+            verification_method,
+        }),
+        bootstrap_binding: None,
         recovery_binding: None,
         device_binding: None,
-        proof_kind: Some(arkret_models_identity::SessionGrantProofKind::AgentKeyProof),
+        proof_kind: Some(SessionGrantProofKind::AgentKeyProof),
         scope_details: Some(scope_details),
+    };
+    let issuance_preimage = preimage.canonical_bytes()?;
+    let issuance_digest = preimage.issuance_digest()?;
+    let grant_id = preimage.grant_id()?;
+    let payload = SignedSessionGrantClaims {
+        kind: SESSION_GRANT_CREDENTIAL_KIND.to_owned(),
+        grant_id: grant_id.clone(),
+        issuer: preimage.issuer,
+        issuance_nonce: preimage.issuance_nonce,
+        subject: preimage.subject,
+        session_public_key: preimage.session_public_key.clone(),
+        audience: preimage.audience,
+        scopes: preimage.scopes,
+        not_before: preimage.not_before,
+        expires_at: preimage.expires_at,
+        session_id: preimage.session_id,
+        cnf: preimage.cnf,
+        credential_class: preimage.credential_class,
+        holder_binding: preimage.holder_binding,
+        bootstrap_binding: preimage.bootstrap_binding,
+        recovery_binding: preimage.recovery_binding,
+        device_binding: preimage.device_binding,
+        proof_kind: preimage.proof_kind,
+        scope_details: preimage.scope_details,
     };
     payload.validate()?;
 
-    let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
-    let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
-    let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id);
-    let signer = key_store.signer_for_algorithm(&alg)?;
-    let grant_jwt = Jwt::sign(header, payload, &*signer)?.into_string();
+    let (alg, key) = reserved_signing_key(key_store, &issuance_seed.signing_key_id)
+        .ok_or(SessionGrantError::NoSigningKey)?;
+    let key_id = issuance_seed.signing_key_id.clone();
+    let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
+    let signer = key.params().signing_key_for_alg(&alg)?;
+    let grant_jwt = Jwt::sign(header, payload, &signer)?.into_string();
 
     Ok(SessionGrantMaterial {
         grant_id,
         grant_jwt,
-        session_public_key,
+        session_public_key: session_public_key.into_string(),
         credential_class: "standard".to_owned(),
         recovery_session_id: None,
         recovery_policy_id: None,
@@ -400,12 +612,18 @@ pub(crate) fn mint_agent_session_grant(
         model_generation_ref: None,
         expires_at: format_timestamp_canonical(expires_at),
         expires_at_timestamp: expires_at,
+        not_before_timestamp: now,
         issuer: issuer.to_string(),
         subject: agent_id.to_owned(),
         device_id: Some(device_id.to_string()),
         audience,
         scopes,
         dpop_jkt: Some(dpop_jkt),
+        session_id,
+        issuance_nonce: issuance_nonce.to_string(),
+        issuance_preimage,
+        issuance_digest,
+        signing_key_id: key_id,
     })
 }
 
@@ -419,15 +637,32 @@ fn compact_agent_scope_details(mut scope_details: serde_json::Value) -> serde_js
     scope_details
 }
 
-#[cfg(test)]
-mod acceptance_tests {
-    use super::*;
+fn reserved_signing_key<'a>(
+    key_store: &'a Keystore,
+    signing_key_id: &str,
+) -> Option<(
+    coauth_iana::jose::JsonWebSignatureAlg,
+    &'a coauth_keystore::JsonWebKey<coauth_keystore::PrivateKey>,
+)> {
+    use coauth_iana::jose::JsonWebSignatureAlg;
 
-    #[test]
-    fn local_session_grant_id_minting_is_fail_closed() {
-        assert!(matches!(
-            new_session_grant_id(),
-            Err(SessionGrantError::EventAcceptanceUnavailable)
-        ));
-    }
+    [
+        JsonWebSignatureAlg::Ed25519,
+        JsonWebSignatureAlg::Es512,
+        JsonWebSignatureAlg::Es384,
+        JsonWebSignatureAlg::Es256,
+        JsonWebSignatureAlg::Rs512,
+        JsonWebSignatureAlg::Rs384,
+        JsonWebSignatureAlg::Rs256,
+        JsonWebSignatureAlg::Ps512,
+        JsonWebSignatureAlg::Ps384,
+        JsonWebSignatureAlg::Ps256,
+    ]
+    .into_iter()
+    .find_map(|alg| {
+        key_store
+            .signing_key_for_algorithm(&alg)
+            .filter(|key| key.kid() == Some(signing_key_id))
+            .map(|key| (alg, key))
+    })
 }

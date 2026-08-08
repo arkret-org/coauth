@@ -46,6 +46,7 @@ use crate::services::dpop::{DpopError, dpop_header_from_request, dpop_htu};
 #[derive(Clone)]
 pub(crate) struct DpopSessionBinding {
     pub proof_jwt: String,
+    pub jti: String,
     pub jkt: String,
     pub public_jwk: PublicJsonWebKey,
 }
@@ -78,6 +79,31 @@ pub(crate) async fn extract_dpop_binding_for_kickoff(
     let result = verifier.verify(&header, &htm, &htu, now, None).await?;
     Ok(Some(DpopSessionBinding {
         proof_jwt: header,
+        jti: result.claims.jti,
+        jkt: result.jkt,
+        public_jwk: result.jwk,
+    }))
+}
+
+/// Verify a kickoff DPoP proof without recording its JTI. Issuer-ledger
+/// handlers use this before replay lookup, then consume the JTI in the same
+/// durable transaction that commits the exact outcome.
+pub(crate) fn extract_dpop_binding_for_kickoff_without_replay(
+    req: &salvo::Request,
+    depot: &Depot,
+    url_builder: &UrlBuilder,
+) -> Result<Option<DpopSessionBinding>, DpopError> {
+    let Some(header) = dpop_header_from_request(req) else {
+        return Ok(None);
+    };
+    let now = chrono::Utc::now();
+    let htm = req.method().as_str().to_ascii_uppercase();
+    let htu = dpop_htu(&url_builder.http_base(), req);
+    let result =
+        crate::services::dpop::DpopVerifier::verify_without_replay(&header, &htm, &htu, now, None)?;
+    Ok(Some(DpopSessionBinding {
+        proof_jwt: header,
+        jti: result.claims.jti,
         jkt: result.jkt,
         public_jwk: result.jwk,
     }))
@@ -311,6 +337,24 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 return Ok(());
             }
             #[cfg(feature = "password-bootstrap")]
+            {
+                // Password authentication is allowed to establish the browser
+                // session only. Session-grant issuance requires the durable
+                // OIDC/passkey proof and operation-ledger path; retaining the
+                // former direct mint here would create a second, replay-unsafe
+                // issuer boundary.
+                let _ = (dpop_binding, requested_audience);
+                PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
+                res.status_code(StatusCode::NOT_IMPLEMENTED);
+                res.render(Json(
+                    LoginOutcome::error("unsupported_feature").with_warnings(vec![
+                        "password login cannot issue session grants; use the OIDC/passkey bridge"
+                            .to_owned(),
+                    ]),
+                ));
+                return Ok(());
+            }
+            #[cfg(all(feature = "password-bootstrap", any()))]
             {
                 let Some(dpop_binding) = dpop_binding else {
                     PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);

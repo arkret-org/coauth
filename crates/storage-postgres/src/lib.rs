@@ -53,6 +53,7 @@ pub mod queue;
 pub mod recovery_authority;
 /// Diesel schema definitions generated from the database
 pub mod schema;
+mod session_grant_codec;
 /// PostgreSQL upstream OAuth repositories.
 pub mod upstream_oauth;
 /// PostgreSQL user repositories.

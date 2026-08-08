@@ -88,8 +88,8 @@ pub enum SessionGrantError {
     #[error("principal_unknown")]
     PrincipalUnknown,
 
-    #[error("session_grant_event_acceptance_unavailable")]
-    EventAcceptanceUnavailable,
+    #[error("standard session grant requires an explicit device scope binding")]
+    MissingDeviceBinding,
 
     #[error(transparent)]
     Other(#[from] AnyhowError),
@@ -125,6 +125,12 @@ pub enum ArkretRouteError {
     #[error("controller approval required")]
     HumanApprovalRequired(arkret_wire::AgentHumanApprovalProblem),
 
+    #[error("session grant exact replay has expired")]
+    SessionGrantReplayExpired(arkret_wire::SessionGrantReplayExpiredProblem),
+
+    #[error("session grant exact replay reached a terminal lifecycle state")]
+    SessionGrantReplayTerminal(arkret_wire::SessionGrantReplayTerminalProblem),
+
     /// Caller did not present a usable bearer token. Renders as `401`.
     #[error("{0}")]
     Unauthorized(String),
@@ -144,6 +150,21 @@ impl ArkretRouteError {
             code,
             message: message.into(),
         }
+    }
+
+    pub fn session_grant_replay_expired(grant_id: arkret_identifiers::SessionGrantId) -> Self {
+        Self::SessionGrantReplayExpired(arkret_wire::SessionGrantReplayExpiredProblem::new(
+            grant_id,
+        ))
+    }
+
+    pub fn session_grant_replay_terminal(
+        grant_id: arkret_identifiers::SessionGrantId,
+        state: arkret_wire::SessionGrantReplayTerminalState,
+    ) -> Self {
+        Self::SessionGrantReplayTerminal(arkret_wire::SessionGrantReplayTerminalProblem::new(
+            grant_id, state,
+        ))
     }
 }
 
@@ -483,6 +504,34 @@ impl Scribe for ArkretRouteError {
                     details,
                 ),
             ),
+            Self::SessionGrantReplayExpired(details) => {
+                let mut envelope = ErrorEnvelope::new(
+                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_EXPIRED,
+                    "session grant exact replay has expired",
+                );
+                if let serde_json::Value::Object(values) =
+                    serde_json::to_value(details).expect("typed replay details serialize")
+                {
+                    for (key, value) in values {
+                        envelope = envelope.with_detail(key, value);
+                    }
+                }
+                (StatusCode::GONE, envelope)
+            }
+            Self::SessionGrantReplayTerminal(details) => {
+                let mut envelope = ErrorEnvelope::new(
+                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_TERMINAL,
+                    "session grant exact replay is terminal",
+                );
+                if let serde_json::Value::Object(values) =
+                    serde_json::to_value(details).expect("typed replay details serialize")
+                {
+                    for (key, value) in values {
+                        envelope = envelope.with_detail(key, value);
+                    }
+                }
+                (StatusCode::CONFLICT, envelope)
+            }
             Self::Unauthorized(message) => (
                 StatusCode::UNAUTHORIZED,
                 ErrorEnvelope::new(arkret_wire::ErrorCode::UNAUTHENTICATED, message),
@@ -882,7 +931,7 @@ pub struct DebugIssueDpopGrantRequestBody {
     pub scopes: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DebugIssueDpopGrantOutcome {
     pub grant_id: String,
     pub grant_jwt: String,
@@ -1087,6 +1136,92 @@ pub async fn debug_issue_dpop_grant(
         ]
     });
 
+    let canonical_intent = arkret_canonical::canonical_json_bytes(&serde_json::json!({
+        "test_operation": "issue_dpop_grant",
+        "request": body,
+        "holder_jkt": jkt,
+    }))
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    use sha2::Digest as _;
+    let canonical_intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_intent).into();
+    let request_identity = format!("cotest:sha256:{}", hex::encode(canonical_intent_digest));
+    let not_before = arkret_canonical::normalize_timestamp_canonical(clock.now());
+    let expires_at = not_before + arkret_config.session_grant_ttl;
+    let (_, signing_key) = preferred_signing_key(&key_store)
+        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
+    let signing_key_id = signing_key
+        .kid()
+        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
+    let issuer = issuer_did_for(&arkret_config).to_string();
+    let reserved = repo
+        .oauth_session_grant()
+        .reserve_operation(
+            &mut rng,
+            &*clock,
+            coauth_data::NewSessionGrantOperation {
+                issuer: &issuer,
+                operation_kind: coauth_data::SessionGrantOperationKind::Issue,
+                proof_kind: Some(arkret_models_identity::SessionGrantProofKind::PairedDeviceProof),
+                request_identity: &request_identity,
+                canonical_intent_digest,
+                canonical_intent: &canonical_intent,
+                operation_selector: None,
+                target_grant_id: None,
+                session_id: None,
+                grant_not_before: Some(not_before),
+                grant_expires_at: Some(expires_at),
+                signing_key_id: Some(signing_key_id),
+                retained_until: expires_at + chrono::Duration::days(7),
+            },
+        )
+        .await
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let operation = match reserved {
+        coauth_data::SessionGrantReserveOutcome::Reserved(operation) => operation,
+        coauth_data::SessionGrantReserveOutcome::Pending(operation)
+            if operation.state == coauth_data::SessionGrantOperationState::Reserved =>
+        {
+            operation
+        }
+        coauth_data::SessionGrantReserveOutcome::Replay(operation) => {
+            let bytes = operation.canonical_outcome.ok_or_else(|| {
+                ArkretRouteError::coded(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                    "cotest grant replay has no canonical outcome",
+                )
+            })?;
+            let outcome = serde_json::from_slice(&bytes)
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+            repo.cancel().await.ok();
+            return Ok(Json(outcome));
+        }
+        coauth_data::SessionGrantReserveOutcome::Conflict(_) => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
+                "cotest grant identity conflicts with a different request",
+            ));
+        }
+        coauth_data::SessionGrantReserveOutcome::Indeterminate(_) => {
+            repo.save().await?;
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "cotest grant outcome is indeterminate",
+            ));
+        }
+        coauth_data::SessionGrantReserveOutcome::Pending(_) => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "cotest grant operation is incomplete",
+            ));
+        }
+    };
+
     // Issue and persist a grant for the already-bound principal.
     let user_agent = Some(format!("coauth-test-harness/device:{}", body.device_id));
     let browser_session = repo
@@ -1096,6 +1231,8 @@ pub async fn debug_issue_dpop_grant(
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
     let material = issue_test_session_grant_for_audience(
+        &SessionGrantIssuanceSeed::from_operation(&operation)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         &*clock,
         &arkret_config,
         &key_store,
@@ -1105,25 +1242,59 @@ pub async fn debug_issue_dpop_grant(
         scopes,
         Some(&principal_did),
         jkt.clone(),
+        arkret_models_identity::SessionGrantProofKind::PairedDeviceProof,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-
-    let persisted =
-        persist_session_grant(&mut repo, &mut rng, &*clock, &browser_session, &material)
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-
-    repo.save()
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-
-    Ok(Json(DebugIssueDpopGrantOutcome {
-        grant_id: persisted.grant_id.to_string(),
-        grant_jwt: material.grant_jwt,
+    let outcome = DebugIssueDpopGrantOutcome {
+        grant_id: material.grant_id.to_string(),
+        grant_jwt: material.grant_jwt.clone(),
         dpop_jkt: jkt,
-        audience: material.audience,
-        scopes: material.scopes,
-        expires_at: material.expires_at,
+        audience: material.audience.clone(),
+        scopes: material.scopes.clone(),
+        expires_at: material.expires_at.clone(),
         principal_did,
-    }))
+    };
+    let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let checkpoint = serde_json::json!({
+        "kind": "cotest_issue_dpop_grant",
+        "request_identity": request_identity,
+    });
+    let committed = commit_session_grant_issuance(
+        &mut repo,
+        &mut rng,
+        &*clock,
+        operation.id,
+        &request_identity,
+        &checkpoint,
+        expires_at,
+        &canonical_outcome,
+        Some(browser_session.id),
+        &material,
+    )
+    .await
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let outcome = match committed {
+        coauth_data::SessionGrantCommitOutcome::Committed(_) => outcome,
+        coauth_data::SessionGrantCommitOutcome::Replay(operation) => {
+            serde_json::from_slice(&operation.canonical_outcome.ok_or_else(|| {
+                ArkretRouteError::coded(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                    "cotest grant commit replay has no canonical outcome",
+                )
+            })?)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        }
+        coauth_data::SessionGrantCommitOutcome::Indeterminate(_) => {
+            repo.save().await?;
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "cotest grant commit is indeterminate",
+            ));
+        }
+    };
+    repo.save().await?;
+    Ok(Json(outcome))
 }

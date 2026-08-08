@@ -483,9 +483,50 @@ CREATE TABLE public.oauth_refresh_tokens (
     created_at timestamp with time zone NOT NULL
 );
 
+CREATE TABLE public.oauth_session_grant_operations (
+    id uuid NOT NULL,
+    issuer text NOT NULL,
+    operation_kind text NOT NULL,
+    proof_kind text,
+    request_identity text NOT NULL,
+    canonical_intent_digest bytea NOT NULL,
+    canonical_intent bytea,
+    operation_selector jsonb,
+    issuance_nonce text,
+    session_id text,
+    grant_not_before timestamp with time zone,
+    grant_expires_at timestamp with time zone,
+    signing_key_id text,
+    state text NOT NULL,
+    proof_authorization_ref text,
+    proof_authorization_checkpoint jsonb,
+    proof_expires_at timestamp with time zone,
+    outcome_digest bytea,
+    canonical_outcome bytea,
+    target_grant_id bytea,
+    result_grant_id bytea,
+    affected_grant_ids bytea[] DEFAULT '{}'::bytea[] NOT NULL,
+    retained_until timestamp with time zone NOT NULL,
+    committed_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT oauth_session_grant_operations_issuer_nonempty CHECK ((btrim(issuer) <> ''::text)),
+    CONSTRAINT oauth_session_grant_operations_request_identity_nonempty CHECK ((btrim(request_identity) <> ''::text)),
+    CONSTRAINT oauth_session_grant_operations_kind_valid CHECK ((operation_kind = ANY (ARRAY['issue'::text, 'refresh'::text, 'revoke'::text, 'recovery_promotion'::text]))),
+    CONSTRAINT oauth_session_grant_operations_proof_kind_shape CHECK ((((operation_kind = 'issue'::text) AND (proof_kind IS NOT NULL)) OR ((operation_kind <> 'issue'::text) AND (proof_kind IS NULL)))),
+    CONSTRAINT oauth_session_grant_operations_digest_length CHECK ((octet_length(canonical_intent_digest) = 32)),
+    CONSTRAINT oauth_session_grant_operations_seed_shape CHECK (((state = 'evicted'::text) AND (issuance_nonce IS NULL) AND (session_id IS NULL) AND (grant_not_before IS NULL) AND (grant_expires_at IS NULL) AND (signing_key_id IS NULL)) OR ((state <> 'evicted'::text) AND (((operation_kind = 'revoke'::text) AND (issuance_nonce IS NULL) AND (session_id IS NULL) AND (grant_not_before IS NULL) AND (grant_expires_at IS NULL) AND (signing_key_id IS NULL)) OR ((operation_kind <> 'revoke'::text) AND (issuance_nonce ~ '^[A-Za-z0-9_-]{43}$'::text) AND (btrim(session_id) <> ''::text) AND (grant_expires_at > grant_not_before) AND (btrim(signing_key_id) <> ''::text))))),
+    CONSTRAINT oauth_session_grant_operations_outcome_digest_length CHECK (((outcome_digest IS NULL) OR (octet_length(outcome_digest) = 32))),
+    CONSTRAINT oauth_session_grant_operations_grant_id_lengths CHECK ((((target_grant_id IS NULL) OR (octet_length(target_grant_id) = 33)) AND ((result_grant_id IS NULL) OR (octet_length(result_grant_id) = 33)))),
+    CONSTRAINT oauth_session_grant_operations_state_valid CHECK ((state = ANY (ARRAY['reserved'::text, 'authorized'::text, 'committed'::text, 'evicted'::text]))),
+    CONSTRAINT oauth_session_grant_operations_retention_valid CHECK ((retained_until > created_at)),
+    CONSTRAINT oauth_session_grant_operations_authorization_shape CHECK ((((state = 'reserved'::text) AND (proof_authorization_ref IS NULL) AND (proof_authorization_checkpoint IS NULL) AND (proof_expires_at IS NULL)) OR ((state = ANY (ARRAY['authorized'::text, 'committed'::text])) AND (proof_authorization_ref IS NOT NULL) AND (proof_authorization_checkpoint IS NOT NULL) AND (proof_expires_at IS NOT NULL) AND (retained_until >= proof_expires_at)) OR ((state = 'evicted'::text) AND (proof_authorization_ref IS NULL) AND (proof_authorization_checkpoint IS NULL) AND (proof_expires_at IS NULL)))),
+    CONSTRAINT oauth_session_grant_operations_outcome_shape CHECK ((((state = ANY (ARRAY['reserved'::text, 'authorized'::text])) AND (result_grant_id IS NULL) AND (cardinality(affected_grant_ids) = 0) AND (outcome_digest IS NULL) AND (canonical_outcome IS NULL) AND (committed_at IS NULL)) OR ((state = 'committed'::text) AND (outcome_digest IS NOT NULL) AND (canonical_outcome IS NOT NULL) AND (committed_at IS NOT NULL) AND (((operation_kind = 'issue'::text) AND (target_grant_id IS NULL) AND (result_grant_id IS NOT NULL) AND (cardinality(affected_grant_ids) = 0)) OR ((operation_kind = ANY (ARRAY['refresh'::text, 'recovery_promotion'::text])) AND (target_grant_id IS NOT NULL) AND (result_grant_id IS NOT NULL) AND (cardinality(affected_grant_ids) = 0)) OR ((operation_kind = 'revoke'::text) AND (result_grant_id IS NULL)))) OR ((state = 'evicted'::text) AND (canonical_intent IS NULL) AND (operation_selector IS NULL) AND (proof_authorization_ref IS NULL) AND (proof_authorization_checkpoint IS NULL) AND (proof_expires_at IS NULL) AND (outcome_digest IS NULL) AND (canonical_outcome IS NULL))))
+);
+
 CREATE TABLE public.oauth_session_grants (
     id uuid NOT NULL,
-    grant_id bytea NOT NULL CHECK (octet_length(grant_id) = 33),
+    grant_id bytea NOT NULL CHECK ((octet_length(grant_id) = 33) AND (get_byte(grant_id, 0) = 1)),
+    issuance_operation_id uuid NOT NULL,
     user_session_id uuid,
     issuer text NOT NULL,
     subject text NOT NULL,
@@ -498,6 +539,11 @@ CREATE TABLE public.oauth_session_grants (
     audience text NOT NULL,
     scope_list text[] NOT NULL,
     grant_jwt text NOT NULL,
+    session_id text NOT NULL,
+    issuance_nonce text NOT NULL,
+    issuance_preimage bytea NOT NULL,
+    issuance_digest bytea NOT NULL,
+    signing_key_id text NOT NULL,
     session_public_key text NOT NULL,
     credential_class text NOT NULL,
     recovery_session_id text,
@@ -506,8 +552,18 @@ CREATE TABLE public.oauth_session_grants (
     device_authorization_event_id text,
     model_generation_ref jsonb,
     expires_at timestamp with time zone NOT NULL,
+    lifecycle_state text NOT NULL,
     revoked_at timestamp with time zone,
+    superseded_at timestamp with time zone,
+    successor_grant_id bytea,
     created_at timestamp with time zone NOT NULL
+    ,CONSTRAINT oauth_session_grants_issuance_digest_valid CHECK ((octet_length(issuance_digest) = 32) AND (substring(grant_id from 2 for 32) = issuance_digest))
+    ,CONSTRAINT oauth_session_grants_nonce_valid CHECK ((issuance_nonce ~ '^[A-Za-z0-9_-]{43}$'::text))
+    ,CONSTRAINT oauth_session_grants_session_id_nonempty CHECK ((btrim(session_id) <> ''::text))
+    ,CONSTRAINT oauth_session_grants_signing_key_id_nonempty CHECK ((btrim(signing_key_id) <> ''::text))
+    ,CONSTRAINT oauth_session_grants_lifecycle_valid CHECK ((lifecycle_state = ANY (ARRAY['active'::text, 'revoked'::text, 'superseded'::text])) AND (((lifecycle_state = 'active'::text) AND (revoked_at IS NULL) AND (superseded_at IS NULL) AND (successor_grant_id IS NULL)) OR ((lifecycle_state = 'revoked'::text) AND (revoked_at IS NOT NULL) AND (superseded_at IS NULL) AND (successor_grant_id IS NULL)) OR ((lifecycle_state = 'superseded'::text) AND (revoked_at IS NULL) AND (superseded_at IS NOT NULL) AND (successor_grant_id IS NOT NULL))))
+    ,CONSTRAINT oauth_session_grants_successor_id_valid CHECK (((successor_grant_id IS NULL) OR ((octet_length(successor_grant_id) = 33) AND (get_byte(successor_grant_id, 0) = 1))))
+    ,CONSTRAINT oauth_session_grants_expiry_valid CHECK ((expires_at > created_at))
 );
 
 CREATE TABLE public.oauth_sessions (
@@ -1221,6 +1277,9 @@ ALTER TABLE ONLY public.oauth_refresh_tokens
 ALTER TABLE ONLY public.oauth_session_grants
     ADD CONSTRAINT oauth_session_grants_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY public.oauth_session_grant_operations
+    ADD CONSTRAINT oauth_session_grant_operations_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY public.oauth_sessions
     ADD CONSTRAINT oauth_sessions_pkey PRIMARY KEY (id);
 
@@ -1549,17 +1608,23 @@ CREATE INDEX oauth_refresh_tokens_chain_root_idx ON public.oauth_refresh_tokens 
 
 CREATE INDEX oauth_refresh_tokens_last_seen_idx ON public.oauth_refresh_tokens USING btree (last_seen_at);
 
-CREATE INDEX oauth_session_grants_active_idx ON public.oauth_session_grants USING btree (expires_at) WHERE (revoked_at IS NULL);
+CREATE INDEX oauth_session_grants_active_idx ON public.oauth_session_grants USING btree (expires_at) WHERE (lifecycle_state = 'active'::text);
+
+CREATE UNIQUE INDEX oauth_session_grant_operations_identity_idx ON public.oauth_session_grant_operations USING btree (issuer, operation_kind, COALESCE(proof_kind, ''::text), request_identity);
+
+CREATE INDEX oauth_session_grant_operations_retention_idx ON public.oauth_session_grant_operations USING btree (retained_until) WHERE (state <> 'evicted'::text);
 
 CREATE INDEX oauth_session_grants_device_id_idx ON public.oauth_session_grants USING btree (device_id) WHERE (device_id IS NOT NULL);
 
-CREATE INDEX oauth_session_grants_applet_delegation_active_idx ON public.oauth_session_grants USING btree (applet_id, registration_epoch, service_id, expires_at) WHERE ((revoked_at IS NULL) AND (applet_id IS NOT NULL));
+CREATE INDEX oauth_session_grants_applet_delegation_active_idx ON public.oauth_session_grants USING btree (applet_id, registration_epoch, service_id, expires_at) WHERE ((lifecycle_state = 'active'::text) AND (applet_id IS NOT NULL));
 
 CREATE INDEX oauth_session_grants_applet_effective_scope_idx ON public.oauth_session_grants USING gin (effective_scope) WHERE (effective_scope IS NOT NULL);
 
 CREATE UNIQUE INDEX oauth_session_grants_grant_jwt_idx ON public.oauth_session_grants USING btree (grant_jwt);
 
 CREATE UNIQUE INDEX oauth_session_grants_grant_id_idx ON public.oauth_session_grants USING btree (grant_id);
+
+CREATE UNIQUE INDEX oauth_session_grants_issuance_operation_idx ON public.oauth_session_grants USING btree (issuance_operation_id);
 
 CREATE INDEX oauth_session_grants_subject_idx ON public.oauth_session_grants USING btree (subject);
 
@@ -1657,7 +1722,10 @@ ALTER TABLE ONLY public.oauth_refresh_tokens
     ADD CONSTRAINT oauth_refresh_tokens_oauth_session_id_fkey FOREIGN KEY (oauth_session_id) REFERENCES public.oauth_sessions(id);
 
 ALTER TABLE ONLY public.oauth_session_grants
-    ADD CONSTRAINT oauth_session_grants_user_session_id_fkey FOREIGN KEY (user_session_id) REFERENCES public.user_sessions(id) ON DELETE CASCADE;
+    ADD CONSTRAINT oauth_session_grants_user_session_id_fkey FOREIGN KEY (user_session_id) REFERENCES public.user_sessions(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY public.oauth_session_grants
+    ADD CONSTRAINT oauth_session_grants_issuance_operation_id_fkey FOREIGN KEY (issuance_operation_id) REFERENCES public.oauth_session_grant_operations(id);
 
 ALTER TABLE ONLY public.recovery_session_grant_promotions
     ADD CONSTRAINT recovery_session_grant_promotions_old_grant_id_fkey FOREIGN KEY (old_grant_id) REFERENCES public.oauth_session_grants(grant_id);

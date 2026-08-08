@@ -165,7 +165,12 @@ pub use self::notification::{
 pub use self::oauth::{
     AuthorizationCode, AuthorizationGrant, AuthorizationGrantStage, Client, DeviceCodeGrant,
     DeviceCodeGrantState, InvalidRedirectUriError, JwksOrJwksUri, LocalizableField,
-    LocalizedClientMetadata, Pkce, Session, SessionGrant, SessionState,
+    LocalizedClientMetadata, NewSessionGrantOperation, Pkce, Session, SessionGrant,
+    SessionGrantCommitOutcome, SessionGrantExactOutcome, SessionGrantLifecycleState,
+    SessionGrantOperation, SessionGrantOperationKind, SessionGrantOperationState,
+    SessionGrantProofAuthorization, SessionGrantRecoveryPromotion,
+    SessionGrantRecoveryPromotionOutcome, SessionGrantRefreshOutcome, SessionGrantReserveOutcome,
+    SessionGrantRevokeOutcome, SessionGrantRevokeSelector, SessionState,
 };
 pub use self::organization_control::{
     NewOrganizationDelegation, NewOrganizationPrincipalControl, OrganizationBootstrapAuthorization,

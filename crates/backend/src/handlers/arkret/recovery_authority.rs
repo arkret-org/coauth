@@ -20,16 +20,20 @@ use arkret_wire::{
 };
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::{
-    NewRecoveryDeviceAuthorization, NewRecoverySessionGrantPromotion, RepositoryAccess as _,
+    NewRecoveryDeviceAuthorization, NewSessionGrantOperation, RepositoryAccess as _,
+    SessionGrantExactOutcome, SessionGrantOperationKind, SessionGrantProofAuthorization,
+    SessionGrantRecoveryPromotion, SessionGrantRecoveryPromotionOutcome,
+    SessionGrantReserveOutcome,
 };
 use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
+use sha2::Digest as _;
 
 use super::device_enroll::{decode_device_public_key, truncate_to_seconds};
 use super::session_grant::{
-    mint_promoted_recovery_session_grant, persist_session_grant_with_browser_session_id,
+    SessionGrantIssuanceSeed, mint_promoted_recovery_session_grant, new_session_grant_record,
 };
-use super::{ArkretRouteError, service_id_for};
+use super::{ArkretRouteError, preferred_signing_key, service_id_for};
 use crate::handlers::common::DepotExt;
 use crate::services::device_enrollment_authority::enrollment_authority;
 use crate::services::did_resolver::{
@@ -991,13 +995,27 @@ async fn replay_promotion_after_race(
     }
 }
 
+pub struct RecoveryPromotionCanonicalJson(Vec<u8>);
+
+impl Scribe for RecoveryPromotionCanonicalJson {
+    fn render(self, response: &mut Response) {
+        response.headers_mut().insert(
+            http::header::CONTENT_TYPE,
+            http::HeaderValue::from_static("application/json"),
+        );
+        response
+            .write_body(self.0)
+            .expect("canonical JSON is writable");
+    }
+}
+
 /// Consume one recovery-restricted grant and atomically persist its standard
 /// device/current-generation-bound successor.
 #[handler]
 pub async fn promote_recovery_session_grant_endpoint(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<PromoteRecoverySessionGrantOutcome>, ArkretRouteError> {
+) -> Result<RecoveryPromotionCanonicalJson, ArkretRouteError> {
     let request: PromoteRecoverySessionGrantRequest = req
         .parse_json()
         .await
@@ -1005,32 +1023,10 @@ pub async fn promote_recovery_session_grant_endpoint(
     request
         .validate_structural()
         .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
-    let canonical_request = arkret_canonical::canonical::canonical_json_bytes(&request)
-        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
-
-    let mut repo = depot.repo().await?;
-    let by_identity = {
-        let mut promotions = repo.recovery_authority();
-        promotions
-            .lookup_promotion(request.transaction_id.as_str(), &request.old_grant_id)
-            .await?
-    };
-    let existing = match by_identity {
-        Some(record) => Some(record),
-        None => {
-            let mut promotions = repo.recovery_authority();
-            promotions
-                .lookup_promotion_by_old_grant(&request.old_grant_id)
-                .await?
-        }
-    };
-    if let Some(record) = existing {
-        repo.cancel().await?;
-        return exact_promotion_replay(record, &request, &canonical_request).map(Json);
-    }
-
     let clock = crate::handlers::make_clock();
     let now = truncate_to_seconds(clock.now());
+    let mut rng = crate::handlers::make_rng();
+    let mut repo = depot.repo().await?;
     let old_grant = repo
         .oauth_session_grant()
         .lookup_by_grant_id(&request.old_grant_id)
@@ -1042,11 +1038,6 @@ pub async fn promote_recovery_session_grant_endpoint(
                 "old recovery grant was not found",
             )
         })?;
-    if !old_grant.is_active(&*clock) {
-        return Err(failed_precondition(
-            "old recovery grant is expired or already consumed",
-        ));
-    }
     let prior_jwt = Jwt::<SignedSessionGrantClaims>::try_from(old_grant.grant_jwt.as_str())
         .map_err(|error| failed_precondition(format!("stored old grant is invalid: {error}")))?;
     let prior_claims = prior_jwt.payload().clone();
@@ -1080,26 +1071,177 @@ pub async fn promote_recovery_session_grant_endpoint(
             "holder proof nonce does not equal canonical_request_digest",
         ));
     }
-
-    let jti_inserted = repo
-        .dpop_replay()
-        .consume_jti(dpop_replay_record(&dpop.claims.jti, now))
-        .await?;
-    if !jti_inserted {
-        repo.cancel().await?;
-        return replay_promotion_after_race(depot, &request, &canonical_request)
-            .await
-            .map(Json);
+    let mut redacted_request = serde_json::to_value(&request)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    if let Some(holder_proof) = redacted_request
+        .get_mut("holder_proof")
+        .and_then(serde_json::Value::as_object_mut)
+        && let Some(proof_jwt) = holder_proof.get("proof_jwt")
+    {
+        let proof_bytes = arkret_canonical::canonical::canonical_json_bytes(proof_jwt)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        holder_proof.insert(
+            "proof_jwt".to_owned(),
+            serde_json::Value::String(format!(
+                "sha256:{}",
+                hex::encode(sha2::Sha256::digest(proof_bytes))
+            )),
+        );
     }
-    let consumed = repo
+    let canonical_intent = arkret_canonical::canonical::canonical_json_bytes(&serde_json::json!({
+        "request": redacted_request,
+        "holder_jkt": dpop.jkt,
+    }))
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let canonical_intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_intent).into();
+    let request_identity = format!(
+        "recovery-promotion:{}:{}",
+        request.transaction_id, request.old_grant_id
+    );
+    let operation_selector = serde_json::json!({
+        "kind": "recovery_promotion",
+        "transaction_id": request.transaction_id,
+        "old_grant_id": request.old_grant_id,
+    });
+    let arkret_config = depot.arkret_config()?;
+    let grant_not_before = arkret_canonical::normalize_timestamp_canonical(now);
+    let grant_expires_at = grant_not_before + arkret_config.session_grant_ttl;
+    let (_, signing_key) = preferred_signing_key(&depot.key_store()?).ok_or_else(|| {
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+            "no session-grant signing key is available",
+        ))
+    })?;
+    let signing_key_id = signing_key.kid().ok_or_else(|| {
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+            "preferred session-grant signing key has no kid",
+        ))
+    })?;
+    let reserved = repo
         .oauth_session_grant()
-        .revoke_if_active(&*clock, old_grant.id)
+        .reserve_operation(
+            &mut rng,
+            &*clock,
+            NewSessionGrantOperation {
+                issuer: &old_grant.issuer,
+                operation_kind: SessionGrantOperationKind::RecoveryPromotion,
+                proof_kind: None,
+                request_identity: &request_identity,
+                canonical_intent_digest,
+                canonical_intent: &canonical_intent,
+                operation_selector: Some(operation_selector),
+                target_grant_id: Some(&old_grant.grant_id),
+                session_id: Some(&old_grant.session_id),
+                grant_not_before: Some(grant_not_before),
+                grant_expires_at: Some(grant_expires_at),
+                signing_key_id: Some(signing_key_id),
+                retained_until: grant_expires_at + Duration::days(7),
+            },
+        )
         .await?;
-    if !consumed {
-        repo.cancel().await?;
-        return replay_promotion_after_race(depot, &request, &canonical_request)
-            .await
-            .map(Json);
+    let operation = match reserved {
+        SessionGrantReserveOutcome::Reserved(operation) => operation,
+        SessionGrantReserveOutcome::Pending(operation)
+            if operation.state == coauth_data::SessionGrantOperationState::Reserved =>
+        {
+            operation
+        }
+        SessionGrantReserveOutcome::Replay(operation) => {
+            let result_grant_id = operation.result_grant_id.as_ref().ok_or_else(|| {
+                ArkretRouteError::coded(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                    "recovery promotion replay has no successor",
+                )
+            })?;
+            let successor = repo
+                .oauth_session_grant()
+                .lookup_by_grant_id(result_grant_id)
+                .await?
+                .ok_or_else(|| {
+                    ArkretRouteError::coded(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                        "recovery promotion successor is unavailable",
+                    )
+                })?;
+            if successor.expires_at <= now {
+                repo.cancel().await.ok();
+                return Err(ArkretRouteError::session_grant_replay_expired(
+                    successor.grant_id,
+                ));
+            }
+            if successor.lifecycle_state != coauth_data::SessionGrantLifecycleState::Active {
+                let state = match successor.lifecycle_state {
+                    coauth_data::SessionGrantLifecycleState::Revoked => {
+                        arkret_wire::SessionGrantReplayTerminalState::Revoked
+                    }
+                    coauth_data::SessionGrantLifecycleState::Superseded => {
+                        arkret_wire::SessionGrantReplayTerminalState::Superseded
+                    }
+                    coauth_data::SessionGrantLifecycleState::Active => unreachable!(),
+                };
+                repo.cancel().await.ok();
+                return Err(ArkretRouteError::session_grant_replay_terminal(
+                    successor.grant_id,
+                    state,
+                ));
+            }
+            let bytes = operation.canonical_outcome.ok_or_else(|| {
+                ArkretRouteError::coded(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                    "recovery promotion replay has no canonical outcome",
+                )
+            })?;
+            repo.cancel().await?;
+            return Ok(RecoveryPromotionCanonicalJson(bytes));
+        }
+        SessionGrantReserveOutcome::Conflict(_) => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
+                "recovery promotion identity conflicts with a different canonical intent",
+            ));
+        }
+        SessionGrantReserveOutcome::Indeterminate(_) => {
+            repo.save().await?;
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "recovery promotion outcome is indeterminate",
+            ));
+        }
+        SessionGrantReserveOutcome::Pending(_) => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "recovery promotion authorization checkpoint is incomplete",
+            ));
+        }
+    };
+
+    if !old_grant.is_active(&*clock) {
+        repo.cancel().await.ok();
+        if old_grant.expires_at <= now {
+            return Err(ArkretRouteError::session_grant_replay_expired(
+                old_grant.grant_id,
+            ));
+        }
+        let state = match old_grant.lifecycle_state {
+            coauth_data::SessionGrantLifecycleState::Revoked => {
+                arkret_wire::SessionGrantReplayTerminalState::Revoked
+            }
+            coauth_data::SessionGrantLifecycleState::Superseded => {
+                arkret_wire::SessionGrantReplayTerminalState::Superseded
+            }
+            coauth_data::SessionGrantLifecycleState::Active => unreachable!(),
+        };
+        return Err(ArkretRouteError::session_grant_replay_terminal(
+            old_grant.grant_id,
+            state,
+        ));
     }
 
     let device_binding = SessionGrantDeviceBinding {
@@ -1113,24 +1255,18 @@ pub async fn promote_recovery_session_grant_endpoint(
             .result_model_generation_ref
             .clone(),
     };
+    let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let material = mint_promoted_recovery_session_grant(
+        &issuance_seed,
         &*clock,
-        &depot.arkret_config()?,
+        &arkret_config,
         &depot.key_store()?,
         &prior_claims,
         old_grant.session_public_key.clone(),
         device_binding,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let mut rng = crate::handlers::make_rng();
-    persist_session_grant_with_browser_session_id(
-        &mut repo,
-        &mut rng,
-        &*clock,
-        old_grant.browser_session_id,
-        &material,
-    )
-    .await?;
 
     let new_grant = SessionGrantOutcome {
         principal_id: Did::new(material.subject.clone())
@@ -1145,12 +1281,13 @@ pub async fn promote_recovery_session_grant_endpoint(
         ),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
-        grant_id: Some(material.grant_id.clone()),
-        session_public_key: Some(material.session_public_key.clone()),
-        audience: Some(
-            Did::new(material.audience.clone())
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-        ),
+        grant_id: material.grant_id.clone(),
+        session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
+            &material.session_public_key,
+        )
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        audience: Did::new(material.audience.clone())
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         granted_scope: material.scopes.clone(),
         scope_details: None,
     };
@@ -1159,48 +1296,106 @@ pub async fn promote_recovery_session_grant_endpoint(
         consumed_grant_id: request.old_grant_id.clone(),
         new_grant: serde_json::to_value(new_grant)
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-        consumed_at: now,
+        consumed_at: issuance_seed.not_before,
     };
     let outcome_value = serde_json::to_value(&outcome)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let inserted = repo
-        .recovery_authority()
-        .insert_promotion(NewRecoverySessionGrantPromotion {
-            transaction_id: request.transaction_id.as_str().to_owned(),
-            old_grant_id: request.old_grant_id.clone(),
-            transaction_request_digest: request.transaction_request_digest.as_str().to_owned(),
-            recovery_session_id: request
-                .completion_attestation
-                .recovery_session_id
-                .as_str()
-                .to_owned(),
-            replacement_device_id: request
-                .completion_attestation
-                .replacement_device_id
-                .as_str()
-                .to_owned(),
-            device_authorization_event_id: request
-                .completion_attestation
-                .device_authorization_event_id
-                .as_str()
-                .to_owned(),
-            model_generation_ref: serde_json::to_value(
-                &request.completion_attestation.result_model_generation_ref,
-            )
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-            canonical_request: canonical_request.clone(),
-            outcome: outcome_value,
-            consumed_at: now,
-        })
+    let canonical_outcome = arkret_canonical::canonical::canonical_json_bytes(&outcome)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let dpop_record = dpop_replay_record(&dpop.claims.jti, now);
+    let dpop_jti_digest = dpop_record.jti_digest.clone();
+    let checkpoint = serde_json::json!({
+        "kind": "recovery_promotion",
+        "transaction_id": request.transaction_id,
+        "transaction_request_digest": request.transaction_request_digest,
+        "dpop_jti_digest": dpop_jti_digest,
+    });
+    let authorization_ref = format!("recovery-promotion:{}", request.transaction_id);
+    let model_generation_ref =
+        serde_json::to_value(&request.completion_attestation.result_model_generation_ref)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let committed = repo
+        .oauth_session_grant()
+        .commit_recovery_promotion(
+            &mut rng,
+            &*clock,
+            operation.id,
+            SessionGrantProofAuthorization {
+                authorization_ref: &authorization_ref,
+                checkpoint: &checkpoint,
+                proof_expires_at: dpop_record.expires_at,
+            },
+            SessionGrantExactOutcome {
+                canonical_response: &canonical_outcome,
+                response_digest: sha2::Sha256::digest(&canonical_outcome).into(),
+            },
+            &old_grant.grant_id,
+            new_session_grant_record(old_grant.browser_session_id, &material),
+            SessionGrantRecoveryPromotion {
+                dpop_jti_digest: &dpop_jti_digest,
+                dpop_seen_at: dpop_record.seen_at,
+                dpop_expires_at: dpop_record.expires_at,
+                transaction_id: request.transaction_id.as_str(),
+                transaction_request_digest: request.transaction_request_digest.as_str(),
+                recovery_session_id: request.completion_attestation.recovery_session_id.as_str(),
+                replacement_device_id: request
+                    .completion_attestation
+                    .replacement_device_id
+                    .as_str(),
+                device_authorization_event_id: request
+                    .completion_attestation
+                    .device_authorization_event_id
+                    .as_str(),
+                model_generation_ref: &model_generation_ref,
+                canonical_request: &canonical_intent,
+                legacy_outcome: &outcome_value,
+            },
+        )
         .await?;
-    if !inserted {
-        repo.cancel().await?;
-        return replay_promotion_after_race(depot, &request, &canonical_request)
-            .await
-            .map(Json);
-    }
     repo.save().await?;
-    Ok(Json(outcome))
+    match committed {
+        SessionGrantRecoveryPromotionOutcome::Committed { .. } => {
+            Ok(RecoveryPromotionCanonicalJson(canonical_outcome))
+        }
+        SessionGrantRecoveryPromotionOutcome::Replay(operation) => operation
+            .canonical_outcome
+            .map(RecoveryPromotionCanonicalJson)
+            .ok_or_else(|| {
+                ArkretRouteError::coded(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                    "recovery promotion replay has no canonical outcome",
+                )
+            }),
+        SessionGrantRecoveryPromotionOutcome::DpopAlreadyConsumed => Err(invalid_signature(
+            "recovery promotion holder DPoP JTI was already consumed",
+        )),
+        SessionGrantRecoveryPromotionOutcome::PredecessorTerminal(grant) => {
+            if grant.expires_at <= now {
+                return Err(ArkretRouteError::session_grant_replay_expired(
+                    grant.grant_id,
+                ));
+            }
+            let state = match grant.lifecycle_state {
+                coauth_data::SessionGrantLifecycleState::Revoked => {
+                    arkret_wire::SessionGrantReplayTerminalState::Revoked
+                }
+                coauth_data::SessionGrantLifecycleState::Superseded => {
+                    arkret_wire::SessionGrantReplayTerminalState::Superseded
+                }
+                coauth_data::SessionGrantLifecycleState::Active => unreachable!(),
+            };
+            Err(ArkretRouteError::session_grant_replay_terminal(
+                grant.grant_id,
+                state,
+            ))
+        }
+        SessionGrantRecoveryPromotionOutcome::Indeterminate(_) => Err(ArkretRouteError::coded(
+            StatusCode::SERVICE_UNAVAILABLE,
+            arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+            "recovery promotion outcome is indeterminate",
+        )),
+    }
 }
 
 #[cfg(test)]

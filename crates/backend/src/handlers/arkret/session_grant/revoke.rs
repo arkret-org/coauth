@@ -1,26 +1,22 @@
-use std::sync::{Arc, OnceLock};
-
 use arkret_identifiers::{DeviceId, Did, SessionGrantId};
 use arkret_models_collaboration::account_lifecycle::{
     AccountLifecycleProof, SessionRevokeOutcome, SessionRevokeRequestBody,
 };
 use chrono::{DateTime, Duration, Utc};
-use coauth_data::oauth::SessionGrantFilter;
-use coauth_data::{Pagination, RepositoryAccess, SessionGrant};
+use coauth_data::{
+    NewSessionGrantOperation, RepositoryAccess, SessionGrant, SessionGrantOperationKind,
+    SessionGrantProofAuthorization, SessionGrantReserveOutcome, SessionGrantRevokeOutcome,
+    SessionGrantRevokeSelector,
+};
 use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
+use sha2::Digest as _;
 
 use super::*;
 use crate::handlers::arkret::*;
 use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
-use crate::services::nonce_store::NonceStore;
 
 const SESSION_REVOKE_PROOF_MAX_WINDOW_SECS: i64 = 300;
-
-fn shared_session_revoke_nonce_store() -> &'static Arc<NonceStore> {
-    static STORE: OnceLock<Arc<NonceStore>> = OnceLock::new();
-    STORE.get_or_init(|| Arc::new(NonceStore::new()))
-}
 
 fn empty_session_revoke_body() -> SessionRevokeRequestBody {
     SessionRevokeRequestBody {
@@ -354,88 +350,7 @@ async fn verify_cross_session_lifecycle_proof(
         ));
     }
 
-    let replay_key = format!(
-        "{}|{}|{}|{}|{}|{}",
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REVOKE_SESSION,
-        current_grant.subject,
-        current_device_id,
-        proof.audience,
-        proof.challenge,
-        proof.request_canonical_digest
-    );
-    shared_session_revoke_nonce_store()
-        .check_and_record(&replay_key, proof.expires_at, now)
-        .map_err(|_| lifecycle_proof_invalid("lifecycle proof challenge has already been used"))?;
-
     Ok(())
-}
-
-async fn revoke_one_active_grant(
-    repo: &mut coauth_data::BoxRepository,
-    clock: &dyn coauth_data::Clock,
-    grant: SessionGrant,
-) -> Result<SessionGrant, ArkretRouteError> {
-    if !grant.is_active(clock) {
-        return Err(session_grant_not_found());
-    }
-    repo.oauth_session_grant()
-        .revoke(clock, grant)
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
-}
-
-async fn revoke_owned_active_grants(
-    repo: &mut coauth_data::BoxRepository,
-    clock: &dyn coauth_data::Clock,
-    current_principal_did: &str,
-    filter_device_id: Option<&str>,
-) -> Result<Vec<SessionGrant>, ArkretRouteError> {
-    let mut revoked = Vec::new();
-    let mut after = None;
-    let now = clock.now();
-
-    loop {
-        let mut filter = SessionGrantFilter::new().active_at(now);
-        if let Some(device_id) = filter_device_id {
-            filter = filter.for_device(device_id);
-        }
-        let pagination = after.map_or_else(
-            || Pagination::first(100),
-            |cursor| Pagination::first(100).after(cursor),
-        );
-        let page = repo
-            .oauth_session_grant()
-            .list(filter, pagination)
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-        if page.edges.is_empty() {
-            break;
-        }
-
-        let has_next = page.has_next_page;
-        let next_after = page.edges.last().map(|edge| edge.cursor);
-        let grants_to_revoke = page
-            .edges
-            .into_iter()
-            .filter_map(|edge| {
-                if grant_is_owned_by_current_principal(&edge.node, current_principal_did) {
-                    Some(edge.node)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-        for grant in grants_to_revoke {
-            revoked.push(revoke_one_active_grant(repo, clock, grant).await?);
-        }
-
-        if !has_next {
-            break;
-        }
-        after = next_after;
-    }
-
-    Ok(revoked)
 }
 
 fn revoked_outcome(grants: Vec<SessionGrant>) -> SessionRevokeOutcome {
@@ -445,11 +360,27 @@ fn revoked_outcome(grants: Vec<SessionGrant>) -> SessionRevokeOutcome {
     }
 }
 
+pub struct RevokeCanonicalJson(Vec<u8>);
+
+impl Scribe for RevokeCanonicalJson {
+    fn render(self, response: &mut Response) {
+        response.headers_mut().insert(
+            http::header::CONTENT_TYPE,
+            http::HeaderValue::from_static("application/json"),
+        );
+        response
+            .write_body(self.0)
+            .expect("canonical JSON is writable");
+    }
+}
+
 #[handler]
 pub async fn revoke_session_grant_endpoint(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SessionRevokeOutcome>, ArkretRouteError> {
+) -> Result<RevokeCanonicalJson, ArkretRouteError> {
+    use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
+
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
@@ -457,10 +388,20 @@ pub async fn revoke_session_grant_endpoint(
     let did_resolver = depot.did_resolver_service()?;
     let binding_store = depot.verified_did_binding_store()?;
     let clock = crate::handlers::make_clock();
+    let mut rng = crate::handlers::make_rng();
 
     let presented_grant_jwt = bearer_session_grant(req)?.to_owned();
     let body = parse_session_revoke_body(req).await?;
     let selector = revoke_selector(&body)?;
+    let dpop_header = dpop_header_from_request(req)
+        .ok_or_else(|| lifecycle_proof_required("session revoke requires holder DPoP proof"))?;
+    let presented_claims = Jwt::<SignedSessionGrantClaims>::try_from(presented_grant_jwt.as_str())
+        .map_err(|_| ArkretRouteError::Unauthorized("session grant is not parseable".to_owned()))?
+        .payload()
+        .clone();
+    presented_claims.validate().map_err(|error| {
+        ArkretRouteError::Unauthorized(format!("invalid session grant: {error}"))
+    })?;
 
     let service_id = service_id_for(&arkret_config);
 
@@ -470,8 +411,29 @@ pub async fn revoke_session_grant_endpoint(
         .lookup_by_grant_jwt(&presented_grant_jwt)
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
-        .filter(|grant| grant.is_active(&clock))
         .ok_or_else(session_grant_not_found)?;
+    if presented_claims.grant_id != current_grant.grant_id
+        || presented_claims.issuer.as_str() != current_grant.issuer
+        || presented_claims.subject.as_str() != current_grant.subject
+    {
+        repo.cancel().await.ok();
+        return Err(lifecycle_proof_invalid(
+            "presented session grant does not match the issuer ledger",
+        ));
+    }
+    let now = clock.now();
+    let htm = req.method().as_str().to_ascii_uppercase();
+    let htu = dpop_htu(&url_builder.http_base(), req);
+    let dpop = DpopVerifier::verify_without_replay(
+        &dpop_header,
+        &htm,
+        &htu,
+        now,
+        Some(&presented_grant_jwt),
+    )
+    .map_err(|error| lifecycle_proof_invalid(error.to_string()))?;
+    DpopVerifier::require_matching_jkt(&dpop.jkt, &presented_claims.cnf.jkt)
+        .map_err(|error| lifecycle_proof_invalid(error.to_string()))?;
 
     let current_device_id = current_grant
         .device_id
@@ -513,53 +475,250 @@ pub async fn revoke_session_grant_endpoint(
             &current_grant,
             current_device_id,
             &service_id,
-            clock.now(),
+            now,
         )
         .await?;
     }
 
     let current_principal_did = current_grant.subject.clone();
-    let revoked = match selector {
-        RevokeSelector::Current => {
-            vec![revoke_one_active_grant(&mut repo, &clock, current_grant).await?]
-        }
+    let target_grant_id = match &selector {
+        RevokeSelector::Current => Some(current_grant.grant_id.clone()),
         RevokeSelector::Grant(target_grant_id) => {
             let target = repo
                 .oauth_session_grant()
-                .lookup_by_grant_id(&target_grant_id)
+                .lookup_by_grant_id(target_grant_id)
                 .await
                 .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
-                .filter(|grant| grant.is_active(&clock))
                 .filter(|grant| grant_is_owned_by_current_principal(grant, &current_principal_did))
                 .ok_or_else(session_grant_not_found)?;
-            vec![revoke_one_active_grant(&mut repo, &clock, target).await?]
+            Some(target.grant_id)
         }
-        RevokeSelector::Device(target_device_id) => {
-            let revoked = revoke_owned_active_grants(
-                &mut repo,
-                &clock,
-                &current_principal_did,
-                Some(target_device_id.as_str()),
-            )
-            .await?;
-            if revoked.is_empty() {
-                return Err(session_grant_not_found());
+        RevokeSelector::Device(_) | RevokeSelector::All => None,
+    };
+    let operation_selector = match &selector {
+        RevokeSelector::Current | RevokeSelector::Grant(_) => serde_json::json!({
+            "kind": "grant",
+            "grant_id": target_grant_id.as_ref().expect("grant selector has an id"),
+        }),
+        RevokeSelector::Device(target_device_id) => serde_json::json!({
+            "kind": "device",
+            "subject": current_principal_did,
+            "device_id": target_device_id,
+        }),
+        RevokeSelector::All => serde_json::json!({
+            "kind": "all_for_subject",
+            "subject": current_principal_did,
+        }),
+    };
+    let mut redacted_body =
+        serde_json::to_value(&body).map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    if let Some(proof) = redacted_body
+        .get_mut("proof")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        for field in ["challenge", "signature"] {
+            if let Some(secret) = proof.get(field) {
+                let bytes = arkret_canonical::canonical_json_bytes(secret)
+                    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+                proof.insert(
+                    field.to_owned(),
+                    serde_json::Value::String(format!(
+                        "sha256:{}",
+                        hex::encode(sha2::Sha256::digest(bytes))
+                    )),
+                );
             }
-            revoked
         }
-        RevokeSelector::All => {
-            let revoked =
-                revoke_owned_active_grants(&mut repo, &clock, &current_principal_did, None).await?;
-            if revoked.is_empty() {
-                return Err(session_grant_not_found());
+    }
+    let canonical_intent = arkret_canonical::canonical_json_bytes(&serde_json::json!({
+        "presented_grant_id": current_grant.grant_id,
+        "holder_jkt": dpop.jkt,
+        "selector": operation_selector,
+        "request": redacted_body,
+    }))
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let canonical_intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_intent).into();
+    let proof_identity = body
+        .proof
+        .as_ref()
+        .map(|proof| proof.challenge.as_str())
+        .unwrap_or(dpop.claims.jti.as_str());
+    let request_identity = format!(
+        "revoke:{}",
+        hex::encode(sha2::Sha256::digest(proof_identity.as_bytes()))
+    );
+    let proof_expires_at = body.proof.as_ref().map_or(
+        now + Duration::seconds(SESSION_REVOKE_PROOF_MAX_WINDOW_SECS),
+        |proof| proof.expires_at,
+    );
+    let reserved = repo
+        .oauth_session_grant()
+        .reserve_operation(
+            &mut rng,
+            &*clock,
+            NewSessionGrantOperation {
+                issuer: &current_grant.issuer,
+                operation_kind: SessionGrantOperationKind::Revoke,
+                proof_kind: None,
+                request_identity: &request_identity,
+                canonical_intent_digest,
+                canonical_intent: &canonical_intent,
+                operation_selector: Some(operation_selector.clone()),
+                target_grant_id: None,
+                session_id: None,
+                grant_not_before: None,
+                grant_expires_at: None,
+                signing_key_id: None,
+                retained_until: proof_expires_at + Duration::days(7),
+            },
+        )
+        .await
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let operation = match reserved {
+        SessionGrantReserveOutcome::Reserved(operation) => operation,
+        SessionGrantReserveOutcome::Pending(operation)
+            if operation.state == coauth_data::SessionGrantOperationState::Reserved =>
+        {
+            operation
+        }
+        SessionGrantReserveOutcome::Replay(operation) => {
+            let bytes = operation.canonical_outcome.ok_or_else(|| {
+                ArkretRouteError::coded(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                    "revoke replay has no canonical outcome",
+                )
+            })?;
+            repo.cancel().await.ok();
+            return Ok(RevokeCanonicalJson(bytes));
+        }
+        SessionGrantReserveOutcome::Conflict(_) => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
+                "revoke proof identity conflicts with a different canonical intent",
+            ));
+        }
+        SessionGrantReserveOutcome::Indeterminate(_) => {
+            repo.save().await?;
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "revoke replay material is unavailable",
+            ));
+        }
+        SessionGrantReserveOutcome::Pending(_) => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "revoke authorization checkpoint is incomplete",
+            ));
+        }
+    };
+
+    // Lifecycle checks happen only after reserve, so an exact retry of a
+    // committed revoke reaches Replay instead of being hidden by the terminal
+    // state created by its first attempt.
+    if !current_grant.is_active(&clock) {
+        repo.cancel().await.ok();
+        if current_grant.expires_at <= now {
+            return Err(ArkretRouteError::session_grant_replay_expired(
+                current_grant.grant_id,
+            ));
+        }
+        let state = match current_grant.lifecycle_state {
+            coauth_data::SessionGrantLifecycleState::Revoked => {
+                arkret_wire::SessionGrantReplayTerminalState::Revoked
             }
-            revoked
+            coauth_data::SessionGrantLifecycleState::Superseded => {
+                arkret_wire::SessionGrantReplayTerminalState::Superseded
+            }
+            coauth_data::SessionGrantLifecycleState::Active => unreachable!(),
+        };
+        return Err(ArkretRouteError::session_grant_replay_terminal(
+            current_grant.grant_id,
+            state,
+        ));
+    }
+    let inserted = repo
+        .dpop_replay()
+        .consume_jti(crate::services::dpop::dpop_replay_record(
+            &dpop.claims.jti,
+            now,
+        ))
+        .await
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    if !inserted {
+        repo.cancel().await.ok();
+        return Err(lifecycle_proof_invalid(
+            "session revoke DPoP JTI was already consumed",
+        ));
+    }
+    let authorization_ref = format!("revoke-proof:{request_identity}");
+    let checkpoint = serde_json::json!({
+        "kind": "session_revoke",
+        "request_identity": request_identity,
+        "dpop_jti_digest": crate::services::dpop::dpop_jti_digest(&dpop.claims.jti),
+        "request_canonical_digest": body.proof.as_ref().map(|proof| &proof.request_canonical_digest),
+    });
+    let durable_selector = match &selector {
+        RevokeSelector::Current | RevokeSelector::Grant(_) => SessionGrantRevokeSelector::Grant(
+            target_grant_id.as_ref().expect("grant selector has an id"),
+        ),
+        RevokeSelector::Device(device_id) => SessionGrantRevokeSelector::Device {
+            subject: &current_principal_did,
+            device_id: device_id.as_str(),
+        },
+        RevokeSelector::All => SessionGrantRevokeSelector::AllForSubject {
+            subject: &current_principal_did,
+        },
+    };
+    let committed = repo
+        .oauth_session_grant()
+        .commit_revoke(
+            &*clock,
+            operation.id,
+            SessionGrantProofAuthorization {
+                authorization_ref: &authorization_ref,
+                checkpoint: &checkpoint,
+                proof_expires_at,
+            },
+            durable_selector,
+        )
+        .await
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let response = match committed {
+        SessionGrantRevokeOutcome::Revoked { grants, .. } => {
+            arkret_canonical::canonical_json_bytes(&revoked_outcome(grants))
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        }
+        SessionGrantRevokeOutcome::Replay(operation) => {
+            operation.canonical_outcome.ok_or_else(|| {
+                ArkretRouteError::coded(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                    "revoke commit replay has no canonical outcome",
+                )
+            })?
+        }
+        SessionGrantRevokeOutcome::AlreadyTerminal(_) => {
+            arkret_canonical::canonical_json_bytes(&revoked_outcome(Vec::new()))
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        }
+        SessionGrantRevokeOutcome::Indeterminate(_) => {
+            repo.save().await?;
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "revoke outcome is indeterminate",
+            ));
         }
     };
 
     repo.save().await?;
-
-    Ok(Json(revoked_outcome(revoked)))
+    Ok(RevokeCanonicalJson(response))
 }
 
 #[cfg(test)]

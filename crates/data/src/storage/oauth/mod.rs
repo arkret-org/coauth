@@ -14,4 +14,10 @@ pub use self::client::OAuthClientRepository;
 pub use self::device_code_grant::{OAuthDeviceCodeGrantParams, OAuthDeviceCodeGrantRepository};
 pub use self::refresh_token::OAuthRefreshTokenRepository;
 pub use self::session::{OAuthSessionFilter, OAuthSessionRepository};
-pub use self::session_grant::{NewSessionGrant, SessionGrantFilter, SessionGrantRepository};
+pub use self::session_grant::{
+    MIN_SESSION_GRANT_OPERATION_RETENTION_SECONDS, NewSessionGrant, NewSessionGrantOperation,
+    SessionGrantCommitOutcome, SessionGrantExactOutcome, SessionGrantFilter,
+    SessionGrantProofAuthorization, SessionGrantRecoveryPromotion,
+    SessionGrantRecoveryPromotionOutcome, SessionGrantRefreshOutcome, SessionGrantRepository,
+    SessionGrantReserveOutcome, SessionGrantRevokeOutcome, SessionGrantRevokeSelector,
+};

@@ -3,6 +3,7 @@ use arkret_models_collaboration::session_grant_bodies::{
 };
 use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
+use sha2::Digest as _;
 
 use super::*;
 use crate::handlers::arkret::*;
@@ -73,6 +74,7 @@ async fn terminate_auth_side_session_by_grant_jwt(
     grant_jwt: &str,
 ) -> Result<AuthSessionLogoutOutcome, ArkretRouteError> {
     let clock = crate::handlers::make_clock();
+    let mut rng = crate::handlers::make_rng();
     let mut repo = depot.repo().await?;
 
     let Some(grant) = repo
@@ -87,11 +89,104 @@ async fn terminate_auth_side_session_by_grant_jwt(
         return Ok(success_outcome());
     };
 
-    if grant.revoked_at.is_none() {
-        repo.oauth_session_grant()
-            .revoke(&*clock, grant.clone())
+    let canonical_intent = arkret_canonical::canonical_json_bytes(&serde_json::json!({
+        "operation": "auth_session_logout",
+        "grant_jwt_digest": format!(
+            "sha256:{}",
+            hex::encode(sha2::Sha256::digest(grant_jwt.as_bytes()))
+        ),
+    }))
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let canonical_intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_intent).into();
+    let request_identity = format!(
+        "auth-session-logout:{}",
+        hex::encode(sha2::Sha256::digest(grant_jwt.as_bytes()))
+    );
+    let selector = serde_json::json!({"kind":"grant","grant_id":grant.grant_id});
+    let now = clock.now();
+    let reserved = repo
+        .oauth_session_grant()
+        .reserve_operation(
+            &mut rng,
+            &*clock,
+            coauth_data::NewSessionGrantOperation {
+                issuer: &grant.issuer,
+                operation_kind: coauth_data::SessionGrantOperationKind::Revoke,
+                proof_kind: None,
+                request_identity: &request_identity,
+                canonical_intent_digest,
+                canonical_intent: &canonical_intent,
+                operation_selector: Some(selector),
+                target_grant_id: None,
+                session_id: None,
+                grant_not_before: None,
+                grant_expires_at: None,
+                signing_key_id: None,
+                retained_until: now + chrono::Duration::days(7),
+            },
+        )
+        .await
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let operation = match reserved {
+        coauth_data::SessionGrantReserveOutcome::Reserved(operation) => Some(operation),
+        coauth_data::SessionGrantReserveOutcome::Pending(operation)
+            if operation.state == coauth_data::SessionGrantOperationState::Reserved =>
+        {
+            Some(operation)
+        }
+        coauth_data::SessionGrantReserveOutcome::Replay(_) => None,
+        coauth_data::SessionGrantReserveOutcome::Conflict(_) => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
+                "auth-session logout identity conflicts with a different intent",
+            ));
+        }
+        coauth_data::SessionGrantReserveOutcome::Indeterminate(_) => {
+            repo.save().await?;
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "auth-session logout replay is indeterminate",
+            ));
+        }
+        coauth_data::SessionGrantReserveOutcome::Pending(_) => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "auth-session logout authorization is incomplete",
+            ));
+        }
+    };
+    if let Some(operation) = operation {
+        let checkpoint = serde_json::json!({"kind":"principal_server_logout"});
+        let committed = repo
+            .oauth_session_grant()
+            .commit_revoke(
+                &*clock,
+                operation.id,
+                coauth_data::SessionGrantProofAuthorization {
+                    authorization_ref: &request_identity,
+                    checkpoint: &checkpoint,
+                    proof_expires_at: now + chrono::Duration::days(7),
+                },
+                coauth_data::SessionGrantRevokeSelector::Grant(&grant.grant_id),
+            )
             .await
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        if matches!(
+            committed,
+            coauth_data::SessionGrantRevokeOutcome::Indeterminate(_)
+        ) {
+            repo.save().await?;
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "auth-session logout commit is indeterminate",
+            ));
+        }
     }
 
     if let Some(browser_session_id) = grant.browser_session_id {
