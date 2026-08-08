@@ -14,7 +14,7 @@ use crate::repository_impl;
 /// Parameters used to create a durable accountability grant.
 #[derive(Debug, Clone)]
 pub struct NewAccountabilityGrant {
-    /// Wire typed id: `ak:grant:<uuid7>`.
+    /// Coauth-local row handle: `ak:local_ref:accountability_grant:<uuid7>`.
     pub accountability_grant_id: String,
     /// Agent principal id covered by this grant.
     pub agent_id: String,

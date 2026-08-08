@@ -12,7 +12,6 @@
 
 use std::collections::BTreeSet;
 
-use arkret_identifiers::{GrantId, new_prefixed_uuid7};
 use arkret_wire::CapabilityActionId;
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
@@ -80,20 +79,19 @@ pub struct AccountabilityGrantRequestBody {
 /// Response payload for `POST /_coauth/self/agents/{id}/accountability-grant`.
 ///
 /// AKP-0008 (`id-kind-registry.json`): the wire shape carries the
-/// freshly minted `ak:grant:<uuid7>` typed id, the
+/// Coauth-local `ak:local_ref:accountability_grant:<uuid7>` row handle, the
 /// `agent_id`, the canonical capability list, and the issuer
 /// controller DID. coauth rejects actions outside the registered
 /// `ak.agent.*` set before issuing the response; soland still verifies
 /// the grant on ingest.
 ///
-/// `accountability_grant_id` and `agent_id` are emitted as
-/// raw strings in the OpenAPI surface — the grant id is construction-validated
-/// by the SDK typed id helper, while `agent_id` is a DID-as-id per
-/// `arkret-spec` common-fields §4.2.
+/// `accountability_grant_id` is a Coauth-local persistence handle, not the id
+/// of an `ak.capability.grant` object. Protocol accountability is established
+/// by the controller-authored `ak.identity.accountability_grant` Event.
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountabilityGrantOutcome {
-    /// Typed id of the issued grant. Wire form:
-    /// `ak:grant:<uuid7>`.
+    /// Coauth-local persistence handle. Wire form:
+    /// `ak:local_ref:accountability_grant:<uuid7>`.
     pub accountability_grant_id: String,
 
     /// Agent principal DID this grant authorizes capability actions on.
@@ -157,9 +155,8 @@ pub async fn post_accountability_grant(
     let clock = make_clock();
     let mut rng = make_rng();
     let issued_at = clock.now();
-    let accountability_grant_id = GrantId::new(new_prefixed_uuid7("ak:grant:"))
-        .map_err(|err| AppError::internal_box(Box::new(err)))?;
-    let accountability_grant_id = accountability_grant_id.into_string();
+    let accountability_grant_id =
+        format!("ak:local_ref:accountability_grant:{}", uuid::Uuid::now_v7());
     let response = AccountabilityGrantOutcome {
         accountability_grant_id: accountability_grant_id.clone(),
         agent_id: agent_id.clone(),

@@ -57,7 +57,10 @@ mod tests {
     }
 
     fn grant_id(rng: &mut impl RngCore, clock: &dyn Clock) -> String {
-        format!("ak:grant:{}", uuid::Uuid::from(new_id(clock.now(), rng)))
+        format!(
+            "ak:local_ref:accountability_grant:{}",
+            uuid::Uuid::from(new_id(clock.now(), rng))
+        )
     }
 
     fn agent_did(label: &str) -> String {
