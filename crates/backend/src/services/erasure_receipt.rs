@@ -1,5 +1,5 @@
 use arkret_models_collaboration::events_payloads::event_wire::VerificationStub;
-use arkret_models_collaboration::governance::erasure::ErasureReceipt;
+use arkret_models_collaboration::governance::erasure::{ErasureReceipt, ErasureReceiptPackage};
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_keystore::Keystore;
@@ -119,4 +119,34 @@ pub async fn verify_erasure_receipt(
     }
 
     Err(ErasureReceiptVerificationError::NoValidIssuerProof)
+}
+
+/// Verify the standard peer carrier package, including the package digest and
+/// exact retained-stub binding, before resolving and authenticating its issuer.
+#[allow(clippy::too_many_arguments)]
+pub async fn verify_erasure_receipt_package(
+    http_client: &reqwest::Client,
+    url_builder: &UrlBuilder,
+    arkret_config: &ArkretConfig,
+    key_store: &Keystore,
+    repo: &mut BoxRepository,
+    did_resolver: &dyn DidResolverService,
+    binding_store: &crate::services::did_binding::DurableVerifiedDidBindingStore,
+    package: &ErasureReceiptPackage,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<(), ErasureReceiptVerificationError> {
+    package.validate_bindings()?;
+    verify_erasure_receipt(
+        http_client,
+        url_builder,
+        arkret_config,
+        key_store,
+        repo,
+        did_resolver,
+        binding_store,
+        &package.receipt,
+        Some(&package.retained_stub),
+        now,
+    )
+    .await
 }
