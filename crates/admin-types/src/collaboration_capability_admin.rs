@@ -321,7 +321,7 @@ mod tests {
             action: CapabilityActionId::RealmDisappearingPolicy,
             issuer_authority_refs: vec![IssuerAuthorityRef::Grant {
                 grant_id: arkret_identifiers::GrantId::new(
-                    "ak:grant:01904100-0000-7000-8000-000000000020",
+                    "ak:grant:ATmMdimZScB3dyV-t4q3cq3H-_deWGSYRAHS0N-uU0Pe",
                 )
                 .unwrap(),
             }],
@@ -355,7 +355,7 @@ mod tests {
                 action,
                 issuer_authority_refs: vec![IssuerAuthorityRef::Grant {
                     grant_id: arkret_identifiers::GrantId::new(
-                        "ak:grant:01904100-0000-7000-8000-000000000020",
+                        "ak:grant:ATmMdimZScB3dyV-t4q3cq3H-_deWGSYRAHS0N-uU0Pe",
                     )
                     .unwrap(),
                 }],
@@ -374,7 +374,7 @@ mod tests {
             action: CapabilityActionId::MessageCreate,
             issuer_authority_refs: vec![IssuerAuthorityRef::Grant {
                 grant_id: arkret_identifiers::GrantId::new(
-                    "ak:grant:01904100-0000-7000-8000-000000000020",
+                    "ak:grant:ATmMdimZScB3dyV-t4q3cq3H-_deWGSYRAHS0N-uU0Pe",
                 )
                 .unwrap(),
             }],

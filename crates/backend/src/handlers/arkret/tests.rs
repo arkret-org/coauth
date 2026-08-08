@@ -917,7 +917,7 @@ fn session_grant_record_exposes_metadata_without_secrets() {
     let grant = SessionGrant {
         id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
         grant_id: arkret_identifiers::SessionGrantId::new(
-            "ak:session_grant:0196419b-0000-8000-8000-000000000205".to_owned(),
+            "ak:session_grant:AbmggbDOpDR8J1xRW3EU4354odEGafHu4vk9FVv4vimH".to_owned(),
         )
         .unwrap(),
         browser_session_id: Some(Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap()),
@@ -964,7 +964,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
     let mut grant = SessionGrant {
         id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
         grant_id: arkret_identifiers::SessionGrantId::new(
-            "ak:session_grant:0196419b-0000-8000-8000-000000000206".to_owned(),
+            "ak:session_grant:AYBAST92B1EGBqtdtlrlJuiZM2Ck4_22_a2eeLbVSQku".to_owned(),
         )
         .unwrap(),
         browser_session_id: Some(Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap()),

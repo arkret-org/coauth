@@ -348,7 +348,7 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
             &*clock,
             NewSessionGrant {
                 grant_id: arkret_identifiers::SessionGrantId::new(
-                    "ak:session_grant:0196419b-0000-8000-8000-000000000204".to_owned(),
+                    "ak:session_grant:AXhWi64NM1HEkQY3dHk_NRU_V4MVtQStlBgHFed0r0xB".to_owned(),
                 )
                 .unwrap(),
                 browser_session_id: Some(browser_session.id),

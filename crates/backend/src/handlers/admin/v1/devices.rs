@@ -575,7 +575,7 @@ mod tests {
                 &*state.clock,
                 NewSessionGrant {
                     grant_id: arkret_identifiers::SessionGrantId::new(
-                        "ak:session_grant:0196419b-0000-8000-8000-000000000203".to_owned(),
+                        "ak:session_grant:AVKDZWS92w01isZDuPKuX-DiJymAf0Qcvf0A6qz8Gy-0".to_owned(),
                     )
                     .unwrap(),
                     browser_session_id: Some(browser_session.id),

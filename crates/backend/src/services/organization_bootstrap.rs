@@ -233,7 +233,7 @@ mod tests {
     fn delegation(org: &str, covers_bootstrap: bool) -> OrganizationDelegation {
         OrganizationDelegation {
             id: "01J0".to_owned(),
-            delegation_ref: "ak:grant:01904100-0000-7000-8000-000000000001".to_owned(),
+            delegation_ref: "ak:grant:AbrgMKK4KXMpRsGsFrsEQEsjo207metUd4zt8yjzB-UH".to_owned(),
             organization_did: org.to_owned(),
             delegate_did: "did:web:server.acme.example".to_owned(),
             issuer_role: RealmOrganizationIssuerRole::GovernanceService,
@@ -280,7 +280,7 @@ mod tests {
             "did:web:org.example",
             true,
             BootstrapAttempt::Delegated {
-                delegation_ref: "ak:grant:01904100-0000-7000-8000-000000000001",
+                delegation_ref: "ak:grant:AbrgMKK4KXMpRsGsFrsEQEsjo207metUd4zt8yjzB-UH",
                 delegation: None,
             },
             now(),

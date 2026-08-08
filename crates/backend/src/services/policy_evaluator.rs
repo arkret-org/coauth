@@ -712,7 +712,7 @@ mod tests {
     fn collaboration_grant(action: CapabilityActionId) -> CollaborationCapabilityGrant {
         CollaborationCapabilityGrant {
             id: "01HY0000000000000000000000".to_owned(),
-            capability_grant_id: "ak:grant:01904100-0000-7000-8000-000000000010".to_owned(),
+            capability_grant_id: "ak:grant:AYdnNxQil6MnHQLqm01XNizblBlrjoob6Q1JlIVBUGig".to_owned(),
             grant_event_id: "ak:event:AQICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC".to_owned(),
             revoke_event_id: None,
             subject: "did:web:alice.example".to_owned(),

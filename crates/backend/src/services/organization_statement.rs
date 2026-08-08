@@ -379,7 +379,7 @@ mod tests {
 
     #[test]
     fn delegated_statement_with_live_delegation_self_verifies() {
-        let reference = "ak:grant:01904100-0000-7000-8000-000000000001";
+        let reference = "ak:grant:AbrgMKK4KXMpRsGsFrsEQEsjo207metUd4zt8yjzB-UH";
         let mut request = base_request();
         request.issuer_role = RealmOrganizationIssuerRole::GovernanceService;
         request.delegation_ref = Some(reference.to_owned());
@@ -400,7 +400,7 @@ mod tests {
 
     #[test]
     fn delegated_statement_with_expired_delegation_fails_self_verify() {
-        let reference = "ak:grant:01904100-0000-7000-8000-000000000002";
+        let reference = "ak:grant:Ae5vV8Lwlft2Dp8x2y6Dv4NysvsHJwrADG-6PXdUz1Sl";
         let mut request = base_request();
         request.issuer_role = RealmOrganizationIssuerRole::AccountAuthority;
         request.delegation_ref = Some(reference.to_owned());
@@ -420,7 +420,7 @@ mod tests {
 
     #[test]
     fn delegated_statement_with_wrong_org_fails_self_verify() {
-        let reference = "ak:grant:01904100-0000-7000-8000-000000000003";
+        let reference = "ak:grant:ASJkvorx6tEzdxoAC5naL70uFcivCk9bMINhB1IWdS80";
         let mut request = base_request();
         request.issuer_role = RealmOrganizationIssuerRole::GovernanceService;
         request.delegation_ref = Some(reference.to_owned());
