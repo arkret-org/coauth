@@ -30,8 +30,6 @@ pub enum SessionGrantOperationKind {
     Refresh,
     /// Explicit revocation/logout/cascade.
     Revoke,
-    /// Recovery promotion that replaces a restricted credential.
-    RecoveryPromotion,
 }
 
 impl SessionGrantOperationKind {
@@ -42,7 +40,6 @@ impl SessionGrantOperationKind {
             Self::Issue => "issue",
             Self::Refresh => "refresh",
             Self::Revoke => "revoke",
-            Self::RecoveryPromotion => "recovery_promotion",
         }
     }
 }
@@ -55,7 +52,6 @@ impl TryFrom<&str> for SessionGrantOperationKind {
             "issue" => Ok(Self::Issue),
             "refresh" => Ok(Self::Refresh),
             "revoke" => Ok(Self::Revoke),
-            "recovery_promotion" => Ok(Self::RecoveryPromotion),
             _ => Err(InvalidTransitionError),
         }
     }
@@ -128,11 +124,6 @@ pub struct SessionGrant {
     pub signing_key_id: String,
     pub session_public_key: String,
     pub credential_class: String,
-    pub recovery_session_id: Option<String>,
-    pub recovery_policy_id: Option<String>,
-    pub recovery_policy_version: Option<i64>,
-    pub device_authorization_event_id: Option<String>,
-    pub model_generation_ref: Option<Value>,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub lifecycle_state: SessionGrantLifecycleState,

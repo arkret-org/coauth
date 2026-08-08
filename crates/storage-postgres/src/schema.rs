@@ -26,55 +26,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    device_bootstrap_transactions (transaction_id) {
-        transaction_id -> Text,
-        mode -> Text,
-        account_authority_id -> Text,
-        principal_server_id -> Text,
-        principal_id -> Text,
-        device_id -> Text,
-        device_key_digest -> Text,
-        holder_jkt -> Text,
-        canonical_request_digest -> Text,
-        canonical_request -> Bytea,
-        founding_batch_digest -> Text,
-        founding_event_ids -> Array<Text>,
-        bootstrap_grant_id -> Text,
-        state -> Text,
-        enrollment_request_digest -> Nullable<Text>,
-        canonical_enrollment_outcome -> Nullable<Bytea>,
-        enrollment_outcome_digest -> Nullable<Text>,
-        authorized_event_id -> Nullable<Text>,
-        authorized_event_digest -> Nullable<Text>,
-        standard_grant_id -> Nullable<Text>,
-        expires_at -> Timestamptz,
-        created_at -> Timestamptz,
-        enrolled_at -> Nullable<Timestamptz>,
-        accepted_at -> Nullable<Timestamptz>,
-        cancelled_at -> Nullable<Timestamptz>,
-        expired_at -> Nullable<Timestamptz>,
-        decision_principal_server_id -> Nullable<Text>,
-        canonical_decision_receipt -> Nullable<Bytea>,
-        decision_receipt_digest -> Nullable<Text>,
-    }
-}
-
-diesel::table! {
-    device_bootstrap_cancel_operations (transaction_id, idempotency_key) {
-        transaction_id -> Text,
-        idempotency_key -> Text,
-        canonical_request_digest -> Text,
-        canonical_request -> Bytea,
-        authority_request_digest -> Text,
-        canonical_authority_request -> Bytea,
-        requested_decision -> Text,
-        canonical_outcome -> Nullable<Bytea>,
-        outcome_digest -> Nullable<Text>,
-        created_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
     users (id) {
         id -> Uuid,
         localpart -> Text,
@@ -243,31 +194,19 @@ diesel::table! {
 }
 
 diesel::table! {
-    recovery_device_authorizations (ticket_id) {
-        ticket_id -> Text,
+    recovery_completion_grant_issuances (transaction_id) {
         transaction_id -> Text,
         transaction_request_digest -> Text,
-        did_entry_ref -> Text,
-        did_entry_digest -> Text,
-        authorization_ref -> Text,
-        canonical_request -> Bytea,
-        outcome -> Jsonb,
-        accepted_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    recovery_session_grant_promotions (transaction_id, old_grant_id) {
-        transaction_id -> Text,
-        old_grant_id -> Binary,
-        transaction_request_digest -> Text,
-        recovery_session_id -> Text,
-        replacement_device_id -> Text,
+        service_account_id -> Uuid,
+        principal_id -> Text,
+        device_id -> Text,
         device_authorization_event_id -> Text,
-        model_generation_ref -> Jsonb,
+        result_model_generation_ref -> Jsonb,
+        canonical_request_digest -> Text,
         canonical_request -> Bytea,
-        outcome -> Jsonb,
-        consumed_at -> Timestamptz,
+        session_grant_operation_id -> Uuid,
+        canonical_outcome -> Bytea,
+        issued_at -> Timestamptz,
     }
 }
 
@@ -781,11 +720,6 @@ diesel::table! {
         signing_key_id -> Text,
         session_public_key -> Text,
         credential_class -> Text,
-        recovery_session_id -> Nullable<Text>,
-        recovery_policy_id -> Nullable<Text>,
-        recovery_policy_version -> Nullable<Int8>,
-        device_authorization_event_id -> Nullable<Text>,
-        model_generation_ref -> Nullable<Jsonb>,
         expires_at -> Timestamptz,
         lifecycle_state -> Text,
         revoked_at -> Nullable<Timestamptz>,
@@ -1142,8 +1076,6 @@ diesel::table! {
         user_id -> Uuid,
         principal_id -> Text,
         key_log_head -> Text,
-        enrollment_authority_did -> Text,
-        enrollment_authority_ref -> Text,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
     }
@@ -1184,6 +1116,8 @@ diesel::joinable!(oauth_authorization_grants -> oauth_clients (oauth_client_id))
 diesel::joinable!(oauth_device_code_grant -> oauth_clients (oauth_client_id));
 diesel::joinable!(oauth_session_grants -> user_sessions (user_session_id));
 diesel::joinable!(oauth_session_grants -> oauth_session_grant_operations (issuance_operation_id));
+diesel::joinable!(recovery_completion_grant_issuances -> users (service_account_id));
+diesel::joinable!(recovery_completion_grant_issuances -> oauth_session_grant_operations (session_grant_operation_id));
 diesel::joinable!(oauth_client_localized_metadata -> oauth_clients (client_id));
 diesel::joinable!(upstream_oauth_links -> upstream_oauth_providers (upstream_oauth_provider_id));
 diesel::joinable!(upstream_oauth_authorization_sessions -> upstream_oauth_providers (upstream_oauth_provider_id));
@@ -1202,8 +1136,6 @@ diesel::joinable!(workflow_audit_logs -> workflow_steps (workflow_step_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     account_handoff_creation_attempts,
-    device_bootstrap_transactions,
-    device_bootstrap_cancel_operations,
     users,
     account_claims,
     risk_action_proposals,
@@ -1237,6 +1169,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     oauth_device_code_grant,
     oauth_session_grants,
     oauth_session_grant_operations,
+    recovery_completion_grant_issuances,
     upstream_oauth_providers,
     upstream_oauth_links,
     upstream_oauth_authorization_sessions,

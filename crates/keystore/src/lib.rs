@@ -703,7 +703,6 @@ pub const SERVICE_IDENTITY_KEY_ID: &str = "coauth-service-identity-v1";
 /// Stable key identifier reserved for the B-model first-device enrollment
 /// authority. This key is intentionally distinct from the service identity
 /// key and must survive process and database replacement.
-pub const DEVICE_ENROLLMENT_KEY_ID: &str = "coauth-device-enrollment-v1";
 
 /// Invalid service-identity key selection from the configured key backend.
 #[derive(Debug, Error)]
@@ -713,16 +712,6 @@ pub enum ServiceIdentityKeyError {
     #[error("more than one key with kid `{SERVICE_IDENTITY_KEY_ID}` is configured")]
     Ambiguous,
     #[error("key `{SERVICE_IDENTITY_KEY_ID}` must be Ed25519")]
-    WrongKeyType,
-}
-
-#[derive(Debug, Error)]
-pub enum DeviceEnrollmentKeyError {
-    #[error("no key with kid `{DEVICE_ENROLLMENT_KEY_ID}` is configured")]
-    Missing,
-    #[error("more than one key with kid `{DEVICE_ENROLLMENT_KEY_ID}` is configured")]
-    Ambiguous,
-    #[error("key `{DEVICE_ENROLLMENT_KEY_ID}` must be Ed25519")]
     WrongKeyType,
 }
 
@@ -769,23 +758,6 @@ impl Keystore {
         match candidate.params() {
             PrivateKey::OkpEd25519(key) => Ok(key.to_bytes()),
             _ => Err(ServiceIdentityKeyError::WrongKeyType),
-        }
-    }
-
-    /// Return the explicitly designated Ed25519 seed for the B-model device
-    /// enrollment authority.
-    pub fn device_enrollment_seed(&self) -> Result<[u8; 32], DeviceEnrollmentKeyError> {
-        let mut candidates = self
-            .inner
-            .iter()
-            .filter(|jwk| jwk.kid() == Some(DEVICE_ENROLLMENT_KEY_ID));
-        let candidate = candidates.next().ok_or(DeviceEnrollmentKeyError::Missing)?;
-        if candidates.next().is_some() {
-            return Err(DeviceEnrollmentKeyError::Ambiguous);
-        }
-        match candidate.params() {
-            PrivateKey::OkpEd25519(key) => Ok(key.to_bytes()),
-            _ => Err(DeviceEnrollmentKeyError::WrongKeyType),
         }
     }
 

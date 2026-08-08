@@ -297,7 +297,6 @@ pub struct PasswordRecoveryTrustBoundary {
     pub recovery_credential_kind: String,
     pub account_password_reset: bool,
     pub device_trust_reset: bool,
-    pub cross_signing_reset: bool,
     pub trusted_recovery_service_used: bool,
     pub device_trust_recovery_required: bool,
 }

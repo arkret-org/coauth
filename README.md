@@ -57,14 +57,9 @@ on load via `ArkretConfig::validate_trust_domain` (mirrors the SDK's
 `TypedTrustDomainId` acceptance rules) and injects it into the Realm
 policy + `/_arkret/describe` document via soland's config API.
 
-**Rotation is wire-breaking for existing cross-signing reset proofs.**
-The `trust_domain` value enters the canonical transcript of every
-`ak.cross_signing.reset` proof (see
-`arkret_models_identity::CrossSigningResetPayload`). Changing it
-invalidates all previously-issued `principal_signing` /
-`recovery_unlock` / `device_quorum` / `trusted_recovery_service`
-proofs. Operators MUST roll fresh proofs through the device-lifecycle
-recovery strand as part of the rotation.
+The `trust_domain` value binds peer and recovery authorization
+transcripts to this deployment. Rotate it only with coordinated expiry
+of in-flight proofs and sessions issued under the prior value.
 
 ## OOB invite code form
 
@@ -96,9 +91,6 @@ The canonical wire behavior lives in the v1 spec artifacts and prose under
   modes share the 5-terminal-state machine (`claimed` / `send_failed` /
   `revoked_by_capability_loss` / `revoked_by_inviter_left` /
   `invalidated_by_rate_limit`); salt / pepper are zeroized within 24h.
-- **`ak.cross_signing.publish` CAS** — publisher reads the current
-  generation and submits `expected_previous_generation`; new generation
-  is strictly `current + 1`.
 - **`/policy/check` v2** — request switches to `PolicyCheckRequestBody`
   (`signed_transport` + `source_ip_digest` + `source.{service_id,
   service_kind}`); response is `PolicyCheckOutcome` carrying the

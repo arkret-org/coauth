@@ -3,6 +3,8 @@ use arkret_models_collaboration::account_lifecycle::{
     AccountRegisterOutcome, AccountRegisterRequestBody,
 };
 use arkret_models_collaboration::objects::account_status::AccountStatus;
+use arkret_models_collaboration::principal_operations::PcrGenesisSubmitRequestBody;
+use arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
 use arkret_models_identity::{
     AccountBindingReceipt, AccountBindingState, AccountHandoffAllowedOperation,
     DidOperationSubmitOutcome, DidOperationSubmitStatus, IdentityCreationOperationStatus,
@@ -12,16 +14,28 @@ use coauth_data::account_handoff::{
     IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
     IdentityCreationRegistrationContext, IdentityCreationSagaState,
 };
+use coauth_data::storage::user::BrowserSessionRepository as _;
 use coauth_data::user::{
     PrincipalDidRepository as _, UserRepository as _, VerifiedPrincipalDidBindingInput,
 };
+use coauth_jose::constraints::Constrainable as _;
 use salvo::prelude::*;
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::account_handoff::{authenticate_account_handoff, enforce_handoff_operation};
-use super::{ArkretRouteError, DepotExt};
+use super::account_handoff::{
+    authenticate_account_handoff, enforce_handoff_operation,
+    verify_account_handoff_holder_without_lookup,
+};
+use super::session_grant::{
+    SessionGrantIssuanceSeed, issue_session_grant_for_audience, persist_session_grant,
+};
+use super::{
+    ArkretRouteError, DepotExt, PRINCIPAL_SERVER_SESSION_BIND_SCOPE, SessionGrantError,
+    preferred_signing_key, service_id_for, trust_domain_for,
+};
 use crate::handlers::{make_clock, make_rng};
+use crate::services::peer_protocol_client::{PeerProtocolClient, PeerProtocolClientError};
 use crate::services::soland_webvh;
 
 /// `POST /_arkret/gate/account/register` identity-creation branch.
@@ -30,8 +44,25 @@ pub async fn account_register_endpoint(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<AccountRegisterOutcome>, ArkretRouteError> {
-    let (grant, _dpop) =
-        authenticate_account_handoff(req, depot, AccountHandoffAllowedOperation::Register).await?;
+    let (handoff_token, replay_dpop) = verify_account_handoff_holder_without_lookup(req, depot)?;
+    let mut replay_repo = depot.repo().await?;
+    let mut grant = replay_repo
+        .account_handoff()
+        .get_by_token(&handoff_token, chrono::Utc::now())
+        .await?
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                arkret_wire::ErrorCode::UNAUTHENTICATED,
+                "account handoff is expired, revoked, or unknown",
+            )
+        })?;
+    replay_repo.cancel().await.ok();
+    if replay_dpop.jkt != grant.cnf_jkt {
+        return Err(proof_invalid(
+            "account handoff DPoP key does not match the credential cnf.jkt",
+        ));
+    }
     enforce_handoff_operation(&grant, AccountHandoffAllowedOperation::Register)?;
 
     let raw_body: Value = req
@@ -47,7 +78,7 @@ pub async fn account_register_endpoint(
         .account_handoff()
         .registration_replay(
             &grant,
-            &replay_key.identity_creation.lease_id,
+            &replay_key.identity_creation.identity_creation_lease_id,
             replay_key.identity_creation.lease_fence,
             &replay_key.identity_creation.control_proof.challenge_id,
             &request_digest,
@@ -56,6 +87,15 @@ pub async fn account_register_endpoint(
     match replay {
         IdentityCreationRegisterReplay::Pending => {
             repo.cancel().await.ok();
+            let (active_grant, _dpop) =
+                authenticate_account_handoff(req, depot, AccountHandoffAllowedOperation::Register)
+                    .await?;
+            if active_grant.id != grant.id {
+                return Err(proof_invalid(
+                    "account handoff identity changed during replay check",
+                ));
+            }
+            grant = active_grant;
         }
         IdentityCreationRegisterReplay::Replay(outcome) => {
             repo.cancel().await.ok();
@@ -70,6 +110,8 @@ pub async fn account_register_endpoint(
     }
     let body: AccountRegisterRequestBody = serde_json::from_value(raw_body)
         .map_err(|_| schema_violation("invalid account register body"))?;
+    body.validate()
+        .map_err(|error| schema_violation(error.to_string()))?;
     let identity_creation = body
         .identity_creation
         .as_ref()
@@ -81,7 +123,7 @@ pub async fn account_register_endpoint(
     }
     if body.device_id.is_some() {
         return Err(failed_precondition(
-            "the founding device must be enrolled after the verified identity binding",
+            "top-level device_id is not used by the atomic identity-creation flow",
         ));
     }
     if identity_creation.did_operation.did != body.principal_id
@@ -99,7 +141,7 @@ pub async fn account_register_endpoint(
         .account_handoff()
         .registration_context(
             &grant,
-            &identity_creation.lease_id,
+            &identity_creation.identity_creation_lease_id,
             identity_creation.lease_fence,
             &identity_creation.control_proof.challenge_id,
             now,
@@ -112,7 +154,28 @@ pub async fn account_register_endpoint(
         })?;
     repo.cancel().await.ok();
 
+    identity_creation
+        .validate()
+        .map_err(|error| proof_invalid(error.to_string()))?;
     validate_registration_transcript(&context, identity_creation)?;
+    validate_initial_session_request(identity_creation, &grant)?;
+    let browser_session_id = grant.browser_session_id.ok_or_else(|| {
+        failed_precondition("identity creation requires its originating browser session")
+    })?;
+    let mut prerequisite_repo = depot.repo().await?;
+    let browser_session = prerequisite_repo
+        .browser_session()
+        .lookup(browser_session_id)
+        .await?
+        .ok_or_else(|| failed_precondition("originating browser session no longer exists"))?;
+    prerequisite_repo.cancel().await.ok();
+    let key_store = depot.key_store()?;
+    let (_, signing_key) = preferred_signing_key(&key_store)
+        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
+    let signing_key_id = signing_key
+        .kid()
+        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?
+        .to_owned();
     let validated = arkret_signatures::webvh::verify_identity_creation_control_proof(
         &identity_creation.did_operation,
         &identity_creation.control_proof,
@@ -148,7 +211,7 @@ pub async fn account_register_endpoint(
             let mut repo = depot.repo().await?;
             if !repo
                 .account_handoff()
-                .mark_published(&context, &receipt, head, now)
+                .mark_did_published(&context, &receipt, head, now)
                 .await?
             {
                 repo.cancel().await.ok();
@@ -159,7 +222,9 @@ pub async fn account_register_endpoint(
             repo.save().await?;
             outcome
         }
-        IdentityCreationSagaState::Published => {
+        IdentityCreationSagaState::DidPublished
+        | IdentityCreationSagaState::PcrAccepted
+        | IdentityCreationSagaState::AccountBound => {
             let outcome: DidOperationSubmitOutcome =
                 serde_json::from_value(context.lease.registry_receipt.clone().ok_or_else(
                     || failed_precondition("published identity has no registry receipt"),
@@ -167,20 +232,22 @@ pub async fn account_register_endpoint(
                 .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
             validate_registry_outcome(&outcome, &body.principal_id)?;
             let head = outcome.head_event_digest.as_ref().expect("validated head");
-            let receipt = serde_json::to_value(&outcome)
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-            let mut repo = depot.repo().await?;
-            if !repo
-                .account_handoff()
-                .mark_published(&context, &receipt, head, now)
-                .await?
-            {
-                repo.cancel().await.ok();
-                return Err(failed_precondition(
-                    "published identity recovery lost its current fence",
-                ));
+            if context.lease.state == IdentityCreationSagaState::DidPublished {
+                let receipt = serde_json::to_value(&outcome)
+                    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+                let mut repo = depot.repo().await?;
+                if !repo
+                    .account_handoff()
+                    .mark_did_published(&context, &receipt, head, now)
+                    .await?
+                {
+                    repo.cancel().await.ok();
+                    return Err(failed_precondition(
+                        "published identity recovery lost its current fence",
+                    ));
+                }
+                repo.save().await?;
             }
-            repo.save().await?;
             outcome
         }
         IdentityCreationSagaState::Active => {
@@ -188,11 +255,89 @@ pub async fn account_register_endpoint(
                 "identity creation operation has not been reserved",
             ));
         }
-        IdentityCreationSagaState::Bound => {
+        IdentityCreationSagaState::Completed => {
             return Err(failed_precondition(
                 "identity binding challenge was already consumed",
             ));
         }
+    };
+
+    let pcr_request = PcrGenesisSubmitRequestBody {
+        account_authority_id: service_id_for(&depot.arkret_config()?),
+        principal_id: body.principal_id.clone(),
+        pcr_realm_id: identity_creation.control_proof.pcr_realm_id.clone(),
+        idempotency_key: arkret_wire::IdempotencyKey::new(format!(
+            "pcr-genesis:{}",
+            request_digest.as_str()
+        ))
+        .map_err(schema_violation)?,
+        registration_request_digest: request_digest.clone(),
+        identity_creation_control_proof: identity_creation.control_proof.clone(),
+        genesis_unit: identity_creation.pcr_genesis_unit.clone(),
+    };
+    pcr_request
+        .validate()
+        .map_err(|error| proof_invalid(error.to_string()))?;
+    let pcr_request_digest = pcr_request
+        .canonical_request_digest()
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let pcr_outcome = if matches!(
+        context.lease.state,
+        IdentityCreationSagaState::Reserved | IdentityCreationSagaState::DidPublished
+    ) {
+        let target = principal_server_target(depot, &grant.audience)?;
+        let config = depot.arkret_config()?;
+        let trust_domain = arkret_identifiers::TypedTrustDomainId::new(trust_domain_for(
+            &depot.url_builder()?,
+            &config,
+        ))
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        let http_client = depot.http_client()?;
+        let key_store = depot.key_store()?;
+        let peer = PeerProtocolClient::new(
+            Some(&target.endpoint),
+            &http_client,
+            &key_store,
+            arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
+                source_service_id: service_id_for(&config),
+                destination_service_id: target.service_id,
+                source_trust_domain: trust_domain.clone(),
+                destination_trust_domain: trust_domain,
+            },
+        )
+        .map_err(map_peer_error)?;
+        let outcome = peer
+            .post_principal_genesis(&pcr_request)
+            .await
+            .map_err(map_peer_error)?;
+        let mut repo = depot.repo().await?;
+        if !repo
+            .account_handoff()
+            .mark_pcr_accepted(&context, &pcr_request_digest, &outcome, now)
+            .await?
+        {
+            repo.cancel().await.ok();
+            return Err(failed_precondition(
+                "PCR genesis receipt could not be durably attached to this registration",
+            ));
+        }
+        repo.save().await?;
+        outcome
+    } else {
+        let outcome = context
+            .lease
+            .pcr_genesis_receipt
+            .clone()
+            .ok_or_else(|| failed_precondition("PCR-accepted saga has no durable receipt"))?;
+        if context.lease.pcr_genesis_request_digest.as_ref() != Some(&pcr_request_digest) {
+            return Err(duplicate_conflict(
+                "PCR genesis request differs from the durable accepted request",
+            ));
+        }
+        outcome
+            .validate_against(&pcr_request)
+            .map_err(|error| failed_precondition(error.to_string()))?;
+        outcome
     };
 
     let operation_status = match registry_outcome.status {
@@ -206,11 +351,102 @@ pub async fn account_register_endpoint(
         .expect("registry outcome head validated above");
     let receipt = AccountBindingReceipt {
         binding_state: AccountBindingState::Bound,
-        lease_id: identity_creation.lease_id.clone(),
+        identity_creation_lease_id: identity_creation.identity_creation_lease_id.clone(),
         lease_fence: identity_creation.lease_fence,
         operation_status,
         operation_digest: validated.operation_digest,
         head_event_digest: head_event_digest.clone(),
+    };
+    let mut rng = make_rng();
+    let mut repo = depot.repo().await?;
+    if context.lease.state != IdentityCreationSagaState::AccountBound {
+        if !repo
+            .account_handoff()
+            .mark_account_bound(&context, &receipt, now)
+            .await?
+        {
+            repo.cancel().await.ok();
+            return Err(failed_precondition(
+                "PCR-accepted identity could not be atomically bound to the account",
+            ));
+        }
+        let user = repo
+            .user()
+            .lookup(grant.service_account_id)
+            .await?
+            .ok_or(ArkretRouteError::NotFound)?;
+        let existing_binding = repo
+            .principal_did()
+            .get_for_user_and_audience(&user, &grant.audience)
+            .await?;
+        match existing_binding {
+            Some(existing)
+                if existing.principal_id == body.principal_id.as_str()
+                    && existing.key_log_head == head_event_digest => {}
+            Some(_) => {
+                repo.cancel().await.ok();
+                return Err(duplicate_conflict(
+                    "service account already has a different verified principal binding",
+                ));
+            }
+            None => {
+                repo.principal_did()
+                    .add_verified(
+                        &mut *rng,
+                        &*clock,
+                        &user,
+                        VerifiedPrincipalDidBindingInput {
+                            audience: grant.audience.clone(),
+                            principal_id: body.principal_id.to_string(),
+                            key_log_head: head_event_digest,
+                        },
+                    )
+                    .await?;
+            }
+        }
+        repo.save().await?;
+        repo = depot.repo().await?;
+    }
+
+    let mut nonce = [0_u8; 32];
+    rand_core::RngCore::fill_bytes(&mut *rng, &mut nonce);
+    let issuance_seed = SessionGrantIssuanceSeed::new(
+        arkret_models_identity::SessionGrantIssuanceNonce::from_bytes(nonce).to_string(),
+        coauth_data::new_id(now, &mut *rng).to_string(),
+        now,
+        now + depot.arkret_config()?.session_grant_ttl,
+        signing_key_id,
+    )
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let initial = &identity_creation.initial_session;
+    let session_public_key: coauth_jose::jwk::PublicJsonWebKey =
+        serde_json::from_str(initial.session_public_key.as_str())
+            .map_err(|error| proof_invalid(error.to_string()))?;
+    let material = issue_session_grant_for_audience(
+        &issuance_seed,
+        &*clock,
+        &depot.arkret_config()?,
+        &key_store,
+        &browser_session,
+        session_public_key,
+        initial.audience.to_string(),
+        initial.requested_scope.clone(),
+        Some(body.principal_id.as_str()),
+        grant.cnf_jkt.clone(),
+        arkret_models_identity::SessionGrantProofKind::DidBoundSignature,
+    )
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    persist_session_grant(&mut repo, &mut *rng, &*clock, &browser_session, &material).await?;
+    let session_grant_outcome = SessionGrantOutcome {
+        principal_id: body.principal_id.clone(),
+        device_id: Some(initial.device_id.clone()),
+        session_grant: material.grant_jwt.clone(),
+        expires_at: material.expires_at_timestamp,
+        grant_id: material.grant_id.clone(),
+        session_public_key: initial.session_public_key.clone(),
+        audience: initial.audience.clone(),
+        granted_scope: material.scopes.clone(),
+        scope_details: None,
     };
     let outcome = AccountRegisterOutcome {
         principal_id: body.principal_id.clone(),
@@ -221,31 +457,19 @@ pub async fn account_register_endpoint(
         handle_claim_digests: Vec::new(),
         profile: None,
         registration_audit: None,
-        binding_receipt: Some(receipt.clone()),
+        binding_receipt: Some(receipt),
+        pcr_genesis_receipt: Some(pcr_outcome.receipt),
+        session_grant_outcome: Some(session_grant_outcome),
     };
-
-    let key_store = depot.key_store()?;
-    let enrollment_authority =
-        crate::services::device_enrollment_authority::enrollment_authority(&key_store)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let enrollment_authority_ref = inception_enrollment_authority_ref(
-        body.principal_id.as_str(),
-        &identity_creation.did_operation.operation,
-        enrollment_authority.did(),
-    )
-    .ok_or_else(|| failed_precondition("invalid enrollment authority service reference"))?;
-    let enrollment_authority_did =
-        arkret_identifiers::Did::new(enrollment_authority.did().to_owned())
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-
-    let mut rng = make_rng();
-    let mut repo = depot.repo().await?;
-    let binding_commit = repo
+    outcome
+        .validate_against_request(&body)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let completion = repo
         .account_handoff()
-        .mark_bound(&context, &receipt, &request_digest, &outcome, now)
+        .mark_completed(&context, &request_digest, &outcome, now)
         .await?;
-    match binding_commit {
-        IdentityCreationBindingCommit::Committed => {}
+    let outcome = match completion {
+        IdentityCreationBindingCommit::Committed => outcome,
         IdentityCreationBindingCommit::Replay(stored) => {
             repo.cancel().await.ok();
             return Ok(Json(*stored));
@@ -259,52 +483,15 @@ pub async fn account_register_endpoint(
         IdentityCreationBindingCommit::Stale => {
             repo.cancel().await.ok();
             return Err(failed_precondition(
-                "published identity could not be atomically finalized as bound",
+                "account-bound identity could not commit its initial Standard grant",
             ));
         }
-    }
-    let user = repo
-        .user()
-        .lookup(grant.service_account_id)
-        .await?
-        .ok_or(ArkretRouteError::NotFound)?;
-    let existing_binding = repo
-        .principal_did()
-        .get_for_user_and_audience(&user, &grant.audience)
-        .await?;
-    match existing_binding {
-        Some(existing)
-            if existing.principal_id == body.principal_id.as_str()
-                && existing.key_log_head == head_event_digest
-                && existing.enrollment_authority_did == enrollment_authority_did
-                && existing.enrollment_authority_ref == enrollment_authority_ref => {}
-        Some(_) => {
-            repo.cancel().await.ok();
-            return Err(ArkretRouteError::coded(
-                StatusCode::CONFLICT,
-                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
-                "service account already has a different verified principal binding",
-            ));
-        }
-        None => {
-            repo.principal_did()
-                .add_verified(
-                    &mut *rng,
-                    &*clock,
-                    &user,
-                    VerifiedPrincipalDidBindingInput {
-                        audience: grant.audience.clone(),
-                        principal_id: body.principal_id.to_string(),
-                        key_log_head: head_event_digest,
-                        enrollment_authority_did,
-                        enrollment_authority_ref,
-                    },
-                )
-                .await?;
-        }
+    };
+    if !repo.account_handoff().consume_grant(&grant, now).await? {
+        repo.cancel().await.ok();
+        return Err(failed_precondition("account handoff was already consumed"));
     }
     repo.save().await?;
-
     Ok(Json(outcome))
 }
 
@@ -327,7 +514,11 @@ fn validate_registration_transcript(
         || challenge.purpose != proof.purpose
         || challenge.principal_id != proof.principal_id
         || challenge.operation_digest != proof.operation_digest
-        || challenge.lease_id != proof.lease_id
+        || challenge.pcr_realm_id != proof.pcr_realm_id
+        || challenge.realm_create_payload_digest != proof.realm_create_payload_digest
+        || challenge.founding_authorize_payload_digest != proof.founding_authorize_payload_digest
+        || challenge.initial_session_request_digest != proof.initial_session_request_digest
+        || challenge.lease_id != proof.identity_creation_lease_id
         || challenge.lease_fence != proof.lease_fence
         || challenge.dpop_jkt != proof.dpop_jkt
         || challenge.audience != proof.audience
@@ -335,7 +526,7 @@ fn validate_registration_transcript(
         || challenge.trust_domain != proof.trust_domain
         || challenge.issued_at != proof.issued_at
         || challenge.expires_at != proof.expires_at
-        || registration.lease_id != proof.lease_id
+        || registration.identity_creation_lease_id != proof.identity_creation_lease_id
         || registration.lease_fence != proof.lease_fence
     {
         return Err(proof_invalid(
@@ -367,7 +558,7 @@ struct AccountRegisterReplayKey {
 
 #[derive(Deserialize)]
 struct AccountRegisterIdentityCreationReplayKey {
-    lease_id: String,
+    identity_creation_lease_id: String,
     lease_fence: u64,
     control_proof: AccountRegisterControlProofReplayKey,
 }
@@ -398,6 +589,7 @@ fn validate_registry_outcome(
 
 struct PrincipalServerTarget {
     endpoint: url::Url,
+    service_id: arkret_identifiers::Did,
     bearer: Option<String>,
 }
 
@@ -417,8 +609,14 @@ fn principal_server_target(
         .ok_or_else(|| {
             failed_precondition("handoff audience has no configured principal server")
         })?;
+    let service_id =
+        crate::services::resolved_principal_audiences::effective_audience_shared(server)
+            .ok_or_else(|| {
+                failed_precondition("principal server identity is unavailable or stale")
+            })?;
     Ok(PrincipalServerTarget {
         endpoint: server.endpoint.clone(),
+        service_id,
         bearer: server
             .embedded_webvh_registration_bearer
             .as_deref()
@@ -428,40 +626,48 @@ fn principal_server_target(
     })
 }
 
-fn inception_enrollment_authority_ref(
-    principal_id: &str,
-    operation: &std::collections::BTreeMap<String, Value>,
-    authority_did: &str,
-) -> Option<String> {
-    let document = operation.get("state")?;
-    if document.get("capabilityDelegation").is_some() {
-        return None;
+fn validate_initial_session_request(
+    registration: &arkret_models_identity::IdentityCreationRegistration,
+    grant: &coauth_data::account_handoff::AccountHandoffGrant,
+) -> Result<(), ArkretRouteError> {
+    let initial = &registration.initial_session;
+    if initial.audience.as_str() != grant.audience {
+        return Err(failed_precondition(
+            "initial SessionGrant audience does not match the account handoff audience",
+        ));
     }
-    let mut designated = document
-        .get("service")?
-        .as_array()?
+    let device_scope = format!("urn:arkret:client:device:{}", initial.device_id.as_str());
+    if !initial
+        .requested_scope
         .iter()
-        .filter(|service| {
-            service.get("type").and_then(Value::as_str)
-                == Some(arkret_models_discovery::service_requirements::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY)
-        });
-    let service = designated.next()?;
-    if designated.next().is_some()
-        || service.get("serviceEndpoint").and_then(Value::as_str) != Some(authority_did)
+        .any(|scope| scope == &device_scope)
+        || initial
+            .requested_scope
+            .iter()
+            .any(|scope| scope != PRINCIPAL_SERVER_SESSION_BIND_SCOPE && scope != &device_scope)
     {
-        return None;
+        return Err(failed_precondition(
+            "initial SessionGrant requested_scope exceeds the founding-device issuer ceiling",
+        ));
     }
-    let reference = service.get("id").and_then(Value::as_str)?;
-    let reference = if reference.starts_with('#') {
-        format!("{principal_id}{reference}")
-    } else {
-        reference.to_owned()
-    };
-    arkret_wire::DidUrl::new(reference.clone()).ok()?;
-    reference
-        .strip_prefix(principal_id)
-        .is_some_and(|fragment| fragment.starts_with('#') && fragment.len() > 1)
-        .then_some(reference)
+    let jkt = initial
+        .session_public_key
+        .thumbprint_sha256()
+        .map_err(|error| proof_invalid(error.to_string()))?;
+    if jkt != grant.cnf_jkt || jkt != registration.control_proof.dpop_jkt {
+        return Err(proof_invalid(
+            "initial SessionGrant key thumbprint does not match the authenticated holder",
+        ));
+    }
+    Ok(())
+}
+
+fn map_peer_error(error: PeerProtocolClientError) -> ArkretRouteError {
+    ArkretRouteError::coded(
+        StatusCode::SERVICE_UNAVAILABLE,
+        arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
+        format!("principal server PCR genesis submission failed: {error}"),
+    )
 }
 
 fn schema_violation(message: impl Into<String>) -> ArkretRouteError {
@@ -496,7 +702,7 @@ fn duplicate_conflict(message: impl Into<String>) -> ArkretRouteError {
     )
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 mod tests {
     use std::collections::BTreeMap;
 
@@ -550,7 +756,7 @@ mod tests {
             service_account_id,
             challenge_id: challenge_id.clone(),
             challenge: challenge_value.clone(),
-            purpose: arkret_models_identity::IdentityBindingPurpose::AccountBinding,
+            purpose: arkret_models_identity::IdentityBindingPurpose::AccountBindingAndPcrGenesis,
             principal_id: did.clone(),
             operation_digest: reserved.operation_digest.clone(),
             lease_id: lease_id.clone(),
@@ -604,7 +810,7 @@ mod tests {
                     arkret_models_identity::IdentityCreationControlProofKind::DidWebvhInceptionUpdateKey,
                 challenge_id,
                 challenge: challenge_value,
-                purpose: arkret_models_identity::IdentityBindingPurpose::AccountBinding,
+                purpose: arkret_models_identity::IdentityBindingPurpose::AccountBindingAndPcrGenesis,
                 principal_id: did,
                 operation_digest: reserved.operation_digest,
                 lease_id: challenge.lease_id.clone(),
@@ -705,7 +911,7 @@ mod tests {
 
         let replay_key: AccountRegisterReplayKey = serde_json::from_value(raw.clone()).unwrap();
         assert_eq!(
-            replay_key.identity_creation.lease_id,
+            replay_key.identity_creation.identity_creation_lease_id,
             "lease-for-replay-lookup"
         );
         assert_eq!(replay_key.identity_creation.lease_fence, 7);

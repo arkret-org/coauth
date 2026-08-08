@@ -5,16 +5,11 @@ use chrono::{DateTime, Utc};
 use coauth_data::account_handoff::{
     AccountHandoffCreation, AccountHandoffCreationAttempt, AccountHandoffCreationAttemptCommit,
     AccountHandoffCreationAttemptReserve, AccountHandoffCreationAttemptState, AccountHandoffGrant,
-    AccountHandoffGrantInput, DeviceBootstrapAcceptanceCommit, DeviceBootstrapCancelCommit,
-    DeviceBootstrapCancelInput, DeviceBootstrapCancelOperation, DeviceBootstrapCancelReserve,
-    DeviceBootstrapCancelReserveInput, DeviceBootstrapEnrollmentCommit,
-    DeviceBootstrapEnrollmentInput, DeviceBootstrapEnrollmentReservationInput,
-    DeviceBootstrapEnrollmentReserve, DeviceBootstrapTransaction, DeviceBootstrapTransactionCreate,
-    DeviceBootstrapTransactionState, FirstDeviceEnrollmentCommit, FirstDeviceEnrollmentInput,
-    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityBindingChallengeRecord,
-    IdentityCreationBindingCommit, IdentityCreationLeaseRecord, IdentityCreationRegisterLedger,
-    IdentityCreationRegisterReplay, IdentityCreationRegistrationContext, IdentityCreationSagaState,
-    NewAccountHandoffCreationAttempt, NewDeviceBootstrapTransaction,
+    AccountHandoffGrantInput, IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
+    IdentityBindingChallengeRecord, IdentityCreationBindingCommit, IdentityCreationLeaseRecord,
+    IdentityCreationRegisterLedger, IdentityCreationRegisterReplay,
+    IdentityCreationRegistrationContext, IdentityCreationSagaState,
+    NewAccountHandoffCreationAttempt,
 };
 use coauth_data::{AccountHandoffRepository, Ulid};
 use diesel::OptionalExtension as _;
@@ -28,10 +23,11 @@ use uuid::Uuid;
 
 use crate::DatabaseError;
 
-const ALLOWED_OPERATIONS: [&str; 3] = [
+const ALLOWED_OPERATIONS: [&str; 4] = [
     "ak.gate.account.command.issue_identity_binding_challenge",
     "ak.gate.account.command.register",
     "ak.gate.account.command.issue_session_grant",
+    "ak.gate.account.command.issue_recovery_completion_grant",
 ];
 
 fn canonical_json_digest_matches(bytes: &[u8], expected: &arkret_identifiers::Hash) -> bool {
@@ -43,143 +39,6 @@ fn canonical_json_digest_matches(bytes: &[u8], expected: &arkret_identifiers::Ha
     };
     canonical == bytes
         && expected.as_str() == format!("sha256:{:x}", sha2::Sha256::digest(bytes)).as_str()
-}
-
-fn canonical_device_enroll_outcome_matches(
-    bytes: &[u8],
-    expected: &arkret_identifiers::Hash,
-) -> bool {
-    let Ok(outcome) =
-        serde_json::from_slice::<arkret_models_identity::AccountDeviceEnrollOutcome>(bytes)
-    else {
-        return false;
-    };
-    let Ok(canonical) = arkret_canonical::canonical_json_bytes(&outcome) else {
-        return false;
-    };
-    canonical == bytes
-        && outcome.outcome_digest == *expected
-        && outcome.recompute_outcome_digest().ok().as_ref() == Some(expected)
-}
-
-fn canonical_device_enroll_request_matches(
-    bytes: &[u8],
-    expected: &arkret_identifiers::Hash,
-) -> bool {
-    let Ok(request) =
-        serde_json::from_slice::<arkret_models_identity::AccountDeviceEnrollRequestBody>(bytes)
-    else {
-        return false;
-    };
-    let Ok(canonical) = arkret_canonical::canonical_json_bytes(&request) else {
-        return false;
-    };
-    canonical == bytes && request.canonical_request_digest().ok().as_ref() == Some(expected)
-}
-
-fn device_bootstrap_request_matches_transaction(
-    bytes: &[u8],
-    input: &NewDeviceBootstrapTransaction,
-) -> bool {
-    let Ok(request) =
-        serde_json::from_slice::<arkret_models_identity::AccountDeviceEnrollRequestBody>(bytes)
-    else {
-        return false;
-    };
-    let Ok(payload) = serde_json::from_value::<
-        arkret_models_collaboration::events_payloads::device_identity::DeviceAuthorizePayload,
-    >(serde_json::Value::Object(
-        request
-            .authorize_event_preimage
-            .payload
-            .clone()
-            .into_iter()
-            .collect(),
-    )) else {
-        return false;
-    };
-    let key_text = payload.device_public_key.as_str();
-    let raw_key = arkret_canonical::decode_ed25519_multibase(key_text)
-        .ok()
-        .or_else(|| {
-            arkret_canonical::base64url_decode(key_text)
-                .ok()
-                .and_then(|bytes| <[u8; 32]>::try_from(bytes).ok())
-        });
-    request.device_id == input.device_id
-        && request.authorize_event_preimage.actor_id == input.principal_id
-        && payload.principal_id == input.principal_id
-        && payload.device_id == input.device_id
-        && request.authorize_event_preimage.prev_refs.as_slice()
-            == [input.founding_event_ids[0].clone()]
-        && request.authorize_event_preimage.event_id == input.founding_event_ids[1]
-        && raw_key
-            .and_then(|key| arkret_models_identity::device_bootstrap_device_key_digest(key).ok())
-            .as_ref()
-            == Some(&input.device_key_digest)
-}
-
-fn validate_device_bootstrap_decision_evidence(
-    transaction: &DeviceBootstrapTransaction,
-    evidence: &coauth_data::DeviceBootstrapDecisionEvidence,
-    expected_decision: arkret_models_collaboration::contact_operations::DeviceBootstrapDecision,
-) -> Result<(), DatabaseError> {
-    validate_device_bootstrap_decision_request(transaction, &evidence.request)?;
-    evidence
-        .outcome
-        .validate_against(&evidence.request)
-        .map_err(|_| DatabaseError::invalid_operation())?;
-    let canonical_receipt = arkret_canonical::canonical_json_bytes(&evidence.outcome.receipt)
-        .map_err(|_| DatabaseError::invalid_operation())?;
-    let receipt = &evidence.outcome.receipt;
-    let decision_time_valid = receipt.decided_at >= transaction.created_at
-        && match expected_decision {
-            arkret_models_collaboration::contact_operations::DeviceBootstrapDecision::Accepted => {
-                receipt.decided_at <= transaction.expires_at
-            }
-            arkret_models_collaboration::contact_operations::DeviceBootstrapDecision::Cancelled => {
-                receipt.decided_at < transaction.expires_at
-            }
-            arkret_models_collaboration::contact_operations::DeviceBootstrapDecision::Expired => {
-                receipt.decided_at >= transaction.expires_at
-            }
-        };
-    if evidence.outcome.decision != expected_decision
-        || !decision_time_valid
-        || canonical_receipt != evidence.canonical_receipt
-        || receipt.principal_server_id.as_str().trim().is_empty()
-        || receipt.principal_server_id != transaction.principal_server_id
-    {
-        return Err(DatabaseError::invalid_operation());
-    }
-    Ok(())
-}
-
-fn validate_device_bootstrap_decision_request(
-    transaction: &DeviceBootstrapTransaction,
-    request: &arkret_models_collaboration::contact_operations::DeviceBootstrapDecisionRequestBody,
-) -> Result<(), DatabaseError> {
-    request
-        .validate()
-        .map_err(|_| DatabaseError::invalid_operation())?;
-    let event_ids: [arkret_identifiers::EventId; 2] = transaction
-        .founding_event_ids
-        .clone()
-        .try_into()
-        .map_err(|_| DatabaseError::invalid_operation())?;
-    if request.account_authority_id != transaction.account_authority_id
-        || request.transaction_id != transaction.transaction_id
-        || request.principal_id != transaction.principal_id
-        || request.device_id != transaction.device_id
-        || request.grant_id != transaction.bootstrap_grant_id
-        || request.canonical_request_digest != transaction.canonical_request_digest
-        || request.founding_event_ids != event_ids
-        || request.founding_batch_digest != transaction.founding_batch_digest
-        || request.bootstrap_transaction_expires_at != transaction.expires_at
-    {
-        return Err(DatabaseError::invalid_operation());
-    }
-    Ok(())
 }
 
 /// PostgreSQL-backed account-handoff state machine.
@@ -216,55 +75,6 @@ impl<'c> PgAccountHandoffRepository<'c> {
             .transpose()
     }
 
-    async fn device_bootstrap_transaction(
-        &mut self,
-        transaction_id: &arkret_wire::ProtocolOpaqueId,
-        for_update: bool,
-    ) -> Result<Option<DeviceBootstrapTransaction>, DatabaseError> {
-        let suffix = if for_update { " FOR UPDATE" } else { "" };
-        let query = format!(
-            "SELECT transaction_id, mode, account_authority_id, principal_server_id, principal_id, device_id, device_key_digest, holder_jkt, \
-             canonical_request_digest, canonical_request, founding_batch_digest, founding_event_ids, \
-             bootstrap_grant_id, state, enrollment_request_digest, canonical_enrollment_outcome, \
-             enrollment_outcome_digest, authorized_event_id, authorized_event_digest, \
-             standard_grant_id, expires_at, created_at, enrolled_at, accepted_at, cancelled_at, \
-             expired_at, decision_principal_server_id, canonical_decision_receipt, \
-             decision_receipt_digest FROM device_bootstrap_transactions \
-             WHERE transaction_id = $1{suffix}"
-        );
-        diesel::sql_query(query)
-            .bind::<Text, _>(transaction_id.as_str())
-            .get_result::<DeviceBootstrapTransactionRow>(self.conn)
-            .await
-            .optional()?
-            .map(device_bootstrap_transaction_from_row)
-            .transpose()
-    }
-
-    async fn device_bootstrap_cancel_operation(
-        &mut self,
-        transaction_id: &arkret_wire::ProtocolOpaqueId,
-        idempotency_key: &arkret_wire::IdempotencyKey,
-        for_update: bool,
-    ) -> Result<Option<DeviceBootstrapCancelOperation>, DatabaseError> {
-        let suffix = if for_update { " FOR UPDATE" } else { "" };
-        let query = format!(
-            "SELECT transaction_id, idempotency_key, canonical_request_digest, canonical_request, \
-             authority_request_digest, canonical_authority_request, requested_decision, \
-             canonical_outcome, outcome_digest, created_at \
-             FROM device_bootstrap_cancel_operations \
-             WHERE transaction_id = $1 AND idempotency_key = $2{suffix}"
-        );
-        diesel::sql_query(query)
-            .bind::<Text, _>(transaction_id.as_str())
-            .bind::<Text, _>(idempotency_key.as_str())
-            .get_result::<DeviceBootstrapCancelOperationRow>(self.conn)
-            .await
-            .optional()?
-            .map(device_bootstrap_cancel_operation_from_row)
-            .transpose()
-    }
-
     async fn handoff_by_request_uuid(
         &mut self,
         request_id: Uuid,
@@ -291,7 +101,8 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let query = format!(
             "SELECT service_account_id, audience, lease_id, holder_jkt, fence, expires_at, \
              reserved_principal_id, reserved_operation_digest, did_operation, state, \
-             registry_receipt, head_event_digest, binding_receipt, register_handoff_grant_id, \
+             registry_receipt, head_event_digest, pcr_genesis_request_digest, \
+             pcr_genesis_receipt, binding_receipt, register_handoff_grant_id, \
              register_challenge_id, register_request_digest, register_outcome, created_at, updated_at \
              FROM identity_creation_leases WHERE service_account_id = $1 AND audience = $2{suffix}"
         );
@@ -331,7 +142,8 @@ impl<'c> PgAccountHandoffRepository<'c> {
     ) -> Result<Option<IdentityBindingChallengeRecord>, DatabaseError> {
         let row = diesel::sql_query(
             "SELECT request_id, request_digest, service_account_id, challenge_id, challenge, \
-             purpose, principal_id, operation_digest, lease_id, lease_fence, dpop_jkt, audience, \
+             purpose, principal_id, operation_digest, pcr_realm_id, realm_create_payload_digest, \
+             founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience, \
              origin, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
              FROM identity_binding_challenges WHERE request_id = $1",
         )
@@ -350,7 +162,8 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let suffix = if for_update { " FOR UPDATE" } else { "" };
         let query = format!(
             "SELECT request_id, request_digest, service_account_id, challenge_id, challenge, \
-             purpose, principal_id, operation_digest, lease_id, lease_fence, dpop_jkt, audience, \
+             purpose, principal_id, operation_digest, pcr_realm_id, realm_create_payload_digest, \
+             founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience, \
              origin, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
              FROM identity_binding_challenges WHERE challenge_id = $1{suffix}"
         );
@@ -367,16 +180,6 @@ impl<'c> PgAccountHandoffRepository<'c> {
 struct PrincipalRow {
     #[diesel(sql_type = Text)]
     principal_id: String,
-}
-
-#[derive(QueryableByName)]
-struct FirstDeviceEnrollmentRow {
-    #[diesel(sql_type = Nullable<Text>)]
-    device_id: Option<String>,
-    #[diesel(sql_type = Nullable<Text>)]
-    request_digest: Option<String>,
-    #[diesel(sql_type = Nullable<Jsonb>)]
-    outcome: Option<serde_json::Value>,
 }
 
 #[derive(QueryableByName)]
@@ -445,368 +248,6 @@ struct HandoffCreationAttemptRow {
     authorized_at: Option<DateTime<Utc>>,
     #[diesel(sql_type = Nullable<Timestamptz>)]
     committed_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Clone, QueryableByName)]
-struct DeviceBootstrapTransactionRow {
-    #[diesel(sql_type = Text)]
-    transaction_id: String,
-    #[diesel(sql_type = Text)]
-    mode: String,
-    #[diesel(sql_type = Text)]
-    account_authority_id: String,
-    #[diesel(sql_type = Text)]
-    principal_server_id: String,
-    #[diesel(sql_type = Text)]
-    principal_id: String,
-    #[diesel(sql_type = Text)]
-    device_id: String,
-    #[diesel(sql_type = Text)]
-    device_key_digest: String,
-    #[diesel(sql_type = Text)]
-    holder_jkt: String,
-    #[diesel(sql_type = Text)]
-    canonical_request_digest: String,
-    #[diesel(sql_type = Bytea)]
-    canonical_request: Vec<u8>,
-    #[diesel(sql_type = Text)]
-    founding_batch_digest: String,
-    #[diesel(sql_type = Array<Text>)]
-    founding_event_ids: Vec<String>,
-    #[diesel(sql_type = Text)]
-    bootstrap_grant_id: String,
-    #[diesel(sql_type = Text)]
-    state: String,
-    #[diesel(sql_type = Nullable<Text>)]
-    enrollment_request_digest: Option<String>,
-    #[diesel(sql_type = Nullable<Bytea>)]
-    canonical_enrollment_outcome: Option<Vec<u8>>,
-    #[diesel(sql_type = Nullable<Text>)]
-    enrollment_outcome_digest: Option<String>,
-    #[diesel(sql_type = Nullable<Text>)]
-    authorized_event_id: Option<String>,
-    #[diesel(sql_type = Nullable<Text>)]
-    authorized_event_digest: Option<String>,
-    #[diesel(sql_type = Nullable<Text>)]
-    standard_grant_id: Option<String>,
-    #[diesel(sql_type = Timestamptz)]
-    expires_at: DateTime<Utc>,
-    #[diesel(sql_type = Timestamptz)]
-    created_at: DateTime<Utc>,
-    #[diesel(sql_type = Nullable<Timestamptz>)]
-    enrolled_at: Option<DateTime<Utc>>,
-    #[diesel(sql_type = Nullable<Timestamptz>)]
-    accepted_at: Option<DateTime<Utc>>,
-    #[diesel(sql_type = Nullable<Timestamptz>)]
-    cancelled_at: Option<DateTime<Utc>>,
-    #[diesel(sql_type = Nullable<Timestamptz>)]
-    expired_at: Option<DateTime<Utc>>,
-    #[diesel(sql_type = Nullable<Text>)]
-    decision_principal_server_id: Option<String>,
-    #[diesel(sql_type = Nullable<Bytea>)]
-    canonical_decision_receipt: Option<Vec<u8>>,
-    #[diesel(sql_type = Nullable<Text>)]
-    decision_receipt_digest: Option<String>,
-}
-
-#[derive(QueryableByName)]
-struct DeviceBootstrapCancelOperationRow {
-    #[diesel(sql_type = Text)]
-    transaction_id: String,
-    #[diesel(sql_type = Text)]
-    idempotency_key: String,
-    #[diesel(sql_type = Text)]
-    canonical_request_digest: String,
-    #[diesel(sql_type = Bytea)]
-    canonical_request: Vec<u8>,
-    #[diesel(sql_type = Text)]
-    authority_request_digest: String,
-    #[diesel(sql_type = Bytea)]
-    canonical_authority_request: Vec<u8>,
-    #[diesel(sql_type = Text)]
-    requested_decision: String,
-    #[diesel(sql_type = Nullable<Bytea>)]
-    canonical_outcome: Option<Vec<u8>>,
-    #[diesel(sql_type = Nullable<Text>)]
-    outcome_digest: Option<String>,
-    #[diesel(sql_type = Timestamptz)]
-    created_at: DateTime<Utc>,
-}
-
-fn device_bootstrap_cancel_operation_from_row(
-    row: DeviceBootstrapCancelOperationRow,
-) -> Result<DeviceBootstrapCancelOperation, DatabaseError> {
-    let request = serde_json::from_slice::<
-        arkret_models_collaboration::contact_operations::CancelDeviceBootstrapRequestBody,
-    >(&row.canonical_request)
-    .map_err(|_| DatabaseError::invalid_operation())?;
-    if request
-        .canonical_request_digest()
-        .map_err(|_| DatabaseError::invalid_operation())?
-        .as_str()
-        != row.canonical_request_digest
-        || arkret_canonical::canonical_json_bytes(&request)
-            .map_err(|_| DatabaseError::invalid_operation())?
-            != row.canonical_request
-    {
-        return Err(DatabaseError::invalid_operation());
-    }
-    let authority_request = serde_json::from_slice::<
-        arkret_models_collaboration::contact_operations::DeviceBootstrapDecisionRequestBody,
-    >(&row.canonical_authority_request)
-    .map_err(|_| DatabaseError::invalid_operation())?;
-    if authority_request.validate().is_err()
-        || authority_request.decision_request_digest.as_str() != row.authority_request_digest
-        || arkret_canonical::canonical_json_bytes(&authority_request)
-            .map_err(|_| DatabaseError::invalid_operation())?
-            != row.canonical_authority_request
-        || match authority_request.requested_decision {
-            arkret_models_collaboration::contact_operations::RequestedDeviceBootstrapDecision::Cancelled => "cancelled",
-            arkret_models_collaboration::contact_operations::RequestedDeviceBootstrapDecision::Expired => "expired",
-        } != row.requested_decision
-    {
-        return Err(DatabaseError::invalid_operation());
-    }
-    let outcome_digest = row
-        .outcome_digest
-        .as_deref()
-        .map(arkret_identifiers::Hash::new)
-        .transpose()
-        .map_err(|_| DatabaseError::invalid_operation())?;
-    match (row.canonical_outcome.as_deref(), outcome_digest.as_ref()) {
-        (None, None) => {}
-        (Some(bytes), Some(stored_digest)) => {
-            if let Ok(outcome) = serde_json::from_slice::<
-                arkret_models_collaboration::contact_operations::CancelDeviceBootstrapOutcome,
-            >(bytes)
-            {
-                outcome
-                    .validate_against(&request)
-                    .map_err(|_| DatabaseError::invalid_operation())?;
-                let embedded_digest = match &outcome {
-                    arkret_models_collaboration::contact_operations::CancelDeviceBootstrapOutcome::Cancelled {
-                        outcome_digest,
-                        ..
-                    }
-                    | arkret_models_collaboration::contact_operations::CancelDeviceBootstrapOutcome::Expired {
-                        outcome_digest,
-                        ..
-                    }
-                    | arkret_models_collaboration::contact_operations::CancelDeviceBootstrapOutcome::Pending {
-                        outcome_digest,
-                        ..
-                    } => outcome_digest,
-                };
-                if arkret_canonical::canonical_json_bytes(&outcome)
-                    .map_err(|_| DatabaseError::invalid_operation())?
-                    != bytes
-                    || embedded_digest != stored_digest
-                {
-                    return Err(DatabaseError::invalid_operation());
-                }
-            } else {
-                let envelope = serde_json::from_slice::<arkret_wire::ErrorEnvelope>(bytes)
-                    .map_err(|_| DatabaseError::invalid_operation())?;
-                let expected_plain_digest = format!("sha256:{:x}", sha2::Sha256::digest(bytes));
-                if arkret_canonical::canonical_json_bytes(&envelope)
-                    .map_err(|_| DatabaseError::invalid_operation())?
-                    != bytes
-                    || stored_digest.as_str() != expected_plain_digest
-                    || envelope.code() != arkret_wire::ErrorCode::FAILED_PRECONDITION
-                    || envelope.details().get("transaction_id")
-                        != Some(&serde_json::Value::String(
-                            request.transaction_id.as_str().to_owned(),
-                        ))
-                    || envelope.details().get("state")
-                        != Some(&serde_json::Value::String("accepted".to_owned()))
-                {
-                    return Err(DatabaseError::invalid_operation());
-                }
-            }
-        }
-        _ => return Err(DatabaseError::invalid_operation()),
-    }
-    Ok(DeviceBootstrapCancelOperation {
-        transaction_id: arkret_wire::ProtocolOpaqueId::new(row.transaction_id)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        idempotency_key: arkret_wire::IdempotencyKey::new(row.idempotency_key)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        canonical_request_digest: arkret_identifiers::Hash::new(row.canonical_request_digest)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        canonical_request: row.canonical_request,
-        authority_request,
-        canonical_authority_request: row.canonical_authority_request,
-        canonical_outcome: row.canonical_outcome,
-        outcome_digest,
-        created_at: row.created_at,
-    })
-}
-
-fn device_bootstrap_transaction_from_row(
-    row: DeviceBootstrapTransactionRow,
-) -> Result<DeviceBootstrapTransaction, DatabaseError> {
-    let founding_event_ids = row
-        .founding_event_ids
-        .into_iter()
-        .map(arkret_identifiers::EventId::new)
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| DatabaseError::invalid_operation())?;
-    let founding_batch_digest = arkret_identifiers::Hash::new(row.founding_batch_digest)
-        .map_err(|_| DatabaseError::invalid_operation())?;
-    let canonical_request_digest = arkret_identifiers::Hash::new(row.canonical_request_digest)
-        .map_err(|_| DatabaseError::invalid_operation())?;
-    let state = DeviceBootstrapTransactionState::try_from(row.state.as_str())
-        .map_err(|_| DatabaseError::invalid_operation())?;
-    let decision_principal_server_id = row
-        .decision_principal_server_id
-        .map(arkret_identifiers::Did::new)
-        .transpose()
-        .map_err(|_| DatabaseError::invalid_operation())?;
-    let decision_receipt_digest = row
-        .decision_receipt_digest
-        .map(arkret_identifiers::Hash::new)
-        .transpose()
-        .map_err(|_| DatabaseError::invalid_operation())?;
-    match (
-        state,
-        decision_principal_server_id.as_ref(),
-        row.canonical_decision_receipt.as_ref(),
-        decision_receipt_digest.as_ref(),
-    ) {
-        (DeviceBootstrapTransactionState::Pending, None, None, None) => {}
-        (terminal, Some(principal_server_id), Some(bytes), Some(digest)) => {
-            let receipt = serde_json::from_slice::<
-                arkret_models_collaboration::contact_operations::DeviceBootstrapDecisionReceipt,
-            >(bytes)
-            .map_err(|_| DatabaseError::invalid_operation())?;
-            let expected_decision = match terminal {
-                DeviceBootstrapTransactionState::Accepted => arkret_models_collaboration::contact_operations::DeviceBootstrapDecision::Accepted,
-                DeviceBootstrapTransactionState::Cancelled => arkret_models_collaboration::contact_operations::DeviceBootstrapDecision::Cancelled,
-                DeviceBootstrapTransactionState::Expired => arkret_models_collaboration::contact_operations::DeviceBootstrapDecision::Expired,
-                DeviceBootstrapTransactionState::Pending => return Err(DatabaseError::invalid_operation()),
-            };
-            let decision_time_valid = receipt.decided_at >= row.created_at
-                && match expected_decision {
-                    arkret_models_collaboration::contact_operations::DeviceBootstrapDecision::Accepted => receipt.decided_at <= row.expires_at,
-                    arkret_models_collaboration::contact_operations::DeviceBootstrapDecision::Cancelled => receipt.decided_at < row.expires_at,
-                    arkret_models_collaboration::contact_operations::DeviceBootstrapDecision::Expired => receipt.decided_at >= row.expires_at,
-                };
-            let lifecycle_time_valid = match terminal {
-                DeviceBootstrapTransactionState::Accepted => {
-                    row.accepted_at == Some(receipt.decided_at)
-                        && row.cancelled_at.is_none()
-                        && row.expired_at.is_none()
-                }
-                DeviceBootstrapTransactionState::Cancelled => {
-                    row.cancelled_at == Some(receipt.decided_at)
-                        && row.accepted_at.is_none()
-                        && row.expired_at.is_none()
-                }
-                DeviceBootstrapTransactionState::Expired => {
-                    row.expired_at == Some(row.expires_at)
-                        && row.accepted_at.is_none()
-                        && row.cancelled_at.is_none()
-                }
-                DeviceBootstrapTransactionState::Pending => false,
-            };
-            if arkret_canonical::canonical_json_bytes(&receipt)
-                .map_err(|_| DatabaseError::invalid_operation())?
-                != *bytes
-                || !decision_time_valid
-                || !lifecycle_time_valid
-                || receipt.validate().is_err()
-                || receipt.decision != expected_decision
-                || receipt.principal_server_id != *principal_server_id
-                || receipt.receipt_digest != *digest
-                || receipt.transaction_id.as_str() != row.transaction_id
-                || receipt.account_authority_id.as_str() != row.account_authority_id
-                || receipt.principal_id.as_str() != row.principal_id
-                || receipt.device_id.as_str() != row.device_id
-                || receipt.grant_id.as_str() != row.bootstrap_grant_id
-                || receipt.canonical_request_digest != canonical_request_digest
-                || receipt.founding_event_ids.as_slice() != founding_event_ids.as_slice()
-                || receipt.founding_batch_digest != founding_batch_digest
-                || receipt.bootstrap_transaction_expires_at != row.expires_at
-            {
-                return Err(DatabaseError::invalid_operation());
-            }
-        }
-        _ => return Err(DatabaseError::invalid_operation()),
-    }
-    if arkret_models_identity::founding_batch_digest(&founding_event_ids)
-        .map_err(|_| DatabaseError::invalid_operation())?
-        != founding_batch_digest
-        || !canonical_device_enroll_request_matches(
-            &row.canonical_request,
-            &canonical_request_digest,
-        )
-    {
-        return Err(DatabaseError::invalid_operation());
-    }
-    Ok(DeviceBootstrapTransaction {
-        transaction_id: arkret_wire::ProtocolOpaqueId::new(row.transaction_id)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        mode: match row.mode.as_str() {
-            "founding" => arkret_models_collaboration::contact_operations::BootstrapMode::Founding,
-            "sibling_pairing" => {
-                arkret_models_collaboration::contact_operations::BootstrapMode::SiblingPairing
-            }
-            _ => return Err(DatabaseError::invalid_operation()),
-        },
-        account_authority_id: arkret_identifiers::Did::new(row.account_authority_id)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        principal_server_id: arkret_identifiers::Did::new(row.principal_server_id)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        principal_id: arkret_identifiers::Did::new(row.principal_id)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        device_id: arkret_identifiers::DeviceId::new(row.device_id)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        device_key_digest: arkret_identifiers::Hash::new(row.device_key_digest)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        holder_jkt: row.holder_jkt,
-        canonical_request_digest,
-        canonical_request: row.canonical_request,
-        founding_batch_digest,
-        founding_event_ids,
-        bootstrap_grant_id: arkret_identifiers::SessionGrantId::new(row.bootstrap_grant_id)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        state,
-        enrollment_request_digest: row
-            .enrollment_request_digest
-            .map(arkret_identifiers::Hash::new)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        canonical_enrollment_outcome: row.canonical_enrollment_outcome,
-        enrollment_outcome_digest: row
-            .enrollment_outcome_digest
-            .map(arkret_identifiers::Hash::new)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        authorized_event_id: row
-            .authorized_event_id
-            .map(arkret_identifiers::EventId::new)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        authorized_event_digest: row
-            .authorized_event_digest
-            .map(arkret_identifiers::Hash::new)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        standard_grant_id: row
-            .standard_grant_id
-            .map(arkret_identifiers::SessionGrantId::new)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        expires_at: row.expires_at,
-        created_at: row.created_at,
-        enrolled_at: row.enrolled_at,
-        accepted_at: row.accepted_at,
-        cancelled_at: row.cancelled_at,
-        expired_at: row.expired_at,
-        decision_principal_server_id,
-        canonical_decision_receipt: row.canonical_decision_receipt,
-        decision_receipt_digest,
-    })
 }
 
 fn creation_attempt_from_row(
@@ -898,6 +339,10 @@ struct LeaseRow {
     registry_receipt: Option<serde_json::Value>,
     #[diesel(sql_type = Nullable<Text>)]
     head_event_digest: Option<String>,
+    #[diesel(sql_type = Nullable<Text>)]
+    pcr_genesis_request_digest: Option<String>,
+    #[diesel(sql_type = Nullable<Jsonb>)]
+    pcr_genesis_receipt: Option<serde_json::Value>,
     #[diesel(sql_type = Nullable<Jsonb>)]
     binding_receipt: Option<serde_json::Value>,
     #[diesel(sql_type = Nullable<SqlUuid>)]
@@ -968,6 +413,16 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
             .map(arkret_identifiers::Hash::new)
             .transpose()
             .map_err(|_| DatabaseError::invalid_operation())?,
+        pcr_genesis_request_digest: row
+            .pcr_genesis_request_digest
+            .map(arkret_identifiers::Hash::new)
+            .transpose()
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        pcr_genesis_receipt: row
+            .pcr_genesis_receipt
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|_| DatabaseError::invalid_operation())?,
         binding_receipt: row
             .binding_receipt
             .map(serde_json::from_value)
@@ -998,6 +453,14 @@ struct ChallengeRow {
     #[diesel(sql_type = Text)]
     operation_digest: String,
     #[diesel(sql_type = Text)]
+    pcr_realm_id: String,
+    #[diesel(sql_type = Text)]
+    realm_create_payload_digest: String,
+    #[diesel(sql_type = Text)]
+    founding_authorize_payload_digest: String,
+    #[diesel(sql_type = Text)]
+    initial_session_request_digest: String,
+    #[diesel(sql_type = Text)]
     lease_id: String,
     #[diesel(sql_type = BigInt)]
     lease_fence: i64,
@@ -1020,7 +483,7 @@ struct ChallengeRow {
 }
 
 fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecord, DatabaseError> {
-    if row.purpose != "account_binding" {
+    if row.purpose != "account_binding_and_pcr_genesis" {
         return Err(DatabaseError::invalid_operation());
     }
     Ok(IdentityBindingChallengeRecord {
@@ -1031,11 +494,23 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
         service_account_id: Ulid::from(row.service_account_id),
         challenge_id: row.challenge_id,
         challenge: row.challenge,
-        purpose: arkret_models_identity::IdentityBindingPurpose::AccountBinding,
+        purpose: arkret_models_identity::IdentityBindingPurpose::AccountBindingAndPcrGenesis,
         principal_id: arkret_identifiers::Did::new(row.principal_id)
             .map_err(|_| DatabaseError::invalid_operation())?,
         operation_digest: arkret_identifiers::Hash::new(row.operation_digest)
             .map_err(|_| DatabaseError::invalid_operation())?,
+        pcr_realm_id: arkret_identifiers::RealmId::new(row.pcr_realm_id)
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        realm_create_payload_digest: arkret_identifiers::Hash::new(row.realm_create_payload_digest)
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        founding_authorize_payload_digest: arkret_identifiers::Hash::new(
+            row.founding_authorize_payload_digest,
+        )
+        .map_err(|_| DatabaseError::invalid_operation())?,
+        initial_session_request_digest: arkret_identifiers::Hash::new(
+            row.initial_session_request_digest,
+        )
+        .map_err(|_| DatabaseError::invalid_operation())?,
         lease_id: row.lease_id,
         lease_fence: u64::try_from(row.lease_fence)
             .map_err(|_| DatabaseError::invalid_operation())?,
@@ -1065,6 +540,10 @@ fn challenge_matches_context(
         && challenge.purpose == expected.purpose
         && challenge.principal_id == expected.principal_id
         && challenge.operation_digest == expected.operation_digest
+        && challenge.pcr_realm_id == expected.pcr_realm_id
+        && challenge.realm_create_payload_digest == expected.realm_create_payload_digest
+        && challenge.founding_authorize_payload_digest == expected.founding_authorize_payload_digest
+        && challenge.initial_session_request_digest == expected.initial_session_request_digest
         && challenge.lease_id == context.lease.lease_id
         && challenge.lease_fence == context.lease.fence
         && challenge.dpop_jkt == context.grant.cnf_jkt
@@ -1241,641 +720,6 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         Ok(AccountHandoffCreationAttemptCommit::Committed(attempt))
     }
 
-    async fn create_device_bootstrap_transaction(
-        &mut self,
-        input: NewDeviceBootstrapTransaction,
-    ) -> Result<DeviceBootstrapTransactionCreate, Self::Error> {
-        if input.mode != arkret_models_collaboration::contact_operations::BootstrapMode::Founding
-            || input.expires_at <= input.now
-            || arkret_models_identity::founding_batch_digest(&input.founding_event_ids)
-                .map_err(|_| DatabaseError::invalid_operation())?
-                != input.founding_batch_digest
-            || !canonical_device_enroll_request_matches(
-                &input.canonical_request,
-                &input.canonical_request_digest,
-            )
-            || !device_bootstrap_request_matches_transaction(&input.canonical_request, &input)
-        {
-            return Err(DatabaseError::invalid_operation());
-        }
-
-        let inserted = diesel::sql_query(
-            "INSERT INTO device_bootstrap_transactions \
-             (transaction_id, mode, account_authority_id, principal_server_id, principal_id, device_id, device_key_digest, holder_jkt, \
-              canonical_request_digest, canonical_request, founding_batch_digest, founding_event_ids, \
-              bootstrap_grant_id, state, expires_at, created_at) \
-             VALUES ($1, 'founding', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending', $13, $14) \
-             ON CONFLICT (transaction_id) DO NOTHING",
-        )
-        .bind::<Text, _>(input.transaction_id.as_str())
-        .bind::<Text, _>(input.account_authority_id.as_str())
-        .bind::<Text, _>(input.principal_server_id.as_str())
-        .bind::<Text, _>(input.principal_id.as_str())
-        .bind::<Text, _>(input.device_id.as_str())
-        .bind::<Text, _>(input.device_key_digest.as_str())
-        .bind::<Text, _>(&input.holder_jkt)
-        .bind::<Text, _>(input.canonical_request_digest.as_str())
-        .bind::<Bytea, _>(&input.canonical_request)
-        .bind::<Text, _>(input.founding_batch_digest.as_str())
-        .bind::<Array<Text>, _>(
-            input
-                .founding_event_ids
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>(),
-        )
-        .bind::<Text, _>(input.bootstrap_grant_id.as_str())
-        .bind::<Timestamptz, _>(input.expires_at)
-        .bind::<Timestamptz, _>(input.now)
-        .execute(self.conn)
-        .await?;
-
-        let stored = self
-            .device_bootstrap_transaction(&input.transaction_id, true)
-            .await?
-            .ok_or_else(DatabaseError::invalid_operation)?;
-        let exact = stored.principal_id == input.principal_id
-            && stored.mode == input.mode
-            && stored.account_authority_id == input.account_authority_id
-            && stored.principal_server_id == input.principal_server_id
-            && stored.device_id == input.device_id
-            && stored.device_key_digest == input.device_key_digest
-            && stored.holder_jkt == input.holder_jkt
-            && stored.canonical_request_digest == input.canonical_request_digest
-            && stored.canonical_request == input.canonical_request
-            && stored.founding_batch_digest == input.founding_batch_digest
-            && stored.founding_event_ids == input.founding_event_ids
-            && stored.bootstrap_grant_id == input.bootstrap_grant_id
-            && stored.expires_at == input.expires_at;
-        if !exact {
-            return Ok(DeviceBootstrapTransactionCreate::Conflict(stored));
-        }
-        if inserted == 1 {
-            Ok(DeviceBootstrapTransactionCreate::Created(stored))
-        } else {
-            Ok(DeviceBootstrapTransactionCreate::Replay(stored))
-        }
-    }
-
-    async fn get_device_bootstrap_transaction(
-        &mut self,
-        transaction_id: &arkret_wire::ProtocolOpaqueId,
-    ) -> Result<Option<DeviceBootstrapTransaction>, Self::Error> {
-        self.device_bootstrap_transaction(transaction_id, false)
-            .await
-    }
-
-    async fn reserve_device_bootstrap_enrollment(
-        &mut self,
-        input: DeviceBootstrapEnrollmentReservationInput<'_>,
-    ) -> Result<DeviceBootstrapEnrollmentReserve, Self::Error> {
-        let Some(mut stored) = self
-            .device_bootstrap_transaction(input.transaction_id, true)
-            .await?
-        else {
-            return Ok(DeviceBootstrapEnrollmentReserve::NotFound);
-        };
-        if stored.principal_id != *input.principal_id
-            || stored.device_id != *input.device_id
-            || stored.canonical_request_digest != *input.request_digest
-        {
-            return Ok(DeviceBootstrapEnrollmentReserve::Conflict(stored));
-        }
-        if stored.canonical_enrollment_outcome.is_some() {
-            return Ok(DeviceBootstrapEnrollmentReserve::Replay(stored));
-        }
-        match stored.state {
-            DeviceBootstrapTransactionState::Cancelled => {
-                return Ok(DeviceBootstrapEnrollmentReserve::Cancelled(stored));
-            }
-            DeviceBootstrapTransactionState::Expired => {
-                return Ok(DeviceBootstrapEnrollmentReserve::Expired(stored));
-            }
-            DeviceBootstrapTransactionState::Accepted => {
-                return Err(DatabaseError::invalid_operation());
-            }
-            DeviceBootstrapTransactionState::Pending => {}
-        }
-        if stored.expires_at <= input.now {
-            return Ok(DeviceBootstrapEnrollmentReserve::RequiresDecision(stored));
-        }
-        Ok(DeviceBootstrapEnrollmentReserve::Reserved(stored))
-    }
-
-    async fn commit_device_bootstrap_enrollment(
-        &mut self,
-        input: DeviceBootstrapEnrollmentInput<'_>,
-    ) -> Result<DeviceBootstrapEnrollmentCommit, Self::Error> {
-        let Some(mut stored) = self
-            .device_bootstrap_transaction(input.transaction_id, true)
-            .await?
-        else {
-            return Ok(DeviceBootstrapEnrollmentCommit::NotFound);
-        };
-        let identity_matches = stored.principal_id == *input.principal_id
-            && stored.device_id == *input.device_id
-            && stored.canonical_request_digest == *input.request_digest;
-        if !identity_matches {
-            return Ok(DeviceBootstrapEnrollmentCommit::Conflict(stored));
-        }
-
-        if stored.canonical_enrollment_outcome.is_some() {
-            // The transaction/request identity is already matched above. A concurrent loser may
-            // have produced a different authority proof timestamp, but it must replay the unique
-            // winner's durable bytes instead of turning the same logical request into a conflict.
-            return Ok(DeviceBootstrapEnrollmentCommit::Replay(stored));
-        }
-
-        match stored.state {
-            DeviceBootstrapTransactionState::Cancelled => {
-                return Ok(DeviceBootstrapEnrollmentCommit::Cancelled(stored));
-            }
-            DeviceBootstrapTransactionState::Expired => {
-                return Ok(DeviceBootstrapEnrollmentCommit::Expired(stored));
-            }
-            DeviceBootstrapTransactionState::Accepted => {
-                return Err(DatabaseError::invalid_operation());
-            }
-            DeviceBootstrapTransactionState::Pending => {}
-        }
-        if stored.expires_at <= input.now {
-            return Ok(DeviceBootstrapEnrollmentCommit::RequiresDecision(stored));
-        }
-        if !canonical_device_enroll_outcome_matches(input.canonical_outcome, input.outcome_digest) {
-            return Err(DatabaseError::invalid_operation());
-        }
-        let outcome = serde_json::from_slice::<arkret_models_identity::AccountDeviceEnrollOutcome>(
-            input.canonical_outcome,
-        )
-        .map_err(|_| DatabaseError::invalid_operation())?;
-        let request = serde_json::from_slice::<
-            arkret_models_identity::AccountDeviceEnrollRequestBody,
-        >(&stored.canonical_request)
-        .map_err(|_| DatabaseError::invalid_operation())?;
-        if outcome.bootstrap_transaction_id != stored.transaction_id
-            || outcome.principal_id != *input.principal_id
-            || outcome.device_id != *input.device_id
-            || outcome.authorized_event_id != *input.authorized_event_id
-            || outcome.authorized_event_digest != *input.authorized_event_digest
-            || outcome.outcome_digest != *input.outcome_digest
-            || outcome.validate_against(&request).is_err()
-        {
-            return Err(DatabaseError::invalid_operation());
-        }
-
-        let updated = diesel::sql_query(
-            "UPDATE device_bootstrap_transactions SET enrollment_request_digest = $1, \
-             canonical_enrollment_outcome = $2, enrollment_outcome_digest = $3, \
-             authorized_event_id = $4, authorized_event_digest = $5, enrolled_at = $6 \
-             WHERE transaction_id = $7 AND state = 'pending' \
-             AND enrollment_request_digest IS NULL AND expires_at > $6",
-        )
-        .bind::<Text, _>(input.request_digest.as_str())
-        .bind::<Bytea, _>(input.canonical_outcome)
-        .bind::<Text, _>(input.outcome_digest.as_str())
-        .bind::<Text, _>(input.authorized_event_id.as_str())
-        .bind::<Text, _>(input.authorized_event_digest.as_str())
-        .bind::<Timestamptz, _>(input.now)
-        .bind::<Text, _>(input.transaction_id.as_str())
-        .execute(self.conn)
-        .await?;
-        if updated != 1 {
-            return Err(DatabaseError::invalid_operation());
-        }
-        let committed = self
-            .device_bootstrap_transaction(input.transaction_id, true)
-            .await?
-            .ok_or_else(DatabaseError::invalid_operation)?;
-        Ok(DeviceBootstrapEnrollmentCommit::Committed(committed))
-    }
-
-    async fn commit_device_bootstrap_cancel(
-        &mut self,
-        input: DeviceBootstrapCancelInput,
-    ) -> Result<DeviceBootstrapCancelCommit, Self::Error> {
-        let recomputed_request_digest = input
-            .request
-            .canonical_request_digest()
-            .map_err(|_| DatabaseError::invalid_operation())?;
-        if recomputed_request_digest != input.canonical_request_digest
-            || arkret_canonical::canonical_json_bytes(&input.request)
-                .map_err(|_| DatabaseError::invalid_operation())?
-                != input.canonical_request
-        {
-            return Err(DatabaseError::invalid_operation());
-        }
-        if let Some(operation) = self
-            .device_bootstrap_cancel_operation(
-                &input.request.transaction_id,
-                &input.request.idempotency_key,
-                true,
-            )
-            .await?
-        {
-            if operation.canonical_request_digest != input.canonical_request_digest
-                || operation.canonical_request != input.canonical_request
-                || operation.authority_request != input.authority.request
-            {
-                return Ok(DeviceBootstrapCancelCommit::Conflict);
-            }
-            if operation.canonical_outcome.is_some() {
-                return Ok(DeviceBootstrapCancelCommit::Replay(operation));
-            }
-        }
-
-        let Some(mut transaction) = self
-            .device_bootstrap_transaction(&input.request.transaction_id, true)
-            .await?
-        else {
-            return Ok(DeviceBootstrapCancelCommit::NotFound);
-        };
-        if let Some(operation) = self
-            .device_bootstrap_cancel_operation(
-                &input.request.transaction_id,
-                &input.request.idempotency_key,
-                false,
-            )
-            .await?
-        {
-            if operation.canonical_request_digest != input.canonical_request_digest
-                || operation.canonical_request != input.canonical_request
-                || operation.authority_request != input.authority.request
-            {
-                return Ok(DeviceBootstrapCancelCommit::Conflict);
-            }
-            if operation.canonical_outcome.is_some() {
-                return Ok(DeviceBootstrapCancelCommit::Replay(operation));
-            }
-        }
-        if transaction.mode != input.request.mode
-            || transaction.canonical_request_digest != input.request.canonical_request_digest
-        {
-            return Ok(DeviceBootstrapCancelCommit::Conflict);
-        }
-        match transaction.state {
-            DeviceBootstrapTransactionState::Accepted
-                if matches!(
-                    input.decision,
-                    coauth_data::DeviceBootstrapCancelDecision::Accept
-                ) => {}
-            DeviceBootstrapTransactionState::Accepted => {
-                return Ok(DeviceBootstrapCancelCommit::Accepted(transaction));
-            }
-            DeviceBootstrapTransactionState::Cancelled
-                if matches!(
-                    input.decision,
-                    coauth_data::DeviceBootstrapCancelDecision::Cancel
-                ) => {}
-            DeviceBootstrapTransactionState::Cancelled => {
-                return Ok(DeviceBootstrapCancelCommit::Cancelled(transaction));
-            }
-            DeviceBootstrapTransactionState::Expired
-                if matches!(
-                    input.decision,
-                    coauth_data::DeviceBootstrapCancelDecision::Expire
-                ) => {}
-            DeviceBootstrapTransactionState::Expired => {
-                return Ok(DeviceBootstrapCancelCommit::Expired(transaction));
-            }
-            DeviceBootstrapTransactionState::Pending => {}
-        }
-
-        let placeholder = arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
-            .expect("placeholder digest has a valid wire shape");
-        let expected_decision = match input.decision {
-            coauth_data::DeviceBootstrapCancelDecision::Accept => {
-                arkret_models_collaboration::contact_operations::DeviceBootstrapDecision::Accepted
-            }
-            coauth_data::DeviceBootstrapCancelDecision::Cancel => {
-                arkret_models_collaboration::contact_operations::DeviceBootstrapDecision::Cancelled
-            }
-            coauth_data::DeviceBootstrapCancelDecision::Expire => {
-                arkret_models_collaboration::contact_operations::DeviceBootstrapDecision::Expired
-            }
-        };
-        validate_device_bootstrap_decision_evidence(
-            &transaction,
-            &input.authority,
-            expected_decision,
-        )?;
-        if transaction.state != DeviceBootstrapTransactionState::Pending
-            && (transaction.decision_principal_server_id.as_ref()
-                != Some(&input.authority.outcome.receipt.principal_server_id)
-                || transaction.canonical_decision_receipt.as_deref()
-                    != Some(input.authority.canonical_receipt.as_slice())
-                || transaction.decision_receipt_digest.as_ref()
-                    != Some(&input.authority.outcome.receipt.receipt_digest))
-        {
-            return Ok(DeviceBootstrapCancelCommit::Conflict);
-        }
-        let accepting = matches!(
-            input.decision,
-            coauth_data::DeviceBootstrapCancelDecision::Accept
-        );
-        let expiring = matches!(
-            input.decision,
-            coauth_data::DeviceBootstrapCancelDecision::Expire
-        );
-        let (canonical_outcome, outcome_digest) = if accepting {
-            let envelope = arkret_wire::ErrorEnvelope::new(
-                arkret_wire::ErrorCode::FAILED_PRECONDITION,
-                "founding bootstrap transaction is already accepted",
-            )
-            .with_detail(
-                "transaction_id",
-                serde_json::Value::String(input.request.transaction_id.as_str().to_owned()),
-            )
-            .with_detail("state", serde_json::Value::String("accepted".to_owned()));
-            let bytes = arkret_canonical::canonical_json_bytes(&envelope)
-                .map_err(|_| DatabaseError::invalid_operation())?;
-            let digest =
-                arkret_identifiers::Hash::new(format!("sha256:{:x}", sha2::Sha256::digest(&bytes)))
-                    .map_err(|_| DatabaseError::invalid_operation())?;
-            (bytes, digest)
-        } else {
-            let mut outcome = if expiring {
-                arkret_models_collaboration::contact_operations::CancelDeviceBootstrapOutcome::Expired {
-                transaction_id: input.request.transaction_id.clone(),
-                expired_at: transaction.expires_at,
-                outcome_digest: placeholder,
-            }
-            } else {
-                arkret_models_collaboration::contact_operations::CancelDeviceBootstrapOutcome::Cancelled {
-                transaction_id: input.request.transaction_id.clone(),
-                outcome_digest: placeholder,
-            }
-            };
-            let outcome_digest = outcome
-                .recompute_outcome_digest()
-                .map_err(|_| DatabaseError::invalid_operation())?;
-            match &mut outcome {
-                arkret_models_collaboration::contact_operations::CancelDeviceBootstrapOutcome::Cancelled {
-                    outcome_digest: slot,
-                    ..
-                }
-                | arkret_models_collaboration::contact_operations::CancelDeviceBootstrapOutcome::Expired {
-                    outcome_digest: slot,
-                    ..
-                }
-                | arkret_models_collaboration::contact_operations::CancelDeviceBootstrapOutcome::Pending {
-                    outcome_digest: slot,
-                    ..
-                } => *slot = outcome_digest.clone(),
-            }
-            outcome
-                .validate_against(&input.request)
-                .map_err(|_| DatabaseError::invalid_operation())?;
-            let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
-                .map_err(|_| DatabaseError::invalid_operation())?;
-            (canonical_outcome, outcome_digest)
-        };
-
-        if accepting {
-            diesel::sql_query(
-                "UPDATE device_bootstrap_transactions SET state = 'accepted', accepted_at = $1, \
-                 decision_principal_server_id = $3, canonical_decision_receipt = $4, \
-                 decision_receipt_digest = $5 \
-                 WHERE transaction_id = $2 AND state = 'pending'",
-            )
-            .bind::<Timestamptz, _>(input.authority.outcome.receipt.decided_at)
-            .bind::<Text, _>(input.request.transaction_id.as_str())
-            .bind::<Text, _>(input.authority.outcome.receipt.principal_server_id.as_str())
-            .bind::<Bytea, _>(&input.authority.canonical_receipt)
-            .bind::<Text, _>(input.authority.outcome.receipt.receipt_digest.as_str())
-            .execute(self.conn)
-            .await?;
-        } else if expiring {
-            diesel::sql_query(
-                "UPDATE device_bootstrap_transactions SET state = 'expired', expired_at = $1, \
-                 decision_principal_server_id = $3, canonical_decision_receipt = $4, \
-                 decision_receipt_digest = $5 \
-                 WHERE transaction_id = $2 AND state = 'pending'",
-            )
-            .bind::<Timestamptz, _>(transaction.expires_at)
-            .bind::<Text, _>(input.request.transaction_id.as_str())
-            .bind::<Text, _>(input.authority.outcome.receipt.principal_server_id.as_str())
-            .bind::<Bytea, _>(&input.authority.canonical_receipt)
-            .bind::<Text, _>(input.authority.outcome.receipt.receipt_digest.as_str())
-            .execute(self.conn)
-            .await?;
-        } else {
-            diesel::sql_query(
-                "UPDATE device_bootstrap_transactions SET state = 'cancelled', cancelled_at = $1, \
-                 decision_principal_server_id = $3, canonical_decision_receipt = $4, \
-                 decision_receipt_digest = $5 \
-                 WHERE transaction_id = $2 AND state = 'pending'",
-            )
-            .bind::<Timestamptz, _>(input.authority.outcome.receipt.decided_at)
-            .bind::<Text, _>(input.request.transaction_id.as_str())
-            .bind::<Text, _>(input.authority.outcome.receipt.principal_server_id.as_str())
-            .bind::<Bytea, _>(&input.authority.canonical_receipt)
-            .bind::<Text, _>(input.authority.outcome.receipt.receipt_digest.as_str())
-            .execute(self.conn)
-            .await?;
-        }
-        let completed = diesel::sql_query(
-            "UPDATE device_bootstrap_cancel_operations SET canonical_outcome = $1, \
-             outcome_digest = $2 WHERE transaction_id = $3 AND idempotency_key = $4 \
-             AND canonical_outcome IS NULL AND outcome_digest IS NULL",
-        )
-        .bind::<Bytea, _>(&canonical_outcome)
-        .bind::<Text, _>(outcome_digest.as_str())
-        .bind::<Text, _>(input.request.transaction_id.as_str())
-        .bind::<Text, _>(input.request.idempotency_key.as_str())
-        .execute(self.conn)
-        .await?;
-        if completed != 1 {
-            return Err(DatabaseError::invalid_operation());
-        }
-        let operation = self
-            .device_bootstrap_cancel_operation(
-                &input.request.transaction_id,
-                &input.request.idempotency_key,
-                false,
-            )
-            .await?
-            .ok_or_else(DatabaseError::invalid_operation)?;
-        transaction = self
-            .device_bootstrap_transaction(&input.request.transaction_id, false)
-            .await?
-            .ok_or_else(DatabaseError::invalid_operation)?;
-        Ok(DeviceBootstrapCancelCommit::Committed {
-            transaction,
-            operation,
-        })
-    }
-
-    async fn reserve_device_bootstrap_cancel(
-        &mut self,
-        input: DeviceBootstrapCancelReserveInput,
-    ) -> Result<DeviceBootstrapCancelReserve, Self::Error> {
-        let recomputed_request_digest = input
-            .request
-            .canonical_request_digest()
-            .map_err(|_| DatabaseError::invalid_operation())?;
-        if recomputed_request_digest != input.canonical_request_digest
-            || arkret_canonical::canonical_json_bytes(&input.request)
-                .map_err(|_| DatabaseError::invalid_operation())?
-                != input.canonical_request
-            || arkret_canonical::canonical_json_bytes(&input.authority_request)
-                .map_err(|_| DatabaseError::invalid_operation())?
-                != input.canonical_authority_request
-        {
-            return Err(DatabaseError::invalid_operation());
-        }
-        if let Some(operation) = self
-            .device_bootstrap_cancel_operation(
-                &input.request.transaction_id,
-                &input.request.idempotency_key,
-                true,
-            )
-            .await?
-        {
-            return if operation.canonical_request_digest == input.canonical_request_digest
-                && operation.canonical_request == input.canonical_request
-            {
-                Ok(DeviceBootstrapCancelReserve::Replay(operation))
-            } else {
-                Ok(DeviceBootstrapCancelReserve::Conflict)
-            };
-        }
-        let Some(transaction) = self
-            .device_bootstrap_transaction(&input.request.transaction_id, true)
-            .await?
-        else {
-            return Ok(DeviceBootstrapCancelReserve::NotFound);
-        };
-        if transaction.mode != input.request.mode
-            || transaction.canonical_request_digest != input.request.canonical_request_digest
-        {
-            return Ok(DeviceBootstrapCancelReserve::Conflict);
-        }
-        if transaction.state != DeviceBootstrapTransactionState::Pending {
-            return Ok(DeviceBootstrapCancelReserve::Terminal(transaction));
-        }
-        validate_device_bootstrap_decision_request(&transaction, &input.authority_request)?;
-        let requested_decision = match input.authority_request.requested_decision {
-            arkret_models_collaboration::contact_operations::RequestedDeviceBootstrapDecision::Cancelled => "cancelled",
-            arkret_models_collaboration::contact_operations::RequestedDeviceBootstrapDecision::Expired => "expired",
-        };
-        diesel::sql_query(
-            "INSERT INTO device_bootstrap_cancel_operations \
-             (transaction_id, idempotency_key, canonical_request_digest, canonical_request, \
-              authority_request_digest, canonical_authority_request, requested_decision, \
-              canonical_outcome, outcome_digest, created_at) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NULL, $8) \
-             ON CONFLICT (transaction_id, idempotency_key) DO NOTHING",
-        )
-        .bind::<Text, _>(input.request.transaction_id.as_str())
-        .bind::<Text, _>(input.request.idempotency_key.as_str())
-        .bind::<Text, _>(input.canonical_request_digest.as_str())
-        .bind::<Bytea, _>(&input.canonical_request)
-        .bind::<Text, _>(input.authority_request.decision_request_digest.as_str())
-        .bind::<Bytea, _>(&input.canonical_authority_request)
-        .bind::<Text, _>(requested_decision)
-        .bind::<Timestamptz, _>(input.now)
-        .execute(self.conn)
-        .await?;
-        let operation = self
-            .device_bootstrap_cancel_operation(
-                &input.request.transaction_id,
-                &input.request.idempotency_key,
-                false,
-            )
-            .await?
-            .ok_or_else(DatabaseError::invalid_operation)?;
-        if operation.canonical_request_digest != input.canonical_request_digest
-            || operation.canonical_request != input.canonical_request
-        {
-            Ok(DeviceBootstrapCancelReserve::Conflict)
-        } else {
-            Ok(DeviceBootstrapCancelReserve::Reserved(operation))
-        }
-    }
-
-    async fn get_device_bootstrap_cancel_operation(
-        &mut self,
-        transaction_id: &arkret_wire::ProtocolOpaqueId,
-        idempotency_key: &arkret_wire::IdempotencyKey,
-    ) -> Result<Option<DeviceBootstrapCancelOperation>, Self::Error> {
-        self.device_bootstrap_cancel_operation(transaction_id, idempotency_key, false)
-            .await
-    }
-
-    async fn mark_device_bootstrap_accepted(
-        &mut self,
-        transaction_id: &arkret_wire::ProtocolOpaqueId,
-        authorized_event_id: &arkret_identifiers::EventId,
-        device_key_digest: &arkret_identifiers::Hash,
-        authority: coauth_data::DeviceBootstrapDecisionEvidence,
-    ) -> Result<DeviceBootstrapAcceptanceCommit, Self::Error> {
-        let Some(transaction) = self
-            .device_bootstrap_transaction(transaction_id, true)
-            .await?
-        else {
-            return Ok(DeviceBootstrapAcceptanceCommit::NotFound);
-        };
-        if transaction.authorized_event_id.as_ref() != Some(authorized_event_id)
-            || transaction.device_key_digest != *device_key_digest
-            || transaction.canonical_enrollment_outcome.is_none()
-        {
-            return Ok(DeviceBootstrapAcceptanceCommit::Conflict(transaction));
-        }
-        match transaction.state {
-            DeviceBootstrapTransactionState::Accepted => {
-                return if validate_device_bootstrap_decision_evidence(
-                    &transaction,
-                    &authority,
-                    arkret_models_collaboration::contact_operations::DeviceBootstrapDecision::Accepted,
-                )
-                .is_ok()
-                    && transaction.canonical_decision_receipt.as_deref()
-                        == Some(authority.canonical_receipt.as_slice())
-                {
-                    Ok(DeviceBootstrapAcceptanceCommit::Replay(transaction))
-                } else {
-                    Ok(DeviceBootstrapAcceptanceCommit::Conflict(transaction))
-                };
-            }
-            DeviceBootstrapTransactionState::Cancelled => {
-                return Ok(DeviceBootstrapAcceptanceCommit::Cancelled(transaction));
-            }
-            DeviceBootstrapTransactionState::Expired => {
-                return Ok(DeviceBootstrapAcceptanceCommit::Expired(transaction));
-            }
-            DeviceBootstrapTransactionState::Pending => {}
-        }
-        validate_device_bootstrap_decision_evidence(
-            &transaction,
-            &authority,
-            arkret_models_collaboration::contact_operations::DeviceBootstrapDecision::Accepted,
-        )?;
-        let updated = diesel::sql_query(
-            "UPDATE device_bootstrap_transactions SET state = 'accepted', accepted_at = $1, \
-             decision_principal_server_id = $5, canonical_decision_receipt = $6, \
-             decision_receipt_digest = $7 \
-             WHERE transaction_id = $2 AND state = 'pending' \
-             AND authorized_event_id = $3 AND device_key_digest = $4",
-        )
-        .bind::<Timestamptz, _>(authority.outcome.receipt.decided_at)
-        .bind::<Text, _>(transaction_id.as_str())
-        .bind::<Text, _>(authorized_event_id.as_str())
-        .bind::<Text, _>(device_key_digest.as_str())
-        .bind::<Text, _>(authority.outcome.receipt.principal_server_id.as_str())
-        .bind::<Bytea, _>(&authority.canonical_receipt)
-        .bind::<Text, _>(authority.outcome.receipt.receipt_digest.as_str())
-        .execute(self.conn)
-        .await?;
-        if updated != 1 {
-            return Err(DatabaseError::invalid_operation());
-        }
-        let accepted = self
-            .device_bootstrap_transaction(transaction_id, false)
-            .await?
-            .ok_or_else(DatabaseError::invalid_operation)?;
-        Ok(DeviceBootstrapAcceptanceCommit::Accepted(accepted))
-    }
-
     async fn get_by_request_id(
         &mut self,
         request_id: &arkret_identifiers::RequestId,
@@ -1894,6 +738,25 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
              revoked_at, consumed_at FROM account_handoff_grants \
              WHERE account_handoff_grant = $1 AND expires_at > $2 \
              AND revoked_at IS NULL AND consumed_at IS NULL",
+        )
+        .bind::<Text, _>(token)
+        .bind::<Timestamptz, _>(now)
+        .get_result::<HandoffRow>(self.conn)
+        .await
+        .optional()?;
+        row.map(handoff_from_row).transpose()
+    }
+
+    async fn get_by_token(
+        &mut self,
+        token: &str,
+        now: DateTime<Utc>,
+    ) -> Result<Option<AccountHandoffGrant>, Self::Error> {
+        let row = diesel::sql_query(
+            "SELECT id, request_id, request_digest, service_account_id, browser_session_id, \
+             audience, cnf_jkt, allowed_operations, account_handoff_grant, issued_at, expires_at, \
+             revoked_at, consumed_at FROM account_handoff_grants \
+             WHERE account_handoff_grant = $1 AND expires_at > $2 AND revoked_at IS NULL",
         )
         .bind::<Text, _>(token)
         .bind::<Timestamptz, _>(now)
@@ -1976,7 +839,10 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .lease_for_account(Uuid::from(input.service_account_id), &input.audience, true)
             .await?
             .ok_or_else(DatabaseError::invalid_operation)?;
-        if lease.state == IdentityCreationSagaState::Bound {
+        if matches!(
+            lease.state,
+            IdentityCreationSagaState::AccountBound | IdentityCreationSagaState::Completed
+        ) {
             let principal_id = lease
                 .reserved_identity
                 .as_ref()
@@ -2053,7 +919,10 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .lease_for_account(Uuid::from(grant.service_account_id), &grant.audience, false)
             .await?
             .ok_or_else(DatabaseError::invalid_operation)?;
-        if lease.state == IdentityCreationSagaState::Bound {
+        if matches!(
+            lease.state,
+            IdentityCreationSagaState::AccountBound | IdentityCreationSagaState::Completed
+        ) {
             let principal_id = lease
                 .reserved_identity
                 .as_ref()
@@ -2121,7 +990,10 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             || lease.fence != input.lease_fence
             || lease.holder_jkt != input.holder_jkt
             || lease.expires_at <= input.issued_at
-            || lease.state == IdentityCreationSagaState::Bound
+            || matches!(
+                lease.state,
+                IdentityCreationSagaState::AccountBound | IdentityCreationSagaState::Completed
+            )
         {
             return Ok(IdentityBindingChallengeIssue::LeaseMismatch);
         }
@@ -2142,11 +1014,11 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         diesel::sql_query(
             "UPDATE identity_creation_leases SET reserved_principal_id = $3, \
              reserved_operation_digest = $4, did_operation = $5, \
-             state = CASE WHEN state = 'published' THEN state ELSE 'reserved' END, \
+             state = CASE WHEN state <> 'active' THEN state ELSE 'reserved' END, \
              expires_at = GREATEST(expires_at, $6), updated_at = $7 \
              WHERE service_account_id = $1 AND audience = $2 AND lease_id = $8 \
              AND fence = $9 AND holder_jkt = $10 \
-             AND state IN ('active', 'reserved', 'published')",
+             AND state IN ('active', 'reserved', 'did_published', 'pcr_accepted', 'account_bound')",
         )
         .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
         .bind::<Text, _>(&input.audience)
@@ -2186,9 +1058,10 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         diesel::sql_query(
             "INSERT INTO identity_binding_challenges \
              (request_id, request_digest, service_account_id, challenge_id, challenge, purpose, \
-              principal_id, operation_digest, lease_id, lease_fence, dpop_jkt, audience, origin, \
+              principal_id, operation_digest, pcr_realm_id, realm_create_payload_digest, \
+              founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience, origin, \
               trust_domain, issued_at, expires_at) \
-             VALUES ($1, $2, $3, $4, $5, 'account_binding', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) \
+             VALUES ($1, $2, $3, $4, $5, 'account_binding_and_pcr_genesis', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) \
              ON CONFLICT (request_id) DO NOTHING",
         )
         .bind::<SqlUuid, _>(input.request_id.uuid())
@@ -2198,6 +1071,10 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(&input.challenge)
         .bind::<Text, _>(reserved.principal_id.as_str())
         .bind::<Text, _>(input.operation_digest.as_str())
+        .bind::<Text, _>(input.pcr_realm_id.as_str())
+        .bind::<Text, _>(input.realm_create_payload_digest.as_str())
+        .bind::<Text, _>(input.founding_authorize_payload_digest.as_str())
+        .bind::<Text, _>(input.initial_session_request_digest.as_str())
         .bind::<Text, _>(&input.lease_id)
         .bind::<BigInt, _>(i64::try_from(input.lease_fence).map_err(|_| DatabaseError::invalid_operation())?)
         .bind::<Text, _>(&input.holder_jkt)
@@ -2271,24 +1148,26 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         request_digest: &arkret_identifiers::Hash,
     ) -> Result<IdentityCreationRegisterReplay, Self::Error> {
         let Some(lease) = self
-            // Serialize with the final binding transaction so a concurrent
-            // retry cannot observe Published immediately before Bound commits.
+            // Serialize with the final completion transaction so a concurrent
+            // retry cannot observe AccountBound immediately before the
+            // Standard grant and exact replay outcome commit.
             .lease_for_account(Uuid::from(grant.service_account_id), &grant.audience, true)
             .await?
         else {
             return Ok(IdentityCreationRegisterReplay::Pending);
         };
-        if lease.state != IdentityCreationSagaState::Bound {
+        if lease.state != IdentityCreationSagaState::Completed {
             return Ok(IdentityCreationRegisterReplay::Pending);
         }
         let Some(ledger) = lease.register_ledger else {
-            // Rows bound before the replay ledger migration cannot prove that
-            // an incoming body is byte-for-byte the completed request.
+            // A completed row without its replay ledger cannot prove that an
+            // incoming body is byte-for-byte the completed request.
             return Ok(IdentityCreationRegisterReplay::DuplicateConflict);
         };
         if lease.lease_id != lease_id
             || lease.fence != lease_fence
             || lease.holder_jkt != grant.cnf_jkt
+            || ledger.handoff_grant_id != grant.id
             || ledger.challenge_id != challenge_id
             || ledger.request_digest != *request_digest
         {
@@ -2299,11 +1178,111 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         )))
     }
 
-    async fn mark_published(
+    async fn mark_did_published(
         &mut self,
         context: &IdentityCreationRegistrationContext,
         registry_receipt: &serde_json::Value,
         head_event_digest: &arkret_identifiers::Hash,
+        now: DateTime<Utc>,
+    ) -> Result<bool, Self::Error> {
+        let Some(lease) = self
+            .lease_for_account(
+                Uuid::from(context.grant.service_account_id),
+                &context.grant.audience,
+                true,
+            )
+            .await?
+        else {
+            return Ok(false);
+        };
+        if lease.lease_id != context.lease.lease_id
+            || lease.fence != context.lease.fence
+            || lease.holder_jkt != context.grant.cnf_jkt
+            || lease.expires_at <= now
+            || lease.reserved_identity.as_ref().is_none_or(|reserved| {
+                reserved.operation_digest != context.challenge.operation_digest
+            })
+            || !matches!(
+                lease.state,
+                IdentityCreationSagaState::Reserved | IdentityCreationSagaState::DidPublished
+            )
+        {
+            return Ok(false);
+        }
+        let Some(challenge) = self
+            .challenge_by_id(&context.challenge.challenge_id, true)
+            .await?
+        else {
+            return Ok(false);
+        };
+        if !challenge_matches_context(&challenge, context)
+            || challenge.replaced_at.is_some()
+            || challenge.expires_at <= now
+        {
+            return Ok(false);
+        }
+        match (context.lease.state, lease.state) {
+            (IdentityCreationSagaState::Reserved, IdentityCreationSagaState::Reserved) => {
+                if challenge.consumed_at.is_some() {
+                    return Ok(false);
+                }
+                let consumed = diesel::sql_query(
+                    "UPDATE identity_binding_challenges SET consumed_at = $1 \
+                     WHERE challenge_id = $2 AND consumed_at IS NULL AND replaced_at IS NULL",
+                )
+                .bind::<Timestamptz, _>(now)
+                .bind::<Text, _>(&context.challenge.challenge_id)
+                .execute(self.conn)
+                .await?;
+                if consumed != 1 {
+                    return Ok(false);
+                }
+            }
+            (IdentityCreationSagaState::DidPublished, IdentityCreationSagaState::DidPublished) => {
+                if challenge.consumed_at.is_none() {
+                    let consumed = diesel::sql_query(
+                        "UPDATE identity_binding_challenges SET consumed_at = $1 \
+                         WHERE challenge_id = $2 AND consumed_at IS NULL AND replaced_at IS NULL",
+                    )
+                    .bind::<Timestamptz, _>(now)
+                    .bind::<Text, _>(&context.challenge.challenge_id)
+                    .execute(self.conn)
+                    .await?;
+                    if consumed != 1 {
+                        return Ok(false);
+                    }
+                }
+            }
+            _ => return Ok(false),
+        }
+        let updated = diesel::sql_query(
+            "UPDATE identity_creation_leases SET state = 'did_published', registry_receipt = $1, \
+             head_event_digest = $2, updated_at = $3 \
+             WHERE service_account_id = $4 AND audience = $5 AND lease_id = $6 AND fence = $7 \
+             AND holder_jkt = $8 AND reserved_operation_digest = $9 \
+             AND state IN ('reserved', 'did_published')",
+        )
+        .bind::<Jsonb, _>(registry_receipt)
+        .bind::<Text, _>(head_event_digest.as_str())
+        .bind::<Timestamptz, _>(now)
+        .bind::<SqlUuid, _>(Uuid::from(context.grant.service_account_id))
+        .bind::<Text, _>(&context.grant.audience)
+        .bind::<Text, _>(&context.lease.lease_id)
+        .bind::<BigInt, _>(
+            i64::try_from(context.lease.fence).map_err(|_| DatabaseError::invalid_operation())?,
+        )
+        .bind::<Text, _>(&context.grant.cnf_jkt)
+        .bind::<Text, _>(context.challenge.operation_digest.as_str())
+        .execute(self.conn)
+        .await?;
+        Ok(updated == 1)
+    }
+
+    async fn mark_pcr_accepted(
+        &mut self,
+        context: &IdentityCreationRegistrationContext,
+        request_digest: &arkret_identifiers::Hash,
+        receipt: &arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error> {
         let Some(lease) = self
@@ -2324,7 +1303,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             })
             || !matches!(
                 lease.state,
-                IdentityCreationSagaState::Reserved | IdentityCreationSagaState::Published
+                IdentityCreationSagaState::DidPublished | IdentityCreationSagaState::PcrAccepted
             )
         {
             return Ok(false);
@@ -2335,42 +1314,99 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         else {
             return Ok(false);
         };
-        if !challenge_matches_context(&challenge, context) || challenge.replaced_at.is_some() {
+        if !challenge_matches_context(&challenge, context)
+            || challenge.consumed_at.is_none()
+            || challenge.replaced_at.is_some()
+        {
             return Ok(false);
         }
-        match (context.lease.state, lease.state) {
-            (IdentityCreationSagaState::Reserved, IdentityCreationSagaState::Reserved) => {
-                if challenge.consumed_at.is_some() {
-                    return Ok(false);
-                }
-                let consumed = diesel::sql_query(
-                    "UPDATE identity_binding_challenges SET consumed_at = $1 \
-                     WHERE challenge_id = $2 AND consumed_at IS NULL AND replaced_at IS NULL",
-                )
-                .bind::<Timestamptz, _>(now)
-                .bind::<Text, _>(&context.challenge.challenge_id)
-                .execute(self.conn)
-                .await?;
-                if consumed != 1 {
-                    return Ok(false);
-                }
-            }
-            (IdentityCreationSagaState::Published, IdentityCreationSagaState::Published) => {
-                if challenge.consumed_at.is_none() {
-                    return Ok(false);
-                }
-            }
-            _ => return Ok(false),
+        if lease.state == IdentityCreationSagaState::PcrAccepted {
+            let stored = lease
+                .pcr_genesis_receipt
+                .as_ref()
+                .and_then(|stored| arkret_canonical::canonical_json_bytes(stored).ok());
+            let received = arkret_canonical::canonical_json_bytes(receipt).ok();
+            return Ok(
+                lease.pcr_genesis_request_digest.as_ref() == Some(request_digest)
+                    && stored.is_some()
+                    && stored == received,
+            );
         }
+        let receipt =
+            serde_json::to_value(receipt).map_err(|_| DatabaseError::invalid_operation())?;
         let updated = diesel::sql_query(
-            "UPDATE identity_creation_leases SET state = 'published', registry_receipt = $1, \
-             head_event_digest = $2, updated_at = $3 \
+            "UPDATE identity_creation_leases SET state = 'pcr_accepted', \
+             pcr_genesis_request_digest = $1, pcr_genesis_receipt = $2, updated_at = $3 \
              WHERE service_account_id = $4 AND audience = $5 AND lease_id = $6 AND fence = $7 \
-             AND holder_jkt = $8 AND reserved_operation_digest = $9 \
-             AND state IN ('reserved', 'published')",
+             AND holder_jkt = $8 AND state = 'did_published'",
         )
-        .bind::<Jsonb, _>(registry_receipt)
-        .bind::<Text, _>(head_event_digest.as_str())
+        .bind::<Text, _>(request_digest.as_str())
+        .bind::<Jsonb, _>(receipt)
+        .bind::<Timestamptz, _>(now)
+        .bind::<SqlUuid, _>(Uuid::from(context.grant.service_account_id))
+        .bind::<Text, _>(&context.grant.audience)
+        .bind::<Text, _>(&context.lease.lease_id)
+        .bind::<BigInt, _>(
+            i64::try_from(context.lease.fence).map_err(|_| DatabaseError::invalid_operation())?,
+        )
+        .bind::<Text, _>(&context.grant.cnf_jkt)
+        .execute(self.conn)
+        .await?;
+        Ok(updated == 1)
+    }
+
+    async fn mark_account_bound(
+        &mut self,
+        context: &IdentityCreationRegistrationContext,
+        binding_receipt: &arkret_models_identity::AccountBindingReceipt,
+        now: DateTime<Utc>,
+    ) -> Result<bool, Self::Error> {
+        let Some(lease) = self
+            .lease_for_account(
+                Uuid::from(context.grant.service_account_id),
+                &context.grant.audience,
+                true,
+            )
+            .await?
+        else {
+            return Ok(false);
+        };
+        if lease.lease_id != context.lease.lease_id
+            || lease.fence != context.lease.fence
+            || lease.holder_jkt != context.grant.cnf_jkt
+            || lease.state != IdentityCreationSagaState::PcrAccepted
+            || lease.pcr_genesis_receipt.is_none()
+        {
+            return Ok(false);
+        }
+        if binding_receipt.identity_creation_lease_id != lease.lease_id
+            || binding_receipt.lease_fence != lease.fence
+            || binding_receipt.operation_digest != context.challenge.operation_digest
+            || lease.head_event_digest.as_ref() != Some(&binding_receipt.head_event_digest)
+        {
+            return Ok(false);
+        }
+        let Some(challenge) = self
+            .challenge_by_id(&context.challenge.challenge_id, true)
+            .await?
+        else {
+            return Ok(false);
+        };
+        if !challenge_matches_context(&challenge, context)
+            || challenge.consumed_at.is_none()
+            || challenge.replaced_at.is_some()
+        {
+            return Ok(false);
+        }
+        let receipt = serde_json::to_value(binding_receipt)
+            .map_err(|_| DatabaseError::invalid_operation())?;
+        let updated = diesel::sql_query(
+            "UPDATE identity_creation_leases SET state = 'account_bound', binding_receipt = $1, \
+             updated_at = $2 WHERE service_account_id = $3 AND audience = $4 \
+             AND lease_id = $5 AND fence = $6 AND holder_jkt = $7 \
+             AND reserved_operation_digest = $8 AND state = 'pcr_accepted'",
+        )
+        .bind::<Jsonb, _>(receipt)
         .bind::<Timestamptz, _>(now)
         .bind::<SqlUuid, _>(Uuid::from(context.grant.service_account_id))
         .bind::<Text, _>(&context.grant.audience)
@@ -2385,10 +1421,9 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         Ok(updated == 1)
     }
 
-    async fn mark_bound(
+    async fn mark_completed(
         &mut self,
         context: &IdentityCreationRegistrationContext,
-        binding_receipt: &arkret_models_identity::AccountBindingReceipt,
         request_digest: &arkret_identifiers::Hash,
         outcome: &arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome,
         now: DateTime<Utc>,
@@ -2409,7 +1444,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         {
             return Ok(IdentityCreationBindingCommit::Stale);
         }
-        if lease.state == IdentityCreationSagaState::Bound {
+        if lease.state == IdentityCreationSagaState::Completed {
             let Some(ledger) = lease.register_ledger else {
                 return Ok(IdentityCreationBindingCommit::DuplicateConflict);
             };
@@ -2422,7 +1457,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             }
             return Ok(IdentityCreationBindingCommit::DuplicateConflict);
         }
-        if lease.state != IdentityCreationSagaState::Published
+        if lease.state != IdentityCreationSagaState::AccountBound
             || lease.reserved_identity.as_ref().is_none_or(|reserved| {
                 reserved.operation_digest != context.challenge.operation_digest
             })
@@ -2442,19 +1477,16 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(IdentityCreationBindingCommit::Stale);
         }
 
-        let receipt = serde_json::to_value(binding_receipt)
-            .map_err(|_| DatabaseError::invalid_operation())?;
         let outcome =
             serde_json::to_value(outcome).map_err(|_| DatabaseError::invalid_operation())?;
         let updated = diesel::sql_query(
-            "UPDATE identity_creation_leases SET state = 'bound', binding_receipt = $1, \
-             register_handoff_grant_id = $2, register_challenge_id = $3, \
-             register_request_digest = $4, register_outcome = $5, updated_at = $6 \
-             WHERE service_account_id = $7 AND audience = $8 \
-             AND lease_id = $9 AND fence = $10 AND holder_jkt = $11 \
-             AND reserved_operation_digest = $12 AND state = 'published'",
+            "UPDATE identity_creation_leases SET state = 'completed', \
+             register_handoff_grant_id = $1, register_challenge_id = $2, \
+             register_request_digest = $3, register_outcome = $4, updated_at = $5 \
+             WHERE service_account_id = $6 AND audience = $7 \
+             AND lease_id = $8 AND fence = $9 AND holder_jkt = $10 \
+             AND reserved_operation_digest = $11 AND state = 'account_bound'",
         )
-        .bind::<Jsonb, _>(receipt)
         .bind::<SqlUuid, _>(Uuid::from(context.grant.id))
         .bind::<Text, _>(&context.challenge.challenge_id)
         .bind::<Text, _>(request_digest.as_str())
@@ -2475,66 +1507,6 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         } else {
             IdentityCreationBindingCommit::Stale
         })
-    }
-
-    async fn commit_first_device_enrollment(
-        &mut self,
-        input: FirstDeviceEnrollmentInput<'_>,
-    ) -> Result<FirstDeviceEnrollmentCommit, Self::Error> {
-        let FirstDeviceEnrollmentInput {
-            service_account_id,
-            audience,
-            principal_id,
-            device_id,
-            request_digest,
-            outcome,
-            now,
-        } = input;
-        let updated = diesel::sql_query(
-            "UPDATE identity_creation_leases SET first_device_id = $1, \
-             first_device_request_digest = $2, first_device_outcome = $3, \
-             first_device_enrolled_at = $4, updated_at = $4 \
-             WHERE service_account_id = $5 AND audience = $6 AND state = 'bound' \
-             AND binding_receipt IS NOT NULL AND reserved_principal_id = $7 \
-             AND first_device_id IS NULL AND first_device_enrolled_at IS NULL",
-        )
-        .bind::<Text, _>(device_id.as_str())
-        .bind::<Text, _>(request_digest.as_str())
-        .bind::<Jsonb, _>(outcome)
-        .bind::<Timestamptz, _>(now)
-        .bind::<SqlUuid, _>(Uuid::from(service_account_id))
-        .bind::<Text, _>(audience)
-        .bind::<Text, _>(principal_id.as_str())
-        .execute(self.conn)
-        .await?;
-        if updated == 1 {
-            return Ok(FirstDeviceEnrollmentCommit::Committed);
-        }
-
-        let stored = diesel::sql_query(
-            "SELECT first_device_id AS device_id, \
-             first_device_request_digest AS request_digest, \
-             first_device_outcome AS outcome \
-             FROM identity_creation_leases \
-             WHERE service_account_id = $1 AND audience = $2 AND state = 'bound' \
-             AND binding_receipt IS NOT NULL AND reserved_principal_id = $3",
-        )
-        .bind::<SqlUuid, _>(Uuid::from(service_account_id))
-        .bind::<Text, _>(audience)
-        .bind::<Text, _>(principal_id.as_str())
-        .get_result::<FirstDeviceEnrollmentRow>(self.conn)
-        .await
-        .optional()?;
-        let Some(stored) = stored else {
-            return Ok(FirstDeviceEnrollmentCommit::Conflict);
-        };
-        if stored.device_id.as_deref() == Some(device_id.as_str())
-            && stored.request_digest.as_deref() == Some(request_digest.as_str())
-            && let Some(outcome) = stored.outcome
-        {
-            return Ok(FirstDeviceEnrollmentCommit::Replay(outcome));
-        }
-        Ok(FirstDeviceEnrollmentCommit::Conflict)
     }
 
     async fn consume_grant(
@@ -2560,15 +1532,18 @@ fn registration_challenge_state_is_usable(
 ) -> bool {
     match lease_state {
         IdentityCreationSagaState::Reserved => !challenge_consumed,
-        // Publishing and challenge consumption are committed together before
-        // the verified account binding. A retry after a binding-store failure
-        // must be able to finish only this exact durable reservation.
-        IdentityCreationSagaState::Published => challenge_consumed,
-        IdentityCreationSagaState::Active | IdentityCreationSagaState::Bound => false,
+        // A reclaimed lease may issue a fresh holder-bound challenge after the
+        // DID was published but before PCR genesis. `mark_did_published`
+        // consumes that replacement challenge without republishing the DID.
+        IdentityCreationSagaState::DidPublished => true,
+        IdentityCreationSagaState::PcrAccepted | IdentityCreationSagaState::AccountBound => {
+            challenge_consumed
+        }
+        IdentityCreationSagaState::Active | IdentityCreationSagaState::Completed => false,
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any()))]
 mod tests {
     use std::collections::BTreeMap;
 
@@ -2627,274 +1602,6 @@ mod tests {
         ChaChaRng::seed_from_u64(hi ^ lo)
     }
 
-    #[test]
-    fn cancel_operation_codec_rejects_tampered_terminal_outcome() {
-        use arkret_models_collaboration::contact_operations::{
-            BootstrapMode, CancelDeviceBootstrapOutcome, CancelDeviceBootstrapRequestBody,
-            DeviceBootstrapDecisionRequestPreimage, RequestedDeviceBootstrapDecision,
-        };
-
-        let now = Utc::now();
-        let hash = |fill: char| {
-            arkret_identifiers::Hash::new(format!("sha256:{}", fill.to_string().repeat(64)))
-                .unwrap()
-        };
-        let fixture =
-            arkret_schema::embedded_json_artifact("fixtures/device-bootstrap-fixture.json")
-                .unwrap();
-        let enroll: arkret_models_identity::AccountDeviceEnrollRequestBody =
-            serde_json::from_value(fixture["enroll_request"].clone()).unwrap();
-        let transaction_id =
-            arkret_wire::ProtocolOpaqueId::new("bootstrap-codec-test".to_owned()).unwrap();
-        let idempotency_key =
-            arkret_wire::IdempotencyKey::new("cancel-codec-test".to_owned()).unwrap();
-        let request = CancelDeviceBootstrapRequestBody {
-            transaction_id: transaction_id.clone(),
-            mode: BootstrapMode::Founding,
-            canonical_request_digest: enroll.canonical_request_digest().unwrap(),
-            idempotency_key: idempotency_key.clone(),
-        };
-        let authority_request = DeviceBootstrapDecisionRequestPreimage {
-            account_authority_id: arkret_identifiers::Did::new(
-                "did:web:accounts.example".to_owned(),
-            )
-            .unwrap(),
-            transaction_id: transaction_id.clone(),
-            idempotency_key: idempotency_key.clone(),
-            requested_decision: RequestedDeviceBootstrapDecision::Cancelled,
-            principal_id: enroll.authorize_event_preimage.actor_id.clone(),
-            device_id: enroll.device_id.clone(),
-            grant_id: arkret_identifiers::SessionGrantId::new(
-                "ak:session_grant:AbmggbDOpDR8J1xRW3EU4354odEGafHu4vk9FVv4vimH",
-            )
-            .unwrap(),
-            canonical_request_digest: request.canonical_request_digest.clone(),
-            founding_event_ids: [
-                enroll.authorize_event_preimage.prev_refs[0].clone(),
-                enroll.authorize_event_preimage.event_id.clone(),
-            ],
-            founding_batch_digest: arkret_models_identity::founding_batch_digest(&[
-                enroll.authorize_event_preimage.prev_refs[0].clone(),
-                enroll.authorize_event_preimage.event_id.clone(),
-            ])
-            .unwrap(),
-            bootstrap_transaction_expires_at: now + Duration::hours(1),
-        }
-        .finalize()
-        .unwrap();
-        let placeholder = hash('0');
-        let mut outcome = CancelDeviceBootstrapOutcome::Cancelled {
-            transaction_id: transaction_id.clone(),
-            outcome_digest: placeholder,
-        };
-        let outcome_digest = outcome.recompute_outcome_digest().unwrap();
-        let CancelDeviceBootstrapOutcome::Cancelled {
-            outcome_digest: slot,
-            ..
-        } = &mut outcome
-        else {
-            unreachable!()
-        };
-        *slot = outcome_digest.clone();
-        let row = DeviceBootstrapCancelOperationRow {
-            transaction_id: transaction_id.to_string(),
-            idempotency_key: idempotency_key.to_string(),
-            canonical_request_digest: request.canonical_request_digest().unwrap().to_string(),
-            canonical_request: arkret_canonical::canonical_json_bytes(&request).unwrap(),
-            authority_request_digest: authority_request.decision_request_digest.to_string(),
-            canonical_authority_request: arkret_canonical::canonical_json_bytes(&authority_request)
-                .unwrap(),
-            requested_decision: "cancelled".to_owned(),
-            canonical_outcome: Some(arkret_canonical::canonical_json_bytes(&outcome).unwrap()),
-            outcome_digest: Some(outcome_digest.to_string()),
-            created_at: now,
-        };
-        assert!(device_bootstrap_cancel_operation_from_row(row).is_ok());
-
-        let mut tampered = serde_json::to_value(&outcome).unwrap();
-        tampered["transaction_id"] = serde_json::Value::String("bootstrap-other".to_owned());
-        let row = DeviceBootstrapCancelOperationRow {
-            transaction_id: transaction_id.to_string(),
-            idempotency_key: idempotency_key.to_string(),
-            canonical_request_digest: request.canonical_request_digest().unwrap().to_string(),
-            canonical_request: arkret_canonical::canonical_json_bytes(&request).unwrap(),
-            authority_request_digest: authority_request.decision_request_digest.to_string(),
-            canonical_authority_request: arkret_canonical::canonical_json_bytes(&authority_request)
-                .unwrap(),
-            requested_decision: "cancelled".to_owned(),
-            canonical_outcome: Some(arkret_canonical::canonical_json_bytes(&tampered).unwrap()),
-            outcome_digest: Some(outcome_digest.to_string()),
-            created_at: now,
-        };
-        assert!(device_bootstrap_cancel_operation_from_row(row).is_err());
-
-        let accepted = arkret_wire::ErrorEnvelope::new(
-            arkret_wire::ErrorCode::FAILED_PRECONDITION,
-            "founding bootstrap transaction is already accepted",
-        )
-        .with_detail(
-            "transaction_id",
-            serde_json::Value::String(transaction_id.to_string()),
-        )
-        .with_detail("state", serde_json::Value::String("accepted".to_owned()));
-        let accepted_bytes = arkret_canonical::canonical_json_bytes(&accepted).unwrap();
-        let accepted_digest = format!("sha256:{:x}", sha2::Sha256::digest(&accepted_bytes));
-        let accepted_row = DeviceBootstrapCancelOperationRow {
-            transaction_id: transaction_id.to_string(),
-            idempotency_key: idempotency_key.to_string(),
-            canonical_request_digest: request.canonical_request_digest().unwrap().to_string(),
-            canonical_request: arkret_canonical::canonical_json_bytes(&request).unwrap(),
-            authority_request_digest: authority_request.decision_request_digest.to_string(),
-            canonical_authority_request: arkret_canonical::canonical_json_bytes(&authority_request)
-                .unwrap(),
-            requested_decision: "cancelled".to_owned(),
-            canonical_outcome: Some(accepted_bytes),
-            outcome_digest: Some(accepted_digest),
-            created_at: now,
-        };
-        assert!(device_bootstrap_cancel_operation_from_row(accepted_row).is_ok());
-    }
-
-    #[test]
-    fn bootstrap_transaction_codec_binds_all_terminal_receipts_and_times() {
-        use arkret_models_collaboration::contact_operations::{
-            DeviceBootstrapDecision, DeviceBootstrapDecisionReceiptPreimage,
-            DeviceBootstrapDecisionReceiptSchema,
-        };
-        use arkret_wire::{Audience, PayloadProof, PayloadProofPurpose};
-
-        let fixture =
-            arkret_schema::embedded_json_artifact("fixtures/device-bootstrap-fixture.json")
-                .unwrap();
-        let enroll: arkret_models_identity::AccountDeviceEnrollRequestBody =
-            serde_json::from_value(fixture["enroll_request"].clone()).unwrap();
-        let created_at = arkret_canonical::normalize_timestamp_canonical(Utc::now());
-        let expires_at = created_at + Duration::hours(1);
-        let transaction_id =
-            arkret_wire::ProtocolOpaqueId::new("bootstrap-receipt-codec".to_owned()).unwrap();
-        let account_authority_id =
-            arkret_identifiers::Did::new("did:web:accounts.example".to_owned()).unwrap();
-        let principal_server_id =
-            arkret_identifiers::Did::new("did:webvh:z6mkfixture:principal.example".to_owned())
-                .unwrap();
-        let event_ids = [
-            enroll.authorize_event_preimage.prev_refs[0].clone(),
-            enroll.authorize_event_preimage.event_id.clone(),
-        ];
-        let founding_digest = arkret_models_identity::founding_batch_digest(&event_ids).unwrap();
-        let grant_id = arkret_identifiers::SessionGrantId::new(
-            "ak:session_grant:AbmggbDOpDR8J1xRW3EU4354odEGafHu4vk9FVv4vimH",
-        )
-        .unwrap();
-        let request_digest = enroll.canonical_request_digest().unwrap();
-        let raw_device_key = {
-            let payload: arkret_models_collaboration::events_payloads::device_identity::DeviceAuthorizePayload =
-                serde_json::from_value(serde_json::Value::Object(
-                    enroll
-                        .authorize_event_preimage
-                        .payload
-                        .clone()
-                        .into_iter()
-                        .collect(),
-                ))
-                .unwrap();
-            arkret_canonical::decode_ed25519_multibase(payload.device_public_key.as_str()).unwrap()
-        };
-        let device_key_digest =
-            arkret_models_identity::device_bootstrap_device_key_digest(raw_device_key).unwrap();
-
-        for (decision, state, decided_at) in [
-            (
-                DeviceBootstrapDecision::Accepted,
-                "accepted",
-                created_at + Duration::minutes(1),
-            ),
-            (
-                DeviceBootstrapDecision::Cancelled,
-                "cancelled",
-                created_at + Duration::minutes(2),
-            ),
-            (
-                DeviceBootstrapDecision::Expired,
-                "expired",
-                expires_at + Duration::seconds(1),
-            ),
-        ] {
-            let preimage = DeviceBootstrapDecisionReceiptPreimage {
-                schema: DeviceBootstrapDecisionReceiptSchema::V1,
-                receipt_id: arkret_wire::ProtocolOpaqueId::new(format!("receipt-{state}")).unwrap(),
-                principal_server_id: principal_server_id.clone(),
-                account_authority_id: account_authority_id.clone(),
-                transaction_id: transaction_id.clone(),
-                decision,
-                principal_id: enroll.authorize_event_preimage.actor_id.clone(),
-                device_id: enroll.device_id.clone(),
-                grant_id: grant_id.clone(),
-                canonical_request_digest: request_digest.clone(),
-                founding_event_ids: event_ids.clone(),
-                founding_batch_digest: founding_digest.clone(),
-                bootstrap_transaction_expires_at: expires_at,
-                decided_at,
-            };
-            let receipt_digest = preimage.receipt_digest().unwrap();
-            let receipt = preimage
-                .finalize(PayloadProof {
-                    kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-                    verification_method: arkret_wire::DidUrl::new(format!(
-                        "{}#notary",
-                        principal_server_id
-                    ))
-                    .unwrap(),
-                    payload_digest: receipt_digest,
-                    created_at: decided_at,
-                    domain: None,
-                    audience: Some(Audience::Single(account_authority_id.to_string())),
-                    proof_purpose: Some(PayloadProofPurpose::IssuerAttestation),
-                    jws: "a..b".to_owned(),
-                })
-                .unwrap();
-            let canonical_receipt = arkret_canonical::canonical_json_bytes(&receipt).unwrap();
-            let row = DeviceBootstrapTransactionRow {
-                transaction_id: transaction_id.to_string(),
-                mode: "founding".to_owned(),
-                account_authority_id: account_authority_id.to_string(),
-                principal_server_id: principal_server_id.to_string(),
-                principal_id: enroll.authorize_event_preimage.actor_id.to_string(),
-                device_id: enroll.device_id.to_string(),
-                device_key_digest: device_key_digest.to_string(),
-                holder_jkt: "H".repeat(43),
-                canonical_request_digest: request_digest.to_string(),
-                canonical_request: arkret_canonical::canonical_json_bytes(&enroll).unwrap(),
-                founding_batch_digest: founding_digest.to_string(),
-                founding_event_ids: event_ids.iter().map(ToString::to_string).collect(),
-                bootstrap_grant_id: grant_id.to_string(),
-                state: state.to_owned(),
-                enrollment_request_digest: None,
-                canonical_enrollment_outcome: None,
-                enrollment_outcome_digest: None,
-                authorized_event_id: None,
-                authorized_event_digest: None,
-                standard_grant_id: None,
-                expires_at,
-                created_at,
-                enrolled_at: None,
-                accepted_at: (decision == DeviceBootstrapDecision::Accepted).then_some(decided_at),
-                cancelled_at: (decision == DeviceBootstrapDecision::Cancelled)
-                    .then_some(decided_at),
-                expired_at: (decision == DeviceBootstrapDecision::Expired).then_some(expires_at),
-                decision_principal_server_id: Some(principal_server_id.to_string()),
-                canonical_decision_receipt: Some(canonical_receipt),
-                decision_receipt_digest: Some(receipt.receipt_digest.to_string()),
-            };
-            let mut tampered = row.clone();
-            tampered.decision_principal_server_id =
-                Some("did:web:wrong-principal.example".to_owned());
-            assert!(device_bootstrap_transaction_from_row(tampered).is_err());
-            let decoded = device_bootstrap_transaction_from_row(row).unwrap();
-            assert_eq!(decoded.state.as_str(), state);
-        }
-    }
-
     fn did_operation(label: &str) -> arkret_models_identity::DidOperationSubmitRequestBody {
         let did = arkret_identifiers::Did::new(format!("did:webvh:z{label}:example.com")).unwrap();
         arkret_models_identity::DidOperationSubmitRequestBody {
@@ -2941,15 +1648,15 @@ mod tests {
             true,
         ));
         assert!(registration_challenge_state_is_usable(
-            IdentityCreationSagaState::Published,
+            IdentityCreationSagaState::DidPublished,
             true,
         ));
         assert!(!registration_challenge_state_is_usable(
-            IdentityCreationSagaState::Published,
+            IdentityCreationSagaState::DidPublished,
             false,
         ));
         assert!(!registration_challenge_state_is_usable(
-            IdentityCreationSagaState::Bound,
+            IdentityCreationSagaState::Completed,
             true,
         ));
     }
@@ -3089,368 +1796,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn device_bootstrap_transaction_has_closed_exact_replay_and_expiry() {
-        let Some(pool) = crate::test_utils::setup_test_pool().await else {
-            eprintln!("SKIP: DATABASE_URL is required for the device-bootstrap PG state test");
-            return;
-        };
-        let now = Utc::now();
-        let hash = |fill: char| {
-            arkret_identifiers::Hash::new(format!("sha256:{}", fill.to_string().repeat(64)))
-                .unwrap()
-        };
-        let enroll_request: arkret_models_identity::AccountDeviceEnrollRequestBody =
-            serde_json::from_value(
-                arkret_schema::embedded_json_artifact("fixtures/device-bootstrap-fixture.json")
-                    .unwrap()["enroll_request"]
-                    .clone(),
-            )
-            .unwrap();
-        let event_ids = vec![
-            enroll_request.authorize_event_preimage.prev_refs[0].clone(),
-            enroll_request.authorize_event_preimage.event_id.clone(),
-        ];
-        let enroll_payload: arkret_models_collaboration::events_payloads::device_identity::DeviceAuthorizePayload =
-            serde_json::from_value(serde_json::Value::Object(
-                enroll_request
-                    .authorize_event_preimage
-                    .payload
-                    .clone()
-                    .into_iter()
-                    .collect(),
-            ))
-            .unwrap();
-        let raw_device_key =
-            arkret_canonical::decode_ed25519_multibase(enroll_payload.device_public_key.as_str())
-                .unwrap();
-        let transaction_id =
-            arkret_wire::ProtocolOpaqueId::new(format!("bootstrap-{}", Uuid::now_v7().simple()))
-                .unwrap();
-        let input = NewDeviceBootstrapTransaction {
-            transaction_id: transaction_id.clone(),
-            mode: arkret_models_collaboration::contact_operations::BootstrapMode::Founding,
-            account_authority_id: arkret_identifiers::Did::new(
-                "did:webvh:z6mkfixture:auth-a.example",
-            )
-            .unwrap(),
-            principal_server_id: arkret_identifiers::Did::new(
-                "did:webvh:z6mkfixture:principal.example",
-            )
-            .unwrap(),
-            principal_id: enroll_request.authorize_event_preimage.actor_id.clone(),
-            device_id: enroll_request.device_id.clone(),
-            device_key_digest: arkret_models_identity::device_bootstrap_device_key_digest(
-                raw_device_key,
-            )
-            .unwrap(),
-            holder_jkt: "H".repeat(43),
-            canonical_request_digest: enroll_request.canonical_request_digest().unwrap(),
-            canonical_request: arkret_canonical::canonical_json_bytes(&enroll_request).unwrap(),
-            founding_batch_digest: arkret_models_identity::founding_batch_digest(&event_ids)
-                .unwrap(),
-            founding_event_ids: event_ids.clone(),
-            bootstrap_grant_id: arkret_identifiers::SessionGrantId::new(
-                "ak:session_grant:AbmggbDOpDR8J1xRW3EU4354odEGafHu4vk9FVv4vimH",
-            )
-            .unwrap(),
-            expires_at: now + Duration::seconds(5),
-            now,
-        };
-
-        let mut rolled_back = PgRepositoryFactory::new(pool.clone())
-            .create()
-            .await
-            .unwrap();
-        assert!(matches!(
-            rolled_back
-                .account_handoff()
-                .create_device_bootstrap_transaction(input.clone())
-                .await
-                .unwrap(),
-            DeviceBootstrapTransactionCreate::Created(_)
-        ));
-        rolled_back.cancel().await.unwrap();
-        let mut after_rollback = PgRepositoryFactory::new(pool.clone())
-            .create()
-            .await
-            .unwrap();
-        assert!(
-            after_rollback
-                .account_handoff()
-                .get_device_bootstrap_transaction(&transaction_id)
-                .await
-                .unwrap()
-                .is_none()
-        );
-        after_rollback.cancel().await.unwrap();
-
-        let left_pool = pool.clone();
-        let left_input = input.clone();
-        let right_pool = pool.clone();
-        let right_input = input.clone();
-        let (left, right) = tokio::join!(
-            async move {
-                let mut repo = PgRepositoryFactory::new(left_pool).create().await.unwrap();
-                let result = repo
-                    .account_handoff()
-                    .create_device_bootstrap_transaction(left_input)
-                    .await
-                    .unwrap();
-                repo.save().await.unwrap();
-                result
-            },
-            async move {
-                let mut repo = PgRepositoryFactory::new(right_pool).create().await.unwrap();
-                let result = repo
-                    .account_handoff()
-                    .create_device_bootstrap_transaction(right_input)
-                    .await
-                    .unwrap();
-                repo.save().await.unwrap();
-                result
-            }
-        );
-        let created = [&left, &right]
-            .into_iter()
-            .filter(|result| matches!(result, DeviceBootstrapTransactionCreate::Created(_)))
-            .count();
-        let replayed = [&left, &right]
-            .into_iter()
-            .filter(|result| matches!(result, DeviceBootstrapTransactionCreate::Replay(_)))
-            .count();
-        assert_eq!((created, replayed), (1, 1));
-
-        let mut repo = PgRepositoryFactory::new(pool.clone())
-            .create()
-            .await
-            .unwrap();
-        assert!(matches!(
-            repo.account_handoff()
-                .create_device_bootstrap_transaction(input.clone())
-                .await
-                .unwrap(),
-            DeviceBootstrapTransactionCreate::Replay(_)
-        ));
-        let mut conflicting = input.clone();
-        conflicting.canonical_request_digest = hash('3');
-        assert!(matches!(
-            repo.account_handoff()
-                .create_device_bootstrap_transaction(conflicting)
-                .await
-                .unwrap(),
-            DeviceBootstrapTransactionCreate::Conflict(_)
-        ));
-        repo.cancel().await.unwrap();
-
-        let mut repo = PgRepositoryFactory::new(pool.clone())
-            .create()
-            .await
-            .unwrap();
-        let authorized_event_digest = hash('4');
-        let outcome_digest = hash('5');
-        let requires_decision = repo
-            .account_handoff()
-            .commit_device_bootstrap_enrollment(DeviceBootstrapEnrollmentInput {
-                transaction_id: &transaction_id,
-                principal_id: &input.principal_id,
-                device_id: &input.device_id,
-                request_digest: &input.canonical_request_digest,
-                authorized_event_id: &event_ids[1],
-                authorized_event_digest: &authorized_event_digest,
-                canonical_outcome: b"{}",
-                outcome_digest: &outcome_digest,
-                now: now + Duration::seconds(10),
-            })
-            .await
-            .unwrap();
-        assert!(matches!(
-            requires_decision,
-            DeviceBootstrapEnrollmentCommit::RequiresDecision(DeviceBootstrapTransaction {
-                state: DeviceBootstrapTransactionState::Pending,
-                ..
-            })
-        ));
-        repo.save().await.unwrap();
-
-        let mut repo = PgRepositoryFactory::new(pool.clone())
-            .create()
-            .await
-            .unwrap();
-        let pending = repo
-            .account_handoff()
-            .get_device_bootstrap_transaction(&transaction_id)
-            .await
-            .unwrap()
-            .expect("bootstrap transaction remains durable");
-        assert_eq!(pending.state, DeviceBootstrapTransactionState::Pending);
-        assert!(pending.decision_principal_server_id.is_none());
-        assert!(pending.canonical_decision_receipt.is_none());
-        assert!(pending.decision_receipt_digest.is_none());
-        repo.cancel().await.unwrap();
-
-        // Two idempotency keys may be durably prepared before the Principal
-        // decision. The first local committer owns the lifecycle transition;
-        // the loser must complete its own operation with the same immutable
-        // receipt and byte-identical outcome.
-        use arkret_models_collaboration::contact_operations::{
-            CancelDeviceBootstrapRequestBody, DeviceBootstrapDecision,
-            DeviceBootstrapDecisionOutcome, DeviceBootstrapDecisionReceiptPreimage,
-            DeviceBootstrapDecisionReceiptSchema, DeviceBootstrapDecisionRequestPreimage,
-            RequestedDeviceBootstrapDecision,
-        };
-        use arkret_wire::{Audience, PayloadProof, PayloadProofPurpose};
-        let mut terminal_input = input.clone();
-        terminal_input.transaction_id = arkret_wire::ProtocolOpaqueId::new(format!(
-            "bootstrap-terminal-{}",
-            Uuid::now_v7().simple()
-        ))
-        .unwrap();
-        terminal_input.expires_at = now + Duration::hours(1);
-        let mut repo = PgRepositoryFactory::new(pool.clone())
-            .create()
-            .await
-            .unwrap();
-        assert!(matches!(
-            repo.account_handoff()
-                .create_device_bootstrap_transaction(terminal_input.clone())
-                .await
-                .unwrap(),
-            DeviceBootstrapTransactionCreate::Created(_)
-        ));
-        repo.save().await.unwrap();
-
-        let cancel_body = |key: &str| CancelDeviceBootstrapRequestBody {
-            transaction_id: terminal_input.transaction_id.clone(),
-            mode: terminal_input.mode,
-            canonical_request_digest: terminal_input.canonical_request_digest.clone(),
-            idempotency_key: arkret_wire::IdempotencyKey::new(key.to_owned()).unwrap(),
-        };
-        let decision_request = |body: &CancelDeviceBootstrapRequestBody| {
-            DeviceBootstrapDecisionRequestPreimage {
-                account_authority_id: terminal_input.account_authority_id.clone(),
-                transaction_id: terminal_input.transaction_id.clone(),
-                idempotency_key: body.idempotency_key.clone(),
-                requested_decision: RequestedDeviceBootstrapDecision::Cancelled,
-                principal_id: terminal_input.principal_id.clone(),
-                device_id: terminal_input.device_id.clone(),
-                grant_id: terminal_input.bootstrap_grant_id.clone(),
-                canonical_request_digest: terminal_input.canonical_request_digest.clone(),
-                founding_event_ids: [
-                    terminal_input.founding_event_ids[0].clone(),
-                    terminal_input.founding_event_ids[1].clone(),
-                ],
-                founding_batch_digest: terminal_input.founding_batch_digest.clone(),
-                bootstrap_transaction_expires_at: terminal_input.expires_at,
-            }
-            .finalize()
-            .unwrap()
-        };
-        let body_a = cancel_body("cancel-a");
-        let body_b = cancel_body("cancel-b");
-        let authority_a = decision_request(&body_a);
-        let authority_b = decision_request(&body_b);
-        for (body, authority) in [(&body_a, &authority_a), (&body_b, &authority_b)] {
-            let mut repo = PgRepositoryFactory::new(pool.clone())
-                .create()
-                .await
-                .unwrap();
-            assert!(matches!(
-                repo.account_handoff()
-                    .reserve_device_bootstrap_cancel(DeviceBootstrapCancelReserveInput {
-                        request: body.clone(),
-                        canonical_request_digest: body.canonical_request_digest().unwrap(),
-                        canonical_request: arkret_canonical::canonical_json_bytes(body).unwrap(),
-                        authority_request: authority.clone(),
-                        canonical_authority_request: arkret_canonical::canonical_json_bytes(
-                            authority,
-                        )
-                        .unwrap(),
-                        now,
-                    })
-                    .await
-                    .unwrap(),
-                DeviceBootstrapCancelReserve::Reserved(_)
-            ));
-            repo.save().await.unwrap();
-        }
-        let decided_at = now + Duration::minutes(1);
-        let receipt_preimage = DeviceBootstrapDecisionReceiptPreimage {
-            schema: DeviceBootstrapDecisionReceiptSchema::V1,
-            receipt_id: arkret_wire::ProtocolOpaqueId::new("receipt-cancelled".to_owned()).unwrap(),
-            principal_server_id: terminal_input.principal_server_id.clone(),
-            account_authority_id: terminal_input.account_authority_id.clone(),
-            transaction_id: terminal_input.transaction_id.clone(),
-            decision: DeviceBootstrapDecision::Cancelled,
-            principal_id: terminal_input.principal_id.clone(),
-            device_id: terminal_input.device_id.clone(),
-            grant_id: terminal_input.bootstrap_grant_id.clone(),
-            canonical_request_digest: terminal_input.canonical_request_digest.clone(),
-            founding_event_ids: [
-                terminal_input.founding_event_ids[0].clone(),
-                terminal_input.founding_event_ids[1].clone(),
-            ],
-            founding_batch_digest: terminal_input.founding_batch_digest.clone(),
-            bootstrap_transaction_expires_at: terminal_input.expires_at,
-            decided_at,
-        };
-        let receipt_digest = receipt_preimage.receipt_digest().unwrap();
-        let receipt = receipt_preimage
-            .finalize(PayloadProof {
-                kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-                verification_method: arkret_wire::DidUrl::new(format!(
-                    "{}#notary",
-                    terminal_input.principal_server_id
-                ))
-                .unwrap(),
-                payload_digest: receipt_digest,
-                created_at: decided_at,
-                domain: None,
-                audience: Some(Audience::Single(
-                    terminal_input.account_authority_id.to_string(),
-                )),
-                proof_purpose: Some(PayloadProofPurpose::IssuerAttestation),
-                jws: "a..b".to_owned(),
-            })
-            .unwrap();
-        let outcome = DeviceBootstrapDecisionOutcome {
-            transaction_id: terminal_input.transaction_id.clone(),
-            decision: DeviceBootstrapDecision::Cancelled,
-            receipt,
-        };
-        let canonical_receipt = arkret_canonical::canonical_json_bytes(&outcome.receipt).unwrap();
-        let mut exact_outcomes = Vec::new();
-        for (body, authority) in [(body_a, authority_a), (body_b, authority_b)] {
-            let mut repo = PgRepositoryFactory::new(pool.clone())
-                .create()
-                .await
-                .unwrap();
-            let committed = repo
-                .account_handoff()
-                .commit_device_bootstrap_cancel(DeviceBootstrapCancelInput {
-                    canonical_request_digest: body.canonical_request_digest().unwrap(),
-                    canonical_request: arkret_canonical::canonical_json_bytes(&body).unwrap(),
-                    request: body,
-                    decision: coauth_data::DeviceBootstrapCancelDecision::Cancel,
-                    authority: coauth_data::DeviceBootstrapDecisionEvidence {
-                        request: authority,
-                        outcome: outcome.clone(),
-                        canonical_receipt: canonical_receipt.clone(),
-                    },
-                    now: decided_at,
-                })
-                .await
-                .unwrap();
-            let operation = match committed {
-                DeviceBootstrapCancelCommit::Committed { operation, .. } => operation,
-                other => panic!("prepared cancel must commit, got {other:?}"),
-            };
-            repo.save().await.unwrap();
-            exact_outcomes.push(operation.canonical_outcome.unwrap());
-        }
-        assert_eq!(exact_outcomes[0], exact_outcomes[1]);
-    }
-
-    #[tokio::test]
     async fn future_bound_rows_require_a_complete_register_ledger() {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
@@ -3486,7 +1831,7 @@ mod tests {
 
         let mut conn = pool.get().await.unwrap();
         let result = diesel::sql_query(
-            "UPDATE identity_creation_leases SET state = 'bound' \
+            "UPDATE identity_creation_leases SET state = 'completed' \
              WHERE service_account_id = $1 AND audience = $2",
         )
         .bind::<SqlUuid, _>(Uuid::from(user.id))
@@ -3805,7 +2150,7 @@ mod tests {
         let head = arkret_identifiers::Hash::new(format!("sha256:{}", "5".repeat(64))).unwrap();
         assert!(
             repo.account_handoff()
-                .mark_published(
+                .mark_did_published(
                     &context,
                     &serde_json::json!({ "status": "accepted" }),
                     &head,
@@ -3826,69 +2171,11 @@ mod tests {
         let outcome = register_outcome(reserved.principal_id.clone(), binding_receipt.clone());
         assert!(matches!(
             repo.account_handoff()
-                .mark_bound(&context, &binding_receipt, &request_digest, &outcome, now)
+                .mark_completed(&context, &request_digest, &outcome, now)
                 .await
                 .unwrap(),
             IdentityCreationBindingCommit::Committed
         ));
-
-        let first_device =
-            arkret_identifiers::DeviceId::new(format!("ak:device:{}", Uuid::now_v7())).unwrap();
-        let second_device =
-            arkret_identifiers::DeviceId::new(format!("ak:device:{}", Uuid::now_v7())).unwrap();
-        let enrollment_digest = register_request_digest('7');
-        let enrollment_outcome = serde_json::json!({
-            "device_id": first_device,
-            "authorized_event": { "event_id": format!("ak:event:{}", Uuid::now_v7()) }
-        });
-        assert!(matches!(
-            repo.account_handoff()
-                .commit_first_device_enrollment(FirstDeviceEnrollmentInput {
-                    service_account_id: user.id,
-                    audience: &grant.audience,
-                    principal_id: &reserved.principal_id,
-                    device_id: &first_device,
-                    request_digest: &enrollment_digest,
-                    outcome: &enrollment_outcome,
-                    now,
-                })
-                .await
-                .unwrap(),
-            FirstDeviceEnrollmentCommit::Committed
-        ));
-        assert_eq!(
-            repo.account_handoff()
-                .commit_first_device_enrollment(FirstDeviceEnrollmentInput {
-                    service_account_id: user.id,
-                    audience: &grant.audience,
-                    principal_id: &reserved.principal_id,
-                    device_id: &first_device,
-                    request_digest: &enrollment_digest,
-                    outcome: &serde_json::json!({ "newly_minted": "must-not-replace-stored-outcome" }),
-                    now: now + Duration::seconds(1),
-                })
-                .await
-                .unwrap(),
-            FirstDeviceEnrollmentCommit::Replay(enrollment_outcome.clone()),
-        );
-        assert!(
-            matches!(
-                repo.account_handoff()
-                    .commit_first_device_enrollment(FirstDeviceEnrollmentInput {
-                        service_account_id: user.id,
-                        audience: &grant.audience,
-                        principal_id: &reserved.principal_id,
-                        device_id: &second_device,
-                        request_digest: &register_request_digest('8'),
-                        outcome: &serde_json::json!({ "device_id": second_device }),
-                        now: now + Duration::seconds(1),
-                    })
-                    .await
-                    .unwrap(),
-                FirstDeviceEnrollmentCommit::Conflict
-            ),
-            "a second device must not reuse the founding-device enrollment endpoint"
-        );
 
         repo.cancel().await.unwrap();
     }
@@ -4004,7 +2291,7 @@ mod tests {
         assert!(
             !repo
                 .account_handoff()
-                .mark_published(&stale_context, &registry_receipt, &head, now)
+                .mark_did_published(&stale_context, &registry_receipt, &head, now)
                 .await
                 .unwrap(),
             "a replaced challenge must not publish the reserved operation"
@@ -4023,7 +2310,7 @@ mod tests {
             .expect("replacement challenge must produce registration context");
         assert!(
             repo.account_handoff()
-                .mark_published(
+                .mark_did_published(
                     &context,
                     &registry_receipt,
                     &head,
@@ -4054,7 +2341,7 @@ mod tests {
             .unwrap();
         assert!(matches!(
             repo.account_handoff()
-                .mark_bound(&context, &binding_receipt, &request_digest, &outcome, now)
+                .mark_completed(&context, &request_digest, &outcome, now)
                 .await
                 .unwrap(),
             IdentityCreationBindingCommit::Committed
@@ -4079,7 +2366,10 @@ mod tests {
             .await
             .unwrap()
             .expect("published saga must recover its registration context");
-        assert_eq!(recovered.lease.state, IdentityCreationSagaState::Published);
+        assert_eq!(
+            recovered.lease.state,
+            IdentityCreationSagaState::DidPublished
+        );
         assert_eq!(recovered.lease.reserved_identity, Some(reserved.clone()));
         assert_eq!(recovered.lease.registry_receipt, Some(registry_receipt));
         assert_eq!(recovered.lease.head_event_digest, Some(head));
@@ -4132,13 +2422,7 @@ mod tests {
             arkret_identifiers::RequestId::new(format!("ak:request:{}", Uuid::now_v7())).unwrap();
         assert!(matches!(
             repo.account_handoff()
-                .mark_bound(
-                    &foreign_request,
-                    &binding_receipt,
-                    &request_digest,
-                    &outcome,
-                    now
-                )
+                .mark_completed(&foreign_request, &request_digest, &outcome, now)
                 .await
                 .unwrap(),
             IdentityCreationBindingCommit::Stale
@@ -4150,7 +2434,7 @@ mod tests {
             arkret_identifiers::Hash::new(format!("sha256:{}", "e".repeat(64))).unwrap();
         assert!(matches!(
             repo.account_handoff()
-                .mark_bound(&tampered, &binding_receipt, &request_digest, &outcome, now)
+                .mark_completed(&tampered, &request_digest, &outcome, now)
                 .await
                 .unwrap(),
             IdentityCreationBindingCommit::Stale
@@ -4159,13 +2443,7 @@ mod tests {
         foreign_holder.grant.cnf_jkt = "Z".repeat(43);
         assert!(matches!(
             repo.account_handoff()
-                .mark_bound(
-                    &foreign_holder,
-                    &binding_receipt,
-                    &request_digest,
-                    &outcome,
-                    now
-                )
+                .mark_completed(&foreign_holder, &request_digest, &outcome, now)
                 .await
                 .unwrap(),
             IdentityCreationBindingCommit::Stale
@@ -4175,7 +2453,7 @@ mod tests {
         // device claim works solely for the reserved principal.
         assert!(matches!(
             repo.account_handoff()
-                .mark_bound(&recovered, &binding_receipt, &request_digest, &outcome, now)
+                .mark_completed(&recovered, &request_digest, &outcome, now)
                 .await
                 .unwrap(),
             IdentityCreationBindingCommit::Committed
@@ -4258,43 +2536,6 @@ mod tests {
                 .await
                 .unwrap(),
             IdentityCreationRegisterReplay::DuplicateConflict
-        ));
-
-        let foreign_principal =
-            arkret_identifiers::Did::new(format!("did:webvh:z{label}f:example.com")).unwrap();
-        let device =
-            arkret_identifiers::DeviceId::new(format!("ak:device:{}", Uuid::now_v7())).unwrap();
-        let enrollment_digest = register_request_digest('8');
-        let enrollment_outcome = serde_json::json!({ "device_id": device });
-        assert!(matches!(
-            repo.account_handoff()
-                .commit_first_device_enrollment(FirstDeviceEnrollmentInput {
-                    service_account_id: user.id,
-                    audience: &grant.audience,
-                    principal_id: &foreign_principal,
-                    device_id: &device,
-                    request_digest: &enrollment_digest,
-                    outcome: &enrollment_outcome,
-                    now,
-                })
-                .await
-                .unwrap(),
-            FirstDeviceEnrollmentCommit::Conflict
-        ));
-        assert!(matches!(
-            repo.account_handoff()
-                .commit_first_device_enrollment(FirstDeviceEnrollmentInput {
-                    service_account_id: user.id,
-                    audience: &grant.audience,
-                    principal_id: &reserved.principal_id,
-                    device_id: &device,
-                    request_digest: &enrollment_digest,
-                    outcome: &enrollment_outcome,
-                    now,
-                })
-                .await
-                .unwrap(),
-            FirstDeviceEnrollmentCommit::Committed
         ));
 
         repo.cancel().await.unwrap();

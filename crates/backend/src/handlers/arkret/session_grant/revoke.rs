@@ -682,6 +682,7 @@ pub async fn revoke_session_grant_endpoint(
         )
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let chaos_committed = matches!(&committed, SessionGrantRevokeOutcome::Revoked { .. });
     let response = match committed {
         SessionGrantRevokeOutcome::Revoked { operation, .. } => {
             operation.canonical_outcome.ok_or_else(|| {
@@ -721,6 +722,13 @@ pub async fn revoke_session_grant_endpoint(
     };
 
     repo.save().await?;
+    if chaos_committed {
+        super::super::test_chaos::maybe_delay_post_commit(
+            "session_grant_revoke_post_commit_pre_response",
+            &request_identity,
+        )
+        .await;
+    }
     Ok(RevokeCanonicalJson(response))
 }
 
@@ -823,11 +831,6 @@ mod tests {
             signing_key_id: material.signing_key_id,
             session_public_key: material.session_public_key,
             credential_class: material.credential_class,
-            recovery_session_id: material.recovery_session_id,
-            recovery_policy_id: material.recovery_policy_id,
-            recovery_policy_version: material.recovery_policy_version,
-            device_authorization_event_id: material.device_authorization_event_id,
-            model_generation_ref: material.model_generation_ref,
             created_at: now,
             expires_at: now + Duration::minutes(15),
             lifecycle_state: coauth_data::SessionGrantLifecycleState::Active,

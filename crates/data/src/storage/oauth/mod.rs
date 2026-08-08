@@ -17,7 +17,6 @@ pub use self::session::{OAuthSessionFilter, OAuthSessionRepository};
 pub use self::session_grant::{
     MIN_SESSION_GRANT_OPERATION_RETENTION_SECONDS, NewSessionGrant, NewSessionGrantOperation,
     SessionGrantCommitOutcome, SessionGrantExactOutcome, SessionGrantFilter,
-    SessionGrantProofAuthorization, SessionGrantRecoveryPromotion,
-    SessionGrantRecoveryPromotionOutcome, SessionGrantRefreshOutcome, SessionGrantRepository,
+    SessionGrantProofAuthorization, SessionGrantRefreshOutcome, SessionGrantRepository,
     SessionGrantReserveOutcome, SessionGrantRevokeOutcome, SessionGrantRevokeSelector,
 };

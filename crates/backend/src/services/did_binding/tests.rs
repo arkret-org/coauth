@@ -71,7 +71,6 @@ fn document_for(did: &str) -> CoauthDidDocument {
         }],
         authentication: Vec::new(),
         assertion_method: Vec::new(),
-        capability_delegation: Vec::new(),
         service: Vec::new(),
         metadata: None,
     }

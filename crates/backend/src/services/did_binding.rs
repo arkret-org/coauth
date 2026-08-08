@@ -195,7 +195,7 @@ pub fn shared_verified_did_binding_store() -> VerifiedDidBindingStoreHandle {
 /// Reuses the existing [`crate::handlers::arkret::trust_domain_for`] derivation
 /// — `arkret.trust_domain` when configured, otherwise `ak:trust_domain:<public
 /// hostname>` — so a binding's trust domain is exactly the value that already
-/// enters cross-signing reset transcripts and DID continuity proof audiences.
+/// enters root-anchored recovery transcripts and DID continuity proof audiences.
 /// No new string is invented for the binding layer.
 pub fn trust_domain_id(
     url_builder: &UrlBuilder,
@@ -987,7 +987,6 @@ pub(crate) fn test_resolution(
             verification_method: Vec::new(),
             authentication: Vec::new(),
             assertion_method: Vec::new(),
-            capability_delegation: Vec::new(),
             service: Vec::new(),
             metadata: None,
         },

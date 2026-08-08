@@ -1,8 +1,8 @@
 use arkret_identifiers::SessionGrantId;
 use arkret_models_collaboration::account_lifecycle::SessionRevokeOutcome as WireSessionRevokeOutcome;
 use arkret_models_identity::{
-    SessionGrantBootstrapBinding, SessionGrantCredentialClass, SessionGrantHolderBinding,
-    SessionGrantIssuancePreimage, SessionGrantProofKind, SignedSessionGrantClaims,
+    SessionGrantCredentialClass, SessionGrantHolderBinding, SessionGrantIssuancePreimage,
+    SessionGrantProofKind, SignedSessionGrantClaims,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -10,9 +10,9 @@ use coauth_data::oauth::{
     MIN_SESSION_GRANT_OPERATION_RETENTION_SECONDS, NewSessionGrant, NewSessionGrantOperation,
     SessionGrantCommitOutcome, SessionGrantExactOutcome, SessionGrantFilter,
     SessionGrantLifecycleState, SessionGrantOperation, SessionGrantOperationKind,
-    SessionGrantOperationState, SessionGrantProofAuthorization, SessionGrantRecoveryPromotion,
-    SessionGrantRecoveryPromotionOutcome, SessionGrantRefreshOutcome, SessionGrantRepository,
-    SessionGrantReserveOutcome, SessionGrantRevokeOutcome, SessionGrantRevokeSelector,
+    SessionGrantOperationState, SessionGrantProofAuthorization, SessionGrantRefreshOutcome,
+    SessionGrantRepository, SessionGrantReserveOutcome, SessionGrantRevokeOutcome,
+    SessionGrantRevokeSelector,
 };
 use coauth_data::pagination::{Node, PaginationDirection};
 use coauth_data::{Clock, Page, Pagination, SessionGrant, new_id};
@@ -24,10 +24,7 @@ use serde_json::Value;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::schema::{
-    device_bootstrap_transactions, dpop_jti_replay, oauth_session_grant_operations,
-    oauth_session_grants, recovery_session_grant_promotions, user_sessions,
-};
+use crate::schema::{oauth_session_grant_operations, oauth_session_grants, user_sessions};
 use crate::session_grant_codec::session_grant_id_from_bytes;
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
@@ -255,11 +252,6 @@ struct SessionGrantLookup {
     signing_key_id: String,
     session_public_key: String,
     credential_class: String,
-    recovery_session_id: Option<String>,
-    recovery_policy_id: Option<String>,
-    recovery_policy_version: Option<i64>,
-    device_authorization_event_id: Option<String>,
-    model_generation_ref: Option<Value>,
     expires_at: DateTime<Utc>,
     lifecycle_state: String,
     revoked_at: Option<DateTime<Utc>>,
@@ -346,11 +338,6 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
             signing_key_id: value.signing_key_id,
             session_public_key: value.session_public_key,
             credential_class: value.credential_class,
-            recovery_session_id: value.recovery_session_id,
-            recovery_policy_id: value.recovery_policy_id,
-            recovery_policy_version: value.recovery_policy_version,
-            device_authorization_event_id: value.device_authorization_event_id,
-            model_generation_ref: value.model_generation_ref,
             created_at: value.created_at,
             expires_at: value.expires_at,
             lifecycle_state,
@@ -387,38 +374,9 @@ struct NewSessionGrantRow<'a> {
     signing_key_id: &'a str,
     session_public_key: &'a str,
     credential_class: &'a str,
-    recovery_session_id: Option<&'a str>,
-    recovery_policy_id: Option<&'a str>,
-    recovery_policy_version: Option<i64>,
-    device_authorization_event_id: Option<&'a str>,
-    model_generation_ref: Option<Value>,
     expires_at: DateTime<Utc>,
     lifecycle_state: &'static str,
     created_at: DateTime<Utc>,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = dpop_jti_replay)]
-struct RecoveryDpopJtiRow<'a> {
-    jti_digest: &'a str,
-    seen_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
-    created_at: DateTime<Utc>,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = recovery_session_grant_promotions)]
-struct RecoveryPromotionRow<'a> {
-    transaction_id: &'a str,
-    old_grant_id: Vec<u8>,
-    transaction_request_digest: &'a str,
-    recovery_session_id: &'a str,
-    replacement_device_id: &'a str,
-    device_authorization_event_id: &'a str,
-    model_generation_ref: Value,
-    canonical_request: &'a [u8],
-    outcome: Value,
-    consumed_at: DateTime<Utc>,
 }
 
 fn validate_grant_material(
@@ -505,29 +463,8 @@ fn validate_grant_material(
     {
         return Err(DatabaseError::invalid_operation());
     }
-    match preimage.credential_class {
-        SessionGrantCredentialClass::RecoveryRestricted => {
-            let binding = preimage
-                .recovery_binding
-                .as_ref()
-                .ok_or_else(DatabaseError::invalid_operation)?;
-            let policy_version = i64::try_from(binding.policy_version)
-                .map_err(|_| DatabaseError::invalid_operation())?;
-            if grant.recovery_session_id != Some(binding.recovery_session_id.as_str())
-                || grant.recovery_policy_id != Some(binding.policy_id.as_str())
-                || grant.recovery_policy_version != Some(policy_version)
-            {
-                return Err(DatabaseError::invalid_operation());
-            }
-        }
-        SessionGrantCredentialClass::Standard | SessionGrantCredentialClass::DeviceBootstrap => {
-            if grant.recovery_session_id.is_some()
-                || grant.recovery_policy_id.is_some()
-                || grant.recovery_policy_version.is_some()
-            {
-                return Err(DatabaseError::invalid_operation());
-            }
-        }
+    if preimage.credential_class != SessionGrantCredentialClass::Standard {
+        return Err(DatabaseError::invalid_operation());
     }
     let bound_device_id = if let Some(binding) = preimage.device_binding.as_ref() {
         Some(binding.device_id.as_str())
@@ -536,33 +473,11 @@ fn validate_grant_material(
             SessionGrantHolderBinding::HumanDevice { device_binding } => device_binding.as_str(),
             SessionGrantHolderBinding::AgentRuntime { device_id, .. } => device_id.as_str(),
         })
-    } else if let Some(binding) = preimage.bootstrap_binding.as_ref() {
-        Some(match binding {
-            SessionGrantBootstrapBinding::Founding { device_id, .. }
-            | SessionGrantBootstrapBinding::SiblingPairing { device_id, .. } => device_id.as_str(),
-        })
     } else {
         None
     };
     if grant.device_id != bound_device_id {
         return Err(DatabaseError::invalid_operation());
-    }
-    match preimage.device_binding.as_ref() {
-        Some(binding) => {
-            let generation = serde_json::to_value(&binding.model_generation_ref)
-                .map_err(|_| DatabaseError::invalid_operation())?;
-            if grant.device_authorization_event_id != Some(binding.authorization_event_id.as_str())
-                || grant.model_generation_ref.as_ref() != Some(&generation)
-            {
-                return Err(DatabaseError::invalid_operation());
-            }
-        }
-        None => {
-            if grant.device_authorization_event_id.is_some() || grant.model_generation_ref.is_some()
-            {
-                return Err(DatabaseError::invalid_operation());
-            }
-        }
     }
     Ok(())
 }
@@ -570,7 +485,7 @@ fn validate_grant_material(
 fn validate_refresh_chain(
     predecessor: &SessionGrant,
     successor: &NewSessionGrant<'_>,
-) -> Result<Option<String>, DatabaseError> {
+) -> Result<(), DatabaseError> {
     let predecessor_preimage: SessionGrantIssuancePreimage =
         serde_json::from_slice(&predecessor.issuance_preimage)
             .map_err(|_| DatabaseError::invalid_operation())?;
@@ -590,46 +505,15 @@ fn validate_refresh_chain(
         return Err(DatabaseError::invalid_operation());
     }
 
-    if predecessor_preimage.credential_class == successor_preimage.credential_class {
-        if predecessor_preimage.holder_binding != successor_preimage.holder_binding
-            || predecessor_preimage.bootstrap_binding != successor_preimage.bootstrap_binding
-            || predecessor_preimage.recovery_binding != successor_preimage.recovery_binding
-            || predecessor_preimage.device_binding != successor_preimage.device_binding
-        {
-            return Err(DatabaseError::invalid_operation());
-        }
-        return Ok(None);
-    }
-
-    let Some(SessionGrantBootstrapBinding::Founding {
-        principal_id,
-        device_id,
-        holder_jkt,
-        transaction_id,
-        ..
-    }) = predecessor_preimage.bootstrap_binding.as_ref()
-    else {
-        return Err(DatabaseError::invalid_operation());
-    };
-    let promoted_holder = Some(SessionGrantHolderBinding::HumanDevice {
-        device_binding: device_id.to_string(),
-    });
-    if predecessor_preimage.credential_class != SessionGrantCredentialClass::DeviceBootstrap
+    if predecessor_preimage.credential_class != SessionGrantCredentialClass::Standard
         || successor_preimage.credential_class != SessionGrantCredentialClass::Standard
-        || predecessor_preimage.subject != *principal_id
-        || predecessor_preimage.holder_binding.is_some()
-        || predecessor_preimage.recovery_binding.is_some()
-        || predecessor_preimage.device_binding.is_some()
-        || predecessor_preimage.cnf.jkt != *holder_jkt
-        || successor_preimage.holder_binding != promoted_holder
-        || successor_preimage.bootstrap_binding.is_some()
-        || successor_preimage.recovery_binding.is_some()
-        || successor_preimage.device_binding.is_some()
-        || successor_preimage.proof_kind == Some(SessionGrantProofKind::PreRegistrationHandoff)
+        || predecessor_preimage.holder_binding != successor_preimage.holder_binding
+        || predecessor_preimage.recovery_binding != successor_preimage.recovery_binding
+        || predecessor_preimage.device_binding != successor_preimage.device_binding
     {
         return Err(DatabaseError::invalid_operation());
     }
-    Ok(Some(transaction_id.clone()))
+    Ok(())
 }
 
 fn new_grant_row<'a>(
@@ -665,11 +549,6 @@ fn new_grant_row<'a>(
         signing_key_id: grant.signing_key_id,
         session_public_key: grant.session_public_key,
         credential_class: grant.credential_class,
-        recovery_session_id: grant.recovery_session_id,
-        recovery_policy_id: grant.recovery_policy_id,
-        recovery_policy_version: grant.recovery_policy_version,
-        device_authorization_event_id: grant.device_authorization_event_id,
-        model_generation_ref: grant.model_generation_ref.clone(),
         expires_at: grant.expires_at,
         lifecycle_state: "active",
         created_at,
@@ -704,11 +583,6 @@ fn owned_grant(
         signing_key_id: grant.signing_key_id.to_owned(),
         session_public_key: grant.session_public_key.to_owned(),
         credential_class: grant.credential_class.to_owned(),
-        recovery_session_id: grant.recovery_session_id.map(ToOwned::to_owned),
-        recovery_policy_id: grant.recovery_policy_id.map(ToOwned::to_owned),
-        recovery_policy_version: grant.recovery_policy_version,
-        device_authorization_event_id: grant.device_authorization_event_id.map(ToOwned::to_owned),
-        model_generation_ref: grant.model_generation_ref,
         created_at,
         expires_at: grant.expires_at,
         lifecycle_state: SessionGrantLifecycleState::Active,
@@ -1077,7 +951,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 }
                 None
             }
-            SessionGrantOperationKind::Refresh | SessionGrantOperationKind::RecoveryPromotion => {
+            SessionGrantOperationKind::Refresh => {
                 let target = operation
                     .target_grant_id
                     .ok_or_else(DatabaseError::invalid_operation)?;
@@ -1357,37 +1231,12 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 {
                     return Err(DatabaseError::invalid_operation());
                 }
-                let bootstrap_promotion_transaction =
-                    validate_refresh_chain(&predecessor, &successor)?;
+                validate_refresh_chain(&predecessor, &successor)?;
                 if predecessor.lifecycle_state != SessionGrantLifecycleState::Active
                     || predecessor.expires_at <= now
                 {
                     return Ok(SessionGrantRefreshOutcome::PredecessorTerminal(predecessor));
                 }
-                if let Some(transaction_id) = bootstrap_promotion_transaction.as_deref() {
-                    let (state, bootstrap_grant_id, authorized_event_id, standard_grant_id) =
-                        device_bootstrap_transactions::table
-                            .find(transaction_id)
-                            .for_update()
-                            .select((
-                                device_bootstrap_transactions::state,
-                                device_bootstrap_transactions::bootstrap_grant_id,
-                                device_bootstrap_transactions::authorized_event_id,
-                                device_bootstrap_transactions::standard_grant_id,
-                            ))
-                            .first::<(String, String, Option<String>, Option<String>)>(conn)
-                            .await
-                            .optional()?
-                            .ok_or_else(DatabaseError::invalid_operation)?;
-                    if state != "accepted"
-                        || bootstrap_grant_id != predecessor_grant_id.as_str()
-                        || authorized_event_id.is_none()
-                        || standard_grant_id.is_some()
-                    {
-                        return Err(DatabaseError::invalid_operation());
-                    }
-                }
-
                 let successor_grant_id = successor.grant_id.clone();
                 diesel::insert_into(oauth_session_grants::table)
                     .values(new_grant_row(
@@ -1412,18 +1261,6 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 .execute(conn)
                 .await?;
                 DatabaseError::ensure_affected_rows_usize(changed, 1)?;
-
-                if let Some(transaction_id) = bootstrap_promotion_transaction.as_deref() {
-                    let changed =
-                        diesel::update(device_bootstrap_transactions::table.find(transaction_id))
-                            .set(
-                                device_bootstrap_transactions::standard_grant_id
-                                    .eq(Some(successor_grant_id.as_str())),
-                            )
-                            .execute(conn)
-                            .await?;
-                    DatabaseError::ensure_affected_rows_usize(changed, 1)?;
-                }
 
                 let retained_until = operation.retained_until.max(authorization.proof_expires_at);
                 commit_operation_outcome(
@@ -1611,197 +1448,6 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
             .await
     }
 
-    async fn commit_recovery_promotion(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        operation_id: Ulid,
-        authorization: SessionGrantProofAuthorization<'_>,
-        outcome: SessionGrantExactOutcome<'_>,
-        predecessor_grant_id: &SessionGrantId,
-        successor: NewSessionGrant<'_>,
-        promotion: SessionGrantRecoveryPromotion<'_>,
-    ) -> Result<SessionGrantRecoveryPromotionOutcome, Self::Error> {
-        validate_exact_outcome(outcome)?;
-        let now = clock.now();
-        let successor_row_id = new_id(now, rng);
-        self.conn
-            .transaction(async move |conn| {
-                let operation = load_operation_for_update(conn, operation_id).await?;
-                if operation.state == SessionGrantOperationState::Evicted
-                    || now >= operation.retained_until
-                {
-                    return Ok(SessionGrantRecoveryPromotionOutcome::Indeterminate(
-                        operation,
-                    ));
-                }
-                if operation
-                    .grant_expires_at
-                    .is_some_and(|expires_at| now >= expires_at)
-                {
-                    let operation = evict_operation(conn, operation_id).await?;
-                    return Ok(SessionGrantRecoveryPromotionOutcome::Indeterminate(
-                        operation,
-                    ));
-                }
-                if operation.operation_kind != SessionGrantOperationKind::RecoveryPromotion
-                    || operation.target_grant_id.as_ref() != Some(predecessor_grant_id)
-                {
-                    return Err(DatabaseError::invalid_operation());
-                }
-                validate_authorization(&operation, authorization, now)?;
-                if operation.state == SessionGrantOperationState::Committed {
-                    return Ok(SessionGrantRecoveryPromotionOutcome::Replay(operation));
-                }
-                if promotion.dpop_jti_digest.trim().is_empty()
-                    || promotion.transaction_id.trim().is_empty()
-                    || promotion.transaction_request_digest.trim().is_empty()
-                    || promotion.canonical_request.is_empty()
-                    || promotion.dpop_expires_at <= promotion.dpop_seen_at
-                    || promotion.dpop_seen_at > now
-                {
-                    return Err(DatabaseError::invalid_operation());
-                }
-
-                validate_grant_material(&operation, &successor)?;
-                lock_session_grant_subject(conn, successor.issuer, successor.subject).await?;
-                let predecessor = load_grant_by_protocol_id_for_update(conn, predecessor_grant_id)
-                    .await?
-                    .ok_or_else(DatabaseError::invalid_operation)?;
-                if predecessor.issuer != successor.issuer
-                    || predecessor.subject != successor.subject
-                    || predecessor.session_id != successor.session_id
-                    || predecessor.recovery_session_id.as_deref()
-                        != Some(promotion.recovery_session_id)
-                    || successor.device_id != Some(promotion.replacement_device_id)
-                    || successor.device_authorization_event_id
-                        != Some(promotion.device_authorization_event_id)
-                    || successor.model_generation_ref.as_ref()
-                        != Some(promotion.model_generation_ref)
-                {
-                    return Err(DatabaseError::invalid_operation());
-                }
-                let predecessor_preimage: SessionGrantIssuancePreimage =
-                    serde_json::from_slice(&predecessor.issuance_preimage)
-                        .map_err(|_| DatabaseError::invalid_operation())?;
-                let successor_preimage: SessionGrantIssuancePreimage =
-                    serde_json::from_slice(successor.issuance_preimage)
-                        .map_err(|_| DatabaseError::invalid_operation())?;
-                let mut expected_successor_scopes = vec![
-                    "urn:arkret:principal-server:session.bind".to_owned(),
-                    format!(
-                        "urn:arkret:client:device:{}",
-                        promotion.replacement_device_id
-                    ),
-                ];
-                expected_successor_scopes.sort_unstable();
-                if predecessor_preimage.credential_class
-                    != SessionGrantCredentialClass::RecoveryRestricted
-                    || successor_preimage.credential_class != SessionGrantCredentialClass::Standard
-                    || predecessor_preimage.issuer != successor_preimage.issuer
-                    || predecessor_preimage.subject != successor_preimage.subject
-                    || predecessor_preimage.audience != successor_preimage.audience
-                    || predecessor_preimage.session_id != successor_preimage.session_id
-                    || successor_preimage.scopes != expected_successor_scopes
-                {
-                    return Err(DatabaseError::invalid_operation());
-                }
-                if predecessor.lifecycle_state != SessionGrantLifecycleState::Active
-                    || predecessor.expires_at <= now
-                {
-                    return Ok(SessionGrantRecoveryPromotionOutcome::PredecessorTerminal(
-                        predecessor,
-                    ));
-                }
-
-                let dpop_inserted = diesel::insert_into(dpop_jti_replay::table)
-                    .values(RecoveryDpopJtiRow {
-                        jti_digest: promotion.dpop_jti_digest,
-                        seen_at: promotion.dpop_seen_at,
-                        expires_at: promotion.dpop_expires_at,
-                        created_at: now,
-                    })
-                    .on_conflict(dpop_jti_replay::jti_digest)
-                    .do_nothing()
-                    .execute(conn)
-                    .await?;
-                if dpop_inserted == 0 {
-                    return Ok(SessionGrantRecoveryPromotionOutcome::DpopAlreadyConsumed);
-                }
-
-                let promotion_inserted =
-                    diesel::insert_into(recovery_session_grant_promotions::table)
-                        .values(RecoveryPromotionRow {
-                            transaction_id: promotion.transaction_id,
-                            old_grant_id: predecessor_grant_id.token_bytes().to_vec(),
-                            transaction_request_digest: promotion.transaction_request_digest,
-                            recovery_session_id: promotion.recovery_session_id,
-                            replacement_device_id: promotion.replacement_device_id,
-                            device_authorization_event_id: promotion.device_authorization_event_id,
-                            model_generation_ref: promotion.model_generation_ref.clone(),
-                            canonical_request: promotion.canonical_request,
-                            outcome: promotion.legacy_outcome.clone(),
-                            consumed_at: now,
-                        })
-                        .on_conflict_do_nothing()
-                        .execute(conn)
-                        .await?;
-                if promotion_inserted != 1 {
-                    return Err(DatabaseError::invalid_operation());
-                }
-
-                let successor_grant_id = successor.grant_id.clone();
-                diesel::insert_into(oauth_session_grants::table)
-                    .values(new_grant_row(
-                        successor_row_id,
-                        operation_id,
-                        now,
-                        &successor,
-                    ))
-                    .execute(conn)
-                    .await?;
-                let changed = diesel::update(
-                    oauth_session_grants::table
-                        .find(Uuid::from(predecessor.id))
-                        .filter(oauth_session_grants::lifecycle_state.eq("active")),
-                )
-                .set((
-                    oauth_session_grants::lifecycle_state.eq("superseded"),
-                    oauth_session_grants::superseded_at.eq(Some(now)),
-                    oauth_session_grants::successor_grant_id
-                        .eq(Some(successor_grant_id.token_bytes().to_vec())),
-                ))
-                .execute(conn)
-                .await?;
-                DatabaseError::ensure_affected_rows_usize(changed, 1)?;
-
-                let retained_until = operation
-                    .retained_until
-                    .max(authorization.proof_expires_at)
-                    .max(promotion.dpop_expires_at);
-                commit_operation_outcome(
-                    conn,
-                    operation_id,
-                    authorization,
-                    outcome,
-                    Some(predecessor_grant_id),
-                    Some(&successor_grant_id),
-                    &[],
-                    retained_until,
-                    now,
-                )
-                .await?;
-                let predecessor = load_grant_by_protocol_id(conn, predecessor_grant_id)
-                    .await?
-                    .ok_or_else(DatabaseError::invalid_operation)?;
-                Ok(SessionGrantRecoveryPromotionOutcome::Committed {
-                    predecessor,
-                    successor: owned_grant(successor_row_id, operation_id, now, successor),
-                })
-            })
-            .await
-    }
-
     #[tracing::instrument(name = "db.oauth_session_grant.lookup", skip_all, err)]
     async fn lookup(&mut self, id: Ulid) -> Result<Option<SessionGrant>, Self::Error> {
         let row = oauth_session_grants::table
@@ -1972,13 +1618,6 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                                 OR replay.result_grant_id = oauth_session_grants.grant_id
                               OR oauth_session_grants.grant_id = ANY(replay.affected_grant_ids)
                             )
-                      )
-                      AND NOT EXISTS (
-                          SELECT 1
-                          FROM device_bootstrap_transactions AS bootstrap
-                          WHERE bootstrap.bootstrap_grant_id =
-                                'ak:session_grant:' ||
-                                translate(encode(oauth_session_grants.grant_id, 'base64'), '+/', '-_')
                       )
                     ORDER BY expires_at ASC
                     LIMIT $3

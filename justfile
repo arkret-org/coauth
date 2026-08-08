@@ -4,14 +4,6 @@
 
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
-# Stable local device-enrollment-authority seed (decision 0002, B model).
-# Without a fixed seed coauth generates a random enrollment key every start, so
-# every restart orphans the `ArkretDeviceEnrollmentAuthority` did:key already
-# pinned into existing principals' DID documents (device enrollment then fails
-# `device_enrollment_authority_not_designated`). This is a DEV-ONLY key; set a
-# real secret seed in production.
-export COAUTH_DEVICE_ENROLLMENT_KEY_SEED := "wgGYluck4bZVA5oa9khVpSriHgrcV81H4iPu6rqtRRY="
-
 # Dev-only escape hatch for the registration email-delivery bypass.
 # config.dev.yaml enables `account.registration_email_delivery_bypass_allowed`
 # (in-band verification code, no SMTP) so local dev needs no mail server. The

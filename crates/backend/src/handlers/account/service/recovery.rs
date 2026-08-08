@@ -149,7 +149,6 @@ pub struct AccountRecoveryTrustBoundary {
     pub recovery_credential_kind: &'static str,
     pub account_password_reset: bool,
     pub device_trust_reset: bool,
-    pub cross_signing_reset: bool,
     pub trusted_recovery_service_used: bool,
     pub device_trust_recovery_required: bool,
 }
@@ -161,7 +160,6 @@ impl AccountRecoveryTrustBoundary {
             recovery_credential_kind: "email_recovery_ticket",
             account_password_reset: true,
             device_trust_reset: false,
-            cross_signing_reset: false,
             trusted_recovery_service_used: false,
             device_trust_recovery_required: true,
         }
@@ -399,7 +397,6 @@ pub async fn complete_account_recovery(
         recovery_credential_kind = completion.trust_boundary.recovery_credential_kind,
         account_password_reset = completion.trust_boundary.account_password_reset,
         device_trust_reset = completion.trust_boundary.device_trust_reset,
-        cross_signing_reset = completion.trust_boundary.cross_signing_reset,
         trusted_recovery_service_used = completion.trust_boundary.trusted_recovery_service_used,
         "account recovery completed within password-only trust boundary",
     );
@@ -448,7 +445,6 @@ mod tests {
         assert_eq!(boundary.recovery_credential_kind, "email_recovery_ticket");
         assert!(boundary.account_password_reset);
         assert!(!boundary.device_trust_reset);
-        assert!(!boundary.cross_signing_reset);
         assert!(!boundary.trusted_recovery_service_used);
         assert!(boundary.device_trust_recovery_required);
     }

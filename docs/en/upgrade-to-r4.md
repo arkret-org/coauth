@@ -17,10 +17,6 @@ Read this page before enabling a build that includes the R4 changes.
 - **Invite claims** use a two-proof chain: a verification-service
   proof for the verified 3PID and a subject proof signed by the
   inviter actor key.
-- **`ak.cross_signing.publish`** is now compare-and-swap. Publishers
-  must read the current generation and submit
-  `expected_previous_generation`; accepted generations advance by
-  exactly one.
 - **`/policy/check` v2** uses `PolicyCheckRequestBody` and returns a
   `PolicyCheckOutcome` with `bound_to`, frontier digests, and a
   DID-keyed signature envelope.
@@ -34,20 +30,19 @@ Use the release notes attached to the build and the matching
 
 ## Trust domain rotation
 
-`arkret.trust_domain` is part of the canonical transcript for every
-`ak.cross_signing.reset` proof. Changing it invalidates reset proofs
-that were issued under the previous trust domain.
+`arkret.trust_domain` binds peer and recovery authorization transcripts
+to a deployment. Changing it invalidates in-flight proofs and sessions
+issued under the previous trust domain.
 
 Before rotating:
 
 1. Record the current configured value and confirm it matches
    `/_arkret/describe`.
-2. Pause or reject in-flight cross-signing reset approvals minted under
-   the old value.
+2. Pause or reject in-flight recovery approvals minted under the old value.
 3. Snapshot the database and keep the previous config alongside the
    snapshot.
 4. Coordinate with Principal Server operators so they reject stale
-   reset proofs after the cutover.
+   recovery proofs after the cutover.
 
 During rotation:
 
@@ -58,7 +53,7 @@ During rotation:
 4. Reissue reset proofs through the device recovery strand. The affected
    proof families are `principal_signing`, `recovery_unlock`,
    `device_quorum`, and `trusted_recovery_service`.
-5. Publish fresh cross-signing generations after the new proofs are
+5. Complete the root-anchored device re-anchor after the new proofs are
    available.
 
 Do not replay old reset proofs into the new trust domain. They must fail

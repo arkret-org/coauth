@@ -432,7 +432,6 @@ impl DidResolverService for DefaultDidResolverService {
                     verification_method: Vec::new(),
                     authentication: Vec::new(),
                     assertion_method: Vec::new(),
-                    capability_delegation: Vec::new(),
                     service: Vec::new(),
                     // External `did:key` — coauth does not own its metadata.
                     metadata: None,

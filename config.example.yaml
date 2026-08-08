@@ -97,8 +97,8 @@ arkret:
   # principal_servers[] Provider below. Operators never copy a DID here.
   # Deployment trust-domain identifier injected into Realm policy and the
   # server-describe document. Wire form: ak:trust_domain:<scope> where <scope>
-  # matches [a-z0-9._:-]{1,128}. Changing it invalidates existing cross-signing
-  # reset proofs (see README "Trust domain rotation"). When omitted, replay
+  # matches [a-z0-9._:-]{1,128}. Changing it invalidates existing recovery
+  # proofs (see README "Trust domain rotation"). When omitted, replay
   # protection fails closed.
   # trust_domain: ak:trust_domain:<scope>
   # Lifetime, in seconds, of the DPoP-bound Arkret session-grant JWTs returned

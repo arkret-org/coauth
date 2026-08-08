@@ -64,7 +64,7 @@ pub mod policy_data;
 pub mod post_auth_action;
 /// Queue models and repository ports.
 pub mod queue;
-/// Durable recovery-authority ticket consumption outcomes.
+/// Durable recovery-completion grant issuance outcomes.
 pub mod recovery_authority;
 mod site_config;
 /// Storage repository abstractions and pagination helpers.
@@ -131,16 +131,11 @@ pub use self::account::{
 pub use self::account_handoff::{
     AccountHandoffCreation, AccountHandoffCreationAttempt, AccountHandoffCreationAttemptCommit,
     AccountHandoffCreationAttemptReserve, AccountHandoffCreationAttemptState, AccountHandoffGrant,
-    AccountHandoffGrantInput, AccountHandoffRepository, DeviceBootstrapAcceptanceCommit,
-    DeviceBootstrapCancelCommit, DeviceBootstrapCancelDecision, DeviceBootstrapCancelInput,
-    DeviceBootstrapCancelOperation, DeviceBootstrapCancelReserve,
-    DeviceBootstrapCancelReserveInput, DeviceBootstrapDecisionEvidence,
-    DeviceBootstrapEnrollmentCommit, DeviceBootstrapEnrollmentInput,
-    DeviceBootstrapEnrollmentReservationInput, DeviceBootstrapEnrollmentReserve,
-    DeviceBootstrapTransaction, DeviceBootstrapTransactionCreate, DeviceBootstrapTransactionState,
-    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityBindingChallengeRecord,
-    IdentityCreationLeaseRecord, IdentityCreationRegistrationContext, IdentityCreationSagaState,
-    NewAccountHandoffCreationAttempt, NewDeviceBootstrapTransaction,
+    AccountHandoffGrantInput, AccountHandoffRepository, IdentityBindingChallengeInput,
+    IdentityBindingChallengeIssue, IdentityBindingChallengeRecord, IdentityCreationBindingCommit,
+    IdentityCreationLeaseRecord, IdentityCreationRegisterReplay,
+    IdentityCreationRegistrationContext, IdentityCreationSagaState,
+    NewAccountHandoffCreationAttempt,
 };
 pub use self::accountability::{
     AccountabilityGrant, AccountabilityGrantFanoutState, AccountabilitySubjectKind,
@@ -176,8 +171,7 @@ pub use self::oauth::{
     LocalizedClientMetadata, NewSessionGrantOperation, Pkce, Session, SessionGrant,
     SessionGrantCommitOutcome, SessionGrantExactOutcome, SessionGrantLifecycleState,
     SessionGrantOperation, SessionGrantOperationKind, SessionGrantOperationState,
-    SessionGrantProofAuthorization, SessionGrantRecoveryPromotion,
-    SessionGrantRecoveryPromotionOutcome, SessionGrantRefreshOutcome, SessionGrantReserveOutcome,
+    SessionGrantProofAuthorization, SessionGrantRefreshOutcome, SessionGrantReserveOutcome,
     SessionGrantRevokeOutcome, SessionGrantRevokeSelector, SessionState,
 };
 pub use self::organization_control::{
@@ -188,8 +182,7 @@ pub use self::organization_control::{
 pub use self::policy_data::{PolicyData, PolicyDataDocument};
 pub use self::post_auth_action::{AccountAction, PostAuthAction};
 pub use self::recovery_authority::{
-    NewRecoveryDeviceAuthorization, NewRecoverySessionGrantPromotion, RecoveryDeviceAuthorization,
-    RecoverySessionGrantPromotion,
+    NewRecoveryCompletionGrantIssuance, RecoveryCompletionGrantIssuance,
 };
 pub use self::site_config::{
     CaptchaConfig, CaptchaService, SessionExpirationConfig, SessionLimitConfig, SiteConfig,

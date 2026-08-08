@@ -104,9 +104,6 @@ impl Options {
             .key_store()
             .await
             .context("could not import keys from config")?;
-        coauth_backend::services::device_enrollment_authority::enrollment_authority(&key_store)
-            .context("could not initialize the persistent device enrollment authority")?;
-
         let cookie_manager = CookieManager::derive_from(
             config.http.public_base.clone(),
             &config.secrets.encryption().await?,

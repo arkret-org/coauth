@@ -204,18 +204,8 @@ pub struct NewSessionGrant<'a> {
     pub signing_key_id: &'a str,
     /// Public key generated for this session grant.
     pub session_public_key: &'a str,
-    /// Closed signed credential class (`standard` or `recovery_restricted`).
+    /// Closed signed credential class (`standard`).
     pub credential_class: &'a str,
-    /// Recovery-session binding, present only for recovery-restricted grants.
-    pub recovery_session_id: Option<&'a str>,
-    /// Recovery policy binding, present only for recovery-restricted grants.
-    pub recovery_policy_id: Option<&'a str>,
-    /// Positive recovery policy version.
-    pub recovery_policy_version: Option<i64>,
-    /// Accepted authorization Event binding for an authorized standard device grant.
-    pub device_authorization_event_id: Option<&'a str>,
-    /// Typed A/B identity-model generation reference.
-    pub model_generation_ref: Option<Value>,
     /// Grant expiration timestamp.
     pub not_before: DateTime<Utc>,
     /// Grant expiration timestamp.
@@ -237,11 +227,11 @@ pub struct NewSessionGrantOperation<'a> {
     pub canonical_intent_digest: [u8; 32],
     /// Exact canonical request intent bytes.
     pub canonical_intent: &'a [u8],
-    /// Closed selector for refresh/revoke/recovery, absent for initial issuance.
+    /// Closed selector for refresh/revoke, absent for initial issuance.
     pub operation_selector: Option<Value>,
-    /// Locked predecessor for refresh/recovery; absent for issue and selector-based revoke.
+    /// Locked predecessor for refresh; absent for issue and selector-based revoke.
     pub target_grant_id: Option<&'a SessionGrantId>,
-    /// Existing rotation-chain id for refresh/promotion; initial issuance allocates when absent.
+    /// Existing rotation-chain id for refresh; initial issuance allocates when absent.
     pub session_id: Option<&'a str>,
     /// Immutable signing window for a grant-producing operation.
     pub grant_not_before: Option<DateTime<Utc>>,
@@ -290,33 +280,6 @@ pub enum SessionGrantRevokeSelector<'a> {
         /// Subject DID.
         subject: &'a str,
     },
-}
-
-/// Recovery-promotion material that must be committed with grant rotation.
-#[derive(Debug)]
-pub struct SessionGrantRecoveryPromotion<'a> {
-    /// SHA-256 digest of the single-use DPoP JTI.
-    pub dpop_jti_digest: &'a str,
-    /// Time the proof was accepted.
-    pub dpop_seen_at: DateTime<Utc>,
-    /// End of the DPoP replay window.
-    pub dpop_expires_at: DateTime<Utc>,
-    /// Recovery transaction identity.
-    pub transaction_id: &'a str,
-    /// Canonical recovery request digest.
-    pub transaction_request_digest: &'a str,
-    /// Bound recovery session identity.
-    pub recovery_session_id: &'a str,
-    /// Replacement device identity.
-    pub replacement_device_id: &'a str,
-    /// Accepted device authorization Event reference.
-    pub device_authorization_event_id: &'a str,
-    /// Current identity-model generation reference.
-    pub model_generation_ref: &'a Value,
-    /// Exact legacy promotion request bytes.
-    pub canonical_request: &'a [u8],
-    /// Exact legacy promotion receipt.
-    pub legacy_outcome: &'a Value,
 }
 
 /// Result of reserving a request identity in the durable operation ledger.
@@ -388,26 +351,6 @@ pub enum SessionGrantRevokeOutcome {
     Indeterminate(SessionGrantOperation),
 }
 
-/// Atomic recovery-promotion result.
-#[derive(Debug)]
-pub enum SessionGrantRecoveryPromotionOutcome {
-    /// This call committed every recovery transition.
-    Committed {
-        /// Atomically superseded recovery grant.
-        predecessor: SessionGrant,
-        /// Atomically inserted standard successor.
-        successor: SessionGrant,
-    },
-    /// A prior promotion committed the byte-exact outcome.
-    Replay(SessionGrantOperation),
-    /// The DPoP JTI was already consumed by another operation.
-    DpopAlreadyConsumed,
-    /// The predecessor was already terminal.
-    PredecessorTerminal(SessionGrant),
-    /// The operation is an evicted tombstone.
-    Indeterminate(SessionGrantOperation),
-}
-
 #[async_trait]
 /// Repository for persisted Arkret session grants.
 pub trait SessionGrantRepository: Send + Sync {
@@ -461,19 +404,6 @@ pub trait SessionGrantRepository: Send + Sync {
         authorization: SessionGrantProofAuthorization<'_>,
         selector: SessionGrantRevokeSelector<'_>,
     ) -> Result<SessionGrantRevokeOutcome, Self::Error>;
-
-    /// Atomically consume recovery DPoP, persist the legacy receipt, and rotate grants.
-    async fn commit_recovery_promotion(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        operation_id: Ulid,
-        authorization: SessionGrantProofAuthorization<'_>,
-        outcome: SessionGrantExactOutcome<'_>,
-        predecessor_grant_id: &SessionGrantId,
-        successor: NewSessionGrant<'_>,
-        promotion: SessionGrantRecoveryPromotion<'_>,
-    ) -> Result<SessionGrantRecoveryPromotionOutcome, Self::Error>;
 
     /// Look up a session grant by id.
     async fn lookup(&mut self, id: Ulid) -> Result<Option<SessionGrant>, Self::Error>;
@@ -581,18 +511,6 @@ repository_impl!(SessionGrantRepository:
         authorization: SessionGrantProofAuthorization<'_>,
         selector: SessionGrantRevokeSelector<'_>,
     ) -> Result<SessionGrantRevokeOutcome, Self::Error>;
-
-    async fn commit_recovery_promotion(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        operation_id: Ulid,
-        authorization: SessionGrantProofAuthorization<'_>,
-        outcome: SessionGrantExactOutcome<'_>,
-        predecessor_grant_id: &SessionGrantId,
-        successor: NewSessionGrant<'_>,
-        promotion: SessionGrantRecoveryPromotion<'_>,
-    ) -> Result<SessionGrantRecoveryPromotionOutcome, Self::Error>;
 
     async fn lookup(&mut self, id: Ulid) -> Result<Option<SessionGrant>, Self::Error>;
 

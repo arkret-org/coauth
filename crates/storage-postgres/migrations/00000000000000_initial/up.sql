@@ -175,29 +175,19 @@ CREATE TABLE public.dpop_jti_replay (
     created_at timestamp with time zone NOT NULL
 );
 
-CREATE TABLE public.recovery_device_authorizations (
-    ticket_id text NOT NULL,
+CREATE TABLE public.recovery_completion_grant_issuances (
     transaction_id text NOT NULL,
     transaction_request_digest text NOT NULL,
-    did_entry_ref text NOT NULL,
-    did_entry_digest text NOT NULL,
-    authorization_ref text NOT NULL,
-    canonical_request bytea NOT NULL,
-    outcome jsonb NOT NULL,
-    accepted_at timestamp with time zone NOT NULL
-);
-
-CREATE TABLE public.recovery_session_grant_promotions (
-    transaction_id text NOT NULL,
-    old_grant_id bytea NOT NULL CHECK (octet_length(old_grant_id) = 33),
-    transaction_request_digest text NOT NULL,
-    recovery_session_id text NOT NULL,
-    replacement_device_id text NOT NULL,
+    service_account_id uuid NOT NULL,
+    principal_id text NOT NULL,
+    device_id text NOT NULL,
     device_authorization_event_id text NOT NULL,
-    model_generation_ref jsonb NOT NULL,
+    result_model_generation_ref jsonb NOT NULL,
+    canonical_request_digest text NOT NULL,
     canonical_request bytea NOT NULL,
-    outcome jsonb NOT NULL,
-    consumed_at timestamp with time zone NOT NULL
+    session_grant_operation_id uuid NOT NULL,
+    canonical_outcome bytea NOT NULL,
+    issued_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.admin_operation_logs (
@@ -511,7 +501,7 @@ CREATE TABLE public.oauth_session_grant_operations (
     created_at timestamp with time zone NOT NULL,
     CONSTRAINT oauth_session_grant_operations_issuer_nonempty CHECK ((btrim(issuer) <> ''::text)),
     CONSTRAINT oauth_session_grant_operations_request_identity_nonempty CHECK ((btrim(request_identity) <> ''::text)),
-    CONSTRAINT oauth_session_grant_operations_kind_valid CHECK ((operation_kind = ANY (ARRAY['issue'::text, 'refresh'::text, 'revoke'::text, 'recovery_promotion'::text]))),
+    CONSTRAINT oauth_session_grant_operations_kind_valid CHECK ((operation_kind = ANY (ARRAY['issue'::text, 'refresh'::text, 'revoke'::text]))),
     CONSTRAINT oauth_session_grant_operations_proof_kind_shape CHECK ((((operation_kind = 'issue'::text) AND (proof_kind IS NOT NULL)) OR ((operation_kind <> 'issue'::text) AND (proof_kind IS NULL)))),
     CONSTRAINT oauth_session_grant_operations_digest_length CHECK ((octet_length(canonical_intent_digest) = 32)),
     CONSTRAINT oauth_session_grant_operations_seed_shape CHECK (((state = 'evicted'::text) AND (issuance_nonce IS NULL) AND (session_id IS NULL) AND (grant_not_before IS NULL) AND (grant_expires_at IS NULL) AND (signing_key_id IS NULL)) OR ((state <> 'evicted'::text) AND (((operation_kind = 'revoke'::text) AND (issuance_nonce IS NULL) AND (session_id IS NULL) AND (grant_not_before IS NULL) AND (grant_expires_at IS NULL) AND (signing_key_id IS NULL)) OR ((operation_kind <> 'revoke'::text) AND (issuance_nonce ~ '^[A-Za-z0-9_-]{43}$'::text) AND (btrim(session_id) <> ''::text) AND (grant_expires_at > grant_not_before) AND (btrim(signing_key_id) <> ''::text))))),
@@ -520,7 +510,7 @@ CREATE TABLE public.oauth_session_grant_operations (
     CONSTRAINT oauth_session_grant_operations_state_valid CHECK ((state = ANY (ARRAY['reserved'::text, 'authorized'::text, 'committed'::text, 'evicted'::text]))),
     CONSTRAINT oauth_session_grant_operations_retention_valid CHECK ((retained_until > created_at)),
     CONSTRAINT oauth_session_grant_operations_authorization_shape CHECK ((((state = 'reserved'::text) AND (proof_authorization_ref IS NULL) AND (proof_authorization_checkpoint IS NULL) AND (proof_expires_at IS NULL)) OR ((state = ANY (ARRAY['authorized'::text, 'committed'::text])) AND (proof_authorization_ref IS NOT NULL) AND (proof_authorization_checkpoint IS NOT NULL) AND (proof_expires_at IS NOT NULL) AND (retained_until >= proof_expires_at)) OR ((state = 'evicted'::text) AND (proof_authorization_ref IS NULL) AND (proof_authorization_checkpoint IS NULL) AND (proof_expires_at IS NULL)))),
-    CONSTRAINT oauth_session_grant_operations_outcome_shape CHECK ((((state = ANY (ARRAY['reserved'::text, 'authorized'::text])) AND (result_grant_id IS NULL) AND (cardinality(affected_grant_ids) = 0) AND (outcome_digest IS NULL) AND (canonical_outcome IS NULL) AND (committed_at IS NULL)) OR ((state = 'committed'::text) AND (outcome_digest IS NOT NULL) AND (canonical_outcome IS NOT NULL) AND (committed_at IS NOT NULL) AND (((operation_kind = 'issue'::text) AND (target_grant_id IS NULL) AND (result_grant_id IS NOT NULL) AND (cardinality(affected_grant_ids) = 0)) OR ((operation_kind = ANY (ARRAY['refresh'::text, 'recovery_promotion'::text])) AND (target_grant_id IS NOT NULL) AND (result_grant_id IS NOT NULL) AND (cardinality(affected_grant_ids) = 0)) OR ((operation_kind = 'revoke'::text) AND (result_grant_id IS NULL)))) OR ((state = 'evicted'::text) AND (canonical_intent IS NULL) AND (operation_selector IS NULL) AND (proof_authorization_ref IS NULL) AND (proof_authorization_checkpoint IS NULL) AND (proof_expires_at IS NULL) AND (outcome_digest IS NULL) AND (canonical_outcome IS NULL))))
+    CONSTRAINT oauth_session_grant_operations_outcome_shape CHECK ((((state = ANY (ARRAY['reserved'::text, 'authorized'::text])) AND (result_grant_id IS NULL) AND (cardinality(affected_grant_ids) = 0) AND (outcome_digest IS NULL) AND (canonical_outcome IS NULL) AND (committed_at IS NULL)) OR ((state = 'committed'::text) AND (outcome_digest IS NOT NULL) AND (canonical_outcome IS NOT NULL) AND (committed_at IS NOT NULL) AND (((operation_kind = 'issue'::text) AND (target_grant_id IS NULL) AND (result_grant_id IS NOT NULL) AND (cardinality(affected_grant_ids) = 0)) OR ((operation_kind = 'refresh'::text) AND (target_grant_id IS NOT NULL) AND (result_grant_id IS NOT NULL) AND (cardinality(affected_grant_ids) = 0)) OR ((operation_kind = 'revoke'::text) AND (result_grant_id IS NULL)))) OR ((state = 'evicted'::text) AND (canonical_intent IS NULL) AND (operation_selector IS NULL) AND (proof_authorization_ref IS NULL) AND (proof_authorization_checkpoint IS NULL) AND (proof_expires_at IS NULL) AND (outcome_digest IS NULL) AND (canonical_outcome IS NULL))))
 );
 
 CREATE TABLE public.oauth_session_grants (
@@ -546,11 +536,6 @@ CREATE TABLE public.oauth_session_grants (
     signing_key_id text NOT NULL,
     session_public_key text NOT NULL,
     credential_class text NOT NULL,
-    recovery_session_id text,
-    recovery_policy_id text,
-    recovery_policy_version bigint,
-    device_authorization_event_id text,
-    model_generation_ref jsonb,
     expires_at timestamp with time zone NOT NULL,
     lifecycle_state text NOT NULL,
     revoked_at timestamp with time zone,
@@ -614,8 +599,6 @@ CREATE TABLE public.principal_did_owners (
     user_id uuid NOT NULL,
     principal_id text NOT NULL,
     key_log_head text NOT NULL,
-    enrollment_authority_did text NOT NULL,
-    enrollment_authority_ref text NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
 );
@@ -658,71 +641,6 @@ CREATE TABLE public.account_handoff_creation_attempts (
     CONSTRAINT account_handoff_creation_attempts_retention_valid CHECK ((retained_until > created_at))
 );
 
-CREATE TABLE public.device_bootstrap_transactions (
-    transaction_id text NOT NULL,
-    mode text NOT NULL,
-    account_authority_id text NOT NULL,
-    principal_server_id text NOT NULL,
-    principal_id text NOT NULL,
-    device_id text NOT NULL,
-    device_key_digest text NOT NULL,
-    holder_jkt text NOT NULL,
-    canonical_request_digest text NOT NULL,
-    canonical_request bytea NOT NULL,
-    founding_batch_digest text NOT NULL,
-    founding_event_ids text[] NOT NULL,
-    bootstrap_grant_id text NOT NULL,
-    state text NOT NULL,
-    enrollment_request_digest text,
-    canonical_enrollment_outcome bytea,
-    enrollment_outcome_digest text,
-    authorized_event_id text,
-    authorized_event_digest text,
-    standard_grant_id text,
-    expires_at timestamp with time zone NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    enrolled_at timestamp with time zone,
-    accepted_at timestamp with time zone,
-    cancelled_at timestamp with time zone,
-    expired_at timestamp with time zone,
-    decision_principal_server_id text,
-    canonical_decision_receipt bytea,
-    decision_receipt_digest text,
-    CONSTRAINT device_bootstrap_transactions_pkey PRIMARY KEY (transaction_id),
-    CONSTRAINT device_bootstrap_transactions_mode_closed CHECK (mode = 'founding'::text),
-    CONSTRAINT device_bootstrap_transactions_state_closed CHECK (state = ANY (ARRAY['pending'::text, 'accepted'::text, 'cancelled'::text, 'expired'::text])),
-    CONSTRAINT device_bootstrap_transactions_transaction_id_nonempty CHECK (btrim(transaction_id) <> ''::text),
-    CONSTRAINT device_bootstrap_transactions_holder_jkt_valid CHECK (holder_jkt ~ '^[A-Za-z0-9_-]{43}$'::text),
-    CONSTRAINT device_bootstrap_transactions_digest_shape CHECK (device_key_digest ~ '^sha256:[0-9a-f]{64}$'::text AND canonical_request_digest ~ '^sha256:[0-9a-f]{64}$'::text AND founding_batch_digest ~ '^sha256:[0-9a-f]{64}$'::text AND (enrollment_request_digest IS NULL OR enrollment_request_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (enrollment_outcome_digest IS NULL OR enrollment_outcome_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (authorized_event_digest IS NULL OR authorized_event_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (decision_receipt_digest IS NULL OR decision_receipt_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT device_bootstrap_transactions_founding_ids_closed CHECK (cardinality(founding_event_ids) = 2 AND founding_event_ids[1] <> founding_event_ids[2]),
-    CONSTRAINT device_bootstrap_transactions_deadline_valid CHECK (expires_at > created_at),
-    CONSTRAINT device_bootstrap_transactions_enrollment_shape CHECK (((enrollment_request_digest IS NULL) AND (canonical_enrollment_outcome IS NULL) AND (enrollment_outcome_digest IS NULL) AND (authorized_event_id IS NULL) AND (authorized_event_digest IS NULL) AND (enrolled_at IS NULL)) OR ((enrollment_request_digest IS NOT NULL) AND (canonical_enrollment_outcome IS NOT NULL) AND (enrollment_outcome_digest IS NOT NULL) AND (authorized_event_id IS NOT NULL) AND (authorized_event_digest IS NOT NULL) AND (enrolled_at IS NOT NULL))),
-    CONSTRAINT device_bootstrap_transactions_state_shape CHECK ((state = 'pending'::text AND standard_grant_id IS NULL AND accepted_at IS NULL AND cancelled_at IS NULL AND expired_at IS NULL AND decision_principal_server_id IS NULL AND canonical_decision_receipt IS NULL AND decision_receipt_digest IS NULL) OR (state = 'accepted'::text AND canonical_enrollment_outcome IS NOT NULL AND accepted_at IS NOT NULL AND cancelled_at IS NULL AND expired_at IS NULL AND decision_principal_server_id IS NOT NULL AND canonical_decision_receipt IS NOT NULL AND decision_receipt_digest IS NOT NULL) OR (state = 'cancelled'::text AND standard_grant_id IS NULL AND accepted_at IS NULL AND cancelled_at IS NOT NULL AND expired_at IS NULL AND decision_principal_server_id IS NOT NULL AND canonical_decision_receipt IS NOT NULL AND decision_receipt_digest IS NOT NULL) OR (state = 'expired'::text AND standard_grant_id IS NULL AND accepted_at IS NULL AND cancelled_at IS NULL AND expired_at IS NOT NULL AND decision_principal_server_id IS NOT NULL AND canonical_decision_receipt IS NOT NULL AND decision_receipt_digest IS NOT NULL))
-);
-
-CREATE INDEX idx_device_bootstrap_transactions_pending_expiry
-    ON public.device_bootstrap_transactions USING btree (expires_at)
-    WHERE state = 'pending'::text;
-
-CREATE TABLE public.device_bootstrap_cancel_operations (
-    transaction_id text NOT NULL,
-    idempotency_key text NOT NULL,
-    canonical_request_digest text NOT NULL,
-    canonical_request bytea NOT NULL,
-    authority_request_digest text NOT NULL,
-    canonical_authority_request bytea NOT NULL,
-    requested_decision text NOT NULL,
-    canonical_outcome bytea,
-    outcome_digest text,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT device_bootstrap_cancel_operations_pkey PRIMARY KEY (transaction_id, idempotency_key),
-    CONSTRAINT device_bootstrap_cancel_operations_request_digest_valid CHECK (canonical_request_digest ~ '^sha256:[0-9a-f]{64}$'::text),
-    CONSTRAINT device_bootstrap_cancel_operations_authority_digest_valid CHECK (authority_request_digest ~ '^sha256:[0-9a-f]{64}$'::text),
-    CONSTRAINT device_bootstrap_cancel_operations_requested_decision_closed CHECK (requested_decision = ANY (ARRAY['cancelled'::text, 'expired'::text])),
-    CONSTRAINT device_bootstrap_cancel_operations_outcome_digest_valid CHECK (outcome_digest IS NULL OR outcome_digest ~ '^sha256:[0-9a-f]{64}$'::text),
-    CONSTRAINT device_bootstrap_cancel_operations_state_shape CHECK ((canonical_outcome IS NULL AND outcome_digest IS NULL) OR (canonical_outcome IS NOT NULL AND outcome_digest IS NOT NULL))
-);
-
 CREATE TABLE public.account_handoff_grants (
     id uuid NOT NULL,
     request_id uuid NOT NULL,
@@ -740,7 +658,7 @@ CREATE TABLE public.account_handoff_grants (
     CONSTRAINT account_handoff_grants_request_digest_valid CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT account_handoff_grants_audience_nonempty CHECK ((btrim(audience) <> ''::text)),
     CONSTRAINT account_handoff_grants_cnf_jkt_valid CHECK ((cnf_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
-    CONSTRAINT account_handoff_grants_allowed_operations_closed CHECK ((allowed_operations = ARRAY['ak.gate.account.command.issue_identity_binding_challenge'::text, 'ak.gate.account.command.register'::text, 'ak.gate.account.command.issue_session_grant'::text])),
+    CONSTRAINT account_handoff_grants_allowed_operations_closed CHECK ((allowed_operations = ARRAY['ak.gate.account.command.issue_identity_binding_challenge'::text, 'ak.gate.account.command.register'::text, 'ak.gate.account.command.issue_session_grant'::text, 'ak.gate.account.command.issue_recovery_completion_grant'::text])),
     CONSTRAINT account_handoff_grants_token_nonempty CHECK ((length(account_handoff_grant) >= 32)),
     CONSTRAINT account_handoff_grants_expiry_valid CHECK ((expires_at > issued_at))
 );
@@ -758,15 +676,13 @@ CREATE TABLE public.identity_creation_leases (
     state text NOT NULL,
     registry_receipt jsonb,
     head_event_digest text,
+    pcr_genesis_request_digest text,
+    pcr_genesis_receipt jsonb,
     binding_receipt jsonb,
     register_handoff_grant_id uuid,
     register_challenge_id text,
     register_request_digest text,
     register_outcome jsonb,
-    first_device_id text,
-    first_device_request_digest text,
-    first_device_outcome jsonb,
-    first_device_enrolled_at timestamp with time zone,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     CONSTRAINT identity_creation_leases_audience_nonempty CHECK ((btrim(audience) <> ''::text)),
@@ -775,15 +691,17 @@ CREATE TABLE public.identity_creation_leases (
     CONSTRAINT identity_creation_leases_fence_positive CHECK ((fence >= 1)),
     CONSTRAINT identity_creation_leases_operation_digest_valid CHECK (((reserved_operation_digest IS NULL) OR (reserved_operation_digest ~ '^sha256:[0-9a-f]{64}$'::text))),
     CONSTRAINT identity_creation_leases_head_digest_valid CHECK (((head_event_digest IS NULL) OR (head_event_digest ~ '^sha256:[0-9a-f]{64}$'::text))),
+    CONSTRAINT identity_creation_leases_pcr_request_digest_valid CHECK (((pcr_genesis_request_digest IS NULL) OR (pcr_genesis_request_digest ~ '^sha256:[0-9a-f]{64}$'::text))),
+    CONSTRAINT identity_creation_leases_pcr_receipt_object CHECK (((pcr_genesis_receipt IS NULL) OR (jsonb_typeof(pcr_genesis_receipt) = 'object'::text))),
     CONSTRAINT identity_creation_leases_register_challenge_id_valid CHECK (((register_challenge_id IS NULL) OR (register_challenge_id ~ '^[A-Za-z0-9_-]{22,128}$'::text))),
     CONSTRAINT identity_creation_leases_register_request_digest_valid CHECK (((register_request_digest IS NULL) OR (register_request_digest ~ '^sha256:[0-9a-f]{64}$'::text))),
     CONSTRAINT identity_creation_leases_register_outcome_object CHECK (((register_outcome IS NULL) OR (jsonb_typeof(register_outcome) = 'object'::text))),
-    CONSTRAINT identity_creation_leases_first_device_request_digest_valid CHECK (((first_device_request_digest IS NULL) OR (first_device_request_digest ~ '^sha256:[0-9a-f]{64}$'::text))),
-    CONSTRAINT identity_creation_leases_first_device_outcome_object CHECK (((first_device_outcome IS NULL) OR (jsonb_typeof(first_device_outcome) = 'object'::text))),
-    CONSTRAINT identity_creation_leases_state_valid CHECK ((state = ANY (ARRAY['active'::text, 'reserved'::text, 'published'::text, 'bound'::text]))),
-    CONSTRAINT identity_creation_leases_reservation_complete CHECK ((((reserved_principal_id IS NULL) AND (reserved_operation_digest IS NULL) AND (did_operation IS NULL)) OR ((reserved_principal_id IS NOT NULL) AND (reserved_operation_digest IS NOT NULL) AND (did_operation IS NOT NULL)))),
-    CONSTRAINT identity_creation_leases_register_ledger_complete CHECK ((((state <> 'bound'::text) AND (register_handoff_grant_id IS NULL) AND (register_challenge_id IS NULL) AND (register_request_digest IS NULL) AND (register_outcome IS NULL)) OR ((state = 'bound'::text) AND (register_handoff_grant_id IS NOT NULL) AND (register_challenge_id IS NOT NULL) AND (register_request_digest IS NOT NULL) AND (register_outcome IS NOT NULL)))),
-    CONSTRAINT identity_creation_leases_first_device_complete CHECK ((((first_device_id IS NULL) AND (first_device_request_digest IS NULL) AND (first_device_outcome IS NULL) AND (first_device_enrolled_at IS NULL)) OR ((first_device_id IS NOT NULL) AND (first_device_request_digest IS NOT NULL) AND (first_device_outcome IS NOT NULL) AND (first_device_enrolled_at IS NOT NULL))))
+    CONSTRAINT identity_creation_leases_state_valid CHECK ((state = ANY (ARRAY['active'::text, 'reserved'::text, 'did_published'::text, 'pcr_accepted'::text, 'account_bound'::text, 'completed'::text]))),
+    CONSTRAINT identity_creation_leases_reservation_complete CHECK ((((state = 'active'::text) AND (reserved_principal_id IS NULL) AND (reserved_operation_digest IS NULL) AND (did_operation IS NULL)) OR ((state <> 'active'::text) AND (reserved_principal_id IS NOT NULL) AND (reserved_operation_digest IS NOT NULL) AND (did_operation IS NOT NULL)))),
+    CONSTRAINT identity_creation_leases_registry_complete CHECK ((((state = ANY (ARRAY['active'::text, 'reserved'::text])) AND (registry_receipt IS NULL) AND (head_event_digest IS NULL)) OR ((state = ANY (ARRAY['did_published'::text, 'pcr_accepted'::text, 'account_bound'::text, 'completed'::text])) AND (registry_receipt IS NOT NULL) AND (jsonb_typeof(registry_receipt) = 'object'::text) AND (head_event_digest IS NOT NULL)))),
+    CONSTRAINT identity_creation_leases_pcr_complete CHECK ((((state = ANY (ARRAY['active'::text, 'reserved'::text, 'did_published'::text])) AND (pcr_genesis_request_digest IS NULL) AND (pcr_genesis_receipt IS NULL)) OR ((state = ANY (ARRAY['pcr_accepted'::text, 'account_bound'::text, 'completed'::text])) AND (pcr_genesis_request_digest IS NOT NULL) AND (pcr_genesis_receipt IS NOT NULL)))),
+    CONSTRAINT identity_creation_leases_binding_complete CHECK ((((state <> ALL (ARRAY['account_bound'::text, 'completed'::text])) AND (binding_receipt IS NULL)) OR ((state = ANY (ARRAY['account_bound'::text, 'completed'::text])) AND (binding_receipt IS NOT NULL)))),
+    CONSTRAINT identity_creation_leases_register_ledger_complete CHECK ((((state <> 'completed'::text) AND (register_handoff_grant_id IS NULL) AND (register_challenge_id IS NULL) AND (register_request_digest IS NULL) AND (register_outcome IS NULL)) OR ((state = 'completed'::text) AND (register_handoff_grant_id IS NOT NULL) AND (register_challenge_id IS NOT NULL) AND (register_request_digest IS NOT NULL) AND (register_outcome IS NOT NULL))))
 );
 
 CREATE TABLE public.identity_binding_challenges (
@@ -795,6 +713,10 @@ CREATE TABLE public.identity_binding_challenges (
     purpose text NOT NULL,
     principal_id text NOT NULL,
     operation_digest text NOT NULL,
+    pcr_realm_id text NOT NULL,
+    realm_create_payload_digest text NOT NULL,
+    founding_authorize_payload_digest text NOT NULL,
+    initial_session_request_digest text NOT NULL,
     lease_id text NOT NULL,
     lease_fence bigint NOT NULL,
     dpop_jkt text NOT NULL,
@@ -808,8 +730,12 @@ CREATE TABLE public.identity_binding_challenges (
     CONSTRAINT identity_binding_challenges_request_digest_valid CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT identity_binding_challenges_challenge_id_valid CHECK ((challenge_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
     CONSTRAINT identity_binding_challenges_challenge_nonempty CHECK ((length(challenge) >= 22)),
-    CONSTRAINT identity_binding_challenges_purpose_valid CHECK ((purpose = 'account_binding'::text)),
+    CONSTRAINT identity_binding_challenges_purpose_valid CHECK ((purpose = 'account_binding_and_pcr_genesis'::text)),
     CONSTRAINT identity_binding_challenges_operation_digest_valid CHECK ((operation_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_binding_challenges_pcr_realm_id_nonempty CHECK ((btrim(pcr_realm_id) <> ''::text)),
+    CONSTRAINT identity_binding_challenges_realm_create_digest_valid CHECK ((realm_create_payload_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_binding_challenges_founding_authorize_digest_valid CHECK ((founding_authorize_payload_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_binding_challenges_initial_session_digest_valid CHECK ((initial_session_request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT identity_binding_challenges_lease_id_valid CHECK ((lease_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
     CONSTRAINT identity_binding_challenges_lease_fence_positive CHECK ((lease_fence >= 1)),
     CONSTRAINT identity_binding_challenges_dpop_jkt_valid CHECK ((dpop_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
@@ -1284,17 +1210,11 @@ ALTER TABLE ONLY public.dpop_jti_replay
 ALTER TABLE ONLY public.verified_did_bindings
     ADD CONSTRAINT verified_did_bindings_pkey PRIMARY KEY (did, trust_domain, purpose, policy_digest, verification_method);
 
-ALTER TABLE ONLY public.recovery_device_authorizations
-    ADD CONSTRAINT recovery_device_authorizations_pkey PRIMARY KEY (ticket_id);
+ALTER TABLE ONLY public.recovery_completion_grant_issuances
+    ADD CONSTRAINT recovery_completion_grant_issuances_pkey PRIMARY KEY (transaction_id);
 
-ALTER TABLE ONLY public.recovery_device_authorizations
-    ADD CONSTRAINT recovery_device_authorizations_transaction_key UNIQUE (transaction_id);
-
-ALTER TABLE ONLY public.recovery_session_grant_promotions
-    ADD CONSTRAINT recovery_session_grant_promotions_pkey PRIMARY KEY (transaction_id, old_grant_id);
-
-ALTER TABLE ONLY public.recovery_session_grant_promotions
-    ADD CONSTRAINT recovery_session_grant_promotions_old_grant_key UNIQUE (old_grant_id);
+ALTER TABLE ONLY public.recovery_completion_grant_issuances
+    ADD CONSTRAINT recovery_completion_grant_issuances_operation_key UNIQUE (session_grant_operation_id);
 
 ALTER TABLE ONLY public.admin_operation_logs
     ADD CONSTRAINT admin_operation_logs_pkey PRIMARY KEY (id);
@@ -1413,10 +1333,7 @@ ALTER TABLE ONLY public.principal_did_owners
 ALTER TABLE ONLY public.principal_did_owners
     ADD CONSTRAINT principal_did_owners_fields_nonempty CHECK (
         btrim(principal_id) <> '' AND
-        btrim(key_log_head) <> '' AND
-        btrim(enrollment_authority_did) <> '' AND
-        left(enrollment_authority_ref, length(principal_id) + 1) = principal_id || '#' AND
-        length(enrollment_authority_ref) > length(principal_id) + 1
+        btrim(key_log_head) <> ''
     );
 
 ALTER TABLE ONLY public.account_handoff_grants
@@ -1657,7 +1574,7 @@ CREATE INDEX idx_account_handoff_creation_attempts_retention ON public.account_h
 
 CREATE INDEX idx_account_handoff_grants_expiry ON public.account_handoff_grants USING btree (expires_at) WHERE ((revoked_at IS NULL) AND (consumed_at IS NULL));
 
-CREATE INDEX idx_identity_creation_leases_expiry ON public.identity_creation_leases USING btree (expires_at) WHERE (state <> 'bound'::text);
+CREATE INDEX idx_identity_creation_leases_expiry ON public.identity_creation_leases USING btree (expires_at) WHERE (state <> 'completed'::text);
 
 CREATE INDEX idx_identity_binding_challenges_reservation ON public.identity_binding_challenges USING btree (service_account_id, audience, lease_id, lease_fence, operation_digest);
 
@@ -1826,8 +1743,11 @@ ALTER TABLE ONLY public.oauth_session_grants
 ALTER TABLE ONLY public.oauth_session_grants
     ADD CONSTRAINT oauth_session_grants_issuance_operation_id_fkey FOREIGN KEY (issuance_operation_id) REFERENCES public.oauth_session_grant_operations(id);
 
-ALTER TABLE ONLY public.recovery_session_grant_promotions
-    ADD CONSTRAINT recovery_session_grant_promotions_old_grant_id_fkey FOREIGN KEY (old_grant_id) REFERENCES public.oauth_session_grants(grant_id);
+ALTER TABLE ONLY public.recovery_completion_grant_issuances
+    ADD CONSTRAINT recovery_completion_grant_issuances_account_id_fkey FOREIGN KEY (service_account_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.recovery_completion_grant_issuances
+    ADD CONSTRAINT recovery_completion_grant_issuances_operation_id_fkey FOREIGN KEY (session_grant_operation_id) REFERENCES public.oauth_session_grant_operations(id);
 
 ALTER TABLE ONLY public.oauth_sessions
     ADD CONSTRAINT oauth_sessions_oauth_client_id_fkey FOREIGN KEY (oauth_client_id) REFERENCES public.oauth_clients(id);

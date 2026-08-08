@@ -1,26 +1,23 @@
-//! PostgreSQL recovery-authority authorization repository.
+//! PostgreSQL recovery-completion grant issuance replay repository.
 
-use arkret_identifiers::SessionGrantId;
 use async_trait::async_trait;
 use coauth_data::recovery_authority::{
-    NewRecoveryDeviceAuthorization, NewRecoverySessionGrantPromotion, RecoveryDeviceAuthorization,
-    RecoverySessionGrantPromotion,
+    NewRecoveryCompletionGrantIssuance, RecoveryCompletionGrantIssuance,
 };
 use coauth_data::storage::recovery_authority::RecoveryAuthorityRepository;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
-use crate::schema::{recovery_device_authorizations, recovery_session_grant_promotions};
-use crate::session_grant_codec::session_grant_id_from_bytes;
-use crate::{DatabaseError, DatabaseInconsistencyError};
+use crate::DatabaseError;
+use crate::schema::recovery_completion_grant_issuances;
 
-/// PostgreSQL implementation of [`RecoveryAuthorityRepository`].
+/// PostgreSQL-backed durable replay ledger for recovery-completion grant issuance.
 pub struct PgRecoveryAuthorityRepository<'c> {
     conn: &'c mut diesel_async::AsyncPgConnection,
 }
 
 impl<'c> PgRecoveryAuthorityRepository<'c> {
-    /// Construct from an active PostgreSQL connection.
+    /// Creates a repository over the caller's existing transaction connection.
     #[must_use]
     pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
         Self { conn }
@@ -28,115 +25,70 @@ impl<'c> PgRecoveryAuthorityRepository<'c> {
 }
 
 #[derive(Queryable, Selectable)]
-#[diesel(table_name = recovery_device_authorizations)]
-struct RecoveryDeviceAuthorizationRow {
-    ticket_id: String,
+#[diesel(table_name = recovery_completion_grant_issuances)]
+struct RecoveryCompletionGrantIssuanceRow {
     transaction_id: String,
     transaction_request_digest: String,
-    did_entry_ref: String,
-    did_entry_digest: String,
-    authorization_ref: String,
+    service_account_id: uuid::Uuid,
+    principal_id: String,
+    device_id: String,
+    device_authorization_event_id: String,
+    result_model_generation_ref: serde_json::Value,
+    canonical_request_digest: String,
     canonical_request: Vec<u8>,
-    outcome: serde_json::Value,
-    accepted_at: chrono::DateTime<chrono::Utc>,
+    session_grant_operation_id: uuid::Uuid,
+    canonical_outcome: Vec<u8>,
+    issued_at: chrono::DateTime<chrono::Utc>,
 }
 
-impl From<RecoveryDeviceAuthorizationRow> for RecoveryDeviceAuthorization {
-    fn from(value: RecoveryDeviceAuthorizationRow) -> Self {
+impl From<RecoveryCompletionGrantIssuanceRow> for RecoveryCompletionGrantIssuance {
+    fn from(value: RecoveryCompletionGrantIssuanceRow) -> Self {
         Self {
-            ticket_id: value.ticket_id,
             transaction_id: value.transaction_id,
             transaction_request_digest: value.transaction_request_digest,
-            did_entry_ref: value.did_entry_ref,
-            did_entry_digest: value.did_entry_digest,
-            authorization_ref: value.authorization_ref,
+            service_account_id: value.service_account_id.into(),
+            principal_id: value.principal_id,
+            device_id: value.device_id,
+            device_authorization_event_id: value.device_authorization_event_id,
+            result_model_generation_ref: value.result_model_generation_ref,
+            canonical_request_digest: value.canonical_request_digest,
             canonical_request: value.canonical_request,
-            outcome: value.outcome,
-            accepted_at: value.accepted_at,
+            session_grant_operation_id: value.session_grant_operation_id.into(),
+            canonical_outcome: value.canonical_outcome,
+            issued_at: value.issued_at,
         }
     }
 }
 
 #[derive(Insertable)]
-#[diesel(table_name = recovery_device_authorizations)]
-struct InsertableRecoveryDeviceAuthorization {
-    ticket_id: String,
+#[diesel(table_name = recovery_completion_grant_issuances)]
+struct InsertableRecoveryCompletionGrantIssuance {
     transaction_id: String,
     transaction_request_digest: String,
-    did_entry_ref: String,
-    did_entry_digest: String,
-    authorization_ref: String,
-    canonical_request: Vec<u8>,
-    outcome: serde_json::Value,
-    accepted_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Queryable, Selectable)]
-#[diesel(table_name = recovery_session_grant_promotions)]
-struct RecoverySessionGrantPromotionRow {
-    transaction_id: String,
-    old_grant_id: Vec<u8>,
-    transaction_request_digest: String,
-    recovery_session_id: String,
-    replacement_device_id: String,
+    service_account_id: uuid::Uuid,
+    principal_id: String,
+    device_id: String,
     device_authorization_event_id: String,
-    model_generation_ref: serde_json::Value,
+    result_model_generation_ref: serde_json::Value,
+    canonical_request_digest: String,
     canonical_request: Vec<u8>,
-    outcome: serde_json::Value,
-    consumed_at: chrono::DateTime<chrono::Utc>,
-}
-
-impl TryFrom<RecoverySessionGrantPromotionRow> for RecoverySessionGrantPromotion {
-    type Error = DatabaseInconsistencyError;
-
-    fn try_from(value: RecoverySessionGrantPromotionRow) -> Result<Self, Self::Error> {
-        let old_grant_id = session_grant_id_from_bytes(&value.old_grant_id).map_err(|error| {
-            DatabaseInconsistencyError::on("recovery_session_grant_promotions")
-                .column("old_grant_id")
-                .source(error)
-        })?;
-        Ok(Self {
-            transaction_id: value.transaction_id,
-            old_grant_id,
-            transaction_request_digest: value.transaction_request_digest,
-            recovery_session_id: value.recovery_session_id,
-            replacement_device_id: value.replacement_device_id,
-            device_authorization_event_id: value.device_authorization_event_id,
-            model_generation_ref: value.model_generation_ref,
-            canonical_request: value.canonical_request,
-            outcome: value.outcome,
-            consumed_at: value.consumed_at,
-        })
-    }
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = recovery_session_grant_promotions)]
-struct InsertableRecoverySessionGrantPromotion {
-    transaction_id: String,
-    old_grant_id: Vec<u8>,
-    transaction_request_digest: String,
-    recovery_session_id: String,
-    replacement_device_id: String,
-    device_authorization_event_id: String,
-    model_generation_ref: serde_json::Value,
-    canonical_request: Vec<u8>,
-    outcome: serde_json::Value,
-    consumed_at: chrono::DateTime<chrono::Utc>,
+    session_grant_operation_id: uuid::Uuid,
+    canonical_outcome: Vec<u8>,
+    issued_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[async_trait]
 impl RecoveryAuthorityRepository for PgRecoveryAuthorityRepository<'_> {
     type Error = DatabaseError;
 
-    #[tracing::instrument(name = "db.recovery_authority.lookup_authorization", skip_all, err)]
-    async fn lookup_authorization(
+    #[tracing::instrument(name = "db.recovery_completion.lookup_issuance", skip_all, err)]
+    async fn lookup_completion_issuance(
         &mut self,
-        ticket_id: &str,
-    ) -> Result<Option<RecoveryDeviceAuthorization>, Self::Error> {
-        recovery_device_authorizations::table
-            .filter(recovery_device_authorizations::ticket_id.eq(ticket_id))
-            .select(RecoveryDeviceAuthorizationRow::as_select())
+        transaction_id: &str,
+    ) -> Result<Option<RecoveryCompletionGrantIssuance>, Self::Error> {
+        recovery_completion_grant_issuances::table
+            .filter(recovery_completion_grant_issuances::transaction_id.eq(transaction_id))
+            .select(RecoveryCompletionGrantIssuanceRow::as_select())
             .first(self.conn)
             .await
             .optional()
@@ -144,113 +96,26 @@ impl RecoveryAuthorityRepository for PgRecoveryAuthorityRepository<'_> {
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(
-        name = "db.recovery_authority.lookup_authorization_by_transaction",
-        skip_all,
-        err
-    )]
-    async fn lookup_authorization_by_transaction(
+    #[tracing::instrument(name = "db.recovery_completion.insert_issuance", skip_all, err)]
+    async fn insert_completion_issuance(
         &mut self,
-        transaction_id: &str,
-    ) -> Result<Option<RecoveryDeviceAuthorization>, Self::Error> {
-        recovery_device_authorizations::table
-            .filter(recovery_device_authorizations::transaction_id.eq(transaction_id))
-            .select(RecoveryDeviceAuthorizationRow::as_select())
-            .first(self.conn)
-            .await
-            .optional()
-            .map(|row| row.map(Into::into))
-            .map_err(Into::into)
-    }
-
-    #[tracing::instrument(name = "db.recovery_authority.insert_authorization", skip_all, err)]
-    async fn insert_authorization(
-        &mut self,
-        params: NewRecoveryDeviceAuthorization,
+        params: NewRecoveryCompletionGrantIssuance,
     ) -> Result<bool, Self::Error> {
-        let row = InsertableRecoveryDeviceAuthorization {
-            ticket_id: params.ticket_id,
+        let row = InsertableRecoveryCompletionGrantIssuance {
             transaction_id: params.transaction_id,
             transaction_request_digest: params.transaction_request_digest,
-            did_entry_ref: params.did_entry_ref,
-            did_entry_digest: params.did_entry_digest,
-            authorization_ref: params.authorization_ref,
-            canonical_request: params.canonical_request,
-            outcome: params.outcome,
-            accepted_at: params.accepted_at,
-        };
-        let inserted = diesel::insert_into(recovery_device_authorizations::table)
-            .values(row)
-            .on_conflict_do_nothing()
-            .execute(self.conn)
-            .await?;
-        Ok(inserted == 1)
-    }
-
-    #[tracing::instrument(name = "db.recovery_authority.lookup_promotion", skip_all, err)]
-    async fn lookup_promotion(
-        &mut self,
-        transaction_id: &str,
-        old_grant_id: &SessionGrantId,
-    ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error> {
-        recovery_session_grant_promotions::table
-            .filter(recovery_session_grant_promotions::transaction_id.eq(transaction_id))
-            .filter(
-                recovery_session_grant_promotions::old_grant_id
-                    .eq(old_grant_id.token_bytes().to_vec()),
-            )
-            .select(RecoverySessionGrantPromotionRow::as_select())
-            .first(self.conn)
-            .await
-            .optional()
-            .map_err(DatabaseError::from)?
-            .map(RecoverySessionGrantPromotion::try_from)
-            .transpose()
-            .map_err(Into::into)
-    }
-
-    #[tracing::instrument(
-        name = "db.recovery_authority.lookup_promotion_by_old_grant",
-        skip_all,
-        err
-    )]
-    async fn lookup_promotion_by_old_grant(
-        &mut self,
-        old_grant_id: &SessionGrantId,
-    ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error> {
-        recovery_session_grant_promotions::table
-            .filter(
-                recovery_session_grant_promotions::old_grant_id
-                    .eq(old_grant_id.token_bytes().to_vec()),
-            )
-            .select(RecoverySessionGrantPromotionRow::as_select())
-            .first(self.conn)
-            .await
-            .optional()
-            .map_err(DatabaseError::from)?
-            .map(RecoverySessionGrantPromotion::try_from)
-            .transpose()
-            .map_err(Into::into)
-    }
-
-    #[tracing::instrument(name = "db.recovery_authority.insert_promotion", skip_all, err)]
-    async fn insert_promotion(
-        &mut self,
-        params: NewRecoverySessionGrantPromotion,
-    ) -> Result<bool, Self::Error> {
-        let row = InsertableRecoverySessionGrantPromotion {
-            transaction_id: params.transaction_id,
-            old_grant_id: params.old_grant_id.token_bytes().to_vec(),
-            transaction_request_digest: params.transaction_request_digest,
-            recovery_session_id: params.recovery_session_id,
-            replacement_device_id: params.replacement_device_id,
+            service_account_id: params.service_account_id.into(),
+            principal_id: params.principal_id,
+            device_id: params.device_id,
             device_authorization_event_id: params.device_authorization_event_id,
-            model_generation_ref: params.model_generation_ref,
+            result_model_generation_ref: params.result_model_generation_ref,
+            canonical_request_digest: params.canonical_request_digest,
             canonical_request: params.canonical_request,
-            outcome: params.outcome,
-            consumed_at: params.consumed_at,
+            session_grant_operation_id: params.session_grant_operation_id.into(),
+            canonical_outcome: params.canonical_outcome,
+            issued_at: params.issued_at,
         };
-        let inserted = diesel::insert_into(recovery_session_grant_promotions::table)
+        let inserted = diesel::insert_into(recovery_completion_grant_issuances::table)
             .values(row)
             .on_conflict_do_nothing()
             .execute(self.conn)

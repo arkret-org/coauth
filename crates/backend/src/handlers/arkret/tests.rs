@@ -71,16 +71,7 @@ fn test_keystore() -> Keystore {
     let mut rng = ChaChaRng::seed_from_u64(42);
     let ed25519 = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
         .with_kid("test-ed25519");
-    let enrollment = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-        .with_kid(coauth_keystore::DEVICE_ENROLLMENT_KEY_ID);
-    Keystore::new(JsonWebKeySet::new(vec![ed25519, enrollment]))
-}
-
-fn test_enrollment_authority_did() -> arkret_identifiers::Did {
-    let authority =
-        crate::services::device_enrollment_authority::enrollment_authority(&test_keystore())
-            .unwrap();
-    arkret_identifiers::Did::new(authority.did().to_owned()).unwrap()
+    Keystore::new(JsonWebKeySet::new(vec![ed25519]))
 }
 
 fn test_session_public_jwk(session_key: &PrivateKey, kid: impl Into<String>) -> PublicJsonWebKey {
@@ -231,7 +222,6 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         &url_builder,
         &arkret_config,
         &[],
-        &test_enrollment_authority_did(),
         false,
     ))
     .unwrap();
@@ -242,10 +232,6 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     );
     assert_eq!(body["trust_domain"], "ak:trust_domain:auth.example.com");
     assert_eq!(body["service_kind"], "auth_server");
-    assert_eq!(
-        body["auth_metadata"]["account_authority"]["enrollment_authority_did"],
-        test_enrollment_authority_did().as_str()
-    );
     assert_eq!(
         body["x_coauth_admin_audience"],
         "https://auth.example.com/api/admin"
@@ -379,7 +365,6 @@ fn service_describe_marks_personal_node_did_web_service_as_no_history() {
         &url_builder,
         &arkret_config,
         &[],
-        &test_enrollment_authority_did(),
         false,
     ))
     .unwrap();
@@ -419,14 +404,8 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
 fn service_describe_advertises_auth_session_logout_boundary() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
     let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
-    let body = serde_json::to_value(service_describe_response(
-        &url_builder,
-        &config,
-        &[],
-        &test_enrollment_authority_did(),
-        false,
-    ))
-    .unwrap();
+    let body =
+        serde_json::to_value(service_describe_response(&url_builder, &config, &[], false)).unwrap();
     let supported_operations = body["supported_operations"].as_array().unwrap();
 
     assert!(
@@ -451,14 +430,8 @@ fn service_describe_advertises_auth_session_logout_boundary() {
 fn service_describe_advertises_complete_account_first_onboarding_surface() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
     let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
-    let body = serde_json::to_value(service_describe_response(
-        &url_builder,
-        &config,
-        &[],
-        &test_enrollment_authority_did(),
-        false,
-    ))
-    .unwrap();
+    let body =
+        serde_json::to_value(service_describe_response(&url_builder, &config, &[], false)).unwrap();
     let supported_operations = body["supported_operations"].as_array().unwrap();
 
     for operation in [
@@ -542,7 +515,6 @@ fn describe_separates_claim_levels() {
         &url_builder,
         &test_arkret_config(),
         &[],
-        &test_enrollment_authority_did(),
         true,
     ))
     .unwrap();
@@ -646,14 +618,8 @@ fn service_describe_emits_trust_domain_when_configured() {
         ..Default::default()
     };
 
-    let body = serde_json::to_value(service_describe_response(
-        &url_builder,
-        &config,
-        &[],
-        &test_enrollment_authority_did(),
-        false,
-    ))
-    .unwrap();
+    let body =
+        serde_json::to_value(service_describe_response(&url_builder, &config, &[], false)).unwrap();
     assert_eq!(body["trust_domain"], "ak:trust_domain:example.net");
 }
 
@@ -668,7 +634,6 @@ fn service_describe_derives_trust_domain_from_public_host_when_unset() {
         &url_builder,
         &test_arkret_config(),
         &[],
-        &test_enrollment_authority_did(),
         false,
     ))
     .unwrap();
@@ -682,7 +647,6 @@ fn service_describe_derives_valid_trust_domain_for_ipv6_host() {
         &url_builder,
         &test_arkret_config(),
         &[],
-        &test_enrollment_authority_did(),
         false,
     ))
     .unwrap();
@@ -702,7 +666,6 @@ fn service_describe_defaults_to_local_identity_binding_resolver() {
         &url_builder,
         &test_arkret_config(),
         &[],
-        &test_enrollment_authority_did(),
         false,
     ))
     .unwrap();
@@ -733,14 +696,8 @@ fn service_describe_advertises_configured_session_grant_ttl() {
         ..ArkretConfig::default()
     };
 
-    let body = serde_json::to_value(service_describe_response(
-        &url_builder,
-        &config,
-        &[],
-        &test_enrollment_authority_did(),
-        false,
-    ))
-    .unwrap();
+    let body =
+        serde_json::to_value(service_describe_response(&url_builder, &config, &[], false)).unwrap();
 
     assert_eq!(body["limits"]["session_grant_ttl_seconds"], 900);
 }
@@ -943,11 +900,6 @@ fn session_grant_record_exposes_metadata_without_secrets() {
         signing_key_id: "test-ed25519".to_owned(),
         session_public_key: "{\"kty\":\"OKP\"}".to_owned(),
         credential_class: "standard".to_owned(),
-        recovery_session_id: None,
-        recovery_policy_id: None,
-        recovery_policy_version: None,
-        device_authorization_event_id: None,
-        model_generation_ref: None,
         created_at: now,
         expires_at: now + chrono::Duration::minutes(5),
         lifecycle_state: coauth_data::SessionGrantLifecycleState::Active,
@@ -999,11 +951,6 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
         signing_key_id: "test-ed25519".to_owned(),
         session_public_key: "{\"kty\":\"OKP\"}".to_owned(),
         credential_class: "standard".to_owned(),
-        recovery_session_id: None,
-        recovery_policy_id: None,
-        recovery_policy_version: None,
-        device_authorization_event_id: None,
-        model_generation_ref: None,
         created_at: now,
         expires_at: now + chrono::Duration::minutes(5),
         lifecycle_state: coauth_data::SessionGrantLifecycleState::Active,

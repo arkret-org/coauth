@@ -420,28 +420,6 @@ pub async fn issue_identity_binding_challenge(
     let validated =
         arkret_signatures::webvh::validate_principal_inception_operation(&body.did_operation)
             .map_err(|error| failed_precondition(error.to_string()))?;
-    if validated.document_profile
-        != arkret_signatures::webvh::PrincipalDidDocumentProfile::ExternalAuthority
-    {
-        return Err(failed_precondition(
-            "account-first identity creation requires the external enrollment-authority B model",
-        ));
-    }
-    let key_store = depot.key_store()?;
-    let enrollment_authority =
-        crate::services::device_enrollment_authority::enrollment_authority(&key_store)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let expected_authority = enrollment_authority.did();
-    if validated
-        .enrollment_authority
-        .as_ref()
-        .map(arkret_identifiers::Did::as_str)
-        != Some(expected_authority)
-    {
-        return Err(failed_precondition(
-            "principal inception enrollment authority does not match the deployment pin",
-        ));
-    }
 
     let arkret_config = depot.arkret_config()?;
     let url_builder = depot.url_builder()?;
@@ -466,11 +444,15 @@ pub async fn issue_identity_binding_challenge(
             request_digest,
             service_account_id: grant.service_account_id,
             audience: grant.audience.clone(),
-            lease_id: body.lease_id,
+            lease_id: body.identity_creation_lease_id,
             lease_fence: body.lease_fence,
             holder_jkt: grant.cnf_jkt.clone(),
             did_operation: body.did_operation,
             operation_digest: validated.operation_digest,
+            pcr_realm_id: body.pcr_realm_id,
+            realm_create_payload_digest: body.realm_create_payload_digest,
+            founding_authorize_payload_digest: body.founding_authorize_payload_digest,
+            initial_session_request_digest: body.initial_session_request_digest,
             challenge_id: random_opaque(&mut *rng, 24),
             challenge: random_opaque(&mut *rng, 32),
             origin,

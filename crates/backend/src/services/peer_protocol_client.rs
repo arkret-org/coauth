@@ -10,13 +10,13 @@ use arkret_canonical::canonical_json_bytes;
 use arkret_models_collaboration::account_lifecycle::{
     AccountStatusPublicationOutcome, AccountStatusPublicationRequestBody,
 };
-use arkret_models_collaboration::contact_operations::{
-    DeviceBootstrapDecisionOutcome, DeviceBootstrapDecisionRequestBody,
-};
 use arkret_models_collaboration::event_query::PeerEventsFrontierRequestBody;
 use arkret_models_collaboration::event_sync::EventsFrontierFederationPeerState;
 use arkret_models_collaboration::governance::invite_addressing::{
     InviteDeliveryOutcome, InviteDeliveryRequestBodyBody,
+};
+use arkret_models_collaboration::principal_operations::{
+    PcrGenesisSubmitOutcome, PcrGenesisSubmitRequestBody,
 };
 use arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding;
 use arkret_signatures::http_signature::{
@@ -116,19 +116,24 @@ impl<'a> PeerProtocolClient<'a> {
         .await
     }
 
-    /// Ask the Principal Server to linearize a founding-bootstrap terminal
-    /// decision. The idempotency key is part of the closed, self-digested
-    /// body, so it MUST NOT also be emitted as an HTTP header.
-    pub async fn post_device_bootstrap_decision(
+    /// Relay the exact client-signed PCR genesis unit. The Account Authority
+    /// authenticates the service transport but does not author or modify any
+    /// principal Event.
+    pub async fn post_principal_genesis(
         &self,
-        request: &DeviceBootstrapDecisionRequestBody,
-    ) -> Result<DeviceBootstrapDecisionOutcome, PeerProtocolClientError> {
+        request: &PcrGenesisSubmitRequestBody,
+    ) -> Result<PcrGenesisSubmitOutcome, PeerProtocolClientError> {
         request
             .validate()
             .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
-        let url = self.join_absolute("/_arkret/peer/device-bootstrap-decisions")?;
-        let outcome: DeviceBootstrapDecisionOutcome = self
-            .post_json("peer_device_bootstrap_decide", url, request, None)
+        let url = self.join_absolute("/_arkret/peer/principal-genesis")?;
+        let outcome: PcrGenesisSubmitOutcome = self
+            .post_json(
+                "peer_principal_genesis_submit",
+                url,
+                request,
+                Some(request.idempotency_key.as_str()),
+            )
             .await?;
         outcome
             .validate_against(request)
@@ -443,37 +448,6 @@ mod tests {
                 .contains("request-canonical-digest")
         );
         assert!(header("Signature").unwrap().starts_with("sig1=:"));
-    }
-
-    #[test]
-    fn device_bootstrap_decision_keeps_idempotency_only_in_closed_body() {
-        let base = Url::parse("https://server.example/").unwrap();
-        let client = reqwest::Client::new();
-        let keystore = test_keystore();
-        let peer =
-            PeerProtocolClient::new(Some(&base), &client, &keystore, peer_identity()).unwrap();
-        let url = base
-            .join("/_arkret/peer/device-bootstrap-decisions")
-            .unwrap();
-        let body = br#"{"idempotency_key":"cancel-1"}"#;
-
-        let signed = peer.signed_request("POST", &url, Some(body), None).unwrap();
-
-        assert!(
-            signed
-                .headers
-                .iter()
-                .all(|(name, _)| !name.eq_ignore_ascii_case("Idempotency-Key"))
-        );
-        assert!(
-            !signed
-                .headers
-                .iter()
-                .find(|(name, _)| name.eq_ignore_ascii_case("Signature-Input"))
-                .unwrap()
-                .1
-                .contains("idempotency-key")
-        );
     }
 
     #[test]

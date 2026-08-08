@@ -19,39 +19,21 @@ use rand_core::SeedableRng;
 
 use crate::PgRepositoryFactory;
 
-fn principal_binding_test_material(
-    label: &str,
-) -> (
-    String,
-    arkret_identifiers::Hash,
-    arkret_identifiers::Did,
-    String,
-) {
+fn principal_binding_test_material(label: &str) -> (String, arkret_identifiers::Hash) {
     let principal_id = format!("did:webvh:z{label}:example.com:users:alice");
     let key_log_head = arkret_identifiers::Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();
-    let enrollment_authority_did = arkret_identifiers::Did::new("did:key:z6Mkenrollment").unwrap();
-    let enrollment_authority_ref = format!("{principal_id}#arkret-device-enrollment-authority");
-    (
-        principal_id,
-        key_log_head,
-        enrollment_authority_did,
-        enrollment_authority_ref,
-    )
+    (principal_id, key_log_head)
 }
 
 fn verified_principal_binding_input(
     audience: impl Into<String>,
     principal_id: String,
     key_log_head: arkret_identifiers::Hash,
-    enrollment_authority_did: arkret_identifiers::Did,
-    enrollment_authority_ref: String,
 ) -> VerifiedPrincipalDidBindingInput {
     VerifiedPrincipalDidBindingInput {
         audience: audience.into(),
         principal_id,
         key_log_head,
-        enrollment_authority_did,
-        enrollment_authority_ref,
     }
 }
 
@@ -1354,13 +1336,10 @@ async fn principal_did_has_one_global_owner_under_concurrent_binding() {
     let bob_id = bob.id;
     repo.save().await.unwrap();
 
-    let (principal_id, key_log_head, enrollment_authority_did, authority_ref) =
-        principal_binding_test_material(&label);
+    let (principal_id, key_log_head) = principal_binding_test_material(&label);
     let first_factory = factory.clone();
     let first_principal_id = principal_id.clone();
     let first_head = key_log_head.clone();
-    let first_authority = enrollment_authority_did.clone();
-    let first_ref = authority_ref.clone();
     let first = async move {
         let mut repo = first_factory.create().await.unwrap();
         let mut rng = ChaChaRng::seed_from_u64(72);
@@ -1374,8 +1353,6 @@ async fn principal_did_has_one_global_owner_under_concurrent_binding() {
                     "https://ps-a.example",
                     first_principal_id,
                     first_head,
-                    first_authority,
-                    first_ref,
                 ),
             )
             .await;
@@ -1403,8 +1380,6 @@ async fn principal_did_has_one_global_owner_under_concurrent_binding() {
                     "https://ps-b.example",
                     second_principal_id,
                     key_log_head,
-                    enrollment_authority_did,
-                    authority_ref,
                 ),
             )
             .await;
@@ -1453,28 +1428,20 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
         .unwrap();
     repo.save().await.unwrap();
 
-    let (first_did, first_head, first_authority, first_ref) =
-        principal_binding_test_material(&format!("first{label}"));
+    let (first_did, first_head) = principal_binding_test_material(&format!("first{label}"));
     let mut repo = factory.create().await.unwrap();
     repo.principal_did()
         .add_verified(
             &mut rng,
             &clock,
             &alice,
-            verified_principal_binding_input(
-                audience,
-                first_did.clone(),
-                first_head,
-                first_authority,
-                first_ref,
-            ),
+            verified_principal_binding_input(audience, first_did.clone(), first_head),
         )
         .await
         .unwrap();
     repo.save().await.unwrap();
 
-    let (second_did, second_head, second_authority, second_ref) =
-        principal_binding_test_material(&format!("second{label}"));
+    let (second_did, second_head) = principal_binding_test_material(&format!("second{label}"));
     let mut repo = factory.create().await.unwrap();
     let conflict = repo
         .principal_did()
@@ -1482,13 +1449,7 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
             &mut rng,
             &clock,
             &alice,
-            verified_principal_binding_input(
-                audience,
-                second_did.clone(),
-                second_head,
-                second_authority,
-                second_ref,
-            ),
+            verified_principal_binding_input(audience, second_did.clone(), second_head),
         )
         .await;
     assert!(conflict.is_err());
@@ -1505,78 +1466,6 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
     assert!(
         repo.principal_did()
             .get_by_did(&second_did)
-            .await
-            .unwrap()
-            .is_none()
-    );
-    repo.cancel().await.unwrap();
-}
-
-#[tokio::test]
-async fn principal_did_binding_does_not_overwrite_the_verified_enrollment_authority() {
-    let Some(pool) = crate::test_utils::setup_test_pool().await else {
-        return;
-    };
-    let factory = PgRepositoryFactory::new(pool);
-    let label = uuid::Uuid::now_v7().simple().to_string();
-    let clock = MockClock::default();
-    let mut rng = ChaChaRng::seed_from_u64(75);
-    let (principal_id, key_log_head, enrollment_authority_did, authority_ref) =
-        principal_binding_test_material(&format!("authority{label}"));
-
-    let mut repo = factory.create().await.unwrap();
-    let alice = repo
-        .user()
-        .add(&mut rng, &clock, format!("alice-authority-{label}"))
-        .await
-        .unwrap();
-    repo.principal_did()
-        .add_verified(
-            &mut rng,
-            &clock,
-            &alice,
-            verified_principal_binding_input(
-                "https://ps-a.example",
-                principal_id.clone(),
-                key_log_head.clone(),
-                enrollment_authority_did.clone(),
-                authority_ref.clone(),
-            ),
-        )
-        .await
-        .unwrap();
-    repo.save().await.unwrap();
-
-    let mut repo = factory.create().await.unwrap();
-    let replacement = repo
-        .principal_did()
-        .add_verified(
-            &mut rng,
-            &clock,
-            &alice,
-            verified_principal_binding_input(
-                "https://ps-b.example",
-                principal_id.clone(),
-                key_log_head,
-                arkret_identifiers::Did::new("did:key:z6Mkreplacement").unwrap(),
-                authority_ref,
-            ),
-        )
-        .await;
-    assert!(replacement.is_err());
-    repo.cancel().await.unwrap();
-
-    let mut repo = factory.create().await.unwrap();
-    let persisted = repo
-        .principal_did()
-        .get_by_did(&principal_id)
-        .await
-        .unwrap()
-        .expect("original verified binding must remain");
-    assert_eq!(persisted.enrollment_authority_did, enrollment_authority_did);
-    assert!(
-        repo.principal_did()
-            .get_by_did_and_audience(&principal_id, "https://ps-b.example")
             .await
             .unwrap()
             .is_none()

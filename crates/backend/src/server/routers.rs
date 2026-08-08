@@ -203,32 +203,10 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                 .options(oidc_preflight_handler)
                 .post(agents::post_agent_key_pair),
         )
-        // ak.gate.account.command.enroll_device (device-lifecycle §5.4 /
-        // key-management §5.0.6) — managed-DID service_attested enrollment.
-        // An authenticated end user posts their device public key; coauth
-        // signs a `service_attested` `ak.device.authorize` under the user's
-        // principal DID with the persistent enrollment key and returns the
-        // Event for the client to submit to soland. coauth does not contact
-        // soland.
         .push(
-            Router::with_path("gate/account/device-enroll")
+            Router::with_path("gate/account/recovery-session-grants/issue")
                 .options(oidc_preflight_handler)
-                .post(arkret::device_enroll_endpoint),
-        )
-        .push(
-            Router::with_path("gate/account/device-bootstrap/cancel")
-                .options(oidc_preflight_handler)
-                .post(arkret::cancel_device_bootstrap_endpoint),
-        )
-        .push(
-            Router::with_path("gate/account/recovery-device-authorizations")
-                .options(oidc_preflight_handler)
-                .post(arkret::authorize_recovery_device_endpoint),
-        )
-        .push(
-            Router::with_path("gate/account/recovery-session-grants/promote")
-                .options(oidc_preflight_handler)
-                .post(arkret::promote_recovery_session_grant_endpoint),
+                .post(arkret::issue_recovery_completion_grant_endpoint),
         )
         .push(Router::with_path("self/policy/check").post(policy_check::post_policy_check))
         .push(Router::with_path("{**rest}").goal(arkret_not_found));
@@ -517,10 +495,7 @@ fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
         | "/_arkret/gate/account/session-grants/revoke"
         | "/_arkret/gate/account/session-grants"
         | "/_arkret/gate/account/agent-key-pair"
-        | "/_arkret/gate/account/device-enroll"
-        | "/_arkret/gate/account/device-bootstrap/cancel"
-        | "/_arkret/gate/account/recovery-device-authorizations"
-        | "/_arkret/gate/account/recovery-session-grants/promote" => Some("POST, OPTIONS"),
+        | "/_arkret/gate/account/recovery-session-grants/issue" => Some("POST, OPTIONS"),
         _ => None,
     }
 }

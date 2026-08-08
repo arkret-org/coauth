@@ -15,31 +15,6 @@ use sha2::Digest as _;
 use super::*;
 use crate::handlers::arkret::*;
 
-fn bootstrap_introspection_status(
-    state: coauth_data::DeviceBootstrapTransactionState,
-    transaction_deadline: DateTime<Utc>,
-    binding_deadline: DateTime<Utc>,
-    now: DateTime<Utc>,
-) -> Option<SessionGrantIntrospectStatus> {
-    match state {
-        coauth_data::DeviceBootstrapTransactionState::Accepted => {
-            Some(SessionGrantIntrospectStatus::Superseded)
-        }
-        coauth_data::DeviceBootstrapTransactionState::Cancelled => {
-            Some(SessionGrantIntrospectStatus::Revoked)
-        }
-        coauth_data::DeviceBootstrapTransactionState::Expired => {
-            Some(SessionGrantIntrospectStatus::Expired)
-        }
-        coauth_data::DeviceBootstrapTransactionState::Pending
-            if transaction_deadline <= now || binding_deadline <= now =>
-        {
-            Some(SessionGrantIntrospectStatus::Expired)
-        }
-        coauth_data::DeviceBootstrapTransactionState::Pending => None,
-    }
-}
-
 fn introspection_grant_record(
     grant: &SessionGrant,
     browser_session: Option<&BrowserSession>,
@@ -102,7 +77,6 @@ fn introspection_grant_record(
         cnf_jkt,
         credential_class: parsed_payload.credential_class,
         recovery_binding: parsed_payload.recovery_binding,
-        bootstrap_binding: parsed_payload.bootstrap_binding,
         holder_binding: parsed_payload.holder_binding,
     })
 }
@@ -329,60 +303,6 @@ pub async fn introspect_session_grant(
         }
     }
 
-    // A bootstrap credential is additionally governed by its issuer transaction. The four-state
-    // transaction is the authoritative capability fence for submit/resolve: cancelled, expired,
-    // or accepted transactions must not remain usable merely because the outer JWT row has not
-    // reached its own TTL yet.
-    let bootstrap_binding = Jwt::<SignedSessionGrantClaims>::try_from(grant.grant_jwt.as_str())
-        .ok()
-        .and_then(|jwt| jwt.payload().bootstrap_binding.clone());
-    if let Some(binding) = bootstrap_binding {
-        let (transaction_id, transaction_deadline) = match binding {
-            arkret_models_identity::SessionGrantBootstrapBinding::Founding {
-                transaction_id,
-                bootstrap_transaction_expires_at,
-                ..
-            }
-            | arkret_models_identity::SessionGrantBootstrapBinding::SiblingPairing {
-                transaction_id,
-                bootstrap_transaction_expires_at,
-                ..
-            } => (transaction_id, bootstrap_transaction_expires_at),
-        };
-        let transaction_id = arkret_wire::ProtocolOpaqueId::new(transaction_id).ok();
-        let transaction = match transaction_id.as_ref() {
-            Some(transaction_id) => {
-                repo.account_handoff()
-                    .get_device_bootstrap_transaction(transaction_id)
-                    .await?
-            }
-            None => None,
-        };
-        match transaction {
-            Some(transaction) if transaction.bootstrap_grant_id != grant.grant_id => {
-                status = SessionGrantIntrospectStatus::Revoked;
-                active = false;
-            }
-            Some(transaction) => {
-                if let Some(bootstrap_status) = bootstrap_introspection_status(
-                    transaction.state,
-                    transaction.expires_at,
-                    transaction_deadline,
-                    clock.now(),
-                ) {
-                    // Local time never mutates Pending. A signed terminal
-                    // receipt always takes precedence over the deadline.
-                    status = bootstrap_status;
-                    active = false;
-                }
-            }
-            _ => {
-                status = SessionGrantIntrospectStatus::Revoked;
-                active = false;
-            }
-        }
-    }
-
     // Agent session use-time gate (key-management §3.6.1): a grant issued
     // from an agent key MUST fail closed once that key authorization is
     // revoked (pause / deactivate / runtime replacement supersede) — it MUST
@@ -466,43 +386,4 @@ pub async fn introspect_session_grant(
         one_time_use_consumed: false,
         grant: grant_record,
     }))
-}
-
-#[cfg(test)]
-mod bootstrap_status_tests {
-    use super::*;
-
-    #[test]
-    fn terminal_receipt_state_precedes_deadline() {
-        let now = Utc::now();
-        let past = now - Duration::hours(1);
-        for (state, expected) in [
-            (
-                coauth_data::DeviceBootstrapTransactionState::Accepted,
-                SessionGrantIntrospectStatus::Superseded,
-            ),
-            (
-                coauth_data::DeviceBootstrapTransactionState::Cancelled,
-                SessionGrantIntrospectStatus::Revoked,
-            ),
-            (
-                coauth_data::DeviceBootstrapTransactionState::Expired,
-                SessionGrantIntrospectStatus::Expired,
-            ),
-        ] {
-            assert_eq!(
-                bootstrap_introspection_status(state, past, past, now),
-                Some(expected)
-            );
-        }
-        assert_eq!(
-            bootstrap_introspection_status(
-                coauth_data::DeviceBootstrapTransactionState::Pending,
-                past,
-                past,
-                now,
-            ),
-            Some(SessionGrantIntrospectStatus::Expired)
-        );
-    }
 }

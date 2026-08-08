@@ -5,13 +5,6 @@ use chrono::{DateTime, Utc};
 use crate::Ulid;
 pub use crate::storage::account_handoff::AccountHandoffRepository;
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum FirstDeviceEnrollmentCommit {
-    Committed,
-    Replay(serde_json::Value),
-    Conflict,
-}
-
 /// Closed lifecycle for the durable, authorization-code-backed handoff
 /// creation fence. `Reserved` means an external exchange may already have
 /// consumed the code, so an uncheckpointed retry must fail indeterminate.
@@ -105,267 +98,6 @@ pub enum AccountHandoffCreationAttemptCommit {
     Indeterminate(AccountHandoffCreationAttempt),
 }
 
-/// Closed lifecycle of a device-bootstrap transaction. An enrollment-authority
-/// signature does not make the transaction `Accepted`; only the Principal
-/// Server's atomic founding batch acceptance may perform that transition.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DeviceBootstrapTransactionState {
-    Pending,
-    Accepted,
-    Cancelled,
-    Expired,
-}
-
-impl DeviceBootstrapTransactionState {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Accepted => "accepted",
-            Self::Cancelled => "cancelled",
-            Self::Expired => "expired",
-        }
-    }
-}
-
-impl TryFrom<&str> for DeviceBootstrapTransactionState {
-    type Error = String;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "pending" => Ok(Self::Pending),
-            "accepted" => Ok(Self::Accepted),
-            "cancelled" => Ok(Self::Cancelled),
-            "expired" => Ok(Self::Expired),
-            other => Err(format!(
-                "unknown device bootstrap transaction state: {other}"
-            )),
-        }
-    }
-}
-
-/// Durable issuer ledger for one closed founding bootstrap transaction.
-#[derive(Clone, Debug)]
-pub struct DeviceBootstrapTransaction {
-    pub transaction_id: arkret_wire::ProtocolOpaqueId,
-    pub mode: arkret_models_collaboration::contact_operations::BootstrapMode,
-    pub account_authority_id: arkret_identifiers::Did,
-    pub principal_server_id: arkret_identifiers::Did,
-    pub principal_id: arkret_identifiers::Did,
-    pub device_id: arkret_identifiers::DeviceId,
-    pub device_key_digest: arkret_identifiers::Hash,
-    pub holder_jkt: String,
-    pub canonical_request_digest: arkret_identifiers::Hash,
-    pub canonical_request: Vec<u8>,
-    pub founding_batch_digest: arkret_identifiers::Hash,
-    pub founding_event_ids: Vec<arkret_identifiers::EventId>,
-    pub bootstrap_grant_id: arkret_identifiers::SessionGrantId,
-    pub state: DeviceBootstrapTransactionState,
-    pub enrollment_request_digest: Option<arkret_identifiers::Hash>,
-    pub canonical_enrollment_outcome: Option<Vec<u8>>,
-    pub enrollment_outcome_digest: Option<arkret_identifiers::Hash>,
-    pub authorized_event_id: Option<arkret_identifiers::EventId>,
-    pub authorized_event_digest: Option<arkret_identifiers::Hash>,
-    pub standard_grant_id: Option<arkret_identifiers::SessionGrantId>,
-    pub expires_at: DateTime<Utc>,
-    pub created_at: DateTime<Utc>,
-    pub enrolled_at: Option<DateTime<Utc>>,
-    pub accepted_at: Option<DateTime<Utc>>,
-    pub cancelled_at: Option<DateTime<Utc>>,
-    pub expired_at: Option<DateTime<Utc>>,
-    /// Principal Server notary identity for the immutable terminal decision.
-    pub decision_principal_server_id: Option<arkret_identifiers::Did>,
-    /// Canonical JCS bytes of the signed Principal Server receipt.
-    pub canonical_decision_receipt: Option<Vec<u8>>,
-    /// Domain-separated receipt digest retained for v1 audit/replay.
-    pub decision_receipt_digest: Option<arkret_identifiers::Hash>,
-}
-
-/// Immutable founding material installed in the same issuer transaction as
-/// the `device_bootstrap` session grant.
-#[derive(Clone, Debug)]
-pub struct NewDeviceBootstrapTransaction {
-    pub transaction_id: arkret_wire::ProtocolOpaqueId,
-    pub mode: arkret_models_collaboration::contact_operations::BootstrapMode,
-    pub account_authority_id: arkret_identifiers::Did,
-    pub principal_server_id: arkret_identifiers::Did,
-    pub principal_id: arkret_identifiers::Did,
-    pub device_id: arkret_identifiers::DeviceId,
-    pub device_key_digest: arkret_identifiers::Hash,
-    pub holder_jkt: String,
-    pub canonical_request_digest: arkret_identifiers::Hash,
-    pub canonical_request: Vec<u8>,
-    pub founding_batch_digest: arkret_identifiers::Hash,
-    pub founding_event_ids: Vec<arkret_identifiers::EventId>,
-    pub bootstrap_grant_id: arkret_identifiers::SessionGrantId,
-    pub expires_at: DateTime<Utc>,
-    pub now: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug)]
-pub enum DeviceBootstrapTransactionCreate {
-    Created(DeviceBootstrapTransaction),
-    Replay(DeviceBootstrapTransaction),
-    Conflict(DeviceBootstrapTransaction),
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct DeviceBootstrapEnrollmentReservationInput<'a> {
-    pub transaction_id: &'a arkret_wire::ProtocolOpaqueId,
-    pub principal_id: &'a arkret_identifiers::Did,
-    pub device_id: &'a arkret_identifiers::DeviceId,
-    pub request_digest: &'a arkret_identifiers::Hash,
-    pub now: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug)]
-pub enum DeviceBootstrapEnrollmentReserve {
-    Reserved(DeviceBootstrapTransaction),
-    /// The local deadline elapsed but no Principal Server terminal receipt
-    /// has been verified. The transaction remains durably pending.
-    RequiresDecision(DeviceBootstrapTransaction),
-    Replay(DeviceBootstrapTransaction),
-    Conflict(DeviceBootstrapTransaction),
-    Cancelled(DeviceBootstrapTransaction),
-    Expired(DeviceBootstrapTransaction),
-    NotFound,
-}
-
-/// Exact enrollment-authority outcome commit. This deliberately leaves the
-/// transaction pending until the founding Event batch is accepted elsewhere.
-#[derive(Clone, Debug)]
-pub struct DeviceBootstrapEnrollmentInput<'a> {
-    pub transaction_id: &'a arkret_wire::ProtocolOpaqueId,
-    pub principal_id: &'a arkret_identifiers::Did,
-    pub device_id: &'a arkret_identifiers::DeviceId,
-    pub request_digest: &'a arkret_identifiers::Hash,
-    pub authorized_event_id: &'a arkret_identifiers::EventId,
-    pub authorized_event_digest: &'a arkret_identifiers::Hash,
-    pub canonical_outcome: &'a [u8],
-    pub outcome_digest: &'a arkret_identifiers::Hash,
-    pub now: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug)]
-pub enum DeviceBootstrapEnrollmentCommit {
-    Committed(DeviceBootstrapTransaction),
-    /// The local deadline elapsed but no Principal Server terminal receipt
-    /// has been verified. The transaction remains durably pending.
-    RequiresDecision(DeviceBootstrapTransaction),
-    Replay(DeviceBootstrapTransaction),
-    Conflict(DeviceBootstrapTransaction),
-    Cancelled(DeviceBootstrapTransaction),
-    Expired(DeviceBootstrapTransaction),
-    NotFound,
-}
-
-#[derive(Clone, Debug)]
-pub struct DeviceBootstrapCancelOperation {
-    pub transaction_id: arkret_wire::ProtocolOpaqueId,
-    pub idempotency_key: arkret_wire::IdempotencyKey,
-    pub canonical_request_digest: arkret_identifiers::Hash,
-    pub canonical_request: Vec<u8>,
-    pub authority_request:
-        arkret_models_collaboration::contact_operations::DeviceBootstrapDecisionRequestBody,
-    pub canonical_authority_request: Vec<u8>,
-    pub canonical_outcome: Option<Vec<u8>>,
-    pub outcome_digest: Option<arkret_identifiers::Hash>,
-    pub created_at: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug)]
-pub struct DeviceBootstrapCancelReserveInput {
-    pub request: arkret_models_collaboration::contact_operations::CancelDeviceBootstrapRequestBody,
-    pub canonical_request_digest: arkret_identifiers::Hash,
-    pub canonical_request: Vec<u8>,
-    pub authority_request:
-        arkret_models_collaboration::contact_operations::DeviceBootstrapDecisionRequestBody,
-    pub canonical_authority_request: Vec<u8>,
-    pub now: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug)]
-pub enum DeviceBootstrapCancelReserve {
-    Reserved(DeviceBootstrapCancelOperation),
-    Replay(DeviceBootstrapCancelOperation),
-    Conflict,
-    Terminal(DeviceBootstrapTransaction),
-    NotFound,
-}
-
-#[derive(Clone, Debug)]
-pub struct DeviceBootstrapCancelInput {
-    pub request: arkret_models_collaboration::contact_operations::CancelDeviceBootstrapRequestBody,
-    pub canonical_request_digest: arkret_identifiers::Hash,
-    pub canonical_request: Vec<u8>,
-    pub decision: DeviceBootstrapCancelDecision,
-    pub authority: DeviceBootstrapDecisionEvidence,
-    pub now: DateTime<Utc>,
-}
-
-/// Fully request-bound Principal Server decision evidence. The backend
-/// cryptographically verifies the detached proof; storage independently
-/// validates every closed request/transaction field before retaining the
-/// canonical receipt in the same transaction as the lifecycle transition.
-#[derive(Clone, Debug)]
-pub struct DeviceBootstrapDecisionEvidence {
-    pub request:
-        arkret_models_collaboration::contact_operations::DeviceBootstrapDecisionRequestBody,
-    pub outcome: arkret_models_collaboration::contact_operations::DeviceBootstrapDecisionOutcome,
-    pub canonical_receipt: Vec<u8>,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum DeviceBootstrapCancelDecision {
-    /// The Principal Server proved that the founding batch is already
-    /// accepted. The client cancel operation commits an exact 409 response.
-    Accept,
-    Cancel,
-    /// The Principal Server's durable decision fence proved that the
-    /// founding transaction is expired. This is distinct from a local clock
-    /// observation and may therefore be committed even when the Account
-    /// Authority clock is marginally behind.
-    Expire,
-}
-
-#[derive(Clone, Debug)]
-pub enum DeviceBootstrapCancelCommit {
-    Committed {
-        transaction: DeviceBootstrapTransaction,
-        operation: DeviceBootstrapCancelOperation,
-    },
-    Replay(DeviceBootstrapCancelOperation),
-    Conflict,
-    Accepted(DeviceBootstrapTransaction),
-    Cancelled(DeviceBootstrapTransaction),
-    Expired(DeviceBootstrapTransaction),
-    NotFound,
-}
-
-#[derive(Clone, Debug)]
-pub enum DeviceBootstrapAcceptanceCommit {
-    Accepted(DeviceBootstrapTransaction),
-    Replay(DeviceBootstrapTransaction),
-    Conflict(DeviceBootstrapTransaction),
-    Cancelled(DeviceBootstrapTransaction),
-    Expired(DeviceBootstrapTransaction),
-    NotFound,
-}
-
-/// Borrowed inputs for the founding-device enrollment commit. The slot is
-/// keyed by `(service_account_id, audience, principal_id)` and the replay
-/// decision compares `(device_id, request_digest)`, so the whole tuple travels
-/// together.
-#[derive(Clone, Copy, Debug)]
-pub struct FirstDeviceEnrollmentInput<'a> {
-    pub service_account_id: Ulid,
-    pub audience: &'a str,
-    pub principal_id: &'a arkret_identifiers::Did,
-    pub device_id: &'a arkret_identifiers::DeviceId,
-    pub request_digest: &'a arkret_identifiers::Hash,
-    pub outcome: &'a serde_json::Value,
-    pub now: DateTime<Utc>,
-}
-
 #[derive(Clone)]
 pub struct AccountHandoffGrant {
     pub id: Ulid,
@@ -375,7 +107,7 @@ pub struct AccountHandoffGrant {
     pub browser_session_id: Option<Ulid>,
     pub audience: String,
     pub cnf_jkt: String,
-    pub allowed_operations: [arkret_models_identity::AccountHandoffAllowedOperation; 3],
+    pub allowed_operations: [arkret_models_identity::AccountHandoffAllowedOperation; 4],
     pub account_handoff_grant: String,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -424,8 +156,10 @@ pub struct AccountHandoffGrantInput {
 pub enum IdentityCreationSagaState {
     Active,
     Reserved,
-    Published,
-    Bound,
+    DidPublished,
+    PcrAccepted,
+    AccountBound,
+    Completed,
 }
 
 impl IdentityCreationSagaState {
@@ -433,8 +167,10 @@ impl IdentityCreationSagaState {
         match self {
             Self::Active => "active",
             Self::Reserved => "reserved",
-            Self::Published => "published",
-            Self::Bound => "bound",
+            Self::DidPublished => "did_published",
+            Self::PcrAccepted => "pcr_accepted",
+            Self::AccountBound => "account_bound",
+            Self::Completed => "completed",
         }
     }
 }
@@ -446,8 +182,10 @@ impl TryFrom<&str> for IdentityCreationSagaState {
         match value {
             "active" => Ok(Self::Active),
             "reserved" => Ok(Self::Reserved),
-            "published" => Ok(Self::Published),
-            "bound" => Ok(Self::Bound),
+            "did_published" => Ok(Self::DidPublished),
+            "pcr_accepted" => Ok(Self::PcrAccepted),
+            "account_bound" => Ok(Self::AccountBound),
+            "completed" => Ok(Self::Completed),
             other => Err(format!("unknown identity creation saga state: {other}")),
         }
     }
@@ -465,6 +203,9 @@ pub struct IdentityCreationLeaseRecord {
     pub state: IdentityCreationSagaState,
     pub registry_receipt: Option<serde_json::Value>,
     pub head_event_digest: Option<arkret_identifiers::Hash>,
+    pub pcr_genesis_request_digest: Option<arkret_identifiers::Hash>,
+    pub pcr_genesis_receipt:
+        Option<arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome>,
     pub binding_receipt: Option<arkret_models_identity::AccountBindingReceipt>,
     pub register_ledger: Option<IdentityCreationRegisterLedger>,
     pub created_at: DateTime<Utc>,
@@ -537,6 +278,10 @@ pub struct IdentityBindingChallengeInput {
     pub holder_jkt: String,
     pub did_operation: arkret_models_identity::DidOperationSubmitRequestBody,
     pub operation_digest: arkret_identifiers::Hash,
+    pub pcr_realm_id: arkret_identifiers::RealmId,
+    pub realm_create_payload_digest: arkret_identifiers::Hash,
+    pub founding_authorize_payload_digest: arkret_identifiers::Hash,
+    pub initial_session_request_digest: arkret_identifiers::Hash,
     pub challenge_id: String,
     pub challenge: String,
     pub origin: String,
@@ -556,6 +301,10 @@ pub struct IdentityBindingChallengeRecord {
     pub purpose: arkret_models_identity::IdentityBindingPurpose,
     pub principal_id: arkret_identifiers::Did,
     pub operation_digest: arkret_identifiers::Hash,
+    pub pcr_realm_id: arkret_identifiers::RealmId,
+    pub realm_create_payload_digest: arkret_identifiers::Hash,
+    pub founding_authorize_payload_digest: arkret_identifiers::Hash,
+    pub initial_session_request_digest: arkret_identifiers::Hash,
     pub lease_id: String,
     pub lease_fence: u64,
     pub dpop_jkt: String,
@@ -577,7 +326,12 @@ impl IdentityBindingChallengeRecord {
             purpose: self.purpose,
             principal_id: self.principal_id.clone(),
             operation_digest: self.operation_digest.clone(),
-            lease_id: self.lease_id.clone(),
+            pcr_realm_id: self.pcr_realm_id.clone(),
+            realm_create_payload_digest: self.realm_create_payload_digest.clone(),
+            founding_authorize_payload_digest: self.founding_authorize_payload_digest.clone(),
+            initial_session_request_digest: self.initial_session_request_digest.clone(),
+            genesis_unit_kinds: arkret_models_identity::PCR_GENESIS_UNIT_KINDS,
+            identity_creation_lease_id: self.lease_id.clone(),
             lease_fence: self.lease_fence,
             dpop_jkt: self.dpop_jkt.clone(),
             audience: self.audience.clone(),

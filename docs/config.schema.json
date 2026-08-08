@@ -1376,7 +1376,7 @@
           "default": 2
         },
         "trust_domain": {
-          "description": "Round R2/R3 (2026-05-20) — deployment trust-domain identifier\ninjected into Realm policy and the server-describe document.\n\nWire form: `ak:trust_domain:<scope>` where `<scope>` matches\n`[a-z0-9._:-]{1,128}`. This value enters the canonical transcript\nof every `ak.cross_signing.reset` proof; **changing\n`trust_domain` invalidates existing cross-signing reset proofs**\n— see the README \"Trust domain rotation\" note.\n\nWhen omitted, callers expected to honour cross-deployment replay\nprotection (`Realm` policy, principal-server describe) MUST be\ntold the trust domain is unset and fail closed.\n\nTypically provisioned consistently across the deployment.",
+          "description": "Deployment trust-domain identifier injected into Realm policy and the server-describe document.\n\nWire form: `ak:trust_domain:<scope>` where `<scope>` matches `[a-z0-9._:-]{1,128}`. This value binds peer and recovery authorization transcripts to the deployment.\n\nWhen omitted, callers expected to honour cross-deployment replay protection (`Realm` policy, principal-server describe) MUST be told the trust domain is unset and fail closed.\n\nTypically provisioned consistently across the deployment.",
           "type": [
             "string",
             "null"

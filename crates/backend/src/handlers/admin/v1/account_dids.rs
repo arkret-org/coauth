@@ -282,49 +282,6 @@ pub async fn add_account_did(
                 "control_proof_invalid: authoritative DID history head is required",
             )
         })?;
-    let authority = crate::services::device_enrollment_authority::enrollment_authority(&key_store)
-        .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
-    let enrollment_authority_did = arkret_identifiers::Did::new(authority.did().to_owned())
-        .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
-    if !validated_control
-        .binding
-        .document
-        .capability_delegation
-        .is_empty()
-    {
-        return Err(AppError::bad_request(
-            "control_proof_invalid: external enrollment authority and capabilityDelegation are mutually exclusive",
-        ));
-    }
-    let mut designated_services =
-        validated_control
-            .binding
-            .document
-            .service
-            .iter()
-            .filter(|service| {
-                service.kind
-                    == arkret_models_discovery::service_requirements::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY
-            });
-    let designated_service = designated_services.next().ok_or_else(|| {
-        AppError::bad_request(
-            "control_proof_invalid: DID does not delegate to this enrollment authority",
-        )
-    })?;
-    if designated_services.next().is_some()
-        || designated_service.service_endpoint != authority.did()
-        || !designated_service
-            .id
-            .strip_prefix(&did)
-            .is_some_and(|fragment| fragment.starts_with('#') && fragment.len() > 1)
-        || arkret_wire::DidUrl::new(designated_service.id.clone()).is_err()
-    {
-        return Err(AppError::bad_request(
-            "control_proof_invalid: DID enrollment authority delegation is ambiguous or invalid",
-        ));
-    }
-    let enrollment_authority_ref = designated_service.id.clone();
-
     let mut rng = crate::handlers::account::make_rng();
     let audiences: Vec<String> = arkret_config
         .principal_servers
@@ -348,8 +305,6 @@ pub async fn add_account_did(
                     audience,
                     principal_id: did.clone(),
                     key_log_head: key_log_head.clone(),
-                    enrollment_authority_did: enrollment_authority_did.clone(),
-                    enrollment_authority_ref: enrollment_authority_ref.clone(),
                 },
             )
             .await?;

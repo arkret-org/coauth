@@ -62,7 +62,6 @@ pub struct PasswordRecoveryTrustBoundaryOutcome {
     pub recovery_credential_kind: &'static str,
     pub account_password_reset: bool,
     pub device_trust_reset: bool,
-    pub cross_signing_reset: bool,
     pub trusted_recovery_service_used: bool,
     pub device_trust_recovery_required: bool,
 }
@@ -73,7 +72,6 @@ impl From<AccountRecoveryTrustBoundary> for PasswordRecoveryTrustBoundaryOutcome
             recovery_credential_kind: value.recovery_credential_kind,
             account_password_reset: value.account_password_reset,
             device_trust_reset: value.device_trust_reset,
-            cross_signing_reset: value.cross_signing_reset,
             trusted_recovery_service_used: value.trusted_recovery_service_used,
             device_trust_recovery_required: value.device_trust_recovery_required,
         }
@@ -235,14 +233,12 @@ pub struct PasswordRecoveryTrustBoundaryRequest {
     #[serde(default)]
     pub device_trust_reset: bool,
     #[serde(default)]
-    pub cross_signing_reset: bool,
-    #[serde(default)]
     pub trusted_recovery_service: bool,
 }
 
 impl PasswordRecoveryTrustBoundaryRequest {
     fn requires_identity_recovery(&self) -> bool {
-        self.device_trust_reset || self.cross_signing_reset || self.trusted_recovery_service
+        self.device_trust_reset || self.trusted_recovery_service
     }
 }
 
@@ -476,7 +472,6 @@ mod tests {
         );
         assert_eq!(boundary["account_password_reset"], true);
         assert_eq!(boundary["device_trust_reset"], false);
-        assert_eq!(boundary["cross_signing_reset"], false);
         assert_eq!(boundary["trusted_recovery_service_used"], false);
         assert_eq!(boundary["device_trust_recovery_required"], true);
     }
@@ -491,13 +486,6 @@ mod tests {
         assert!(
             PasswordRecoveryTrustBoundaryRequest {
                 device_trust_reset: true,
-                ..Default::default()
-            }
-            .requires_identity_recovery()
-        );
-        assert!(
-            PasswordRecoveryTrustBoundaryRequest {
-                cross_signing_reset: true,
                 ..Default::default()
             }
             .requires_identity_recovery()
@@ -599,7 +587,6 @@ mod tests {
         let body: serde_json::Value = response.json();
         assert_eq!(body["status"], "DEVICE_TRUST_RECOVERY_REQUIRED");
         assert_eq!(body["trust_boundary"]["device_trust_reset"], false);
-        assert_eq!(body["trust_boundary"]["cross_signing_reset"], false);
         assert_eq!(
             body["trust_boundary"]["trusted_recovery_service_used"],
             false

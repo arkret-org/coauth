@@ -2409,7 +2409,6 @@ mod tests {
             ),
             dpop_binding_proof: None,
             applet_authority: None,
-            device_bootstrap_request: None,
             proof: arkret_models_collaboration::session_grant_bodies::SessionGrantRequestProof {
                 proof_kind: arkret_models_identity::SessionGrantProofKind::AgentKeyProof,
                 challenge: "challenge-abc".to_owned(),

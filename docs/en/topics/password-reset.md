@@ -29,19 +29,17 @@ The current `coauth` password-recovery endpoints are explicitly
 account-password scoped. A successful
 `POST /_coauth/gate/account/password-recovery/set` consumes the email
 recovery ticket and writes a new account password, but it does **not**
-authorize a device, emit `ak.cross_signing.reset`, or treat
-`trusted_recovery_service` as satisfied.
+authorize a device or treat `trusted_recovery_service` as satisfied.
 
 The response carries a `trust_boundary` object documenting that scope:
 `recovery_credential_kind=email_recovery_ticket`,
 `account_password_reset=true`, and `device_trust_reset=false`,
-`cross_signing_reset=false`, `trusted_recovery_service_used=false`.
-Clients that need device trust or cross-signing recovery must use the
-identity recovery-session flow backed by recovery credentials, device
-quorum, or an explicitly trusted recovery service.
+`trusted_recovery_service_used=false`. Clients that need device trust
+must use the PCR recovery-session flow backed by recovery credentials,
+device quorum, or an explicitly trusted recovery service.
 
-If a caller asks the password endpoint to reset device trust,
-cross-signing, or a trusted-recovery-service boundary, the endpoint
+If a caller asks the password endpoint to reset device trust or a
+trusted-recovery-service boundary, the endpoint
 returns `DEVICE_TRUST_RECOVERY_REQUIRED` without consuming the recovery
 ticket.
 

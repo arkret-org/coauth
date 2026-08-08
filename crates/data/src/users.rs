@@ -595,10 +595,6 @@ pub struct PrincipalDidBinding {
     pub principal_id: String,
     /// Verified DID history head returned by the authoritative host.
     pub key_log_head: arkret_identifiers::Hash,
-    /// Enrollment authority DID verified in the authoritative DID document.
-    pub enrollment_authority_did: arkret_identifiers::Did,
-    /// Entry-0 delegation reference designating coauth's enrollment authority.
-    pub enrollment_authority_ref: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

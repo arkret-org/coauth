@@ -1,18 +1,15 @@
 mod account_handoff;
 mod account_register;
-mod device_bootstrap_cancel;
-mod device_enroll;
 mod did_document;
 mod handle_claim;
 mod identity;
 mod recovery_authority;
 mod service_describe;
 mod session_grant;
+mod test_chaos;
 
 pub use account_handoff::*;
 pub use account_register::*;
-pub use device_bootstrap_cancel::*;
-pub use device_enroll::*;
 pub use did_document::*;
 pub use handle_claim::*;
 pub use identity::*;
@@ -949,12 +946,26 @@ pub struct DebugIssueDpopGrantOutcome {
     pub principal_did: String,
 }
 
+/// Byte-preserving response used by the live issuer-ledger fault seam.
+pub struct DebugIssueDpopGrantCanonicalJson(Vec<u8>);
+
+impl Scribe for DebugIssueDpopGrantCanonicalJson {
+    fn render(self, response: &mut Response) {
+        response.headers_mut().insert(
+            http::header::CONTENT_TYPE,
+            http::HeaderValue::from_static("application/json"),
+        );
+        response
+            .write_body(self.0)
+            .expect("debug canonical JSON response body is writable");
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct DebugBindPrincipalRequestBody {
     pub actor_id: String,
     pub audience: String,
     pub key_log_head: String,
-    pub enrollment_authority_ref: String,
     pub account_handle: String,
 }
 
@@ -962,7 +973,6 @@ pub struct DebugBindPrincipalRequestBody {
 pub struct DebugBindPrincipalOutcome {
     pub actor_id: String,
     pub audience: String,
-    pub enrollment_authority_did: String,
 }
 
 /// Returns true when test-only endpoints are explicitly allowed at runtime.
@@ -980,7 +990,7 @@ pub fn test_endpoints_enabled() -> bool {
 
 /// Test-only setup seam for a principal whose DID inception was accepted by
 /// the live Principal Server. Recovery behavior still uses the standard
-/// authorization, promotion, and session-grant endpoints.
+/// authorization, recovery-completion, and session-grant endpoints.
 #[handler]
 pub async fn debug_bind_principal(
     req: &mut Request,
@@ -999,21 +1009,6 @@ pub async fn debug_bind_principal(
         .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
     let key_log_head = arkret_identifiers::Hash::new(body.key_log_head)
         .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
-    let authority =
-        crate::services::device_enrollment_authority::enrollment_authority(&depot.key_store()?)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let enrollment_authority_did = arkret_identifiers::Did::new(authority.did().to_owned())
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let expected_ref_prefix = format!("{principal_id}#");
-    if !body
-        .enrollment_authority_ref
-        .starts_with(&expected_ref_prefix)
-    {
-        return Err(ArkretRouteError::BadRequest(
-            "enrollment_authority_ref must be a DID URL under actor_id".to_owned(),
-        ));
-    }
-
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
     let mut repo = depot.repo().await?;
@@ -1038,9 +1033,7 @@ pub async fn debug_bind_principal(
     match existing_binding {
         Some(binding)
             if binding.principal_id == principal_id.as_str()
-                && binding.key_log_head == key_log_head
-                && binding.enrollment_authority_did == enrollment_authority_did
-                && binding.enrollment_authority_ref == body.enrollment_authority_ref => {}
+                && binding.key_log_head == key_log_head => {}
         Some(_) => {
             repo.cancel().await.ok();
             return Err(ArkretRouteError::coded(
@@ -1059,8 +1052,6 @@ pub async fn debug_bind_principal(
                         audience: audience.to_string(),
                         principal_id: principal_id.to_string(),
                         key_log_head,
-                        enrollment_authority_did: enrollment_authority_did.clone(),
-                        enrollment_authority_ref: body.enrollment_authority_ref,
                     },
                 )
                 .await?;
@@ -1070,7 +1061,6 @@ pub async fn debug_bind_principal(
     Ok(Json(DebugBindPrincipalOutcome {
         actor_id: principal_id.to_string(),
         audience: audience.to_string(),
-        enrollment_authority_did: enrollment_authority_did.to_string(),
     }))
 }
 
@@ -1082,7 +1072,7 @@ pub async fn debug_bind_principal(
 pub async fn debug_issue_dpop_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<DebugIssueDpopGrantOutcome>, ArkretRouteError> {
+) -> Result<DebugIssueDpopGrantCanonicalJson, ArkretRouteError> {
     use coauth_jose::jwk::{PublicJsonWebKey, Thumbprint};
 
     if !test_endpoints_enabled() {
@@ -1197,10 +1187,8 @@ pub async fn debug_issue_dpop_grant(
                     "cotest grant replay has no canonical outcome",
                 )
             })?;
-            let outcome = serde_json::from_slice(&bytes)
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
             repo.cancel().await.ok();
-            return Ok(Json(outcome));
+            return Ok(DebugIssueDpopGrantCanonicalJson(bytes));
         }
         coauth_data::SessionGrantReserveOutcome::Conflict(_) => {
             repo.cancel().await.ok();
@@ -1280,17 +1268,20 @@ pub async fn debug_issue_dpop_grant(
     )
     .await
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let outcome = match committed {
-        coauth_data::SessionGrantCommitOutcome::Committed(_) => outcome,
+    let chaos_committed = matches!(
+        &committed,
+        coauth_data::SessionGrantCommitOutcome::Committed(_)
+    );
+    let response = match committed {
+        coauth_data::SessionGrantCommitOutcome::Committed(_) => canonical_outcome,
         coauth_data::SessionGrantCommitOutcome::Replay(operation) => {
-            serde_json::from_slice(&operation.canonical_outcome.ok_or_else(|| {
+            operation.canonical_outcome.ok_or_else(|| {
                 ArkretRouteError::coded(
                     StatusCode::SERVICE_UNAVAILABLE,
                     arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
                     "cotest grant commit replay has no canonical outcome",
                 )
-            })?)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+            })?
         }
         coauth_data::SessionGrantCommitOutcome::Indeterminate(_) => {
             repo.save().await?;
@@ -1302,5 +1293,12 @@ pub async fn debug_issue_dpop_grant(
         }
     };
     repo.save().await?;
-    Ok(Json(outcome))
+    if chaos_committed {
+        test_chaos::maybe_delay_post_commit(
+            "session_grant_issue_post_commit_pre_response",
+            &request_identity,
+        )
+        .await;
+    }
+    Ok(DebugIssueDpopGrantCanonicalJson(response))
 }

@@ -259,10 +259,8 @@ pub struct ArkretConfig {
     /// injected into Realm policy and the server-describe document.
     ///
     /// Wire form: `ak:trust_domain:<scope>` where `<scope>` matches
-    /// `[a-z0-9._:-]{1,128}`. This value enters the canonical transcript
-    /// of every `ak.cross_signing.reset` proof; **changing
-    /// `trust_domain` invalidates existing cross-signing reset proofs**
-    /// — see the README "Trust domain rotation" note.
+    /// `[a-z0-9._:-]{1,128}`. This value binds peer and recovery
+    /// authorization transcripts to the deployment.
     ///
     /// When omitted, callers expected to honour cross-deployment replay
     /// protection (`Realm` policy, principal-server describe) MUST be

@@ -1,83 +1,39 @@
-//! Durable recovery-authority authorization repository.
+//! Recovery-completion grant issuance replay repository.
 
-use arkret_identifiers::SessionGrantId;
 use async_trait::async_trait;
 
 use crate::recovery_authority::{
-    NewRecoveryDeviceAuthorization, NewRecoverySessionGrantPromotion, RecoveryDeviceAuthorization,
-    RecoverySessionGrantPromotion,
+    NewRecoveryCompletionGrantIssuance, RecoveryCompletionGrantIssuance,
 };
 use crate::repository_impl;
 
-/// Persistence boundary for recovery authority ticket consumption and replay.
 #[async_trait]
+/// Persists the single committed Standard-grant outcome for a completed root recovery.
 pub trait RecoveryAuthorityRepository: Send + Sync {
-    /// Backend error type.
+    /// Backend-specific persistence error.
     type Error;
 
-    /// Look up the first outcome by the one-time ticket identity.
-    async fn lookup_authorization(
-        &mut self,
-        ticket_id: &str,
-    ) -> Result<Option<RecoveryDeviceAuthorization>, Self::Error>;
-
-    /// Look up the first outcome by recovery transaction identity.
-    async fn lookup_authorization_by_transaction(
+    /// Look up the first accepted issuance by its recovery transaction id.
+    async fn lookup_completion_issuance(
         &mut self,
         transaction_id: &str,
-    ) -> Result<Option<RecoveryDeviceAuthorization>, Self::Error>;
+    ) -> Result<Option<RecoveryCompletionGrantIssuance>, Self::Error>;
 
-    /// Insert the first outcome. Returns `true` when this transaction won the
-    /// ticket-consumption race and `false` when the ticket already exists.
-    async fn insert_authorization(
+    /// Insert the first accepted issuance. A false result means another
+    /// transaction already committed the same recovery transaction id.
+    async fn insert_completion_issuance(
         &mut self,
-        params: NewRecoveryDeviceAuthorization,
-    ) -> Result<bool, Self::Error>;
-
-    /// Look up the first promotion by its full protocol identity.
-    async fn lookup_promotion(
-        &mut self,
-        transaction_id: &str,
-        old_grant_id: &SessionGrantId,
-    ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error>;
-
-    /// Look up a promotion by old grant to reject transaction substitution.
-    async fn lookup_promotion_by_old_grant(
-        &mut self,
-        old_grant_id: &SessionGrantId,
-    ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error>;
-
-    /// Insert the first promotion outcome.
-    async fn insert_promotion(
-        &mut self,
-        params: NewRecoverySessionGrantPromotion,
+        params: NewRecoveryCompletionGrantIssuance,
     ) -> Result<bool, Self::Error>;
 }
 
 repository_impl!(RecoveryAuthorityRepository:
-    async fn lookup_authorization(
-        &mut self,
-        ticket_id: &str,
-    ) -> Result<Option<RecoveryDeviceAuthorization>, Self::Error>;
-    async fn lookup_authorization_by_transaction(
+    async fn lookup_completion_issuance(
         &mut self,
         transaction_id: &str,
-    ) -> Result<Option<RecoveryDeviceAuthorization>, Self::Error>;
-    async fn insert_authorization(
+    ) -> Result<Option<RecoveryCompletionGrantIssuance>, Self::Error>;
+    async fn insert_completion_issuance(
         &mut self,
-        params: NewRecoveryDeviceAuthorization,
-    ) -> Result<bool, Self::Error>;
-    async fn lookup_promotion(
-        &mut self,
-        transaction_id: &str,
-        old_grant_id: &SessionGrantId,
-    ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error>;
-    async fn lookup_promotion_by_old_grant(
-        &mut self,
-        old_grant_id: &SessionGrantId,
-    ) -> Result<Option<RecoverySessionGrantPromotion>, Self::Error>;
-    async fn insert_promotion(
-        &mut self,
-        params: NewRecoverySessionGrantPromotion,
+        params: NewRecoveryCompletionGrantIssuance,
     ) -> Result<bool, Self::Error>;
 );

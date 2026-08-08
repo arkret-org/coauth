@@ -2,9 +2,8 @@ use arkret_canonical::format_timestamp_canonical;
 use arkret_identifiers::{DeviceId, Did, EventId};
 use arkret_models_identity::{
     CanonicalSessionPublicJwk, SESSION_GRANT_CREDENTIAL_KIND, SESSION_GRANT_ISSUANCE_SCHEMA,
-    SessionGrantBootstrapBinding, SessionGrantCnf, SessionGrantCredentialClass,
-    SessionGrantHolderBinding, SessionGrantIssuancePreimage, SessionGrantProofKind,
-    SignedSessionGrantClaims,
+    SessionGrantCnf, SessionGrantCredentialClass, SessionGrantHolderBinding,
+    SessionGrantIssuancePreimage, SessionGrantProofKind, SignedSessionGrantClaims,
 };
 use arkret_wire::DidUrl;
 use chrono::{DateTime, Utc};
@@ -24,8 +23,6 @@ use ulid::Ulid;
 
 use super::*;
 use crate::handlers::arkret::*;
-
-pub(crate) const DEVICE_BOOTSTRAP_TRANSACTION_TTL: chrono::Duration = chrono::Duration::hours(24);
 
 // Test-only convenience wrapper (re-exported under `#[cfg(test)]` from the
 // session_grant module); production paths call the audience-explicit forms.
@@ -186,7 +183,6 @@ fn issue_session_grant_for_audience_inner(
         holder_binding: Some(SessionGrantHolderBinding::HumanDevice {
             device_binding: device_id.clone(),
         }),
-        bootstrap_binding: None,
         recovery_binding: None,
         device_binding: None,
         proof_kind: Some(proof_kind),
@@ -210,7 +206,6 @@ fn issue_session_grant_for_audience_inner(
         cnf: preimage.cnf,
         credential_class: preimage.credential_class,
         holder_binding: preimage.holder_binding,
-        bootstrap_binding: preimage.bootstrap_binding,
         recovery_binding: preimage.recovery_binding,
         device_binding: preimage.device_binding,
         proof_kind: preimage.proof_kind,
@@ -230,11 +225,6 @@ fn issue_session_grant_for_audience_inner(
         grant_jwt,
         session_public_key: session_public_key.into_string(),
         credential_class: "standard".to_owned(),
-        recovery_session_id: None,
-        recovery_policy_id: None,
-        recovery_policy_version: None,
-        device_authorization_event_id: None,
-        model_generation_ref: None,
         expires_at: format_timestamp_canonical(expires_at),
         expires_at_timestamp: expires_at,
         not_before_timestamp: now,
@@ -244,244 +234,6 @@ fn issue_session_grant_for_audience_inner(
         audience: audience_did.to_string(),
         scopes,
         dpop_jkt: Some(dpop_jkt),
-        session_id,
-        issuance_nonce: issuance_nonce.to_string(),
-        issuance_preimage,
-        issuance_digest,
-        signing_key_id: key_id,
-    })
-}
-
-/// Mint the closed founding `device_bootstrap` credential. All client-owned
-/// Event identity material has already been validated by the SDK request
-/// model; this builder only adds issuer-owned transaction/session material.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn issue_founding_device_bootstrap_grant(
-    issuance_seed: &SessionGrantIssuanceSeed,
-    arkret_config: &ArkretConfig,
-    key_store: &Keystore,
-    session_public_key: PublicJsonWebKey,
-    subject: &Did,
-    device_id: &DeviceId,
-    audience: &Did,
-    dpop_jkt: String,
-    transaction_id: &str,
-    bootstrap_transaction_expires_at: DateTime<Utc>,
-    canonical_request_digest: arkret_identifiers::Hash,
-    device_key_digest: arkret_identifiers::Hash,
-    founding_batch_digest: arkret_identifiers::Hash,
-    founding_event_ids: Vec<EventId>,
-) -> Result<SessionGrantMaterial, SessionGrantError> {
-    ensure_principal_did_method_allowed(arkret_config, subject.as_str())?;
-    let issuer = issuer_did_for(arkret_config);
-    let session_public_key =
-        CanonicalSessionPublicJwk::new(serde_json::to_string(&session_public_key)?)?;
-    let allowed_operation_ids = vec![
-        "ak.gate.account.command.enroll_device".to_owned(),
-        "ak.gate.account.command.cancel_device_bootstrap".to_owned(),
-        "ak.self.events.command.submit".to_owned(),
-        "ak.self.events.read.resolve".to_owned(),
-    ];
-    let mut scopes = vec![
-        PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
-        format!("urn:arkret:client:device:{}", device_id.as_str()),
-    ];
-    scopes.sort_unstable();
-    let bootstrap_binding = SessionGrantBootstrapBinding::Founding {
-        credential_kind: "device_bootstrap".to_owned(),
-        principal_id: subject.clone(),
-        device_id: device_id.clone(),
-        device_key_digest,
-        transaction_id: transaction_id.to_owned(),
-        holder_jkt: dpop_jkt.clone(),
-        canonical_request_digest,
-        founding_batch_digest,
-        founding_event_ids,
-        allowed_operation_ids,
-        credential_expires_at: issuance_seed.expires_at,
-        bootstrap_transaction_expires_at,
-    };
-    let issuance_nonce = issuance_seed.issuance_nonce.clone();
-    let session_id = issuance_seed.session_id.clone();
-    let preimage = SessionGrantIssuancePreimage {
-        schema: SESSION_GRANT_ISSUANCE_SCHEMA.to_owned(),
-        issuer: issuer.clone(),
-        issuance_nonce: issuance_nonce.clone(),
-        subject: subject.clone(),
-        session_public_key: session_public_key.clone(),
-        audience: audience.clone(),
-        scopes: scopes.clone(),
-        not_before: issuance_seed.not_before,
-        expires_at: issuance_seed.expires_at,
-        session_id: session_id.clone(),
-        cnf: SessionGrantCnf {
-            jkt: dpop_jkt.clone(),
-        },
-        credential_class: SessionGrantCredentialClass::DeviceBootstrap,
-        holder_binding: None,
-        bootstrap_binding: Some(bootstrap_binding),
-        recovery_binding: None,
-        device_binding: None,
-        proof_kind: Some(SessionGrantProofKind::PreRegistrationHandoff),
-        scope_details: None,
-    };
-    let issuance_preimage = preimage.canonical_bytes()?;
-    let issuance_digest = preimage.issuance_digest()?;
-    let grant_id = preimage.grant_id()?;
-    let payload = SignedSessionGrantClaims {
-        kind: SESSION_GRANT_CREDENTIAL_KIND.to_owned(),
-        grant_id: grant_id.clone(),
-        issuer: preimage.issuer,
-        issuance_nonce: preimage.issuance_nonce,
-        subject: preimage.subject,
-        session_public_key: preimage.session_public_key.clone(),
-        audience: preimage.audience,
-        scopes: preimage.scopes,
-        not_before: preimage.not_before,
-        expires_at: preimage.expires_at,
-        session_id: preimage.session_id,
-        cnf: preimage.cnf,
-        credential_class: preimage.credential_class,
-        holder_binding: preimage.holder_binding,
-        bootstrap_binding: preimage.bootstrap_binding,
-        recovery_binding: preimage.recovery_binding,
-        device_binding: preimage.device_binding,
-        proof_kind: preimage.proof_kind,
-        scope_details: preimage.scope_details,
-    };
-    payload.validate()?;
-
-    let (alg, key) = reserved_signing_key(key_store, &issuance_seed.signing_key_id)
-        .ok_or(SessionGrantError::NoSigningKey)?;
-    let key_id = issuance_seed.signing_key_id.clone();
-    let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
-    let signer = key.params().signing_key_for_alg(&alg)?;
-    let grant_jwt = Jwt::sign(header, payload, &signer)?.into_string();
-
-    Ok(SessionGrantMaterial {
-        grant_id,
-        grant_jwt,
-        session_public_key: session_public_key.into_string(),
-        credential_class: "device_bootstrap".to_owned(),
-        recovery_session_id: None,
-        recovery_policy_id: None,
-        recovery_policy_version: None,
-        device_authorization_event_id: None,
-        model_generation_ref: None,
-        expires_at: format_timestamp_canonical(issuance_seed.expires_at),
-        expires_at_timestamp: issuance_seed.expires_at,
-        not_before_timestamp: issuance_seed.not_before,
-        issuer: issuer.to_string(),
-        subject: subject.to_string(),
-        device_id: Some(device_id.to_string()),
-        audience: audience.to_string(),
-        scopes,
-        dpop_jkt: Some(dpop_jkt),
-        session_id,
-        issuance_nonce: issuance_nonce.to_string(),
-        issuance_preimage,
-        issuance_digest,
-        signing_key_id: key_id,
-    })
-}
-
-pub(crate) fn mint_promoted_recovery_session_grant(
-    issuance_seed: &SessionGrantIssuanceSeed,
-    clock: &dyn Clock,
-    arkret_config: &ArkretConfig,
-    key_store: &Keystore,
-    prior_claims: &SignedSessionGrantClaims,
-    session_public_key: String,
-    device_binding: arkret_models_identity::SessionGrantDeviceBinding,
-) -> Result<SessionGrantMaterial, SessionGrantError> {
-    let now = issuance_seed.not_before;
-    let expires_at = issuance_seed.expires_at;
-    let device_scope = format!(
-        "urn:arkret:client:device:{}",
-        device_binding.device_id.as_str()
-    );
-    let scopes = vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(), device_scope];
-    let issuer = issuer_did_for(arkret_config);
-    let session_public_key = CanonicalSessionPublicJwk::new(session_public_key)?;
-    let issuance_nonce = issuance_seed.issuance_nonce.clone();
-    let session_id = prior_claims.session_id.clone();
-    let preimage = SessionGrantIssuancePreimage {
-        schema: SESSION_GRANT_ISSUANCE_SCHEMA.to_owned(),
-        issuer: issuer.clone(),
-        issuance_nonce: issuance_nonce.clone(),
-        subject: prior_claims.subject.clone(),
-        session_public_key: session_public_key.clone(),
-        audience: prior_claims.audience.clone(),
-        scopes: scopes.clone(),
-        not_before: now,
-        expires_at,
-        session_id: session_id.clone(),
-        cnf: prior_claims.cnf.clone(),
-        credential_class: SessionGrantCredentialClass::Standard,
-        holder_binding: Some(SessionGrantHolderBinding::HumanDevice {
-            device_binding: device_binding.device_id.as_str().to_owned(),
-        }),
-        bootstrap_binding: None,
-        recovery_binding: None,
-        device_binding: Some(device_binding.clone()),
-        proof_kind: prior_claims.proof_kind,
-        scope_details: None,
-    };
-    let issuance_preimage = preimage.canonical_bytes()?;
-    let issuance_digest = preimage.issuance_digest()?;
-    let grant_id = preimage.grant_id()?;
-    let payload = SignedSessionGrantClaims {
-        kind: SESSION_GRANT_CREDENTIAL_KIND.to_owned(),
-        grant_id: grant_id.clone(),
-        issuer: preimage.issuer,
-        issuance_nonce: preimage.issuance_nonce,
-        subject: preimage.subject,
-        session_public_key: preimage.session_public_key.clone(),
-        audience: preimage.audience,
-        scopes: preimage.scopes,
-        not_before: preimage.not_before,
-        expires_at: preimage.expires_at,
-        session_id: preimage.session_id,
-        cnf: preimage.cnf,
-        credential_class: preimage.credential_class,
-        holder_binding: preimage.holder_binding,
-        bootstrap_binding: preimage.bootstrap_binding,
-        recovery_binding: preimage.recovery_binding,
-        device_binding: preimage.device_binding,
-        proof_kind: preimage.proof_kind,
-        scope_details: preimage.scope_details,
-    };
-    payload.validate()?;
-
-    let (alg, key) = reserved_signing_key(key_store, &issuance_seed.signing_key_id)
-        .ok_or(SessionGrantError::NoSigningKey)?;
-    let key_id = issuance_seed.signing_key_id.clone();
-    let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
-    let signer = key.params().signing_key_for_alg(&alg)?;
-    let grant_jwt = Jwt::sign(header, payload, &signer)?.into_string();
-    let model_generation_ref = serde_json::to_value(&device_binding.model_generation_ref)?;
-
-    Ok(SessionGrantMaterial {
-        grant_id,
-        grant_jwt,
-        session_public_key: session_public_key.into_string(),
-        credential_class: "standard".to_owned(),
-        recovery_session_id: None,
-        recovery_policy_id: None,
-        recovery_policy_version: None,
-        device_authorization_event_id: Some(
-            device_binding.authorization_event_id.as_str().to_owned(),
-        ),
-        model_generation_ref: Some(model_generation_ref),
-        expires_at: format_timestamp_canonical(expires_at),
-        expires_at_timestamp: expires_at,
-        not_before_timestamp: now,
-        issuer: issuer.to_string(),
-        subject: prior_claims.subject.as_str().to_owned(),
-        device_id: Some(device_binding.device_id.as_str().to_owned()),
-        audience: prior_claims.audience.to_string(),
-        scopes,
-        dpop_jkt: Some(prior_claims.cnf.jkt.clone()),
         session_id,
         issuance_nonce: issuance_nonce.to_string(),
         issuance_preimage,
@@ -618,11 +370,6 @@ pub(crate) fn new_session_grant_record(
         signing_key_id: &material.signing_key_id,
         session_public_key: &material.session_public_key,
         credential_class: &material.credential_class,
-        recovery_session_id: material.recovery_session_id.as_deref(),
-        recovery_policy_id: material.recovery_policy_id.as_deref(),
-        recovery_policy_version: material.recovery_policy_version,
-        device_authorization_event_id: material.device_authorization_event_id.as_deref(),
-        model_generation_ref: material.model_generation_ref.clone(),
         not_before: material.not_before_timestamp,
         expires_at: material.expires_at_timestamp,
     }
@@ -754,7 +501,6 @@ pub(crate) fn mint_agent_session_grant(
             agent_key_authorization_ref,
             verification_method,
         }),
-        bootstrap_binding: None,
         recovery_binding: None,
         device_binding: None,
         proof_kind: Some(SessionGrantProofKind::AgentKeyProof),
@@ -778,7 +524,6 @@ pub(crate) fn mint_agent_session_grant(
         cnf: preimage.cnf,
         credential_class: preimage.credential_class,
         holder_binding: preimage.holder_binding,
-        bootstrap_binding: preimage.bootstrap_binding,
         recovery_binding: preimage.recovery_binding,
         device_binding: preimage.device_binding,
         proof_kind: preimage.proof_kind,
@@ -798,11 +543,6 @@ pub(crate) fn mint_agent_session_grant(
         grant_jwt,
         session_public_key: session_public_key.into_string(),
         credential_class: "standard".to_owned(),
-        recovery_session_id: None,
-        recovery_policy_id: None,
-        recovery_policy_version: None,
-        device_authorization_event_id: None,
-        model_generation_ref: None,
         expires_at: format_timestamp_canonical(expires_at),
         expires_at_timestamp: expires_at,
         not_before_timestamp: now,

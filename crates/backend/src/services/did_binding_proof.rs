@@ -615,7 +615,6 @@ mod tests {
                 verification_method: Vec::new(),
                 authentication: Vec::new(),
                 assertion_method: Vec::new(),
-                capability_delegation: Vec::new(),
                 service: Vec::new(),
                 metadata: None,
             },

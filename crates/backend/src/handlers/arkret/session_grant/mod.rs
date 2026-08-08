@@ -13,11 +13,9 @@ pub(crate) use introspection::{introspection_status, session_grant_jwt_hash};
 #[cfg(test)]
 pub(crate) use issuance::issue_session_grant;
 pub(crate) use issuance::{
-    DEVICE_BOOTSTRAP_TRANSACTION_TTL, commit_session_grant_issuance,
-    issue_founding_device_bootstrap_grant, issue_session_grant_for_audience,
-    issue_test_session_grant_for_audience, mint_agent_session_grant,
-    mint_promoted_recovery_session_grant, new_session_grant_record, persist_session_grant,
-    persist_unbound_session_grant,
+    commit_session_grant_issuance, issue_session_grant_for_audience,
+    issue_test_session_grant_for_audience, mint_agent_session_grant, new_session_grant_record,
+    persist_session_grant, persist_unbound_session_grant,
 };
 pub use issue::issue_session_grant_endpoint;
 pub(crate) use issue::map_oidc_exchange_error;

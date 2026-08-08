@@ -45,8 +45,6 @@ type PrincipalDidJoinedRow = (
     String,
     String,
     String,
-    String,
-    String,
     DateTime<Utc>,
     DateTime<Utc>,
 );
@@ -57,8 +55,6 @@ fn binding_selection() -> (
     principal_did_bindings::audience,
     principal_did_owners::principal_id,
     principal_did_owners::key_log_head,
-    principal_did_owners::enrollment_authority_did,
-    principal_did_owners::enrollment_authority_ref,
     principal_did_bindings::created_at,
     principal_did_bindings::updated_at,
 ) {
@@ -68,8 +64,6 @@ fn binding_selection() -> (
         principal_did_bindings::audience,
         principal_did_owners::principal_id,
         principal_did_owners::key_log_head,
-        principal_did_owners::enrollment_authority_did,
-        principal_did_owners::enrollment_authority_ref,
         principal_did_bindings::created_at,
         principal_did_bindings::updated_at,
     )
@@ -83,22 +77,14 @@ fn binding_from_row(row: PrincipalDidJoinedRow) -> Result<PrincipalDidBinding, D
             .row(id)
             .source(error)
     })?;
-    let enrollment_authority_did = arkret_identifiers::Did::new(row.5).map_err(|error| {
-        DatabaseInconsistencyError::on("principal_did_owners")
-            .column("enrollment_authority_did")
-            .row(id)
-            .source(error)
-    })?;
     Ok(PrincipalDidBinding {
         id,
         user_id: Ulid::from(row.1),
         audience: row.2,
         principal_id: row.3,
         key_log_head,
-        enrollment_authority_did,
-        enrollment_authority_ref: row.6,
-        created_at: row.7,
-        updated_at: row.8,
+        created_at: row.5,
+        updated_at: row.6,
     })
 }
 
@@ -108,8 +94,6 @@ struct PrincipalDidOwnerLookup {
     id: Uuid,
     user_id: Uuid,
     key_log_head: String,
-    enrollment_authority_did: String,
-    enrollment_authority_ref: String,
 }
 
 #[derive(Insertable)]
@@ -119,8 +103,6 @@ struct NewPrincipalDidOwner {
     user_id: Uuid,
     principal_id: String,
     key_log_head: String,
-    enrollment_authority_did: String,
-    enrollment_authority_ref: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -188,16 +170,10 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             audience,
             principal_id,
             key_log_head,
-            enrollment_authority_did,
-            enrollment_authority_ref,
         } = input;
         if audience.trim().is_empty()
             || principal_id.trim() != principal_id
             || arkret_identifiers::Did::new(principal_id.clone()).is_err()
-            || !enrollment_authority_ref
-                .strip_prefix(&principal_id)
-                .is_some_and(|fragment| fragment.starts_with('#') && fragment.len() > 1)
-            || arkret_wire::DidUrl::new(enrollment_authority_ref.clone()).is_err()
         {
             return Err(DatabaseError::invalid_operation());
         }
@@ -217,8 +193,6 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             user_id: Uuid::from(user.id),
             principal_id: principal_id.clone(),
             key_log_head: key_log_head.to_string(),
-            enrollment_authority_did: enrollment_authority_did.as_str().to_owned(),
-            enrollment_authority_ref: enrollment_authority_ref.clone(),
             created_at: now,
             updated_at: now,
         };
@@ -235,12 +209,6 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             .first::<PrincipalDidOwnerLookup>(self.conn)
             .await?;
         if owner.user_id != Uuid::from(user.id) {
-            return Err(DatabaseError::invalid_operation());
-        }
-
-        if owner.enrollment_authority_did != enrollment_authority_did.as_str()
-            || owner.enrollment_authority_ref != enrollment_authority_ref
-        {
             return Err(DatabaseError::invalid_operation());
         }
 

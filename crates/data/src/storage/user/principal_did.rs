@@ -15,10 +15,6 @@ pub struct VerifiedPrincipalDidBindingInput {
     pub principal_id: String,
     /// Verified head of the principal DID's WebVH history.
     pub key_log_head: arkret_identifiers::Hash,
-    /// DID of the authority that attested the enrollment delegation.
-    pub enrollment_authority_did: arkret_identifiers::Did,
-    /// DID URL of the delegated enrollment authority service.
-    pub enrollment_authority_ref: String,
 }
 
 /// Persistence boundary for principal DIDs verified by an authoritative host.

@@ -27,17 +27,16 @@ const SUPPORTED_OPERATIONS: &[&str] = &[
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_EXCHANGE_CREATE_HANDOFF,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER,
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_CANCEL_DEVICE_BOOTSTRAP,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_RECOVERY_COMPLETION_GRANT,
     "ak.gate.account.command.refresh_session_grant",
     "ak.gate.account.command.logout_auth_session",
     "ak.gate.account.command.introspect_session_grant",
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ENROLL_DEVICE,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REVOKE_SESSION,
 ];
 
-const IMPLEMENTED_PROFILE_EVENT_KINDS: &[&str] = &["ak.session.grant"];
+const IMPLEMENTED_PROFILE_EVENT_KINDS: &[&str] = &[];
 
 const IMPLEMENTED_PROFILE_SCHEMAS: &[&str] =
     &["ak.schema.handle_claim.v1", "ak.schema.service_describe.v1"];
@@ -252,11 +251,7 @@ fn build_verified_profile_descriptors(
 /// Proprietary fields with no first-class slot on `AuthMetadata` are inserted
 /// into `extra` so they keep serializing at the top level of the
 /// `auth_metadata` object.
-fn build_auth_metadata(
-    url_builder: &UrlBuilder,
-    arkret_config: &ArkretConfig,
-    enrollment_authority_did: &arkret_identifiers::Did,
-) -> AuthMetadata {
+fn build_auth_metadata(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -> AuthMetadata {
     use serde_json::json;
 
     let issuer = url_builder.oidc_issuer().to_string();
@@ -312,7 +307,6 @@ fn build_auth_metadata(
         account_authority: Some(AccountAuthority {
             origin,
             gate_account_base,
-            enrollment_authority_did: Some(enrollment_authority_did.clone()),
         }),
         methods: vec![AuthMethod {
             method: AuthMethodKind::Oidc,
@@ -374,7 +368,6 @@ pub(crate) fn service_describe_response(
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
     loaded_verified_profiles: &[crate::services::verified_profiles::VerifiedProfileDescriptor],
-    enrollment_authority_did: &arkret_identifiers::Did,
     development_mode: bool,
 ) -> ServiceDescribeOutcome {
     validate_claimed_profiles_against_sdk_requirements();
@@ -510,7 +503,7 @@ pub(crate) fn service_describe_response(
         ],
         supported_features: features.clone(),
         calendar_tzdb_versions: Vec::new(),
-        auth_metadata: build_auth_metadata(url_builder, arkret_config, enrollment_authority_did),
+        auth_metadata: build_auth_metadata(url_builder, arkret_config),
         limits: ServerLimits {
             extensions: limits_extensions,
         },
@@ -617,18 +610,10 @@ pub async fn server_describe(
         )
         .cloned()
         .unwrap_or_else(|_| std::sync::Arc::new(Vec::new()));
-    let key_store = depot.key_store()?;
-    let enrollment_authority =
-        crate::services::device_enrollment_authority::enrollment_authority(&key_store)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let enrollment_authority_did =
-        arkret_identifiers::Did::new(enrollment_authority.did().to_owned())
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let mut response = service_describe_response(
         &url_builder,
         &arkret_config,
         verified_profiles_loaded.as_ref(),
-        &enrollment_authority_did,
         depot
             .get::<bool>("development_mode")
             .copied()
