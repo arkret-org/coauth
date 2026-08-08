@@ -498,9 +498,6 @@ async fn apply_device_revocation_audit(
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone as _;
-    use coauth_data::Clock;
-    use coauth_data::oauth::NewSessionGrant;
-    use coauth_oauth_types::scope::Scope;
     use hyper::{Request, StatusCode};
 
     use super::*;
@@ -567,41 +564,43 @@ mod tests {
             )
             .await
             .unwrap();
-        let scope: Scope = "urn:arkret:principal-server:session.bind".parse().unwrap();
-        let grant = repo
-            .oauth_session_grant()
-            .add(
-                &mut rng,
-                &*state.clock,
-                NewSessionGrant {
-                    grant_id: arkret_identifiers::SessionGrantId::new(
-                        "ak:session_grant:AVKDZWS92w01isZDuPKuX-DiJymAf0Qcvf0A6qz8Gy-0".to_owned(),
-                    )
-                    .unwrap(),
-                    browser_session_id: Some(browser_session.id),
-                    issuer: "did:web:auth.example",
-                    subject: "did:web:alice.example",
-                    device_id: Some("device-1"),
-                    applet_id: None,
-                    effective_scope: None,
-                    registration_epoch: None,
-                    service_id: None,
-                    capability_grant_refs: Vec::new(),
-                    audience: "https://principal.example/api",
-                    scope,
-                    grant_jwt: "device-1.jwt",
-                    session_public_key: "{\"kty\":\"OKP\"}",
-                    credential_class: "standard",
-                    recovery_session_id: None,
-                    recovery_policy_id: None,
-                    recovery_policy_version: None,
-                    device_authorization_event_id: None,
-                    model_generation_ref: None,
-                    expires_at: state.clock.now() + chrono::Duration::try_minutes(5).unwrap(),
-                },
-            )
-            .await
-            .unwrap();
+        let device_id = "ak:device:0196419b-0000-7000-8000-000000000006";
+        let grant_config = coauth_config::ArkretConfig {
+            deployment_profile: coauth_config::DeploymentProfileConfig::PersonalNode,
+            principal_method: coauth_config::PrincipalMethodConfig::DidWeb,
+            runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+                "did:web:auth.example",
+            ),
+            ..coauth_config::ArkretConfig::default()
+        };
+        let session_private = coauth_keystore::PrivateKey::generate_ed25519(&mut rng);
+        let session_public = coauth_jose::jwk::PublicJsonWebKey::new(
+            coauth_jose::jwk::JsonWebKeyPublicParameters::from(&session_private),
+        );
+        let material = crate::handlers::arkret::issue_session_grant(
+            &mut rng,
+            &*state.clock,
+            &state.url_builder,
+            &grant_config,
+            &state.key_store,
+            &browser_session,
+            session_public,
+            "did:web:alice.example",
+            vec![
+                crate::handlers::arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
+                format!("urn:arkret:client:device:{device_id}"),
+            ],
+        )
+        .unwrap();
+        let grant = crate::handlers::arkret::persist_session_grant(
+            &mut repo,
+            &mut rng,
+            &*state.clock,
+            &browser_session,
+            &material,
+        )
+        .await
+        .unwrap();
         repo.save().await.unwrap();
 
         let response = state
@@ -613,21 +612,21 @@ mod tests {
             .await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_eq!(body["data"][0]["id"], "device-1");
+        assert_eq!(body["data"][0]["id"], device_id);
         assert_eq!(body["data"][0]["account_id"], user.id.to_string());
         assert!(body["data"][0]["registered_at"].is_string());
         assert_eq!(body["data"][0]["revoked_at"], serde_json::Value::Null);
 
         let response = state
             .request(
-                Request::post("/_coauth/admin/devices/device-1/revoke")
+                Request::post(format!("/_coauth/admin/devices/{device_id}/revoke"))
                     .bearer(&token)
                     .json(serde_json::json!({ "reason": "lost device" })),
             )
             .await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_eq!(body["device"]["id"], "device-1");
+        assert_eq!(body["device"]["id"], device_id);
         assert_eq!(body["revoked_session_grants"], 1);
 
         let mut repo = state.repository().await.unwrap();

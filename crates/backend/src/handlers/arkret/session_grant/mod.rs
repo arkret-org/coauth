@@ -6,17 +6,18 @@ mod revoke;
 mod session_logout;
 mod types;
 
-pub(crate) use arkret_models_identity::{SessionGrantCnf, SignedSessionGrantClaims};
+pub(crate) use arkret_models_identity::SignedSessionGrantClaims;
 pub use introspection::introspect_session_grant;
 #[cfg(test)]
 pub(crate) use introspection::{introspection_status, session_grant_jwt_hash};
 #[cfg(test)]
 pub(crate) use issuance::issue_session_grant;
 pub(crate) use issuance::{
-    commit_session_grant_issuance, issue_session_grant_for_audience,
+    DEVICE_BOOTSTRAP_TRANSACTION_TTL, commit_session_grant_issuance,
+    issue_founding_device_bootstrap_grant, issue_session_grant_for_audience,
     issue_test_session_grant_for_audience, mint_agent_session_grant,
     mint_promoted_recovery_session_grant, new_session_grant_record, persist_session_grant,
-    persist_session_grant_with_browser_session_id, persist_unbound_session_grant,
+    persist_unbound_session_grant,
 };
 pub use issue::issue_session_grant_endpoint;
 pub(crate) use issue::map_oidc_exchange_error;

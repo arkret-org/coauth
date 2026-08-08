@@ -20,21 +20,16 @@
 //!    `enrollment_authority_binding`.
 //! 5. Sign the proof with the persistent enrollment key (VM mapped to `executed_by`) and return the
 //!    full Event JSON.
-use std::sync::{Mutex, OnceLock};
-
+#[cfg(test)]
 use arkret_canonical::ed25519_pubkey_to_did_key_multibase;
-use arkret_hlc::HlcGenerator;
-use arkret_identifiers::{EventId, Hlc, RealmId};
-use arkret_models_collaboration::events_payloads::device_identity::{
-    DeviceAuthorizePayload, DeviceOrPrincipalRef,
-};
+use arkret_models_collaboration::events_payloads::device_identity::DeviceAuthorizePayload;
 use arkret_models_identity::{
-    AccountDeviceEnrollOutcome, AccountDeviceEnrollRequestBody, DeviceEnrollmentAuthorityBinding,
-    DeviceEnrollmentAuthorityBindingKind, SessionGrantBootstrapBinding,
-    SessionGrantCredentialClass, SignedSessionGrantClaims,
+    AccountDeviceEnrollOutcome, AccountDeviceEnrollRequestBody, SessionGrantBootstrapBinding,
+    SessionGrantCredentialClass, SignedSessionGrantClaims, device_bootstrap_device_key_digest,
+    founding_batch_digest,
 };
 use arkret_signatures::{SignEventOptions, sign_event};
-use arkret_wire::{AuthorizationRef, Event, NonEmptyString, ScopeRef};
+use arkret_wire::Event;
 use chrono::{DateTime, Utc};
 use coauth_data::user::PrincipalDidRepository as _;
 use salvo::prelude::*;
@@ -48,7 +43,7 @@ use crate::services::resolved_principal_audiences::{
 
 /// Extract the `Authorization: Bearer <token>` value (the caller's
 /// `ak.session.grant`), or a 401.
-fn bearer_token_from_request(req: &Request) -> Result<String, ArkretRouteError> {
+pub(super) fn bearer_token_from_request(req: &Request) -> Result<String, ArkretRouteError> {
     let header = req
         .headers()
         .get(http::header::AUTHORIZATION)
@@ -108,65 +103,22 @@ fn decode_base64_any(input: &str) -> Option<Vec<u8>> {
         .ok()
 }
 
-/// Truncate to whole seconds so the SDK serializes `created_at`/`not_before` in
-/// the canonical `YYYY-MM-DDTHH:MM:SSZ` form the principal server enforces
-/// (`validate_timestamp_canonical` rejects fractional seconds).
 pub(super) fn truncate_to_seconds(when: DateTime<Utc>) -> DateTime<Utc> {
     DateTime::from_timestamp(when.timestamp(), 0).unwrap_or(when)
 }
 
-static DEVICE_ENROLL_HLC: OnceLock<Mutex<HlcGenerator>> = OnceLock::new();
+pub struct DeviceEnrollCanonicalJson(Vec<u8>);
 
-fn fresh_hlc(
-    authority: &crate::services::device_enrollment_authority::EnrollmentAuthority,
-    realm_id: &RealmId,
-    device_id: &arkret_identifiers::DeviceId,
-    now: DateTime<Utc>,
-) -> Result<Hlc, ArkretRouteError> {
-    let unix_ms = u64::try_from(now.timestamp_millis().max(0)).unwrap_or(0);
-    let secret = authority.hlc_node_secret();
-    let clock = DEVICE_ENROLL_HLC.get_or_init(|| {
-        Mutex::new(HlcGenerator::with_initial_time(
-            realm_id.as_str(),
-            device_id.as_str(),
-            &secret,
-            0,
-        ))
-    });
-    clock
-        .lock()
-        .map_err(|_| {
-            ArkretRouteError::Internal(Box::new(std::io::Error::other(
-                "device enrollment HLC lock poisoned",
-            )))
-        })?
-        .try_generate_for_scope_at(realm_id.as_str(), device_id.as_str(), &secret, unix_ms)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
-}
-
-fn enforce_service_attested_device_authorize_provenance(
-    event: &Event,
-    payload: &DeviceAuthorizePayload,
-) -> Result<(), ArkretRouteError> {
-    payload
-        .validate_service_attested_provenance(
-            event.executed_by.as_ref(),
-            event.authorization_ref.as_deref(),
-            event.created_at,
-        )
-        .map_err(|error| service_attested_provenance_error(error.to_string()))
-}
-
-fn service_attested_provenance_error(message: impl std::fmt::Display) -> ArkretRouteError {
-    ArkretRouteError::coded(
-        StatusCode::FORBIDDEN,
-        arkret_wire::ErrorCode::FAILED_PRECONDITION,
-        format!("reason_code=service_attested_provenance_required; {message}"),
-    )
-}
-
-fn device_enroll_prev_refs(bootstrap_create_event_id: EventId) -> Vec<EventId> {
-    vec![bootstrap_create_event_id]
+impl Scribe for DeviceEnrollCanonicalJson {
+    fn render(self, response: &mut Response) {
+        response.headers_mut().insert(
+            http::header::CONTENT_TYPE,
+            http::HeaderValue::from_static("application/json"),
+        );
+        response
+            .write_body(self.0)
+            .expect("canonical JSON response body is writable");
+    }
 }
 
 /// Resolve the configured Principal Server selected by the authenticated
@@ -208,11 +160,13 @@ fn principal_audience_for_grant(
 pub async fn device_enroll_endpoint(
     req: &mut Request,
     depot: &mut Depot,
-) -> Result<Json<AccountDeviceEnrollOutcome>, ArkretRouteError> {
+) -> Result<DeviceEnrollCanonicalJson, ArkretRouteError> {
     use coauth_data::RepositoryAccess;
     use coauth_jose::jwt::Jwt;
 
-    use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
+    use crate::services::dpop::{
+        DpopVerifier, dpop_header_from_request, dpop_htu, dpop_replay_record,
+    };
 
     let arkret_config = depot.arkret_config()?;
     let url_builder = depot.url_builder()?;
@@ -240,12 +194,11 @@ pub async fn device_enroll_endpoint(
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
     let body: AccountDeviceEnrollRequestBody = serde_json::from_value(raw_body.clone())
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
-    let request_digest = arkret_identifiers::Hash::new(
-        arkret_canonical::canonical_sha256(&raw_body).map_err(|_| {
-            ArkretRouteError::BadRequest("device-enroll body is not canonicalizable".to_owned())
-        })?,
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    body.validate()
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    let request_digest = body
+        .canonical_request_digest()
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
 
     // Read `cnf.jkt` from the grant payload; the persisted row is the source of
     // truth (no JWT signature check here — the DB lookup authenticates it).
@@ -270,46 +223,58 @@ pub async fn device_enroll_endpoint(
                 "no session grant matches the presented bearer",
             )
         })?;
-    if !grant_row.is_active(&*clock) {
-        repo.cancel().await.ok();
-        return Err(ArkretRouteError::coded(
-            StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::GRANT_ALREADY_CONSUMED,
-            "session grant is expired, revoked, or superseded",
-        ));
-    }
     let expected_device_scope = format!("urn:arkret:client:device:{}", body.device_id.as_str());
-    let (bootstrap_device_id, allowed_operation_ids, bootstrap_expires_at) =
-        match grant_payload.bootstrap_binding.as_ref() {
-            Some(SessionGrantBootstrapBinding::Founding {
-                device_id,
-                allowed_operation_ids,
-                bootstrap_transaction_expires_at,
-                ..
-            })
-            | Some(SessionGrantBootstrapBinding::SiblingPairing {
-                device_id,
-                allowed_operation_ids,
-                bootstrap_transaction_expires_at,
-                ..
-            }) => (
-                device_id,
-                allowed_operation_ids,
-                bootstrap_transaction_expires_at,
-            ),
-            _ => {
-                repo.cancel().await.ok();
-                return Err(ArkretRouteError::coded(
-                    StatusCode::UNAUTHORIZED,
-                    arkret_wire::ErrorCode::FAILED_PRECONDITION,
-                    "device enrollment requires a closed device_bootstrap binding",
-                ));
-            }
-        };
+    let (
+        bootstrap_transaction_id,
+        bootstrap_principal_id,
+        bootstrap_device_id,
+        bootstrap_device_key_digest,
+        bootstrap_holder_jkt,
+        bootstrap_request_digest,
+        bootstrap_founding_digest,
+        bootstrap_founding_event_ids,
+        allowed_operation_ids,
+        bootstrap_expires_at,
+    ) = match grant_payload.bootstrap_binding.as_ref() {
+        Some(SessionGrantBootstrapBinding::Founding {
+            transaction_id,
+            principal_id,
+            device_id,
+            device_key_digest,
+            holder_jkt,
+            canonical_request_digest,
+            founding_batch_digest,
+            founding_event_ids,
+            allowed_operation_ids,
+            bootstrap_transaction_expires_at,
+            ..
+        }) => (
+            transaction_id,
+            principal_id,
+            device_id,
+            device_key_digest,
+            holder_jkt,
+            canonical_request_digest,
+            founding_batch_digest,
+            founding_event_ids,
+            allowed_operation_ids,
+            bootstrap_transaction_expires_at,
+        ),
+        _ => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                "device enrollment requires a closed device_bootstrap binding",
+            ));
+        }
+    };
     if grant_payload.credential_class != SessionGrantCredentialClass::DeviceBootstrap
         || grant_payload.holder_binding.is_some()
+        || bootstrap_principal_id != &grant_payload.subject
         || bootstrap_device_id != &body.device_id
-        || *bootstrap_expires_at <= clock.now()
+        || bootstrap_holder_jkt != &grant_payload.cnf.jkt
+        || bootstrap_request_digest != &request_digest
         || !allowed_operation_ids.iter().any(|operation| {
             operation == arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ENROLL_DEVICE
         })
@@ -334,63 +299,16 @@ pub async fn device_enroll_endpoint(
             "session grant holder/device binding does not authorize this enrollment device",
         ));
     }
-    let Some(browser_session_id) = grant_row.browser_session_id else {
-        repo.cancel().await.ok();
-        return Err(ArkretRouteError::coded(
-            StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::SESSION_GRANT_NOT_FOUND,
-            "device enrollment requires a browser-bound session grant",
-        ));
-    };
-    let browser_session = repo
-        .browser_session()
-        .lookup(browser_session_id)
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
-        .ok_or_else(|| {
-            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
-                "session grant references missing browser session",
-            ))
-        })?;
-    if browser_session.finished_at.is_some() {
-        repo.cancel().await.ok();
-        return Err(ArkretRouteError::coded(
-            StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::SESSION_LOGGED_OUT,
-            "browser session is logged out",
-        ));
-    }
-    let principal_binding = repo
-        .principal_did()
-        .get_by_did_and_audience(
-            grant_payload.subject.as_str(),
-            grant_payload.audience.as_str(),
-        )
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
-        .filter(|binding| binding.user_id == browser_session.user.id)
-        .ok_or_else(|| {
-            ArkretRouteError::coded(
-                StatusCode::NOT_FOUND,
-                arkret_wire::ErrorCode::PRINCIPAL_UNKNOWN,
-                "principal_unknown",
-            )
-        })?;
-    let enrollment_authority_did = principal_binding.enrollment_authority_did;
-    let authorization_ref = principal_binding.enrollment_authority_ref;
-    let service_account_id = principal_binding.user_id;
     repo.cancel().await.ok();
 
     // 2. Proof-of-possession: the caller MUST hold the key the grant is bound to.
-    let verifier = depot.dpop_verifier()?;
     let dpop_now = clock.now();
     let htm = req.method().as_str().to_ascii_uppercase();
     let public_base = url_builder.http_base();
     let htu = dpop_htu(&public_base, req);
-    let verification = verifier
-        .verify(&dpop_header, &htm, &htu, dpop_now, Some(&grant_jwt))
-        .await
-        .map_err(|error| {
+    let verification =
+        DpopVerifier::verify_without_replay(&dpop_header, &htm, &htu, dpop_now, Some(&grant_jwt))
+            .map_err(|error| {
             ArkretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
                 arkret_wire::ErrorCode::INVALID_SIGNATURE,
@@ -408,20 +326,228 @@ pub async fn device_enroll_endpoint(
     // 3. The principal DID is the grant subject. Bind the event proof to the configured principal
     //    server and require the grant to target it.
     let principal_id = grant_payload.subject.clone();
-    let audience = principal_audience_for_grant(
+    let _audience = principal_audience_for_grant(
         &arkret_config,
         resolved_principal_audiences::shared(),
         grant_payload.audience.as_str(),
     )?;
 
-    // 3. This session's device id (client-supplied; soland projects the device_public_key under it,
-    //    matching the id the session/recovery uses). Already a typed `DeviceId` (validated on
-    //    deserialize) from the SDK request body.
+    // 4. Re-derive every bootstrap identity value from the complete client-authored preimage. The
+    //    account authority is not an Event author: it may validate and append one proof only.
     let device_id = body.device_id.clone();
-    let device_public_key = decode_device_public_key(&body.device_public_key)?;
-    let device_public_key_multibase = ed25519_pubkey_to_did_key_multibase(&device_public_key);
+    let preimage = &body.authorize_event_preimage;
+    let payload: DeviceAuthorizePayload = serde_json::from_value(
+        serde_json::to_value(&preimage.payload)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+    )
+    .map_err(|error| {
+        ArkretRouteError::BadRequest(format!("invalid device authorize payload: {error}"))
+    })?;
+    let device_public_key = decode_device_public_key(payload.device_public_key.as_str())?;
+    let derived_device_key_digest = device_bootstrap_device_key_digest(device_public_key)
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    let derived_founding_digest = founding_batch_digest(bootstrap_founding_event_ids)
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    let expected_realm_id = arkret_models_identity::principal_control_realm_id(&principal_id);
+    if preimage.realm_id.as_str() != expected_realm_id
+        || preimage.actor_id != principal_id
+        || preimage.prev_refs.first() != bootstrap_founding_event_ids.first()
+        || Some(&preimage.event_id) != bootstrap_founding_event_ids.get(1)
+        || &derived_device_key_digest != bootstrap_device_key_digest
+        || &derived_founding_digest != bootstrap_founding_digest
+    {
+        return Err(ArkretRouteError::coded(
+            StatusCode::FORBIDDEN,
+            arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            "device authorize preimage does not match the founding bootstrap transaction",
+        ));
+    }
 
-    // 4. Assemble the B-model envelope.
+    let bootstrap_transaction_id =
+        arkret_wire::ProtocolOpaqueId::new(bootstrap_transaction_id.clone())
+            .map_err(|error| ArkretRouteError::BadRequest(error.to_owned()))?;
+
+    // Replay is decided before signing. A retry must return the exact first proof bytes, not a
+    // newly-created equivalent signature. The current request has already reauthenticated the
+    // holder and revalidated every immutable bootstrap binding above.
+    let mut repo = depot.repo().await?;
+    let reservation = repo
+        .account_handoff()
+        .reserve_device_bootstrap_enrollment(
+            coauth_data::DeviceBootstrapEnrollmentReservationInput {
+                transaction_id: &bootstrap_transaction_id,
+                principal_id: &principal_id,
+                device_id: &device_id,
+                request_digest: &request_digest,
+                now: clock.now(),
+            },
+        )
+        .await?;
+    let transaction = match &reservation {
+        coauth_data::DeviceBootstrapEnrollmentReserve::Reserved(transaction)
+        | coauth_data::DeviceBootstrapEnrollmentReserve::RequiresDecision(transaction)
+        | coauth_data::DeviceBootstrapEnrollmentReserve::Replay(transaction)
+        | coauth_data::DeviceBootstrapEnrollmentReserve::Conflict(transaction)
+        | coauth_data::DeviceBootstrapEnrollmentReserve::Cancelled(transaction)
+        | coauth_data::DeviceBootstrapEnrollmentReserve::Expired(transaction) => transaction,
+        coauth_data::DeviceBootstrapEnrollmentReserve::NotFound => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "device bootstrap credential has no durable issuer transaction",
+            ));
+        }
+    };
+    let binding_matches = transaction.principal_id == principal_id
+        && transaction.device_id == device_id
+        && transaction.device_key_digest == derived_device_key_digest
+        && transaction.holder_jkt == expected_jkt
+        && transaction.canonical_request_digest == request_digest
+        && transaction.founding_batch_digest == derived_founding_digest
+        && transaction.founding_event_ids == *bootstrap_founding_event_ids
+        && transaction.bootstrap_grant_id == grant_payload.grant_id;
+    if !binding_matches {
+        repo.cancel().await.ok();
+        return Err(ArkretRouteError::coded(
+            StatusCode::CONFLICT,
+            arkret_wire::ErrorCode::BOOTSTRAP_IDEMPOTENCY_CONFLICT,
+            "founding device enrollment conflicts with the durable bootstrap transaction",
+        ));
+    }
+    let enrollment_authority_did = match reservation {
+        coauth_data::DeviceBootstrapEnrollmentReserve::Reserved(_) => {
+            if !grant_row.is_active(&*clock) || *bootstrap_expires_at <= clock.now() {
+                repo.cancel().await.ok();
+                return Err(ArkretRouteError::coded(
+                    StatusCode::UNAUTHORIZED,
+                    arkret_wire::ErrorCode::GRANT_ALREADY_CONSUMED,
+                    "session grant or bootstrap authorization is no longer active",
+                ));
+            }
+            if !repo
+                .dpop_replay()
+                .consume_jti(dpop_replay_record(&verification.claims.jti, dpop_now))
+                .await?
+            {
+                repo.cancel().await.ok();
+                return Err(ArkretRouteError::coded(
+                    StatusCode::UNAUTHORIZED,
+                    arkret_wire::ErrorCode::INVALID_SIGNATURE,
+                    "DPoP JTI was already consumed",
+                ));
+            }
+            let Some(browser_session_id) = grant_row.browser_session_id else {
+                repo.cancel().await.ok();
+                return Err(ArkretRouteError::coded(
+                    StatusCode::UNAUTHORIZED,
+                    arkret_wire::ErrorCode::SESSION_GRANT_NOT_FOUND,
+                    "device enrollment requires a browser-bound session grant",
+                ));
+            };
+            let browser_session = repo
+                .browser_session()
+                .lookup(browser_session_id)
+                .await
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+                .ok_or_else(|| {
+                    ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                        "session grant references missing browser session",
+                    ))
+                })?;
+            if browser_session.finished_at.is_some() {
+                repo.cancel().await.ok();
+                return Err(ArkretRouteError::coded(
+                    StatusCode::UNAUTHORIZED,
+                    arkret_wire::ErrorCode::SESSION_LOGGED_OUT,
+                    "browser session is logged out",
+                ));
+            }
+            let principal_binding = repo
+                .principal_did()
+                .get_by_did_and_audience(
+                    grant_payload.subject.as_str(),
+                    grant_payload.audience.as_str(),
+                )
+                .await
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+                .filter(|binding| binding.user_id == browser_session.user.id)
+                .ok_or_else(|| {
+                    ArkretRouteError::coded(
+                        StatusCode::NOT_FOUND,
+                        arkret_wire::ErrorCode::PRINCIPAL_UNKNOWN,
+                        "principal_unknown",
+                    )
+                })?;
+            if preimage.executed_by.as_str() != principal_binding.enrollment_authority_did.as_str()
+                || preimage.authorization_ref.as_str() != principal_binding.enrollment_authority_ref
+            {
+                repo.cancel().await.ok();
+                return Err(ArkretRouteError::coded(
+                    StatusCode::FORBIDDEN,
+                    arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                    "device authorize preimage does not match the enrollment authority binding",
+                ));
+            }
+            principal_binding.enrollment_authority_did
+        }
+        coauth_data::DeviceBootstrapEnrollmentReserve::RequiresDecision(_) => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::BOOTSTRAP_DECISION_INDETERMINATE,
+                "bootstrap deadline requires a Principal Server decision receipt",
+            ));
+        }
+        coauth_data::DeviceBootstrapEnrollmentReserve::Replay(transaction) => {
+            let bytes = transaction.canonical_enrollment_outcome.ok_or_else(|| {
+                ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                    "replayed device-bootstrap transaction has no canonical outcome",
+                ))
+            })?;
+            let stored: AccountDeviceEnrollOutcome =
+                serde_json::from_slice(&bytes).map_err(|error| {
+                    ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                        format!("stored device-enroll outcome is invalid: {error}"),
+                    ))
+                })?;
+            stored.validate_against(&body).map_err(|error| {
+                ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                    format!("stored device-enroll outcome failed validation: {error}"),
+                ))
+            })?;
+            repo.cancel().await.ok();
+            return Ok(DeviceEnrollCanonicalJson(bytes));
+        }
+        coauth_data::DeviceBootstrapEnrollmentReserve::Conflict(_) => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::BOOTSTRAP_IDEMPOTENCY_CONFLICT,
+                "founding device enrollment conflicts with the durable bootstrap transaction",
+            ));
+        }
+        coauth_data::DeviceBootstrapEnrollmentReserve::Cancelled(_) => {
+            repo.save().await?;
+            return Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::BOOTSTRAP_TRANSACTION_CANCELLED,
+                "device bootstrap transaction is cancelled",
+            ));
+        }
+        coauth_data::DeviceBootstrapEnrollmentReserve::Expired(_) => {
+            repo.save().await?;
+            return Err(ArkretRouteError::coded(
+                StatusCode::GONE,
+                arkret_wire::ErrorCode::BOOTSTRAP_TRANSACTION_EXPIRED,
+                "device bootstrap transaction is expired",
+            ));
+        }
+        coauth_data::DeviceBootstrapEnrollmentReserve::NotFound => unreachable!("handled above"),
+    };
+
+    // 5. Materialize the exact proof-free Event and append only the persistent enrollment authority
+    //    proof. `validate_against` below proves signing did not rewrite the preimage.
     let key_store = depot.key_store()?;
     let authority = enrollment_authority(&key_store)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
@@ -433,80 +559,7 @@ pub async fn device_enroll_endpoint(
         ));
     }
     let authority_did = enrollment_authority_did;
-    let realm_id_string = arkret_models_identity::principal_control_realm_id(&principal_id);
-    let realm_id = RealmId::new(realm_id_string).map_err(|error| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "derived principal-control realm id is invalid: {error}"
-        )))
-    })?;
-
-    let now = truncate_to_seconds(clock.now());
-    let not_before = body.not_before.map_or_else(|| now, truncate_to_seconds);
-    let prev_refs = device_enroll_prev_refs(body.bootstrap_create_event_id.clone());
-
-    let payload = DeviceAuthorizePayload {
-        principal_id: principal_id.clone(),
-        device_id: device_id.clone(),
-        device_public_key: NonEmptyString::new(device_public_key_multibase)
-            .expect("encoded Ed25519 public key is non-empty"),
-        hpke_key: NonEmptyString::new(body.hpke_key.clone())
-            .map_err(|error| ArkretRouteError::BadRequest(format!("invalid hpke_key: {error}")))?,
-        algorithms: body
-            .algorithms
-            .iter()
-            .cloned()
-            .map(NonEmptyString::new)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| ArkretRouteError::BadRequest(format!("invalid algorithm: {error}")))?,
-        device_key_algorithm: None,
-        authorized_by: DeviceOrPrincipalRef::Did(authority_did.clone()),
-        scopes: None,
-        not_before,
-        expires_at: None,
-        device_signature: None,
-        proof: None,
-        cross_signing_binding: None,
-        enrollment_authority_binding: Some(DeviceEnrollmentAuthorityBinding {
-            kind: DeviceEnrollmentAuthorityBindingKind::ServiceAttested,
-            authority_did: authority_did.clone(),
-            authorization_ref: NonEmptyString::new(authorization_ref.clone())
-                .expect("principal enrollment authority reference is non-empty"),
-        }),
-        recovery_session_id: None,
-    };
-
-    let hlc = fresh_hlc(&authority, &realm_id, &device_id, now)?;
-    let mut event = Event::new_at(
-        "ak.device.authorize",
-        ScopeRef::Realm {
-            realm_id: realm_id.clone(),
-        },
-        principal_id.clone(),
-        body.actor_seq,
-        hlc,
-        serde_json::to_value(&payload).map_err(|error| {
-            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                "failed to serialize device-enroll payload: {error}"
-            )))
-        })?,
-        now,
-    )
-    .map_err(|error| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "failed to author device-enroll event: {error}"
-        )))
-    })?;
-    event.prev_refs = prev_refs;
-    event.executed_by = Some(authority_did.clone());
-    event.authorization_ref = Some(AuthorizationRef::new(authorization_ref.clone()).map_err(
-        |error| {
-            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                "invalid device-enroll authorization reference: {error}"
-            )))
-        },
-    )?);
-
-    enforce_service_attested_device_authorize_provenance(&event, &payload)?;
+    let mut event: Event = preimage.clone().into_event();
 
     // 5. Sign the proof with the persistent enrollment key; the VM maps to `executed_by`
     //    (device-lifecycle §5.4). The authorization is a portable identity fact, so its proof omits
@@ -518,7 +571,7 @@ pub async fn device_enroll_endpoint(
         &mut event,
         &signer,
         authority.verification_method(),
-        SignEventOptions::new().with_created_at(now),
+        SignEventOptions::new().with_created_at(clock.now()),
     )
     .map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
@@ -526,63 +579,103 @@ pub async fn device_enroll_endpoint(
         )))
     })?;
 
-    let outcome = AccountDeviceEnrollOutcome {
+    let mut outcome = AccountDeviceEnrollOutcome {
+        bootstrap_transaction_id: bootstrap_transaction_id.clone(),
         principal_id,
         device_id,
         authority_did,
+        authorized_event_id: event.event_id.clone(),
+        authorized_event_digest: arkret_identifiers::Hash::new(
+            event
+                .event_digest()
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        )
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         authorized_event: event,
+        outcome_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
+            .expect("placeholder outcome digest has a valid wire shape"),
     };
-    let encoded_outcome = serde_json::to_value(&outcome).map_err(|error| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "failed to encode device-enroll outcome: {error}"
-        )))
-    })?;
-
-    let mut repo = depot.repo().await?;
+    outcome.outcome_digest = outcome
+        .recompute_outcome_digest()
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    outcome
+        .validate_against(&body)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let commit = repo
         .account_handoff()
-        .commit_first_device_enrollment(coauth_data::account_handoff::FirstDeviceEnrollmentInput {
-            service_account_id,
-            audience: &audience,
+        .commit_device_bootstrap_enrollment(coauth_data::DeviceBootstrapEnrollmentInput {
+            transaction_id: &bootstrap_transaction_id,
             principal_id: &outcome.principal_id,
             device_id: &outcome.device_id,
             request_digest: &request_digest,
-            outcome: &encoded_outcome,
+            authorized_event_id: &outcome.authorized_event_id,
+            authorized_event_digest: &outcome.authorized_event_digest,
+            canonical_outcome: &canonical_outcome,
+            outcome_digest: &outcome.outcome_digest,
             now: clock.now(),
         })
         .await?;
-    // Cotest seeds an already-verified DID binding through the debug-only
-    // setup seam instead of replaying the browser account-handoff UI. Keep
-    // every protocol check above (grant, DPoP, audience, delegation, signed
-    // Event) and waive only the absent setup receipt in that explicitly gated
-    // process.
     match commit {
-        coauth_data::account_handoff::FirstDeviceEnrollmentCommit::Committed => {
+        coauth_data::DeviceBootstrapEnrollmentCommit::Committed(transaction) => {
             repo.save().await?;
-            Ok(Json(outcome))
-        }
-        coauth_data::account_handoff::FirstDeviceEnrollmentCommit::Replay(stored) => {
-            let stored =
-                serde_json::from_value::<AccountDeviceEnrollOutcome>(stored).map_err(|error| {
+            Ok(DeviceEnrollCanonicalJson(
+                transaction.canonical_enrollment_outcome.ok_or_else(|| {
                     ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
-                        format!("stored device-enroll outcome is invalid: {error}"),
+                        "committed device-bootstrap transaction has no canonical outcome",
                     ))
-                })?;
-            repo.cancel().await.ok();
-            Ok(Json(stored))
+                })?,
+            ))
         }
-        coauth_data::account_handoff::FirstDeviceEnrollmentCommit::Conflict
-            if super::test_endpoints_enabled() =>
-        {
+        coauth_data::DeviceBootstrapEnrollmentCommit::RequiresDecision(_) => {
             repo.cancel().await.ok();
-            Ok(Json(outcome))
+            Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::BOOTSTRAP_DECISION_INDETERMINATE,
+                "bootstrap deadline requires a Principal Server decision receipt",
+            ))
         }
-        coauth_data::account_handoff::FirstDeviceEnrollmentCommit::Conflict => {
+        coauth_data::DeviceBootstrapEnrollmentCommit::Replay(transaction) => {
+            repo.cancel().await.ok();
+            Ok(DeviceEnrollCanonicalJson(
+                transaction.canonical_enrollment_outcome.ok_or_else(|| {
+                    ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                        "replayed device-bootstrap transaction has no canonical outcome",
+                    ))
+                })?,
+            ))
+        }
+        coauth_data::DeviceBootstrapEnrollmentCommit::Conflict(_) => {
             repo.cancel().await.ok();
             Err(ArkretRouteError::coded(
                 StatusCode::CONFLICT,
                 arkret_wire::ErrorCode::BOOTSTRAP_IDEMPOTENCY_CONFLICT,
                 "founding device enrollment conflicts with the durable bootstrap outcome",
+            ))
+        }
+        coauth_data::DeviceBootstrapEnrollmentCommit::Cancelled(_) => {
+            repo.save().await?;
+            Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::BOOTSTRAP_TRANSACTION_CANCELLED,
+                "device bootstrap transaction is cancelled",
+            ))
+        }
+        coauth_data::DeviceBootstrapEnrollmentCommit::Expired(_) => {
+            repo.save().await?;
+            Err(ArkretRouteError::coded(
+                StatusCode::GONE,
+                arkret_wire::ErrorCode::BOOTSTRAP_TRANSACTION_EXPIRED,
+                "device bootstrap transaction is expired",
+            ))
+        }
+        coauth_data::DeviceBootstrapEnrollmentCommit::NotFound => {
+            repo.cancel().await.ok();
+            Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "device bootstrap credential has no durable issuer transaction",
             ))
         }
     }
@@ -599,16 +692,6 @@ mod tests {
             session_grant_introspection_bearer: Some("test-introspection".to_owned()),
             embedded_webvh_registration_bearer: Some("test-registration".to_owned()),
         }
-    }
-
-    fn event_id(value: &str) -> EventId {
-        EventId::new(value).expect("valid event id")
-    }
-
-    #[test]
-    fn first_device_uses_bootstrap_create_predecessor() {
-        let create = event_id("ak:event:AQcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH");
-        assert_eq!(device_enroll_prev_refs(create.clone()), vec![create]);
     }
 
     #[test]

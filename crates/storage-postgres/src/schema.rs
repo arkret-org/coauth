@@ -4,6 +4,77 @@
 #![allow(missing_docs)]
 
 diesel::table! {
+    account_handoff_creation_attempts (request_id) {
+        request_id -> Uuid,
+        request_digest -> Text,
+        canonical_intent_digest -> Text,
+        canonical_intent -> Bytea,
+        holder_jkt -> Text,
+        issuer -> Text,
+        client_id -> Text,
+        authorization_code_digest -> Text,
+        dpop_jti_digest -> Text,
+        state -> Text,
+        authorization_checkpoint -> Nullable<Jsonb>,
+        canonical_outcome -> Nullable<Bytea>,
+        outcome_digest -> Nullable<Text>,
+        retained_until -> Timestamptz,
+        created_at -> Timestamptz,
+        authorized_at -> Nullable<Timestamptz>,
+        committed_at -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
+    device_bootstrap_transactions (transaction_id) {
+        transaction_id -> Text,
+        mode -> Text,
+        account_authority_id -> Text,
+        principal_server_id -> Text,
+        principal_id -> Text,
+        device_id -> Text,
+        device_key_digest -> Text,
+        holder_jkt -> Text,
+        canonical_request_digest -> Text,
+        canonical_request -> Bytea,
+        founding_batch_digest -> Text,
+        founding_event_ids -> Array<Text>,
+        bootstrap_grant_id -> Text,
+        state -> Text,
+        enrollment_request_digest -> Nullable<Text>,
+        canonical_enrollment_outcome -> Nullable<Bytea>,
+        enrollment_outcome_digest -> Nullable<Text>,
+        authorized_event_id -> Nullable<Text>,
+        authorized_event_digest -> Nullable<Text>,
+        standard_grant_id -> Nullable<Text>,
+        expires_at -> Timestamptz,
+        created_at -> Timestamptz,
+        enrolled_at -> Nullable<Timestamptz>,
+        accepted_at -> Nullable<Timestamptz>,
+        cancelled_at -> Nullable<Timestamptz>,
+        expired_at -> Nullable<Timestamptz>,
+        decision_principal_server_id -> Nullable<Text>,
+        canonical_decision_receipt -> Nullable<Bytea>,
+        decision_receipt_digest -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
+    device_bootstrap_cancel_operations (transaction_id, idempotency_key) {
+        transaction_id -> Text,
+        idempotency_key -> Text,
+        canonical_request_digest -> Text,
+        canonical_request -> Bytea,
+        authority_request_digest -> Text,
+        canonical_authority_request -> Bytea,
+        requested_decision -> Text,
+        canonical_outcome -> Nullable<Bytea>,
+        outcome_digest -> Nullable<Text>,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     users (id) {
         id -> Uuid,
         localpart -> Text,
@@ -1130,6 +1201,9 @@ diesel::joinable!(workflow_audit_logs -> workflow_instances (workflow_instance_i
 diesel::joinable!(workflow_audit_logs -> workflow_steps (workflow_step_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    account_handoff_creation_attempts,
+    device_bootstrap_transactions,
+    device_bootstrap_cancel_operations,
     users,
     account_claims,
     risk_action_proposals,

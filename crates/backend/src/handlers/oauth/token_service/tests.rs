@@ -7,10 +7,10 @@ use std::sync::Arc;
 use chrono::Duration;
 use coauth_config::ArkretConfig;
 use coauth_data::clock::MockClock;
-use coauth_data::oauth::{LocalizedClientMetadata, NewSessionGrant};
+use coauth_data::oauth::LocalizedClientMetadata;
 use coauth_data::{
-    AuthorizationCode, Client, Clock, Pkce, RefreshToken, RefreshTokenState,
-    RepositoryFactory as _, SiteConfig, TokenType, UrlBuilder,
+    AuthorizationCode, Client, Pkce, RefreshToken, RefreshTokenState, RepositoryFactory as _,
+    SiteConfig, TokenType, UrlBuilder,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_iana::oauth::{OAuthClientAuthenticationMethod, PkceCodeChallengeMethod};
@@ -341,40 +341,43 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
         .add_from_browser_session(&mut rng, &*clock, &client, &browser_session, scope.clone())
         .await
         .unwrap();
-    let session_grant = repo
-        .oauth_session_grant()
-        .add(
-            &mut rng,
-            &*clock,
-            NewSessionGrant {
-                grant_id: arkret_identifiers::SessionGrantId::new(
-                    "ak:session_grant:AXhWi64NM1HEkQY3dHk_NRU_V4MVtQStlBgHFed0r0xB".to_owned(),
-                )
-                .unwrap(),
-                browser_session_id: Some(browser_session.id),
-                issuer: "did:web:issuer.example",
-                subject: "did:web:subject.example",
-                device_id: Some("device-1"),
-                applet_id: None,
-                effective_scope: None,
-                registration_epoch: None,
-                service_id: None,
-                capability_grant_refs: Vec::new(),
-                audience: "did:web:audience.example",
-                scope,
-                grant_jwt: "session-grant-jwt",
-                session_public_key: "session-public-key",
-                credential_class: "standard",
-                recovery_session_id: None,
-                recovery_policy_id: None,
-                recovery_policy_version: None,
-                device_authorization_event_id: None,
-                model_generation_ref: None,
-                expires_at: clock.now() + Duration::try_hours(1).unwrap(),
-            },
-        )
-        .await
-        .unwrap();
+    let grant_config = ArkretConfig {
+        deployment_profile: coauth_config::DeploymentProfileConfig::PersonalNode,
+        principal_method: coauth_config::PrincipalMethodConfig::DidWeb,
+        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+            "did:web:issuer.example",
+        ),
+        ..ArkretConfig::default()
+    };
+    let grant_keystore = ed25519_keystore();
+    let grant_url_builder = UrlBuilder::new("https://issuer.example/".parse().unwrap(), None, None);
+    let grant_public_jwk = coauth_jose::jwk::PublicJsonWebKey::new(
+        coauth_jose::jwk::JsonWebKeyPublicParameters::from(&PrivateKey::generate_ed25519(&mut rng)),
+    );
+    let grant_material = crate::handlers::arkret::issue_session_grant(
+        &mut rng,
+        &*clock,
+        &grant_url_builder,
+        &grant_config,
+        &grant_keystore,
+        &browser_session,
+        grant_public_jwk,
+        "did:web:subject.example",
+        vec![
+            crate::handlers::arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
+            "urn:arkret:client:device:device-1".to_owned(),
+        ],
+    )
+    .unwrap();
+    let session_grant = crate::handlers::arkret::persist_session_grant(
+        &mut repo,
+        &mut rng,
+        &*clock,
+        &browser_session,
+        &grant_material,
+    )
+    .await
+    .unwrap();
     let access_token_value = TokenType::AccessToken.generate(&mut rng);
     let access_token = repo
         .oauth_access_token()

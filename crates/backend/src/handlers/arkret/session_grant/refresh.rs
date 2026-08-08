@@ -1,10 +1,13 @@
-use arkret_identifiers::{DeviceId, Did, Hash};
-use arkret_models_collaboration::session_grant_bodies::{
-    SESSION_GRANT_REFRESH_OPERATION, SessionGrantRefreshOutcome, SessionGrantRefreshProof,
-    SessionGrantRefreshRequestBody, session_grant_refresh_proof_signing_bytes,
-    session_grant_refresh_request_digest,
+use arkret_identifiers::{DeviceId, Did};
+use arkret_models_collaboration::contact_operations::{
+    DeviceBootstrapDecision, DeviceBootstrapDecisionRequestPreimage,
+    RequestedDeviceBootstrapDecision,
 };
-use arkret_models_identity::SessionGrantProofKind;
+use arkret_models_collaboration::session_grant_bodies::{
+    SessionGrantRefreshOutcome, SessionGrantRefreshProof, SessionGrantRefreshRequestBody,
+    session_grant_refresh_proof_signing_bytes, session_grant_refresh_request_digest,
+};
+use arkret_models_identity::{SessionGrantCredentialClass, SessionGrantProofKind};
 use chrono::{DateTime, Utc};
 use coauth_data::{
     NewSessionGrantOperation, SessionGrantExactOutcome, SessionGrantOperationKind,
@@ -17,7 +20,10 @@ use sha2::Digest as _;
 
 use super::*;
 use crate::handlers::arkret::*;
-use crate::services::device_signing_directory::resolve_authorized_device_signing_key;
+use crate::services::device_signing_directory::{
+    ResolvedDeviceSigningKey, resolve_authorized_device_signing_key,
+};
+use crate::services::peer_protocol_client::PeerProtocolClient;
 use crate::services::resolved_principal_audiences;
 
 const SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS: i64 = 300;
@@ -67,9 +73,7 @@ fn did_proof_replay_window_exceeded(message: impl Into<String>) -> ArkretRouteEr
 
 /// The closed refresh DTO always carries the proof; presence is a parse-time
 /// guarantee, so only its field contents still need validating.
-fn required_soft_logout_proof(
-    body: &SessionGrantRefreshRequestBody,
-) -> &SessionGrantRefreshProof {
+fn required_soft_logout_proof(body: &SessionGrantRefreshRequestBody) -> &SessionGrantRefreshProof {
     &body.proof
 }
 
@@ -215,7 +219,7 @@ async fn verify_soft_logout_did_proof(
     prior_grant: &coauth_data::SessionGrant,
     device_id: &str,
     now: DateTime<Utc>,
-) -> Result<(), ArkretRouteError> {
+) -> Result<ResolvedDeviceSigningKey, ArkretRouteError> {
     let proof = required_soft_logout_proof(body);
     validate_soft_logout_proof_kind(proof.proof_kind)?;
 
@@ -319,7 +323,7 @@ async fn verify_soft_logout_did_proof(
         ));
     }
 
-    Ok(())
+    Ok(resolved)
 }
 
 // ── DPoP-bound session-grant refresh + debug seed ──────────────
@@ -854,6 +858,41 @@ pub async fn refresh_session_grant(
         };
     }
 
+    // DeviceBootstrap has exactly one legal refresh transition: a Founding
+    // transaction whose exact authorize event is accepted becomes Standard.
+    // Carry the closed binding into the authority check below; every other
+    // bootstrap shape fails before the generic human-device mint path.
+    let bootstrap_promotion = if prior_payload.credential_class
+        == SessionGrantCredentialClass::DeviceBootstrap
+    {
+        match prior_payload.bootstrap_binding.as_ref() {
+            Some(arkret_models_identity::SessionGrantBootstrapBinding::Founding {
+                transaction_id,
+                founding_event_ids,
+                device_key_digest,
+                ..
+            }) if founding_event_ids.len() == 2 => Some((
+                arkret_wire::ProtocolOpaqueId::new(transaction_id.clone()).map_err(|error| {
+                    ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                        error.to_owned(),
+                    ))
+                })?,
+                founding_event_ids[1].clone(),
+                device_key_digest.clone(),
+            )),
+            _ => {
+                repo.cancel().await.ok();
+                return Err(ArkretRouteError::coded(
+                    StatusCode::PRECONDITION_REQUIRED,
+                    arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                    "device-bootstrap refresh requires a closed founding binding",
+                ));
+            }
+        }
+    } else {
+        None
+    };
+
     // 4. Resolve the underlying browser session so the new grant lives under the same
     //    authentication context.
     let browser_session_id = prior_grant.browser_session_id.ok_or_else(|| {
@@ -931,7 +970,7 @@ pub async fn refresh_session_grant(
     // one Principal Server must not be able to rotate it into a grant for a
     // different audience (which it could then exchange there). Ignore any
     // client-supplied audience; reject an explicit mismatch defensively.
-    verify_soft_logout_did_proof(
+    let authorized_device = verify_soft_logout_did_proof(
         &http_client,
         &arkret_config,
         &body,
@@ -940,6 +979,219 @@ pub async fn refresh_session_grant(
         now,
     )
     .await?;
+
+    if let Some((transaction_id, expected_event_id, expected_key_digest)) =
+        bootstrap_promotion.as_ref()
+    {
+        let projected_event_id = authorized_device
+            .device_authorize_event_id
+            .as_ref()
+            .ok_or_else(|| {
+                did_proof_invalid("Principal authority omitted the device authorize event identity")
+            })?;
+        let raw_key = crate::handlers::arkret::device_enroll::decode_device_public_key(
+            &authorized_device.multibase,
+        )?;
+        let projected_key_digest =
+            arkret_models_identity::device_bootstrap_device_key_digest(raw_key)
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        if projected_event_id != expected_event_id || projected_key_digest != *expected_key_digest {
+            repo.cancel().await.ok();
+            return Err(did_proof_invalid(
+                "Principal authority acceptance does not match the founding transaction",
+            ));
+        }
+        let transaction = {
+            let mut handoff = repo.account_handoff();
+            handoff
+                .get_device_bootstrap_transaction(transaction_id)
+                .await?
+        }
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "founding bootstrap transaction is absent from the issuer ledger",
+            )
+        })?;
+        if transaction.authorized_event_id.as_ref() != Some(expected_event_id)
+            || transaction.device_key_digest != *expected_key_digest
+        {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::BOOTSTRAP_IDEMPOTENCY_CONFLICT,
+                "Principal authority acceptance conflicts with the founding transaction",
+            ));
+        }
+        match transaction.state {
+            coauth_data::DeviceBootstrapTransactionState::Accepted
+                if transaction.canonical_decision_receipt.is_some()
+                    && transaction.decision_receipt_digest.is_some()
+                    && transaction.decision_principal_server_id.is_some() => {}
+            coauth_data::DeviceBootstrapTransactionState::Accepted => {
+                repo.cancel().await.ok();
+                return Err(ArkretRouteError::coded(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    arkret_wire::ErrorCode::BOOTSTRAP_DECISION_INDETERMINATE,
+                    "Principal authority has not supplied a durable signed acceptance receipt",
+                ));
+            }
+            coauth_data::DeviceBootstrapTransactionState::Pending => {
+                let current_service_id = service_id_for(&arkret_config);
+                let grant_audience_id = arkret_identifiers::Did::new(prior_grant.audience.clone())
+                    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+                if transaction.account_authority_id != current_service_id
+                    || transaction.principal_server_id != grant_audience_id
+                {
+                    repo.cancel().await.ok();
+                    return Err(ArkretRouteError::coded(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        arkret_wire::ErrorCode::BOOTSTRAP_DECISION_INDETERMINATE,
+                        "bootstrap transaction service identities drifted before promotion",
+                    ));
+                }
+                let target = arkret_config
+                    .principal_servers
+                    .iter()
+                    .find_map(|server| {
+                        crate::services::resolved_principal_audiences::effective_audience_shared(
+                            server,
+                        )
+                        .filter(|audience| *audience == transaction.principal_server_id)
+                        .map(|audience| (server, audience))
+                    })
+                    .ok_or_else(|| {
+                        ArkretRouteError::coded(
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            arkret_wire::ErrorCode::BOOTSTRAP_DECISION_INDETERMINATE,
+                            "durable bootstrap Principal Server is no longer configured",
+                        )
+                    })?;
+                let decision_request = DeviceBootstrapDecisionRequestPreimage {
+                    account_authority_id: transaction.account_authority_id.clone(),
+                    transaction_id: transaction.transaction_id.clone(),
+                    idempotency_key: arkret_wire::IdempotencyKey::new(format!(
+                        "bootstrap-promotion-{}",
+                        transaction.transaction_id
+                    ))
+                    .map_err(|error| ArkretRouteError::BadRequest(error.to_owned()))?,
+                    requested_decision: RequestedDeviceBootstrapDecision::Cancelled,
+                    principal_id: transaction.principal_id.clone(),
+                    device_id: transaction.device_id.clone(),
+                    grant_id: transaction.bootstrap_grant_id.clone(),
+                    canonical_request_digest: transaction.canonical_request_digest.clone(),
+                    founding_event_ids: [
+                        transaction.founding_event_ids[0].clone(),
+                        transaction.founding_event_ids[1].clone(),
+                    ],
+                    founding_batch_digest: transaction.founding_batch_digest.clone(),
+                    bootstrap_transaction_expires_at: transaction.expires_at,
+                }
+                .finalize()
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+                let trust_domain = arkret_identifiers::TypedTrustDomainId::new(trust_domain_for(
+                    &depot.url_builder()?,
+                    &arkret_config,
+                ))
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+                let identity =
+                    arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
+                        source_service_id: transaction.account_authority_id.clone(),
+                        destination_service_id: transaction.principal_server_id.clone(),
+                        source_trust_domain: trust_domain.clone(),
+                        destination_trust_domain: trust_domain,
+                    };
+                let peer = PeerProtocolClient::new(
+                    Some(&target.0.endpoint),
+                    &http_client,
+                    &key_store,
+                    identity,
+                )
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+                // The Principal decision call is an external saga boundary.
+                // Persist the refresh reservation (including nonce, session,
+                // validity window and signing key) before the call so a crash
+                // after Principal acceptance cannot make a retry draw new
+                // issuance material.
+                repo.save().await?;
+                let outcome = peer
+                    .post_device_bootstrap_decision(&decision_request)
+                    .await
+                    .map_err(|error| {
+                        ArkretRouteError::coded(
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            arkret_wire::ErrorCode::BOOTSTRAP_DECISION_INDETERMINATE,
+                            error.to_string(),
+                        )
+                    })?;
+                if outcome.decision != DeviceBootstrapDecision::Accepted {
+                    return Err(ArkretRouteError::coded(
+                        StatusCode::CONFLICT,
+                        match outcome.decision {
+                            DeviceBootstrapDecision::Cancelled => {
+                                arkret_wire::ErrorCode::BOOTSTRAP_TRANSACTION_CANCELLED
+                            }
+                            DeviceBootstrapDecision::Expired => {
+                                arkret_wire::ErrorCode::BOOTSTRAP_TRANSACTION_EXPIRED
+                            }
+                            DeviceBootstrapDecision::Accepted => unreachable!(),
+                        },
+                        "Principal Server returned a terminal non-accepted bootstrap decision",
+                    ));
+                }
+                let evidence = crate::handlers::arkret::device_bootstrap_cancel::verify_device_bootstrap_decision_evidence(
+                    depot,
+                    decision_request,
+                    outcome,
+                    &transaction.principal_server_id,
+                    now,
+                )
+                .await?;
+                // Resume in a fresh transaction. Acceptance evidence and the
+                // successor grant are committed together below; an error
+                // leaves only the stable Reserved saga checkpoint.
+                repo = depot.repo().await?;
+                let accepted = repo
+                    .account_handoff()
+                    .mark_device_bootstrap_accepted(
+                        transaction_id,
+                        expected_event_id,
+                        expected_key_digest,
+                        evidence,
+                    )
+                    .await?;
+                if !matches!(
+                    accepted,
+                    coauth_data::DeviceBootstrapAcceptanceCommit::Accepted(_)
+                        | coauth_data::DeviceBootstrapAcceptanceCommit::Replay(_)
+                ) {
+                    repo.cancel().await.ok();
+                    return Err(ArkretRouteError::coded(
+                        StatusCode::CONFLICT,
+                        arkret_wire::ErrorCode::BOOTSTRAP_IDEMPOTENCY_CONFLICT,
+                        "accepted receipt conflicts with the durable bootstrap transaction",
+                    ));
+                }
+            }
+            coauth_data::DeviceBootstrapTransactionState::Cancelled => {
+                repo.cancel().await.ok();
+                return Err(ArkretRouteError::coded(
+                    StatusCode::CONFLICT,
+                    arkret_wire::ErrorCode::BOOTSTRAP_TRANSACTION_CANCELLED,
+                    "device bootstrap transaction is cancelled",
+                ));
+            }
+            coauth_data::DeviceBootstrapTransactionState::Expired => {
+                repo.cancel().await.ok();
+                return Err(ArkretRouteError::coded(
+                    StatusCode::GONE,
+                    arkret_wire::ErrorCode::BOOTSTRAP_TRANSACTION_EXPIRED,
+                    "device bootstrap transaction is expired",
+                ));
+            }
+        }
+    }
 
     // 6. Rebuild the successor solely from the durable reservation seed. The
     // signing window, nonce, chain id and signing key therefore remain byte
@@ -952,9 +1204,13 @@ pub async fn refresh_session_grant(
         .collect();
     let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let proof_kind = prior_payload.proof_kind.ok_or_else(|| {
-        did_proof_required("session-grant refresh predecessor is missing proof_kind")
-    })?;
+    let proof_kind = if bootstrap_promotion.is_some() {
+        body.proof.proof_kind
+    } else {
+        prior_payload.proof_kind.ok_or_else(|| {
+            did_proof_required("session-grant refresh predecessor is missing proof_kind")
+        })?
+    };
     let new_material = issue_session_grant_for_audience(
         &issuance_seed,
         &*clock,
@@ -1123,16 +1379,8 @@ mod tests {
     }
 
     #[test]
-    fn soft_logout_proof_kind_is_required() {
-        let err = validate_soft_logout_proof_kind(None)
-            .expect_err("missing proof_kind must require proof context");
-
-        assert_coded(err, arkret_wire::ErrorCode::DID_PROOF_REQUIRED);
-    }
-
-    #[test]
     fn soft_logout_proof_kind_rejects_unrelated_branches() {
-        let err = validate_soft_logout_proof_kind(Some(SessionGrantProofKind::AgentKeyProof))
+        let err = validate_soft_logout_proof_kind(SessionGrantProofKind::AgentKeyProof)
             .expect_err("agent_key_proof must not restore a human soft-logged-out session");
 
         assert_coded(err, arkret_wire::ReasonCode::PROOF_INVALID);

@@ -25,8 +25,8 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::schema::{
-    dpop_jti_replay, oauth_session_grant_operations, oauth_session_grants,
-    recovery_session_grant_promotions, user_sessions,
+    device_bootstrap_transactions, dpop_jti_replay, oauth_session_grant_operations,
+    oauth_session_grants, recovery_session_grant_promotions, user_sessions,
 };
 use crate::session_grant_codec::session_grant_id_from_bytes;
 use crate::{DatabaseError, DatabaseInconsistencyError};
@@ -498,7 +498,10 @@ fn validate_grant_material(
         || preimage.session_id != grant.session_id
         || credential_class != grant.credential_class
         || claims.grant_id != grant.grant_id
-        || operation.proof_kind != preimage.proof_kind
+        || (operation.operation_kind == SessionGrantOperationKind::Issue
+            && operation.proof_kind != preimage.proof_kind)
+        || (operation.operation_kind != SessionGrantOperationKind::Issue
+            && operation.proof_kind.is_some())
     {
         return Err(DatabaseError::invalid_operation());
     }
@@ -567,30 +570,66 @@ fn validate_grant_material(
 fn validate_refresh_chain(
     predecessor: &SessionGrant,
     successor: &NewSessionGrant<'_>,
-) -> Result<(), DatabaseError> {
+) -> Result<Option<String>, DatabaseError> {
     let predecessor_preimage: SessionGrantIssuancePreimage =
         serde_json::from_slice(&predecessor.issuance_preimage)
             .map_err(|_| DatabaseError::invalid_operation())?;
     let successor_preimage: SessionGrantIssuancePreimage =
         serde_json::from_slice(successor.issuance_preimage)
             .map_err(|_| DatabaseError::invalid_operation())?;
-    if predecessor_preimage.issuer != successor_preimage.issuer
+    let common_binding_mismatch = predecessor_preimage.issuer != successor_preimage.issuer
         || predecessor_preimage.subject != successor_preimage.subject
         || predecessor_preimage.audience != successor_preimage.audience
         || predecessor_preimage.session_id != successor_preimage.session_id
-        || predecessor_preimage.credential_class != successor_preimage.credential_class
-        || predecessor_preimage.holder_binding != successor_preimage.holder_binding
-        || predecessor_preimage.bootstrap_binding != successor_preimage.bootstrap_binding
-        || predecessor_preimage.recovery_binding != successor_preimage.recovery_binding
-        || predecessor_preimage.device_binding != successor_preimage.device_binding
+        || predecessor_preimage.cnf != successor_preimage.cnf
         || successor_preimage
             .scopes
             .iter()
-            .any(|scope| !predecessor_preimage.scopes.contains(scope))
+            .any(|scope| !predecessor_preimage.scopes.contains(scope));
+    if common_binding_mismatch {
+        return Err(DatabaseError::invalid_operation());
+    }
+
+    if predecessor_preimage.credential_class == successor_preimage.credential_class {
+        if predecessor_preimage.holder_binding != successor_preimage.holder_binding
+            || predecessor_preimage.bootstrap_binding != successor_preimage.bootstrap_binding
+            || predecessor_preimage.recovery_binding != successor_preimage.recovery_binding
+            || predecessor_preimage.device_binding != successor_preimage.device_binding
+        {
+            return Err(DatabaseError::invalid_operation());
+        }
+        return Ok(None);
+    }
+
+    let Some(SessionGrantBootstrapBinding::Founding {
+        principal_id,
+        device_id,
+        holder_jkt,
+        transaction_id,
+        ..
+    }) = predecessor_preimage.bootstrap_binding.as_ref()
+    else {
+        return Err(DatabaseError::invalid_operation());
+    };
+    let promoted_holder = Some(SessionGrantHolderBinding::HumanDevice {
+        device_binding: device_id.to_string(),
+    });
+    if predecessor_preimage.credential_class != SessionGrantCredentialClass::DeviceBootstrap
+        || successor_preimage.credential_class != SessionGrantCredentialClass::Standard
+        || predecessor_preimage.subject != *principal_id
+        || predecessor_preimage.holder_binding.is_some()
+        || predecessor_preimage.recovery_binding.is_some()
+        || predecessor_preimage.device_binding.is_some()
+        || predecessor_preimage.cnf.jkt != *holder_jkt
+        || successor_preimage.holder_binding != promoted_holder
+        || successor_preimage.bootstrap_binding.is_some()
+        || successor_preimage.recovery_binding.is_some()
+        || successor_preimage.device_binding.is_some()
+        || successor_preimage.proof_kind == Some(SessionGrantProofKind::PreRegistrationHandoff)
     {
         return Err(DatabaseError::invalid_operation());
     }
-    Ok(())
+    Ok(Some(transaction_id.clone()))
 }
 
 fn new_grant_row<'a>(
@@ -751,7 +790,8 @@ fn validate_authorization(
     now: DateTime<Utc>,
 ) -> Result<(), DatabaseError> {
     if authorization.authorization_ref.trim().is_empty()
-        || authorization.proof_expires_at <= now
+        || operation.state == SessionGrantOperationState::Reserved
+            && authorization.proof_expires_at <= now
         || matches!(
             operation.state,
             SessionGrantOperationState::Authorized | SessionGrantOperationState::Committed
@@ -760,6 +800,97 @@ fn validate_authorization(
         return Err(DatabaseError::invalid_operation());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod authorization_checkpoint_tests {
+    use super::*;
+
+    fn operation(
+        state: SessionGrantOperationState,
+        authorization: SessionGrantProofAuthorization<'_>,
+        now: DateTime<Utc>,
+    ) -> SessionGrantOperation {
+        SessionGrantOperation {
+            id: Ulid::from(1_u128),
+            issuer: "did:web:issuer.example".to_owned(),
+            operation_kind: SessionGrantOperationKind::Issue,
+            proof_kind: None,
+            request_identity: "oidc-code-hash".to_owned(),
+            canonical_intent_digest: [7; 32],
+            canonical_intent: Some(br#"{"kind":"oidc"}"#.to_vec()),
+            operation_selector: None,
+            issuance_nonce: Some("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8".to_owned()),
+            session_id: Some("session-1".to_owned()),
+            grant_not_before: Some(now - chrono::Duration::try_minutes(10).unwrap()),
+            grant_expires_at: Some(now + chrono::Duration::try_minutes(50).unwrap()),
+            signing_key_id: Some("key-1".to_owned()),
+            proof_authorization_ref: Some(authorization.authorization_ref.to_owned()),
+            proof_authorization_checkpoint: Some(authorization.checkpoint.clone()),
+            proof_expires_at: Some(authorization.proof_expires_at),
+            outcome_digest: None,
+            canonical_outcome: None,
+            state,
+            target_grant_id: None,
+            result_grant_id: None,
+            affected_grant_ids: Vec::new(),
+            retained_until: now + chrono::Duration::try_days(7).unwrap(),
+            created_at: now - chrono::Duration::try_minutes(10).unwrap(),
+            committed_at: None,
+        }
+    }
+
+    #[test]
+    fn authorized_exact_checkpoint_can_finish_after_proof_expiry() {
+        let now = Utc::now();
+        let checkpoint = serde_json::json!({"kind":"oidc","subject":"did:web:alice.example"});
+        let authorization = SessionGrantProofAuthorization {
+            authorization_ref: "oidc:code-hash",
+            checkpoint: &checkpoint,
+            proof_expires_at: now - chrono::Duration::try_minutes(1).unwrap(),
+        };
+        let operation = operation(SessionGrantOperationState::Authorized, authorization, now);
+
+        validate_authorization(&operation, authorization, now)
+            .expect("an exact durable checkpoint remains resumable after five minutes");
+    }
+
+    #[test]
+    fn reserved_operation_cannot_first_consume_expired_proof() {
+        let now = Utc::now();
+        let checkpoint = serde_json::json!({"kind":"oidc"});
+        let authorization = SessionGrantProofAuthorization {
+            authorization_ref: "oidc:code-hash",
+            checkpoint: &checkpoint,
+            proof_expires_at: now - chrono::Duration::try_seconds(1).unwrap(),
+        };
+        let operation = operation(SessionGrantOperationState::Reserved, authorization, now);
+
+        assert!(validate_authorization(&operation, authorization, now).is_err());
+    }
+
+    #[test]
+    fn authorized_resume_rejects_changed_checkpoint_after_expiry() {
+        let now = Utc::now();
+        let stored = serde_json::json!({"kind":"oidc","subject":"did:web:alice.example"});
+        let changed = serde_json::json!({"kind":"oidc","subject":"did:web:bob.example"});
+        let stored_authorization = SessionGrantProofAuthorization {
+            authorization_ref: "oidc:code-hash",
+            checkpoint: &stored,
+            proof_expires_at: now - chrono::Duration::try_minutes(1).unwrap(),
+        };
+        let operation = operation(
+            SessionGrantOperationState::Authorized,
+            stored_authorization,
+            now,
+        );
+        let changed_authorization = SessionGrantProofAuthorization {
+            checkpoint: &changed,
+            ..stored_authorization
+        };
+
+        assert!(validate_authorization(&operation, changed_authorization, now).is_err());
+    }
 }
 
 async fn evict_operation(
@@ -1064,9 +1195,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         authorization: SessionGrantProofAuthorization<'_>,
     ) -> Result<SessionGrantOperation, Self::Error> {
         let now = clock.now();
-        if authorization.authorization_ref.trim().is_empty()
-            || authorization.proof_expires_at <= now
-        {
+        if authorization.authorization_ref.trim().is_empty() {
             return Err(DatabaseError::invalid_operation());
         }
         self.conn
@@ -1086,6 +1215,9 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                         }
                     }
                     SessionGrantOperationState::Reserved => {
+                        if authorization.proof_expires_at <= now {
+                            return Err(DatabaseError::invalid_operation());
+                        }
                         let retained_until =
                             operation.retained_until.max(authorization.proof_expires_at);
                         diesel::update(
@@ -1225,11 +1357,35 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 {
                     return Err(DatabaseError::invalid_operation());
                 }
-                validate_refresh_chain(&predecessor, &successor)?;
+                let bootstrap_promotion_transaction =
+                    validate_refresh_chain(&predecessor, &successor)?;
                 if predecessor.lifecycle_state != SessionGrantLifecycleState::Active
                     || predecessor.expires_at <= now
                 {
                     return Ok(SessionGrantRefreshOutcome::PredecessorTerminal(predecessor));
+                }
+                if let Some(transaction_id) = bootstrap_promotion_transaction.as_deref() {
+                    let (state, bootstrap_grant_id, authorized_event_id, standard_grant_id) =
+                        device_bootstrap_transactions::table
+                            .find(transaction_id)
+                            .for_update()
+                            .select((
+                                device_bootstrap_transactions::state,
+                                device_bootstrap_transactions::bootstrap_grant_id,
+                                device_bootstrap_transactions::authorized_event_id,
+                                device_bootstrap_transactions::standard_grant_id,
+                            ))
+                            .first::<(String, String, Option<String>, Option<String>)>(conn)
+                            .await
+                            .optional()?
+                            .ok_or_else(DatabaseError::invalid_operation)?;
+                    if state != "accepted"
+                        || bootstrap_grant_id != predecessor_grant_id.as_str()
+                        || authorized_event_id.is_none()
+                        || standard_grant_id.is_some()
+                    {
+                        return Err(DatabaseError::invalid_operation());
+                    }
                 }
 
                 let successor_grant_id = successor.grant_id.clone();
@@ -1256,6 +1412,18 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 .execute(conn)
                 .await?;
                 DatabaseError::ensure_affected_rows_usize(changed, 1)?;
+
+                if let Some(transaction_id) = bootstrap_promotion_transaction.as_deref() {
+                    let changed =
+                        diesel::update(device_bootstrap_transactions::table.find(transaction_id))
+                            .set(
+                                device_bootstrap_transactions::standard_grant_id
+                                    .eq(Some(successor_grant_id.as_str())),
+                            )
+                            .execute(conn)
+                            .await?;
+                    DatabaseError::ensure_affected_rows_usize(changed, 1)?;
+                }
 
                 let retained_until = operation.retained_until.max(authorization.proof_expires_at);
                 commit_operation_outcome(
@@ -1519,6 +1687,14 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 let successor_preimage: SessionGrantIssuancePreimage =
                     serde_json::from_slice(successor.issuance_preimage)
                         .map_err(|_| DatabaseError::invalid_operation())?;
+                let mut expected_successor_scopes = vec![
+                    "urn:arkret:principal-server:session.bind".to_owned(),
+                    format!(
+                        "urn:arkret:client:device:{}",
+                        promotion.replacement_device_id
+                    ),
+                ];
+                expected_successor_scopes.sort_unstable();
                 if predecessor_preimage.credential_class
                     != SessionGrantCredentialClass::RecoveryRestricted
                     || successor_preimage.credential_class != SessionGrantCredentialClass::Standard
@@ -1526,10 +1702,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                     || predecessor_preimage.subject != successor_preimage.subject
                     || predecessor_preimage.audience != successor_preimage.audience
                     || predecessor_preimage.session_id != successor_preimage.session_id
-                    || successor_preimage
-                        .scopes
-                        .iter()
-                        .any(|scope| !predecessor_preimage.scopes.contains(scope))
+                    || successor_preimage.scopes != expected_successor_scopes
                 {
                     return Err(DatabaseError::invalid_operation());
                 }
@@ -1797,8 +1970,15 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                             AND (
                                 replay.target_grant_id = oauth_session_grants.grant_id
                                 OR replay.result_grant_id = oauth_session_grants.grant_id
-                                OR oauth_session_grants.grant_id = ANY(replay.affected_grant_ids)
+                              OR oauth_session_grants.grant_id = ANY(replay.affected_grant_ids)
                             )
+                      )
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM device_bootstrap_transactions AS bootstrap
+                          WHERE bootstrap.bootstrap_grant_id =
+                                'ak:session_grant:' ||
+                                translate(encode(oauth_session_grants.grant_id, 'base64'), '+/', '-_')
                       )
                     ORDER BY expires_at ASC
                     LIMIT $3

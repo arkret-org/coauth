@@ -1876,6 +1876,7 @@ dependencies = [
  "arkret-locale",
  "arkret-models-collaboration",
  "arkret-models-identity",
+ "arkret-schema",
  "arkret-wire",
  "async-trait",
  "chrono",

@@ -380,7 +380,7 @@ mod tests {
             "holder_did": "did:web:holder",
             "peer_did": "did:web:peer",
             "consent_scope": scope,
-            "state": "revoked",
+            "state": "no_consent",
             "updated_at": "2026-05-01T00:00:00.000Z",
             "active_grant_dots": [],
             "grant_dots": ["ak:event:AQgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI:0"],

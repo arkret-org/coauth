@@ -197,6 +197,91 @@ pub async fn verify_unpublished_webvh_candidate(
     )
 }
 
+/// Resolve the last cryptographically verified `did:webvh` document whose
+/// version time is not later than an immutable receipt timestamp. Receipt
+/// verification must use the key that controlled the service DID when the
+/// receipt was signed, not merely the current post-rotation document.
+pub async fn resolve_verified_webvh_document_at(
+    http_client: &reqwest::Client,
+    did: &arkret_identifiers::Did,
+    decided_at: chrono::DateTime<chrono::Utc>,
+) -> Result<DidDocument, DidResolveError> {
+    if !did.as_str().starts_with("did:webvh:") {
+        return Err(DidResolveError::UnsupportedMethod);
+    }
+    let log_url = Url::parse(
+        &arkret_identity::DidWebvhResolver::log_url(did)
+            .map_err(|error| DidResolveError::InvalidDid(error.to_string()))?,
+    )?;
+    enforce_resolver_url_policy(&log_url)?;
+    let pinned_resolution = enforce_resolver_dns_policy(&log_url).await?;
+    let pinned_http_client;
+    let request_client = if let Some((host, addrs)) = pinned_resolution.as_ref() {
+        pinned_http_client =
+            crate::outbound_http::reqwest_client_with_static_resolution(host, addrs);
+        &pinned_http_client
+    } else {
+        http_client
+    };
+    let mut response = request_client.get(log_url.clone()).send_traced().await?;
+    if !response.status().is_success() {
+        return Err(DidResolveError::BadResolverResponse(format!(
+            "historical did:webvh request {log_url} returned {}",
+            response.status()
+        )));
+    }
+    if response
+        .content_length()
+        .is_some_and(|length| length > DID_WEBVH_LOG_MAX_BYTES as u64)
+    {
+        return Err(DidResolveError::DocumentTooLarge {
+            limit: DID_WEBVH_LOG_MAX_BYTES,
+        });
+    }
+    let mut history = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if history.len().saturating_add(chunk.len()) > DID_WEBVH_LOG_MAX_BYTES {
+            return Err(DidResolveError::DocumentTooLarge {
+                limit: DID_WEBVH_LOG_MAX_BYTES,
+            });
+        }
+        history.extend_from_slice(&chunk);
+    }
+    let verified =
+        arkret_identity::verify_did_webvh_v1_log_bytes(did, &history).map_err(|error| {
+            DidResolveError::BadResolverResponse(format!(
+                "historical did:webvh log failed verification: {error}"
+            ))
+        })?;
+    verified_webvh_document_at(did, &verified, decided_at)
+}
+
+fn verified_webvh_document_at(
+    did: &arkret_identifiers::Did,
+    verified: &arkret_identity::VerifiedDidWebvhLog,
+    decided_at: chrono::DateTime<chrono::Utc>,
+) -> Result<DidDocument, DidResolveError> {
+    let state = verified
+        .entries
+        .iter()
+        .rev()
+        .find(|entry| entry.version_time <= decided_at)
+        .map(|entry| entry.state.clone())
+        .ok_or_else(|| {
+            DidResolveError::BadResolverResponse(
+                "receipt predates the first verified did:webvh version".to_owned(),
+            )
+        })?;
+    let document: DidDocument = serde_json::from_value(state)?;
+    if document.id != did.as_str() {
+        return Err(DidResolveError::DocumentIdMismatch {
+            expected: did.to_string(),
+            actual: document.id,
+        });
+    }
+    Ok(document)
+}
+
 pub fn verify_unpublished_webvh_candidate_from_history(
     did: &arkret_identifiers::Did,
     expected_previous_version_id: &str,
@@ -848,6 +933,8 @@ fn did_plc_document_url(did: &str) -> Result<Url, DidResolveError> {
 
 #[cfg(test)]
 mod tests {
+    use chrono::{TimeZone as _, Utc};
+
     use super::*;
 
     fn addr(value: &str) -> SocketAddr {
@@ -1024,5 +1111,63 @@ mod tests {
                 Err(DidResolveError::BadResolverResponse(_))
             ));
         }
+    }
+
+    #[test]
+    fn verified_webvh_history_resolves_the_key_document_as_of_receipt_time() {
+        let did =
+            arkret_identifiers::Did::new("did:webvh:z6mkfixture:principal.example".to_owned())
+                .unwrap();
+        let old_time = Utc.with_ymd_and_hms(2026, 8, 8, 10, 0, 0).unwrap();
+        let rotated_time = Utc.with_ymd_and_hms(2026, 8, 8, 11, 0, 0).unwrap();
+        let document = |key: &str| {
+            serde_json::json!({
+                "id": did,
+                "verificationMethod": [{
+                    "id": format!("{}#{key}", did),
+                    "type": "JsonWebKey2020",
+                    "controller": did,
+                    "publicKeyJwk": {"kty":"OKP","crv":"Ed25519","x":"11qYAYdk9JtJ7w"}
+                }],
+                "assertionMethod": [format!("{}#{key}", did)]
+            })
+        };
+        let verified = arkret_identity::VerifiedDidWebvhLog {
+            raw_entries: Vec::new(),
+            entries: vec![
+                arkret_identity::DidWebvhLogEntry {
+                    version_id: "1-old".to_owned(),
+                    version_time: old_time,
+                    parameters: serde_json::json!({}),
+                    state: document("old"),
+                    proof: Vec::new(),
+                },
+                arkret_identity::DidWebvhLogEntry {
+                    version_id: "2-new".to_owned(),
+                    version_time: rotated_time,
+                    parameters: serde_json::json!({}),
+                    state: document("new"),
+                    proof: Vec::new(),
+                },
+            ],
+            head_version_id: "2-new".to_owned(),
+            head_state: document("new"),
+            active_update_keys: Vec::new(),
+        };
+
+        let old =
+            verified_webvh_document_at(&did, &verified, old_time + chrono::Duration::minutes(30))
+                .unwrap();
+        assert_eq!(old.assertion_method, vec![format!("{}#old", did)]);
+        let current = verified_webvh_document_at(&did, &verified, rotated_time).unwrap();
+        assert_eq!(current.assertion_method, vec![format!("{}#new", did)]);
+        assert!(
+            verified_webvh_document_at(
+                &did,
+                &verified,
+                old_time - chrono::Duration::milliseconds(1)
+            )
+            .is_err()
+        );
     }
 }

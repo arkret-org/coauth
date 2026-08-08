@@ -393,8 +393,20 @@ pub async fn issue_session_grant_endpoint(
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
     require_principal_id(&raw_body)?;
     let body: arkret_models_collaboration::session_grant_bodies::SessionGrantRequestBody =
-        serde_json::from_value(raw_body.clone())
-            .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
+        serde_json::from_value(raw_body.clone()).map_err(|error| {
+            ArkretRouteError::coded(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                arkret_wire::ErrorCode::SCHEMA_VIOLATION,
+                error.to_string(),
+            )
+        })?;
+    body.validate().map_err(|error| {
+        ArkretRouteError::coded(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            arkret_wire::ErrorCode::SCHEMA_VIOLATION,
+            error.to_string(),
+        )
+    })?;
     match body.proof.proof_kind {
         arkret_models_identity::SessionGrantProofKind::OidcCodeExchange => {
             let dpop_binding = extract_kickoff_dpop(req, depot).await?;
@@ -727,13 +739,17 @@ async fn issue_pre_registration_handoff_session_grant(
         .device_id
         .as_ref()
         .expect("handoff device_id was required before reservation");
+    let bootstrap_request = body.device_bootstrap_request.as_ref().ok_or_else(|| {
+        ArkretRouteError::coded(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            arkret_wire::ErrorCode::SCHEMA_VIOLATION,
+            "pre-registration handoff requires founding bootstrap material",
+        )
+    })?;
     let device_scope = format!("urn:arkret:client:device:{}", device_id.as_str());
     let scope_ceiling = [PRINCIPAL_SERVER_SESSION_BIND_SCOPE, device_scope.as_str()];
     if !body.requested_scope.is_empty()
-        && (body
-            .requested_scope
-            .iter()
-            .any(|scope| !scope_ceiling.contains(&scope.as_str()))
+        && (body.requested_scope.len() != scope_ceiling.len()
             || !scope_ceiling
                 .iter()
                 .all(|required| body.requested_scope.iter().any(|scope| scope == required)))
@@ -745,7 +761,47 @@ async fn issue_pre_registration_handoff_session_grant(
             "pre_registration_handoff requested_scope must equal the closed session-bind and device scope ceiling",
         ));
     }
-    let scopes = vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(), device_scope];
+    let enroll_request = arkret_models_identity::AccountDeviceEnrollRequestBody {
+        device_id: device_id.clone(),
+        authorize_event_preimage: bootstrap_request.authorize_event_preimage.clone(),
+    };
+    enroll_request
+        .validate()
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    let enroll_request_digest = enroll_request
+        .canonical_request_digest()
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    let canonical_enroll_request = arkret_canonical::canonical_json_bytes(&enroll_request)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let preimage = &bootstrap_request.authorize_event_preimage;
+    let payload: arkret_models_collaboration::events_payloads::device_identity::DeviceAuthorizePayload =
+        serde_json::from_value(
+            serde_json::to_value(&preimage.payload)
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        )
+        .map_err(|error| {
+            ArkretRouteError::BadRequest(format!("invalid device authorize payload: {error}"))
+        })?;
+    let raw_device_key =
+        super::super::device_enroll::decode_device_public_key(payload.device_public_key.as_str())?;
+    let device_key_digest =
+        arkret_models_identity::device_bootstrap_device_key_digest(raw_device_key)
+            .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    if preimage.actor_id != body.principal_id
+        || preimage.realm_id.as_str()
+            != arkret_models_identity::principal_control_realm_id(&body.principal_id)
+        || preimage.executed_by.as_str() != binding.enrollment_authority_did.as_str()
+        || preimage.authorization_ref.as_str() != binding.enrollment_authority_ref
+    {
+        repo.cancel().await.ok();
+        return Err(ArkretRouteError::coded(
+            StatusCode::FORBIDDEN,
+            arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            "founding preimage does not match the pinned principal enrollment delegation",
+        ));
+    }
+    let transaction_id = arkret_wire::ProtocolOpaqueId::new(operation.id.to_string())
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_owned()))?;
     let arkret_config = depot.arkret_config()?;
     let principal_endpoint = arkret_config
         .principal_servers
@@ -782,18 +838,23 @@ async fn issue_pre_registration_handoff_session_grant(
     })?;
     let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let material = issue_session_grant_for_audience(
+    let bootstrap_transaction_expires_at =
+        issuance_seed.expires_at + DEVICE_BOOTSTRAP_TRANSACTION_TTL;
+    let material = issue_founding_device_bootstrap_grant(
         &issuance_seed,
-        &*clock,
         &arkret_config,
         &depot.key_store()?,
-        &browser_session,
         dpop.jwk,
-        handoff.audience.clone(),
-        scopes,
-        Some(&binding.principal_id),
+        &body.principal_id,
+        device_id,
+        &proof.audience,
         dpop.jkt,
-        arkret_models_identity::SessionGrantProofKind::PreRegistrationHandoff,
+        transaction_id.as_str(),
+        bootstrap_transaction_expires_at,
+        enroll_request_digest.clone(),
+        device_key_digest.clone(),
+        bootstrap_request.founding_batch_digest.clone(),
+        bootstrap_request.founding_event_ids.clone(),
     )
     .map_err(map_session_grant_material_error)?;
     if !repo
@@ -844,11 +905,12 @@ async fn issue_pre_registration_handoff_session_grant(
         "handoff_grant_id": handoff.id.to_string(),
         "dpop_jti_digest": crate::services::dpop::dpop_jti_digest(&dpop.claims.jti),
     });
+    let operation_id = operation.id;
     let committed = commit_session_grant_issuance(
         &mut repo,
         &mut rng,
         &*clock,
-        operation.id,
+        operation_id,
         &format!("handoff:{}", handoff.id),
         &checkpoint,
         expires_at,
@@ -857,6 +919,46 @@ async fn issue_pre_registration_handoff_session_grant(
         &material,
     )
     .await?;
+    if matches!(
+        committed,
+        SessionGrantCommitOutcome::Committed(_) | SessionGrantCommitOutcome::Replay(_)
+    ) {
+        let transaction = repo
+            .account_handoff()
+            .create_device_bootstrap_transaction(coauth_data::NewDeviceBootstrapTransaction {
+                transaction_id,
+                mode: arkret_models_collaboration::contact_operations::BootstrapMode::Founding,
+                account_authority_id: service_id_for(&arkret_config),
+                principal_server_id: arkret_identifiers::Did::new(material.audience.clone())
+                    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+                principal_id: body.principal_id.clone(),
+                device_id: device_id.clone(),
+                device_key_digest,
+                holder_jkt: material
+                    .dpop_jkt
+                    .clone()
+                    .expect("bootstrap material always carries holder JKT"),
+                canonical_request_digest: enroll_request_digest,
+                canonical_request: canonical_enroll_request,
+                founding_batch_digest: bootstrap_request.founding_batch_digest.clone(),
+                founding_event_ids: bootstrap_request.founding_event_ids.clone(),
+                bootstrap_grant_id: material.grant_id.clone(),
+                expires_at: bootstrap_transaction_expires_at,
+                now: clock.now(),
+            })
+            .await?;
+        if matches!(
+            transaction,
+            coauth_data::DeviceBootstrapTransactionCreate::Conflict(_)
+        ) {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::BOOTSTRAP_IDEMPOTENCY_CONFLICT,
+                "bootstrap transaction identity conflicts with a durable issuer record",
+            ));
+        }
+    }
     repo.save().await?;
     match committed {
         SessionGrantCommitOutcome::Committed(_) => Ok(CanonicalJsonResponse(canonical_outcome)),
@@ -1271,6 +1373,7 @@ mod tests {
                 .with_alg(JsonWebSignatureAlg::Ed25519);
         DpopSessionBinding {
             proof_jwt: proof_jwt.to_owned(),
+            jti: "test-jti".to_owned(),
             jkt: "test-jkt".to_owned(),
             public_jwk,
         }

@@ -1,6 +1,6 @@
 use arkret_identifiers::{DeviceId, Did, SessionGrantId};
 use arkret_models_collaboration::account_lifecycle::{
-    AccountLifecycleProof, SessionRevokeOutcome, SessionRevokeRequestBody,
+    AccountLifecycleProof, SessionRevokeRequestBody,
 };
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::{
@@ -353,13 +353,6 @@ async fn verify_cross_session_lifecycle_proof(
     Ok(())
 }
 
-fn revoked_outcome(grants: Vec<SessionGrant>) -> SessionRevokeOutcome {
-    SessionRevokeOutcome {
-        revoked_count: grants.len() as u64,
-        revoked_grant_ids: grants.into_iter().map(|grant| grant.grant_id).collect(),
-    }
-}
-
 pub struct RevokeCanonicalJson(Vec<u8>);
 
 impl Scribe for RevokeCanonicalJson {
@@ -690,9 +683,14 @@ pub async fn revoke_session_grant_endpoint(
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let response = match committed {
-        SessionGrantRevokeOutcome::Revoked { grants, .. } => {
-            arkret_canonical::canonical_json_bytes(&revoked_outcome(grants))
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        SessionGrantRevokeOutcome::Revoked { operation, .. } => {
+            operation.canonical_outcome.ok_or_else(|| {
+                ArkretRouteError::coded(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                    "revoke commit has no repository canonical outcome",
+                )
+            })?
         }
         SessionGrantRevokeOutcome::Replay(operation) => {
             operation.canonical_outcome.ok_or_else(|| {
@@ -703,9 +701,14 @@ pub async fn revoke_session_grant_endpoint(
                 )
             })?
         }
-        SessionGrantRevokeOutcome::AlreadyTerminal { .. } => {
-            arkret_canonical::canonical_json_bytes(&revoked_outcome(Vec::new()))
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        SessionGrantRevokeOutcome::AlreadyTerminal { operation, .. } => {
+            operation.canonical_outcome.ok_or_else(|| {
+                ArkretRouteError::coded(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                    "terminal revoke commit has no repository canonical outcome",
+                )
+            })?
         }
         SessionGrantRevokeOutcome::Indeterminate(_) => {
             repo.save().await?;
@@ -725,6 +728,8 @@ pub async fn revoke_session_grant_endpoint(
 mod tests {
     use chrono::{Duration, Utc};
     use coauth_config::{ArkretConfig, DeploymentProfileConfig, PrincipalMethodConfig};
+    use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
+    use coauth_jose::jwk::JsonWebKeyPublicParameters;
     use coauth_keystore::{JsonWebKeySet, Keystore, PrivateKey};
     use coauth_oauth_types::scope::Scope;
     use rand_chacha::ChaChaRng;
@@ -752,7 +757,26 @@ mod tests {
 
     fn agent_session_grant(controller_id: &str) -> SessionGrant {
         let now = Utc::now();
+        let mut session_rng = ChaChaRng::seed_from_u64(0x4e18);
+        let session_key = PrivateKey::generate_ed25519(&mut session_rng);
+        let session_public_key = serde_json::to_string(
+            &coauth_keystore::JsonWebKey::new(JsonWebKeyPublicParameters::from(&session_key))
+                .with_use(JsonWebKeyUse::Sig)
+                .with_key_ops(vec![JsonWebKeyOperation::Verify])
+                .with_alg(JsonWebSignatureAlg::Ed25519)
+                .with_kid("agent-revoke-session-key"),
+        )
+        .unwrap();
+        let issuance_seed = SessionGrantIssuanceSeed::new(
+            arkret_models_identity::SessionGrantIssuanceNonce::from_bytes([0x51; 32]).to_string(),
+            "agent-revoke-test-session",
+            now,
+            now + Duration::minutes(15),
+            "test-ed25519",
+        )
+        .unwrap();
         let material = mint_agent_session_grant(
+            &issuance_seed,
             &personal_did_web_config(),
             &test_keystore(),
             "did:web:agent.example",
@@ -760,13 +784,18 @@ mod tests {
             "did:web:soland.example".to_owned(),
             vec!["ak.self.events.stream.subscribe".to_owned()],
             "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_owned(),
-            "{\"kty\":\"OKP\"}".to_owned(),
+            session_public_key,
             serde_json::json!({
                 "controller_id": controller_id,
                 "resources": {
                     "realm_refs": ["ak:realm:team"],
                 },
             }),
+            arkret_identifiers::EventId::new(
+                "ak:event:AQilOsNi6WF7kBMfOVLw4LjFp75pXSq5WJ0WMmJw3kgK",
+            )
+            .unwrap(),
+            arkret_wire::DidUrl::new("did:web:agent.example#runtime-key").unwrap(),
             now,
             now + Duration::minutes(15),
         )
@@ -787,6 +816,11 @@ mod tests {
             audience: material.audience,
             scope: Scope::from_iter(["ak.self.events.stream.subscribe".parse().unwrap()]),
             grant_jwt: material.grant_jwt,
+            session_id: material.session_id,
+            issuance_nonce: material.issuance_nonce,
+            issuance_preimage: material.issuance_preimage,
+            issuance_digest: material.issuance_digest,
+            signing_key_id: material.signing_key_id,
             session_public_key: material.session_public_key,
             credential_class: material.credential_class,
             recovery_session_id: material.recovery_session_id,
@@ -796,7 +830,11 @@ mod tests {
             model_generation_ref: material.model_generation_ref,
             created_at: now,
             expires_at: now + Duration::minutes(15),
+            lifecycle_state: coauth_data::SessionGrantLifecycleState::Active,
             revoked_at: None,
+            superseded_at: None,
+            successor_grant_id: None,
+            issuance_operation_id: ulid::Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap(),
         }
     }
 

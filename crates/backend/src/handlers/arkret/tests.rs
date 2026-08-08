@@ -104,7 +104,6 @@ fn jwt_payload_value(jwt: &str) -> serde_json::Value {
 
 fn assert_session_grant_jwt_omits_server_identity_metadata(raw_payload: &serde_json::Value) {
     for field in [
-        "issuer",
         "service_account_id",
         "principal_id",
         "provenance_anchor",
@@ -138,6 +137,10 @@ fn personal_node_did_web_config() -> ArkretConfig {
         runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
             "did:web:auth.example.com",
         ),
+        // Session-grant audiences are Principal Server DIDs. Keeping this
+        // explicit prevents the legacy HTTP admin URL fallback from entering
+        // the signed issuance preimage in these direct minting fixtures.
+        admin_audience: Some("did:web:principal.example.com".to_owned()),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
         ..ArkretConfig::default()
@@ -784,12 +787,12 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
     assert_eq!(payload.grant_id, grant.grant_id);
     assert_eq!(payload.subject.as_str(), principal_did);
     assert_eq!(
-        payload.audience,
+        payload.audience.as_str(),
         required_audience_for(&url_builder, &arkret_config)
     );
     assert_eq!(
         payload.scopes,
-        vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE, device_scope]
+        vec![device_scope, PRINCIPAL_SERVER_SESSION_BIND_SCOPE]
     );
     assert_eq!(payload.session_id, browser_session.id.to_string());
     assert_eq!(
@@ -803,10 +806,7 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
     let raw_payload = jwt_payload_value(&grant.grant_jwt);
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
     assert_subject_did_occurs_once(&raw_payload, payload.subject.as_str());
-    assert!(
-        raw_payload.get("session_public_key").is_none(),
-        "session grant JWT must bind grant-binding keys with cnf.jkt, not inline the full JWK"
-    );
+    assert!(raw_payload.get("session_public_key").is_some());
     assert_eq!(
         raw_payload["cnf"]["jkt"],
         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -874,6 +874,7 @@ fn session_grant_uses_configured_ttl() {
         ),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
+        admin_audience: Some("did:web:principal.example.com".to_owned()),
         session_grant_ttl: Duration::try_minutes(15).unwrap(),
         ..ArkretConfig::default()
     };
@@ -898,7 +899,10 @@ fn session_grant_uses_configured_ttl() {
         &browser_session,
         session_public_key,
         &principal_did,
-        vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
+        vec![
+            PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
+            "urn:arkret:client:device:ak:device:01964137-0000-7000-8000-000000000001".to_owned(),
+        ],
     )
     .unwrap();
 
@@ -932,6 +936,11 @@ fn session_grant_record_exposes_metadata_without_secrets() {
         audience: "https://soland.example.com/api".to_owned(),
         scope: Scope::from_iter([PRINCIPAL_SERVER_SESSION_BIND_SCOPE.parse().unwrap()]),
         grant_jwt: "header.payload.signature".to_owned(),
+        session_id: "test-session".to_owned(),
+        issuance_nonce: arkret_canonical::base64url_encode([0x11; 32]),
+        issuance_preimage: Vec::new(),
+        issuance_digest: [0_u8; 32],
+        signing_key_id: "test-ed25519".to_owned(),
         session_public_key: "{\"kty\":\"OKP\"}".to_owned(),
         credential_class: "standard".to_owned(),
         recovery_session_id: None,
@@ -941,7 +950,11 @@ fn session_grant_record_exposes_metadata_without_secrets() {
         model_generation_ref: None,
         created_at: now,
         expires_at: now + chrono::Duration::minutes(5),
+        lifecycle_state: coauth_data::SessionGrantLifecycleState::Active,
         revoked_at: None,
+        superseded_at: None,
+        successor_grant_id: None,
+        issuance_operation_id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCQ").unwrap(),
     };
 
     let body = serde_json::to_value(SessionGrantRecord::from(grant)).unwrap();
@@ -979,6 +992,11 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
         audience: "https://soland.example.com/api".to_owned(),
         scope: Scope::from_iter([PRINCIPAL_SERVER_SESSION_BIND_SCOPE.parse().unwrap()]),
         grant_jwt: "header.payload.signature".to_owned(),
+        session_id: "test-session".to_owned(),
+        issuance_nonce: arkret_canonical::base64url_encode([0x22; 32]),
+        issuance_preimage: Vec::new(),
+        issuance_digest: [0_u8; 32],
+        signing_key_id: "test-ed25519".to_owned(),
         session_public_key: "{\"kty\":\"OKP\"}".to_owned(),
         credential_class: "standard".to_owned(),
         recovery_session_id: None,
@@ -988,7 +1006,11 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
         model_generation_ref: None,
         created_at: now,
         expires_at: now + chrono::Duration::minutes(5),
+        lifecycle_state: coauth_data::SessionGrantLifecycleState::Active,
         revoked_at: None,
+        superseded_at: None,
+        successor_grant_id: None,
+        issuance_operation_id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCR").unwrap(),
     };
 
     assert_eq!(
@@ -1024,6 +1046,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
     );
 
     grant.revoked_at = Some(now);
+    grant.lifecycle_state = coauth_data::SessionGrantLifecycleState::Revoked;
     assert_eq!(
         introspection_status(&grant, Some(&user), now, None),
         SessionGrantIntrospectStatus::Revoked
@@ -1072,10 +1095,7 @@ async fn seed_persisted_session_grant(
     .unwrap();
     let raw_payload = jwt_payload_value(&material.grant_jwt);
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
-    assert!(
-        raw_payload.get("session_public_key").is_none(),
-        "session grant JWT must not inline the full grant-binding JWK"
-    );
+    assert!(raw_payload.get("session_public_key").is_some());
     assert!(raw_payload.get("cnf").is_none());
     let grant = persist_session_grant(
         &mut repo,
@@ -1290,7 +1310,17 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     let session_key = PrivateKey::generate_ed25519(&mut rng);
     let bound_jkt = "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD".to_owned();
     let grant_config = personal_node_did_web_config();
+    let issuance_seed = SessionGrantIssuanceSeed::new(
+        arkret_models_identity::SessionGrantIssuanceNonce::from_bytes([0x31; 32]).to_string(),
+        browser_session.id.to_string(),
+        state.clock.now(),
+        state.clock.now() + grant_config.session_grant_ttl,
+        "test-ed25519",
+    )
+    .unwrap();
+    let principal_did = format!("did:web:auth.example.com:users:{}", user.id);
     let material = issue_session_grant_for_audience(
+        &issuance_seed,
         &*state.clock,
         &grant_config,
         &state.key_store,
@@ -1298,16 +1328,14 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
         required_audience_for(&state.url_builder, &grant_config),
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
-        None,
+        Some(&principal_did),
         bound_jkt.clone(),
+        arkret_models_identity::SessionGrantProofKind::DidBoundSignature,
     )
     .unwrap();
     let raw_payload = jwt_payload_value(&material.grant_jwt);
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
-    assert!(
-        raw_payload.get("session_public_key").is_none(),
-        "DPoP-bound grant JWT must not inline the full grant-binding JWK"
-    );
+    assert!(raw_payload.get("session_public_key").is_some());
     assert_eq!(raw_payload["cnf"]["jkt"].as_str(), Some(bound_jkt.as_str()));
     let grant = persist_session_grant(
         &mut repo,
@@ -1391,7 +1419,16 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
             "realm_refs": ["ak:realm:team"],
         },
     });
+    let issuance_seed = SessionGrantIssuanceSeed::new(
+        arkret_models_identity::SessionGrantIssuanceNonce::from_bytes([0x41; 32]).to_string(),
+        "agent-test-session",
+        now,
+        now + Duration::try_minutes(15).unwrap(),
+        "test-ed25519",
+    )
+    .unwrap();
     let material = mint_agent_session_grant(
+        &issuance_seed,
         &state.arkret_config,
         &state.key_store,
         "did:web:agent.example",
@@ -1402,6 +1439,9 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC".to_owned(),
         session_public_key.clone(),
         scope_details.clone(),
+        arkret_identifiers::EventId::new("ak:event:AQilOsNi6WF7kBMfOVLw4LjFp75pXSq5WJ0WMmJw3kgK")
+            .unwrap(),
+        arkret_wire::DidUrl::new("did:web:agent.example#runtime-key").unwrap(),
         now,
         now + Duration::try_minutes(15).unwrap(),
     )
@@ -1409,10 +1449,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     let raw_payload = jwt_payload_value(&material.grant_jwt);
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
     assert_subject_did_occurs_once(&raw_payload, "did:web:agent.example");
-    assert!(
-        raw_payload.get("session_public_key").is_none(),
-        "agent session grant JWT must not inline the full grant-binding JWK"
-    );
+    assert!(raw_payload.get("session_public_key").is_some());
     assert_eq!(
         raw_payload["cnf"]["jkt"].as_str(),
         Some("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC")

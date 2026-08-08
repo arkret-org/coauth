@@ -129,10 +129,18 @@ pub use self::account::{
     AccountContactPoint, AccountIdentityBinding, ContactChannel, IdentityProviderType,
 };
 pub use self::account_handoff::{
-    AccountHandoffCreation, AccountHandoffGrant, AccountHandoffGrantInput,
-    AccountHandoffRepository, IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
-    IdentityBindingChallengeRecord, IdentityCreationLeaseRecord,
-    IdentityCreationRegistrationContext, IdentityCreationSagaState,
+    AccountHandoffCreation, AccountHandoffCreationAttempt, AccountHandoffCreationAttemptCommit,
+    AccountHandoffCreationAttemptReserve, AccountHandoffCreationAttemptState, AccountHandoffGrant,
+    AccountHandoffGrantInput, AccountHandoffRepository, DeviceBootstrapAcceptanceCommit,
+    DeviceBootstrapCancelCommit, DeviceBootstrapCancelDecision, DeviceBootstrapCancelInput,
+    DeviceBootstrapCancelOperation, DeviceBootstrapCancelReserve,
+    DeviceBootstrapCancelReserveInput, DeviceBootstrapDecisionEvidence,
+    DeviceBootstrapEnrollmentCommit, DeviceBootstrapEnrollmentInput,
+    DeviceBootstrapEnrollmentReservationInput, DeviceBootstrapEnrollmentReserve,
+    DeviceBootstrapTransaction, DeviceBootstrapTransactionCreate, DeviceBootstrapTransactionState,
+    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityBindingChallengeRecord,
+    IdentityCreationLeaseRecord, IdentityCreationRegistrationContext, IdentityCreationSagaState,
+    NewAccountHandoffCreationAttempt, NewDeviceBootstrapTransaction,
 };
 pub use self::accountability::{
     AccountabilityGrant, AccountabilityGrantFanoutState, AccountabilitySubjectKind,

@@ -93,6 +93,8 @@ pub struct ResolvedDeviceSigningKey {
     /// The bare `z…` multibase Ed25519 key, suitable for
     /// `arkret_signatures::PublicKeyMaterial::Ed25519Multibase`.
     pub multibase: String,
+    /// Exact accepted `ak.device.authorize` Event projected for this key.
+    pub device_authorize_event_id: Option<arkret_identifiers::EventId>,
 }
 
 /// Resolve `(principal_id, device_id)` → authorized device signing key against
@@ -196,6 +198,7 @@ pub async fn resolve_authorized_device_signing_key(
     Ok(ResolvedDeviceSigningKey {
         device_signing_key_did: entry.device_signing_key,
         multibase,
+        device_authorize_event_id: entry.device_authorize_event_id,
     })
 }
 

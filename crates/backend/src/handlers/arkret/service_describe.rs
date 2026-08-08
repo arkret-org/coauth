@@ -27,6 +27,7 @@ const SUPPORTED_OPERATIONS: &[&str] = &[
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_EXCHANGE_CREATE_HANDOFF,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_CANCEL_DEVICE_BOOTSTRAP,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT,
     "ak.gate.account.command.refresh_session_grant",
     "ak.gate.account.command.logout_auth_session",

@@ -15,7 +15,8 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::schema::{
-    upstream_oauth_authorization_sessions, user_session_authentications, user_sessions, users,
+    oauth_session_grants, upstream_oauth_authorization_sessions, user_session_authentications,
+    user_sessions, users,
 };
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
@@ -366,6 +367,18 @@ impl BrowserSessionRepository for PgBrowserSessionRepository<'_> {
 
         DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
 
+        diesel::update(
+            oauth_session_grants::table
+                .filter(oauth_session_grants::user_session_id.eq(Uuid::from(user_session.id)))
+                .filter(oauth_session_grants::lifecycle_state.eq("active")),
+        )
+        .set((
+            oauth_session_grants::lifecycle_state.eq("revoked"),
+            oauth_session_grants::revoked_at.eq(Some(finished_at)),
+        ))
+        .execute(self.conn)
+        .await?;
+
         Ok(user_session)
     }
 
@@ -380,12 +393,27 @@ impl BrowserSessionRepository for PgBrowserSessionRepository<'_> {
         let update = diesel::update(user_sessions::table).into_boxed();
         let update = apply_session_filter!(update, filter);
 
-        let rows_affected = update
+        let finished_session_ids = update
             .set(user_sessions::finished_at.eq(Some(finished_at)))
-            .execute(self.conn)
+            .returning(user_sessions::id)
+            .get_results::<Uuid>(self.conn)
             .await?;
 
-        Ok(rows_affected)
+        if !finished_session_ids.is_empty() {
+            diesel::update(
+                oauth_session_grants::table
+                    .filter(oauth_session_grants::user_session_id.eq_any(&finished_session_ids))
+                    .filter(oauth_session_grants::lifecycle_state.eq("active")),
+            )
+            .set((
+                oauth_session_grants::lifecycle_state.eq("revoked"),
+                oauth_session_grants::revoked_at.eq(Some(finished_at)),
+            ))
+            .execute(self.conn)
+            .await?;
+        }
+
+        Ok(finished_session_ids.len())
     }
 
     #[tracing::instrument(name = "db.browser_session.list", skip_all, err)]
@@ -718,6 +746,15 @@ impl BrowserSessionRepository for PgBrowserSessionRepository<'_> {
                     deleted_authentications AS (
                         DELETE FROM user_session_authentications USING to_delete
                         WHERE user_session_authentications.user_session_id = to_delete.user_session_id
+                    ),
+                    revoked_session_grants AS (
+                        UPDATE oauth_session_grants
+                        SET lifecycle_state = 'revoked',
+                            revoked_at = COALESCE(oauth_session_grants.revoked_at, to_delete.finished_at)
+                        FROM to_delete
+                        WHERE oauth_session_grants.user_session_id = to_delete.user_session_id
+                          AND oauth_session_grants.lifecycle_state = 'active'
+                        RETURNING oauth_session_grants.id
                     ),
                     deleted_sessions AS (
                         DELETE FROM user_sessions USING to_delete

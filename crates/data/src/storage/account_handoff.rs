@@ -7,9 +7,14 @@ use coauth_data::account_handoff::{
     IdentityCreationRegisterReplay,
 };
 use coauth_data::{
-    AccountHandoffCreation, AccountHandoffGrant, AccountHandoffGrantInput,
-    IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
-    IdentityCreationRegistrationContext,
+    AccountHandoffCreation, AccountHandoffCreationAttemptCommit,
+    AccountHandoffCreationAttemptReserve, AccountHandoffGrant, AccountHandoffGrantInput,
+    DeviceBootstrapAcceptanceCommit, DeviceBootstrapCancelCommit, DeviceBootstrapCancelInput,
+    DeviceBootstrapEnrollmentCommit, DeviceBootstrapEnrollmentInput,
+    DeviceBootstrapEnrollmentReservationInput, DeviceBootstrapEnrollmentReserve,
+    DeviceBootstrapTransaction, DeviceBootstrapTransactionCreate, IdentityBindingChallengeInput,
+    IdentityBindingChallengeIssue, IdentityCreationRegistrationContext,
+    NewAccountHandoffCreationAttempt, NewDeviceBootstrapTransaction,
 };
 
 use crate::repository_impl;
@@ -19,6 +24,95 @@ use crate::repository_impl;
 pub trait AccountHandoffRepository: Send + Sync {
     /// Backend-specific failure type.
     type Error;
+
+    /// Install the durable fence before contacting the external OIDC token
+    /// endpoint. Same-intent `Pending(Reserved)` must never re-exchange.
+    async fn reserve_creation_attempt(
+        &mut self,
+        input: NewAccountHandoffCreationAttempt,
+    ) -> Result<AccountHandoffCreationAttemptReserve, Self::Error>;
+
+    /// Persist the non-sensitive authorization conclusion. Exact Authorized
+    /// replay is allowed to resume the local commit without re-exchanging.
+    async fn checkpoint_creation_authorization(
+        &mut self,
+        request_id: &arkret_identifiers::RequestId,
+        canonical_intent_digest: &arkret_identifiers::Hash,
+        checkpoint: &serde_json::Value,
+        now: DateTime<Utc>,
+    ) -> Result<AccountHandoffCreationAttemptCommit, Self::Error>;
+
+    /// Commit the exact canonical outcome after the handoff and lease were
+    /// created in the caller's same repository transaction.
+    async fn commit_creation_attempt(
+        &mut self,
+        request_id: &arkret_identifiers::RequestId,
+        canonical_intent_digest: &arkret_identifiers::Hash,
+        canonical_outcome: &[u8],
+        outcome_digest: &arkret_identifiers::Hash,
+        now: DateTime<Utc>,
+    ) -> Result<AccountHandoffCreationAttemptCommit, Self::Error>;
+
+    /// Install the immutable founding transaction beside its bootstrap grant.
+    async fn create_device_bootstrap_transaction(
+        &mut self,
+        input: NewDeviceBootstrapTransaction,
+    ) -> Result<DeviceBootstrapTransactionCreate, Self::Error>;
+
+    /// Resolve a bootstrap transaction by its protocol identifier.
+    async fn get_device_bootstrap_transaction(
+        &mut self,
+        transaction_id: &arkret_wire::ProtocolOpaqueId,
+    ) -> Result<Option<DeviceBootstrapTransaction>, Self::Error>;
+
+    /// Lock the transaction and elect the sole signer for an enrollment
+    /// request. The caller must keep this repository transaction open through
+    /// `commit_device_bootstrap_enrollment` and `save`.
+    async fn reserve_device_bootstrap_enrollment(
+        &mut self,
+        input: DeviceBootstrapEnrollmentReservationInput<'_>,
+    ) -> Result<DeviceBootstrapEnrollmentReserve, Self::Error>;
+
+    /// Persist the exact authority-signed enrollment outcome while keeping the
+    /// transaction pending until the founding Event batch is accepted.
+    async fn commit_device_bootstrap_enrollment(
+        &mut self,
+        input: DeviceBootstrapEnrollmentInput<'_>,
+    ) -> Result<DeviceBootstrapEnrollmentCommit, Self::Error>;
+
+    /// Commit a founding cancellation after the caller has obtained the
+    /// Principal-side accepted|cancelled|expired decision-fence receipt. A
+    /// directory miss is not sufficient authority for this transition. Exact
+    /// `(transaction,idempotency_key)` replay returns the first canonical
+    /// outcome.
+    async fn commit_device_bootstrap_cancel(
+        &mut self,
+        input: DeviceBootstrapCancelInput,
+    ) -> Result<DeviceBootstrapCancelCommit, Self::Error>;
+
+    /// Durably freeze the exact Principal decision request before the caller
+    /// crosses the service boundary. Exact retries recover the same prepared
+    /// bytes; terminal lifecycle state is not changed by this reservation.
+    async fn reserve_device_bootstrap_cancel(
+        &mut self,
+        input: coauth_data::DeviceBootstrapCancelReserveInput,
+    ) -> Result<coauth_data::DeviceBootstrapCancelReserve, Self::Error>;
+
+    /// Resolve an exact cancel operation before any external projection read.
+    async fn get_device_bootstrap_cancel_operation(
+        &mut self,
+        transaction_id: &arkret_wire::ProtocolOpaqueId,
+        idempotency_key: &arkret_wire::IdempotencyKey,
+    ) -> Result<Option<coauth_data::DeviceBootstrapCancelOperation>, Self::Error>;
+
+    /// Persist the authoritative Principal Server acceptance checkpoint.
+    async fn mark_device_bootstrap_accepted(
+        &mut self,
+        transaction_id: &arkret_wire::ProtocolOpaqueId,
+        authorized_event_id: &arkret_identifiers::EventId,
+        device_key_digest: &arkret_identifiers::Hash,
+        authority: coauth_data::DeviceBootstrapDecisionEvidence,
+    ) -> Result<DeviceBootstrapAcceptanceCommit, Self::Error>;
 
     /// Look up a handoff by its replay-protection request identifier.
     async fn get_by_request_id(
@@ -109,6 +203,61 @@ pub trait AccountHandoffRepository: Send + Sync {
 }
 
 repository_impl!(AccountHandoffRepository:
+    async fn reserve_creation_attempt(
+        &mut self,
+        input: NewAccountHandoffCreationAttempt,
+    ) -> Result<AccountHandoffCreationAttemptReserve, Self::Error>;
+    async fn checkpoint_creation_authorization(
+        &mut self,
+        request_id: &arkret_identifiers::RequestId,
+        canonical_intent_digest: &arkret_identifiers::Hash,
+        checkpoint: &serde_json::Value,
+        now: DateTime<Utc>,
+    ) -> Result<AccountHandoffCreationAttemptCommit, Self::Error>;
+    async fn commit_creation_attempt(
+        &mut self,
+        request_id: &arkret_identifiers::RequestId,
+        canonical_intent_digest: &arkret_identifiers::Hash,
+        canonical_outcome: &[u8],
+        outcome_digest: &arkret_identifiers::Hash,
+        now: DateTime<Utc>,
+    ) -> Result<AccountHandoffCreationAttemptCommit, Self::Error>;
+    async fn create_device_bootstrap_transaction(
+        &mut self,
+        input: NewDeviceBootstrapTransaction,
+    ) -> Result<DeviceBootstrapTransactionCreate, Self::Error>;
+    async fn get_device_bootstrap_transaction(
+        &mut self,
+        transaction_id: &arkret_wire::ProtocolOpaqueId,
+    ) -> Result<Option<DeviceBootstrapTransaction>, Self::Error>;
+    async fn reserve_device_bootstrap_enrollment(
+        &mut self,
+        input: DeviceBootstrapEnrollmentReservationInput<'_>,
+    ) -> Result<DeviceBootstrapEnrollmentReserve, Self::Error>;
+    async fn commit_device_bootstrap_enrollment(
+        &mut self,
+        input: DeviceBootstrapEnrollmentInput<'_>,
+    ) -> Result<DeviceBootstrapEnrollmentCommit, Self::Error>;
+    async fn commit_device_bootstrap_cancel(
+        &mut self,
+        input: DeviceBootstrapCancelInput,
+    ) -> Result<DeviceBootstrapCancelCommit, Self::Error>;
+    async fn reserve_device_bootstrap_cancel(
+        &mut self,
+        input: coauth_data::DeviceBootstrapCancelReserveInput,
+    ) -> Result<coauth_data::DeviceBootstrapCancelReserve, Self::Error>;
+    async fn get_device_bootstrap_cancel_operation(
+        &mut self,
+        transaction_id: &arkret_wire::ProtocolOpaqueId,
+        idempotency_key: &arkret_wire::IdempotencyKey,
+    ) -> Result<Option<coauth_data::DeviceBootstrapCancelOperation>, Self::Error>;
+    async fn mark_device_bootstrap_accepted(
+        &mut self,
+        transaction_id: &arkret_wire::ProtocolOpaqueId,
+        authorized_event_id: &arkret_identifiers::EventId,
+        device_key_digest: &arkret_identifiers::Hash,
+        authority: coauth_data::DeviceBootstrapDecisionEvidence,
+    ) -> Result<DeviceBootstrapAcceptanceCommit, Self::Error>;
     async fn get_by_request_id(
         &mut self,
         request_id: &arkret_identifiers::RequestId,
