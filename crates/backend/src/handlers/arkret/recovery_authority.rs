@@ -25,6 +25,7 @@ use coauth_data::{
     SessionGrantRecoveryPromotion, SessionGrantRecoveryPromotionOutcome,
     SessionGrantReserveOutcome,
 };
+use coauth_jose::constraints::Constrainable as _;
 use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
 use sha2::Digest as _;
@@ -911,11 +912,11 @@ fn validate_promotion_evidence(
         || prior_claims.credential_class != SessionGrantCredentialClass::RecoveryRestricted
         || prior_claims.device_binding.is_some()
         || prior_claims.subject != attestation.principal_id
-        || prior_claims.audience != attestation.coordinator_service_id.as_str()
+        || prior_claims.audience.as_str() != attestation.coordinator_service_id.as_str()
         || recovery_binding.recovery_session_id != attestation.recovery_session_id
         || old_grant.grant_id != request.old_grant_id
         || old_grant.subject != prior_claims.subject.as_str()
-        || old_grant.audience != prior_claims.audience
+        || old_grant.audience != prior_claims.audience.as_str()
         || old_grant.credential_class != "recovery_restricted"
         || old_grant.recovery_session_id.as_deref()
             != Some(recovery_binding.recovery_session_id.as_str())
@@ -1106,7 +1107,8 @@ pub async fn promote_recovery_session_grant_endpoint(
     let arkret_config = depot.arkret_config()?;
     let grant_not_before = arkret_canonical::normalize_timestamp_canonical(now);
     let grant_expires_at = grant_not_before + arkret_config.session_grant_ttl;
-    let (_, signing_key) = preferred_signing_key(&depot.key_store()?).ok_or_else(|| {
+    let signing_key_store = depot.key_store()?;
+    let (_, signing_key) = preferred_signing_key(&signing_key_store).ok_or_else(|| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
             "no session-grant signing key is available",
         ))

@@ -131,7 +131,8 @@ async fn reserve_issue_operation(
         grant_ttl = grant_ttl.min(crate::handlers::account::agents::AGENT_SESSION_MAX_TTL);
     }
     let grant_expires_at = now + grant_ttl;
-    let (_, signing_key) = preferred_signing_key(&depot.key_store()?)
+    let signing_key_store = depot.key_store()?;
+    let (_, signing_key) = preferred_signing_key(&signing_key_store)
         .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
     let signing_key_id = signing_key
         .kid()
@@ -1074,7 +1075,7 @@ async fn issue_agent_key_proof_session_grant(
     let wire_outcome = SessionGrantOutcome {
         principal_id,
         device_id: body.device_id.clone(),
-        session_grant: material.grant_jwt,
+        session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
         grant_id,
         session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
@@ -1082,7 +1083,7 @@ async fn issue_agent_key_proof_session_grant(
         )
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         audience: wire_audience,
-        granted_scope: material.scopes,
+        granted_scope: material.scopes.clone(),
         scope_details: Some(authorization.wire_scope_details),
     };
     let canonical_outcome = arkret_canonical::canonical_json_bytes(&wire_outcome)

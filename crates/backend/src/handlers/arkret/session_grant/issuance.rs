@@ -149,7 +149,8 @@ fn issue_session_grant_for_audience_inner(
     let cnf = SessionGrantCnf {
         jkt: dpop_jkt.clone(),
     };
-    let subject = Did::new(subject.clone()).map_err(|_| SessionGrantError::PrincipalUnknown)?;
+    let subject_did =
+        Did::new(subject.clone()).map_err(|_| SessionGrantError::PrincipalUnknown)?;
     let audience_did = Did::new(audience.clone())?;
     let mut scopes = scopes;
     scopes.sort_unstable();
@@ -160,7 +161,7 @@ fn issue_session_grant_for_audience_inner(
         schema: SESSION_GRANT_ISSUANCE_SCHEMA.to_owned(),
         issuer: issuer.clone(),
         issuance_nonce: issuance_nonce.clone(),
-        subject: subject.clone(),
+        subject: subject_did.clone(),
         session_public_key: session_public_key.clone(),
         audience: audience_did.clone(),
         scopes: scopes.clone(),
@@ -227,7 +228,7 @@ fn issue_session_grant_for_audience_inner(
         issuer: issuer.to_string(),
         subject,
         device_id: Some(device_id),
-        audience,
+        audience: audience_did.to_string(),
         scopes,
         dpop_jkt: Some(dpop_jkt),
         session_id,
@@ -332,7 +333,7 @@ pub(crate) fn mint_promoted_recovery_session_grant(
         issuer: issuer.to_string(),
         subject: prior_claims.subject.as_str().to_owned(),
         device_id: Some(device_binding.device_id.as_str().to_owned()),
-        audience: prior_claims.audience.clone(),
+        audience: prior_claims.audience.to_string(),
         scopes,
         dpop_jkt: Some(prior_claims.cnf.jkt.clone()),
         session_id,
@@ -353,44 +354,87 @@ pub(crate) async fn persist_session_grant_with_browser_session_id<R>(
 where
     R: RepositoryAccess + ?Sized,
 {
-    let scope: Scope = material
-        .scopes
-        .iter()
-        .map(|scope| scope.parse::<ScopeToken>())
-        .collect::<Result<Scope, _>>()
-        // This can only fail if an internal caller constructed an invalid scope
-        // string before signing the JWT.
-        .expect("session grant scopes must be valid OAuth scope tokens");
-
-    repo.oauth_session_grant()
-        .add(
+    // The repository has no single-call insert: a grant only becomes durable as
+    // the committed outcome of a reserved operation. Internal browser-session
+    // entry points (password, passkey, debug seeds) therefore reserve and commit
+    // here rather than carrying a second persistence path that bypasses the
+    // ledger.
+    //
+    // The already-signed material is its own stable request identity — the
+    // `grant_id` is the digest of the exact issuance preimage — so an exact
+    // retry of the same logical login converges on one grant instead of minting
+    // a second one.
+    let request_identity = format!("internal-issue:{}", material.grant_id);
+    let reserved = repo
+        .oauth_session_grant()
+        .reserve_operation(
             rng,
             clock,
-            NewSessionGrant {
-                grant_id: material.grant_id.clone(),
-                browser_session_id,
+            coauth_data::NewSessionGrantOperation {
                 issuer: &material.issuer,
-                subject: &material.subject,
-                device_id: material.device_id.as_deref(),
-                applet_id: None,
-                effective_scope: None,
-                registration_epoch: None,
-                service_id: None,
-                capability_grant_refs: Vec::new(),
-                audience: &material.audience,
-                scope,
-                grant_jwt: &material.grant_jwt,
-                session_public_key: &material.session_public_key,
-                credential_class: &material.credential_class,
-                recovery_session_id: material.recovery_session_id.as_deref(),
-                recovery_policy_id: material.recovery_policy_id.as_deref(),
-                recovery_policy_version: material.recovery_policy_version,
-                device_authorization_event_id: material.device_authorization_event_id.as_deref(),
-                model_generation_ref: material.model_generation_ref.clone(),
-                expires_at: material.expires_at_timestamp,
+                operation_kind: coauth_data::SessionGrantOperationKind::Issue,
+                proof_kind: None,
+                request_identity: &request_identity,
+                canonical_intent_digest: material.issuance_digest,
+                canonical_intent: &material.issuance_preimage,
+                operation_selector: None,
+                target_grant_id: None,
+                session_id: Some(&material.session_id),
+                grant_not_before: Some(material.not_before_timestamp),
+                grant_expires_at: Some(material.expires_at_timestamp),
+                signing_key_id: Some(&material.signing_key_id),
+                retained_until: material.expires_at_timestamp + chrono::Duration::days(7),
             },
         )
-        .await
+        .await?;
+
+    let operation_id = match reserved {
+        coauth_data::SessionGrantReserveOutcome::Reserved(operation)
+        | coauth_data::SessionGrantReserveOutcome::Pending(operation) => operation.id,
+        coauth_data::SessionGrantReserveOutcome::Replay(operation)
+        | coauth_data::SessionGrantReserveOutcome::Conflict(operation)
+        | coauth_data::SessionGrantReserveOutcome::Indeterminate(operation) => operation.id,
+    };
+
+    let checkpoint = serde_json::json!({
+        "kind": "internal_browser_session_issue",
+        "grant_id": material.grant_id,
+    });
+    let committed = repo
+        .oauth_session_grant()
+        .commit_issuance(
+            rng,
+            clock,
+            operation_id,
+            coauth_data::SessionGrantProofAuthorization {
+                authorization_ref: &request_identity,
+                checkpoint: &checkpoint,
+                proof_expires_at: material.expires_at_timestamp,
+            },
+            coauth_data::SessionGrantExactOutcome {
+                canonical_response: &material.issuance_preimage,
+                response_digest: material.issuance_digest,
+            },
+            new_session_grant_record(browser_session_id, material),
+        )
+        .await?;
+
+    match committed {
+        coauth_data::SessionGrantCommitOutcome::Committed(grant) => Ok(grant),
+        coauth_data::SessionGrantCommitOutcome::Replay(operation)
+        | coauth_data::SessionGrantCommitOutcome::Indeterminate(operation) => {
+            // Each internal login signs fresh material, so its `grant_id` — and
+            // therefore its request identity — is unique to this attempt. A
+            // replay or tombstone here means the caller reused signed material
+            // across two logical issuances, which would hand out one grant under
+            // two identities.
+            panic!(
+                "internal browser-session issuance reused signed material: operation {} already \
+                 holds an outcome for grant {}",
+                operation.id, material.grant_id
+            )
+        }
+    }
 }
 
 pub(crate) fn new_session_grant_record(
@@ -552,7 +596,7 @@ pub(crate) fn mint_agent_session_grant(
         scopes: scopes.clone(),
         not_before: now,
         expires_at,
-        session_id,
+        session_id: session_id.clone(),
         cnf: cnf.clone(),
         credential_class: SessionGrantCredentialClass::Standard,
         holder_binding: Some(SessionGrantHolderBinding::AgentRuntime {

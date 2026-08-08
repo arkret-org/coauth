@@ -91,6 +91,10 @@ pub enum SessionGrantError {
     #[error("standard session grant requires an explicit device scope binding")]
     MissingDeviceBinding,
 
+    /// Typed identifier parse failure surfaced by the identifiers owner crate.
+    #[error(transparent)]
+    Identifier(#[from] arkret_identifiers::IdentifierError),
+
     #[error(transparent)]
     Other(#[from] AnyhowError),
 }
@@ -920,7 +924,7 @@ pub(crate) fn parse_local_handle(url_builder: &UrlBuilder, handle: &str) -> Opti
 /// caller wants the grant bound to; we trust it because this endpoint
 /// is gated behind `debug_assertions` / a `COAUTH_ENABLE_TEST_ENDPOINTS`
 /// env var.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct DebugIssueDpopGrantRequestBody {
     pub actor_id: String,
     pub device_id: String,

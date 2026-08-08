@@ -362,7 +362,10 @@ pub async fn device_enroll_endpoint(
     }
     let principal_binding = repo
         .principal_did()
-        .get_by_did_and_audience(grant_payload.subject.as_str(), &grant_payload.audience)
+        .get_by_did_and_audience(
+            grant_payload.subject.as_str(),
+            grant_payload.audience.as_str(),
+        )
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .filter(|binding| binding.user_id == browser_session.user.id)
@@ -408,7 +411,7 @@ pub async fn device_enroll_endpoint(
     let audience = principal_audience_for_grant(
         &arkret_config,
         resolved_principal_audiences::shared(),
-        &grant_payload.audience,
+        grant_payload.audience.as_str(),
     )?;
 
     // 3. This session's device id (client-supplied; soland projects the device_public_key under it,

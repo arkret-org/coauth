@@ -137,29 +137,19 @@ where
 {
     use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
 
-    if proof.proof_kind != Some(arkret_models_identity::SessionGrantProofKind::AgentKeyProof) {
+    if proof.proof_kind != arkret_models_identity::SessionGrantProofKind::AgentKeyProof {
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
-    let challenge = proof
-        .challenge
-        .as_deref()
-        .map(str::trim)
+    // The closed DTO makes every field below required, so the only remaining
+    // rejection is a present-but-blank string.
+    let challenge = Some(proof.challenge.trim())
         .filter(|value| !value.is_empty())
         .ok_or(AgentAuthRejection::ProofInvalid)?;
-    let request_digest = proof
-        .request_canonical_digest
-        .as_ref()
-        .ok_or(AgentAuthRejection::ProofInvalid)?;
-    let proof_audience = proof
-        .audience
-        .as_ref()
-        .ok_or(AgentAuthRejection::ProofInvalid)?;
-    let issued_at = proof.issued_at.ok_or(AgentAuthRejection::ProofInvalid)?;
-    let expires_at = proof.expires_at.ok_or(AgentAuthRejection::ProofInvalid)?;
-    let signature = proof
-        .signature
-        .as_deref()
-        .map(str::trim)
+    let request_digest = &proof.request_canonical_digest;
+    let proof_audience = &proof.audience;
+    let issued_at = proof.issued_at;
+    let expires_at = proof.expires_at;
+    let signature = Some(proof.signature.trim())
         .filter(|value| !value.is_empty())
         .ok_or(AgentAuthRejection::ProofInvalid)?;
     let verification_method = proof
@@ -2401,6 +2391,7 @@ mod tests {
             principal_id: arkret_identifiers::Did::new("did:web:agent.example").unwrap(),
             device_id: None,
             requested_scope: vec!["ak.message.create".to_owned()],
+            requested_scope_disclosure: None,
             agent_key_authorization_ref: Some(
                 "ak:event:AQoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoK".to_owned(),
             ),

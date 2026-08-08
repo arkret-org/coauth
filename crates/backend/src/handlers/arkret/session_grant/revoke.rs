@@ -703,7 +703,7 @@ pub async fn revoke_session_grant_endpoint(
                 )
             })?
         }
-        SessionGrantRevokeOutcome::AlreadyTerminal(_) => {
+        SessionGrantRevokeOutcome::AlreadyTerminal { .. } => {
             arkret_canonical::canonical_json_bytes(&revoked_outcome(Vec::new()))
                 .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         }

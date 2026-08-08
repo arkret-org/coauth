@@ -65,60 +65,24 @@ fn did_proof_replay_window_exceeded(message: impl Into<String>) -> ArkretRouteEr
     )
 }
 
+/// The closed refresh DTO always carries the proof; presence is a parse-time
+/// guarantee, so only its field contents still need validating.
 fn required_soft_logout_proof(
     body: &SessionGrantRefreshRequestBody,
-) -> Result<&SessionGrantRefreshProof, ArkretRouteError> {
-    body.proof.as_ref().ok_or_else(|| {
-        did_proof_required("human soft logout recovery requires a fresh device DID proof")
-    })
+) -> &SessionGrantRefreshProof {
+    &body.proof
 }
 
-fn required_proof_str<'a>(
-    value: &'a Option<String>,
-    field: &str,
-) -> Result<&'a str, ArkretRouteError> {
-    value
-        .as_deref()
-        .map(str::trim)
+/// A required proof string may still arrive present-but-blank.
+fn required_proof_str<'a>(value: &'a str, field: &str) -> Result<&'a str, ArkretRouteError> {
+    Some(value.trim())
         .filter(|value| !value.is_empty())
         .ok_or_else(|| did_proof_required(format!("soft logout DID proof requires {field}")))
 }
 
-fn required_proof_did<'a>(
-    value: &'a Option<Did>,
-    field: &str,
-) -> Result<&'a str, ArkretRouteError> {
-    value
-        .as_ref()
-        .map(Did::as_str)
-        .ok_or_else(|| did_proof_required(format!("soft logout DID proof requires {field}")))
-}
-
-fn required_proof_timestamp(
-    value: &Option<DateTime<Utc>>,
-    field: &str,
-) -> Result<DateTime<Utc>, ArkretRouteError> {
-    value
-        .as_ref()
-        .copied()
-        .ok_or_else(|| did_proof_required(format!("soft logout DID proof requires {field}")))
-}
-
-fn required_proof_hash<'a>(
-    value: &'a Option<Hash>,
-    field: &str,
-) -> Result<&'a str, ArkretRouteError> {
-    value
-        .as_ref()
-        .map(arkret_identifiers::Hash::as_str)
-        .ok_or_else(|| did_proof_required(format!("soft logout DID proof requires {field}")))
-}
-
 fn validate_soft_logout_proof_kind(
-    proof_kind: Option<SessionGrantProofKind>,
+    proof_kind: SessionGrantProofKind,
 ) -> Result<(), ArkretRouteError> {
-    let proof_kind = proof_kind
-        .ok_or_else(|| did_proof_required("soft logout DID proof requires proof_kind"))?;
     match proof_kind {
         SessionGrantProofKind::DidBoundSignature | SessionGrantProofKind::PairedDeviceProof => {
             Ok(())
@@ -252,16 +216,15 @@ async fn verify_soft_logout_did_proof(
     device_id: &str,
     now: DateTime<Utc>,
 ) -> Result<(), ArkretRouteError> {
-    let proof = required_soft_logout_proof(body)?;
+    let proof = required_soft_logout_proof(body);
     validate_soft_logout_proof_kind(proof.proof_kind)?;
 
     let challenge = required_proof_str(&proof.challenge, "challenge")?;
-    let proof_audience = required_proof_did(&proof.audience, "audience")?;
-    let request_canonical_digest =
-        required_proof_hash(&proof.request_canonical_digest, "request_canonical_digest")?;
+    let proof_audience = proof.audience.as_str();
+    let request_canonical_digest = proof.request_canonical_digest.as_str();
     let proof_jws = required_proof_str(&proof.signature, "signature")?;
-    let issued_at = required_proof_timestamp(&proof.issued_at, "issued_at")?;
-    let expires_at = required_proof_timestamp(&proof.expires_at, "expires_at")?;
+    let issued_at = proof.issued_at;
+    let expires_at = proof.expires_at;
 
     if proof_audience != prior_grant.audience {
         return Err(ArkretRouteError::coded(
@@ -462,12 +425,8 @@ pub async fn refresh_session_grant(
         )
     })?;
 
-    let proof = body.proof.as_ref().ok_or_else(|| {
-        did_proof_required("session-grant refresh requires its closed proof object")
-    })?;
-    let request_digest = proof.request_canonical_digest.as_ref().ok_or_else(|| {
-        did_proof_required("session-grant refresh proof requires request_canonical_digest")
-    })?;
+    let proof = &body.proof;
+    let request_digest = &proof.request_canonical_digest;
     let request_identity = format!(
         "refresh:{}:{}",
         prior_grant.grant_id,
@@ -658,7 +617,7 @@ pub async fn refresh_session_grant(
         ));
     }
     let device_id = require_soft_logout_bound_device_id(
-        body.device_id.as_ref().map(DeviceId::as_str),
+        Some(body.device_id.as_str()),
         prior_grant.device_id.as_deref(),
     )?;
 
@@ -689,9 +648,7 @@ pub async fn refresh_session_grant(
                 ));
             }
         };
-        let proof = body.proof.as_ref().ok_or_else(|| {
-            did_proof_required("Agent session refresh requires a fresh runtime-key proof")
-        })?;
+        let proof = &body.proof;
         let device_id = DeviceId::new(device_id.to_owned()).map_err(|error| {
             ArkretRouteError::coded(
                 StatusCode::BAD_REQUEST,
@@ -784,8 +741,13 @@ pub async fn refresh_session_grant(
             scope_details,
             arkret_identifiers::EventId::new(authorization.authorized_event_id.clone())
                 .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-            arkret_wire::DidUrl::new(authorization.verification_method.clone())
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            arkret_wire::DidUrl::new(authorization.verification_method.clone()).map_err(
+                |error| {
+                    ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                        error.to_owned(),
+                    ))
+                },
+            )?,
             issuance_seed.not_before,
             issuance_seed.expires_at,
         )
@@ -822,9 +784,7 @@ pub async fn refresh_session_grant(
             repo.cancel().await.ok();
             return Err(did_proof_invalid("refresh DPoP JTI was already consumed"));
         }
-        let proof_expires_at = proof
-            .expires_at
-            .ok_or_else(|| did_proof_required("Agent refresh proof requires expires_at"))?;
+        let proof_expires_at = proof.expires_at;
         let checkpoint = serde_json::json!({
             "kind": "agent_key_refresh",
             "agent_key_authorization_ref": authorization.authorized_event_id,
@@ -1043,17 +1003,9 @@ pub async fn refresh_session_grant(
         repo.cancel().await.ok();
         return Err(did_proof_invalid("refresh DPoP JTI was already consumed"));
     }
-    let proof = body
-        .proof
-        .as_ref()
-        .expect("refresh proof was required above");
-    let proof_expires_at = proof
-        .expires_at
-        .ok_or_else(|| did_proof_required("refresh proof requires expires_at"))?;
-    let challenge = proof
-        .challenge
-        .as_deref()
-        .ok_or_else(|| did_proof_required("refresh proof requires challenge"))?;
+    let proof = &body.proof;
+    let proof_expires_at = proof.expires_at;
+    let challenge = proof.challenge.as_str();
     let authorization_ref = format!("device-refresh:{}", challenge);
     let checkpoint = serde_json::json!({
         "kind": "human_device_refresh",

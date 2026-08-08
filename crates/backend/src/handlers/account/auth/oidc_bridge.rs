@@ -174,9 +174,11 @@ async fn commit_oidc_session_grant(
         canonical_response: &canonical_outcome,
         response_digest: outcome_digest,
     };
+    let mut rng = crate::handlers::make_rng();
     let committed = repo
         .oauth_session_grant()
         .commit_issuance(
+            &mut rng,
             clock,
             operation.id,
             authorization,
@@ -1441,11 +1443,11 @@ async fn exchange_oidc_code(
         &arkret_config,
         &key_store,
         &browser_session,
-        dpop_binding.public_jwk,
+        dpop_binding.public_jwk.clone(),
         grant_target.audience.clone(),
         principal_session_grant_scopes(&device_id),
         Some(&principal_did),
-        dpop_binding.jkt,
+        dpop_binding.jkt.clone(),
         arkret_models_identity::SessionGrantProofKind::OidcCodeExchange,
     )
     .map_err(|error| OidcExchangeError::new("session_grant_denied", error.to_string()))?;
