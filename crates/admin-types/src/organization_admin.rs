@@ -138,9 +138,11 @@ pub enum BootstrapAuthorizationInput {
 pub struct BootstrapOrganizationRequest {
     /// Organization principal DID being bootstrapped.
     pub organization_did: String,
-    /// Principal Control Realm id (`principal_control_realm_id`).
+    /// Event-derived Principal Control Realm id. It must equal a retype of
+    /// `control_stream_ref` at bootstrap.
     pub principal_control_realm_id: String,
-    /// Optional control-stream / PCR genesis event ref.
+    /// Accepted PCR create Event ref. Kept optional in the admin carrier for
+    /// decoding compatibility, but the bootstrap handler rejects omission.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub control_stream_ref: Option<String>,
     /// Optional control-frontier digest.

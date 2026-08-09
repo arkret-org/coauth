@@ -658,7 +658,7 @@ CREATE TABLE public.account_handoff_grants (
     CONSTRAINT account_handoff_grants_request_digest_valid CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT account_handoff_grants_audience_nonempty CHECK ((btrim(audience) <> ''::text)),
     CONSTRAINT account_handoff_grants_cnf_jkt_valid CHECK ((cnf_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
-    CONSTRAINT account_handoff_grants_allowed_operations_closed CHECK ((allowed_operations = ARRAY['ak.gate.account.command.issue_identity_binding_challenge'::text, 'ak.gate.account.command.register'::text, 'ak.gate.account.command.issue_session_grant'::text, 'ak.gate.account.command.issue_recovery_completion_grant'::text])),
+    CONSTRAINT account_handoff_grants_allowed_operations_closed CHECK ((allowed_operations = ARRAY['ak.gate.account.command.issue_identity_binding_challenge'::text, 'ak.gate.account.command.issue_identity_abandonment_challenge'::text, 'ak.gate.account.command.abandon_identity_creation'::text, 'ak.gate.account.command.register'::text, 'ak.gate.account.command.issue_session_grant'::text, 'ak.gate.account.command.issue_recovery_completion_grant'::text])),
     CONSTRAINT account_handoff_grants_token_nonempty CHECK ((length(account_handoff_grant) >= 32)),
     CONSTRAINT account_handoff_grants_expiry_valid CHECK ((expires_at > issued_at))
 );
@@ -702,6 +702,22 @@ CREATE TABLE public.identity_creation_leases (
     CONSTRAINT identity_creation_leases_pcr_complete CHECK ((((state = ANY (ARRAY['active'::text, 'reserved'::text, 'did_published'::text])) AND (pcr_genesis_request_digest IS NULL) AND (pcr_genesis_receipt IS NULL)) OR ((state = ANY (ARRAY['pcr_accepted'::text, 'account_bound'::text, 'completed'::text])) AND (pcr_genesis_request_digest IS NOT NULL) AND (pcr_genesis_receipt IS NOT NULL)))),
     CONSTRAINT identity_creation_leases_binding_complete CHECK ((((state <> ALL (ARRAY['account_bound'::text, 'completed'::text])) AND (binding_receipt IS NULL)) OR ((state = ANY (ARRAY['account_bound'::text, 'completed'::text])) AND (binding_receipt IS NOT NULL)))),
     CONSTRAINT identity_creation_leases_register_ledger_complete CHECK ((((state <> 'completed'::text) AND (register_handoff_grant_id IS NULL) AND (register_challenge_id IS NULL) AND (register_request_digest IS NULL) AND (register_outcome IS NULL)) OR ((state = 'completed'::text) AND (register_handoff_grant_id IS NOT NULL) AND (register_challenge_id IS NOT NULL) AND (register_request_digest IS NOT NULL) AND (register_outcome IS NOT NULL))))
+);
+
+-- Durable, append-only quota consumption.  The subject is the service's
+-- salted account-subject digest, never the raw upstream OIDC `sub`.
+CREATE TABLE public.identity_creation_lease_rate_limit_events (
+    id bigserial NOT NULL,
+    request_id uuid NOT NULL,
+    account_subject text NOT NULL,
+    audience text NOT NULL,
+    lease_id text NOT NULL,
+    action text NOT NULL,
+    occurred_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT identity_creation_lease_rate_subject_valid CHECK ((account_subject ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_creation_lease_rate_audience_nonempty CHECK ((btrim(audience) <> ''::text)),
+    CONSTRAINT identity_creation_lease_rate_lease_id_valid CHECK ((lease_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
+    CONSTRAINT identity_creation_lease_rate_action_closed CHECK ((action = ANY (ARRAY['acquisition'::text, 'renewal'::text])))
 );
 
 CREATE TABLE public.identity_binding_challenges (
@@ -748,6 +764,55 @@ CREATE TABLE public.identity_binding_challenges (
     CONSTRAINT identity_binding_challenges_lease_fence_positive CHECK ((lease_fence >= 1)),
     CONSTRAINT identity_binding_challenges_dpop_jkt_valid CHECK ((dpop_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
     CONSTRAINT identity_binding_challenges_expiry_valid CHECK ((expires_at > issued_at AND expires_at <= (issued_at + '00:05:00'::interval)))
+);
+
+-- Durable explicit-abandonment transcript. The challenge retains both the
+-- issuing handoff and its holder key so confirmation can require a different
+-- freshly authenticated handoff without weakening the holder binding.
+CREATE TABLE public.identity_abandonment_challenges (
+    request_id uuid PRIMARY KEY,
+    request_digest text NOT NULL,
+    issuing_handoff_grant_id uuid NOT NULL,
+    service_account_id uuid NOT NULL,
+    audience text NOT NULL,
+    account_subject text NOT NULL,
+    holder_jkt text NOT NULL,
+    lease_id text NOT NULL,
+    lease_fence bigint NOT NULL,
+    principal_id text NOT NULL,
+    did_version_id text NOT NULL,
+    challenge_id text NOT NULL UNIQUE,
+    challenge text NOT NULL,
+    origin text NOT NULL,
+    trust_domain text NOT NULL,
+    issued_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    consumed_at timestamp with time zone,
+    confirmation_request_id uuid UNIQUE,
+    confirmation_request_digest text,
+    outcome jsonb,
+    CONSTRAINT identity_abandonment_request_digest_valid CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_abandonment_account_subject_valid CHECK ((account_subject ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_abandonment_holder_jkt_valid CHECK ((holder_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
+    CONSTRAINT identity_abandonment_lease_id_valid CHECK ((lease_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
+    CONSTRAINT identity_abandonment_lease_fence_positive CHECK ((lease_fence >= 1)),
+    CONSTRAINT identity_abandonment_did_version_nonempty CHECK ((btrim(did_version_id) <> ''::text)),
+    CONSTRAINT identity_abandonment_challenge_id_valid CHECK ((challenge_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
+    CONSTRAINT identity_abandonment_challenge_nonempty CHECK ((length(challenge) >= 22)),
+    CONSTRAINT identity_abandonment_expiry_valid CHECK ((expires_at > issued_at AND expires_at <= (issued_at + '00:05:00'::interval))),
+    CONSTRAINT identity_abandonment_confirmation_shape CHECK (((consumed_at IS NULL AND confirmation_request_id IS NULL AND confirmation_request_digest IS NULL AND outcome IS NULL) OR (consumed_at IS NOT NULL AND confirmation_request_id IS NOT NULL AND confirmation_request_digest IS NOT NULL AND confirmation_request_digest ~ '^sha256:[0-9a-f]{64}$'::text AND outcome IS NOT NULL AND jsonb_typeof(outcome) = 'object'::text)))
+);
+
+-- Append-only reservation preventing a published entry-0 orphan anchor from
+-- ever being reused as a live identity root.
+CREATE TABLE public.identity_orphan_anchor_tombstones (
+    principal_id text PRIMARY KEY,
+    did_version_id text NOT NULL,
+    account_subject text NOT NULL,
+    abandonment_request_id uuid NOT NULL UNIQUE,
+    abandoned_at timestamp with time zone NOT NULL,
+    CONSTRAINT identity_orphan_anchor_version_nonempty CHECK ((btrim(did_version_id) <> ''::text)),
+    CONSTRAINT identity_orphan_anchor_account_subject_valid CHECK ((account_subject ~ '^sha256:[0-9a-f]{64}$'::text))
 );
 
 CREATE TABLE public.queue_jobs (
@@ -1352,6 +1417,12 @@ ALTER TABLE ONLY public.identity_creation_leases
 ALTER TABLE ONLY public.identity_creation_leases
     ADD CONSTRAINT identity_creation_leases_lease_id_unique UNIQUE (lease_id);
 
+ALTER TABLE ONLY public.identity_creation_lease_rate_limit_events
+    ADD CONSTRAINT identity_creation_lease_rate_limit_events_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.identity_creation_lease_rate_limit_events
+    ADD CONSTRAINT identity_creation_lease_rate_request_action_unique UNIQUE (request_id, action);
+
 ALTER TABLE ONLY public.identity_binding_challenges
     ADD CONSTRAINT identity_binding_challenges_pkey PRIMARY KEY (request_id);
 
@@ -1570,6 +1641,10 @@ CREATE INDEX idx_account_handoff_creation_attempts_retention ON public.account_h
 CREATE INDEX idx_account_handoff_grants_expiry ON public.account_handoff_grants USING btree (expires_at) WHERE ((revoked_at IS NULL) AND (consumed_at IS NULL));
 
 CREATE INDEX idx_identity_creation_leases_expiry ON public.identity_creation_leases USING btree (expires_at) WHERE (state <> 'completed'::text);
+
+CREATE INDEX idx_identity_creation_lease_rate_acquisition ON public.identity_creation_lease_rate_limit_events USING btree (account_subject, audience, occurred_at DESC) WHERE (action = 'acquisition'::text);
+
+CREATE INDEX idx_identity_creation_lease_rate_renewal ON public.identity_creation_lease_rate_limit_events USING btree (lease_id, occurred_at DESC) WHERE (action = 'renewal'::text);
 
 CREATE INDEX idx_identity_binding_challenges_reservation ON public.identity_binding_challenges USING btree (service_account_id, audience, lease_id, lease_fence, operation_digest);
 

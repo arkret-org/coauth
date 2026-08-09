@@ -22,9 +22,12 @@ use crate::repository_impl;
 pub struct NewOrganizationPrincipalControl {
     /// Organization principal DID this control row governs.
     pub organization_did: String,
-    /// Realm id the principal-control / PCR bootstrap is scoped to.
+    /// Event-derived Realm id of the accepted PCR create Event named by
+    /// `control_stream_ref`. Storage rejects a missing or mismatched pair.
     pub principal_control_realm_id: String,
-    /// Optional reference to the organization control stream.
+    /// Accepted PCR create Event at bootstrap. It is required for the initial
+    /// insert even though later projected rows may replace it with the current
+    /// organization control-stream head.
     pub control_stream_ref: Option<String>,
     /// Optional digest of the PCR control frontier evaluated at bootstrap.
     pub pcr_frontier_digest: Option<String>,

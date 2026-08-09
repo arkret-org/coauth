@@ -148,6 +148,16 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                 .post(arkret::issue_identity_binding_challenge),
         )
         .push(
+            Router::with_path("gate/account/identity-abandonment-challenges")
+                .options(oidc_preflight_handler)
+                .post(arkret::issue_identity_abandonment_challenge),
+        )
+        .push(
+            Router::with_path("gate/account/identity-abandonments")
+                .options(oidc_preflight_handler)
+                .post(arkret::abandon_identity_creation),
+        )
+        .push(
             Router::with_path("gate/account/register")
                 .options(oidc_preflight_handler)
                 .post(arkret::account_register_endpoint),
@@ -490,6 +500,8 @@ fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
         | "/_arkret/self/policy/check" => Some("POST"),
         "/_arkret/gate/account/authentication-handoffs"
         | "/_arkret/gate/account/identity-binding-challenges"
+        | "/_arkret/gate/account/identity-abandonment-challenges"
+        | "/_arkret/gate/account/identity-abandonments"
         | "/_arkret/gate/account/register"
         | "/_arkret/gate/account/session-grants/refresh"
         | "/_arkret/gate/account/session-grants/revoke"

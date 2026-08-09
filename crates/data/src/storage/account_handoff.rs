@@ -5,8 +5,9 @@ use chrono::{DateTime, Utc};
 use coauth_data::{
     AccountHandoffAuthorizationCheckpoint, AccountHandoffCreation,
     AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve, AccountHandoffGrant,
-    AccountHandoffGrantInput, IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
-    IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
+    AccountHandoffGrantInput, IdentityAbandonmentChallengeInput, IdentityAbandonmentChallengeIssue,
+    IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
+    IdentityBindingChallengeIssue, IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
     IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
 };
 
@@ -85,6 +86,20 @@ pub trait AccountHandoffRepository: Send + Sync {
         &mut self,
         input: IdentityBindingChallengeInput,
     ) -> Result<IdentityBindingChallengeIssue, Self::Error>;
+
+    /// Issue or replay the durable explicit-abandonment challenge while the
+    /// reserved identity has a published DID but no accepted PCR.
+    async fn issue_identity_abandonment_challenge(
+        &mut self,
+        input: IdentityAbandonmentChallengeInput,
+    ) -> Result<IdentityAbandonmentChallengeIssue, Self::Error>;
+
+    /// Atomically consume the challenge, reserve the orphan anchor, suppress
+    /// the holder checkpoint and release the identity-creation lease.
+    async fn abandon_identity_creation(
+        &mut self,
+        input: IdentityAbandonmentCommitInput,
+    ) -> Result<IdentityAbandonmentCommit, Self::Error>;
 
     /// Load a fail-closed registration context for an active challenge and fence.
     async fn registration_context(
@@ -197,6 +212,14 @@ repository_impl!(AccountHandoffRepository:
         &mut self,
         input: IdentityBindingChallengeInput,
     ) -> Result<IdentityBindingChallengeIssue, Self::Error>;
+    async fn issue_identity_abandonment_challenge(
+        &mut self,
+        input: IdentityAbandonmentChallengeInput,
+    ) -> Result<IdentityAbandonmentChallengeIssue, Self::Error>;
+    async fn abandon_identity_creation(
+        &mut self,
+        input: IdentityAbandonmentCommitInput,
+    ) -> Result<IdentityAbandonmentCommit, Self::Error>;
     async fn registration_context(
         &mut self,
         grant: &AccountHandoffGrant,

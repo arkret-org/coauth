@@ -65,10 +65,16 @@ impl TryFrom<ControlRow> for OrganizationPrincipalControl {
                 .column("bootstrap_authorization")
                 .row(id)
         })?;
+        let principal_control_realm_id =
+            arkret_identifiers::RealmId::new(value.principal_control_realm_id).map_err(|_| {
+                DatabaseInconsistencyError::on("organization_principal_controls")
+                    .column("principal_control_realm_id")
+                    .row(id)
+            })?;
         Ok(Self {
             id: id.to_string(),
             organization_did: value.organization_did,
-            principal_control_realm_id: value.principal_control_realm_id,
+            principal_control_realm_id: principal_control_realm_id.to_string(),
             control_stream_ref: value.control_stream_ref,
             pcr_frontier_digest: value.pcr_frontier_digest,
             bootstrap_authorization,
@@ -235,11 +241,26 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
     ) -> Result<OrganizationPrincipalControl, Self::Error> {
         let now = clock.now();
         let id = new_id(now, rng);
+        let supplied_realm_id = arkret_identifiers::RealmId::new(params.principal_control_realm_id)
+            .map_err(|_| DatabaseError::invalid_operation())?;
+        let create_event_id = params
+            .control_stream_ref
+            .as_deref()
+            .ok_or_else(DatabaseError::invalid_operation)
+            .and_then(|reference| {
+                arkret_identifiers::EventId::new(reference.to_owned())
+                    .map_err(|_| DatabaseError::invalid_operation())
+            })?;
+        let principal_control_realm_id =
+            arkret_identifiers::RealmId::from_event_id(&create_event_id);
+        if supplied_realm_id != principal_control_realm_id {
+            return Err(DatabaseError::invalid_operation());
+        }
         let row = InsertableControl {
             id: Uuid::from(id),
             organization_did: params.organization_did,
-            principal_control_realm_id: params.principal_control_realm_id,
-            control_stream_ref: params.control_stream_ref,
+            principal_control_realm_id: principal_control_realm_id.to_string(),
+            control_stream_ref: Some(create_event_id.to_string()),
             pcr_frontier_digest: params.pcr_frontier_digest,
             bootstrap_authorization: params.bootstrap_authorization.as_str().to_owned(),
             bootstrap_delegation_ref: params.bootstrap_delegation_ref,
@@ -477,12 +498,17 @@ mod tests {
     use crate::PgRepositoryFactory;
 
     fn control(did: &str) -> NewOrganizationPrincipalControl {
+        let create_event_id = arkret_identifiers::EventId::new(
+            "ak:event:AQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUF".to_owned(),
+        )
+        .unwrap();
         NewOrganizationPrincipalControl {
             organization_did: did.to_owned(),
-            principal_control_realm_id: format!("ak:realm:{did}"),
-            control_stream_ref: Some(
-                "ak:event:AQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUF".to_owned(),
-            ),
+            principal_control_realm_id: arkret_identifiers::RealmId::from_event_id(
+                &create_event_id,
+            )
+            .to_string(),
+            control_stream_ref: Some(create_event_id.to_string()),
             pcr_frontier_digest: None,
             bootstrap_authorization: OrganizationBootstrapAuthorization::DidControllerProof,
             bootstrap_delegation_ref: None,
@@ -562,5 +588,28 @@ mod tests {
             .expect("active delegation revocable");
         assert!(!revoked.is_live(clock.now()));
         repo.save().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn bootstrap_rejects_a_did_spliced_realm_identifier() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let factory = PgRepositoryFactory::new(pool);
+        let clock = MockClock::default();
+        let mut rng = ChaChaRng::seed_from_u64(74);
+        let did = format!("did:web:{}.example", uuid::Uuid::now_v7());
+        let mut input = control(&did);
+        input.principal_control_realm_id = ["ak:realm:", did.as_str()].concat();
+
+        let mut repo = factory.create().await.unwrap();
+        assert!(
+            repo.organization_control()
+                .bootstrap(&mut rng, &clock, input)
+                .await
+                .is_err(),
+            "organization bootstrap must fail closed without a typed event-derived realm id"
+        );
+        repo.cancel().await.unwrap();
     }
 }

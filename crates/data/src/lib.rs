@@ -132,8 +132,10 @@ pub use self::account_handoff::{
     AccountHandoffAuthorizationCheckpoint, AccountHandoffCreation, AccountHandoffCreationAttempt,
     AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve,
     AccountHandoffCreationAttemptState, AccountHandoffGrant, AccountHandoffGrantInput,
-    AccountHandoffRepository, IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
-    IdentityBindingChallengeRecord, IdentityCreationBindingCommit, IdentityCreationLeaseRecord,
+    AccountHandoffRepository, IdentityAbandonmentChallengeInput, IdentityAbandonmentChallengeIssue,
+    IdentityAbandonmentChallengeRecord, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
+    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityBindingChallengeRecord,
+    IdentityCreationBindingCommit, IdentityCreationLeaseRecord, IdentityCreationLeaseRiskDecision,
     IdentityCreationRegisterReplay, IdentityCreationRegistrationContext, IdentityCreationSagaState,
     NewAccountHandoffCreationAttempt,
 };

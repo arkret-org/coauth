@@ -1,7 +1,10 @@
 -- Squashed initial migration. This drops all tables. Only use in development.
 DROP TABLE IF EXISTS account_claims CASCADE;
 DROP TABLE IF EXISTS account_security_events CASCADE;
+DROP TABLE IF EXISTS identity_orphan_anchor_tombstones CASCADE;
+DROP TABLE IF EXISTS identity_abandonment_challenges CASCADE;
 DROP TABLE IF EXISTS identity_binding_challenges CASCADE;
+DROP TABLE IF EXISTS identity_creation_lease_rate_limit_events CASCADE;
 DROP TABLE IF EXISTS identity_creation_leases CASCADE;
 DROP TABLE IF EXISTS account_handoff_grants CASCADE;
 DROP TABLE IF EXISTS account_handoff_creation_attempts CASCADE;

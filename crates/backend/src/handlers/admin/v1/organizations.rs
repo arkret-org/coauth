@@ -20,7 +20,7 @@
 //! explicitly from storage-neutral domain records.
 
 use arkret_canonical::{canonical_json_bytes, sha256_digest};
-use arkret_identifiers::{Did, Hash, RealmId, new_prefixed_uuid7};
+use arkret_identifiers::{Did, EventId, Hash, RealmId, new_prefixed_uuid7};
 use arkret_models_collaboration::{RealmOrganizationPayload, RealmOrganizationStatus};
 use coauth_admin_types::organization_admin::{
     BootstrapAuthorizationInput, BootstrapOrganizationRequest, IssueOrganizationStatementRequest,
@@ -163,6 +163,26 @@ pub async fn bootstrap_handler(
         .map_err(|e| AppError::bad_request(format!("invalid bootstrap body: {e}")))?;
     // Validate the organization DID shape up front.
     parse_did(&body.organization_did)?;
+    let create_event_id = body
+        .control_stream_ref
+        .as_deref()
+        .ok_or_else(|| {
+            AppError::bad_request(
+                "organization bootstrap requires the accepted PCR create Event reference",
+            )
+        })
+        .and_then(|reference| {
+            EventId::new(reference.to_owned()).map_err(|error| {
+                AppError::bad_request(format!("invalid PCR create Event ref: {error}"))
+            })
+        })?;
+    let supplied_realm_id = RealmId::new(body.principal_control_realm_id.clone())
+        .map_err(|error| AppError::bad_request(format!("invalid PCR Realm id: {error}")))?;
+    if supplied_realm_id != RealmId::from_event_id(&create_event_id) {
+        return Err(AppError::bad_request(
+            "principal_control_realm_id is not derived from the accepted PCR create Event",
+        ));
+    }
 
     let call_context = extract_call_context(req, depot).await?;
     // The authenticated admin / service principal is only the executor.
@@ -567,7 +587,7 @@ mod tests {
     fn bootstrap_request(organization_did: &str) -> BootstrapOrganizationRequest {
         BootstrapOrganizationRequest {
             organization_did: organization_did.to_owned(),
-            principal_control_realm_id: "ak:realm:AUhJ30wlw7UA5CWJk9HZUsDp0GyhA-QVSF565JjdtLul"
+            principal_control_realm_id: "ak:realm:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG"
                 .to_owned(),
             control_stream_ref: Some(
                 "ak:event:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG".to_owned(),

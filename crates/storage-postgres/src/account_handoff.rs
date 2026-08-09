@@ -1,12 +1,14 @@
 //! PostgreSQL account-handoff state machine.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use coauth_data::account_handoff::{
     AccountHandoffCreation, AccountHandoffCreationAttempt, AccountHandoffCreationAttemptCommit,
     AccountHandoffCreationAttemptReserve, AccountHandoffCreationAttemptState, AccountHandoffGrant,
-    AccountHandoffGrantInput, IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
-    IdentityBindingChallengeRecord, IdentityCreationBindingCommit, IdentityCreationLeaseRecord,
+    AccountHandoffGrantInput, IdentityAbandonmentChallengeInput, IdentityAbandonmentChallengeIssue,
+    IdentityAbandonmentChallengeRecord, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
+    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityBindingChallengeRecord,
+    IdentityCreationBindingCommit, IdentityCreationLeaseRecord, IdentityCreationLeaseRiskDecision,
     IdentityCreationRegisterLedger, IdentityCreationRegisterReplay,
     IdentityCreationRegistrationContext, IdentityCreationSagaState,
     NewAccountHandoffCreationAttempt,
@@ -23,8 +25,10 @@ use uuid::Uuid;
 
 use crate::DatabaseError;
 
-const ALLOWED_OPERATIONS: [&str; 4] = [
+const ALLOWED_OPERATIONS: [&str; 6] = [
     "ak.gate.account.command.issue_identity_binding_challenge",
+    "ak.gate.account.command.issue_identity_abandonment_challenge",
+    "ak.gate.account.command.abandon_identity_creation",
     "ak.gate.account.command.register",
     "ak.gate.account.command.issue_session_grant",
     "ak.gate.account.command.issue_recovery_completion_grant",
@@ -174,6 +178,322 @@ impl<'c> PgAccountHandoffRepository<'c> {
             .optional()?;
         row.map(challenge_from_row).transpose()
     }
+
+    async fn abandonment_challenge_by_request(
+        &mut self,
+        request_id: Uuid,
+        for_update: bool,
+    ) -> Result<Option<IdentityAbandonmentChallengeRecord>, DatabaseError> {
+        let suffix = if for_update { " FOR UPDATE" } else { "" };
+        let query = format!(
+            "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
+             audience, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
+             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
+             consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
+             FROM identity_abandonment_challenges WHERE request_id = $1{suffix}"
+        );
+        diesel::sql_query(query)
+            .bind::<SqlUuid, _>(request_id)
+            .get_result::<AbandonmentChallengeRow>(self.conn)
+            .await
+            .optional()?
+            .map(abandonment_challenge_from_row)
+            .transpose()
+    }
+
+    async fn abandonment_challenge_by_id(
+        &mut self,
+        challenge_id: &str,
+        for_update: bool,
+    ) -> Result<Option<IdentityAbandonmentChallengeRecord>, DatabaseError> {
+        let suffix = if for_update { " FOR UPDATE" } else { "" };
+        let query = format!(
+            "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
+             audience, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
+             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
+             consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
+             FROM identity_abandonment_challenges WHERE challenge_id = $1{suffix}"
+        );
+        diesel::sql_query(query)
+            .bind::<Text, _>(challenge_id)
+            .get_result::<AbandonmentChallengeRow>(self.conn)
+            .await
+            .optional()?
+            .map(abandonment_challenge_from_row)
+            .transpose()
+    }
+
+    async fn abandonment_challenge_by_confirmation_request(
+        &mut self,
+        request_id: Uuid,
+        for_update: bool,
+    ) -> Result<Option<IdentityAbandonmentChallengeRecord>, DatabaseError> {
+        let suffix = if for_update { " FOR UPDATE" } else { "" };
+        let query = format!(
+            "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
+             audience, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
+             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
+             consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
+             FROM identity_abandonment_challenges WHERE confirmation_request_id = $1{suffix}"
+        );
+        diesel::sql_query(query)
+            .bind::<SqlUuid, _>(request_id)
+            .get_result::<AbandonmentChallengeRow>(self.conn)
+            .await
+            .optional()?
+            .map(abandonment_challenge_from_row)
+            .transpose()
+    }
+
+    async fn suppress_reserved_identity_checkpoints(
+        &mut self,
+        service_account_id: Ulid,
+        lease_id: &str,
+        abandoned_at: DateTime<Utc>,
+    ) -> Result<(), DatabaseError> {
+        let rows = diesel::sql_query(
+            "SELECT request_id, canonical_outcome FROM account_handoff_creation_attempts \
+             WHERE state = 'committed' AND canonical_outcome IS NOT NULL \
+             AND authorization_checkpoint ->> 'service_account_id' = $1 FOR UPDATE",
+        )
+        .bind::<Text, _>(service_account_id.to_string())
+        .load::<CommittedHandoffOutcomeRow>(self.conn)
+        .await?;
+        for row in rows {
+            let mut outcome: arkret_models_identity::AccountHandoffOutcome =
+                serde_json::from_slice(&row.canonical_outcome)
+                    .map_err(|_| DatabaseError::invalid_operation())?;
+            let arkret_models_identity::AccountHandoffBinding::IdentityCreationActive {
+                identity_creation_lease,
+            } = &mut outcome.binding
+            else {
+                continue;
+            };
+            if identity_creation_lease.identity_creation_lease_id != lease_id {
+                continue;
+            }
+            identity_creation_lease.reserved_identity = None;
+            identity_creation_lease.expires_at = abandoned_at;
+            let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
+                .map_err(|_| DatabaseError::invalid_operation())?;
+            let outcome_digest = format!("sha256:{:x}", sha2::Sha256::digest(&canonical_outcome));
+            let updated = diesel::sql_query(
+                "UPDATE account_handoff_creation_attempts SET canonical_outcome = $2, \
+                 outcome_digest = $3 WHERE request_id = $1 AND state = 'committed'",
+            )
+            .bind::<SqlUuid, _>(row.request_id)
+            .bind::<Bytea, _>(canonical_outcome)
+            .bind::<Text, _>(outcome_digest)
+            .execute(self.conn)
+            .await?;
+            if updated != 1 {
+                return Err(DatabaseError::invalid_operation());
+            }
+        }
+        Ok(())
+    }
+
+    async fn server_now(&mut self) -> Result<DateTime<Utc>, DatabaseError> {
+        Ok(diesel::sql_query("SELECT CURRENT_TIMESTAMP AS now")
+            .get_result::<ServerNowRow>(self.conn)
+            .await?
+            .now)
+    }
+
+    async fn account_risk_allows_identity_creation(
+        &mut self,
+        service_account_id: Uuid,
+    ) -> Result<bool, DatabaseError> {
+        // Hold a share lock until the lease transaction commits. A concurrent
+        // status transition therefore cannot race between this fail-closed
+        // check and quota/lease consumption.
+        Ok(
+            diesel::sql_query("SELECT status FROM users WHERE id = $1 FOR SHARE")
+                .bind::<SqlUuid, _>(service_account_id)
+                .get_result::<AccountStatusRow>(self.conn)
+                .await
+                .optional()?
+                .is_some_and(|row| row.status == "active"),
+        )
+    }
+
+    async fn lock_lease_quota(
+        &mut self,
+        account_subject: &arkret_identifiers::Hash,
+        audience: &str,
+    ) -> Result<(), DatabaseError> {
+        // Serialize the no-row acquisition case as well as renewal. The lock
+        // key contains only the salted account-subject digest and audience.
+        let key = format!("{}\0{audience}", account_subject.as_str());
+        let _ = diesel::sql_query(
+            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0)) IS NULL AS locked",
+        )
+        .bind::<Text, _>(key)
+        .get_result::<AdvisoryLockRow>(self.conn)
+        .await?;
+        Ok(())
+    }
+
+    async fn quota_event_exists(
+        &mut self,
+        request_id: Uuid,
+        action: &str,
+    ) -> Result<bool, DatabaseError> {
+        Ok(diesel::sql_query(
+            "SELECT EXISTS(SELECT 1 FROM identity_creation_lease_rate_limit_events \
+             WHERE request_id = $1 AND action = $2) AS present",
+        )
+        .bind::<SqlUuid, _>(request_id)
+        .bind::<Text, _>(action)
+        .get_result::<ExistsRow>(self.conn)
+        .await?
+        .present)
+    }
+
+    async fn consume_acquisition_quota(
+        &mut self,
+        request_id: Uuid,
+        account_subject: &arkret_identifiers::Hash,
+        audience: &str,
+        lease_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<Option<u64>, DatabaseError> {
+        if self.quota_event_exists(request_id, "acquisition").await? {
+            return Ok(None);
+        }
+        let window = diesel::sql_query(
+            "SELECT COUNT(*)::bigint AS count, MIN(occurred_at) AS oldest_at \
+             FROM identity_creation_lease_rate_limit_events \
+             WHERE account_subject = $1 AND audience = $2 AND action = 'acquisition' \
+             AND occurred_at > $3",
+        )
+        .bind::<Text, _>(account_subject.as_str())
+        .bind::<Text, _>(audience)
+        .bind::<Timestamptz, _>(now - Duration::minutes(10))
+        .get_result::<RateWindowRow>(self.conn)
+        .await?;
+        if window.count >= 5 {
+            let retry_at = window
+                .oldest_at
+                .ok_or_else(DatabaseError::invalid_operation)?
+                + Duration::minutes(10);
+            return Ok(Some(retry_after_ms(retry_at, now)));
+        }
+        self.insert_quota_event(
+            request_id,
+            account_subject,
+            audience,
+            lease_id,
+            "acquisition",
+        )
+        .await?;
+        Ok(None)
+    }
+
+    async fn consume_renewal_quota(
+        &mut self,
+        request_id: Uuid,
+        account_subject: &arkret_identifiers::Hash,
+        audience: &str,
+        lease_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<Option<u64>, DatabaseError> {
+        if self.quota_event_exists(request_id, "renewal").await? {
+            return Ok(None);
+        }
+        let minute = self
+            .renewal_window(lease_id, now - Duration::minutes(1))
+            .await?;
+        let hour = self
+            .renewal_window(lease_id, now - Duration::hours(1))
+            .await?;
+        let mut retry_at = None;
+        if minute.count >= 1 {
+            retry_at = minute.oldest_at.map(|value| value + Duration::minutes(1));
+        }
+        if hour.count >= 12 {
+            let hour_retry = hour.oldest_at.map(|value| value + Duration::hours(1));
+            retry_at = retry_at.max(hour_retry);
+        }
+        if let Some(retry_at) = retry_at {
+            return Ok(Some(retry_after_ms(retry_at, now)));
+        }
+        self.insert_quota_event(request_id, account_subject, audience, lease_id, "renewal")
+            .await?;
+        Ok(None)
+    }
+
+    async fn renewal_window(
+        &mut self,
+        lease_id: &str,
+        since: DateTime<Utc>,
+    ) -> Result<RateWindowRow, DatabaseError> {
+        Ok(diesel::sql_query(
+            "SELECT COUNT(*)::bigint AS count, MIN(occurred_at) AS oldest_at \
+             FROM identity_creation_lease_rate_limit_events \
+             WHERE lease_id = $1 AND action = 'renewal' AND occurred_at > $2",
+        )
+        .bind::<Text, _>(lease_id)
+        .bind::<Timestamptz, _>(since)
+        .get_result::<RateWindowRow>(self.conn)
+        .await?)
+    }
+
+    async fn insert_quota_event(
+        &mut self,
+        request_id: Uuid,
+        account_subject: &arkret_identifiers::Hash,
+        audience: &str,
+        lease_id: &str,
+        action: &str,
+    ) -> Result<(), DatabaseError> {
+        diesel::sql_query(
+            "INSERT INTO identity_creation_lease_rate_limit_events \
+             (request_id, account_subject, audience, lease_id, action) \
+             VALUES ($1, $2, $3, $4, $5) ON CONFLICT (request_id, action) DO NOTHING",
+        )
+        .bind::<SqlUuid, _>(request_id)
+        .bind::<Text, _>(account_subject.as_str())
+        .bind::<Text, _>(audience)
+        .bind::<Text, _>(lease_id)
+        .bind::<Text, _>(action)
+        .execute(self.conn)
+        .await?;
+        Ok(())
+    }
+}
+
+#[derive(QueryableByName)]
+struct ServerNowRow {
+    #[diesel(sql_type = Timestamptz)]
+    now: DateTime<Utc>,
+}
+
+#[derive(QueryableByName)]
+struct AccountStatusRow {
+    #[diesel(sql_type = Text)]
+    status: String,
+}
+
+#[derive(QueryableByName)]
+struct AdvisoryLockRow {
+    #[diesel(sql_type = diesel::sql_types::Bool)]
+    #[allow(dead_code)]
+    locked: bool,
+}
+
+#[derive(QueryableByName)]
+struct ExistsRow {
+    #[diesel(sql_type = diesel::sql_types::Bool)]
+    present: bool,
+}
+
+#[derive(QueryableByName)]
+struct RateWindowRow {
+    #[diesel(sql_type = BigInt)]
+    count: i64,
+    #[diesel(sql_type = Nullable<Timestamptz>)]
+    oldest_at: Option<DateTime<Utc>>,
 }
 
 #[derive(QueryableByName)]
@@ -248,6 +568,14 @@ struct HandoffCreationAttemptRow {
     authorized_at: Option<DateTime<Utc>>,
     #[diesel(sql_type = Nullable<Timestamptz>)]
     committed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(QueryableByName)]
+struct CommittedHandoffOutcomeRow {
+    #[diesel(sql_type = SqlUuid)]
+    request_id: Uuid,
+    #[diesel(sql_type = Bytea)]
+    canonical_outcome: Vec<u8>,
 }
 
 fn creation_attempt_from_row(
@@ -496,6 +824,99 @@ struct ChallengeRow {
     consumed_at: Option<DateTime<Utc>>,
     #[diesel(sql_type = Nullable<Timestamptz>)]
     replaced_at: Option<DateTime<Utc>>,
+}
+
+#[derive(QueryableByName)]
+struct AbandonmentChallengeRow {
+    #[diesel(sql_type = SqlUuid)]
+    request_id: Uuid,
+    #[diesel(sql_type = Text)]
+    request_digest: String,
+    #[diesel(sql_type = SqlUuid)]
+    issuing_handoff_grant_id: Uuid,
+    #[diesel(sql_type = SqlUuid)]
+    service_account_id: Uuid,
+    #[diesel(sql_type = Text)]
+    audience: String,
+    #[diesel(sql_type = Text)]
+    account_subject: String,
+    #[diesel(sql_type = Text)]
+    holder_jkt: String,
+    #[diesel(sql_type = Text)]
+    lease_id: String,
+    #[diesel(sql_type = BigInt)]
+    lease_fence: i64,
+    #[diesel(sql_type = Text)]
+    principal_id: String,
+    #[diesel(sql_type = Text)]
+    did_version_id: String,
+    #[diesel(sql_type = Text)]
+    challenge_id: String,
+    #[diesel(sql_type = Text)]
+    challenge: String,
+    #[diesel(sql_type = Text)]
+    origin: String,
+    #[diesel(sql_type = Text)]
+    trust_domain: String,
+    #[diesel(sql_type = Timestamptz)]
+    issued_at: DateTime<Utc>,
+    #[diesel(sql_type = Timestamptz)]
+    expires_at: DateTime<Utc>,
+    #[diesel(sql_type = Nullable<Timestamptz>)]
+    consumed_at: Option<DateTime<Utc>>,
+    #[diesel(sql_type = Nullable<SqlUuid>)]
+    confirmation_request_id: Option<Uuid>,
+    #[diesel(sql_type = Nullable<Text>)]
+    confirmation_request_digest: Option<String>,
+    #[diesel(sql_type = Nullable<Jsonb>)]
+    outcome: Option<serde_json::Value>,
+}
+
+fn abandonment_challenge_from_row(
+    row: AbandonmentChallengeRow,
+) -> Result<IdentityAbandonmentChallengeRecord, DatabaseError> {
+    Ok(IdentityAbandonmentChallengeRecord {
+        request_id: arkret_identifiers::RequestId::new(format!("ak:request:{}", row.request_id))
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        request_digest: arkret_identifiers::Hash::new(row.request_digest)
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        issuing_handoff_grant_id: Ulid::from(row.issuing_handoff_grant_id),
+        service_account_id: Ulid::from(row.service_account_id),
+        audience: arkret_identifiers::Did::new(row.audience)
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        account_subject: arkret_identifiers::Hash::new(row.account_subject)
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        holder_jkt: row.holder_jkt,
+        lease_id: row.lease_id,
+        lease_fence: u64::try_from(row.lease_fence)
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        principal_id: arkret_identifiers::Did::new(row.principal_id)
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        did_version_id: row.did_version_id,
+        challenge_id: row.challenge_id,
+        challenge: row.challenge,
+        origin: row.origin,
+        trust_domain: arkret_identifiers::TypedTrustDomainId::new(row.trust_domain)
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        issued_at: row.issued_at,
+        expires_at: row.expires_at,
+        consumed_at: row.consumed_at,
+        confirmation_request_id: row
+            .confirmation_request_id
+            .map(|id| arkret_identifiers::RequestId::new(format!("ak:request:{id}")))
+            .transpose()
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        confirmation_request_digest: row
+            .confirmation_request_digest
+            .map(arkret_identifiers::Hash::new)
+            .transpose()
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        outcome: row
+            .outcome
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|_| DatabaseError::invalid_operation())?,
+    })
 }
 
 fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecord, DatabaseError> {
@@ -848,49 +1269,100 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             });
         }
 
-        diesel::sql_query(
-            "INSERT INTO identity_creation_leases \
-             (service_account_id, audience, lease_id, holder_jkt, fence, expires_at, state, \
-              created_at, updated_at) \
-             VALUES ($1, $2, $3, $4, 1, $5, 'active', $6, $6) \
-             ON CONFLICT (service_account_id, audience) DO NOTHING",
-        )
-        .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
-        .bind::<Text, _>(&input.audience)
-        .bind::<Text, _>(&input.lease_id)
-        .bind::<Text, _>(&input.cnf_jkt)
-        .bind::<Timestamptz, _>(input.lease_expires_at)
-        .bind::<Timestamptz, _>(input.issued_at)
-        .execute(self.conn)
-        .await?;
+        if input.risk_decision != IdentityCreationLeaseRiskDecision::Allowed
+            || !self
+                .account_risk_allows_identity_creation(Uuid::from(input.service_account_id))
+                .await?
+        {
+            return Ok(AccountHandoffCreation::RiskRejected { grant });
+        }
 
-        let mut lease = self
+        self.lock_lease_quota(&input.account_subject, &input.audience)
+            .await?;
+        let server_now = self.server_now().await?;
+        let existing_lease = self
             .lease_for_account(Uuid::from(input.service_account_id), &input.audience, true)
-            .await?
-            .ok_or_else(DatabaseError::invalid_operation)?;
-        if matches!(
-            lease.state,
-            IdentityCreationSagaState::AccountBound | IdentityCreationSagaState::Completed
-        ) {
-            let principal_id = lease
-                .reserved_identity
-                .as_ref()
-                .map(|reserved| reserved.principal_id.clone())
-                .ok_or_else(DatabaseError::invalid_operation)?;
-            return Ok(AccountHandoffCreation::Bound {
-                grant,
-                principal_id,
-            });
+            .await?;
+        if let Some(lease) = existing_lease.as_ref() {
+            if matches!(
+                lease.state,
+                IdentityCreationSagaState::AccountBound | IdentityCreationSagaState::Completed
+            ) {
+                let principal_id = lease
+                    .reserved_identity
+                    .as_ref()
+                    .map(|reserved| reserved.principal_id.clone())
+                    .ok_or_else(DatabaseError::invalid_operation)?;
+                return Ok(AccountHandoffCreation::Bound {
+                    grant,
+                    principal_id,
+                });
+            }
+            if lease.expires_at > input.issued_at && lease.holder_jkt != input.cnf_jkt {
+                return Ok(AccountHandoffCreation::Busy {
+                    grant,
+                    retry_after_ms: retry_after_ms(lease.expires_at, input.issued_at),
+                    expires_at: lease.expires_at,
+                });
+            }
         }
-        if lease.expires_at > input.issued_at && lease.holder_jkt != input.cnf_jkt {
-            return Ok(AccountHandoffCreation::Busy {
+
+        let is_acquisition = existing_lease
+            .as_ref()
+            .map_or(true, |lease| lease.expires_at <= input.issued_at);
+        let exact_quota_replay = self
+            .quota_event_exists(input.request_id.uuid(), "acquisition")
+            .await?
+            || self
+                .quota_event_exists(input.request_id.uuid(), "renewal")
+                .await?;
+        let retry_after_ms = if exact_quota_replay {
+            None
+        } else if is_acquisition {
+            self.consume_acquisition_quota(
+                input.request_id.uuid(),
+                &input.account_subject,
+                &input.audience,
+                &input.lease_id,
+                server_now,
+            )
+            .await?
+        } else {
+            let lease = existing_lease
+                .as_ref()
+                .ok_or_else(DatabaseError::invalid_operation)?;
+            self.consume_renewal_quota(
+                input.request_id.uuid(),
+                &input.account_subject,
+                &input.audience,
+                &lease.lease_id,
+                server_now,
+            )
+            .await?
+        };
+        if let Some(retry_after_ms) = retry_after_ms {
+            return Ok(AccountHandoffCreation::RateLimited {
                 grant,
-                retry_after_ms: retry_after_ms(lease.expires_at, input.issued_at),
-                expires_at: lease.expires_at,
+                retry_after_ms,
             });
         }
 
-        if lease.expires_at <= input.issued_at {
+        if existing_lease.is_none() {
+            diesel::sql_query(
+                "INSERT INTO identity_creation_leases \
+                 (service_account_id, audience, lease_id, holder_jkt, fence, expires_at, state, \
+                  created_at, updated_at) \
+                 VALUES ($1, $2, $3, $4, 1, $5, 'active', $6, $6)",
+            )
+            .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
+            .bind::<Text, _>(&input.audience)
+            .bind::<Text, _>(&input.lease_id)
+            .bind::<Text, _>(&input.cnf_jkt)
+            .bind::<Timestamptz, _>(input.lease_expires_at)
+            .bind::<Timestamptz, _>(input.issued_at)
+            .execute(self.conn)
+            .await?;
+        } else if is_acquisition {
             diesel::sql_query(
                 "UPDATE identity_creation_leases SET lease_id = $3, holder_jkt = $4, \
                  fence = fence + 1, expires_at = $5, updated_at = $6 \
@@ -918,7 +1390,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .execute(self.conn)
             .await?;
         }
-        lease = self
+        let lease = self
             .lease_for_account(Uuid::from(input.service_account_id), &input.audience, false)
             .await?
             .ok_or_else(DatabaseError::invalid_operation)?;
@@ -947,8 +1419,10 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         }
         let lease = self
             .lease_for_account(Uuid::from(grant.service_account_id), &grant.audience, false)
-            .await?
-            .ok_or_else(DatabaseError::invalid_operation)?;
+            .await?;
+        let Some(lease) = lease else {
+            return Ok(AccountHandoffCreation::ExpiredReplay);
+        };
         if matches!(
             lease.state,
             IdentityCreationSagaState::AccountBound | IdentityCreationSagaState::Completed
@@ -1011,6 +1485,27 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(IdentityBindingChallengeIssue::Replay(existing));
         }
 
+        self.lock_lease_quota(&input.account_subject, &input.audience)
+            .await?;
+        // A concurrent exact request may have committed while this transaction
+        // waited for the quota lock. Re-read before consuming renewal quota or
+        // replacing the active challenge so response-loss replay remains
+        // byte-for-byte stable across instances.
+        if let Some(existing) = self.challenge_by_request(input.request_id.uuid()).await? {
+            if existing.request_digest != input.request_digest
+                || existing.service_account_id != input.service_account_id
+            {
+                return Ok(IdentityBindingChallengeIssue::DuplicateConflict);
+            }
+            if existing.consumed_at.is_some()
+                || existing.replaced_at.is_some()
+                || existing.expires_at <= input.issued_at
+            {
+                return Ok(IdentityBindingChallengeIssue::StaleRequest);
+            }
+            return Ok(IdentityBindingChallengeIssue::Replay(existing));
+        }
+        let server_now = self.server_now().await?;
         let lease = self
             .lease_for_account(Uuid::from(input.service_account_id), &input.audience, true)
             .await?;
@@ -1040,6 +1535,30 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             && existing != &reserved
         {
             return Ok(IdentityBindingChallengeIssue::ReservationConflict);
+        }
+        let orphan_anchor_reserved = diesel::sql_query(
+            "SELECT EXISTS(SELECT 1 FROM identity_orphan_anchor_tombstones \
+             WHERE principal_id = $1) AS present",
+        )
+        .bind::<Text, _>(reserved.principal_id.as_str())
+        .get_result::<ExistsRow>(self.conn)
+        .await?
+        .present;
+        if orphan_anchor_reserved {
+            return Ok(IdentityBindingChallengeIssue::ReservationConflict);
+        }
+
+        if let Some(retry_after_ms) = self
+            .consume_renewal_quota(
+                input.request_id.uuid(),
+                &input.account_subject,
+                &input.audience,
+                &input.lease_id,
+                server_now,
+            )
+            .await?
+        {
+            return Ok(IdentityBindingChallengeIssue::RateLimited { retry_after_ms });
         }
 
         diesel::sql_query(
@@ -1130,6 +1649,301 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(IdentityBindingChallengeIssue::DuplicateConflict);
         }
         Ok(IdentityBindingChallengeIssue::Issued(challenge))
+    }
+
+    async fn issue_identity_abandonment_challenge(
+        &mut self,
+        input: IdentityAbandonmentChallengeInput,
+    ) -> Result<IdentityAbandonmentChallengeIssue, Self::Error> {
+        let input = IdentityAbandonmentChallengeInput {
+            issued_at: arkret_canonical::normalize_timestamp_canonical(input.issued_at),
+            expires_at: arkret_canonical::normalize_timestamp_canonical(input.expires_at),
+            ..input
+        };
+        if input.expires_at <= input.issued_at
+            || input.expires_at - input.issued_at > Duration::minutes(5)
+        {
+            return Err(DatabaseError::invalid_operation());
+        }
+        if let Some(existing) = self
+            .abandonment_challenge_by_request(input.request_id.uuid(), false)
+            .await?
+        {
+            if existing.request_digest != input.request_digest
+                || existing.issuing_handoff_grant_id != input.issuing_handoff_grant_id
+                || existing.service_account_id != input.service_account_id
+                || existing.audience.as_str() != input.audience
+                || existing.holder_jkt != input.holder_jkt
+            {
+                return Ok(IdentityAbandonmentChallengeIssue::DuplicateConflict);
+            }
+            return Ok(IdentityAbandonmentChallengeIssue::Replay(existing));
+        }
+
+        self.lock_lease_quota(&input.account_subject, &input.audience)
+            .await?;
+        if let Some(existing) = self
+            .abandonment_challenge_by_request(input.request_id.uuid(), false)
+            .await?
+        {
+            if existing.request_digest != input.request_digest
+                || existing.issuing_handoff_grant_id != input.issuing_handoff_grant_id
+                || existing.service_account_id != input.service_account_id
+                || existing.audience.as_str() != input.audience
+                || existing.holder_jkt != input.holder_jkt
+            {
+                return Ok(IdentityAbandonmentChallengeIssue::DuplicateConflict);
+            }
+            return Ok(IdentityAbandonmentChallengeIssue::Replay(existing));
+        }
+
+        let server_now = self.server_now().await?;
+        let Some(lease) = self
+            .lease_for_account(Uuid::from(input.service_account_id), &input.audience, true)
+            .await?
+        else {
+            return Ok(IdentityAbandonmentChallengeIssue::LeaseFenced);
+        };
+        if lease.lease_id != input.lease_id
+            || lease.fence != input.lease_fence
+            || lease.holder_jkt != input.holder_jkt
+            || lease.expires_at <= server_now
+        {
+            return Ok(IdentityAbandonmentChallengeIssue::LeaseFenced);
+        }
+        if matches!(
+            lease.state,
+            IdentityCreationSagaState::PcrAccepted
+                | IdentityCreationSagaState::AccountBound
+                | IdentityCreationSagaState::Completed
+        ) {
+            return Ok(IdentityAbandonmentChallengeIssue::AlreadyAccepted);
+        }
+        if lease.state != IdentityCreationSagaState::DidPublished {
+            return Ok(IdentityAbandonmentChallengeIssue::CheckpointMismatch);
+        }
+        let Some(reserved) = lease.reserved_identity.as_ref() else {
+            return Ok(IdentityAbandonmentChallengeIssue::CheckpointMismatch);
+        };
+        let reserved_version = reserved
+            .did_operation
+            .operation
+            .get("versionId")
+            .and_then(serde_json::Value::as_str);
+        if reserved.principal_id != input.principal_id
+            || reserved_version != Some(input.did_version_id.as_str())
+        {
+            return Ok(IdentityAbandonmentChallengeIssue::CheckpointMismatch);
+        }
+
+        diesel::sql_query(
+            "INSERT INTO identity_abandonment_challenges \
+             (request_id, request_digest, issuing_handoff_grant_id, service_account_id, audience, \
+              account_subject, holder_jkt, lease_id, lease_fence, principal_id, did_version_id, \
+              challenge_id, challenge, origin, trust_domain, issued_at, expires_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) \
+             ON CONFLICT (request_id) DO NOTHING",
+        )
+        .bind::<SqlUuid, _>(input.request_id.uuid())
+        .bind::<Text, _>(input.request_digest.as_str())
+        .bind::<SqlUuid, _>(Uuid::from(input.issuing_handoff_grant_id))
+        .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
+        .bind::<Text, _>(&input.audience)
+        .bind::<Text, _>(input.account_subject.as_str())
+        .bind::<Text, _>(&input.holder_jkt)
+        .bind::<Text, _>(&input.lease_id)
+        .bind::<BigInt, _>(
+            i64::try_from(input.lease_fence).map_err(|_| DatabaseError::invalid_operation())?,
+        )
+        .bind::<Text, _>(input.principal_id.as_str())
+        .bind::<Text, _>(&input.did_version_id)
+        .bind::<Text, _>(&input.challenge_id)
+        .bind::<Text, _>(&input.challenge)
+        .bind::<Text, _>(&input.origin)
+        .bind::<Text, _>(input.trust_domain.as_str())
+        .bind::<Timestamptz, _>(input.issued_at)
+        .bind::<Timestamptz, _>(input.expires_at)
+        .execute(self.conn)
+        .await?;
+        let challenge = self
+            .abandonment_challenge_by_request(input.request_id.uuid(), false)
+            .await?
+            .ok_or_else(DatabaseError::invalid_operation)?;
+        if challenge.request_digest != input.request_digest
+            || challenge.issuing_handoff_grant_id != input.issuing_handoff_grant_id
+            || challenge.service_account_id != input.service_account_id
+        {
+            return Ok(IdentityAbandonmentChallengeIssue::DuplicateConflict);
+        }
+        Ok(IdentityAbandonmentChallengeIssue::Issued(challenge))
+    }
+
+    async fn abandon_identity_creation(
+        &mut self,
+        input: IdentityAbandonmentCommitInput,
+    ) -> Result<IdentityAbandonmentCommit, Self::Error> {
+        let now = arkret_canonical::normalize_timestamp_canonical(input.now);
+        if let Some(existing) = self
+            .abandonment_challenge_by_confirmation_request(input.request_id.uuid(), true)
+            .await?
+        {
+            if existing.confirmation_request_digest.as_ref() == Some(&input.request_digest)
+                && existing.service_account_id == input.service_account_id
+                && existing.audience.as_str() == input.audience
+                && existing.holder_jkt == input.holder_jkt
+            {
+                return existing
+                    .outcome
+                    .map(IdentityAbandonmentCommit::Replay)
+                    .ok_or_else(DatabaseError::invalid_operation);
+            }
+            return Ok(IdentityAbandonmentCommit::DuplicateConflict);
+        }
+
+        let Some(challenge) = self
+            .abandonment_challenge_by_id(&input.challenge_id, true)
+            .await?
+        else {
+            return Ok(IdentityAbandonmentCommit::UnknownChallenge);
+        };
+        // The initial confirmation-request lookup can race a transaction that
+        // is currently consuming this same challenge. SELECT FOR UPDATE above
+        // observes its committed ledger after waiting, so exact concurrent
+        // replay must be recognized here as well.
+        if let Some(confirmation_request_id) = challenge.confirmation_request_id.as_ref() {
+            if confirmation_request_id == &input.request_id {
+                if challenge.confirmation_request_digest.as_ref() == Some(&input.request_digest)
+                    && challenge.service_account_id == input.service_account_id
+                    && challenge.audience.as_str() == input.audience
+                    && challenge.holder_jkt == input.holder_jkt
+                {
+                    return challenge
+                        .outcome
+                        .map(IdentityAbandonmentCommit::Replay)
+                        .ok_or_else(DatabaseError::invalid_operation);
+                }
+                return Ok(IdentityAbandonmentCommit::DuplicateConflict);
+            }
+            return Ok(IdentityAbandonmentCommit::ChallengeConsumed);
+        }
+        if challenge.issuing_handoff_grant_id == input.confirming_handoff_grant_id {
+            return Ok(IdentityAbandonmentCommit::GrantReused);
+        }
+        if challenge.consumed_at.is_some() {
+            return Ok(IdentityAbandonmentCommit::ChallengeConsumed);
+        }
+        if challenge.expires_at <= now {
+            return Ok(IdentityAbandonmentCommit::ChallengeExpired);
+        }
+        if challenge.service_account_id != input.service_account_id
+            || challenge.audience.as_str() != input.audience
+            || challenge.holder_jkt != input.holder_jkt
+            || challenge.challenge != input.challenge
+            || challenge.lease_id != input.lease_id
+            || challenge.lease_fence != input.lease_fence
+            || challenge.principal_id != input.principal_id
+            || challenge.did_version_id != input.did_version_id
+        {
+            return Ok(IdentityAbandonmentCommit::ChallengeMismatch);
+        }
+
+        let Some(lease) = self
+            .lease_for_account(Uuid::from(input.service_account_id), &input.audience, true)
+            .await?
+        else {
+            return Ok(IdentityAbandonmentCommit::LeaseFenced);
+        };
+        if lease.lease_id != input.lease_id
+            || lease.fence != input.lease_fence
+            || lease.holder_jkt != input.holder_jkt
+            || lease.expires_at <= now
+        {
+            return Ok(IdentityAbandonmentCommit::LeaseFenced);
+        }
+        if matches!(
+            lease.state,
+            IdentityCreationSagaState::PcrAccepted
+                | IdentityCreationSagaState::AccountBound
+                | IdentityCreationSagaState::Completed
+        ) {
+            return Ok(IdentityAbandonmentCommit::AlreadyAccepted);
+        }
+        if lease.state != IdentityCreationSagaState::DidPublished {
+            return Ok(IdentityAbandonmentCommit::ChallengeMismatch);
+        }
+        let Some(reserved) = lease.reserved_identity.as_ref() else {
+            return Ok(IdentityAbandonmentCommit::ChallengeMismatch);
+        };
+        let reserved_version = reserved
+            .did_operation
+            .operation
+            .get("versionId")
+            .and_then(serde_json::Value::as_str);
+        if reserved.principal_id != input.principal_id
+            || reserved_version != Some(input.did_version_id.as_str())
+        {
+            return Ok(IdentityAbandonmentCommit::ChallengeMismatch);
+        }
+
+        let outcome = arkret_models_identity::IdentityAbandonmentOutcome {
+            request_id: input.request_id.clone(),
+            status: arkret_models_identity::IdentityAbandonmentStatus::Abandoned,
+            account_subject: challenge.account_subject.clone(),
+            principal_id: input.principal_id.clone(),
+            did_version_id: input.did_version_id.clone(),
+            abandoned_at: now,
+        };
+        let outcome_value =
+            serde_json::to_value(&outcome).map_err(|_| DatabaseError::invalid_operation())?;
+        let tombstones = diesel::sql_query(
+            "INSERT INTO identity_orphan_anchor_tombstones \
+             (principal_id, did_version_id, account_subject, abandonment_request_id, abandoned_at) \
+             VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+        )
+        .bind::<Text, _>(input.principal_id.as_str())
+        .bind::<Text, _>(&input.did_version_id)
+        .bind::<Text, _>(challenge.account_subject.as_str())
+        .bind::<SqlUuid, _>(input.request_id.uuid())
+        .bind::<Timestamptz, _>(now)
+        .execute(self.conn)
+        .await?;
+        if tombstones != 1 {
+            return Err(DatabaseError::invalid_operation());
+        }
+        let challenges = diesel::sql_query(
+            "UPDATE identity_abandonment_challenges SET consumed_at = $1, \
+             confirmation_request_id = $2, confirmation_request_digest = $3, outcome = $4 \
+             WHERE challenge_id = $5 AND consumed_at IS NULL",
+        )
+        .bind::<Timestamptz, _>(now)
+        .bind::<SqlUuid, _>(input.request_id.uuid())
+        .bind::<Text, _>(input.request_digest.as_str())
+        .bind::<Jsonb, _>(outcome_value)
+        .bind::<Text, _>(&input.challenge_id)
+        .execute(self.conn)
+        .await?;
+        if challenges != 1 {
+            return Err(DatabaseError::invalid_operation());
+        }
+        self.suppress_reserved_identity_checkpoints(input.service_account_id, &input.lease_id, now)
+            .await?;
+        let leases = diesel::sql_query(
+            "DELETE FROM identity_creation_leases WHERE service_account_id = $1 AND audience = $2 \
+             AND lease_id = $3 AND fence = $4 AND holder_jkt = $5 AND state = 'did_published'",
+        )
+        .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
+        .bind::<Text, _>(&input.audience)
+        .bind::<Text, _>(&input.lease_id)
+        .bind::<BigInt, _>(
+            i64::try_from(input.lease_fence).map_err(|_| DatabaseError::invalid_operation())?,
+        )
+        .bind::<Text, _>(&input.holder_jkt)
+        .execute(self.conn)
+        .await?;
+        if leases != 1 {
+            return Err(DatabaseError::invalid_operation());
+        }
+        Ok(IdentityAbandonmentCommit::Abandoned(outcome))
     }
 
     async fn registration_context(
@@ -1612,6 +2426,12 @@ mod tests {
             service_account_id,
             browser_session_id: None,
             audience: "did:web:principal.example".to_owned(),
+            account_subject: arkret_identifiers::Hash::new(format!(
+                "sha256:{:x}",
+                sha2::Sha256::digest(service_account_id.to_string().as_bytes())
+            ))
+            .unwrap(),
+            risk_decision: IdentityCreationLeaseRiskDecision::Allowed,
             cnf_jkt: holder_jkt.to_owned(),
             account_handoff_grant: format!("{}{}", Uuid::now_v7().simple(), "A".repeat(11)),
             issued_at,
@@ -1877,6 +2697,268 @@ mod tests {
             result.is_err(),
             "a post-migration Bound row without a replay ledger must violate the constraint"
         );
+    }
+
+    #[tokio::test]
+    async fn lease_quota_is_durable_exact_replay_safe_and_uses_closed_windows() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let factory = PgRepositoryFactory::new(pool);
+        let mut repo = factory.create().await.unwrap();
+        let clock = MockClock::default();
+        let now = clock.now();
+        let mut rng = test_rng();
+        let label = Uuid::now_v7().simple().to_string();
+        let user = repo
+            .user()
+            .add(&mut rng, &clock, format!("lease-quota-{label}"))
+            .await
+            .unwrap();
+
+        let first = handoff_input(&mut rng, user.id, now, &"Q".repeat(43), &unique_lease_id());
+        assert!(matches!(
+            repo.account_handoff()
+                .create_with_lease(first.clone())
+                .await
+                .unwrap(),
+            AccountHandoffCreation::Active { .. }
+        ));
+        assert!(matches!(
+            repo.account_handoff()
+                .create_with_lease(first)
+                .await
+                .unwrap(),
+            AccountHandoffCreation::Active { .. }
+        ));
+
+        // Commit and reopen through a new repository instance. The following
+        // renewal must observe the durable quota event, not process memory.
+        repo.save().await.unwrap();
+        let mut repo = factory.create().await.unwrap();
+
+        let renewal = handoff_input(
+            &mut rng,
+            user.id,
+            now + Duration::minutes(1),
+            &"Q".repeat(43),
+            &unique_lease_id(),
+        );
+        assert!(matches!(
+            repo.account_handoff()
+                .create_with_lease(renewal)
+                .await
+                .unwrap(),
+            AccountHandoffCreation::Active { .. }
+        ));
+        let too_soon = handoff_input(
+            &mut rng,
+            user.id,
+            now + Duration::minutes(2),
+            &"Q".repeat(43),
+            &unique_lease_id(),
+        );
+        assert!(matches!(
+            repo.account_handoff()
+                .create_with_lease(too_soon)
+                .await
+                .unwrap(),
+            AccountHandoffCreation::RateLimited { .. }
+        ));
+
+        // Five acquisitions in the server's ten-minute window are accepted;
+        // exact replay above did not consume a second slot.
+        for index in 1..5 {
+            let issued_at = now + Duration::minutes(i64::from(index) * 16);
+            let input = handoff_input(
+                &mut rng,
+                user.id,
+                issued_at,
+                &"Q".repeat(43),
+                &unique_lease_id(),
+            );
+            assert!(matches!(
+                repo.account_handoff()
+                    .create_with_lease(input)
+                    .await
+                    .unwrap(),
+                AccountHandoffCreation::Active { .. }
+            ));
+        }
+        let sixth = handoff_input(
+            &mut rng,
+            user.id,
+            now + Duration::minutes(80),
+            &"Q".repeat(43),
+            &unique_lease_id(),
+        );
+        assert!(matches!(
+            repo.account_handoff()
+                .create_with_lease(sixth)
+                .await
+                .unwrap(),
+            AccountHandoffCreation::RateLimited { .. }
+        ));
+        repo.cancel().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn lease_acquisition_quota_serializes_cross_instance_concurrency() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let factory = PgRepositoryFactory::new(pool);
+        let clock = MockClock::default();
+        let now = clock.now();
+        let mut rng = test_rng();
+        let label = Uuid::now_v7().simple().to_string();
+        let mut setup = factory.create().await.unwrap();
+        let mut users = Vec::new();
+        for index in 0..6 {
+            users.push(
+                setup
+                    .user()
+                    .add(
+                        &mut rng,
+                        &clock,
+                        format!("lease-concurrent-{label}-{index}"),
+                    )
+                    .await
+                    .unwrap(),
+            );
+        }
+        setup.save().await.unwrap();
+
+        // Separate service accounts model independent acquisition requests,
+        // while the shared salted subject and audience exercise the protocol
+        // quota key. Each future owns a distinct database transaction.
+        let shared_subject = arkret_identifiers::Hash::new(format!(
+            "sha256:{:x}",
+            sha2::Sha256::digest(format!("shared-{label}").as_bytes())
+        ))
+        .unwrap();
+        let attempts = users.into_iter().map(|user| {
+            let mut input =
+                handoff_input(&mut rng, user.id, now, &"C".repeat(43), &unique_lease_id());
+            input.account_subject = shared_subject.clone();
+            let factory = factory.clone();
+            async move {
+                let mut repo = factory.create().await.unwrap();
+                let result = repo
+                    .account_handoff()
+                    .create_with_lease(input)
+                    .await
+                    .unwrap();
+                let accepted = matches!(&result, AccountHandoffCreation::Active { .. });
+                if accepted {
+                    repo.save().await.unwrap();
+                } else {
+                    assert!(matches!(result, AccountHandoffCreation::RateLimited { .. }));
+                    repo.cancel().await.unwrap();
+                }
+                accepted
+            }
+        });
+        let results = futures_util::future::join_all(attempts).await;
+        assert_eq!(results.iter().filter(|accepted| **accepted).count(), 5);
+        assert_eq!(results.iter().filter(|accepted| !**accepted).count(), 1);
+    }
+
+    #[tokio::test]
+    async fn lease_renewal_enforces_the_durable_hour_window() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let factory = PgRepositoryFactory::new(pool.clone());
+        let clock = MockClock::default();
+        let now = clock.now();
+        let mut rng = test_rng();
+        let label = Uuid::now_v7().simple().to_string();
+        let mut repo = factory.create().await.unwrap();
+        let user = repo
+            .user()
+            .add(&mut rng, &clock, format!("lease-hour-{label}"))
+            .await
+            .unwrap();
+        let first = handoff_input(&mut rng, user.id, now, &"H".repeat(43), &unique_lease_id());
+        let account_subject = first.account_subject.clone();
+        let audience = first.audience.clone();
+        let created = repo
+            .account_handoff()
+            .create_with_lease(first)
+            .await
+            .unwrap();
+        let AccountHandoffCreation::Active { lease, .. } = created else {
+            panic!("identity creation must acquire an active lease");
+        };
+        let lease_id = lease.lease_id.clone();
+        repo.save().await.unwrap();
+
+        // Seed twelve prior server-timestamped renewals outside the one-minute
+        // window but inside the hour. The next renewal must be rejected by the
+        // independent 12/hour ceiling.
+        let mut conn = pool.get().await.unwrap();
+        for _ in 0..12 {
+            diesel::sql_query(
+                "INSERT INTO identity_creation_lease_rate_limit_events \
+                 (request_id, account_subject, audience, lease_id, action, occurred_at) \
+                 VALUES ($1, $2, $3, $4, 'renewal', CURRENT_TIMESTAMP - INTERVAL '2 minutes')",
+            )
+            .bind::<SqlUuid, _>(Uuid::now_v7())
+            .bind::<Text, _>(account_subject.as_str())
+            .bind::<Text, _>(&audience)
+            .bind::<Text, _>(&lease_id)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        }
+        drop(conn);
+
+        let renewal = handoff_input(
+            &mut rng,
+            user.id,
+            now + Duration::minutes(1),
+            &"H".repeat(43),
+            &unique_lease_id(),
+        );
+        let mut repo = factory.create().await.unwrap();
+        assert!(matches!(
+            repo.account_handoff()
+                .create_with_lease(renewal)
+                .await
+                .unwrap(),
+            AccountHandoffCreation::RateLimited { .. }
+        ));
+        repo.cancel().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn lease_acquisition_rechecks_current_account_risk_in_the_same_transaction() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let clock = MockClock::default();
+        let now = clock.now();
+        let mut rng = test_rng();
+        let label = Uuid::now_v7().simple().to_string();
+        let user = repo
+            .user()
+            .add(&mut rng, &clock, format!("lease-risk-{label}"))
+            .await
+            .unwrap();
+        let user = repo.user().lock(&clock, user).await.unwrap();
+        assert!(!user.is_valid());
+
+        let input = handoff_input(&mut rng, user.id, now, &"R".repeat(43), &unique_lease_id());
+        assert!(matches!(
+            repo.account_handoff()
+                .create_with_lease(input)
+                .await
+                .unwrap(),
+            AccountHandoffCreation::RiskRejected { .. }
+        ));
+        repo.cancel().await.unwrap();
     }
 
     #[tokio::test]
@@ -2576,6 +3658,650 @@ mod tests {
             IdentityCreationRegisterReplay::DuplicateConflict
         ));
 
+        repo.cancel().await.unwrap();
+    }
+}
+
+#[cfg(test)]
+mod abandonment_tests {
+    use std::collections::BTreeMap;
+
+    use chrono::Duration;
+    use coauth_data::account_handoff::{
+        AccountHandoffAuthorizationCheckpoint, AccountHandoffCreation,
+        AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve,
+        AccountHandoffGrantInput, IdentityAbandonmentChallengeInput,
+        IdentityAbandonmentChallengeIssue, IdentityAbandonmentCommit,
+        IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
+        IdentityBindingChallengeIssue, IdentityCreationLeaseRiskDecision,
+        NewAccountHandoffCreationAttempt,
+    };
+    use coauth_data::clock::MockClock;
+    use coauth_data::user::UserRepository as _;
+    use coauth_data::{
+        AccountHandoffRepository as _, Clock as _, RepositoryAccess as _, RepositoryFactory as _,
+        new_id,
+    };
+    use diesel::sql_types::{Bytea, Jsonb};
+    use diesel_async::pooled_connection::deadpool::Pool;
+    use rand_chacha::ChaChaRng;
+    use rand_core::SeedableRng;
+    use sha2::Digest as _;
+
+    use super::*;
+    use crate::PgRepositoryFactory;
+
+    const AUDIENCE: &str = "did:web:principal.example";
+    const HOLDER_JKT: &str = "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH";
+    const PCR_REALM_ID: &str = "ak:realm:Ac1aCK8aQdnkYImvdH3DFjq4jDCP198pXYWCGzGuVyj5";
+
+    fn hash(fill: char) -> arkret_identifiers::Hash {
+        arkret_identifiers::Hash::new(format!("sha256:{}", fill.to_string().repeat(64))).unwrap()
+    }
+
+    fn request_id() -> arkret_identifiers::RequestId {
+        arkret_identifiers::RequestId::new(format!("ak:request:{}", Uuid::now_v7())).unwrap()
+    }
+
+    fn test_rng() -> ChaChaRng {
+        let bytes = Uuid::now_v7().into_bytes();
+        let high = u64::from_le_bytes(bytes[..8].try_into().unwrap());
+        let low = u64::from_le_bytes(bytes[8..].try_into().unwrap());
+        ChaChaRng::seed_from_u64(high ^ low)
+    }
+
+    fn did_operation(
+        label: &str,
+        did_version_id: &str,
+    ) -> arkret_models_identity::DidOperationSubmitRequestBody {
+        let did = arkret_identifiers::Did::new(format!("did:webvh:z{label}:example.com")).unwrap();
+        arkret_models_identity::DidOperationSubmitRequestBody {
+            did: did.clone(),
+            did_method: "webvh".to_owned(),
+            seq: Some(0),
+            prev_event_digest: None,
+            operation: BTreeMap::from([
+                (
+                    "state".to_owned(),
+                    serde_json::json!({ "id": did.as_str() }),
+                ),
+                (
+                    "versionId".to_owned(),
+                    serde_json::Value::String(did_version_id.to_owned()),
+                ),
+            ]),
+        }
+    }
+
+    fn handoff_input(
+        rng: &mut ChaChaRng,
+        service_account_id: Ulid,
+        now: DateTime<Utc>,
+        account_subject: arkret_identifiers::Hash,
+    ) -> AccountHandoffGrantInput {
+        AccountHandoffGrantInput {
+            id: new_id(now, rng),
+            request_id: request_id(),
+            request_digest: hash('1'),
+            service_account_id,
+            browser_session_id: None,
+            audience: AUDIENCE.to_owned(),
+            account_subject,
+            risk_decision: IdentityCreationLeaseRiskDecision::Allowed,
+            cnf_jkt: HOLDER_JKT.to_owned(),
+            account_handoff_grant: format!("{}{}", Uuid::now_v7().simple(), "G".repeat(11)),
+            issued_at: now,
+            expires_at: now + Duration::minutes(30),
+            lease_id: format!("{}{}", Uuid::now_v7().simple(), "L".repeat(11)),
+            lease_expires_at: now + Duration::minutes(15),
+        }
+    }
+
+    #[derive(Clone)]
+    struct PublishedFixture {
+        pool: Pool<AsyncPgConnection>,
+        grant: coauth_data::account_handoff::AccountHandoffGrant,
+        lease: coauth_data::account_handoff::IdentityCreationLeaseRecord,
+        reserved: arkret_models_identity::ReservedIdentityCreation,
+        account_subject: arkret_identifiers::Hash,
+        did_version_id: String,
+        issued: coauth_data::account_handoff::IdentityAbandonmentChallengeRecord,
+        now: DateTime<Utc>,
+    }
+
+    impl PublishedFixture {
+        async fn create(challenge_offset: Duration) -> Option<Self> {
+            let pool = crate::test_utils::setup_test_pool().await?;
+            let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+            let clock = MockClock::new(now);
+            let mut rng = test_rng();
+            let label = Uuid::now_v7().simple().to_string();
+            let account_subject = arkret_identifiers::Hash::new(format!(
+                "sha256:{:x}",
+                sha2::Sha256::digest(format!("abandon-subject-{label}").as_bytes())
+            ))
+            .unwrap();
+            let did_version_id = format!("1-{label}");
+
+            let mut repo = PgRepositoryFactory::new(pool.clone())
+                .create()
+                .await
+                .unwrap();
+            let user = repo
+                .user()
+                .add(&mut rng, &clock, format!("abandon-{label}"))
+                .await
+                .unwrap();
+            let created = repo
+                .account_handoff()
+                .create_with_lease(handoff_input(
+                    &mut rng,
+                    user.id,
+                    clock.now(),
+                    account_subject.clone(),
+                ))
+                .await
+                .unwrap();
+            let AccountHandoffCreation::Active { grant, lease } = created else {
+                panic!("fixture must acquire an identity-creation lease");
+            };
+            repo.save().await.unwrap();
+
+            let operation = did_operation(&label, &did_version_id);
+            let reserved =
+                arkret_models_identity::ReservedIdentityCreation::from_operation(operation)
+                    .unwrap();
+            let head_digest = hash('3');
+            let registry_receipt = arkret_models_identity::DidOperationSubmitOutcome {
+                status: arkret_models_identity::DidOperationSubmitStatus::Accepted,
+                did: reserved.principal_id.clone(),
+                seq: Some(0),
+                head_event_digest: Some(head_digest.clone()),
+                operation_ref: None,
+                receipts: Vec::new(),
+            };
+            let mut conn = pool.get().await.unwrap();
+            diesel::sql_query(
+                "UPDATE identity_creation_leases SET reserved_principal_id = $1, \
+                 reserved_operation_digest = $2, did_operation = $3, state = 'did_published', \
+                 registry_receipt = $4, head_event_digest = $5, updated_at = $6 \
+                 WHERE service_account_id = $7 AND audience = $8 AND lease_id = $9",
+            )
+            .bind::<Text, _>(reserved.principal_id.as_str())
+            .bind::<Text, _>(reserved.operation_digest.as_str())
+            .bind::<Jsonb, _>(serde_json::to_value(&reserved.did_operation).unwrap())
+            .bind::<Jsonb, _>(serde_json::to_value(registry_receipt).unwrap())
+            .bind::<Text, _>(head_digest.as_str())
+            .bind::<Timestamptz, _>(now)
+            .bind::<SqlUuid, _>(Uuid::from(user.id))
+            .bind::<Text, _>(AUDIENCE)
+            .bind::<Text, _>(&lease.lease_id)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+            drop(conn);
+
+            let challenge_issued_at = now + challenge_offset;
+            let challenge_input = IdentityAbandonmentChallengeInput {
+                request_id: request_id(),
+                request_digest: hash('4'),
+                issuing_handoff_grant_id: grant.id,
+                service_account_id: user.id,
+                audience: AUDIENCE.to_owned(),
+                account_subject: account_subject.clone(),
+                holder_jkt: HOLDER_JKT.to_owned(),
+                lease_id: lease.lease_id.clone(),
+                lease_fence: lease.fence,
+                principal_id: reserved.principal_id.clone(),
+                did_version_id: did_version_id.clone(),
+                challenge_id: format!("{}{}", Uuid::now_v7().simple(), "I".repeat(11)),
+                challenge: format!("{}{}", Uuid::now_v7().simple(), "C".repeat(11)),
+                origin: "https://account.example".to_owned(),
+                trust_domain: arkret_identifiers::TypedTrustDomainId::new(
+                    "ak:trust_domain:example.net",
+                )
+                .unwrap(),
+                issued_at: challenge_issued_at,
+                expires_at: challenge_issued_at + Duration::minutes(5),
+            };
+            let mut repo = PgRepositoryFactory::new(pool.clone())
+                .create()
+                .await
+                .unwrap();
+            let issued = match repo
+                .account_handoff()
+                .issue_identity_abandonment_challenge(challenge_input)
+                .await
+                .unwrap()
+            {
+                IdentityAbandonmentChallengeIssue::Issued(challenge) => challenge,
+                other => panic!("fixture challenge was not issued: {other:?}"),
+            };
+            repo.save().await.unwrap();
+
+            Some(Self {
+                pool,
+                grant,
+                lease: *lease,
+                reserved,
+                account_subject,
+                did_version_id,
+                issued,
+                now,
+            })
+        }
+
+        fn commit_input(&self, now: DateTime<Utc>) -> IdentityAbandonmentCommitInput {
+            IdentityAbandonmentCommitInput {
+                request_id: request_id(),
+                request_digest: hash('5'),
+                confirming_handoff_grant_id: Ulid::from(Uuid::now_v7()),
+                service_account_id: self.grant.service_account_id,
+                audience: self.grant.audience.clone(),
+                holder_jkt: self.grant.cnf_jkt.clone(),
+                challenge_id: self.issued.challenge_id.clone(),
+                challenge: self.issued.challenge.clone(),
+                lease_id: self.lease.lease_id.clone(),
+                lease_fence: self.lease.fence,
+                principal_id: self.reserved.principal_id.clone(),
+                did_version_id: self.did_version_id.clone(),
+                now,
+            }
+        }
+
+        async fn seed_committed_checkpoint(&self) -> arkret_identifiers::RequestId {
+            let request_id = request_id();
+            let canonical_intent = br#"{"issuer":"https://issuer.example"}"#.to_vec();
+            let canonical_intent_digest = arkret_identifiers::Hash::new(format!(
+                "sha256:{:x}",
+                sha2::Sha256::digest(&canonical_intent)
+            ))
+            .unwrap();
+            let attempt = NewAccountHandoffCreationAttempt {
+                request_id: request_id.clone(),
+                request_digest: hash('6'),
+                canonical_intent_digest: canonical_intent_digest.clone(),
+                canonical_intent,
+                holder_jkt: HOLDER_JKT.to_owned(),
+                issuer: "https://issuer.example".to_owned(),
+                client_id: "arkret-test".to_owned(),
+                authorization_code_digest: hash('7'),
+                dpop_jti_digest: hash('8'),
+                retained_until: self.now + Duration::days(7),
+                now: self.now,
+            };
+            let checkpoint = AccountHandoffAuthorizationCheckpoint {
+                service_account_id: self.grant.service_account_id.to_string(),
+                browser_session_id: None,
+                audience: self.grant.audience.clone(),
+                account_handle: "alice:example.com".to_owned(),
+                preferred_locale: None,
+            };
+            let outcome = arkret_models_identity::AccountHandoffOutcome {
+                request_id: request_id.clone(),
+                account_handle: arkret_models_identity::Handle::parse("alice:example.com").unwrap(),
+                account_subject: self.account_subject.clone(),
+                preferred_locale: None,
+                account_handoff_grant: "checkpoint-grant-value-that-is-long-enough".to_owned(),
+                expires_at: self.grant.expires_at,
+                allowed_operations: arkret_models_identity::ACCOUNT_HANDOFF_ALLOWED_OPERATIONS,
+                binding: arkret_models_identity::AccountHandoffBinding::IdentityCreationActive {
+                    identity_creation_lease: arkret_models_identity::IdentityCreationLease {
+                        identity_creation_lease_id: self.lease.lease_id.clone(),
+                        fence: self.lease.fence,
+                        expires_at: self.lease.expires_at,
+                        reserved_identity: Some(self.reserved.clone()),
+                    },
+                },
+            };
+            let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome).unwrap();
+            let outcome_digest = arkret_identifiers::Hash::new(format!(
+                "sha256:{:x}",
+                sha2::Sha256::digest(&canonical_outcome)
+            ))
+            .unwrap();
+
+            let mut repo = PgRepositoryFactory::new(self.pool.clone())
+                .create()
+                .await
+                .unwrap();
+            assert!(matches!(
+                repo.account_handoff()
+                    .reserve_creation_attempt(attempt)
+                    .await
+                    .unwrap(),
+                AccountHandoffCreationAttemptReserve::Reserved(_)
+            ));
+            assert!(matches!(
+                repo.account_handoff()
+                    .checkpoint_creation_authorization(
+                        &request_id,
+                        &canonical_intent_digest,
+                        &checkpoint,
+                        self.now + Duration::seconds(1),
+                    )
+                    .await
+                    .unwrap(),
+                AccountHandoffCreationAttemptCommit::Committed(_)
+            ));
+            assert!(matches!(
+                repo.account_handoff()
+                    .commit_creation_attempt(
+                        &request_id,
+                        &canonical_intent_digest,
+                        &canonical_outcome,
+                        &outcome_digest,
+                        self.now + Duration::seconds(2),
+                    )
+                    .await
+                    .unwrap(),
+                AccountHandoffCreationAttemptCommit::Committed(_)
+            ));
+            repo.save().await.unwrap();
+            request_id
+        }
+
+        async fn mark_pcr_accepted(&self) {
+            let pcr_receipt = serde_json::json!({
+                "principal_id": self.reserved.principal_id.as_str(),
+                "pcr_realm_id": PCR_REALM_ID,
+                "accepted_device_id": "ak:device:01904100-0000-7000-8000-000000000001",
+                "receipt": {
+                    "schema": "ak.schema.event_batch_receipt.v1",
+                    "receipt_id": "ak:receipt:01904100-0000-7000-8000-000000000001",
+                    "issuer": AUDIENCE,
+                    "scope": {
+                        "kind": "pcr_genesis_unit",
+                        "principal_id": self.reserved.principal_id.as_str(),
+                        "realm_id": PCR_REALM_ID,
+                        "did_version_id": self.did_version_id.as_str(),
+                        "log_head_digest": hash('a'),
+                        "control_key_digest": hash('b'),
+                        "create_digest": hash('c'),
+                        "founding_authorize_digest": hash('d'),
+                        "accepted_device_id": "ak:device:01904100-0000-7000-8000-000000000001",
+                        "device_key_digest": hash('e'),
+                        "hpke_key_digest": hash('f'),
+                        "accepted_at": self.now,
+                        "audience": AUDIENCE
+                    },
+                    "frontier": { "actor_seq": 1 },
+                    "events": [],
+                    "created_at": self.now,
+                    "proofs": []
+                }
+            });
+            let _: arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome =
+                serde_json::from_value(pcr_receipt.clone()).unwrap();
+            let mut conn = self.pool.get().await.unwrap();
+            diesel::sql_query(
+                "UPDATE identity_creation_leases SET state = 'pcr_accepted', \
+                 pcr_genesis_request_digest = $1, pcr_genesis_receipt = $2, updated_at = $3 \
+                 WHERE service_account_id = $4 AND audience = $5 AND lease_id = $6",
+            )
+            .bind::<Text, _>(hash('9').as_str())
+            .bind::<Jsonb, _>(pcr_receipt)
+            .bind::<Timestamptz, _>(self.now)
+            .bind::<SqlUuid, _>(Uuid::from(self.grant.service_account_id))
+            .bind::<Text, _>(&self.grant.audience)
+            .bind::<Text, _>(&self.lease.lease_id)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn abandonment_rejects_reused_grant_expiry_and_pcr_accept_race() {
+        let Some(fresh) = PublishedFixture::create(Duration::zero()).await else {
+            return;
+        };
+        let mut reused = fresh.commit_input(fresh.now + Duration::seconds(1));
+        reused.confirming_handoff_grant_id = fresh.grant.id;
+        let mut repo = PgRepositoryFactory::new(fresh.pool.clone())
+            .create()
+            .await
+            .unwrap();
+        assert!(matches!(
+            repo.account_handoff()
+                .abandon_identity_creation(reused)
+                .await
+                .unwrap(),
+            IdentityAbandonmentCommit::GrantReused
+        ));
+        repo.cancel().await.unwrap();
+
+        let Some(expired) = PublishedFixture::create(-Duration::minutes(10)).await else {
+            return;
+        };
+        let mut repo = PgRepositoryFactory::new(expired.pool.clone())
+            .create()
+            .await
+            .unwrap();
+        assert!(matches!(
+            repo.account_handoff()
+                .abandon_identity_creation(expired.commit_input(expired.now))
+                .await
+                .unwrap(),
+            IdentityAbandonmentCommit::ChallengeExpired
+        ));
+        repo.cancel().await.unwrap();
+
+        let Some(accepted) = PublishedFixture::create(Duration::zero()).await else {
+            return;
+        };
+        accepted.mark_pcr_accepted().await;
+        let mut repo = PgRepositoryFactory::new(accepted.pool.clone())
+            .create()
+            .await
+            .unwrap();
+        assert!(matches!(
+            repo.account_handoff()
+                .abandon_identity_creation(
+                    accepted.commit_input(accepted.now + Duration::seconds(1))
+                )
+                .await
+                .unwrap(),
+            IdentityAbandonmentCommit::AlreadyAccepted
+        ));
+        repo.cancel().await.unwrap();
+
+        let mut conn = accepted.pool.get().await.unwrap();
+        assert_eq!(
+            diesel::sql_query(
+                "SELECT EXISTS(SELECT 1 FROM identity_orphan_anchor_tombstones \
+                 WHERE principal_id = $1) AS present",
+            )
+            .bind::<Text, _>(accepted.reserved.principal_id.as_str())
+            .get_result::<ExistsRow>(&mut *conn)
+            .await
+            .unwrap()
+            .present,
+            false
+        );
+    }
+
+    #[tokio::test]
+    async fn abandonment_exact_concurrent_replay_consumes_once_and_suppresses_checkpoint() {
+        let Some(fixture) = PublishedFixture::create(Duration::zero()).await else {
+            return;
+        };
+        let checkpoint_request_id = fixture.seed_committed_checkpoint().await;
+        let input = fixture.commit_input(fixture.now + Duration::seconds(3));
+        let attempts = (0..2).map(|_| {
+            let pool = fixture.pool.clone();
+            let input = input.clone();
+            async move {
+                let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+                let outcome = repo
+                    .account_handoff()
+                    .abandon_identity_creation(input)
+                    .await
+                    .unwrap();
+                repo.save().await.unwrap();
+                outcome
+            }
+        });
+        let outcomes = futures_util::future::join_all(attempts).await;
+        assert_eq!(
+            outcomes
+                .iter()
+                .filter(|outcome| matches!(outcome, IdentityAbandonmentCommit::Abandoned(_)))
+                .count(),
+            1
+        );
+        assert_eq!(
+            outcomes
+                .iter()
+                .filter(|outcome| matches!(outcome, IdentityAbandonmentCommit::Replay(_)))
+                .count(),
+            1
+        );
+
+        let mut different = input.clone();
+        different.request_id = request_id();
+        different.request_digest = hash('0');
+        let mut repo = PgRepositoryFactory::new(fixture.pool.clone())
+            .create()
+            .await
+            .unwrap();
+        assert!(matches!(
+            repo.account_handoff()
+                .abandon_identity_creation(different)
+                .await
+                .unwrap(),
+            IdentityAbandonmentCommit::ChallengeConsumed
+        ));
+        repo.cancel().await.unwrap();
+
+        #[derive(QueryableByName)]
+        struct CheckpointRow {
+            #[diesel(sql_type = Bytea)]
+            canonical_outcome: Vec<u8>,
+        }
+        let mut conn = fixture.pool.get().await.unwrap();
+        let stored = diesel::sql_query(
+            "SELECT canonical_outcome FROM account_handoff_creation_attempts WHERE request_id = $1",
+        )
+        .bind::<SqlUuid, _>(checkpoint_request_id.uuid())
+        .get_result::<CheckpointRow>(&mut *conn)
+        .await
+        .unwrap();
+        let outcome: arkret_models_identity::AccountHandoffOutcome =
+            serde_json::from_slice(&stored.canonical_outcome).unwrap();
+        let arkret_models_identity::AccountHandoffBinding::IdentityCreationActive {
+            identity_creation_lease,
+        } = outcome.binding
+        else {
+            panic!("checkpoint binding changed variant");
+        };
+        assert!(identity_creation_lease.reserved_identity.is_none());
+        assert_eq!(
+            identity_creation_lease.expires_at,
+            arkret_canonical::normalize_timestamp_canonical(input.now)
+        );
+        assert_eq!(
+            diesel::sql_query(
+                "SELECT EXISTS(SELECT 1 FROM identity_creation_leases \
+                 WHERE service_account_id = $1 AND audience = $2) AS present",
+            )
+            .bind::<SqlUuid, _>(Uuid::from(fixture.grant.service_account_id))
+            .bind::<Text, _>(&fixture.grant.audience)
+            .get_result::<ExistsRow>(&mut *conn)
+            .await
+            .unwrap()
+            .present,
+            false
+        );
+        assert!(
+            diesel::sql_query(
+                "SELECT EXISTS(SELECT 1 FROM identity_orphan_anchor_tombstones \
+                 WHERE principal_id = $1 AND abandonment_request_id = $2) AS present",
+            )
+            .bind::<Text, _>(fixture.reserved.principal_id.as_str())
+            .bind::<SqlUuid, _>(input.request_id.uuid())
+            .get_result::<ExistsRow>(&mut *conn)
+            .await
+            .unwrap()
+            .present,
+            "both exact concurrent confirmations must converge on one durable tombstone"
+        );
+    }
+
+    #[tokio::test]
+    async fn abandoned_orphan_anchor_is_permanently_rejected_by_reservation_gate() {
+        let Some(fixture) = PublishedFixture::create(Duration::zero()).await else {
+            return;
+        };
+        let input = fixture.commit_input(fixture.now + Duration::seconds(1));
+        let mut repo = PgRepositoryFactory::new(fixture.pool.clone())
+            .create()
+            .await
+            .unwrap();
+        assert!(matches!(
+            repo.account_handoff()
+                .abandon_identity_creation(input)
+                .await
+                .unwrap(),
+            IdentityAbandonmentCommit::Abandoned(_)
+        ));
+        repo.save().await.unwrap();
+
+        let mut rng = test_rng();
+        let renewed_at = fixture.now + Duration::seconds(2);
+        let mut repo = PgRepositoryFactory::new(fixture.pool.clone())
+            .create()
+            .await
+            .unwrap();
+        let replacement = repo
+            .account_handoff()
+            .create_with_lease(handoff_input(
+                &mut rng,
+                fixture.grant.service_account_id,
+                renewed_at,
+                fixture.account_subject.clone(),
+            ))
+            .await
+            .unwrap();
+        let AccountHandoffCreation::Active { lease, .. } = replacement else {
+            panic!("a fresh lease must be available after explicit abandonment");
+        };
+        let binding_input = IdentityBindingChallengeInput {
+            request_id: request_id(),
+            request_digest: hash('a'),
+            service_account_id: fixture.grant.service_account_id,
+            audience: fixture.grant.audience.clone(),
+            lease_id: lease.lease_id.clone(),
+            lease_fence: lease.fence,
+            holder_jkt: lease.holder_jkt.clone(),
+            did_operation: fixture.reserved.did_operation.clone(),
+            operation_digest: fixture.reserved.operation_digest.clone(),
+            account_subject: fixture.account_subject,
+            did_version_id: fixture.did_version_id,
+            log_head_digest: hash('b'),
+            control_key_digest: hash('c'),
+            pcr_realm_id: arkret_identifiers::RealmId::new(PCR_REALM_ID).unwrap(),
+            realm_create_payload_digest: hash('d'),
+            founding_authorize_payload_digest: hash('e'),
+            initial_session_request_digest: hash('f'),
+            challenge_id: format!("{}{}", Uuid::now_v7().simple(), "J".repeat(11)),
+            challenge: format!("{}{}", Uuid::now_v7().simple(), "K".repeat(11)),
+            origin: "https://account.example".to_owned(),
+            trust_domain: arkret_identifiers::TypedTrustDomainId::new(
+                "ak:trust_domain:example.net",
+            )
+            .unwrap(),
+            issued_at: renewed_at,
+            expires_at: renewed_at + Duration::minutes(5),
+            lease_expires_at: lease.expires_at,
+        };
+        assert!(matches!(
+            repo.account_handoff()
+                .reserve_and_issue_challenge(binding_input)
+                .await
+                .unwrap(),
+            IdentityBindingChallengeIssue::ReservationConflict
+        ));
         repo.cancel().await.unwrap();
     }
 }

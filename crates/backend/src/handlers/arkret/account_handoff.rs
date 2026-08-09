@@ -1,7 +1,9 @@
 //! Canonical account-first handoff, lease, and identity-binding operations.
 use arkret_models_identity::{
     ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffAllowedOperation, AccountHandoffBinding,
-    AccountHandoffOutcome, AccountHandoffRequestBody, Handle, IdentityBindingChallengeRequestBody,
+    AccountHandoffOutcome, AccountHandoffRequestBody, Handle,
+    IdentityAbandonmentChallengeRequestBody, IdentityAbandonmentRequestBody,
+    IdentityBindingChallengeRequestBody,
 };
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::Duration;
@@ -9,8 +11,10 @@ use coauth_data::{
     AccountHandoffAuthorizationCheckpoint, AccountHandoffCreation, AccountHandoffCreationAttempt,
     AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve,
     AccountHandoffCreationAttemptState, AccountHandoffGrant, AccountHandoffGrantInput,
-    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, NewAccountHandoffCreationAttempt,
-    RepositoryAccess as _, Ulid, new_id,
+    IdentityAbandonmentChallengeInput, IdentityAbandonmentChallengeIssue,
+    IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
+    IdentityBindingChallengeIssue, IdentityCreationLeaseRiskDecision,
+    NewAccountHandoffCreationAttempt, RepositoryAccess as _, Ulid, new_id,
 };
 use rand_core::RngCore;
 use salvo::prelude::*;
@@ -33,6 +37,7 @@ use crate::services::dpop::{
 const HANDOFF_TTL: Duration = Duration::minutes(10);
 const IDENTITY_CREATION_LEASE_TTL: Duration = Duration::minutes(15);
 const IDENTITY_BINDING_CHALLENGE_TTL: Duration = Duration::minutes(5);
+const IDENTITY_ABANDONMENT_CHALLENGE_TTL: Duration = Duration::minutes(5);
 const HANDOFF_ATTEMPT_RETENTION: Duration = Duration::days(7);
 
 pub struct AccountHandoffCanonicalJson(Vec<u8>);
@@ -305,6 +310,10 @@ async fn commit_authorized_handoff(
     };
     let now = make_clock().now();
     let mut rng = make_rng();
+    let account_subject = account_subject(
+        &super::service_id_for(&depot.arkret_config()?),
+        service_account_id,
+    )?;
     let mut repo = depot.repo().await?;
     let creation = repo
         .account_handoff()
@@ -315,6 +324,12 @@ async fn commit_authorized_handoff(
             service_account_id,
             browser_session_id,
             audience: checkpoint.audience,
+            account_subject: account_subject.clone(),
+            // The checkpoint exists only after the OIDC bridge has rejected
+            // locked, suspended, deactivated, or otherwise invalid accounts.
+            // Carry that fail-closed risk conclusion into the atomic lease
+            // acquisition transaction rather than re-inferring it in storage.
+            risk_decision: IdentityCreationLeaseRiskDecision::Allowed,
             cnf_jkt: attempt.holder_jkt.clone(),
             account_handoff_grant: random_opaque(&mut *rng, 32),
             issued_at: now,
@@ -323,10 +338,6 @@ async fn commit_authorized_handoff(
             lease_expires_at: now + IDENTITY_CREATION_LEASE_TTL,
         })
         .await?;
-    let account_subject = account_subject(
-        &super::service_id_for(&depot.arkret_config()?),
-        service_account_id,
-    )?;
     let outcome = creation_to_outcome(creation, account_handle, account_subject, preferred_locale)?;
     let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
@@ -488,6 +499,219 @@ pub async fn issue_identity_binding_challenge(
             repo.cancel().await.ok();
             Err(failed_precondition(
                 "identity-creation lease, fence, holder, or challenge request is stale",
+            ))
+        }
+        IdentityBindingChallengeIssue::RateLimited { retry_after_ms } => {
+            repo.cancel().await.ok();
+            Err(ArkretRouteError::coded(
+                StatusCode::TOO_MANY_REQUESTS,
+                arkret_wire::ErrorCode::RATE_LIMITED,
+                format!(
+                    "identity-creation lease renewal is rate limited; retry after {retry_after_ms} ms"
+                ),
+            ))
+        }
+    }
+}
+
+/// `POST /_arkret/gate/account/identity-abandonment-challenges`.
+#[handler]
+pub async fn issue_identity_abandonment_challenge(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<arkret_models_identity::IdentityAbandonmentChallengeOutcome>, ArkretRouteError> {
+    let (grant, _dpop) = authenticate_account_handoff(
+        req,
+        depot,
+        AccountHandoffAllowedOperation::IssueIdentityAbandonmentChallenge,
+    )
+    .await?;
+    let body: IdentityAbandonmentChallengeRequestBody = req
+        .parse_json()
+        .await
+        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
+    body.validate()
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    let request_digest = body
+        .canonical_request_digest()
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    let arkret_config = depot.arkret_config()?;
+    let account_subject = account_subject(
+        &super::service_id_for(&arkret_config),
+        grant.service_account_id,
+    )?;
+    let url_builder = depot.url_builder()?;
+    let trust_domain =
+        arkret_identifiers::TypedTrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
+            .map_err(|error| failed_precondition(error.to_string()))?;
+    let audience = arkret_identifiers::Did::new(grant.audience.clone())
+        .map_err(|error| failed_precondition(error.to_string()))?;
+    let origin = url_builder.http_base().origin().ascii_serialization();
+    let now = make_clock().now();
+    let mut rng = make_rng();
+    let mut repo = depot.repo().await?;
+    let issue = repo
+        .account_handoff()
+        .issue_identity_abandonment_challenge(IdentityAbandonmentChallengeInput {
+            request_id: body.request_id,
+            request_digest,
+            issuing_handoff_grant_id: grant.id,
+            service_account_id: grant.service_account_id,
+            audience: grant.audience.clone(),
+            account_subject,
+            holder_jkt: grant.cnf_jkt.clone(),
+            lease_id: body.identity_creation_lease_id,
+            lease_fence: body.lease_fence,
+            principal_id: body.principal_id,
+            did_version_id: body.did_version_id,
+            challenge_id: random_opaque(&mut *rng, 24),
+            challenge: random_opaque(&mut *rng, 32),
+            origin,
+            trust_domain,
+            issued_at: now,
+            expires_at: now + IDENTITY_ABANDONMENT_CHALLENGE_TTL,
+        })
+        .await?;
+    match issue {
+        IdentityAbandonmentChallengeIssue::Issued(challenge)
+        | IdentityAbandonmentChallengeIssue::Replay(challenge) => {
+            let outcome = challenge.wire_outcome();
+            outcome
+                .validate()
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+            if outcome.audience != audience {
+                repo.cancel().await.ok();
+                return Err(failed_precondition(
+                    "persisted abandonment challenge audience does not match the handoff",
+                ));
+            }
+            repo.save().await?;
+            Ok(Json(outcome))
+        }
+        IdentityAbandonmentChallengeIssue::DuplicateConflict => {
+            repo.cancel().await.ok();
+            Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
+                "request_id was reused with a different abandonment challenge intent",
+            ))
+        }
+        IdentityAbandonmentChallengeIssue::LeaseFenced => {
+            repo.cancel().await.ok();
+            Err(identity_abandonment_error(
+                arkret_wire::ReasonCode::IDENTITY_CREATION_LEASE_FENCED,
+                "identity-creation lease is absent, expired, held by another key, or fenced",
+            ))
+        }
+        IdentityAbandonmentChallengeIssue::CheckpointMismatch => {
+            repo.cancel().await.ok();
+            Err(failed_precondition(
+                "principal_id or did_version_id does not match the published-DID checkpoint",
+            ))
+        }
+        IdentityAbandonmentChallengeIssue::AlreadyAccepted => {
+            repo.cancel().await.ok();
+            Err(identity_abandonment_error(
+                arkret_wire::ReasonCode::IDENTITY_CREATION_ALREADY_ACCEPTED,
+                "the Principal Control Realm has already been accepted",
+            ))
+        }
+    }
+}
+
+/// `POST /_arkret/gate/account/identity-abandonments`.
+#[handler]
+pub async fn abandon_identity_creation(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<arkret_models_identity::IdentityAbandonmentOutcome>, ArkretRouteError> {
+    let (grant, _dpop) = authenticate_account_handoff(
+        req,
+        depot,
+        AccountHandoffAllowedOperation::AbandonIdentityCreation,
+    )
+    .await?;
+    let body: IdentityAbandonmentRequestBody = req
+        .parse_json()
+        .await
+        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
+    body.validate()
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    let request_digest = body
+        .canonical_request_digest()
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    let mut repo = depot.repo().await?;
+    let commit = repo
+        .account_handoff()
+        .abandon_identity_creation(IdentityAbandonmentCommitInput {
+            request_id: body.request_id,
+            request_digest,
+            confirming_handoff_grant_id: grant.id,
+            service_account_id: grant.service_account_id,
+            audience: grant.audience,
+            holder_jkt: grant.cnf_jkt,
+            challenge_id: body.challenge_id,
+            challenge: body.challenge,
+            lease_id: body.identity_creation_lease_id,
+            lease_fence: body.lease_fence,
+            principal_id: body.principal_id,
+            did_version_id: body.did_version_id,
+            now: make_clock().now(),
+        })
+        .await?;
+    match commit {
+        IdentityAbandonmentCommit::Abandoned(outcome)
+        | IdentityAbandonmentCommit::Replay(outcome) => {
+            repo.save().await?;
+            Ok(Json(outcome))
+        }
+        IdentityAbandonmentCommit::DuplicateConflict => {
+            repo.cancel().await.ok();
+            Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
+                "request_id was reused with a different abandonment intent",
+            ))
+        }
+        IdentityAbandonmentCommit::GrantReused => {
+            repo.cancel().await.ok();
+            Err(proof_invalid(
+                "abandonment confirmation must use a fresh account handoff grant",
+            ))
+        }
+        IdentityAbandonmentCommit::ChallengeExpired => {
+            repo.cancel().await.ok();
+            Err(identity_abandonment_error(
+                arkret_wire::ReasonCode::IDENTITY_CREATION_CHALLENGE_EXPIRED,
+                "identity-abandonment challenge expired",
+            ))
+        }
+        IdentityAbandonmentCommit::ChallengeConsumed => {
+            repo.cancel().await.ok();
+            Err(identity_abandonment_error(
+                arkret_wire::ReasonCode::IDENTITY_CREATION_CHALLENGE_ALREADY_CONSUMED,
+                "identity-abandonment challenge was already consumed",
+            ))
+        }
+        IdentityAbandonmentCommit::LeaseFenced => {
+            repo.cancel().await.ok();
+            Err(identity_abandonment_error(
+                arkret_wire::ReasonCode::IDENTITY_CREATION_LEASE_FENCED,
+                "identity-creation lease is absent, expired, held by another key, or fenced",
+            ))
+        }
+        IdentityAbandonmentCommit::AlreadyAccepted => {
+            repo.cancel().await.ok();
+            Err(identity_abandonment_error(
+                arkret_wire::ReasonCode::IDENTITY_CREATION_ALREADY_ACCEPTED,
+                "the Principal Control Realm has already been accepted",
+            ))
+        }
+        IdentityAbandonmentCommit::UnknownChallenge
+        | IdentityAbandonmentCommit::ChallengeMismatch => {
+            repo.cancel().await.ok();
+            Err(failed_precondition(
+                "abandonment challenge does not match the authenticated holder and checkpoint",
             ))
         }
     }
@@ -670,6 +894,20 @@ fn creation_to_outcome(
             grant,
             principal_id,
         } => (grant, AccountHandoffBinding::Bound { principal_id }),
+        AccountHandoffCreation::RateLimited { retry_after_ms, .. } => {
+            return Err(ArkretRouteError::coded(
+                StatusCode::TOO_MANY_REQUESTS,
+                arkret_wire::ErrorCode::RATE_LIMITED,
+                format!("identity-creation lease is rate limited; retry after {retry_after_ms} ms"),
+            ));
+        }
+        AccountHandoffCreation::RiskRejected { .. } => {
+            return Err(ArkretRouteError::coded(
+                StatusCode::FORBIDDEN,
+                arkret_wire::ErrorCode::POLICY_DENIED,
+                "account risk state does not permit identity creation",
+            ));
+        }
         AccountHandoffCreation::DuplicateConflict => {
             return Err(ArkretRouteError::coded(
                 StatusCode::CONFLICT,
@@ -757,6 +995,17 @@ fn failed_precondition(message: impl Into<String>) -> ArkretRouteError {
         StatusCode::CONFLICT,
         arkret_wire::ErrorCode::FAILED_PRECONDITION,
         message,
+    )
+}
+
+fn identity_abandonment_error(
+    reason_code: &'static str,
+    message: impl Into<String>,
+) -> ArkretRouteError {
+    ArkretRouteError::coded(
+        StatusCode::CONFLICT,
+        arkret_wire::ErrorCode::FAILED_PRECONDITION,
+        format!("reason_code={reason_code}; {}", message.into()),
     )
 }
 

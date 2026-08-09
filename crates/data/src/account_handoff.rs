@@ -120,7 +120,7 @@ pub struct AccountHandoffGrant {
     pub browser_session_id: Option<Ulid>,
     pub audience: String,
     pub cnf_jkt: String,
-    pub allowed_operations: [arkret_models_identity::AccountHandoffAllowedOperation; 4],
+    pub allowed_operations: [arkret_models_identity::AccountHandoffAllowedOperation; 6],
     pub account_handoff_grant: String,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -157,12 +157,24 @@ pub struct AccountHandoffGrantInput {
     pub service_account_id: Ulid,
     pub browser_session_id: Option<Ulid>,
     pub audience: String,
+    /// Stable, non-reversible subject used to serialize and rate-limit lease
+    /// acquisition without persisting the raw upstream OIDC subject.
+    pub account_subject: arkret_identifiers::Hash,
+    /// The fail-closed account-risk conclusion made before entering the
+    /// atomic lease transaction.
+    pub risk_decision: IdentityCreationLeaseRiskDecision,
     pub cnf_jkt: String,
     pub account_handoff_grant: String,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub lease_id: String,
     pub lease_expires_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IdentityCreationLeaseRiskDecision {
+    Allowed,
+    Rejected,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -228,7 +240,7 @@ pub struct IdentityCreationLeaseRecord {
 impl IdentityCreationLeaseRecord {
     pub fn wire_lease(&self) -> arkret_models_identity::IdentityCreationLease {
         arkret_models_identity::IdentityCreationLease {
-            lease_id: self.lease_id.clone(),
+            identity_creation_lease_id: self.lease_id.clone(),
             fence: self.fence,
             expires_at: self.expires_at,
             reserved_identity: self.reserved_identity.clone(),
@@ -276,6 +288,13 @@ pub enum AccountHandoffCreation {
     Bound {
         grant: AccountHandoffGrant,
         principal_id: arkret_identifiers::Did,
+    },
+    RateLimited {
+        grant: AccountHandoffGrant,
+        retry_after_ms: u64,
+    },
+    RiskRejected {
+        grant: AccountHandoffGrant,
     },
     DuplicateConflict,
     ExpiredReplay,
@@ -377,6 +396,122 @@ pub enum IdentityBindingChallengeIssue {
     LeaseMismatch,
     ReservationConflict,
     StaleRequest,
+    RateLimited { retry_after_ms: u64 },
+}
+
+/// Durable issue input for the explicit provisional-identity abandonment
+/// challenge. The issuing handoff identifier is retained so confirmation can
+/// require a different, freshly authenticated handoff.
+#[derive(Clone, Debug)]
+pub struct IdentityAbandonmentChallengeInput {
+    pub request_id: arkret_identifiers::RequestId,
+    pub request_digest: arkret_identifiers::Hash,
+    pub issuing_handoff_grant_id: Ulid,
+    pub service_account_id: Ulid,
+    pub audience: String,
+    pub account_subject: arkret_identifiers::Hash,
+    pub holder_jkt: String,
+    pub lease_id: String,
+    pub lease_fence: u64,
+    pub principal_id: arkret_identifiers::Did,
+    pub did_version_id: String,
+    pub challenge_id: String,
+    pub challenge: String,
+    pub origin: String,
+    pub trust_domain: arkret_identifiers::TypedTrustDomainId,
+    pub issued_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug)]
+pub struct IdentityAbandonmentChallengeRecord {
+    pub request_id: arkret_identifiers::RequestId,
+    pub request_digest: arkret_identifiers::Hash,
+    pub issuing_handoff_grant_id: Ulid,
+    pub service_account_id: Ulid,
+    pub audience: arkret_identifiers::Did,
+    pub account_subject: arkret_identifiers::Hash,
+    pub holder_jkt: String,
+    pub lease_id: String,
+    pub lease_fence: u64,
+    pub principal_id: arkret_identifiers::Did,
+    pub did_version_id: String,
+    pub challenge_id: String,
+    pub challenge: String,
+    pub origin: String,
+    pub trust_domain: arkret_identifiers::TypedTrustDomainId,
+    pub issued_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub consumed_at: Option<DateTime<Utc>>,
+    pub confirmation_request_id: Option<arkret_identifiers::RequestId>,
+    pub confirmation_request_digest: Option<arkret_identifiers::Hash>,
+    pub outcome: Option<arkret_models_identity::IdentityAbandonmentOutcome>,
+}
+
+impl IdentityAbandonmentChallengeRecord {
+    pub fn wire_outcome(&self) -> arkret_models_identity::IdentityAbandonmentChallengeOutcome {
+        arkret_models_identity::IdentityAbandonmentChallengeOutcome {
+            request_id: self.request_id.clone(),
+            challenge_id: self.challenge_id.clone(),
+            challenge: self.challenge.clone(),
+            purpose:
+                arkret_models_identity::IdentityAbandonmentPurpose::ProvisionalIdentityAbandonment,
+            account_subject: self.account_subject.clone(),
+            principal_id: self.principal_id.clone(),
+            did_version_id: self.did_version_id.clone(),
+            identity_creation_lease_id: self.lease_id.clone(),
+            lease_fence: self.lease_fence,
+            consequence_disclosure:
+                arkret_models_identity::IDENTITY_ABANDONMENT_CONSEQUENCE_DISCLOSURE,
+            dpop_jkt: self.holder_jkt.clone(),
+            audience: self.audience.clone(),
+            origin: self.origin.clone(),
+            trust_domain: self.trust_domain.clone(),
+            issued_at: self.issued_at,
+            expires_at: self.expires_at,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum IdentityAbandonmentChallengeIssue {
+    Issued(IdentityAbandonmentChallengeRecord),
+    Replay(IdentityAbandonmentChallengeRecord),
+    DuplicateConflict,
+    LeaseFenced,
+    CheckpointMismatch,
+    AlreadyAccepted,
+}
+
+#[derive(Clone, Debug)]
+pub struct IdentityAbandonmentCommitInput {
+    pub request_id: arkret_identifiers::RequestId,
+    pub request_digest: arkret_identifiers::Hash,
+    pub confirming_handoff_grant_id: Ulid,
+    pub service_account_id: Ulid,
+    pub audience: String,
+    pub holder_jkt: String,
+    pub challenge_id: String,
+    pub challenge: String,
+    pub lease_id: String,
+    pub lease_fence: u64,
+    pub principal_id: arkret_identifiers::Did,
+    pub did_version_id: String,
+    pub now: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug)]
+pub enum IdentityAbandonmentCommit {
+    Abandoned(arkret_models_identity::IdentityAbandonmentOutcome),
+    Replay(arkret_models_identity::IdentityAbandonmentOutcome),
+    DuplicateConflict,
+    UnknownChallenge,
+    GrantReused,
+    ChallengeMismatch,
+    ChallengeExpired,
+    ChallengeConsumed,
+    LeaseFenced,
+    AlreadyAccepted,
 }
 
 #[derive(Clone, Debug)]
