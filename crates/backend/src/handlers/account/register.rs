@@ -613,7 +613,7 @@ pub struct FinishRegistrationOutcome {
     /// OAuth authorization grant continuation), the frontend uses this to
     /// resume that strand after the account is created.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub post_auth_action: Option<serde_json::Value>,
+    pub post_auth_action: Option<coauth_account_types::PostAuthAction>,
 }
 
 #[derive(Default, Deserialize, ToSchema)]

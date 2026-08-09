@@ -8,6 +8,91 @@
 pub mod passkey;
 
 use serde::{Deserialize, Serialize};
+use ulid::Ulid;
+
+/// Describes what should happen after a user completes authentication.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum PostAuthAction {
+    ContinueAuthorizationGrant {
+        id: Ulid,
+    },
+    ContinueDeviceCodeGrant {
+        id: Ulid,
+    },
+    ChangePassword,
+    LinkUpstream {
+        id: Ulid,
+    },
+    ManageAccount {
+        #[serde(flatten)]
+        action: Option<AccountAction>,
+    },
+}
+
+impl PostAuthAction {
+    #[must_use]
+    pub const fn continue_grant(id: Ulid) -> Self {
+        Self::ContinueAuthorizationGrant { id }
+    }
+
+    #[must_use]
+    pub const fn continue_device_code_grant(id: Ulid) -> Self {
+        Self::ContinueDeviceCodeGrant { id }
+    }
+
+    #[must_use]
+    pub const fn link_upstream(id: Ulid) -> Self {
+        Self::LinkUpstream { id }
+    }
+}
+
+/// Account-management destination carried by [`PostAuthAction::ManageAccount`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum AccountAction {
+    Profile,
+    SessionsList,
+    SessionView { device_id: String },
+    SessionEnd { device_id: String },
+}
+
+/// Field-specific validation failures returned by upstream account linking.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+#[serde(deny_unknown_fields)]
+pub struct UpstreamLinkFieldErrors {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handle: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accept_terms: Option<String>,
+    #[serde(default, rename = "_form", skip_serializing_if = "Option::is_none")]
+    pub form: Option<String>,
+}
+
+impl UpstreamLinkFieldErrors {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.handle.is_none() && self.accept_terms.is_none() && self.form.is_none()
+    }
+}
+
+/// Closed response for the upstream account-link action.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum UpstreamLinkActionOutcome {
+    Success {
+        redirect_url: String,
+    },
+    Error {
+        error: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        field_errors: Option<UpstreamLinkFieldErrors>,
+    },
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]

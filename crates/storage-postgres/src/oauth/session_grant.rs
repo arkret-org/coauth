@@ -9,10 +9,10 @@ use chrono::{DateTime, Utc};
 use coauth_data::oauth::{
     MIN_SESSION_GRANT_OPERATION_RETENTION_SECONDS, NewSessionGrant, NewSessionGrantOperation,
     SessionGrantCommitOutcome, SessionGrantExactOutcome, SessionGrantFilter,
-    SessionGrantLifecycleState, SessionGrantOperation, SessionGrantOperationKind,
-    SessionGrantOperationState, SessionGrantProofAuthorization, SessionGrantRefreshOutcome,
-    SessionGrantRepository, SessionGrantReserveOutcome, SessionGrantRevokeOutcome,
-    SessionGrantRevokeSelector,
+    SessionGrantLifecycleState, SessionGrantOperation, SessionGrantOperationDescriptor,
+    SessionGrantOperationKind, SessionGrantOperationState, SessionGrantProofAuthorization,
+    SessionGrantRefreshOutcome, SessionGrantRepository, SessionGrantReserveOutcome,
+    SessionGrantRevokeOutcome, SessionGrantRevokeSelector, SessionGrantRevokeTarget,
 };
 use coauth_data::pagination::{Node, PaginationDirection};
 use coauth_data::{Clock, Page, Pagination, SessionGrant, new_id};
@@ -125,6 +125,54 @@ impl TryFrom<SessionGrantOperationRow> for SessionGrantOperation {
         };
         let operation_kind = SessionGrantOperationKind::try_from(value.operation_kind.as_str())
             .map_err(|error| inconsistent("operation_kind", Box::new(error)))?;
+        let operation = match operation_kind {
+            SessionGrantOperationKind::Issue if value.operation_selector.is_none() => {
+                SessionGrantOperationDescriptor::Issue
+            }
+            SessionGrantOperationKind::Refresh => {
+                #[derive(serde::Deserialize)]
+                struct RefreshSelector {
+                    predecessor_grant_id: SessionGrantId,
+                }
+                let selector: RefreshSelector =
+                    serde_json::from_value(value.operation_selector.clone().ok_or_else(|| {
+                        inconsistent(
+                            "operation_selector",
+                            Box::new(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "refresh operation selector is missing",
+                            )),
+                        )
+                    })?)
+                    .map_err(|error| inconsistent("operation_selector", Box::new(error)))?;
+                SessionGrantOperationDescriptor::Refresh {
+                    predecessor_grant_id: selector.predecessor_grant_id,
+                }
+            }
+            SessionGrantOperationKind::Revoke => SessionGrantOperationDescriptor::Revoke {
+                selector: serde_json::from_value(value.operation_selector.clone().ok_or_else(
+                    || {
+                        inconsistent(
+                            "operation_selector",
+                            Box::new(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "revoke operation selector is missing",
+                            )),
+                        )
+                    },
+                )?)
+                .map_err(|error| inconsistent("operation_selector", Box::new(error)))?,
+            },
+            SessionGrantOperationKind::Issue => {
+                return Err(inconsistent(
+                    "operation_selector",
+                    Box::new(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "issue operation selector must be absent",
+                    )),
+                ));
+            }
+        };
         let proof_kind = value
             .proof_kind
             .as_deref()
@@ -178,12 +226,11 @@ impl TryFrom<SessionGrantOperationRow> for SessionGrantOperation {
         Ok(Self {
             id,
             issuer: value.issuer,
-            operation_kind,
+            operation,
             proof_kind,
             request_identity: value.request_identity,
             canonical_intent_digest,
             canonical_intent: value.canonical_intent,
-            operation_selector: value.operation_selector,
             issuance_nonce: value.issuance_nonce,
             session_id: value.session_id,
             grant_not_before: value.grant_not_before,
@@ -456,9 +503,9 @@ fn validate_grant_material(
         || preimage.session_id != grant.session_id
         || credential_class != grant.credential_class
         || claims.grant_id != grant.grant_id
-        || (operation.operation_kind == SessionGrantOperationKind::Issue
+        || (operation.operation.kind() == SessionGrantOperationKind::Issue
             && operation.proof_kind != preimage.proof_kind)
-        || (operation.operation_kind != SessionGrantOperationKind::Issue
+        || (operation.operation.kind() != SessionGrantOperationKind::Issue
             && operation.proof_kind.is_some())
     {
         return Err(DatabaseError::invalid_operation());
@@ -688,12 +735,11 @@ mod authorization_checkpoint_tests {
         SessionGrantOperation {
             id: Ulid::from(1_u128),
             issuer: "did:web:issuer.example".to_owned(),
-            operation_kind: SessionGrantOperationKind::Issue,
+            operation: SessionGrantOperationDescriptor::Issue,
             proof_kind: None,
             request_identity: "oidc-code-hash".to_owned(),
             canonical_intent_digest: [7; 32],
             canonical_intent: Some(br#"{"kind":"oidc"}"#.to_vec()),
-            operation_selector: None,
             issuance_nonce: Some("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8".to_owned()),
             session_id: Some("session-1".to_owned()),
             grant_not_before: Some(now - chrono::Duration::try_minutes(10).unwrap()),
@@ -930,11 +976,23 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         {
             return Err(DatabaseError::invalid_operation());
         }
+        let operation_kind = operation.operation.kind();
+        let operation_selector = match &operation.operation {
+            SessionGrantOperationDescriptor::Issue => None,
+            SessionGrantOperationDescriptor::Refresh {
+                predecessor_grant_id,
+            } => Some(serde_json::json!({
+                "predecessor_grant_id": predecessor_grant_id,
+            })),
+            SessionGrantOperationDescriptor::Revoke { selector } => Some(
+                serde_json::to_value(selector).map_err(|_| DatabaseError::invalid_operation())?,
+            ),
+        };
         let proof_kind = operation.proof_kind.map(proof_kind_wire).transpose()?;
-        if (operation.operation_kind == SessionGrantOperationKind::Issue) != proof_kind.is_some() {
+        if (operation_kind == SessionGrantOperationKind::Issue) != proof_kind.is_some() {
             return Err(DatabaseError::invalid_operation());
         }
-        let grant_producing = operation.operation_kind != SessionGrantOperationKind::Revoke;
+        let grant_producing = operation_kind != SessionGrantOperationKind::Revoke;
         if grant_producing
             && (operation.grant_not_before.is_none()
                 || operation.grant_expires_at <= operation.grant_not_before
@@ -944,7 +1002,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         {
             return Err(DatabaseError::invalid_operation());
         }
-        let inherited_session_id = match operation.operation_kind {
+        let inherited_session_id = match operation_kind {
             SessionGrantOperationKind::Issue => {
                 if operation.session_id.is_some() || operation.target_grant_id.is_some() {
                     return Err(DatabaseError::invalid_operation());
@@ -993,12 +1051,12 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         let row = NewSessionGrantOperationRow {
             id: Uuid::from(id),
             issuer: operation.issuer,
-            operation_kind: operation.operation_kind.as_str(),
+            operation_kind: operation_kind.as_str(),
             proof_kind: proof_kind.as_deref(),
             request_identity: operation.request_identity,
             canonical_intent_digest: operation.canonical_intent_digest.to_vec(),
             canonical_intent: Some(operation.canonical_intent),
-            operation_selector: operation.operation_selector.clone(),
+            operation_selector,
             issuance_nonce,
             session_id,
             grant_not_before: operation.grant_not_before,
@@ -1020,10 +1078,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
 
         let stored = oauth_session_grant_operations::table
             .filter(oauth_session_grant_operations::issuer.eq(operation.issuer))
-            .filter(
-                oauth_session_grant_operations::operation_kind
-                    .eq(operation.operation_kind.as_str()),
-            )
+            .filter(oauth_session_grant_operations::operation_kind.eq(operation_kind.as_str()))
             .filter(oauth_session_grant_operations::proof_kind.eq(proof_kind.as_deref()))
             .filter(oauth_session_grant_operations::request_identity.eq(operation.request_identity))
             .select(SessionGrantOperationRow::as_select())
@@ -1042,7 +1097,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         }
         if stored.canonical_intent_digest != operation.canonical_intent_digest
             || stored.canonical_intent.as_deref() != Some(operation.canonical_intent)
-            || stored.operation_selector != operation.operation_selector
+            || stored.operation != operation.operation
             || stored.target_grant_id.as_ref() != operation.target_grant_id
         {
             return Ok(SessionGrantReserveOutcome::Conflict(stored));
@@ -1144,7 +1199,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                     let operation = evict_operation(conn, operation_id).await?;
                     return Ok(SessionGrantCommitOutcome::Indeterminate(operation));
                 }
-                if operation.operation_kind != SessionGrantOperationKind::Issue {
+                if operation.operation.kind() != SessionGrantOperationKind::Issue {
                     return Err(DatabaseError::invalid_operation());
                 }
                 if operation.state == SessionGrantOperationState::Committed {
@@ -1210,7 +1265,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                     let operation = evict_operation(conn, operation_id).await?;
                     return Ok(SessionGrantRefreshOutcome::Indeterminate(operation));
                 }
-                if operation.operation_kind != SessionGrantOperationKind::Refresh
+                if operation.operation.kind() != SessionGrantOperationKind::Refresh
                     || operation.target_grant_id.as_ref() != Some(predecessor_grant_id)
                 {
                     return Err(DatabaseError::invalid_operation());
@@ -1302,7 +1357,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 {
                     return Ok(SessionGrantRevokeOutcome::Indeterminate(operation));
                 }
-                if operation.operation_kind != SessionGrantOperationKind::Revoke {
+                if operation.operation.kind() != SessionGrantOperationKind::Revoke {
                     return Err(DatabaseError::invalid_operation());
                 }
                 validate_authorization(&operation, authorization, now)?;
@@ -1310,7 +1365,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                     return Ok(SessionGrantRevokeOutcome::Replay(operation));
                 }
 
-                let (subject, selector_value) = match selector {
+                let (subject, expected_selector) = match selector {
                     SessionGrantRevokeSelector::Grant(grant_id) => {
                         let grant = load_grant_by_protocol_id(conn, grant_id)
                             .await?
@@ -1320,19 +1375,30 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                         }
                         (
                             grant.subject,
-                            serde_json::json!({"kind":"grant","grant_id":grant_id.as_str()}),
+                            SessionGrantRevokeTarget::Grant {
+                                grant_id: grant_id.clone(),
+                            },
                         )
                     }
                     SessionGrantRevokeSelector::Device { subject, device_id } => (
                         subject.to_owned(),
-                        serde_json::json!({"kind":"device","subject":subject,"device_id":device_id}),
+                        SessionGrantRevokeTarget::Device {
+                            subject: subject.to_owned(),
+                            device_id: device_id.to_owned(),
+                        },
                     ),
                     SessionGrantRevokeSelector::AllForSubject { subject } => (
                         subject.to_owned(),
-                        serde_json::json!({"kind":"all_for_subject","subject":subject}),
+                        SessionGrantRevokeTarget::AllForSubject {
+                            subject: subject.to_owned(),
+                        },
                     ),
                 };
-                if operation.operation_selector.as_ref() != Some(&selector_value) {
+                if operation.operation
+                    != (SessionGrantOperationDescriptor::Revoke {
+                        selector: expected_selector,
+                    })
+                {
                     return Err(DatabaseError::invalid_operation());
                 }
                 lock_session_grant_subject(conn, &operation.issuer, &subject).await?;
@@ -1394,9 +1460,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                     .await?;
                     DatabaseError::ensure_affected_rows_usize(changed, active_ids.len())?;
                 }
-                let retained_until = operation
-                    .retained_until
-                    .max(authorization.proof_expires_at);
+                let retained_until = operation.retained_until.max(authorization.proof_expires_at);
                 let wire_outcome = WireSessionRevokeOutcome {
                     revoked_count: u64::try_from(active_ids.len())
                         .map_err(|_| DatabaseError::invalid_operation())?,

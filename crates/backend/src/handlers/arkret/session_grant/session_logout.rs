@@ -102,7 +102,6 @@ async fn terminate_auth_side_session_by_grant_jwt(
         "auth-session-logout:{}",
         hex::encode(sha2::Sha256::digest(grant_jwt.as_bytes()))
     );
-    let selector = serde_json::json!({"kind":"grant","grant_id":grant.grant_id});
     let now = clock.now();
     let reserved = repo
         .oauth_session_grant()
@@ -111,12 +110,15 @@ async fn terminate_auth_side_session_by_grant_jwt(
             &*clock,
             coauth_data::NewSessionGrantOperation {
                 issuer: &grant.issuer,
-                operation_kind: coauth_data::SessionGrantOperationKind::Revoke,
+                operation: coauth_data::SessionGrantOperationDescriptor::Revoke {
+                    selector: coauth_data::SessionGrantRevokeTarget::Grant {
+                        grant_id: grant.grant_id.clone(),
+                    },
+                },
                 proof_kind: None,
                 request_identity: &request_identity,
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
-                operation_selector: Some(selector),
                 target_grant_id: None,
                 session_id: None,
                 grant_not_before: None,

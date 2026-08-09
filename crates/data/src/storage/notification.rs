@@ -161,7 +161,7 @@ pub struct NewNotificationEventLog {
     kind: NotificationEventKind,
     actor: NotificationEventActor,
     summary: Option<String>,
-    metadata: Value,
+    audit_context: Value,
 }
 
 impl NewNotificationEventLog {
@@ -170,13 +170,13 @@ impl NewNotificationEventLog {
     pub fn new(
         kind: NotificationEventKind,
         actor: NotificationEventActor,
-        metadata: Value,
+        audit_context: Value,
     ) -> Self {
         Self {
             kind,
             actor,
             summary: None,
-            metadata,
+            audit_context,
         }
     }
 
@@ -205,10 +205,10 @@ impl NewNotificationEventLog {
         self.summary.as_deref()
     }
 
-    /// The structured metadata for the event.
+    /// Supplementary audit context independent of the event kind.
     #[must_use]
-    pub fn metadata(&self) -> &Value {
-        &self.metadata
+    pub fn audit_context(&self) -> &Value {
+        &self.audit_context
     }
 }
 

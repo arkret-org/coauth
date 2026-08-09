@@ -62,8 +62,9 @@ pub struct AddAccountDidBindingRequestBody {
     /// Optional SDK `ak.schema.did_continuity_proof.v1` payload. Required
     /// when promoting a weak `did:web` primary binding to `did:webvh`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[salvo(schema(value_type = serde_json::Value))]
-    pub continuity_proof: Option<serde_json::Value>,
+    #[schemars(with = "Option<serde_json::Value>")]
+    #[salvo(schema(value_type = Option<serde_json::Value>))]
+    pub continuity_proof: Option<arkret_models_identity::DidContinuityProof>,
 
     /// Whether the new binding should become the primary DID when accepted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -74,9 +75,11 @@ pub struct AddAccountDidBindingRequestBody {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verification_method: Option<String>,
 
-    /// Optional delegated resolver submission payload or receipt seed.
+    /// Optional raw input for the configured delegated resolver adapter. Its
+    /// shape is owned by that adapter and does not vary with the binding kind.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub resolver_submission: Option<serde_json::Value>,
+    #[serde(rename = "resolver_submission")]
+    pub resolver_submission_context: Option<serde_json::Value>,
 
     /// Optional operator note for audit and admin UI surfaces.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -328,7 +331,7 @@ pub async fn add_account_did(
                     "continuity_proof_present": body.continuity_proof.is_some(),
                     "verification_status": "verified",
                     "verification_method": body.verification_method,
-                    "resolver_submission_present": body.resolver_submission.is_some(),
+                    "resolver_submission_present": body.resolver_submission_context.is_some(),
                     "operator_note": body.operator_note,
                     "verified_at": now,
                     "added_by": admin_user_id,
@@ -400,7 +403,7 @@ fn enforce_did_continuity_for_primary_upgrade(
     current_bindings: &[AccountDidBinding],
     new_did: &str,
     make_primary: bool,
-    continuity_proof: Option<&serde_json::Value>,
+    continuity_proof: Option<&arkret_models_identity::DidContinuityProof>,
     expected_audience: &str,
     expected_trust_domain: &str,
     now: chrono::DateTime<chrono::Utc>,
@@ -417,13 +420,9 @@ fn enforce_did_continuity_for_primary_upgrade(
     if !current_primary.did.starts_with("did:web:") || !new_did.starts_with("did:webvh:") {
         return Ok(());
     }
-    let proof_value = continuity_proof.ok_or_else(|| {
+    let proof = continuity_proof.ok_or_else(|| {
         AppError::bad_request("did_continuity_proof_required: did:web to did:webvh primary upgrade")
     })?;
-    let proof: arkret_models_identity::DidContinuityProof =
-        serde_json::from_value(proof_value.clone()).map_err(|error| {
-            AppError::bad_request(format!("did_continuity_proof_invalid: {error}"))
-        })?;
     proof
         .validate_minimal()
         .map_err(|error| AppError::bad_request(format!("did_continuity_proof_invalid: {error}")))?;

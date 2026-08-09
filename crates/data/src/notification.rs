@@ -22,7 +22,8 @@ pub struct NotificationRequest {
     /// Correlates the request to the business workflow or domain object that
     /// created it.
     pub source: NotificationRequestSource,
-    /// Free-form template payload stored as structured JSON.
+    /// Template variables owned by `template_key`; lifecycle `status` never
+    /// selects or interprets their shape.
     pub payload: Value,
     /// Current lifecycle status for the request.
     pub status: NotificationRequestStatus,
@@ -243,8 +244,11 @@ pub struct NotificationEventLog {
     pub actor: NotificationEventActor,
     /// Optional human-readable summary.
     pub summary: Option<String>,
-    /// Structured event metadata for audits and debugging.
-    pub metadata: Value,
+    /// Supplementary audit context independent of the event kind.
+    ///
+    /// This open JSON object is diagnostic annotation data. It does not select
+    /// or encode a kind-specific payload shape.
+    pub audit_context: Value,
     /// When the event occurred.
     pub occurred_at: DateTime<Utc>,
 }

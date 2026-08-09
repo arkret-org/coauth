@@ -2,8 +2,8 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 use coauth_data::{
-    Clock, UpstreamOAuthAuthorizationSession, UserEmailAuthentication, UserPhoneAuthentication,
-    UserRegistration, UserRegistrationToken,
+    Clock, PostAuthAction, UpstreamOAuthAuthorizationSession, UserEmailAuthentication,
+    UserPhoneAuthentication, UserRegistration, UserRegistrationToken,
 };
 use rand_core::RngCore;
 use ulid::Ulid;
@@ -54,7 +54,7 @@ pub trait UserRegistrationRepository: Send + Sync {
         handle: String,
         ip_address: Option<IpAddr>,
         user_agent: Option<String>,
-        post_auth_action: Option<serde_json::Value>,
+        post_auth_action: Option<PostAuthAction>,
     ) -> Result<UserRegistration, Self::Error>;
 
     /// Set the display name of a [`UserRegistration`]
@@ -250,7 +250,7 @@ repository_impl!(UserRegistrationRepository:
         handle: String,
         ip_address: Option<IpAddr>,
         user_agent: Option<String>,
-        post_auth_action: Option<serde_json::Value>,
+        post_auth_action: Option<PostAuthAction>,
     ) -> Result<UserRegistration, Self::Error>;
     async fn set_display_name(
         &mut self,

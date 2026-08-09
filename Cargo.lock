@@ -247,6 +247,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkret-event-draft"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-identifiers",
+ "arkret-models-collaboration",
+ "arkret-models-crypto",
+ "arkret-models-identity",
+ "arkret-models-integration",
+ "arkret-wire",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "arkret-hlc"
 version = "0.3.0"
 dependencies = [
@@ -415,6 +432,7 @@ name = "arkret-policy"
 version = "0.3.0"
 dependencies = [
  "arkret-canonical",
+ "arkret-event-draft",
  "arkret-models-collaboration",
  "arkret-models-crypto",
  "arkret-schema",
@@ -447,6 +465,7 @@ name = "arkret-signatures"
 version = "0.3.0"
 dependencies = [
  "arkret-canonical",
+ "arkret-event-draft",
  "arkret-models-collaboration",
  "arkret-models-discovery",
  "arkret-models-identity",
@@ -471,6 +490,7 @@ name = "arkret-state"
 version = "0.3.0"
 dependencies = [
  "arkret-canonical",
+ "arkret-event-draft",
  "arkret-identifiers",
  "arkret-models-collaboration",
  "arkret-models-crypto",
@@ -1429,6 +1449,7 @@ dependencies = [
  "salvo",
  "serde",
  "serde_json",
+ "ulid 1.2.1",
 ]
 
 [[package]]
@@ -1624,6 +1645,7 @@ dependencies = [
  "arkret-wire",
  "async-trait",
  "chrono",
+ "coauth-account-types",
  "coauth-data-model",
  "coauth-email-types",
  "coauth-iana",

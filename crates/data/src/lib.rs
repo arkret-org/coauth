@@ -129,12 +129,12 @@ pub use self::account::{
     AccountContactPoint, AccountIdentityBinding, ContactChannel, IdentityProviderType,
 };
 pub use self::account_handoff::{
-    AccountHandoffCreation, AccountHandoffCreationAttempt, AccountHandoffCreationAttemptCommit,
-    AccountHandoffCreationAttemptReserve, AccountHandoffCreationAttemptState, AccountHandoffGrant,
-    AccountHandoffGrantInput, AccountHandoffRepository, IdentityBindingChallengeInput,
-    IdentityBindingChallengeIssue, IdentityBindingChallengeRecord, IdentityCreationBindingCommit,
-    IdentityCreationLeaseRecord, IdentityCreationRegisterReplay,
-    IdentityCreationRegistrationContext, IdentityCreationSagaState,
+    AccountHandoffAuthorizationCheckpoint, AccountHandoffCreation, AccountHandoffCreationAttempt,
+    AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve,
+    AccountHandoffCreationAttemptState, AccountHandoffGrant, AccountHandoffGrantInput,
+    AccountHandoffRepository, IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
+    IdentityBindingChallengeRecord, IdentityCreationBindingCommit, IdentityCreationLeaseRecord,
+    IdentityCreationRegisterReplay, IdentityCreationRegistrationContext, IdentityCreationSagaState,
     NewAccountHandoffCreationAttempt,
 };
 pub use self::accountability::{
@@ -170,9 +170,10 @@ pub use self::oauth::{
     DeviceCodeGrantState, InvalidRedirectUriError, JwksOrJwksUri, LocalizableField,
     LocalizedClientMetadata, NewSessionGrantOperation, Pkce, Session, SessionGrant,
     SessionGrantCommitOutcome, SessionGrantExactOutcome, SessionGrantLifecycleState,
-    SessionGrantOperation, SessionGrantOperationKind, SessionGrantOperationState,
-    SessionGrantProofAuthorization, SessionGrantRefreshOutcome, SessionGrantReserveOutcome,
-    SessionGrantRevokeOutcome, SessionGrantRevokeSelector, SessionState,
+    SessionGrantOperation, SessionGrantOperationDescriptor, SessionGrantOperationKind,
+    SessionGrantOperationState, SessionGrantProofAuthorization, SessionGrantRefreshOutcome,
+    SessionGrantReserveOutcome, SessionGrantRevokeOutcome, SessionGrantRevokeSelector,
+    SessionGrantRevokeTarget, SessionState,
 };
 pub use self::organization_control::{
     NewOrganizationDelegation, NewOrganizationPrincipalControl, OrganizationBootstrapAuthorization,
@@ -220,6 +221,6 @@ pub use self::utils::{BoxClock, BoxRng};
 pub use self::version::AppVersion;
 pub use self::workflow::{
     WorkflowActor, WorkflowAssignee, WorkflowAuditAction, WorkflowAuditLog, WorkflowDeadline,
-    WorkflowDeadlineStatus, WorkflowEvent, WorkflowEventKind, WorkflowInstance,
-    WorkflowInstanceStatus, WorkflowStep, WorkflowStepStatus, WorkflowSubject,
+    WorkflowDeadlineStatus, WorkflowInstance, WorkflowInstanceStatus, WorkflowStep,
+    WorkflowStepStatus, WorkflowSubject,
 };

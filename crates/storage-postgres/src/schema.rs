@@ -931,7 +931,7 @@ diesel::table! {
         kind -> Text,
         actor -> Jsonb,
         summary -> Nullable<Text>,
-        metadata -> Jsonb,
+        audit_context -> Jsonb,
         occurred_at -> Timestamptz,
     }
 }
@@ -976,18 +976,6 @@ diesel::table! {
         failed_at -> Nullable<Timestamptz>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    workflow_events (id) {
-        id -> Uuid,
-        workflow_instance_id -> Uuid,
-        workflow_step_id -> Nullable<Uuid>,
-        kind -> Text,
-        actor -> Jsonb,
-        payload -> Jsonb,
-        occurred_at -> Timestamptz,
     }
 }
 
@@ -1127,8 +1115,6 @@ diesel::joinable!(notification_deliveries -> notification_requests (notification
 diesel::joinable!(notification_event_logs -> notification_requests (notification_request_id));
 diesel::joinable!(notification_event_logs -> notification_deliveries (notification_delivery_id));
 diesel::joinable!(workflow_steps -> workflow_instances (workflow_instance_id));
-diesel::joinable!(workflow_events -> workflow_instances (workflow_instance_id));
-diesel::joinable!(workflow_events -> workflow_steps (workflow_step_id));
 diesel::joinable!(workflow_deadlines -> workflow_instances (workflow_instance_id));
 diesel::joinable!(workflow_deadlines -> workflow_steps (workflow_step_id));
 diesel::joinable!(workflow_audit_logs -> workflow_instances (workflow_instance_id));
@@ -1189,7 +1175,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     account_security_events,
     workflow_instances,
     workflow_steps,
-    workflow_events,
     workflow_deadlines,
     workflow_audit_logs,
     handle_audit_log,

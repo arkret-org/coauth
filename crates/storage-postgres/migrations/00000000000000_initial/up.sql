@@ -333,7 +333,7 @@ CREATE TABLE public.notification_event_logs (
     kind text NOT NULL,
     actor jsonb NOT NULL,
     summary text,
-    metadata jsonb NOT NULL,
+    audit_context jsonb NOT NULL,
     occurred_at timestamp with time zone NOT NULL
 );
 
@@ -1113,16 +1113,6 @@ CREATE TABLE public.workflow_deadlines (
     created_at timestamp with time zone NOT NULL
 );
 
-CREATE TABLE public.workflow_events (
-    id uuid NOT NULL,
-    workflow_instance_id uuid NOT NULL,
-    workflow_step_id uuid,
-    kind text NOT NULL,
-    actor jsonb NOT NULL,
-    payload jsonb NOT NULL,
-    occurred_at timestamp with time zone NOT NULL
-);
-
 CREATE TABLE public.workflow_instances (
     id uuid NOT NULL,
     workflow_key text NOT NULL,
@@ -1471,9 +1461,6 @@ ALTER TABLE ONLY public.workflow_audit_logs
 ALTER TABLE ONLY public.workflow_deadlines
     ADD CONSTRAINT workflow_deadlines_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.workflow_events
-    ADD CONSTRAINT workflow_events_pkey PRIMARY KEY (id);
-
 ALTER TABLE ONLY public.workflow_instances
     ADD CONSTRAINT workflow_instances_pkey PRIMARY KEY (id);
 
@@ -1665,8 +1652,6 @@ CREATE INDEX webauthn_ceremonies_expiry_idx ON public.webauthn_ceremonies USING 
 CREATE INDEX workflow_audit_logs_instance_idx ON public.workflow_audit_logs USING btree (workflow_instance_id, id);
 
 CREATE INDEX workflow_deadlines_status_due_idx ON public.workflow_deadlines USING btree (status, due_at);
-
-CREATE INDEX workflow_events_instance_idx ON public.workflow_events USING btree (workflow_instance_id, id);
 
 CREATE INDEX workflow_instances_correlation_key_idx ON public.workflow_instances USING btree (correlation_key) WHERE (correlation_key IS NOT NULL);
 
@@ -1907,12 +1892,6 @@ ALTER TABLE ONLY public.workflow_deadlines
 
 ALTER TABLE ONLY public.workflow_deadlines
     ADD CONSTRAINT workflow_deadlines_workflow_step_id_fkey FOREIGN KEY (workflow_step_id) REFERENCES public.workflow_steps(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.workflow_events
-    ADD CONSTRAINT workflow_events_workflow_instance_id_fkey FOREIGN KEY (workflow_instance_id) REFERENCES public.workflow_instances(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.workflow_events
-    ADD CONSTRAINT workflow_events_workflow_step_id_fkey FOREIGN KEY (workflow_step_id) REFERENCES public.workflow_steps(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.workflow_steps
     ADD CONSTRAINT workflow_steps_workflow_instance_id_fkey FOREIGN KEY (workflow_instance_id) REFERENCES public.workflow_instances(id) ON DELETE CASCADE;

@@ -40,6 +40,8 @@ pub struct AccountClaimRecord {
     pub issuer: String,
     pub verifier_did: String,
     pub represented_org: String,
+    /// Verifier-owned claim document. `claim_kind` selects the verifier and
+    /// its registered schema; lifecycle `status` does not select this shape.
     pub payload: Value,
     pub status: AccountClaimStatus,
     pub issued_at: DateTime<Utc>,
@@ -56,6 +58,8 @@ pub struct IssueAccountClaim {
     pub issuer: String,
     pub verifier_did: String,
     pub represented_org: String,
+    /// Claim document already validated by the verifier selected by
+    /// `claim_kind`; it is an open verifier boundary, not lifecycle data.
     pub payload: Value,
     pub issued_at: DateTime<Utc>,
     pub expires_at: Option<DateTime<Utc>>,

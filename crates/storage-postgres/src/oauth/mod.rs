@@ -76,12 +76,11 @@ mod tests {
                 clock,
                 coauth_data::NewSessionGrantOperation {
                     issuer,
-                    operation_kind: coauth_data::SessionGrantOperationKind::Issue,
+                    operation: coauth_data::SessionGrantOperationDescriptor::Issue,
                     proof_kind: None,
                     request_identity: seed.request_identity,
                     canonical_intent_digest: seed.issuance_digest,
                     canonical_intent,
-                    operation_selector: None,
                     target_grant_id: None,
                     session_id: Some(seed.session_id),
                     grant_not_before: Some(not_before),

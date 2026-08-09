@@ -4,8 +4,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::user::UserRegistrationRepository;
 use coauth_data::{
-    Clock, UpstreamOAuthAuthorizationSession, UserEmailAuthentication, UserPhoneAuthentication,
-    UserRegistration, UserRegistrationPassword, UserRegistrationToken, new_id,
+    Clock, PostAuthAction, UpstreamOAuthAuthorizationSession, UserEmailAuthentication,
+    UserPhoneAuthentication, UserRegistration, UserRegistrationPassword, UserRegistrationToken,
+    new_id,
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -96,7 +97,16 @@ impl TryFrom<UserRegistrationRow> for UserRegistration {
             id,
             ip_address: value.ip_address.map(|network| network.ip()),
             user_agent: value.user_agent,
-            post_auth_action: value.post_auth_action,
+            post_auth_action: value
+                .post_auth_action
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|error| {
+                    DatabaseInconsistencyError::on("user_registrations")
+                        .column("post_auth_action")
+                        .row(id)
+                        .source(error)
+                })?,
             localpart: value.localpart,
             display_name: value.display_name,
             avatar_url: value.avatar_url,
@@ -165,7 +175,7 @@ impl UserRegistrationRepository for PgUserRegistrationRepository<'_> {
         handle: String,
         ip_address: Option<IpAddr>,
         user_agent: Option<String>,
-        post_auth_action: Option<serde_json::Value>,
+        post_auth_action: Option<PostAuthAction>,
     ) -> Result<UserRegistration, Self::Error> {
         let created_at = clock.now();
         let id = new_id(created_at, rng);
@@ -175,7 +185,10 @@ impl UserRegistrationRepository for PgUserRegistrationRepository<'_> {
             id: Uuid::from(id),
             ip_address: ip_address.map(IpNetwork::from),
             user_agent: user_agent.clone(),
-            post_auth_action: post_auth_action.clone(),
+            post_auth_action: post_auth_action
+                .as_ref()
+                .map(serde_json::to_value)
+                .transpose()?,
             localpart: handle.clone(),
             created_at,
         };
@@ -664,7 +677,7 @@ mod tests {
                 "alice".to_owned(),
                 Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
                 Some("Mozilla/5.0".to_owned()),
-                Some(serde_json::json!({"kind": "change_password"})),
+                Some(PostAuthAction::ChangePassword),
             )
             .await
             .unwrap();
@@ -676,7 +689,7 @@ mod tests {
         );
         assert_eq!(
             registration.post_auth_action,
-            Some(serde_json::json!({"kind": "change_password"}))
+            Some(PostAuthAction::ChangePassword)
         );
 
         let lookup = repo

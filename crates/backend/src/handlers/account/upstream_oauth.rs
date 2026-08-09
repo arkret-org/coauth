@@ -5,6 +5,7 @@
 
 use std::sync::LazyLock;
 
+use coauth_account_types::UpstreamLinkActionOutcome;
 use opentelemetry::metrics::Counter;
 use opentelemetry::{Key, KeyValue};
 use salvo::oapi::ToSchema;
@@ -93,18 +94,6 @@ pub enum LinkAction {
         #[serde(default)]
         accept_terms: Option<bool>,
     },
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct LinkActionOutcome {
-    pub status: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub redirect_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[salvo(schema(value_type = Object))]
-    pub field_errors: Option<serde_json::Value>,
 }
 
 /// Return the current state of an upstream OAuth link as JSON.
@@ -252,10 +241,8 @@ pub async fn post_link(
         Err(SubmitUpstreamLinkError::InvalidAction) => {
             cookie_jar.finalize(
                 res,
-                Json(LinkActionOutcome {
-                    status: "error",
-                    redirect_url: None,
-                    error: Some("invalid_action".to_owned()),
+                Json(UpstreamLinkActionOutcome::Error {
+                    error: "invalid_action".to_owned(),
                     field_errors: None,
                 }),
             );
@@ -264,10 +251,8 @@ pub async fn post_link(
         Err(SubmitUpstreamLinkError::Validation { field_errors }) => {
             cookie_jar.finalize(
                 res,
-                Json(LinkActionOutcome {
-                    status: "error",
-                    redirect_url: None,
-                    error: Some("validation_failed".to_owned()),
+                Json(UpstreamLinkActionOutcome::Error {
+                    error: "validation_failed".to_owned(),
                     field_errors: Some(field_errors),
                 }),
             );
@@ -422,12 +407,7 @@ fn render_post_link_outcome(
 
             cookie_jar.finalize(
                 res,
-                Json(LinkActionOutcome {
-                    status: "success",
-                    redirect_url: Some(redirect_url),
-                    error: None,
-                    field_errors: None,
-                }),
+                Json(UpstreamLinkActionOutcome::Success { redirect_url }),
             );
         }
         SubmitUpstreamLinkOutcome::Registered {
@@ -446,12 +426,7 @@ fn render_post_link_outcome(
 
             cookie_jar.finalize(
                 res,
-                Json(LinkActionOutcome {
-                    status: "success",
-                    redirect_url: Some(redirect_url),
-                    error: None,
-                    field_errors: None,
-                }),
+                Json(UpstreamLinkActionOutcome::Success { redirect_url }),
             );
         }
     }

@@ -443,7 +443,7 @@ pub struct StepOutcome {
     /// (e.g. an OAuth authorization grant continuation). The frontend
     /// uses this to resume the original strand after the account is created.
     #[serde(default)]
-    pub post_auth_action: Option<serde_json::Value>,
+    pub post_auth_action: Option<coauth_account_types::PostAuthAction>,
 }
 
 // ── Recovery API types ────────────────────────────────────────

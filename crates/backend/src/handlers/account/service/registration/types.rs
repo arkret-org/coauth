@@ -3,10 +3,10 @@ use std::net::IpAddr;
 use anyhow::Error as AnyhowError;
 use chrono::{DateTime, Utc};
 use coauth_data::{
-    BrowserSession, RepositoryError, UpstreamOAuthAuthorizationSession, UpstreamOAuthLink,
-    UserEmailAuthentication, UserPhoneAuthentication, UserRegistration, UserRegistrationToken,
+    BrowserSession, PostAuthAction, RepositoryError, UpstreamOAuthAuthorizationSession,
+    UpstreamOAuthLink, UserEmailAuthentication, UserPhoneAuthentication, UserRegistration,
+    UserRegistrationToken,
 };
-use serde_json::Value;
 use thiserror::Error;
 use url::Url;
 use zeroize::Zeroizing;
@@ -20,7 +20,7 @@ pub struct StartPasswordRegistrationRequestBody {
     pub password: Zeroizing<String>,
     pub user_agent: Option<String>,
     pub ip_address: Option<IpAddr>,
-    pub post_auth_action: Option<Value>,
+    pub post_auth_action: Option<PostAuthAction>,
     pub terms_url: Option<Url>,
     pub notification_language: String,
 }
@@ -35,7 +35,7 @@ pub struct BeginPasswordRegistrationRequestBody {
     pub ip_address: Option<IpAddr>,
     pub requester: RequesterFingerprint,
     pub notification_language: String,
-    pub post_auth_action: Option<Value>,
+    pub post_auth_action: Option<PostAuthAction>,
     pub password_registration_enabled: bool,
     pub password_registration_contact_required: bool,
     pub terms_url: Option<Url>,

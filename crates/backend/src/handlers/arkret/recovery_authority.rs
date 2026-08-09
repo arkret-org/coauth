@@ -12,8 +12,8 @@ use coauth_data::storage::user::BrowserSessionRepository as _;
 use coauth_data::user::PrincipalDidRepository as _;
 use coauth_data::{
     NewRecoveryCompletionGrantIssuance, NewSessionGrantOperation, RepositoryAccess as _,
-    SessionGrantCommitOutcome, SessionGrantExactOutcome, SessionGrantOperationKind,
-    SessionGrantProofAuthorization, SessionGrantReserveOutcome,
+    SessionGrantCommitOutcome, SessionGrantExactOutcome, SessionGrantProofAuthorization,
+    SessionGrantReserveOutcome,
 };
 use coauth_jose::constraints::Constrainable as _;
 use salvo::prelude::*;
@@ -191,12 +191,11 @@ pub async fn issue_recovery_completion_grant_endpoint(
             &*clock,
             NewSessionGrantOperation {
                 issuer: &issuer,
-                operation_kind: SessionGrantOperationKind::Issue,
+                operation: coauth_data::SessionGrantOperationDescriptor::Issue,
                 proof_kind: Some(SessionGrantProofKind::DidBoundSignature),
                 request_identity: &request_identity,
                 canonical_intent_digest: intent_digest,
                 canonical_intent: &canonical_request,
-                operation_selector: None,
                 target_grant_id: None,
                 session_id: None,
                 grant_not_before: Some(now),

@@ -80,6 +80,8 @@ pub struct InviteQuarantineEntry {
     pub consent_id: String,
     pub scope: String,
     pub requesting_admin_did: Option<String>,
+    /// Original quarantined invite document; `status` only records the review
+    /// lifecycle and does not discriminate this document.
     pub payload: serde_json::Value,
     pub status: WireStatus,
     pub resolved_at: Option<DateTime<Utc>>,

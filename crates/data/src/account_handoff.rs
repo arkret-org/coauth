@@ -1,6 +1,7 @@
 //! Durable state for canonical account handoff and first-principal binding.
 
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 use crate::Ulid;
 pub use crate::storage::account_handoff::AccountHandoffRepository;
@@ -42,6 +43,18 @@ impl TryFrom<&str> for AccountHandoffCreationAttemptState {
 
 /// Durable fence for one account-handoff creation request. Sensitive OIDC
 /// material is represented only by digests in `canonical_intent`.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AccountHandoffAuthorizationCheckpoint {
+    pub service_account_id: String,
+    pub browser_session_id: Option<String>,
+    pub audience: String,
+    pub account_handle: String,
+    pub preferred_locale: Option<String>,
+}
+
+/// Durable fence for one account-handoff creation request. Sensitive OIDC
+/// material is represented only by digests in `canonical_intent`.
 #[derive(Clone, Debug)]
 pub struct AccountHandoffCreationAttempt {
     pub request_id: arkret_identifiers::RequestId,
@@ -54,7 +67,7 @@ pub struct AccountHandoffCreationAttempt {
     pub authorization_code_digest: arkret_identifiers::Hash,
     pub dpop_jti_digest: arkret_identifiers::Hash,
     pub state: AccountHandoffCreationAttemptState,
-    pub authorization_checkpoint: Option<serde_json::Value>,
+    pub authorization_checkpoint: Option<AccountHandoffAuthorizationCheckpoint>,
     pub canonical_outcome: Option<Vec<u8>>,
     pub outcome_digest: Option<arkret_identifiers::Hash>,
     pub retained_until: DateTime<Utc>,
@@ -201,7 +214,7 @@ pub struct IdentityCreationLeaseRecord {
     pub expires_at: DateTime<Utc>,
     pub reserved_identity: Option<arkret_models_identity::ReservedIdentityCreation>,
     pub state: IdentityCreationSagaState,
-    pub registry_receipt: Option<serde_json::Value>,
+    pub registry_receipt: Option<arkret_models_identity::DidOperationSubmitOutcome>,
     pub head_event_digest: Option<arkret_identifiers::Hash>,
     pub pcr_genesis_request_digest: Option<arkret_identifiers::Hash>,
     pub pcr_genesis_receipt:

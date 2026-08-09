@@ -1,6 +1,7 @@
 use std::net::IpAddr;
 
 use anyhow::Error as AnyhowError;
+use coauth_account_types::UpstreamLinkFieldErrors;
 use coauth_data::upstream_oauth::{
     UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
     UpstreamOAuthSessionRepository,
@@ -20,7 +21,7 @@ use coauth_policy::{
 use coauth_principal::ConnectorAdmin;
 use minijinja::Environment;
 use rand_core::RngCore;
-use serde_json::{Map as JsonMap, Value as JsonValue};
+use serde_json::Value as JsonValue;
 use thiserror::Error;
 use ulid::Ulid;
 
@@ -184,7 +185,9 @@ pub enum SubmitUpstreamLinkError {
     InvalidAction,
 
     #[error("validation failed")]
-    Validation { field_errors: JsonValue },
+    Validation {
+        field_errors: UpstreamLinkFieldErrors,
+    },
 
     #[error(transparent)]
     Workflow(#[from] UpstreamLinkWorkflowError),
@@ -424,9 +427,7 @@ pub async fn submit_upstream_link_action(
             .await?;
 
             if !field_errors.is_empty() {
-                return Err(SubmitUpstreamLinkError::Validation {
-                    field_errors: JsonValue::Object(field_errors),
-                });
+                return Err(SubmitUpstreamLinkError::Validation { field_errors });
             }
 
             let mut registration = prepare_user_registration(
@@ -440,7 +441,7 @@ pub async fn submit_upstream_link_action(
                 attributes.avatar_url,
                 ip_address,
                 user_agent,
-                post_auth_action.map(|value| serde_json::json!(value)),
+                post_auth_action,
             )
             .await?;
 
@@ -563,7 +564,7 @@ async fn load_upstream_registration_screen(
             suggestions.suggested_avatar_url.clone(),
             ip_address,
             user_agent,
-            post_auth_action.map(|value| serde_json::json!(value)),
+            post_auth_action,
         )
         .await?;
 
@@ -958,11 +959,11 @@ async fn validate_registration_action(
     username: &str,
     email: Option<&str>,
     accept_terms: bool,
-) -> Result<JsonMap<String, JsonValue>, UpstreamLinkWorkflowError> {
-    let mut field_errors = JsonMap::new();
+) -> Result<UpstreamLinkFieldErrors, UpstreamLinkWorkflowError> {
+    let mut field_errors = UpstreamLinkFieldErrors::default();
 
     if username.is_empty() {
-        field_errors.insert("handle".into(), serde_json::json!("required"));
+        field_errors.handle = Some("required".to_owned());
     } else {
         let already_exists = repo.user().exists(username).await?
             || !principal_server
@@ -970,12 +971,12 @@ async fn validate_registration_action(
                 .await
                 .map_err(UpstreamLinkWorkflowError::principal_server)?;
         if already_exists {
-            field_errors.insert("handle".into(), serde_json::json!("exists"));
+            field_errors.handle = Some("exists".to_owned());
         }
     }
 
     if site_config.tos_uri.is_some() && !accept_terms {
-        field_errors.insert("accept_terms".into(), serde_json::json!("required"));
+        field_errors.accept_terms = Some("required".to_owned());
     }
 
     let eval_result = policy
@@ -994,17 +995,17 @@ async fn validate_registration_action(
 
     for violation in &eval_result.violations {
         let code = if violation.msg.is_empty() {
-            serde_json::json!("policy_violation")
+            "policy_violation".to_owned()
         } else {
-            serde_json::json!(&violation.msg)
+            violation.msg.clone()
         };
 
         match violation.field.as_deref() {
             Some("handle") => {
-                field_errors.insert("handle".into(), code);
+                field_errors.handle = Some(code);
             }
             _ => {
-                field_errors.insert("_form".into(), code);
+                field_errors.form = Some(code);
             }
         }
     }
@@ -1095,7 +1096,7 @@ async fn prepare_user_registration(
     avatar_url: Option<String>,
     ip_address: Option<IpAddr>,
     user_agent: Option<String>,
-    post_auth_action: Option<JsonValue>,
+    post_auth_action: Option<PostAuthAction>,
 ) -> Result<UserRegistration, UpstreamLinkWorkflowError> {
     let mut registration = repo
         .user_registration()

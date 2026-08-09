@@ -192,47 +192,6 @@ pub enum WorkflowAssignee {
     Admin { user_id: Ulid },
 }
 
-/// Immutable event emitted by workflow execution.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WorkflowEvent {
-    /// Stable unique identifier for the event.
-    pub id: Ulid,
-    /// Parent workflow instance.
-    pub workflow_instance_id: Ulid,
-    /// Related step when the event is step-specific.
-    pub workflow_step_id: Option<Ulid>,
-    /// Event kind.
-    pub kind: WorkflowEventKind,
-    /// Actor that triggered the event.
-    pub actor: WorkflowActor,
-    /// Structured event payload.
-    pub payload: Value,
-    /// When the event occurred.
-    pub occurred_at: DateTime<Utc>,
-}
-
-/// Immutable workflow event kind.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WorkflowEventKind {
-    InstanceCreated,
-    InstanceActivated,
-    StepScheduled,
-    StepStarted,
-    StepSucceeded,
-    StepFailed,
-    StepSkipped,
-    WaitingEntered,
-    WaitingResolved,
-    DeadlineScheduled,
-    DeadlineSatisfied,
-    DeadlineMissed,
-    InstanceSucceeded,
-    InstanceFailed,
-    InstanceCancelled,
-    InstanceExpired,
-}
-
 /// A persisted deadline or SLA attached to a workflow or step.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowDeadline {

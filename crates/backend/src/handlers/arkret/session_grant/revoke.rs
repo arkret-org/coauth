@@ -4,9 +4,8 @@ use arkret_models_collaboration::account_lifecycle::{
 };
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::{
-    NewSessionGrantOperation, RepositoryAccess, SessionGrant, SessionGrantOperationKind,
-    SessionGrantProofAuthorization, SessionGrantReserveOutcome, SessionGrantRevokeOutcome,
-    SessionGrantRevokeSelector,
+    NewSessionGrantOperation, RepositoryAccess, SessionGrant, SessionGrantProofAuthorization,
+    SessionGrantReserveOutcome, SessionGrantRevokeOutcome, SessionGrantRevokeSelector,
 };
 use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
@@ -489,19 +488,21 @@ pub async fn revoke_session_grant_endpoint(
         RevokeSelector::Device(_) | RevokeSelector::All => None,
     };
     let operation_selector = match &selector {
-        RevokeSelector::Current | RevokeSelector::Grant(_) => serde_json::json!({
-            "kind": "grant",
-            "grant_id": target_grant_id.as_ref().expect("grant selector has an id"),
-        }),
-        RevokeSelector::Device(target_device_id) => serde_json::json!({
-            "kind": "device",
-            "subject": current_principal_did,
-            "device_id": target_device_id,
-        }),
-        RevokeSelector::All => serde_json::json!({
-            "kind": "all_for_subject",
-            "subject": current_principal_did,
-        }),
+        RevokeSelector::Current | RevokeSelector::Grant(_) => {
+            coauth_data::SessionGrantRevokeTarget::Grant {
+                grant_id: target_grant_id
+                    .as_ref()
+                    .expect("grant selector has an id")
+                    .clone(),
+            }
+        }
+        RevokeSelector::Device(target_device_id) => coauth_data::SessionGrantRevokeTarget::Device {
+            subject: current_principal_did.to_string(),
+            device_id: target_device_id.to_string(),
+        },
+        RevokeSelector::All => coauth_data::SessionGrantRevokeTarget::AllForSubject {
+            subject: current_principal_did.to_string(),
+        },
     };
     let mut redacted_body =
         serde_json::to_value(&body).map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
@@ -551,12 +552,13 @@ pub async fn revoke_session_grant_endpoint(
             &*clock,
             NewSessionGrantOperation {
                 issuer: &current_grant.issuer,
-                operation_kind: SessionGrantOperationKind::Revoke,
+                operation: coauth_data::SessionGrantOperationDescriptor::Revoke {
+                    selector: operation_selector,
+                },
                 proof_kind: None,
                 request_identity: &request_identity,
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
-                operation_selector: Some(operation_selector.clone()),
                 target_grant_id: None,
                 session_id: None,
                 grant_not_before: None,

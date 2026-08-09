@@ -149,7 +149,7 @@ struct NotificationEventLogRow {
     kind: String,
     actor: serde_json::Value,
     summary: Option<String>,
-    metadata: serde_json::Value,
+    audit_context: serde_json::Value,
     occurred_at: DateTime<Utc>,
 }
 
@@ -192,7 +192,7 @@ impl TryFrom<NotificationEventLogRow> for NotificationEventLog {
             kind: parse_event_kind(&value.kind, id)?,
             actor: deserialize_json("notification_event_logs", "actor", id, value.actor)?,
             summary: value.summary,
-            metadata: value.metadata,
+            audit_context: value.audit_context,
             occurred_at: value.occurred_at,
         })
     }
@@ -245,7 +245,7 @@ struct NewNotificationEventLogRow {
     kind: String,
     actor: serde_json::Value,
     summary: Option<String>,
-    metadata: serde_json::Value,
+    audit_context: serde_json::Value,
     occurred_at: DateTime<Utc>,
 }
 
@@ -798,7 +798,7 @@ impl NotificationRepository for PgNotificationRepository<'_> {
             actor: serde_json::to_value(params.actor())
                 .map_err(DatabaseError::to_invalid_operation)?,
             summary: params.summary().map(ToOwned::to_owned),
-            metadata: params.metadata().clone(),
+            audit_context: params.audit_context().clone(),
             occurred_at,
         };
 
@@ -814,7 +814,7 @@ impl NotificationRepository for PgNotificationRepository<'_> {
             kind: params.kind(),
             actor: params.actor().clone(),
             summary: row.summary,
-            metadata: row.metadata,
+            audit_context: row.audit_context,
             occurred_at,
         })
     }

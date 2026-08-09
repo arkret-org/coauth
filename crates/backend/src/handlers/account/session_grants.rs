@@ -124,7 +124,6 @@ pub async fn revoke_session_grant(
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let canonical_intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_intent).into();
     let request_identity = format!("admin-revoke:{}", grant.grant_id);
-    let operation_selector = serde_json::json!({"kind":"grant","grant_id":grant.grant_id});
     let now = clock.now();
     let reserved = repo
         .oauth_session_grant()
@@ -133,12 +132,15 @@ pub async fn revoke_session_grant(
             &clock,
             coauth_data::NewSessionGrantOperation {
                 issuer: &grant.issuer,
-                operation_kind: coauth_data::SessionGrantOperationKind::Revoke,
+                operation: coauth_data::SessionGrantOperationDescriptor::Revoke {
+                    selector: coauth_data::SessionGrantRevokeTarget::Grant {
+                        grant_id: grant.grant_id.clone(),
+                    },
+                },
                 proof_kind: None,
                 request_identity: &request_identity,
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
-                operation_selector: Some(operation_selector),
                 target_grant_id: None,
                 session_id: None,
                 grant_not_before: None,

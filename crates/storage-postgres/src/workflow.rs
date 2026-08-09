@@ -2,12 +2,9 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::workflow::{
-    NewWorkflowEvent, NewWorkflowInstance, NewWorkflowStep, WorkflowRepository,
-};
+use coauth_data::workflow::{NewWorkflowInstance, NewWorkflowStep, WorkflowRepository};
 use coauth_data::{
-    Clock, WorkflowEvent, WorkflowEventKind, WorkflowInstance, WorkflowInstanceStatus,
-    WorkflowStep, WorkflowStepStatus, new_id,
+    Clock, WorkflowInstance, WorkflowInstanceStatus, WorkflowStep, WorkflowStepStatus, new_id,
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -16,7 +13,7 @@ use serde::de::DeserializeOwned;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::schema::{workflow_events, workflow_instances, workflow_steps};
+use crate::schema::{workflow_instances, workflow_steps};
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`WorkflowRepository`].
@@ -146,36 +143,6 @@ impl TryFrom<WorkflowStepRow> for WorkflowStep {
     }
 }
 
-#[derive(Debug, Clone, Queryable, Selectable)]
-#[diesel(table_name = workflow_events)]
-struct WorkflowEventRow {
-    id: Uuid,
-    workflow_instance_id: Uuid,
-    workflow_step_id: Option<Uuid>,
-    kind: String,
-    actor: serde_json::Value,
-    payload: serde_json::Value,
-    occurred_at: DateTime<Utc>,
-}
-
-impl TryFrom<WorkflowEventRow> for WorkflowEvent {
-    type Error = DatabaseInconsistencyError;
-
-    fn try_from(value: WorkflowEventRow) -> Result<Self, Self::Error> {
-        let id = value.id.into();
-
-        Ok(WorkflowEvent {
-            id,
-            workflow_instance_id: value.workflow_instance_id.into(),
-            workflow_step_id: value.workflow_step_id.map(Into::into),
-            kind: parse_event_kind(&value.kind, id)?,
-            actor: deserialize_json("workflow_events", "actor", id, value.actor)?,
-            payload: value.payload,
-            occurred_at: value.occurred_at,
-        })
-    }
-}
-
 // ── Insertable types ─────────────────────────────────────────────────
 
 #[derive(Insertable)]
@@ -219,18 +186,6 @@ struct InsertableWorkflowStep {
     failed_at: Option<DateTime<Utc>>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = workflow_events)]
-struct InsertableWorkflowEvent {
-    id: Uuid,
-    workflow_instance_id: Uuid,
-    workflow_step_id: Option<Uuid>,
-    kind: String,
-    actor: serde_json::Value,
-    payload: serde_json::Value,
-    occurred_at: DateTime<Utc>,
 }
 
 // ── Repository implementation ────────────────────────────────────────
@@ -586,78 +541,6 @@ impl WorkflowRepository for PgWorkflowRepository<'_> {
 
         Ok(workflow_step)
     }
-
-    #[tracing::instrument(
-        name = "db.workflow.append_event",
-        skip_all,
-        fields(
-            workflow_instance.id = %workflow_instance.id,
-            workflow_event.kind = ?params.kind(),
-        ),
-        err,
-    )]
-    async fn append_event(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        workflow_instance: &WorkflowInstance,
-        workflow_step: Option<&WorkflowStep>,
-        params: NewWorkflowEvent,
-    ) -> Result<WorkflowEvent, Self::Error> {
-        let occurred_at = clock.now();
-        let id = new_id(occurred_at, rng);
-
-        let row = InsertableWorkflowEvent {
-            id: Uuid::from(id),
-            workflow_instance_id: Uuid::from(workflow_instance.id),
-            workflow_step_id: workflow_step.map(|s| Uuid::from(s.id)),
-            kind: event_kind_to_db(params.kind()).to_owned(),
-            actor: serde_json::to_value(params.actor())
-                .map_err(DatabaseError::to_invalid_operation)?,
-            payload: params.payload().clone(),
-            occurred_at,
-        };
-
-        diesel::insert_into(workflow_events::table)
-            .values(&row)
-            .execute(self.conn)
-            .await?;
-
-        Ok(WorkflowEvent {
-            id,
-            workflow_instance_id: workflow_instance.id,
-            workflow_step_id: workflow_step.map(|s| s.id),
-            kind: params.kind(),
-            actor: params.actor().clone(),
-            payload: row.payload,
-            occurred_at,
-        })
-    }
-
-    #[tracing::instrument(
-        name = "db.workflow.list_events",
-        skip_all,
-        fields(workflow_instance.id = %workflow_instance.id),
-        err,
-    )]
-    async fn list_events(
-        &mut self,
-        workflow_instance: &WorkflowInstance,
-    ) -> Result<Vec<WorkflowEvent>, Self::Error> {
-        workflow_events::table
-            .filter(workflow_events::workflow_instance_id.eq(Uuid::from(workflow_instance.id)))
-            .order((
-                workflow_events::occurred_at.asc(),
-                workflow_events::id.asc(),
-            ))
-            .select(WorkflowEventRow::as_select())
-            .load::<WorkflowEventRow>(self.conn)
-            .await?
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
-    }
 }
 
 // ── Status conversion helpers ────────────────────────────────────────
@@ -720,54 +603,6 @@ fn parse_step_status(
         "skipped" => Ok(WorkflowStepStatus::Skipped),
         _ => Err(DatabaseInconsistencyError::on("workflow_steps")
             .column("status")
-            .row(row)),
-    }
-}
-
-const fn event_kind_to_db(kind: WorkflowEventKind) -> &'static str {
-    match kind {
-        WorkflowEventKind::InstanceCreated => "instance_created",
-        WorkflowEventKind::InstanceActivated => "instance_activated",
-        WorkflowEventKind::StepScheduled => "step_scheduled",
-        WorkflowEventKind::StepStarted => "step_started",
-        WorkflowEventKind::StepSucceeded => "step_succeeded",
-        WorkflowEventKind::StepFailed => "step_failed",
-        WorkflowEventKind::StepSkipped => "step_skipped",
-        WorkflowEventKind::WaitingEntered => "waiting_entered",
-        WorkflowEventKind::WaitingResolved => "waiting_resolved",
-        WorkflowEventKind::DeadlineScheduled => "deadline_scheduled",
-        WorkflowEventKind::DeadlineSatisfied => "deadline_satisfied",
-        WorkflowEventKind::DeadlineMissed => "deadline_missed",
-        WorkflowEventKind::InstanceSucceeded => "instance_succeeded",
-        WorkflowEventKind::InstanceFailed => "instance_failed",
-        WorkflowEventKind::InstanceCancelled => "instance_cancelled",
-        WorkflowEventKind::InstanceExpired => "instance_expired",
-    }
-}
-
-fn parse_event_kind(
-    value: &str,
-    row: Ulid,
-) -> Result<WorkflowEventKind, DatabaseInconsistencyError> {
-    match value {
-        "instance_created" => Ok(WorkflowEventKind::InstanceCreated),
-        "instance_activated" => Ok(WorkflowEventKind::InstanceActivated),
-        "step_scheduled" => Ok(WorkflowEventKind::StepScheduled),
-        "step_started" => Ok(WorkflowEventKind::StepStarted),
-        "step_succeeded" => Ok(WorkflowEventKind::StepSucceeded),
-        "step_failed" => Ok(WorkflowEventKind::StepFailed),
-        "step_skipped" => Ok(WorkflowEventKind::StepSkipped),
-        "waiting_entered" => Ok(WorkflowEventKind::WaitingEntered),
-        "waiting_resolved" => Ok(WorkflowEventKind::WaitingResolved),
-        "deadline_scheduled" => Ok(WorkflowEventKind::DeadlineScheduled),
-        "deadline_satisfied" => Ok(WorkflowEventKind::DeadlineSatisfied),
-        "deadline_missed" => Ok(WorkflowEventKind::DeadlineMissed),
-        "instance_succeeded" => Ok(WorkflowEventKind::InstanceSucceeded),
-        "instance_failed" => Ok(WorkflowEventKind::InstanceFailed),
-        "instance_cancelled" => Ok(WorkflowEventKind::InstanceCancelled),
-        "instance_expired" => Ok(WorkflowEventKind::InstanceExpired),
-        _ => Err(DatabaseInconsistencyError::on("workflow_events")
-            .column("kind")
             .row(row)),
     }
 }

@@ -3,11 +3,11 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::{
-    AccountHandoffCreation, AccountHandoffCreationAttemptCommit,
-    AccountHandoffCreationAttemptReserve, AccountHandoffGrant, AccountHandoffGrantInput,
-    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityCreationBindingCommit,
-    IdentityCreationRegisterReplay, IdentityCreationRegistrationContext,
-    NewAccountHandoffCreationAttempt,
+    AccountHandoffAuthorizationCheckpoint, AccountHandoffCreation,
+    AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve, AccountHandoffGrant,
+    AccountHandoffGrantInput, IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
+    IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
+    IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
 };
 
 use crate::repository_impl;
@@ -31,7 +31,7 @@ pub trait AccountHandoffRepository: Send + Sync {
         &mut self,
         request_id: &arkret_identifiers::RequestId,
         canonical_intent_digest: &arkret_identifiers::Hash,
-        checkpoint: &serde_json::Value,
+        checkpoint: &AccountHandoffAuthorizationCheckpoint,
         now: DateTime<Utc>,
     ) -> Result<AccountHandoffCreationAttemptCommit, Self::Error>;
 

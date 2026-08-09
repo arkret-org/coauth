@@ -77,6 +77,8 @@ pub struct InviteQuarantineRecord {
     pub consent_id: String,
     pub scope: String,
     pub requesting_admin_did: Option<String>,
+    /// Original quarantined invite document. Its shape is independent of the
+    /// quarantine lifecycle `status` and is never dispatched by that status.
     pub payload: Value,
     pub status: InviteQuarantineStatus,
     pub resolved_at: Option<DateTime<Utc>>,

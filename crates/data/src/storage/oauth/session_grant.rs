@@ -7,7 +7,7 @@ use rand_core::RngCore;
 use serde_json::Value;
 use ulid::Ulid;
 
-use crate::oauth::{SessionGrant, SessionGrantOperation, SessionGrantOperationKind};
+use crate::oauth::{SessionGrant, SessionGrantOperation, SessionGrantOperationDescriptor};
 use crate::pagination::Page;
 use crate::storage::Pagination;
 use crate::{Clock, repository_impl};
@@ -218,7 +218,7 @@ pub struct NewSessionGrantOperation<'a> {
     /// Issuer DID that owns this replay namespace.
     pub issuer: &'a str,
     /// Closed lifecycle operation family.
-    pub operation_kind: SessionGrantOperationKind,
+    pub operation: SessionGrantOperationDescriptor,
     /// Signed proof kind for initial issuance; absent for other operations.
     pub proof_kind: Option<SessionGrantProofKind>,
     /// Stable proof- or predecessor-derived request identity.
@@ -227,8 +227,6 @@ pub struct NewSessionGrantOperation<'a> {
     pub canonical_intent_digest: [u8; 32],
     /// Exact canonical request intent bytes.
     pub canonical_intent: &'a [u8],
-    /// Closed selector for refresh/revoke, absent for initial issuance.
-    pub operation_selector: Option<Value>,
     /// Locked predecessor for refresh; absent for issue and selector-based revoke.
     pub target_grant_id: Option<&'a SessionGrantId>,
     /// Existing rotation-chain id for refresh; initial issuance allocates when absent.

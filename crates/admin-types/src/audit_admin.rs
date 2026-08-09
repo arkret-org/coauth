@@ -27,6 +27,8 @@ pub struct AuditEntry {
     pub resource_kind: String,
     pub resource_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Supplementary audit context. `resource_kind` identifies the audited
+    /// resource but does not select or validate this annotation's shape.
     pub details: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
     pub signature_status: AuditSignatureStatus,

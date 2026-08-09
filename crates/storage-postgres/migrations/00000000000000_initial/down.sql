@@ -70,7 +70,6 @@ DROP TABLE IF EXISTS webauthn_credentials CASCADE;
 DROP TABLE IF EXISTS webauthn_ceremonies CASCADE;
 DROP TABLE IF EXISTS workflow_audit_logs CASCADE;
 DROP TABLE IF EXISTS workflow_deadlines CASCADE;
-DROP TABLE IF EXISTS workflow_events CASCADE;
 DROP TABLE IF EXISTS workflow_instances CASCADE;
 DROP TABLE IF EXISTS workflow_steps CASCADE;
 DROP FUNCTION IF EXISTS handle_audit_log_block_mutation() CASCADE;

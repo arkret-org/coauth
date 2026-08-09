@@ -410,8 +410,8 @@ mod tests {
     -> arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBodyBody
     {
         arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBodyBody::new(
-            arkret_wire::Event::new(
-                arkret_wire::EventKind::INVITE_CREATE,
+            arkret_wire::test_support::raw_event(
+                arkret_wire::EventKind::InviteCreate.as_str(),
                 arkret_wire::ScopeRef::Realm {
                     realm_id: arkret_identifiers::RealmId::new(
                         "ak:realm:Acewuy1nKbK90D-V6pWEnoWq1drBx9FVel0gtDQlninN",

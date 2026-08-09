@@ -6,10 +6,11 @@ use arkret_models_identity::{
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::Duration;
 use coauth_data::{
-    AccountHandoffCreation, AccountHandoffCreationAttempt, AccountHandoffCreationAttemptCommit,
-    AccountHandoffCreationAttemptReserve, AccountHandoffCreationAttemptState, AccountHandoffGrant,
-    AccountHandoffGrantInput, IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
-    NewAccountHandoffCreationAttempt, RepositoryAccess as _, Ulid, new_id,
+    AccountHandoffAuthorizationCheckpoint, AccountHandoffCreation, AccountHandoffCreationAttempt,
+    AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve,
+    AccountHandoffCreationAttemptState, AccountHandoffGrant, AccountHandoffGrantInput,
+    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, NewAccountHandoffCreationAttempt,
+    RepositoryAccess as _, Ulid, new_id,
 };
 use rand_core::RngCore;
 use salvo::prelude::*;
@@ -46,16 +47,6 @@ impl Scribe for AccountHandoffCanonicalJson {
             .write_body(self.0)
             .expect("canonical JSON response body is writable");
     }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct AccountHandoffAuthorizationCheckpoint {
-    service_account_id: String,
-    browser_session_id: Option<String>,
-    audience: String,
-    account_handle: String,
-    preferred_locale: Option<String>,
 }
 
 /// `POST /_arkret/gate/account/authentication-handoffs`.
@@ -190,8 +181,6 @@ pub async fn create_account_handoff(
         account_handle: account_handle.to_string(),
         preferred_locale: preferred_locale.map(|locale| locale.code().to_owned()),
     };
-    let checkpoint_value = serde_json::to_value(&checkpoint)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let checkpoint_now = clock.now();
     let mut checkpoint_repo = depot.repo().await?;
     let consumed = checkpoint_repo
@@ -208,7 +197,7 @@ pub async fn create_account_handoff(
             .checkpoint_creation_authorization(
                 &body.request_id,
                 &canonical_intent_digest,
-                &checkpoint_value,
+                &checkpoint,
                 checkpoint_now,
             )
             .await?
@@ -284,14 +273,13 @@ fn sha256_hash(bytes: &[u8]) -> Result<arkret_identifiers::Hash, ArkretRouteErro
 fn authorized_checkpoint(
     attempt: &AccountHandoffCreationAttempt,
 ) -> Result<AccountHandoffAuthorizationCheckpoint, ArkretRouteError> {
-    let value = attempt.authorization_checkpoint.clone().ok_or_else(|| {
+    attempt.authorization_checkpoint.clone().ok_or_else(|| {
         ArkretRouteError::coded(
             StatusCode::SERVICE_UNAVAILABLE,
             arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
             "authorized account handoff attempt has no durable checkpoint",
         )
-    })?;
-    serde_json::from_value(value).map_err(|_| indeterminate_handoff_replay())
+    })
 }
 
 async fn commit_authorized_handoff(

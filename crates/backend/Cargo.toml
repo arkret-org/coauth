@@ -138,6 +138,7 @@ zxcvbn = {workspace = true}
 sd-notify = {workspace = true}
 
 [dev-dependencies]
+arkret-wire = {workspace = true,features = ["test-support"]}
 cookie_store = {workspace = true}
 insta = {workspace = true}
 salvo = {workspace = true,features = ["test"]}

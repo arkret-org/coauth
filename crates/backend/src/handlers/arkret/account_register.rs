@@ -226,10 +226,9 @@ pub async fn account_register_endpoint(
         | IdentityCreationSagaState::PcrAccepted
         | IdentityCreationSagaState::AccountBound => {
             let outcome: DidOperationSubmitOutcome =
-                serde_json::from_value(context.lease.registry_receipt.clone().ok_or_else(
-                    || failed_precondition("published identity has no registry receipt"),
-                )?)
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+                context.lease.registry_receipt.clone().ok_or_else(|| {
+                    failed_precondition("published identity has no registry receipt")
+                })?;
             validate_registry_outcome(&outcome, &body.principal_id)?;
             let head = outcome.head_event_digest.as_ref().expect("validated head");
             if context.lease.state == IdentityCreationSagaState::DidPublished {

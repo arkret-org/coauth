@@ -1156,12 +1156,11 @@ pub async fn debug_issue_dpop_grant(
             &*clock,
             coauth_data::NewSessionGrantOperation {
                 issuer: &issuer,
-                operation_kind: coauth_data::SessionGrantOperationKind::Issue,
+                operation: coauth_data::SessionGrantOperationDescriptor::Issue,
                 proof_kind: Some(arkret_models_identity::SessionGrantProofKind::PairedDeviceProof),
                 request_identity: &request_identity,
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
-                operation_selector: None,
                 target_grant_id: None,
                 session_id: None,
                 grant_not_before: Some(not_before),

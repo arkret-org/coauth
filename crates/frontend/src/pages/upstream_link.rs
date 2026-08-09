@@ -1,3 +1,4 @@
+use coauth_account_types::{UpstreamLinkActionOutcome, UpstreamLinkFieldErrors};
 use dioxus::prelude::*;
 use serde::Deserialize;
 
@@ -40,14 +41,6 @@ pub enum LinkState {
         code: String,
         description: String,
     },
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct LinkActionOutcome {
-    pub status: String,
-    pub redirect_url: Option<String>,
-    pub error: Option<String>,
-    pub field_errors: Option<serde_json::Value>,
 }
 
 // ── Component ───────────────────────────────────────────────────
@@ -208,18 +201,17 @@ fn SuggestLinkView(
                             submitting.set(true);
                             spawn(async move {
                                 let body = serde_json::json!({ "action": "link" });
-                                match api_post::<LinkActionOutcome>(
+                                match api_post::<UpstreamLinkActionOutcome>(
                                     &format!("/self/upstream-oauth/link/{id}"),
                                     body,
                                 )
                                 .await
                                 {
-                                    Ok(resp) if resp.status == "success" => {
-                                        let url = resp.redirect_url.unwrap_or_else(|| "/".to_owned());
-                                        nav.push(url);
+                                    Ok(UpstreamLinkActionOutcome::Success { redirect_url }) => {
+                                        nav.push(redirect_url);
                                     }
-                                    Ok(resp) => {
-                                        error.set(resp.error.or(Some("Failed to link account".to_owned())));
+                                    Ok(UpstreamLinkActionOutcome::Error { error: message, .. }) => {
+                                        error.set(Some(message));
                                         submitting.set(false);
                                     }
                                     Err(e) => {
@@ -277,7 +269,7 @@ fn RegisterView(
     let mut accept_terms = use_signal(|| false);
     let mut submitting = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
-    let mut field_errors = use_signal(|| None::<serde_json::Value>);
+    let mut field_errors = use_signal(|| None::<UpstreamLinkFieldErrors>);
     let nav = navigator();
 
     let provider = provider_name.unwrap_or_else(|| "external provider".to_owned());
@@ -319,21 +311,23 @@ fn RegisterView(
                                     "import_display_name": idn,
                                     "accept_terms": at,
                                 });
-                                match api_post::<LinkActionOutcome>(
+                                match api_post::<UpstreamLinkActionOutcome>(
                                     &format!("/self/upstream-oauth/link/{id}"),
                                     body,
                                 )
                                 .await
                                 {
-                                    Ok(resp) if resp.status == "success" => {
-                                        let url = resp.redirect_url.unwrap_or_else(|| "/".to_owned());
-                                        nav.push(url);
+                                    Ok(UpstreamLinkActionOutcome::Success { redirect_url }) => {
+                                        nav.push(redirect_url);
                                     }
-                                    Ok(resp) => {
-                                        if let Some(fe) = resp.field_errors {
+                                    Ok(UpstreamLinkActionOutcome::Error {
+                                        error: message,
+                                        field_errors: response_errors,
+                                    }) => {
+                                        if let Some(fe) = response_errors {
                                             field_errors.set(Some(fe));
                                         }
-                                        error.set(resp.error.or(Some("Registration failed".to_owned())));
+                                        error.set(Some(message));
                                         submitting.set(false);
                                     }
                                     Err(e) => {
@@ -359,7 +353,7 @@ fn RegisterView(
                             oninput: move |e| handle.set(e.value()),
                         }
                         if let Some(ref fe) = *field_errors.read() {
-                            if let Some(err) = fe.get("username") {
+                            if let Some(err) = fe.handle.as_ref() {
                                 span { class: "form-error",
                                     "{err}"
                                 }
@@ -406,8 +400,8 @@ fn RegisterView(
                                 }
                                 "I accept the Terms of Service"
                             }
-                            if let Some(ref fe) = *field_errors.read() {
-                                if let Some(err) = fe.get("accept_terms") {
+                        if let Some(ref fe) = *field_errors.read() {
+                            if let Some(err) = fe.accept_terms.as_ref() {
                                     span { class: "form-error",
                                         "{err}"
                                     }

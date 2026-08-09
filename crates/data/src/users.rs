@@ -546,7 +546,7 @@ pub struct UserRegistration {
     pub user_registration_token_id: Option<Ulid>,
     pub password: Option<UserRegistrationPassword>,
     pub upstream_oauth_authorization_session_id: Option<Ulid>,
-    pub post_auth_action: Option<serde_json::Value>,
+    pub post_auth_action: Option<crate::PostAuthAction>,
     pub ip_address: Option<IpAddr>,
     pub user_agent: Option<String>,
     pub created_at: DateTime<Utc>,

@@ -6,9 +6,8 @@ use arkret_models_collaboration::session_grant_bodies::{
 use arkret_models_identity::SessionGrantProofKind;
 use chrono::{DateTime, Utc};
 use coauth_data::{
-    NewSessionGrantOperation, SessionGrantExactOutcome, SessionGrantOperationKind,
-    SessionGrantProofAuthorization, SessionGrantRefreshOutcome as LedgerRefreshOutcome,
-    SessionGrantReserveOutcome,
+    NewSessionGrantOperation, SessionGrantExactOutcome, SessionGrantProofAuthorization,
+    SessionGrantRefreshOutcome as LedgerRefreshOutcome, SessionGrantReserveOutcome,
 };
 use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
@@ -471,7 +470,6 @@ pub async fn refresh_session_grant(
     let signing_key_id = signing_key
         .kid()
         .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
-    let selector = serde_json::json!({"predecessor_grant_id": prior_grant.grant_id});
     let reserved = repo
         .oauth_session_grant()
         .reserve_operation(
@@ -479,12 +477,13 @@ pub async fn refresh_session_grant(
             &*clock,
             NewSessionGrantOperation {
                 issuer: &prior_grant.issuer,
-                operation_kind: SessionGrantOperationKind::Refresh,
+                operation: coauth_data::SessionGrantOperationDescriptor::Refresh {
+                    predecessor_grant_id: prior_grant.grant_id.clone(),
+                },
                 proof_kind: None,
                 request_identity: &request_identity,
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
-                operation_selector: Some(selector),
                 target_grant_id: Some(&prior_grant.grant_id),
                 session_id: Some(&prior_payload.session_id),
                 grant_not_before: Some(grant_not_before),

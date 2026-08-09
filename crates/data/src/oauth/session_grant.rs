@@ -32,6 +32,40 @@ pub enum SessionGrantOperationKind {
     Revoke,
 }
 
+/// Closed durable selector for a session-grant operation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "operation_kind", rename_all = "snake_case")]
+pub enum SessionGrantOperationDescriptor {
+    Issue,
+    Refresh {
+        predecessor_grant_id: SessionGrantId,
+    },
+    Revoke {
+        #[serde(flatten)]
+        selector: SessionGrantRevokeTarget,
+    },
+}
+
+impl SessionGrantOperationDescriptor {
+    #[must_use]
+    pub const fn kind(&self) -> SessionGrantOperationKind {
+        match self {
+            Self::Issue => SessionGrantOperationKind::Issue,
+            Self::Refresh { .. } => SessionGrantOperationKind::Refresh,
+            Self::Revoke { .. } => SessionGrantOperationKind::Revoke,
+        }
+    }
+}
+
+/// Owned target carried by a durable revoke operation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SessionGrantRevokeTarget {
+    Grant { grant_id: SessionGrantId },
+    Device { subject: String, device_id: String },
+    AllForSubject { subject: String },
+}
+
 impl SessionGrantOperationKind {
     /// Stable database representation.
     #[must_use]
@@ -76,12 +110,11 @@ pub enum SessionGrantOperationState {
 pub struct SessionGrantOperation {
     pub id: Ulid,
     pub issuer: String,
-    pub operation_kind: SessionGrantOperationKind,
+    pub operation: SessionGrantOperationDescriptor,
     pub proof_kind: Option<SessionGrantProofKind>,
     pub request_identity: String,
     pub canonical_intent_digest: [u8; 32],
     pub canonical_intent: Option<Vec<u8>>,
-    pub operation_selector: Option<Value>,
     pub issuance_nonce: Option<String>,
     pub session_id: Option<String>,
     pub grant_not_before: Option<DateTime<Utc>>,

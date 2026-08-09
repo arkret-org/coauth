@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::{
-    Clock, WorkflowActor, WorkflowAssignee, WorkflowEvent, WorkflowEventKind, WorkflowInstance,
-    WorkflowInstanceStatus, WorkflowStep, WorkflowStepStatus, WorkflowSubject,
+    Clock, WorkflowActor, WorkflowAssignee, WorkflowInstance, WorkflowInstanceStatus, WorkflowStep,
+    WorkflowStepStatus, WorkflowSubject,
 };
 use rand_core::RngCore;
 use serde_json::Value;
@@ -144,60 +144,7 @@ impl NewWorkflowStep {
     }
 }
 
-/// Parameters used when appending a workflow event.
-#[derive(Debug, Clone)]
-pub struct NewWorkflowEvent {
-    kind: WorkflowEventKind,
-    actor: WorkflowActor,
-    payload: Value,
-    workflow_step_id: Option<Ulid>,
-}
-
-impl NewWorkflowEvent {
-    /// Create a new workflow event draft.
-    #[must_use]
-    pub fn new(kind: WorkflowEventKind, actor: WorkflowActor, payload: Value) -> Self {
-        Self {
-            kind,
-            actor,
-            payload,
-            workflow_step_id: None,
-        }
-    }
-
-    /// Associate the event with a specific workflow step.
-    #[must_use]
-    pub fn for_step(mut self, workflow_step_id: Ulid) -> Self {
-        self.workflow_step_id = Some(workflow_step_id);
-        self
-    }
-
-    /// The event kind.
-    #[must_use]
-    pub fn kind(&self) -> WorkflowEventKind {
-        self.kind
-    }
-
-    /// The actor that triggered the event.
-    #[must_use]
-    pub fn actor(&self) -> &WorkflowActor {
-        &self.actor
-    }
-
-    /// The structured event payload.
-    #[must_use]
-    pub fn payload(&self) -> &Value {
-        &self.payload
-    }
-
-    /// The related step identifier, if any.
-    #[must_use]
-    pub fn workflow_step_id(&self) -> Option<Ulid> {
-        self.workflow_step_id
-    }
-}
-
-/// Repository for persisted workflow instances, steps, and events.
+/// Repository for persisted workflow instances and steps.
 #[async_trait]
 pub trait WorkflowRepository: Send + Sync {
     /// The error type returned by the repository.
@@ -247,22 +194,6 @@ pub trait WorkflowRepository: Send + Sync {
         workflow_step: WorkflowStep,
         status: WorkflowStepStatus,
     ) -> Result<WorkflowStep, Self::Error>;
-
-    /// Append an immutable workflow event.
-    async fn append_event(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        workflow_instance: &WorkflowInstance,
-        workflow_step: Option<&WorkflowStep>,
-        params: NewWorkflowEvent,
-    ) -> Result<WorkflowEvent, Self::Error>;
-
-    /// List events for a workflow instance.
-    async fn list_events(
-        &mut self,
-        workflow_instance: &WorkflowInstance,
-    ) -> Result<Vec<WorkflowEvent>, Self::Error>;
 }
 
 repository_impl!(WorkflowRepository:
@@ -303,16 +234,4 @@ repository_impl!(WorkflowRepository:
         workflow_step: WorkflowStep,
         status: WorkflowStepStatus,
     ) -> Result<WorkflowStep, Self::Error>;
-    async fn append_event(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        workflow_instance: &WorkflowInstance,
-        workflow_step: Option<&WorkflowStep>,
-        params: NewWorkflowEvent,
-    ) -> Result<WorkflowEvent, Self::Error>;
-    async fn list_events(
-        &mut self,
-        workflow_instance: &WorkflowInstance,
-    ) -> Result<Vec<WorkflowEvent>, Self::Error>;
 );

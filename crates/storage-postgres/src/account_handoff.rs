@@ -270,7 +270,11 @@ fn creation_attempt_from_row(
             .map_err(|_| DatabaseError::invalid_operation())?,
         state: AccountHandoffCreationAttemptState::try_from(row.state.as_str())
             .map_err(|_| DatabaseError::invalid_operation())?,
-        authorization_checkpoint: row.authorization_checkpoint,
+        authorization_checkpoint: row
+            .authorization_checkpoint
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|_| DatabaseError::invalid_operation())?,
         canonical_outcome: row.canonical_outcome,
         outcome_digest: row
             .outcome_digest
@@ -407,7 +411,11 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
         reserved_identity,
         state: IdentityCreationSagaState::try_from(row.state.as_str())
             .map_err(|_| DatabaseError::invalid_operation())?,
-        registry_receipt: row.registry_receipt,
+        registry_receipt: row
+            .registry_receipt
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|_| DatabaseError::invalid_operation())?,
         head_event_digest: row
             .head_event_digest
             .map(arkret_identifiers::Hash::new)
@@ -621,7 +629,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         &mut self,
         request_id: &arkret_identifiers::RequestId,
         canonical_intent_digest: &arkret_identifiers::Hash,
-        checkpoint: &serde_json::Value,
+        checkpoint: &coauth_data::AccountHandoffAuthorizationCheckpoint,
         now: DateTime<Utc>,
     ) -> Result<AccountHandoffCreationAttemptCommit, Self::Error> {
         let attempt = self
@@ -654,7 +662,9 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         )
         .bind::<SqlUuid, _>(request_id.uuid())
         .bind::<Text, _>(canonical_intent_digest.as_str())
-        .bind::<Jsonb, _>(checkpoint)
+        .bind::<Jsonb, _>(
+            serde_json::to_value(checkpoint).map_err(|_| DatabaseError::invalid_operation())?,
+        )
         .bind::<Timestamptz, _>(now)
         .execute(self.conn)
         .await?;
@@ -2371,7 +2381,10 @@ mod tests {
             IdentityCreationSagaState::DidPublished
         );
         assert_eq!(recovered.lease.reserved_identity, Some(reserved.clone()));
-        assert_eq!(recovered.lease.registry_receipt, Some(registry_receipt));
+        assert_eq!(
+            serde_json::to_value(recovered.lease.registry_receipt).unwrap(),
+            serde_json::to_value(Some(registry_receipt)).unwrap()
+        );
         assert_eq!(recovered.lease.head_event_digest, Some(head));
         assert!(recovered.challenge.consumed_at.is_some());
 

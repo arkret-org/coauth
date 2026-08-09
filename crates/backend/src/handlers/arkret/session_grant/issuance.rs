@@ -273,12 +273,11 @@ where
             clock,
             coauth_data::NewSessionGrantOperation {
                 issuer: &material.issuer,
-                operation_kind: coauth_data::SessionGrantOperationKind::Issue,
+                operation: coauth_data::SessionGrantOperationDescriptor::Issue,
                 proof_kind: issuance_preimage.proof_kind,
                 request_identity: &request_identity,
                 canonical_intent_digest: material.issuance_digest,
                 canonical_intent: &material.issuance_preimage,
-                operation_selector: None,
                 target_grant_id: None,
                 session_id: Some(&material.session_id),
                 grant_not_before: Some(material.not_before_timestamp),

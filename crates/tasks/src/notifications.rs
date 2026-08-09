@@ -85,7 +85,7 @@ enum PreparedDelivery {
     Ready(NotificationRequest),
     Cancelled {
         summary: &'static str,
-        metadata: Value,
+        audit_context: Value,
     },
 }
 
@@ -108,13 +108,23 @@ async fn append_event(
     notification_delivery: Option<&NotificationDelivery>,
     kind: NotificationEventKind,
     summary: Option<&str>,
-    metadata: Value,
+    audit_context: Value,
 ) -> Result<(), JobError> {
     let params = summary.map_or_else(
-        || NewNotificationEventLog::new(kind, NotificationEventActor::System, metadata.clone()),
+        || {
+            NewNotificationEventLog::new(
+                kind,
+                NotificationEventActor::System,
+                audit_context.clone(),
+            )
+        },
         |summary| {
-            NewNotificationEventLog::new(kind, NotificationEventActor::System, metadata.clone())
-                .with_summary(summary)
+            NewNotificationEventLog::new(
+                kind,
+                NotificationEventActor::System,
+                audit_context.clone(),
+            )
+            .with_summary(summary)
         },
     );
 
@@ -662,7 +672,7 @@ async fn prepare_delivery(
             if auth.completed_at.is_some() {
                 return Ok(PreparedDelivery::Cancelled {
                     summary: "Email authentication already completed",
-                    metadata: json!({
+                    audit_context: json!({
                         "user_email_authentication_id": user_email_authentication_id,
                     }),
                 });
@@ -737,7 +747,7 @@ async fn prepare_delivery(
             if auth.completed_at.is_some() {
                 return Ok(PreparedDelivery::Cancelled {
                     summary: "Phone authentication already completed",
-                    metadata: json!({
+                    audit_context: json!({
                         "user_phone_authentication_id": user_phone_authentication_id,
                     }),
                 });
@@ -783,7 +793,7 @@ async fn prepare_delivery(
             if session.consumed_at.is_some() {
                 return Ok(PreparedDelivery::Cancelled {
                     summary: "Recovery session already consumed",
-                    metadata: json!({
+                    audit_context: json!({
                         "user_recovery_session_id": user_recovery_session_id,
                     }),
                 });
@@ -959,7 +969,10 @@ async fn process_single_delivery(state: &State) -> Result<bool, JobError> {
         .map_err(JobError::retry)?;
 
     match prepare_delivery(&mut repo, url_builder, &request, &delivery).await {
-        Ok(PreparedDelivery::Cancelled { summary, metadata }) => {
+        Ok(PreparedDelivery::Cancelled {
+            summary,
+            audit_context,
+        }) => {
             let delivery = repo
                 .notification()
                 .cancel_delivery(clock, delivery)
@@ -979,7 +992,7 @@ async fn process_single_delivery(state: &State) -> Result<bool, JobError> {
                 Some(&delivery),
                 NotificationEventKind::RequestCancelled,
                 Some(summary),
-                metadata,
+                audit_context,
             )
             .await?;
 

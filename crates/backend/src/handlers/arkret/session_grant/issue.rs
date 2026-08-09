@@ -1,7 +1,7 @@
 use coauth_data::user::PrincipalDidRepository as _;
 use coauth_data::{
     NewSessionGrantOperation, RepositoryAccess as _, SessionGrantCommitOutcome,
-    SessionGrantOperation, SessionGrantOperationKind, SessionGrantReserveOutcome,
+    SessionGrantOperation, SessionGrantReserveOutcome,
 };
 use salvo::prelude::*;
 use sha2::Digest as _;
@@ -152,12 +152,11 @@ async fn reserve_issue_operation(
             &*clock,
             NewSessionGrantOperation {
                 issuer: &issuer,
-                operation_kind: SessionGrantOperationKind::Issue,
+                operation: coauth_data::SessionGrantOperationDescriptor::Issue,
                 proof_kind: Some(body.proof.proof_kind),
                 request_identity: &request_identity,
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
-                operation_selector: None,
                 target_grant_id: None,
                 session_id: None,
                 grant_not_before: Some(now),
