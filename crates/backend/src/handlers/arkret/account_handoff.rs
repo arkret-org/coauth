@@ -323,7 +323,11 @@ async fn commit_authorized_handoff(
             lease_expires_at: now + IDENTITY_CREATION_LEASE_TTL,
         })
         .await?;
-    let outcome = creation_to_outcome(creation, account_handle, preferred_locale)?;
+    let account_subject = account_subject(
+        &super::service_id_for(&depot.arkret_config()?),
+        service_account_id,
+    )?;
+    let outcome = creation_to_outcome(creation, account_handle, account_subject, preferred_locale)?;
     let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let outcome_digest = sha256_hash(&canonical_outcome)?;
@@ -410,6 +414,10 @@ pub async fn issue_identity_binding_challenge(
             .map_err(|error| failed_precondition(error.to_string()))?;
 
     let arkret_config = depot.arkret_config()?;
+    let account_subject = account_subject(
+        &super::service_id_for(&arkret_config),
+        grant.service_account_id,
+    )?;
     let url_builder = depot.url_builder()?;
     let trust_domain = trust_domain_for(&url_builder, &arkret_config);
     let trust_domain = arkret_identifiers::TypedTrustDomainId::new(trust_domain)
@@ -437,6 +445,10 @@ pub async fn issue_identity_binding_challenge(
             holder_jkt: grant.cnf_jkt.clone(),
             did_operation: body.did_operation,
             operation_digest: validated.operation_digest,
+            account_subject,
+            did_version_id: validated.did_version_id,
+            log_head_digest: validated.log_head_digest,
+            control_key_digest: validated.control_key_digest,
             pcr_realm_id: body.pcr_realm_id,
             realm_create_payload_digest: body.realm_create_payload_digest,
             founding_authorize_payload_digest: body.founding_authorize_payload_digest,
@@ -633,6 +645,7 @@ fn verify_handoff_holder_signature(
 fn creation_to_outcome(
     creation: AccountHandoffCreation,
     account_handle: Handle,
+    account_subject: arkret_identifiers::Hash,
     preferred_locale: Option<arkret_locale::UiLocale>,
 ) -> Result<AccountHandoffOutcome, ArkretRouteError> {
     let (grant, binding) = match creation {
@@ -645,9 +658,13 @@ fn creation_to_outcome(
         AccountHandoffCreation::Busy {
             grant,
             retry_after_ms,
+            expires_at,
         } => (
             grant,
-            AccountHandoffBinding::IdentityCreationBusy { retry_after_ms },
+            AccountHandoffBinding::IdentityCreationBusy {
+                retry_after_ms,
+                expires_at,
+            },
         ),
         AccountHandoffCreation::Bound {
             grant,
@@ -671,6 +688,7 @@ fn creation_to_outcome(
     let outcome = AccountHandoffOutcome {
         request_id: grant.request_id,
         account_handle,
+        account_subject,
         preferred_locale,
         account_handoff_grant: grant.account_handoff_grant,
         expires_at: grant.expires_at,
@@ -681,6 +699,22 @@ fn creation_to_outcome(
         .validate()
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     Ok(outcome)
+}
+
+fn account_subject(
+    account_authority_id: &arkret_identifiers::Did,
+    service_account_id: Ulid,
+) -> Result<arkret_identifiers::Hash, ArkretRouteError> {
+    let value = serde_json::json!({
+        "account_authority_id": account_authority_id,
+        "service_account_id": service_account_id.to_string(),
+    });
+    let mut bytes = b"ak.account-subject.v1\n".to_vec();
+    bytes.extend(
+        arkret_canonical::canonical_json_bytes(&value)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+    );
+    sha256_hash(&bytes)
 }
 
 fn canonical_account_handle(

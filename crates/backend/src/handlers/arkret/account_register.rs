@@ -9,6 +9,7 @@ use arkret_models_identity::{
     AccountBindingReceipt, AccountBindingState, AccountHandoffAllowedOperation,
     DidOperationSubmitOutcome, DidOperationSubmitStatus, IdentityCreationOperationStatus,
 };
+use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::RepositoryAccess as _;
 use coauth_data::account_handoff::{
     IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
@@ -22,6 +23,7 @@ use coauth_jose::constraints::Constrainable as _;
 use salvo::prelude::*;
 use serde::Deserialize;
 use serde_json::Value;
+use signature::RandomizedSigner as _;
 
 use super::account_handoff::{
     authenticate_account_handoff, enforce_handoff_operation,
@@ -149,7 +151,7 @@ pub async fn account_register_endpoint(
         .await?
         .ok_or_else(|| {
             failed_precondition(
-                "reason_code=challenge_expired; lease, fence, reservation, or challenge is stale",
+                "reason_code=identity_creation_challenge_expired; lease, fence, reservation, or challenge is stale",
             )
         })?;
     repo.cancel().await.ok();
@@ -256,7 +258,7 @@ pub async fn account_register_endpoint(
         }
         IdentityCreationSagaState::Completed => {
             return Err(failed_precondition(
-                "identity binding challenge was already consumed",
+                "reason_code=identity_creation_challenge_already_consumed; identity binding challenge was already consumed",
             ));
         }
     };
@@ -271,6 +273,9 @@ pub async fn account_register_endpoint(
         ))
         .map_err(schema_violation)?,
         registration_request_digest: request_digest.clone(),
+        did_version_id: identity_creation.control_proof.did_version_id.clone(),
+        log_head_digest: identity_creation.control_proof.log_head_digest.clone(),
+        control_key_digest: identity_creation.control_proof.control_key_digest.clone(),
         identity_creation_control_proof: identity_creation.control_proof.clone(),
         genesis_unit: identity_creation.pcr_genesis_unit.clone(),
     };
@@ -348,14 +353,39 @@ pub async fn account_register_endpoint(
         .head_event_digest
         .clone()
         .expect("registry outcome head validated above");
-    let receipt = AccountBindingReceipt {
+    let mut receipt = AccountBindingReceipt {
         binding_state: AccountBindingState::Bound,
+        account_authority_id: service_id_for(&depot.arkret_config()?),
+        account_subject: context.challenge.account_subject.clone(),
+        principal_id: body.principal_id.clone(),
         identity_creation_lease_id: identity_creation.identity_creation_lease_id.clone(),
         lease_fence: identity_creation.lease_fence,
         operation_status,
         operation_digest: validated.operation_digest,
         head_event_digest: head_event_digest.clone(),
+        issued_at: now,
+        proof: arkret_wire::PayloadProof {
+            kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
+            verification_method: arkret_wire::DidUrl::new(format!(
+                "{}#{}",
+                service_id_for(&depot.arkret_config()?),
+                signing_key_id
+            ))
+            .map_err(|error| {
+                ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                    error.to_owned(),
+                ))
+            })?,
+            payload_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            created_at: now,
+            domain: None,
+            audience: None,
+            proof_purpose: None,
+            jws: String::new(),
+        },
     };
+    sign_account_binding_receipt(&mut receipt, &key_store)?;
     let mut rng = make_rng();
     let mut repo = depot.repo().await?;
     if context.lease.state != IdentityCreationSagaState::AccountBound {
@@ -508,6 +538,11 @@ fn validate_registration_transcript(
         .ok_or_else(|| failed_precondition("identity creation operation is not reserved"))?;
     let proof = &registration.control_proof;
     let challenge = &context.challenge;
+    if challenge.account_subject != proof.account_subject {
+        return Err(failed_precondition(
+            "reason_code=account_binding_principal_mismatch; identity-creation proof changed the authenticated account subject",
+        ));
+    }
     if reserved.did_operation != registration.did_operation
         || reserved.principal_id != proof.principal_id
         || reserved.operation_digest != proof.operation_digest
@@ -516,6 +551,9 @@ fn validate_registration_transcript(
         || challenge.purpose != proof.purpose
         || challenge.principal_id != proof.principal_id
         || challenge.operation_digest != proof.operation_digest
+        || challenge.did_version_id != proof.did_version_id
+        || challenge.log_head_digest != proof.log_head_digest
+        || challenge.control_key_digest != proof.control_key_digest
         || challenge.pcr_realm_id != proof.pcr_realm_id
         || challenge.realm_create_payload_digest != proof.realm_create_payload_digest
         || challenge.founding_authorize_payload_digest != proof.founding_authorize_payload_digest
@@ -541,6 +579,55 @@ fn validate_registration_transcript(
         ));
     }
     Ok(())
+}
+
+fn sign_account_binding_receipt(
+    receipt: &mut AccountBindingReceipt,
+    key_store: &coauth_keystore::Keystore,
+) -> Result<(), ArkretRouteError> {
+    let payload_digest = receipt
+        .canonical_payload_digest()
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    receipt.proof.payload_digest = payload_digest.clone();
+    let transcript = serde_json::json!({
+        "context": "ak.account-binding-receipt-proof-v1",
+        "payload_digest": payload_digest,
+        "account_authority_id": &receipt.account_authority_id,
+        "account_subject": &receipt.account_subject,
+        "principal_id": &receipt.principal_id,
+        "verification_method": &receipt.proof.verification_method,
+        "created_at": arkret_canonical::format_timestamp_canonical(receipt.issued_at),
+    });
+    let payload = arkret_canonical::canonical_json_bytes(&transcript)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let (algorithm, key) = preferred_signing_key(key_store)
+        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
+    let key_id = key
+        .kid()
+        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
+    let header = coauth_jose::jwt::JsonWebSignatureHeader::new(algorithm.clone())
+        .with_kid(key_id.to_owned());
+    let protected =
+        serde_json::to_vec(&header).map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let protected = Base64UrlUnpadded::encode_string(&protected);
+    let payload = Base64UrlUnpadded::encode_string(&payload);
+    let signing_input = format!("{protected}.{payload}");
+    let signer = key_store
+        .signer_for_algorithm(&algorithm)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let mut entropy = make_rng();
+    let mut rng = crate::handlers::make_rng_from(&mut *entropy);
+    let signature = signer
+        .try_sign_with_rng(&mut rng, signing_input.as_bytes())
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let signature: Box<[u8]> = signature.into();
+    receipt.proof.jws = format!(
+        "{protected}..{}",
+        Base64UrlUnpadded::encode_string(&signature)
+    );
+    receipt
+        .validate_shape()
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
 }
 
 fn canonical_register_request_digest(

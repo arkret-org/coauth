@@ -142,7 +142,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
     ) -> Result<Option<IdentityBindingChallengeRecord>, DatabaseError> {
         let row = diesel::sql_query(
             "SELECT request_id, request_digest, service_account_id, challenge_id, challenge, \
-             purpose, principal_id, operation_digest, pcr_realm_id, realm_create_payload_digest, \
+             purpose, account_subject, principal_id, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
              founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience, \
              origin, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
              FROM identity_binding_challenges WHERE request_id = $1",
@@ -162,7 +162,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let suffix = if for_update { " FOR UPDATE" } else { "" };
         let query = format!(
             "SELECT request_id, request_digest, service_account_id, challenge_id, challenge, \
-             purpose, principal_id, operation_digest, pcr_realm_id, realm_create_payload_digest, \
+             purpose, account_subject, principal_id, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
              founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience, \
              origin, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
              FROM identity_binding_challenges WHERE challenge_id = $1{suffix}"
@@ -457,9 +457,17 @@ struct ChallengeRow {
     #[diesel(sql_type = Text)]
     purpose: String,
     #[diesel(sql_type = Text)]
+    account_subject: String,
+    #[diesel(sql_type = Text)]
     principal_id: String,
     #[diesel(sql_type = Text)]
     operation_digest: String,
+    #[diesel(sql_type = Text)]
+    did_version_id: String,
+    #[diesel(sql_type = Text)]
+    log_head_digest: String,
+    #[diesel(sql_type = Text)]
+    control_key_digest: String,
     #[diesel(sql_type = Text)]
     pcr_realm_id: String,
     #[diesel(sql_type = Text)]
@@ -503,9 +511,16 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
         challenge_id: row.challenge_id,
         challenge: row.challenge,
         purpose: arkret_models_identity::IdentityBindingPurpose::AccountBindingAndPcrGenesis,
+        account_subject: arkret_identifiers::Hash::new(row.account_subject)
+            .map_err(|_| DatabaseError::invalid_operation())?,
         principal_id: arkret_identifiers::Did::new(row.principal_id)
             .map_err(|_| DatabaseError::invalid_operation())?,
         operation_digest: arkret_identifiers::Hash::new(row.operation_digest)
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        did_version_id: row.did_version_id,
+        log_head_digest: arkret_identifiers::Hash::new(row.log_head_digest)
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        control_key_digest: arkret_identifiers::Hash::new(row.control_key_digest)
             .map_err(|_| DatabaseError::invalid_operation())?,
         pcr_realm_id: arkret_identifiers::RealmId::new(row.pcr_realm_id)
             .map_err(|_| DatabaseError::invalid_operation())?,
@@ -546,8 +561,12 @@ fn challenge_matches_context(
         && challenge.challenge_id == expected.challenge_id
         && challenge.challenge == expected.challenge
         && challenge.purpose == expected.purpose
+        && challenge.account_subject == expected.account_subject
         && challenge.principal_id == expected.principal_id
         && challenge.operation_digest == expected.operation_digest
+        && challenge.did_version_id == expected.did_version_id
+        && challenge.log_head_digest == expected.log_head_digest
+        && challenge.control_key_digest == expected.control_key_digest
         && challenge.pcr_realm_id == expected.pcr_realm_id
         && challenge.realm_create_payload_digest == expected.realm_create_payload_digest
         && challenge.founding_authorize_payload_digest == expected.founding_authorize_payload_digest
@@ -867,6 +886,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(AccountHandoffCreation::Busy {
                 grant,
                 retry_after_ms: retry_after_ms(lease.expires_at, input.issued_at),
+                expires_at: lease.expires_at,
             });
         }
 
@@ -955,6 +975,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             Ok(AccountHandoffCreation::Busy {
                 grant: grant.clone(),
                 retry_after_ms: retry_after_ms(lease.expires_at, now),
+                expires_at: lease.expires_at,
             })
         }
     }
@@ -1068,10 +1089,10 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         diesel::sql_query(
             "INSERT INTO identity_binding_challenges \
              (request_id, request_digest, service_account_id, challenge_id, challenge, purpose, \
-              principal_id, operation_digest, pcr_realm_id, realm_create_payload_digest, \
+              account_subject, principal_id, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
               founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience, origin, \
               trust_domain, issued_at, expires_at) \
-             VALUES ($1, $2, $3, $4, $5, 'account_binding_and_pcr_genesis', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) \
+             VALUES ($1, $2, $3, $4, $5, 'account_binding_and_pcr_genesis', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23) \
              ON CONFLICT (request_id) DO NOTHING",
         )
         .bind::<SqlUuid, _>(input.request_id.uuid())
@@ -1079,8 +1100,12 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
         .bind::<Text, _>(&input.challenge_id)
         .bind::<Text, _>(&input.challenge)
+        .bind::<Text, _>(input.account_subject.as_str())
         .bind::<Text, _>(reserved.principal_id.as_str())
         .bind::<Text, _>(input.operation_digest.as_str())
+        .bind::<Text, _>(&input.did_version_id)
+        .bind::<Text, _>(input.log_head_digest.as_str())
+        .bind::<Text, _>(input.control_key_digest.as_str())
         .bind::<Text, _>(input.pcr_realm_id.as_str())
         .bind::<Text, _>(input.realm_create_payload_digest.as_str())
         .bind::<Text, _>(input.founding_authorize_payload_digest.as_str())
