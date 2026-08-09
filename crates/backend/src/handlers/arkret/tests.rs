@@ -1360,12 +1360,18 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service"
             .to_owned();
     let now = state.clock.now();
-    let scope_details = serde_json::json!({
-        "controller_id": "did:web:alice.example",
-        "resources": {
-            "realm_refs": ["ak:realm:team"],
-        },
-    });
+    let scope_details = serde_json::Map::from_iter([
+        (
+            "controller_id".to_owned(),
+            serde_json::json!("did:web:alice.example"),
+        ),
+        (
+            "resources".to_owned(),
+            serde_json::json!({
+                "realm_refs": ["ak:realm:team"],
+            }),
+        ),
+    ]);
     let issuance_seed = SessionGrantIssuanceSeed::new(
         arkret_models_identity::SessionGrantIssuanceNonce::from_bytes([0x41; 32]).to_string(),
         "agent-test-session",
@@ -1438,7 +1444,10 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         "ak:device:0196419b-0000-7000-8000-000000000005"
     );
     assert_eq!(body["grant"]["proof_kind"], "agent_key_proof");
-    assert_eq!(body["grant"]["scope_details"], scope_details);
+    assert_eq!(
+        body["grant"]["scope_details"],
+        serde_json::Value::Object(scope_details)
+    );
     assert_eq!(body["grant"]["freshness_state"], serde_json::Value::Null);
     assert_eq!(
         body["grant"]["cnf_jkt"],

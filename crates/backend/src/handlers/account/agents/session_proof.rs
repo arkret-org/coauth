@@ -106,7 +106,7 @@ pub struct AgentSessionAuthorization {
     /// payload (canonical resource constraints + optional participation
     /// entries). This is the JWT-internal shape soland enforces against; it is
     /// NOT the `SessionGrantOutcome.scope_details` wire DTO.
-    pub scope_details: serde_json::Value,
+    pub scope_details: serde_json::Map<String, serde_json::Value>,
     /// Spec-typed `SessionGrantOutcome.scope_details` overlay returned on the
     /// wire (`service-operation-dtos.schema.json#/$defs/SessionGrantOutcome`,
     /// `additionalProperties:false`, agent-only four fields). Distinct from the
@@ -549,26 +549,50 @@ pub async fn validate_agent_session_proof(
             .map_err(|_| AgentAuthRejection::ProofInvalid)?;
     }
 
-    let mut scope_details = serde_json::json!({
-        "controller_id": &controller_id,
+    let mut scope_details = serde_json::Map::from_iter([
+        (
+            "controller_id".to_owned(),
+            serde_json::json!(&controller_id),
+        ),
         // Issuing key authorization, retained so introspection can fail the
         // grant closed at use time once the key is revoked (pause /
         // deactivate / superseded_by_repairing) instead of letting the token
         // live out its natural TTL (key-management §3.6.1).
-        "agent_key_authorization_ref": authorization_ref,
-        "realm_ids": &effective_scope.realm_ids,
-        "strand_ids": &effective_scope.strand_ids,
-        "resources": {
-            "realm_refs": &effective_scope.realm_ids,
-            "strand_refs": &effective_scope.strand_ids,
-        },
-        "constraints": constraints,
-        "capability_grant_refs": &effective_scope.capability_grant_refs,
-        "policy_refs": &effective_scope.policy_refs,
-    });
+        (
+            "agent_key_authorization_ref".to_owned(),
+            serde_json::json!(authorization_ref),
+        ),
+        (
+            "realm_ids".to_owned(),
+            serde_json::json!(&effective_scope.realm_ids),
+        ),
+        (
+            "strand_ids".to_owned(),
+            serde_json::json!(&effective_scope.strand_ids),
+        ),
+        (
+            "resources".to_owned(),
+            serde_json::json!({
+                "realm_refs": &effective_scope.realm_ids,
+                "strand_refs": &effective_scope.strand_ids,
+            }),
+        ),
+        ("constraints".to_owned(), constraints),
+        (
+            "capability_grant_refs".to_owned(),
+            serde_json::json!(&effective_scope.capability_grant_refs),
+        ),
+        (
+            "policy_refs".to_owned(),
+            serde_json::json!(&effective_scope.policy_refs),
+        ),
+    ]);
     if !scope_request.participation.is_empty() {
-        scope_details["participation"] = serde_json::to_value(&scope_request.participation)
-            .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+        scope_details.insert(
+            "participation".to_owned(),
+            serde_json::to_value(&scope_request.participation)
+                .map_err(|_| AgentAuthRejection::ProofInvalid)?,
+        );
     }
 
     // Spec-typed wire overlay returned in `SessionGrantOutcome.scope_details`.

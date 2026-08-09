@@ -458,7 +458,7 @@ pub(crate) fn mint_agent_session_grant(
     scopes: Vec<String>,
     dpop_jkt: String,
     session_public_key: String,
-    scope_details: serde_json::Value,
+    scope_details: serde_json::Map<String, serde_json::Value>,
     agent_key_authorization_ref: EventId,
     verification_method: DidUrl,
     now: DateTime<Utc>,
@@ -556,13 +556,13 @@ pub(crate) fn mint_agent_session_grant(
     })
 }
 
-fn compact_agent_scope_details(mut scope_details: serde_json::Value) -> serde_json::Value {
-    if let Some(object) = scope_details.as_object_mut() {
-        object.remove("agent_id");
-        object.remove("principal_id");
-        object.remove("subject");
-        object.remove("audience");
-    }
+fn compact_agent_scope_details(
+    mut scope_details: serde_json::Map<String, serde_json::Value>,
+) -> serde_json::Map<String, serde_json::Value> {
+    scope_details.remove("agent_id");
+    scope_details.remove("principal_id");
+    scope_details.remove("subject");
+    scope_details.remove("audience");
     scope_details
 }
 

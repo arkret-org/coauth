@@ -796,12 +796,15 @@ mod tests {
             vec!["ak.self.events.stream.subscribe".to_owned()],
             "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_owned(),
             session_public_key,
-            serde_json::json!({
-                "controller_id": controller_id,
-                "resources": {
-                    "realm_refs": ["ak:realm:team"],
-                },
-            }),
+            serde_json::Map::from_iter([
+                ("controller_id".to_owned(), serde_json::json!(controller_id)),
+                (
+                    "resources".to_owned(),
+                    serde_json::json!({
+                        "realm_refs": ["ak:realm:team"],
+                    }),
+                ),
+            ]),
             arkret_identifiers::EventId::new(
                 "ak:event:AQilOsNi6WF7kBMfOVLw4LjFp75pXSq5WJ0WMmJw3kgK",
             )

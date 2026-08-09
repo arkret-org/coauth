@@ -188,7 +188,13 @@ impl UserRegistrationRepository for PgUserRegistrationRepository<'_> {
             post_auth_action: post_auth_action
                 .as_ref()
                 .map(serde_json::to_value)
-                .transpose()?,
+                .transpose()
+                .map_err(|source| {
+                    DatabaseInconsistencyError::on("user_registrations")
+                        .column("post_auth_action")
+                        .row(id)
+                        .source(source)
+                })?,
             localpart: handle.clone(),
             created_at,
         };
@@ -564,10 +570,10 @@ mod tests {
     use coauth_data::clock::MockClock;
     use coauth_data::upstream_oauth::UpstreamOAuthProviderParams;
     use coauth_data::{
-        Clock, RepositoryAccess as _, RepositoryFactory as _, UpstreamOAuthProviderClaimsImports,
-        UpstreamOAuthProviderDiscoveryMode, UpstreamOAuthProviderOnBackchannelLogout,
-        UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderTokenAuthMethod, UserRegistration,
-        UserRegistrationPassword,
+        Clock, PostAuthAction, RepositoryAccess as _, RepositoryFactory as _,
+        UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,
+        UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderPkceMode,
+        UpstreamOAuthProviderTokenAuthMethod, UserRegistration, UserRegistrationPassword,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_oauth_types::scope::Scope;

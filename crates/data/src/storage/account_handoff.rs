@@ -159,7 +159,7 @@ repository_impl!(AccountHandoffRepository:
         &mut self,
         request_id: &arkret_identifiers::RequestId,
         canonical_intent_digest: &arkret_identifiers::Hash,
-        checkpoint: &serde_json::Value,
+        checkpoint: &AccountHandoffAuthorizationCheckpoint,
         now: DateTime<Utc>,
     ) -> Result<AccountHandoffCreationAttemptCommit, Self::Error>;
     async fn commit_creation_attempt(
