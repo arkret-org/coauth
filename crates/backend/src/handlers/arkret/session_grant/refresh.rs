@@ -485,6 +485,7 @@ pub async fn refresh_session_grant(
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
                 target_grant_id: Some(&prior_grant.grant_id),
+                issuance_nonce: None,
                 session_id: Some(&prior_payload.session_id),
                 grant_not_before: Some(grant_not_before),
                 grant_expires_at: Some(grant_expires_at),

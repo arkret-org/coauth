@@ -1162,6 +1162,7 @@ pub async fn debug_issue_dpop_grant(
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
                 target_grant_id: None,
+                issuance_nonce: None,
                 session_id: None,
                 grant_not_before: Some(not_before),
                 grant_expires_at: Some(expires_at),

@@ -479,35 +479,101 @@ fn validate_grant_material(
         .ok()
         .and_then(|value| value.as_str().map(ToOwned::to_owned))
         .ok_or_else(DatabaseError::invalid_operation)?;
-    if operation.issuance_nonce.as_deref() != Some(grant.issuance_nonce)
-        || operation.session_id.as_deref() != Some(grant.session_id)
-        || operation.grant_not_before != Some(grant.not_before)
-        || operation.grant_expires_at != Some(grant.expires_at)
-        || operation.signing_key_id.as_deref() != Some(grant.signing_key_id)
-        || grant.grant_id.issuance_digest() != grant.issuance_digest
-        || arkret_canonical::sha256_bytes(grant.issuance_preimage) != grant.issuance_digest
-        || grant.session_id == grant.grant_id.as_str()
-        || canonical_preimage != grant.issuance_preimage
-        || claims.issuance_preimage() != preimage
-        || claim_preimage.grant_id().ok().as_ref() != Some(&grant.grant_id)
-        || header_kid != grant.signing_key_id
-        || preimage.issuer.to_string() != grant.issuer
-        || operation.issuer != grant.issuer
-        || preimage.subject.to_string() != grant.subject
-        || preimage.audience.to_string() != grant.audience
-        || preimage.issuance_nonce.as_str() != grant.issuance_nonce
-        || preimage.session_public_key.as_str() != grant.session_public_key
-        || preimage.scopes != scope_list
-        || preimage.not_before != grant.not_before
-        || preimage.expires_at != grant.expires_at
-        || preimage.session_id != grant.session_id
-        || credential_class != grant.credential_class
-        || claims.grant_id != grant.grant_id
-        || (operation.operation.kind() == SessionGrantOperationKind::Issue
-            && operation.proof_kind != preimage.proof_kind)
-        || (operation.operation.kind() != SessionGrantOperationKind::Issue
-            && operation.proof_kind.is_some())
-    {
+    let constraints = [
+        (
+            "operation_issuance_nonce",
+            operation.issuance_nonce.as_deref() == Some(grant.issuance_nonce),
+        ),
+        (
+            "operation_session_id",
+            operation.session_id.as_deref() == Some(grant.session_id),
+        ),
+        (
+            "operation_not_before",
+            operation.grant_not_before == Some(grant.not_before),
+        ),
+        (
+            "operation_expires_at",
+            operation.grant_expires_at == Some(grant.expires_at),
+        ),
+        (
+            "operation_signing_key",
+            operation.signing_key_id.as_deref() == Some(grant.signing_key_id),
+        ),
+        (
+            "grant_id_digest",
+            grant.grant_id.issuance_digest() == grant.issuance_digest,
+        ),
+        (
+            "preimage_digest",
+            arkret_canonical::sha256_bytes(grant.issuance_preimage) == grant.issuance_digest,
+        ),
+        (
+            "session_id_domain",
+            grant.session_id != grant.grant_id.as_str(),
+        ),
+        (
+            "canonical_preimage",
+            canonical_preimage == grant.issuance_preimage,
+        ),
+        ("claims_preimage", claims.issuance_preimage() == preimage),
+        (
+            "claims_grant_id_derivation",
+            claim_preimage.grant_id().ok().as_ref() == Some(&grant.grant_id),
+        ),
+        ("header_kid", header_kid == grant.signing_key_id),
+        (
+            "preimage_issuer",
+            preimage.issuer.to_string() == grant.issuer,
+        ),
+        ("operation_issuer", operation.issuer == grant.issuer),
+        (
+            "preimage_subject",
+            preimage.subject.to_string() == grant.subject,
+        ),
+        (
+            "preimage_audience",
+            preimage.audience.to_string() == grant.audience,
+        ),
+        (
+            "preimage_issuance_nonce",
+            preimage.issuance_nonce.as_str() == grant.issuance_nonce,
+        ),
+        (
+            "preimage_session_key",
+            preimage.session_public_key.as_str() == grant.session_public_key,
+        ),
+        ("preimage_scopes", preimage.scopes == scope_list),
+        (
+            "preimage_not_before",
+            preimage.not_before == grant.not_before,
+        ),
+        (
+            "preimage_expires_at",
+            preimage.expires_at == grant.expires_at,
+        ),
+        (
+            "preimage_session_id",
+            preimage.session_id == grant.session_id,
+        ),
+        (
+            "credential_class",
+            credential_class == grant.credential_class,
+        ),
+        ("claims_grant_id", claims.grant_id == grant.grant_id),
+        (
+            "issue_proof_kind",
+            operation.operation.kind() != SessionGrantOperationKind::Issue
+                || operation.proof_kind == preimage.proof_kind,
+        ),
+        (
+            "non_issue_proof_kind",
+            operation.operation.kind() == SessionGrantOperationKind::Issue
+                || operation.proof_kind.is_none(),
+        ),
+    ];
+    if let Some((constraint, _)) = constraints.iter().find(|(_, valid)| !valid) {
+        tracing::error!(constraint, "session grant material constraint failed");
         return Err(DatabaseError::invalid_operation());
     }
     if preimage.credential_class != SessionGrantCredentialClass::Standard {
@@ -515,13 +581,11 @@ fn validate_grant_material(
     }
     let bound_device_id = if let Some(binding) = preimage.device_binding.as_ref() {
         Some(binding.device_id.as_str())
-    } else if let Some(binding) = preimage.holder_binding.as_ref() {
-        Some(match binding {
+    } else {
+        Some(match &preimage.holder_binding {
             SessionGrantHolderBinding::HumanDevice { device_binding } => device_binding.as_str(),
             SessionGrantHolderBinding::AgentRuntime { device_id, .. } => device_id.as_str(),
         })
-    } else {
-        None
     };
     if grant.device_id != bound_device_id {
         return Err(DatabaseError::invalid_operation());
@@ -555,7 +619,6 @@ fn validate_refresh_chain(
     if predecessor_preimage.credential_class != SessionGrantCredentialClass::Standard
         || successor_preimage.credential_class != SessionGrantCredentialClass::Standard
         || predecessor_preimage.holder_binding != successor_preimage.holder_binding
-        || predecessor_preimage.recovery_binding != successor_preimage.recovery_binding
         || predecessor_preimage.device_binding != successor_preimage.device_binding
     {
         return Err(DatabaseError::invalid_operation());
@@ -1004,12 +1067,23 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         }
         let inherited_session_id = match operation_kind {
             SessionGrantOperationKind::Issue => {
-                if operation.session_id.is_some() || operation.target_grant_id.is_some() {
+                if operation.target_grant_id.is_some()
+                    || operation.issuance_nonce.is_some() != operation.session_id.is_some()
+                    || operation
+                        .issuance_nonce
+                        .is_some_and(|nonce| nonce.trim().is_empty())
+                    || operation
+                        .session_id
+                        .is_some_and(|session_id| session_id.trim().is_empty())
+                {
                     return Err(DatabaseError::invalid_operation());
                 }
-                None
+                operation.session_id.map(ToOwned::to_owned)
             }
             SessionGrantOperationKind::Refresh => {
+                if operation.issuance_nonce.is_some() {
+                    return Err(DatabaseError::invalid_operation());
+                }
                 let target = operation
                     .target_grant_id
                     .ok_or_else(DatabaseError::invalid_operation)?;
@@ -1026,21 +1100,23 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 Some(predecessor.session_id)
             }
             SessionGrantOperationKind::Revoke => {
-                if operation.session_id.is_some() {
+                if operation.issuance_nonce.is_some() || operation.session_id.is_some() {
                     return Err(DatabaseError::invalid_operation());
                 }
                 None
             }
         };
         let (issuance_nonce, session_id) = if grant_producing {
-            let mut nonce = [0_u8; 32];
-            rng.fill_bytes(&mut nonce);
+            let issuance_nonce = if let Some(nonce) = operation.issuance_nonce {
+                nonce.to_owned()
+            } else {
+                let mut nonce = [0_u8; 32];
+                rng.fill_bytes(&mut nonce);
+                arkret_canonical::base64url_encode(nonce)
+            };
             let session_id = inherited_session_id
                 .unwrap_or_else(|| format!("session-chain:{}", new_id(now, rng)));
-            (
-                Some(arkret_canonical::base64url_encode(nonce)),
-                Some(session_id),
-            )
+            (Some(issuance_nonce), Some(session_id))
         } else {
             (None, None)
         };

@@ -76,7 +76,6 @@ fn introspection_grant_record(
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         cnf_jkt,
         credential_class: parsed_payload.credential_class,
-        recovery_binding: parsed_payload.recovery_binding,
         holder_binding: parsed_payload.holder_binding,
     })
 }

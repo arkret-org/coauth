@@ -229,6 +229,9 @@ pub struct NewSessionGrantOperation<'a> {
     pub canonical_intent: &'a [u8],
     /// Locked predecessor for refresh; absent for issue and selector-based revoke.
     pub target_grant_id: Option<&'a SessionGrantId>,
+    /// Existing issuance nonce for an internally pre-minted initial grant.
+    /// External issue operations leave this absent so reservation allocates it.
+    pub issuance_nonce: Option<&'a str>,
     /// Existing rotation-chain id for refresh; initial issuance allocates when absent.
     pub session_id: Option<&'a str>,
     /// Immutable signing window for a grant-producing operation.
