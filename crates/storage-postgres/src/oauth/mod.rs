@@ -83,6 +83,7 @@ mod tests {
                     canonical_intent,
                     operation_selector: None,
                     target_grant_id: None,
+                    issuance_nonce: Some("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"),
                     session_id: Some(seed.session_id),
                     grant_not_before: Some(not_before),
                     grant_expires_at: Some(expires_at),

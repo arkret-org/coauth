@@ -31,6 +31,7 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 const RETRY_DELAY_SECONDS: i64 = 5;
+pub(crate) const SERVICE_IDENTITY_VERIFICATION_METHOD_FRAGMENT: &str = "service-key";
 
 #[derive(Clone)]
 struct ProviderCandidate {
@@ -455,7 +456,7 @@ fn prepare_inception(
             registration_key,
             also_known_as: &[],
             version_time: Utc::now(),
-            did_key_fragment: Some("service-key"),
+            did_key_fragment: Some(SERVICE_IDENTITY_VERIFICATION_METHOD_FRAGMENT),
         },
         signing_seed,
     )

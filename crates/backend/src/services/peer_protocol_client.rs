@@ -285,7 +285,7 @@ impl<'a> PeerProtocolClient<'a> {
             covered.push(Component::Header("idempotency-key".to_owned()));
         }
 
-        let (kid, signer) = ed25519_signer(self.keystore)?;
+        let signer = ed25519_signer(self.keystore)?;
         let created = chrono::Utc::now().timestamp();
         let expires = created.saturating_add(SIGNATURE_WINDOW_SECONDS);
         let covered_wire = covered
@@ -295,7 +295,8 @@ impl<'a> PeerProtocolClient<'a> {
             .join(" ");
         let signature_input_header = format!(
             "{SIGNATURE_LABEL}=({covered_wire});created={created};expires={expires};keyid=\"{}#{}\";alg=\"ed25519\"",
-            self.identity.source_service_id, kid
+            self.identity.source_service_id,
+            super::service_identity::SERVICE_IDENTITY_VERIFICATION_METHOD_FRAGMENT
         );
         let signature_input = parse_signature_input(&signature_input_header)
             .map_err(|_| PeerProtocolClientError::Sign)?;
@@ -354,25 +355,16 @@ fn request_parts(
 
 fn ed25519_signer(
     keystore: &Keystore,
-) -> Result<
-    (
-        String,
-        std::sync::Arc<coauth_jose::jwa::AsymmetricSigningKey>,
-    ),
-    PeerProtocolClientError,
-> {
+) -> Result<std::sync::Arc<coauth_jose::jwa::AsymmetricSigningKey>, PeerProtocolClientError> {
     let key = keystore
         .signing_key_for_algorithm(&JsonWebSignatureAlg::Ed25519)
         .ok_or(PeerProtocolClientError::NoSigningKey)?;
-    let kid = key
-        .kid()
+    key.kid()
         .filter(|kid| !kid.trim().is_empty())
-        .ok_or(PeerProtocolClientError::NoSigningKey)?
-        .to_owned();
-    let signer = keystore
+        .ok_or(PeerProtocolClientError::NoSigningKey)?;
+    keystore
         .signer_for_algorithm(&JsonWebSignatureAlg::Ed25519)
-        .map_err(|_| PeerProtocolClientError::NoSigningKey)?;
-    Ok((kid, signer))
+        .map_err(|_| PeerProtocolClientError::NoSigningKey)
 }
 
 async fn parse_json_response<R>(response: reqwest::Response) -> Result<R, PeerProtocolClientError>
@@ -446,6 +438,11 @@ mod tests {
             !header("Signature-Input")
                 .unwrap()
                 .contains("request-canonical-digest")
+        );
+        assert!(
+            header("Signature-Input")
+                .unwrap()
+                .contains("keyid=\"did:web:auth.example#service-key\"")
         );
         assert!(header("Signature").unwrap().starts_with("sig1=:"));
     }

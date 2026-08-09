@@ -118,6 +118,7 @@ async fn terminate_auth_side_session_by_grant_jwt(
                 canonical_intent: &canonical_intent,
                 operation_selector: Some(selector),
                 target_grant_id: None,
+                issuance_nonce: None,
                 session_id: None,
                 grant_not_before: None,
                 grant_expires_at: None,

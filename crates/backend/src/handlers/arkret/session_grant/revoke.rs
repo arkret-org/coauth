@@ -558,6 +558,7 @@ pub async fn revoke_session_grant_endpoint(
                 canonical_intent: &canonical_intent,
                 operation_selector: Some(operation_selector.clone()),
                 target_grant_id: None,
+                issuance_nonce: None,
                 session_id: None,
                 grant_not_before: None,
                 grant_expires_at: None,

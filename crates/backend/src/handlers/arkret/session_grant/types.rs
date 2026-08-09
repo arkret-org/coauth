@@ -58,6 +58,8 @@ impl SessionGrantIssuanceSeed {
         expires_at: DateTime<Utc>,
         signing_key_id: impl Into<String>,
     ) -> Result<Self, arkret_wire::WireError> {
+        let not_before = arkret_canonical::normalize_timestamp_canonical(not_before);
+        let expires_at = arkret_canonical::normalize_timestamp_canonical(expires_at);
         let session_id = session_id.into();
         if session_id.trim().is_empty() {
             return Err(arkret_wire::WireError::Protocol(

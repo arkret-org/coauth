@@ -159,6 +159,7 @@ async fn reserve_issue_operation(
                 canonical_intent: &canonical_intent,
                 operation_selector: None,
                 target_grant_id: None,
+                issuance_nonce: None,
                 session_id: None,
                 grant_not_before: Some(now),
                 grant_expires_at: Some(grant_expires_at),

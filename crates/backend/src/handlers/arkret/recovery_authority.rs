@@ -198,6 +198,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
                 canonical_intent: &canonical_request,
                 operation_selector: None,
                 target_grant_id: None,
+                issuance_nonce: None,
                 session_id: None,
                 grant_not_before: Some(now),
                 grant_expires_at: Some(expires_at),

@@ -278,6 +278,7 @@ where
                 canonical_intent: &material.issuance_preimage,
                 operation_selector: None,
                 target_grant_id: None,
+                issuance_nonce: Some(&material.issuance_nonce),
                 session_id: Some(&material.session_id),
                 grant_not_before: Some(material.not_before_timestamp),
                 grant_expires_at: Some(material.expires_at_timestamp),

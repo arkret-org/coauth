@@ -463,6 +463,9 @@ pub async fn account_register_endpoint(
     };
     outcome
         .validate_against_request(&body)
+        .inspect_err(|error| {
+            tracing::error!(%error, "identity-creation outcome validation failed");
+        })
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let completion = repo
         .account_handoff()
