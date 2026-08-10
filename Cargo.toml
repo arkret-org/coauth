@@ -194,6 +194,7 @@ futures-util = "0.3.32"
 # -i generic-array shows 13+ transitive consumers all on 0.14). Revisit
 # once `sha2 0.11` is stable on crates.io.
 generic-array = "0.14.9"
+getrandom = {version = "0.3.4",default-features = false}
 gloo-timers = {version = "0.4",features = ["futures"]}
 headers = "0.4.1"
 hex = "0.4.3"

@@ -1699,6 +1699,7 @@ dependencies = [
  "coauth-account-types",
  "dioxus",
  "fluent-bundle",
+ "getrandom 0.3.4",
  "gloo-timers 0.4.0",
  "js-sys",
  "reqwest 0.13.4",
