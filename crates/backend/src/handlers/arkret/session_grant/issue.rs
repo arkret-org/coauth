@@ -463,12 +463,14 @@ pub async fn issue_session_grant_endpoint(
                         format!("issued grant carried a non-protocol device_id: {e}"),
                     ))
                 })?;
-            let principal_id = arkret_identifiers::Did::new(success.principal_did.clone())
+            let principal_full_id = arkret_identifiers::FullId::new(success.principal_did.clone())
                 .map_err(|e| {
                     ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
-                        format!("issued grant carried a non-DID principal_id: {e}"),
+                        format!("issued grant carried an invalid full principal_id: {e}"),
                     ))
                 })?;
+            let principal_id = arkret_identifiers::project_full_id_to_core_id(&principal_full_id)
+                .map_err(|e| ArkretRouteError::Internal(Box::new(e)))?;
 
             // Human (OIDC) grant: grant_id / session_public_key / audience are
             // SessionGrantOutcome top-level fields (mirroring
@@ -485,12 +487,15 @@ pub async fn issue_session_grant_endpoint(
                             )),
                         )
                     })?;
-            let audience = arkret_identifiers::Did::new(success.session_grant.audience.clone())
-                .map_err(|e| {
-                    ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
-                        format!("issued grant carried a non-DID audience: {e}"),
-                    ))
-                })?;
+            let audience =
+                arkret_identifiers::ServiceId::new(success.session_grant.audience.clone())
+                    .map_err(|e| {
+                        ArkretRouteError::Internal(
+                            Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                                "issued grant carried a non-DID audience: {e}"
+                            )),
+                        )
+                    })?;
 
             canonical_json_response(
                 &arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome {
@@ -744,7 +749,7 @@ async fn issue_agent_key_proof_session_grant(
     .map_err(map_session_grant_material_error)?;
 
     let principal_id =
-        arkret_identifiers::Did::new(authorization.agent_id.clone()).map_err(|e| {
+        arkret_identifiers::CoreId::new(authorization.agent_id.clone()).map_err(|e| {
             ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
                 "agent principal is not a valid DID: {e}"
             )))
@@ -757,11 +762,12 @@ async fn issue_agent_key_proof_session_grant(
     // canonical constraint projection are already baked into the minted grant
     // above.
     let grant_id = material.grant_id.clone();
-    let wire_audience = arkret_identifiers::Did::new(material.audience.clone()).map_err(|e| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "issued agent grant carried a non-DID audience: {e}"
-        )))
-    })?;
+    let wire_audience =
+        arkret_identifiers::ServiceId::new(material.audience.clone()).map_err(|e| {
+            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                "issued agent grant carried a non-DID audience: {e}"
+            )))
+        })?;
 
     let wire_outcome = SessionGrantOutcome {
         principal_id,

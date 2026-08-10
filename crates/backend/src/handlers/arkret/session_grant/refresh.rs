@@ -1,4 +1,4 @@
-use arkret_identifiers::{DeviceId, Did};
+use arkret_identifiers::{DeviceId, ServiceId};
 use arkret_models_collaboration::session_grant_bodies::{
     SessionGrantRefreshOutcome, SessionGrantRefreshProof, SessionGrantRefreshRequestBody,
     session_grant_refresh_proof_signing_bytes, session_grant_refresh_request_digest,
@@ -159,11 +159,16 @@ fn soft_logout_restore_request_canonical_digest(
     audience: &str,
     grant_binding_key_id: &str,
 ) -> Result<String, ArkretRouteError> {
+    let audience = ServiceId::new(audience.to_owned()).map_err(|error| {
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "session grant audience is not a service core_id: {error}"
+        )))
+    })?;
     session_grant_refresh_request_digest(
         grant_jwt,
         principal_id,
         device_id,
-        audience,
+        &audience,
         grant_binding_key_id,
     )
     .map(|digest| digest.as_str().to_owned())
@@ -218,13 +223,13 @@ async fn verify_soft_logout_did_proof(
     validate_soft_logout_proof_kind(proof.proof_kind)?;
 
     let challenge = required_proof_str(&proof.challenge, "challenge")?;
-    let proof_audience = proof.audience.as_str();
+    let proof_audience = &proof.audience;
     let request_canonical_digest = proof.request_canonical_digest.as_str();
     let proof_jws = required_proof_str(&proof.signature, "signature")?;
     let issued_at = proof.issued_at;
     let expires_at = proof.expires_at;
 
-    if proof_audience != prior_grant.audience {
+    if proof_audience.as_str() != prior_grant.audience {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
@@ -308,7 +313,7 @@ async fn verify_soft_logout_did_proof(
         &body.grant_jwt,
         &prior_grant.subject,
         device_id,
-        proof_audience,
+        proof_audience.as_str(),
         &verification_method,
     )?;
     if request_canonical_digest != expected_digest {
@@ -751,9 +756,9 @@ pub async fn refresh_session_grant(
             issuance_seed.expires_at,
         )
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-        let audience = Did::new(new_material.audience.clone()).map_err(|error| {
+        let audience = ServiceId::new(new_material.audience.clone()).map_err(|error| {
             ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                "refreshed Agent grant carried a non-DID audience: {error}"
+                "refreshed Agent grant carried an invalid service core_id audience: {error}"
             )))
         })?;
         let outcome = SessionGrantRefreshOutcome {
@@ -976,9 +981,9 @@ pub async fn refresh_session_grant(
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
-    let response_audience = Did::new(new_material.audience.clone()).map_err(|error| {
+    let response_audience = ServiceId::new(new_material.audience.clone()).map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "refreshed grant carried a non-DID audience: {error}"
+            "refreshed grant carried an invalid service core_id audience: {error}"
         )))
     })?;
 
@@ -1181,7 +1186,7 @@ mod tests {
             "grant.jwt.value",
             "did:web:alice.example",
             DEVICE_ID,
-            "did:web:auth.example",
+            "ak:did_core:web:auth.example",
             "did:web:alice.example#device-key-1",
         )
         .expect("request digest should compute");
@@ -1191,7 +1196,7 @@ mod tests {
             "grant.jwt.value",
             "did:web:alice.example",
             OTHER_DEVICE_ID,
-            "did:web:auth.example",
+            "ak:did_core:web:auth.example",
             "did:web:alice.example#device-key-1",
         )
         .expect("request digest should compute");
@@ -1199,7 +1204,7 @@ mod tests {
             "grant.jwt.value",
             "did:web:alice.example",
             DEVICE_ID,
-            "did:web:auth.example",
+            "ak:did_core:web:auth.example",
             "did:web:alice.example#other-device-key",
         )
         .expect("request digest should compute");

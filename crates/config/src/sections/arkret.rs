@@ -617,9 +617,11 @@ pub struct PrincipalServerConfig {
     pub endpoint: Url,
 
     /// Stable service identity core for authenticated S2S authorization.
-    /// Gate-attestation issuance fails closed when this is absent; an endpoint
-    /// URL or bearer token is never converted into an identity core.
+    /// This is required for every configured Principal Server. Describe
+    /// metadata may confirm it but can never discover or replace it; an
+    /// endpoint URL or bearer token is never converted into an identity core.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<String>")]
     pub service_id: Option<arkret_identifiers::ServiceId>,
 
     /// Optional static bearer for the Account Authority / Principal Server

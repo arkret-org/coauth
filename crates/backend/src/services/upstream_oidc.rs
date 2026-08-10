@@ -555,8 +555,7 @@ pub fn default_upstream_oidc_service() -> UpstreamOidcServiceHandle {
 #[cfg(test)]
 mod tests {
     use coauth_config::PrincipalServerConfig;
-    use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::MockServer;
 
     use super::*;
 
@@ -565,7 +564,9 @@ mod tests {
             principal_servers: vec![PrincipalServerConfig {
                 name: "soland".to_owned(),
                 endpoint: endpoint.clone(),
-                service_id: None,
+                service_id: Some(
+                    arkret_identifiers::ServiceId::new("ak:did_core:webvh:current").unwrap(),
+                ),
                 session_grant_introspection_bearer: None,
                 embedded_webvh_registration_bearer: None,
             }],
@@ -574,24 +575,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn oidc_target_refreshes_an_unresolved_principal_audience_on_demand() {
+    async fn oidc_target_uses_configured_principal_audience_without_describe_discovery() {
         let server = MockServer::start().await;
         let endpoint = Url::parse(&server.uri()).unwrap();
         let config = principal_server_config_for(endpoint);
-        let service_id =
-            arkret_identifiers::Did::new("did:webvh:current:soland.example:webvh:service").unwrap();
-        let description = arkret_models_discovery::ServiceDescribe::development(
-            service_id.clone(),
-            arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:example".to_owned())
-                .unwrap(),
-            arkret_wire::ServiceKind::PrincipalServer,
-        );
-        Mock::given(method("GET"))
-            .and(path("/_arkret/describe"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(description))
-            .expect(1)
-            .mount(&server)
-            .await;
+        let service_id = arkret_identifiers::ServiceId::new("ak:did_core:webvh:current").unwrap();
 
         let resolved = ResolvedPrincipalAudiences::new();
         let url_builder = UrlBuilder::new("https://auth.example/".parse().unwrap(), None, None);

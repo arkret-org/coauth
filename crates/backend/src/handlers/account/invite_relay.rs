@@ -320,24 +320,29 @@ pub async fn post_invite_relay(
 
     let service_id = arkret::service_id_for(&arkret_config);
     let trust_domain = arkret::trust_domain_for(&url_builder, &arkret_config);
-    let destination_service_id = params.invite_delivery.as_ref().map_or_else(
-        || service_id.clone(),
-        |delivery| delivery.invite_address.recipient_service_id.clone(),
-    );
+    let destination_service_id = match params.invite_delivery.as_ref() {
+        Some(delivery) => delivery.invite_address.recipient_service_id.clone().into(),
+        None => service_id.clone().into(),
+    };
     let trust_domain = arkret_identifiers::TypedTrustDomainId::new(trust_domain)
         .map_err(|error| RouteError::Internal(Box::new(error)))?;
     let identity = arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
-        source_service_id: service_id,
+        source_service_id: service_id.into(),
         destination_service_id,
         source_trust_domain: trust_domain.clone(),
         destination_trust_domain: trust_domain,
     };
-    let peer_client =
-        match PeerProtocolClient::new(principal_url.as_ref(), &http_client, &key_store, identity) {
-            Ok(client) => Some(client),
-            Err(PeerProtocolClientError::BaseUrlNotConfigured) => None,
-            Err(error) => return Err(RouteError::Internal(Box::new(error))),
-        };
+    let peer_client = match PeerProtocolClient::new(
+        principal_url.as_ref(),
+        &http_client,
+        &key_store,
+        arkret::issuer_did_for(&arkret_config),
+        identity,
+    ) {
+        Ok(client) => Some(client),
+        Err(PeerProtocolClientError::BaseUrlNotConfigured) => None,
+        Err(error) => return Err(RouteError::Internal(Box::new(error))),
+    };
 
     let outcome = relay_invite_with(
         principal_url.as_ref(),
@@ -377,22 +382,38 @@ mod tests {
     }
 
     fn peer_identity() -> arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
-        let service_id = arkret_identifiers::Did::new("did:web:auth.example").unwrap();
+        let service_id =
+            arkret_identifiers::ServiceId::new("ak:did_core:web:auth.example".to_owned()).unwrap();
         let trust_domain =
             arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:auth.example").unwrap();
         arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
-            source_service_id: service_id.clone(),
-            destination_service_id: service_id,
+            source_service_id: service_id.clone().into(),
+            destination_service_id: service_id.into(),
             source_trust_domain: trust_domain.clone(),
             destination_trust_domain: trust_domain,
         }
     }
 
+    fn source_full_id() -> arkret_identifiers::FullId {
+        arkret_identifiers::FullId::new("did:web:auth.example".to_owned()).unwrap()
+    }
+
+    fn service_resolution() -> arkret_models_identity::identity_resolution::ServiceResolutionCarrier
+    {
+        arkret_models_identity::identity_resolution::ServiceResolutionCarrier::CurrentRecordUrl {
+            current_record_url:
+                "https://auth.example/_arkret/open/services/ak%3Adid_core%3Aweb%3Aauth.example/resolution"
+                    .to_owned(),
+            pinned_record_digest: None,
+        }
+    }
+
     fn payload() -> serde_json::Value {
         arkret_models_collaboration::governance::membership_invite::InviteCreatePayload::new(
-            arkret_identifiers::Did::new("did:web:holder").unwrap(),
+            arkret_identifiers::CoreId::new("ak:did_core:web:holder".to_owned()).unwrap(),
             arkret_models_collaboration::governance::invite_addressing::InviteDeliveryTarget::principal_server(
-                arkret_identifiers::Did::new("did:web:auth.example").unwrap(),
+                arkret_identifiers::ServiceId::new("ak:did_core:web:auth.example".to_owned()).unwrap(),
+                service_resolution(),
             ),
             arkret_identifiers::Hash::new(
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -418,15 +439,19 @@ mod tests {
                     )
                     .unwrap(),
                 },
-                arkret_identifiers::Did::new("did:web:inviter").unwrap(),
+                arkret_identifiers::ActorId::new(
+                    "ak:did_core:web:inviter".to_owned(),
+                )
+                .unwrap(),
                 1,
                 arkret_identifiers::Hlc::new("01970e589d21-0001-a13f9c2e").unwrap(),
                 payload(),
             )
             .unwrap(),
             arkret_models_collaboration::governance::invite_addressing::InviteAddress::principal_server(
-                arkret_identifiers::Did::new("did:web:holder").unwrap(),
-                arkret_identifiers::Did::new("did:web:auth.example").unwrap(),
+                arkret_identifiers::CoreId::new("ak:did_core:web:holder".to_owned()).unwrap(),
+                arkret_identifiers::ServiceId::new("ak:did_core:web:auth.example".to_owned()).unwrap(),
+                service_resolution(),
             ),
             arkret_models_collaboration::governance::invite_addressing::IntroductionEvidence::ExplicitAddress,
             "idem-1",
@@ -480,8 +505,14 @@ mod tests {
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
         let keystore = test_keystore();
-        let peer =
-            PeerProtocolClient::new(Some(&base), &client, &keystore, peer_identity()).unwrap();
+        let peer = PeerProtocolClient::new(
+            Some(&base),
+            &client,
+            &keystore,
+            source_full_id(),
+            peer_identity(),
+        )
+        .unwrap();
         let delivery = invite_delivery();
 
         let outcome = relay_invite_with(
@@ -641,8 +672,14 @@ mod tests {
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
         let keystore = test_keystore();
-        let peer =
-            PeerProtocolClient::new(Some(&base), &client, &keystore, peer_identity()).unwrap();
+        let peer = PeerProtocolClient::new(
+            Some(&base),
+            &client,
+            &keystore,
+            source_full_id(),
+            peer_identity(),
+        )
+        .unwrap();
         let delivery = invite_delivery();
 
         let outcome = relay_invite_with(

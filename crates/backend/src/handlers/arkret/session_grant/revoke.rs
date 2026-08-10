@@ -395,7 +395,7 @@ pub async fn revoke_session_grant_endpoint(
         ArkretRouteError::Unauthorized(format!("invalid session grant: {error}"))
     })?;
 
-    let service_id = service_id_for(&arkret_config);
+    let service_id = issuer_did_for(&arkret_config);
 
     let mut repo = depot.repo().await?;
     let current_grant = repo

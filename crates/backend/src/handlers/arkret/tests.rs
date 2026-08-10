@@ -1,4 +1,3 @@
-use arkret_identifiers::Did;
 use arkret_models_collaboration::session_grant_bodies::{
     SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND, SessionGrantIntrospectStatus,
     SessionGrantIntrospectionProofClaims,
@@ -171,7 +170,7 @@ fn service_and_user_identifiers_follow_arkret_shape() {
     };
     assert_eq!(
         service_id_for(&arkret_config).as_str(),
-        "did:webvh:ztest:auth.example.com:webvh:service"
+        "ak:did_core:webvh:ztest"
     );
     assert_eq!(oidc_subject_for_user(&arkret_config, &user), user.sub);
     // Spec 7157ee8 §3.1 — canonical handle form is
@@ -198,7 +197,10 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         principal_servers: vec![PrincipalServerConfig {
             name: "soland-prod".to_owned(),
             endpoint: "https://soland.example.com/arkret".parse().unwrap(),
-            service_id: None,
+            service_id: Some(
+                arkret_identifiers::ServiceId::new("ak:did_core:web:session-grant-static.test")
+                    .unwrap(),
+            ),
             session_grant_introspection_bearer: None,
             embedded_webvh_registration_bearer: None,
         }],
@@ -227,10 +229,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     ))
     .unwrap();
 
-    assert_eq!(
-        body["service_id"],
-        "did:webvh:ztest:auth.example.com:webvh:service"
-    );
+    assert_eq!(body["service_id"], "ak:did_core:webvh:ztest");
     assert_eq!(body["trust_domain"], "ak:trust_domain:auth.example.com");
     assert_eq!(body["service_kind"], "auth_server");
     assert_eq!(
@@ -249,8 +248,14 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         body["x_coauth_principal_server_delegation_targets"][0]["endpoint"],
         "https://soland.example.com/arkret"
     );
-    assert!(body["x_coauth_principal_server_delegation_targets"][0]["audience"].is_null());
-    assert!(body["x_coauth_principal_server_delegation_targets"][0]["did"].is_null());
+    assert_eq!(
+        body["x_coauth_principal_server_delegation_targets"][0]["audience"],
+        "ak:did_core:web:session-grant-static.test"
+    );
+    assert_eq!(
+        body["x_coauth_principal_server_delegation_targets"][0]["did"],
+        "ak:did_core:web:session-grant-static.test"
+    );
     assert_eq!(
         body["x_coauth_identity_registry_resolver"]["mode"],
         "delegated_resolver"
@@ -370,7 +375,7 @@ fn service_describe_marks_personal_node_did_web_service_as_no_history() {
     ))
     .unwrap();
 
-    assert_eq!(body["service_id"], "did:web:auth.example.com");
+    assert_eq!(body["service_id"], "ak:did_core:web:auth.example.com");
     assert_eq!(
         body["auth_metadata"]["service_id_history_evidence_kind"],
         "none"
@@ -389,16 +394,15 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
         principal_servers: vec![PrincipalServerConfig {
             name: "soland-dev".to_owned(),
             endpoint: "https://session-grant-static.test/".parse().unwrap(),
-            service_id: None,
+            service_id: Some(
+                arkret_identifiers::ServiceId::new("ak:did_core:web:session-grant-static.test")
+                    .unwrap(),
+            ),
             session_grant_introspection_bearer: Some(bearer.to_owned()),
             embedded_webvh_registration_bearer: None,
         }],
         ..ArkretConfig::default()
     };
-    crate::services::resolved_principal_audiences::shared().insert_for_test(
-        &config.principal_servers[0].endpoint,
-        "did:web:session-grant-static.test",
-    );
     config
 }
 
@@ -464,20 +468,18 @@ fn shared_static_bearer_is_scoped_to_every_matching_server() {
     config.principal_servers.push(PrincipalServerConfig {
         name: "soland-beta".to_owned(),
         endpoint: "https://session-grant-static-beta.test/".parse().unwrap(),
-        service_id: None,
+        service_id: Some(
+            arkret_identifiers::ServiceId::new("ak:did_core:web:session-grant-static-beta.test")
+                .unwrap(),
+        ),
         session_grant_introspection_bearer: Some("shared-cluster-token".to_owned()),
         embedded_webvh_registration_bearer: None,
     });
-    crate::services::resolved_principal_audiences::shared().insert_for_test(
-        &config.principal_servers[1].endpoint,
-        "did:web:session-grant-static-beta.test",
-    );
-
     assert_eq!(
         principal_server_static_session_grant_bearer_audiences(&config, "shared-cluster-token"),
         vec![
-            "did:web:session-grant-static.test".to_owned(),
-            "did:web:session-grant-static-beta.test".to_owned(),
+            "ak:did_core:web:session-grant-static.test".to_owned(),
+            "ak:did_core:web:session-grant-static-beta.test".to_owned(),
         ]
     );
 }
@@ -1076,7 +1078,7 @@ fn session_grant_introspection_proof(
         kind: SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND.to_owned(),
         grant_id: grant.grant_id.to_string(),
         grant_jwt_hash: session_grant_jwt_hash(&material.grant_jwt),
-        audience: Did::new(grant.audience.clone()).unwrap(),
+        audience: arkret_identifiers::ServiceId::new(grant.audience.clone()).unwrap(),
         challenge: challenge.to_owned(),
         issued_at: now,
         expires_at: now + Duration::try_minutes(1).unwrap(),

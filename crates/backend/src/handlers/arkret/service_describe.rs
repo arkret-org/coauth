@@ -44,9 +44,9 @@ const IMPLEMENTED_PROFILE_SCHEMAS: &[&str] =
 #[derive(Debug, Clone, Serialize)]
 struct PrincipalServerDescriptor {
     name: String,
-    audience: Option<arkret_identifiers::Did>,
+    audience: Option<arkret_identifiers::ServiceId>,
     endpoint: String,
-    did: Option<arkret_identifiers::Did>,
+    did: Option<arkret_identifiers::ServiceId>,
 }
 
 #[derive(Debug, Serialize)]
@@ -262,8 +262,6 @@ fn build_auth_metadata(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -
         .to_string();
     let origin = url_builder.http_base().to_string();
     let origin = origin.strip_suffix('/').unwrap_or(&origin).to_owned();
-    let service_id = service_id_for(arkret_config);
-
     let mut extra = std::collections::BTreeMap::new();
     extra.insert(
         "issuer_did".to_owned(),
@@ -290,7 +288,7 @@ fn build_auth_metadata(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -
         "session_grant_scope".to_owned(),
         json!(PRINCIPAL_SERVER_SESSION_BIND_SCOPE),
     );
-    if service_id.method() == "web" {
+    if issuer_did_for(arkret_config).method() == "web" {
         extra.insert("service_id_history_evidence_kind".to_owned(), json!("none"));
         extra.insert(
             "service_id_trust_profile".to_owned(),

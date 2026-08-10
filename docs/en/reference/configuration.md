@@ -82,6 +82,7 @@ arkret:
   principal_servers:
     - name: soland
       endpoint: https://soland.example.com/
+      service_id: ak:did_core:webvh:<soland-scid>
       embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 
   identity_registry:
@@ -92,8 +93,9 @@ arkret:
   session_grant_ttl: 300
 ```
 
-- `principal_servers`: trusted Principal Server descriptors published through
-  Arkret discovery
+- `principal_servers`: trusted Principal Server configuration; operations
+  authenticating that service require an explicit `service_id` pin and fail
+  closed without it; Describe cannot act as identity discovery or an authorization root
 - `deployment_profile`: identity deployment profile. `did:web` principal DIDs
   are accepted only for `personal_node`.
 - `principal_method`: principal DID method. Defaults to `did:webvh`; `did:web`

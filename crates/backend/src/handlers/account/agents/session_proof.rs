@@ -6,7 +6,7 @@
 
 use std::collections::BTreeSet;
 
-use arkret_identifiers::new_prefixed_uuid7;
+use arkret_identifiers::{ServiceId, new_prefixed_uuid7};
 use coauth_config::ArkretConfig;
 use coauth_data::RepositoryAccess;
 use coauth_data::agent_key::NewAgentSessionProofReplay;
@@ -30,11 +30,13 @@ fn agent_session_refresh_request_digest(
     audience: &str,
     verification_method: &str,
 ) -> Result<String, AgentAuthRejection> {
+    let audience =
+        ServiceId::new(audience.to_owned()).map_err(|_| AgentAuthRejection::ProofInvalid)?;
     arkret_models_collaboration::session_grant_bodies::session_grant_refresh_request_digest(
         prior_grant_jwt,
         principal_id,
         device_id,
-        audience,
+        &audience,
         verification_method,
     )
     .map(|digest| digest.as_str().to_owned())
@@ -215,7 +217,7 @@ where
         session_grant_refresh_proof_signing_bytes(
             prior_claims.subject.as_str(),
             device_id.as_str(),
-            proof_audience.as_str(),
+            proof_audience,
             challenge,
             request_digest.as_str(),
             issued_at,
@@ -1606,8 +1608,8 @@ mod tests {
                     }
                 },
                 "key_state": {
-                    "agent_id": "did:web:agent.example",
-                    "controller_id": "did:web:controller.example",
+                    "agent_id": "ak:did_core:web:agent.example",
+                    "controller_id": "ak:did_core:web:controller.example",
                     "principal_control_realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG",
                     "controller_authorization_ref": "did:web:agent.example#managed-controller",
                     "pcr_recovery": pcr_recovery,
@@ -1630,12 +1632,16 @@ mod tests {
             .push(coauth_config::PrincipalServerConfig {
                 name: "soland-test".to_owned(),
                 endpoint: server.uri().parse().unwrap(),
-                service_id: None,
+                service_id: Some(
+                    arkret_identifiers::ServiceId::new("ak:did_core:web:soland.test").unwrap(),
+                ),
                 session_grant_introspection_bearer: Some("lifecycle-secret".to_owned()),
                 embedded_webvh_registration_bearer: None,
             });
-        crate::services::resolved_principal_audiences::shared()
-            .insert_for_test(&config.principal_servers[0].endpoint, "did:web:soland.test");
+        crate::services::resolved_principal_audiences::shared().insert_for_test(
+            &config.principal_servers[0].endpoint,
+            "ak:did_core:web:soland.test",
+        );
         (server, config)
     }
 
@@ -2413,7 +2419,7 @@ mod tests {
     #[test]
     fn session_request_digest_ignores_signature_but_binds_scope() {
         let mut body = arkret_models_collaboration::session_grant_bodies::SessionGrantRequestBody {
-            principal_id: arkret_identifiers::Did::new("did:web:agent.example").unwrap(),
+            principal_id: arkret_identifiers::CoreId::new("ak:did_core:web:agent.example").unwrap(),
             device_id: None,
             requested_scope: vec!["ak.message.create".to_owned()],
             requested_scope_disclosure: None,
@@ -2442,7 +2448,8 @@ mod tests {
                     "0".repeat(64)
                 ))
                 .unwrap(),
-                audience: arkret_identifiers::Did::new("did:web:soland.example").unwrap(),
+                audience: arkret_identifiers::ServiceId::new("ak:did_core:web:soland.example")
+                    .unwrap(),
                 expires_at: Some(chrono::Utc::now() + chrono::Duration::minutes(5)),
                 signature: "sig-a".to_owned(),
                 verification_method: Some(
@@ -2485,7 +2492,7 @@ mod tests {
             "grant.jwt.one",
             "did:web:agent.example",
             "ak:device:01970000-0000-7000-8000-000000000001",
-            "did:web:service.example",
+            "ak:did_core:web:service.example",
             "did:web:agent.example#runtime-key-1",
         )
         .unwrap();
@@ -2496,7 +2503,7 @@ mod tests {
                 "grant.jwt.two",
                 "did:web:agent.example",
                 "ak:device:01970000-0000-7000-8000-000000000001",
-                "did:web:service.example",
+                "ak:did_core:web:service.example",
                 "did:web:agent.example#runtime-key-1",
             )
             .unwrap(),
@@ -2504,7 +2511,7 @@ mod tests {
                 "grant.jwt.one",
                 "did:web:agent.example",
                 "ak:device:01970000-0000-7000-8000-000000000002",
-                "did:web:service.example",
+                "ak:did_core:web:service.example",
                 "did:web:agent.example#runtime-key-1",
             )
             .unwrap(),
@@ -2512,7 +2519,7 @@ mod tests {
                 "grant.jwt.one",
                 "did:web:agent.example",
                 "ak:device:01970000-0000-7000-8000-000000000001",
-                "did:web:other-service.example",
+                "ak:did_core:web:other-service.example",
                 "did:web:agent.example#runtime-key-1",
             )
             .unwrap(),
@@ -2520,7 +2527,7 @@ mod tests {
                 "grant.jwt.one",
                 "did:web:agent.example",
                 "ak:device:01970000-0000-7000-8000-000000000001",
-                "did:web:service.example",
+                "ak:did_core:web:service.example",
                 "did:web:agent.example#runtime-key-2",
             )
             .unwrap(),

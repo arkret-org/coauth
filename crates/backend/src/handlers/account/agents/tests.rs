@@ -248,7 +248,7 @@ mod agent_auth_error_matrix_tests {
         let multibase = multicodec_ed25519_public_key(&signing_key.verifying_key());
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
         let fields = AgentKeyProofSigningInput {
-            audience: arkret_wire::Did::new("did:web:arkret.example".to_owned()).unwrap(),
+            audience: arkret_wire::ServiceId::new("ak:did_core:web:arkret.example").unwrap(),
             challenge: "challenge-abc".to_owned(),
             nonce: Some("nonce-abc".to_owned()),
             expires_at,
@@ -276,7 +276,7 @@ mod agent_auth_error_matrix_tests {
         let multibase = multicodec_ed25519_public_key(&signing_key.verifying_key());
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
         let signed = AgentKeyProofSigningInput {
-            audience: arkret_wire::Did::new("did:web:arkret.example".to_owned()).unwrap(),
+            audience: arkret_wire::ServiceId::new("ak:did_core:web:arkret.example").unwrap(),
             challenge: "challenge-abc".to_owned(),
             nonce: Some("nonce-abc".to_owned()),
             expires_at,
@@ -293,7 +293,7 @@ mod agent_auth_error_matrix_tests {
 
         // A different audience (replay to a different service) must fail closed.
         let tampered = AgentKeyProofSigningInput {
-            audience: arkret_wire::Did::new("did:web:evil.example".to_owned()).unwrap(),
+            audience: arkret_wire::ServiceId::new("ak:did_core:web:evil.example").unwrap(),
             ..signed
         };
         let tampered_message = tampered.canonical_bytes().expect("canonical bytes");
@@ -311,7 +311,7 @@ mod agent_auth_error_matrix_tests {
         let multibase = multicodec_ed25519_public_key(&signing_key.verifying_key());
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
         let signed = AgentKeyProofSigningInput {
-            audience: arkret_wire::Did::new("did:web:arkret.example".to_owned()).unwrap(),
+            audience: arkret_wire::ServiceId::new("ak:did_core:web:arkret.example").unwrap(),
             challenge: "challenge-abc".to_owned(),
             nonce: Some("nonce-abc".to_owned()),
             expires_at,

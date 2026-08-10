@@ -139,6 +139,7 @@ pub struct SolandFrontierSource {
     request_timeout: Duration,
     signing: Option<(
         coauth_keystore::Keystore,
+        arkret_identifiers::FullId,
         PeerKeyPackagesClaimTransportBinding,
     )>,
 }
@@ -154,6 +155,7 @@ impl SolandFrontierSource {
         http_client: reqwest::Client,
         signing: Option<(
             coauth_keystore::Keystore,
+            arkret_identifiers::FullId,
             PeerKeyPackagesClaimTransportBinding,
         )>,
     ) -> Self {
@@ -195,12 +197,17 @@ impl FrontierSource for SolandFrontierSource {
             // path on `principal_server_url` rather than being resolved
             // relative to it (URL relative-resolution would otherwise
             // truncate the last base segment).
-            let (keystore, identity) = self.signing.as_ref().ok_or_else(|| {
+            let (keystore, source_full_id, identity) = self.signing.as_ref().ok_or_else(|| {
                 FrontierError::Http("peer frontier signing identity is unavailable".to_owned())
             })?;
-            let client =
-                PeerProtocolClient::new(Some(base), &self.http_client, keystore, identity.clone())
-                    .map_err(|error| FrontierError::Http(error.to_string()))?;
+            let client = PeerProtocolClient::new(
+                Some(base),
+                &self.http_client,
+                keystore,
+                source_full_id.clone(),
+                identity.clone(),
+            )
+            .map_err(|error| FrontierError::Http(error.to_string()))?;
             let request = PeerEventsFrontierRequestBody {
                 realm_id: realm_id.clone(),
             };

@@ -35,7 +35,7 @@ use super::session_grant::{
 };
 use super::{
     ArkretRouteError, DepotExt, PRINCIPAL_SERVER_SESSION_BIND_SCOPE, SessionGrantError,
-    preferred_signing_key, service_id_for, trust_domain_for,
+    issuer_did_for, preferred_signing_key, service_id_for, trust_domain_for,
 };
 use crate::handlers::{make_clock, make_rng};
 use crate::services::peer_protocol_client::{PeerProtocolClient, PeerProtocolClientError};
@@ -192,7 +192,11 @@ pub async fn account_register_endpoint(
         &identity_creation.control_proof,
     )
     .map_err(|error| proof_invalid(error.to_string()))?;
-    if validated.principal_id != body.principal_id {
+    if validated.principal_id != body.full_id
+        || arkret_identifiers::project_full_id_to_core_id(&validated.principal_id)
+            .map_err(|error| proof_invalid(error.to_string()))?
+            != body.principal_id
+    {
         return Err(proof_invalid(
             "validated inception principal does not match the registration principal",
         ));
@@ -273,7 +277,7 @@ pub async fn account_register_endpoint(
     };
 
     let pcr_request = PcrGenesisSubmitRequestBody {
-        account_authority_id: service_id_for(&depot.arkret_config()?),
+        account_authority_id: issuer_did_for(&depot.arkret_config()?),
         principal_id: body.principal_id.clone(),
         pcr_realm_id: identity_creation.control_proof.pcr_realm_id.clone(),
         idempotency_key: arkret_wire::IdempotencyKey::new(format!(
@@ -311,9 +315,10 @@ pub async fn account_register_endpoint(
             Some(&target.endpoint),
             &http_client,
             &key_store,
+            issuer_did_for(&config),
             arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
-                source_service_id: service_id_for(&config),
-                destination_service_id: target.service_id,
+                source_service_id: service_id_for(&config).into(),
+                destination_service_id: target.service_id.into(),
                 source_trust_domain: trust_domain.clone(),
                 destination_trust_domain: trust_domain,
             },
@@ -365,7 +370,7 @@ pub async fn account_register_endpoint(
     let mut receipt = AccountBindingReceipt {
         binding_state: AccountBindingState::Bound,
         binding_kind: AccountBindingKind::IdentityCreation,
-        account_authority_id: service_id_for(&depot.arkret_config()?),
+        account_authority_id: issuer_did_for(&depot.arkret_config()?),
         account_subject: context.challenge.account_subject.clone(),
         principal_id: body.principal_id.clone(),
         full_id: body.full_id.clone(),
@@ -381,7 +386,7 @@ pub async fn account_register_endpoint(
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
             verification_method: arkret_wire::DidUrl::new(format!(
                 "{}#{}",
-                service_id_for(&depot.arkret_config()?),
+                issuer_did_for(&depot.arkret_config()?),
                 signing_key_id
             ))
             .map_err(|error| {
@@ -501,8 +506,7 @@ pub async fn account_register_endpoint(
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     persist_session_grant(&mut repo, &mut *rng, &*clock, &browser_session, &material).await?;
     let session_grant_outcome = SessionGrantOutcome {
-        principal_id: arkret_identifiers::Did::new(body.full_id.to_string())
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        principal_id: body.principal_id.clone(),
         device_id: Some(initial.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
@@ -681,7 +685,7 @@ async fn register_published_did(
     let mut receipt = AccountBindingReceipt {
         binding_state: AccountBindingState::Bound,
         binding_kind: AccountBindingKind::PublishedDid,
-        account_authority_id: service_id_for(&depot.arkret_config()?),
+        account_authority_id: issuer_did_for(&depot.arkret_config()?),
         account_subject: challenge.input.account_subject.clone(),
         principal_id: body.principal_id.clone(),
         full_id: body.full_id.clone(),
@@ -697,9 +701,9 @@ async fn register_published_did(
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
             verification_method: arkret_wire::DidUrl::new(format!(
                 "{}#{signing_key_id}",
-                service_id_for(&depot.arkret_config()?)
+                issuer_did_for(&depot.arkret_config()?)
             ))
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?,
             payload_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
                 .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
             created_at: now,
@@ -722,10 +726,13 @@ async fn register_published_did(
         .lookup(grant.service_account_id)
         .await?
         .ok_or(ArkretRouteError::NotFound)?;
-    if let Some(existing) = repo
-        .principal_did()
-        .get_for_user_and_audience(&user, &grant.audience)
-        .await?
+    let existing = {
+        let mut principal_dids = repo.principal_did();
+        principal_dids
+            .get_for_user_and_audience(&user, &grant.audience)
+            .await?
+    };
+    if let Some(existing) = existing
         && existing.principal_id != body.principal_id.as_str()
     {
         repo.cancel().await.ok();
@@ -771,17 +778,19 @@ async fn register_published_did(
     outcome
         .validate_against_request(&body)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    match repo
-        .account_handoff()
-        .commit_published_did_registration(
-            &grant,
-            &proof.challenge_id,
-            &request_digest,
-            &outcome,
-            now,
-        )
-        .await?
-    {
+    let commit = {
+        let mut handoffs = repo.account_handoff();
+        handoffs
+            .commit_published_did_registration(
+                &grant,
+                &proof.challenge_id,
+                &request_digest,
+                &outcome,
+                now,
+            )
+            .await?
+    };
+    match commit {
         PublishedDidRegisterCommit::Committed => {}
         PublishedDidRegisterCommit::Replay(stored) => {
             repo.cancel().await.ok();
@@ -966,7 +975,7 @@ fn validate_registry_outcome(
 
 struct PrincipalServerTarget {
     endpoint: url::Url,
-    service_id: arkret_identifiers::Did,
+    service_id: arkret_identifiers::ServiceId,
     bearer: Option<String>,
 }
 

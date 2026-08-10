@@ -32,7 +32,7 @@ pub async fn identity_describe(
     };
 
     Ok(Json(IdentityDescribeOutcome(IdentityDescription {
-        service_id: service_id_for(&arkret_config),
+        service_id: issuer_did_for(&arkret_config),
         registry_mode: registry_mode.to_owned(),
         supported_receipts: Vec::new(),
         protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
@@ -300,7 +300,7 @@ fn directory_handle_delivery_binding(
         .as_ref()
         .and_then(|did| arkret_identifiers::Did::new(did.clone()).ok())
         .or_else(|| arkret_identifiers::Did::new(principal_binding.audience.clone()).ok())
-        .or_else(|| Some(service_id_for(arkret_config)))
+        .or_else(|| Some(issuer_did_for(arkret_config)))
         .ok_or_else(|| {
             ArkretRouteError::Internal(Box::new(std::io::Error::other(
                 "no valid DID available for handle claim delivery binding",

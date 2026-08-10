@@ -79,6 +79,7 @@ arkret:
   principal_servers:
     - name: soland
       endpoint: https://soland.example.com/
+      service_id: ak:did_core:webvh:<soland-scid>
       embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 
   identity_registry:
@@ -89,7 +90,8 @@ arkret:
   session_grant_ttl: 300
 ```
 
-- `principal_servers`：通过 Arkret discovery 发布的受信任 Principal Server 描述
+- `principal_servers`：受信任 Principal Server 配置；涉及该服务身份认证的操作必须显式固定
+  `service_id`，否则 fail closed；Describe 不能作为身份发现或授权根
 - `deployment_profile`：身份部署 profile。只有 `personal_node` 可接受
   `did:web` principal DID。
 - `principal_method`：principal DID 方法。默认 `did:webvh`；`did:web`

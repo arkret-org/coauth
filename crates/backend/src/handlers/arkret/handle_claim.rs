@@ -73,7 +73,7 @@ pub(crate) fn issue_handle_claim(
 ) -> Result<HandleClaimMaterial, SessionGrantError> {
     use crate::services::handle_subject_validator::ensure_subject_is_principal_did;
 
-    let issuer_service_id = service_id_for(arkret_config);
+    let issuer_service_id = issuer_did_for(arkret_config);
     // The subject is the verified principal DID supplied by the caller.
     let subject_id = subject_did.to_owned();
 

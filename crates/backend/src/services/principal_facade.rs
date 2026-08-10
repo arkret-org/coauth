@@ -43,7 +43,8 @@ pub struct DbConnectorAdmin {
 #[derive(Clone)]
 struct PeerSigningContext {
     keystore: coauth_keystore::Keystore,
-    source_service_id: arkret_identifiers::Did,
+    source_service_id: arkret_identifiers::ServiceId,
+    source_full_id: arkret_identifiers::FullId,
     source_trust_domain: arkret_identifiers::TypedTrustDomainId,
 }
 
@@ -71,12 +72,14 @@ impl DbConnectorAdmin {
     pub fn with_peer_signing(
         mut self,
         keystore: coauth_keystore::Keystore,
-        source_service_id: arkret_identifiers::Did,
+        source_service_id: arkret_identifiers::ServiceId,
+        source_full_id: arkret_identifiers::FullId,
         source_trust_domain: arkret_identifiers::TypedTrustDomainId,
     ) -> Self {
         self.peer_signing = Some(PeerSigningContext {
             keystore,
             source_service_id,
+            source_full_id,
             source_trust_domain,
         });
         self
@@ -292,8 +295,8 @@ impl ConnectorAdmin for DbConnectorAdmin {
             crate::services::resolved_principal_audiences::effective_audience_shared(target)
                 .context("account-status destination service identity is unavailable or stale")?;
         let identity = arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
-            source_service_id: signing.source_service_id.clone(),
-            destination_service_id,
+            source_service_id: signing.source_service_id.clone().into(),
+            destination_service_id: destination_service_id.into(),
             source_trust_domain: signing.source_trust_domain.clone(),
             destination_trust_domain: signing.source_trust_domain.clone(),
         };
@@ -301,6 +304,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
             Some(&target.endpoint),
             &self.http_client,
             &signing.keystore,
+            signing.source_full_id.clone(),
             identity,
         )?;
         let outcome = client

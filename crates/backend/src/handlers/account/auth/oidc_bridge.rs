@@ -14,8 +14,7 @@
 // `coauth_admin_types::integration_manifest_admin` so the sodmin admin SPA
 // decodes them through the same typed shape. The `integration_describe`
 // endpoint below returns the shared `IntegrationManifest` directly.
-use arkret_identifiers::{DeviceId, Did};
-use arkret_models_collaboration::account_lifecycle::AccountRegisterRequestBody;
+use arkret_identifiers::{CoreId, DeviceId, FullId};
 use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
 };
@@ -95,11 +94,13 @@ async fn commit_oidc_session_grant(
     device_id: &str,
     material: &SessionGrantMaterial,
 ) -> Result<coauth_data::SessionGrant, OidcExchangeError> {
-    let principal_id = arkret_identifiers::Did::new(principal_did.to_owned())
+    let principal_full_id = FullId::new(principal_did.to_owned())
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+    let principal_id = arkret_identifiers::project_full_id_to_core_id(&principal_full_id)
         .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
     let device_id_typed = arkret_identifiers::DeviceId::new(device_id.to_owned())
         .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-    let audience = arkret_identifiers::Did::new(material.audience.clone())
+    let audience = arkret_identifiers::ServiceId::new(material.audience.clone())
         .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
     let session_public_key =
         arkret_models_identity::CanonicalSessionPublicJwk::new(&material.session_public_key)
@@ -338,14 +339,29 @@ pub(crate) fn principal_server_operation_bearer<'a>(
         .filter(|value| !value.is_empty())
 }
 
+/// Deployment-private projection command. This deliberately does not reuse
+/// the public `AccountRegisterRequestBody`: only the Account Authority may
+/// invoke it after the canonical binding flow has completed.
+#[derive(Debug, serde::Serialize)]
+struct AccountProjectionRegisterRequestBody {
+    principal_id: CoreId,
+    full_id: FullId,
+    display_name: Option<String>,
+    device_id: Option<DeviceId>,
+}
+
 fn soland_account_register_body(
     principal_did: &str,
     display_name: Option<&str>,
     device_id: Option<&str>,
-) -> Result<AccountRegisterRequestBody, String> {
-    Ok(AccountRegisterRequestBody {
-        principal_id: Did::new(principal_did.to_owned())
-            .map_err(|error| format!("principal DID is invalid: {error}"))?,
+) -> Result<AccountProjectionRegisterRequestBody, String> {
+    let full_id = FullId::new(principal_did.to_owned())
+        .map_err(|error| format!("principal DID is invalid: {error}"))?;
+    let principal_id = arkret_identifiers::project_full_id_to_core_id(&full_id)
+        .map_err(|error| format!("principal DID cannot be projected: {error}"))?;
+    Ok(AccountProjectionRegisterRequestBody {
+        principal_id,
+        full_id,
         display_name: display_name.map(ToOwned::to_owned),
         device_id: device_id
             .map(|value| {
@@ -353,9 +369,6 @@ fn soland_account_register_body(
                     .map_err(|error| format!("device_id is invalid for account register: {error}"))
             })
             .transpose()?,
-        policy_evidence: None,
-        proof: None,
-        identity_creation: None,
     })
 }
 
@@ -363,7 +376,7 @@ async fn send_soland_account_register(
     http_client: &reqwest::Client,
     endpoint: &url::Url,
     bearer: &str,
-    body: &AccountRegisterRequestBody,
+    body: &AccountProjectionRegisterRequestBody,
 ) -> Result<(reqwest::StatusCode, String), String> {
     let body_bytes = arkret_canonical::canonical_json_bytes(body)
         .map_err(|error| format!("canonicalize principal account register request: {error}"))?;
@@ -431,7 +444,12 @@ fn soland_account_localpart_failure(status: reqwest::StatusCode, body: &str) -> 
     )
 }
 
-/// Load the verified principal binding for `user` and `audience`.
+/// Load the verified full DID snapshot for `user` and `audience`.
+///
+/// The durable binding is keyed by the stable principal core, while the
+/// legacy session-grant DTO still requires a full DID. Never reconstruct that
+/// full value from the core; only return the snapshot captured by the
+/// canonical binding flow.
 pub(super) async fn load_verified_principal_did(
     repo: &mut coauth_data::BoxRepository,
     user: &User,
@@ -441,8 +459,8 @@ pub(super) async fn load_verified_principal_did(
         .get_for_user_and_audience(user, audience)
         .await
         .map_err(|error| format!("principal binding lookup failed: {error}"))?
-        .map(|binding| binding.principal_id)
-        .ok_or_else(|| "principal_unknown".to_owned())
+        .and_then(|binding| binding.verified_full_id.map(|full_id| full_id.to_string()))
+        .ok_or_else(|| "principal binding has no verified full_id snapshot".to_owned())
 }
 
 /// Load a verified principal DID in an isolated read transaction.

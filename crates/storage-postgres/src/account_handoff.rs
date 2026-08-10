@@ -1036,7 +1036,7 @@ fn did_binding_challenge_from_row(
             challenge_id: row.challenge_id,
             challenge: row.challenge,
             dpop_jkt: row.dpop_jkt,
-            audience: arkret_identifiers::Did::new(row.audience)
+            audience: arkret_identifiers::ServiceId::new(row.audience)
                 .map_err(|_| DatabaseError::invalid_operation())?,
             origin: row.origin,
             trust_domain: arkret_identifiers::TypedTrustDomainId::new(row.trust_domain)
@@ -1115,7 +1115,7 @@ fn abandonment_challenge_from_row(
             .map_err(|_| DatabaseError::invalid_operation())?,
         issuing_handoff_grant_id: Ulid::from(row.issuing_handoff_grant_id),
         service_account_id: Ulid::from(row.service_account_id),
-        audience: arkret_identifiers::Did::new(row.audience)
+        audience: arkret_identifiers::ServiceId::new(row.audience)
             .map_err(|_| DatabaseError::invalid_operation())?,
         account_subject: arkret_identifiers::Hash::new(row.account_subject)
             .map_err(|_| DatabaseError::invalid_operation())?,
@@ -1123,7 +1123,7 @@ fn abandonment_challenge_from_row(
         lease_id: row.lease_id,
         lease_fence: u64::try_from(row.lease_fence)
             .map_err(|_| DatabaseError::invalid_operation())?,
-        principal_id: arkret_identifiers::Did::new(row.principal_id)
+        principal_id: arkret_identifiers::CoreId::new(row.principal_id)
             .map_err(|_| DatabaseError::invalid_operation())?,
         did_version_id: row.did_version_id,
         challenge_id: row.challenge_id,
@@ -1194,7 +1194,7 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
         lease_fence: u64::try_from(row.lease_fence)
             .map_err(|_| DatabaseError::invalid_operation())?,
         dpop_jkt: row.dpop_jkt,
-        audience: arkret_identifiers::Did::new(row.audience)
+        audience: arkret_identifiers::ServiceId::new(row.audience)
             .map_err(|_| DatabaseError::invalid_operation())?,
         origin: row.origin,
         trust_domain: arkret_identifiers::TypedTrustDomainId::new(row.trust_domain)
@@ -1613,11 +1613,15 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(AccountHandoffCreation::RiskRejected { grant });
         }
 
-        self.lock_lease_quota(&input.account_subject, &input.audience)
+        self.lock_lease_quota(&input.account_subject, input.audience.as_str())
             .await?;
         let server_now = self.server_now().await?;
         let existing_lease = self
-            .lease_for_account(Uuid::from(input.service_account_id), &input.audience, true)
+            .lease_for_account(
+                Uuid::from(input.service_account_id),
+                input.audience.as_str(),
+                true,
+            )
             .await?;
         if let Some(lease) = existing_lease.as_ref() {
             if matches!(
@@ -1658,7 +1662,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             self.consume_acquisition_quota(
                 input.request_id.uuid(),
                 &input.account_subject,
-                &input.audience,
+                input.audience.as_str(),
                 &input.lease_id,
                 server_now,
             )
@@ -1822,7 +1826,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(IdentityBindingChallengeIssue::Replay(existing));
         }
 
-        self.lock_lease_quota(&input.account_subject, &input.audience)
+        self.lock_lease_quota(&input.account_subject, input.audience.as_str())
             .await?;
         // A concurrent exact request may have committed while this transaction
         // waited for the quota lock. Re-read before consuming renewal quota or
@@ -1844,7 +1848,11 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         }
         let server_now = self.server_now().await?;
         let lease = self
-            .lease_for_account(Uuid::from(input.service_account_id), &input.audience, true)
+            .lease_for_account(
+                Uuid::from(input.service_account_id),
+                input.audience.as_str(),
+                true,
+            )
             .await?;
         let Some(lease) = lease else {
             return Ok(IdentityBindingChallengeIssue::LeaseMismatch);
@@ -1889,7 +1897,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .consume_renewal_quota(
                 input.request_id.uuid(),
                 &input.account_subject,
-                &input.audience,
+                input.audience.as_str(),
                 &input.lease_id,
                 server_now,
             )
@@ -1908,7 +1916,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
              AND state IN ('active', 'reserved', 'did_published', 'pcr_accepted', 'account_bound')",
         )
         .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
-        .bind::<Text, _>(&input.audience)
+        .bind::<Text, _>(input.audience.as_str())
         .bind::<Text, _>(reserved.principal_id.as_str())
         .bind::<Text, _>(reserved.operation_digest.as_str())
         .bind::<Jsonb, _>(
@@ -1933,7 +1941,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         )
         .bind::<Timestamptz, _>(input.issued_at)
         .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
-        .bind::<Text, _>(&input.audience)
+        .bind::<Text, _>(input.audience.as_str())
         .bind::<Text, _>(&input.lease_id)
         .bind::<BigInt, _>(
             i64::try_from(input.lease_fence).map_err(|_| DatabaseError::invalid_operation())?,
@@ -1970,7 +1978,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(&input.lease_id)
         .bind::<BigInt, _>(i64::try_from(input.lease_fence).map_err(|_| DatabaseError::invalid_operation())?)
         .bind::<Text, _>(&input.holder_jkt)
-        .bind::<Text, _>(&input.audience)
+        .bind::<Text, _>(input.audience.as_str())
         .bind::<Text, _>(&input.origin)
         .bind::<Text, _>(input.trust_domain.as_str())
         .bind::<Timestamptz, _>(input.issued_at)
@@ -2150,7 +2158,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             if existing.request_digest != input.request_digest
                 || existing.issuing_handoff_grant_id != input.issuing_handoff_grant_id
                 || existing.service_account_id != input.service_account_id
-                || existing.audience.as_str() != input.audience
+                || existing.audience.as_str() != input.audience.as_str()
                 || existing.holder_jkt != input.holder_jkt
             {
                 return Ok(IdentityAbandonmentChallengeIssue::DuplicateConflict);
@@ -2158,7 +2166,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(IdentityAbandonmentChallengeIssue::Replay(existing));
         }
 
-        self.lock_lease_quota(&input.account_subject, &input.audience)
+        self.lock_lease_quota(&input.account_subject, input.audience.as_str())
             .await?;
         if let Some(existing) = self
             .abandonment_challenge_by_request(input.request_id.uuid(), false)
@@ -2167,7 +2175,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             if existing.request_digest != input.request_digest
                 || existing.issuing_handoff_grant_id != input.issuing_handoff_grant_id
                 || existing.service_account_id != input.service_account_id
-                || existing.audience.as_str() != input.audience
+                || existing.audience.as_str() != input.audience.as_str()
                 || existing.holder_jkt != input.holder_jkt
             {
                 return Ok(IdentityAbandonmentChallengeIssue::DuplicateConflict);
@@ -2177,7 +2185,11 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
 
         let server_now = self.server_now().await?;
         let Some(lease) = self
-            .lease_for_account(Uuid::from(input.service_account_id), &input.audience, true)
+            .lease_for_account(
+                Uuid::from(input.service_account_id),
+                input.audience.as_str(),
+                true,
+            )
             .await?
         else {
             return Ok(IdentityAbandonmentChallengeIssue::LeaseFenced);
@@ -2226,7 +2238,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(input.request_digest.as_str())
         .bind::<SqlUuid, _>(Uuid::from(input.issuing_handoff_grant_id))
         .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
-        .bind::<Text, _>(&input.audience)
+        .bind::<Text, _>(input.audience.as_str())
         .bind::<Text, _>(input.account_subject.as_str())
         .bind::<Text, _>(&input.holder_jkt)
         .bind::<Text, _>(&input.lease_id)
@@ -2267,7 +2279,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         {
             if existing.confirmation_request_digest.as_ref() == Some(&input.request_digest)
                 && existing.service_account_id == input.service_account_id
-                && existing.audience.as_str() == input.audience
+                && existing.audience.as_str() == input.audience.as_str()
                 && existing.holder_jkt == input.holder_jkt
             {
                 return existing
@@ -2292,7 +2304,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             if confirmation_request_id == &input.request_id {
                 if challenge.confirmation_request_digest.as_ref() == Some(&input.request_digest)
                     && challenge.service_account_id == input.service_account_id
-                    && challenge.audience.as_str() == input.audience
+                    && challenge.audience.as_str() == input.audience.as_str()
                     && challenge.holder_jkt == input.holder_jkt
                 {
                     return challenge
@@ -2314,7 +2326,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(IdentityAbandonmentCommit::ChallengeExpired);
         }
         if challenge.service_account_id != input.service_account_id
-            || challenge.audience.as_str() != input.audience
+            || challenge.audience.as_str() != input.audience.as_str()
             || challenge.holder_jkt != input.holder_jkt
             || challenge.challenge != input.challenge
             || challenge.lease_id != input.lease_id
@@ -2326,7 +2338,11 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         }
 
         let Some(lease) = self
-            .lease_for_account(Uuid::from(input.service_account_id), &input.audience, true)
+            .lease_for_account(
+                Uuid::from(input.service_account_id),
+                input.audience.as_str(),
+                true,
+            )
             .await?
         else {
             return Ok(IdentityAbandonmentCommit::LeaseFenced);
@@ -2410,7 +2426,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
              AND lease_id = $3 AND fence = $4 AND holder_jkt = $5 AND state = 'did_published'",
         )
         .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
-        .bind::<Text, _>(&input.audience)
+        .bind::<Text, _>(input.audience.as_str())
         .bind::<Text, _>(&input.lease_id)
         .bind::<BigInt, _>(
             i64::try_from(input.lease_fence).map_err(|_| DatabaseError::invalid_operation())?,
@@ -4292,7 +4308,7 @@ mod abandonment_tests {
             let head_digest = hash('3');
             let registry_receipt = arkret_models_identity::DidOperationSubmitOutcome {
                 status: arkret_models_identity::DidOperationSubmitStatus::Accepted,
-                did: reserved.principal_id.clone(),
+                did: reserved.full_id.clone(),
                 seq: Some(0),
                 head_event_digest: Some(head_digest.clone()),
                 operation_ref: None,
@@ -4330,7 +4346,7 @@ mod abandonment_tests {
                 holder_jkt: HOLDER_JKT.to_owned(),
                 lease_id: lease.lease_id.clone(),
                 lease_fence: lease.fence,
-                principal_id: reserved.principal_id.clone(),
+                principal_id: reserved.full_id.clone(),
                 did_version_id: did_version_id.clone(),
                 challenge_id: format!("{}{}", Uuid::now_v7().simple(), "I".repeat(11)),
                 challenge: format!("{}{}", Uuid::now_v7().simple(), "C".repeat(11)),
@@ -4381,7 +4397,7 @@ mod abandonment_tests {
                 challenge: self.issued.challenge.clone(),
                 lease_id: self.lease.lease_id.clone(),
                 lease_fence: self.lease.fence,
-                principal_id: self.reserved.principal_id.clone(),
+                principal_id: self.reserved.full_id.clone(),
                 did_version_id: self.did_version_id.clone(),
                 now,
             }
@@ -4753,6 +4769,8 @@ mod abandonment_tests {
             lease_fence: lease.fence,
             holder_jkt: lease.holder_jkt.clone(),
             did_operation: fixture.reserved.did_operation.clone(),
+            principal_id: fixture.reserved.principal_id.clone(),
+            full_id: fixture.reserved.full_id.clone(),
             operation_digest: fixture.reserved.operation_digest.clone(),
             account_subject: fixture.account_subject,
             did_version_id: fixture.did_version_id,

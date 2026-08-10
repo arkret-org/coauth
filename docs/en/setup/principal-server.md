@@ -14,6 +14,7 @@ arkret:
   principal_servers:
     - name: soland
       endpoint: https://soland.example.com/
+      service_id: ak:did_core:webvh:<soland-scid>
       embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 ```
 
@@ -40,6 +41,11 @@ v1 protocol operations:
 
 Both edges are authenticated with the shared bearer configured on the matching
 `principal_servers` entry:
+
+`service_id` is the local authorization pin. Any operation that authenticates
+this Principal Server requires it and fails closed when it is absent.
+`/_arkret/describe` is capability and metadata only; a remote Describe response
+cannot establish or replace the configured identity.
 
 ```yaml
 arkret:

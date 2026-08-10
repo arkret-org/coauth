@@ -158,7 +158,7 @@ pub async fn issue_controller_gate_attestation(
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let mut attestation = ControllerAccountGateAttestation {
         schema: NonEmptyString::new("ak.schema.controller_account_gate_attestation.v1".to_owned())
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?,
         principal_id: request.principal_id.clone(),
         eligibility,
         status,
@@ -166,14 +166,14 @@ pub async fn issue_controller_gate_attestation(
         basis_digest,
         authority_service_id,
         verification_method: DidUrl::new(format!("{}#{signing_key_id}", authority_full_id))
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?,
         issued_at: now,
         expires_at,
         proof: AgentDetachedJws {
             kind: NonEmptyString::new("detached_jws".to_owned())
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+                .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?,
             jws: NonEmptyString::new("pending".to_owned())
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+                .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?,
         },
     };
     arkret_signatures::agent_evidence::sign_controller_account_gate_attestation(
@@ -232,18 +232,21 @@ async fn authenticate_agent_authority_request(
         .service_resolution_record
         .record
         .full_id;
-    let resolved = depot
-        .did_resolver_service()?
-        .resolve_did_document(
-            &depot.http_client()?,
-            &depot.url_builder()?,
-            &config,
-            &depot.key_store()?,
-            repo,
-            full_id.as_str(),
-        )
-        .await
-        .map_err(|_| not_found())?;
+    let resolved = crate::services::did_binding::authority_document(
+        &depot.http_client()?,
+        &depot.url_builder()?,
+        &config,
+        &depot.key_store()?,
+        repo,
+        depot.did_resolver_service()?.as_ref(),
+        depot.verified_did_binding_store()?.as_ref(),
+        full_id.as_str(),
+        arkret_identity::DidBindingPurpose::Controller,
+        crate::services::did_binding::controller_freshness(),
+        now,
+    )
+    .await
+    .map_err(|_| not_found())?;
     let resolved_document = serde_json::to_value(&resolved.document).map_err(|_| not_found())?;
     let carried_document = serde_json::to_value(
         &request
@@ -251,11 +254,12 @@ async fn authenticate_agent_authority_request(
             .normalized_did_document,
     )
     .map_err(|_| not_found())?;
-    let resolved_evidence = resolved.method_evidence;
+    let resolved_evidence = resolved.accepted.evidence_receipt();
     let carried_evidence = serde_json::to_value(
         &request
             .agent_authority_service_resolution
-            .method_history_evidence,
+            .method_history_evidence
+            .evidence(),
     )
     .map_err(|_| not_found())?;
     if arkret_canonical::canonical_sha256(&resolved_document).map_err(|_| not_found())?

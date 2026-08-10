@@ -77,6 +77,7 @@ arkret:
   principal_servers:
     - name: soland
       endpoint: https://soland.example.com/
+      service_id: ak:did_core:webvh:<soland-scid>
       embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 
 secrets:

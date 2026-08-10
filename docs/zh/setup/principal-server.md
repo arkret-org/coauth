@@ -13,6 +13,7 @@ arkret:
   principal_servers:
     - name: soland
       endpoint: https://soland.example.com/
+      service_id: ak:did_core:webvh:<soland-scid>
       embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 ```
 
@@ -35,6 +36,8 @@ coauth 以 Auth Server 角色对 Principal Server 发起两类**无 principal se
 | 协作 capability fanout | `POST /_soland/root/authz/capability-fanout` | `org.arkret.soland.root.authz.capability_fanout.submit` | 物化 coauth 签发的 `ak.capability.grant` / `ak.capability.revoke` |
 
 两条边都用对应 `principal_servers` 条目上配置的共享 bearer 鉴权：
+
+`service_id` 是本地配置的授权 pin；任何需要认证该 Principal Server 的操作都必须显式提供它，否则运行时 fail closed。`/_arkret/describe` 只用于能力与元数据校验，不能从远端自报的 Describe 动态建立或替换该身份。
 
 ```yaml
 arkret:

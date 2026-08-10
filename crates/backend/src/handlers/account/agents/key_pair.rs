@@ -564,7 +564,8 @@ fn validate_controller_authorize_event(
     let payload = AgentKeyAuthorizePayload::try_from(event)
         .map_err(|error| AppError::bad_request(format!("authorize_event.event {error}")))?;
 
-    if event.actor_id.as_str() != agent_id {
+    let expected_agent_id = project_full_id_str_to_actor_id(agent_id, "agent_id")?;
+    if event.actor_id != expected_agent_id {
         return Err(AppError::forbidden(
             "authorize_event.event.actor_id must equal the managed Agent DID",
         ));
@@ -572,9 +573,9 @@ fn validate_controller_authorize_event(
     let controller_id = event
         .executed_by
         .as_ref()
-        .map(arkret_identifiers::Did::as_str)
+        .map(arkret_identifiers::ActorId::as_str)
         .ok_or_else(|| AppError::bad_request("authorize_event.event.executed_by is required"))?;
-    if authoritative_key_state.agent_id.as_str() != agent_id
+    if authoritative_key_state.agent_id != expected_agent_id
         || authoritative_key_state.controller_id.as_str() != controller_id
     {
         return Err(AppError::forbidden(
@@ -609,7 +610,13 @@ fn validate_controller_authorize_event(
             "authorize_event.event.payload.verification_method must match the request",
         ));
     }
-    if payload.accountable_principal_id.as_str() != controller_id {
+    if project_full_id_str_to_actor_id(
+        payload.accountable_principal_id.as_str(),
+        "authorize_event.event.payload.accountable_principal_id",
+    )?
+    .as_str()
+        != controller_id
+    {
         return Err(AppError::forbidden(
             "authorize_event.event.payload.accountable_principal_id must match executed_by",
         ));
@@ -636,7 +643,7 @@ fn validate_controller_authorize_event(
             "authorize_event.event.payload.signing_key_binding_digest must bind signing_key_binding",
         ));
     }
-    if signing_key_binding.agent_id.as_str() != agent_id
+    if signing_key_binding.agent_id != expected_agent_id
         || signing_key_binding.verification_method != verification_method
         || signing_key_binding.agent_key_authorize_event_id.as_str() != event.event_id.as_str()
         || signing_key_binding.public_key_digest != validated_key_material.authorization_digest
@@ -717,19 +724,26 @@ fn validate_controller_authorize_event(
             "authorize_event.event.payload.approval_evidence.pairing_request_id must match the request",
         ));
     }
-    if approval
+    let approved_by_matches_controller = approval
         .approved_by
         .as_ref()
-        .map(arkret_identifiers::Did::as_str)
-        != Some(controller_id)
-    {
+        .map(|approved_by| {
+            project_full_id_str_to_actor_id(
+                approved_by.as_str(),
+                "authorize_event.event.payload.approval_evidence.approved_by",
+            )
+            .map(|approved_by| approved_by.as_str() == controller_id)
+        })
+        .transpose()?
+        .unwrap_or(false);
+    if !approved_by_matches_controller {
         return Err(AppError::forbidden(
             "authorize_event.event.payload.approval_evidence.approved_by must match executed_by",
         ));
     }
 
     Ok(ValidatedAuthorizeEvent {
-        controller_id: controller_id.to_owned(),
+        controller_id: payload.accountable_principal_id.to_string(),
         payload,
     })
 }
@@ -807,10 +821,10 @@ fn ensure_authorize_event_has_controller_signature(
             "authorize_event must carry controller signature proofs",
         ));
     }
-    let signed_by_controller = event
-        .proofs
-        .iter()
-        .any(|proof| verification_method_controller(&proof.verification_method) == controller_id);
+    let signed_by_controller = event.proofs.iter().any(|proof| {
+        verification_method_controller_actor_id(&proof.verification_method)
+            .is_some_and(|proof_controller| proof_controller.as_str() == controller_id)
+    });
     if !signed_by_controller {
         return Err(AppError::bad_request(
             "authorize_event proof verification_method must be controlled by actor_id",
@@ -835,11 +849,14 @@ async fn verify_authorize_event_controller_signature(
     now: DateTime<Utc>,
 ) -> Result<(), AppError> {
     let canonical_bytes = authorize_event_signature_input(event, agent_id, controller_id)?;
+    let controller_core_id = project_full_id_str_to_actor_id(controller_id, "controller_id")?;
     let mut has_controller_key_proof = false;
     let mut saw_controller_proof = false;
 
     for proof in &event.proofs {
-        if verification_method_controller(&proof.verification_method) != controller_id {
+        if !verification_method_controller_actor_id(&proof.verification_method)
+            .is_some_and(|proof_controller| proof_controller == controller_core_id)
+        {
             continue;
         }
         saw_controller_proof = true;
@@ -927,10 +944,13 @@ fn verify_authorize_event_controller_signature_with_methods(
     verification_methods: &[VerificationMethod],
 ) -> Result<(), AppError> {
     let canonical_bytes = authorize_event_signature_input(event, agent_id, controller_id)?;
+    let controller_core_id = project_full_id_str_to_actor_id(controller_id, "controller_id")?;
 
     let mut saw_controller_proof = false;
     for proof in &event.proofs {
-        if verification_method_controller(&proof.verification_method) != controller_id {
+        if !verification_method_controller_actor_id(&proof.verification_method)
+            .is_some_and(|proof_controller| proof_controller == controller_core_id)
+        {
             continue;
         }
         saw_controller_proof = true;
@@ -1044,9 +1064,19 @@ async fn verify_pairing_signing_key_binding(
                 ))
             })?
     };
+    let expected_agent = arkret_identifiers::ActorId::from(
+        arkret_identifiers::project_full_id_to_core_id(agent_id).map_err(|error| {
+            AppError::bad_request(format!("agent_id cannot be projected: {error}"))
+        })?,
+    );
+    let expected_controller = arkret_identifiers::ActorId::from(
+        arkret_identifiers::project_full_id_to_core_id(&expected_controller).map_err(|error| {
+            AppError::bad_request(format!("controller_id cannot be projected: {error}"))
+        })?,
+    );
     arkret_signatures::agent_evidence::verify_agent_signing_key_binding(
         binding,
-        agent_id,
+        &expected_agent,
         &arkret_wire::NonEmptyString::new(agent_key_id.to_owned()).map_err(|error| {
             AppError::bad_request(format!("authorize_event payload key_id invalid: {error}"))
         })?,
@@ -1071,17 +1101,14 @@ fn authorize_event_signature_input(
     agent_id: &str,
     controller_id: &str,
 ) -> Result<Vec<u8>, AppError> {
-    if event.actor_id.as_str() != agent_id {
+    let expected_agent_id = project_full_id_str_to_actor_id(agent_id, "agent_id")?;
+    if event.actor_id != expected_agent_id {
         return Err(AppError::bad_request(
             "authorize_event.event.actor_id must match the managed Agent DID",
         ));
     }
-    if event
-        .executed_by
-        .as_ref()
-        .map(arkret_identifiers::Did::as_str)
-        != Some(controller_id)
-    {
+    let expected_controller_id = project_full_id_str_to_actor_id(controller_id, "controller_id")?;
+    if event.executed_by.as_ref() != Some(&expected_controller_id) {
         return Err(AppError::bad_request(
             "authorize_event.event.executed_by must match the resolved controller DID",
         ));
@@ -1109,6 +1136,27 @@ fn verification_method_controller(verification_method: &str) -> &str {
         .split('?')
         .next()
         .unwrap_or("")
+}
+
+fn project_full_id_str_to_actor_id(
+    full_id: &str,
+    field: &str,
+) -> Result<arkret_identifiers::ActorId, AppError> {
+    let full_id = arkret_identifiers::FullId::new(full_id.to_owned())
+        .map_err(|error| AppError::bad_request(format!("{field} invalid: {error}")))?;
+    arkret_identifiers::project_full_id_to_core_id(&full_id)
+        .map(arkret_identifiers::ActorId::from)
+        .map_err(|error| AppError::bad_request(format!("{field} cannot be projected: {error}")))
+}
+
+fn verification_method_controller_actor_id(
+    verification_method: &str,
+) -> Option<arkret_identifiers::ActorId> {
+    project_full_id_str_to_actor_id(
+        verification_method_controller(verification_method),
+        "verification_method controller",
+    )
+    .ok()
 }
 
 fn verification_method_device_id(verification_method: &str) -> Option<String> {
@@ -1193,10 +1241,12 @@ mod tests {
 
     use super::*;
 
-    const AGENT: &str = "did:web:agent.example";
-    const CONTROLLER: &str = "did:web:controller.example";
+    const AGENT: &str = "ak:did_core:web:agent.example";
+    const AGENT_FULL: &str = "did:web:agent.example";
+    const CONTROLLER: &str = "ak:did_core:web:controller.example";
+    const CONTROLLER_FULL: &str = "did:web:controller.example";
     const VM: &str = "did:web:agent.example#runtime-key-1";
-    const AUDIENCE: &str = "did:web:soland.local";
+    const AUDIENCE: &str = "ak:did_core:web:soland.local";
     const PAIRING_REQUEST_ID: &str = "agent_pairing_request:01999999-0000-7000-8000-00000000feed";
     const PUBLIC_KEY_DIGEST: &str =
         "sha256:225e8b1ac962ec6c55284d4a00c7e6c484db19fbe7c51abe118f1edc5e04a517";
@@ -1228,7 +1278,7 @@ mod tests {
             "agent_id": AGENT,
             "controller_id": CONTROLLER,
             "principal_control_realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG",
-            "controller_authorization_ref": format!("{AGENT}#managed-controller"),
+            "controller_authorization_ref": format!("{AGENT_FULL}#managed-controller"),
             "pcr_recovery": {
                 "status": "ready",
                 "backup_id": "ak:backup:01999999-0000-7000-8000-000000000020",
@@ -1289,18 +1339,18 @@ mod tests {
             },
             "actor_id": AGENT,
             "executed_by": CONTROLLER,
-            "authorization_ref": format!("{AGENT}#managed-controller"),
+            "authorization_ref": format!("{AGENT_FULL}#managed-controller"),
             "actor_seq": 1,
             "created_at": "2026-07-06T00:00:00.000Z",
             "hlc": "01970e589d21-0001-a13f9c2e",
             "prev_refs": [],
             "payload": {
-                "agent_id": AGENT,
+                "agent_id": AGENT_FULL,
                 "key_id": "runtime-key-1",
                 "verification_method": VM,
                 "public_key_digest": SIGNING_KEY_PUBLIC_KEY_DIGEST,
                 "signing_key_binding_digest": binding_digest,
-                "accountable_principal_id": CONTROLLER,
+                "accountable_principal_id": CONTROLLER_FULL,
                 "agent_key_scope": {
                     "actions": [
                         "ak.self.events.stream.subscribe",
@@ -1315,7 +1365,7 @@ mod tests {
                     "kind": "pairing_request",
                     "request_canonical_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "pairing_request_id": pairing_request_id,
-                    "approved_by": CONTROLLER
+                    "approved_by": CONTROLLER_FULL
                 }
             },
             "proofs": [{
@@ -1424,7 +1474,7 @@ mod tests {
 
         let err = validate_controller_authorize_event(
             &authorize_event(envelope),
-            AGENT,
+            AGENT_FULL,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1446,7 +1496,7 @@ mod tests {
 
         let err = validate_controller_authorize_event(
             &authorize_event(envelope),
-            AGENT,
+            AGENT_FULL,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1473,7 +1523,7 @@ mod tests {
         let binding = valid_signing_key_binding();
         validate_controller_authorize_event(
             &authorize_event(valid_authorize_event(PAIRING_REQUEST_ID)),
-            AGENT,
+            AGENT_FULL,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1488,7 +1538,7 @@ mod tests {
         let wrong_binding = valid_signing_key_binding_for(wrong_pairing_request_id);
         let err = validate_controller_authorize_event(
             &authorize_event(valid_authorize_event(wrong_pairing_request_id)),
-            AGENT,
+            AGENT_FULL,
             VM,
             &valid_public_key_typed(),
             &wrong_binding,
@@ -1509,7 +1559,7 @@ mod tests {
         assert_ne!(binding.public_key_digest.as_str(), PUBLIC_KEY_DIGEST);
         validate_controller_authorize_event(
             &authorize_event(valid_authorize_event(PAIRING_REQUEST_ID)),
-            AGENT,
+            AGENT_FULL,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1574,7 +1624,7 @@ mod tests {
 
         let err = validate_controller_authorize_event(
             &authorize_event(event),
-            AGENT,
+            AGENT_FULL,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1603,7 +1653,7 @@ mod tests {
 
         let validated = validate_controller_authorize_event(
             &authorize_event(event),
-            AGENT,
+            AGENT_FULL,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1625,7 +1675,7 @@ mod tests {
 
         let err = validate_controller_authorize_event(
             &authorize_event(event),
-            AGENT,
+            AGENT_FULL,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1666,7 +1716,7 @@ mod tests {
 
         validate_controller_authorize_event(
             &authorize_event(event),
-            AGENT,
+            AGENT_FULL,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1694,7 +1744,7 @@ mod tests {
 
         let err = validate_controller_authorize_event(
             &authorize_event(event),
-            AGENT,
+            AGENT_FULL,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1715,8 +1765,8 @@ mod tests {
 
         let err = verify_authorize_event_controller_signature_with_methods(
             &event,
-            AGENT,
-            CONTROLLER,
+            AGENT_FULL,
+            CONTROLLER_FULL,
             std::slice::from_ref(&method),
         )
         .expect_err("fake detached JWS must fail closed");
@@ -1727,19 +1777,19 @@ mod tests {
     #[test]
     fn controller_device_verification_method_uses_device_directory_identity() {
         let device_id = "ak:device:01999999-0000-7000-8000-000000000042";
-        let verification_method = format!("{CONTROLLER}#{device_id}");
+        let verification_method = format!("{CONTROLLER_FULL}#{device_id}");
 
         assert_eq!(
             verification_method_device_id(&verification_method).as_deref(),
             Some(device_id)
         );
-        assert!(verification_method_device_id(&format!("{CONTROLLER}#key-1")).is_none());
+        assert!(verification_method_device_id(&format!("{CONTROLLER_FULL}#key-1")).is_none());
     }
 
     #[test]
     fn authorize_event_accepts_controller_device_multibase_signature() {
         let device_id = "ak:device:01999999-0000-7000-8000-000000000042";
-        let verification_method = format!("{CONTROLLER}#{device_id}");
+        let verification_method = format!("{CONTROLLER_FULL}#{device_id}");
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
         let multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
             &signing_key.verifying_key().to_bytes(),
@@ -1770,15 +1820,15 @@ mod tests {
         let method = VerificationMethod {
             id: verification_method,
             kind: "Multikey".to_owned(),
-            controller: CONTROLLER.to_owned(),
+            controller: CONTROLLER_FULL.to_owned(),
             public_key_jwk: None,
             public_key_multibase: Some(multibase),
         };
 
         verify_authorize_event_controller_signature_with_methods(
             &event,
-            AGENT,
-            CONTROLLER,
+            AGENT_FULL,
+            CONTROLLER_FULL,
             &[method],
         )
         .expect("authorized controller device signature accepts");
@@ -1799,7 +1849,7 @@ mod tests {
         VerificationMethod {
             id: "did:web:controller.example#key-1".to_owned(),
             kind: "JsonWebKey2020".to_owned(),
-            controller: CONTROLLER.to_owned(),
+            controller: CONTROLLER_FULL.to_owned(),
             public_key_jwk: Some(
                 serde_json::from_value(json!({
                     "kty": "OKP",

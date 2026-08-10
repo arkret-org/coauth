@@ -258,8 +258,12 @@ pub async fn issue_recovery_completion_grant_endpoint(
         SessionGrantProofKind::DidBoundSignature,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let principal_core_id = arkret_identifiers::CoreId::from(
+        arkret_identifiers::project_full_id_to_core_id(&receipt.principal_id)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+    );
     let wire_grant = SessionGrantOutcome {
-        principal_id: receipt.principal_id.clone(),
+        principal_id: principal_core_id,
         device_id: Some(initial.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,

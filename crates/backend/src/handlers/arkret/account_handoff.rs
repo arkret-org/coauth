@@ -19,7 +19,6 @@ use coauth_data::{
 };
 use rand_core::RngCore;
 use salvo::prelude::*;
-use serde::{Deserialize, Serialize};
 use sha2::Digest as _;
 
 use super::session_grant::map_oidc_exchange_error;
@@ -183,7 +182,8 @@ pub async fn create_account_handoff(
     let checkpoint = AccountHandoffAuthorizationCheckpoint {
         service_account_id: authenticated.user.id.to_string(),
         browser_session_id: authenticated.browser_session_id.map(|id| id.to_string()),
-        audience: authenticated.audience,
+        audience: arkret_identifiers::ServiceId::new(authenticated.audience)
+            .map_err(|error| failed_precondition(error.to_string()))?,
         account_handle: account_handle.to_string(),
         preferred_locale: preferred_locale.map(|locale| locale.code().to_owned()),
     };
@@ -324,7 +324,7 @@ async fn commit_authorized_handoff(
             request_digest: attempt.request_digest.clone(),
             service_account_id,
             browser_session_id,
-            audience: checkpoint.audience,
+            audience: checkpoint.audience.to_string(),
             account_subject: account_subject.clone(),
             // The checkpoint exists only after the OIDC bridge has rejected
             // locked, suspended, deactivated, or otherwise invalid accounts.
@@ -512,7 +512,7 @@ pub async fn issue_did_binding_challenge(
         &config,
     ))
     .map_err(|error| failed_precondition(error.to_string()))?;
-    let audience = arkret_identifiers::Did::new(grant.audience.clone())
+    let audience = arkret_identifiers::ServiceId::new(grant.audience.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
     let origin = depot
         .url_builder()?
@@ -601,11 +601,9 @@ pub async fn issue_identity_binding_challenge(
     let validated =
         arkret_signatures::webvh::validate_principal_inception_operation(&body.did_operation)
             .map_err(|error| failed_precondition(error.to_string()))?;
-    if body.full_id != body.did_operation.did
-        || arkret_identifiers::project_full_id_to_core_id(&body.full_id)
-            .map_err(|error| failed_precondition(error.to_string()))?
-            != validated.principal_id
-    {
+    let principal_id = arkret_identifiers::project_full_id_to_core_id(&body.full_id)
+        .map_err(|error| failed_precondition(error.to_string()))?;
+    if body.full_id != body.did_operation.did || validated.principal_id != body.full_id {
         return Err(failed_precondition(
             "identity creation full_id/core projection does not match the inception operation",
         ));
@@ -620,7 +618,7 @@ pub async fn issue_identity_binding_challenge(
     let trust_domain = trust_domain_for(&url_builder, &arkret_config);
     let trust_domain = arkret_identifiers::TypedTrustDomainId::new(trust_domain)
         .map_err(|error| failed_precondition(error.to_string()))?;
-    let audience = arkret_identifiers::Did::new(grant.audience.clone())
+    let audience = arkret_identifiers::ServiceId::new(grant.audience.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
     let origin = depot
         .url_builder()?
@@ -637,12 +635,12 @@ pub async fn issue_identity_binding_challenge(
             request_id: body.request_id,
             request_digest,
             service_account_id: grant.service_account_id,
-            audience: grant.audience.clone(),
+            audience: audience.clone(),
             lease_id: body.identity_creation_lease_id,
             lease_fence: body.lease_fence,
             holder_jkt: grant.cnf_jkt.clone(),
             did_operation: body.did_operation,
-            principal_id: validated.principal_id,
+            principal_id,
             full_id: body.full_id,
             operation_digest: validated.operation_digest,
             account_subject,
@@ -733,7 +731,7 @@ pub async fn issue_identity_abandonment_challenge(
     let trust_domain =
         arkret_identifiers::TypedTrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
             .map_err(|error| failed_precondition(error.to_string()))?;
-    let audience = arkret_identifiers::Did::new(grant.audience.clone())
+    let audience = arkret_identifiers::ServiceId::new(grant.audience.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
     let origin = url_builder.http_base().origin().ascii_serialization();
     let now = make_clock().now();
@@ -746,7 +744,7 @@ pub async fn issue_identity_abandonment_challenge(
             request_digest,
             issuing_handoff_grant_id: grant.id,
             service_account_id: grant.service_account_id,
-            audience: grant.audience.clone(),
+            audience: audience.clone(),
             account_subject,
             holder_jkt: grant.cnf_jkt.clone(),
             lease_id: body.identity_creation_lease_id,
@@ -829,6 +827,8 @@ pub async fn abandon_identity_creation(
     let request_digest = body
         .canonical_request_digest()
         .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    let audience = arkret_identifiers::ServiceId::new(grant.audience.clone())
+        .map_err(|error| failed_precondition(error.to_string()))?;
     let mut repo = depot.repo().await?;
     let commit = repo
         .account_handoff()
@@ -837,7 +837,7 @@ pub async fn abandon_identity_creation(
             request_digest,
             confirming_handoff_grant_id: grant.id,
             service_account_id: grant.service_account_id,
-            audience: grant.audience,
+            audience,
             holder_jkt: grant.cnf_jkt,
             challenge_id: body.challenge_id,
             challenge: body.challenge,
@@ -1136,7 +1136,7 @@ fn creation_to_outcome(
 }
 
 fn account_subject(
-    account_authority_id: &arkret_identifiers::Did,
+    account_authority_id: &arkret_identifiers::ServiceId,
     service_account_id: Ulid,
 ) -> Result<arkret_identifiers::Hash, ArkretRouteError> {
     let value = serde_json::json!({
@@ -1186,6 +1186,14 @@ fn proof_invalid(message: impl Into<String>) -> ArkretRouteError {
     )
 }
 
+fn schema_violation(message: impl Into<String>) -> ArkretRouteError {
+    ArkretRouteError::coded(
+        StatusCode::UNPROCESSABLE_ENTITY,
+        arkret_wire::ErrorCode::SCHEMA_VIOLATION,
+        message,
+    )
+}
+
 fn failed_precondition(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::CONFLICT,
@@ -1224,7 +1232,8 @@ mod tests {
                     "0".repeat(64)
                 ))
                 .unwrap(),
-                audience: arkret_identifiers::Did::new("did:web:principal.example").unwrap(),
+                audience: arkret_identifiers::ServiceId::new("ak:did_core:web:principal.example")
+                    .unwrap(),
                 issuer: "https://issuer.example".to_owned(),
                 client_id: "arkret-client".to_owned(),
                 redirect_uri: "https://client.example/callback".to_owned(),

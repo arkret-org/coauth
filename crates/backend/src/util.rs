@@ -696,6 +696,7 @@ pub fn principal_server_connection_from_config(
     let registry = ConnectorRegistry::new();
 
     let source_service_id = crate::handlers::arkret::service_id_for(&arkret_config);
+    let source_full_id = crate::handlers::arkret::issuer_did_for(&arkret_config);
     let source_trust_domain = arkret_identifiers::TypedTrustDomainId::new(
         crate::handlers::arkret::trust_domain_for(url_builder, &arkret_config),
     )
@@ -708,7 +709,12 @@ pub fn principal_server_connection_from_config(
             arkret_config,
             http_client,
         )
-        .with_peer_signing(key_store.clone(), source_service_id, source_trust_domain),
+        .with_peer_signing(
+            key_store.clone(),
+            source_service_id,
+            source_full_id,
+            source_trust_domain,
+        ),
     );
     (admin, registry)
 }

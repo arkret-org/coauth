@@ -24,7 +24,7 @@ use arkret_signatures::http_signature::{
     format_signature_header, parse_signature_input,
 };
 use arkret_state::SnapshotManifest;
-use arkret_wire::{HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN};
+use arkret_wire::{FullId, HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable;
 use coauth_keystore::Keystore;
@@ -63,6 +63,7 @@ pub struct PeerProtocolClient<'a> {
     base_url: &'a Url,
     http_client: &'a reqwest::Client,
     keystore: &'a Keystore,
+    source_full_id: FullId,
     identity: PeerKeyPackagesClaimTransportBinding,
 }
 
@@ -71,15 +72,24 @@ impl<'a> PeerProtocolClient<'a> {
         base_url: Option<&'a Url>,
         http_client: &'a reqwest::Client,
         keystore: &'a Keystore,
+        source_full_id: FullId,
         identity: PeerKeyPackagesClaimTransportBinding,
     ) -> Result<Self, PeerProtocolClientError> {
         let Some(base_url) = base_url else {
             return Err(PeerProtocolClientError::BaseUrlNotConfigured);
         };
+        let projected = arkret_identifiers::project_full_id_to_core_id(&source_full_id)
+            .map_err(|error| PeerProtocolClientError::InvalidUrl(error.to_string()))?;
+        if projected.as_str() != identity.source_service_id.as_str() {
+            return Err(PeerProtocolClientError::InvalidUrl(
+                "source service full_id does not project to Source-Service-ID".to_owned(),
+            ));
+        }
         Ok(Self {
             base_url,
             http_client,
             keystore,
+            source_full_id,
             identity,
         })
     }
@@ -295,7 +305,7 @@ impl<'a> PeerProtocolClient<'a> {
             .join(" ");
         let signature_input_header = format!(
             "{SIGNATURE_LABEL}=({covered_wire});created={created};expires={expires};keyid=\"{}#{}\";alg=\"ed25519\"",
-            self.identity.source_service_id,
+            self.source_full_id,
             super::service_identity::SERVICE_IDENTITY_VERIFICATION_METHOD_FRAGMENT
         );
         let signature_input = parse_signature_input(&signature_input_header)
@@ -395,15 +405,20 @@ mod tests {
     }
 
     fn peer_identity() -> PeerKeyPackagesClaimTransportBinding {
-        let service_id = arkret_identifiers::Did::new("did:web:auth.example").unwrap();
+        let service_id =
+            arkret_identifiers::ServiceId::new("ak:did_core:web:auth.example".to_owned()).unwrap();
         let trust_domain =
             arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:auth.example").unwrap();
         PeerKeyPackagesClaimTransportBinding {
-            source_service_id: service_id.clone(),
-            destination_service_id: service_id,
+            source_service_id: service_id.clone().into(),
+            destination_service_id: service_id.into(),
             source_trust_domain: trust_domain.clone(),
             destination_trust_domain: trust_domain,
         }
+    }
+
+    fn source_full_id() -> arkret_identifiers::FullId {
+        arkret_identifiers::FullId::new("did:web:auth.example".to_owned()).unwrap()
     }
 
     #[test]
@@ -412,7 +427,9 @@ mod tests {
         let client = reqwest::Client::new();
         let keystore = test_keystore();
         let identity = peer_identity();
-        let peer = PeerProtocolClient::new(Some(&base), &client, &keystore, identity).unwrap();
+        let peer =
+            PeerProtocolClient::new(Some(&base), &client, &keystore, source_full_id(), identity)
+                .unwrap();
         let body = br#"{"a":1}"#;
         let url = base.join("/_arkret/peer/invites").unwrap();
 
@@ -427,7 +444,10 @@ mod tests {
                 .map(|(_, value)| value.as_str())
         };
 
-        assert_eq!(header("Source-Service-ID"), Some("did:web:auth.example"));
+        assert_eq!(
+            header("Source-Service-ID"),
+            Some("ak:did_core:web:auth.example")
+        );
         assert!(header("Content-Digest").is_some());
         assert!(
             header("Signature-Input")
@@ -453,7 +473,9 @@ mod tests {
         let client = reqwest::Client::new();
         let keystore = test_keystore();
         let identity = peer_identity();
-        let peer = PeerProtocolClient::new(Some(&base), &client, &keystore, identity).unwrap();
+        let peer =
+            PeerProtocolClient::new(Some(&base), &client, &keystore, source_full_id(), identity)
+                .unwrap();
         let url = base
             .join("/_arkret/peer/snapshot/head?realm_id=ak:realm:test")
             .unwrap();
@@ -474,7 +496,9 @@ mod tests {
         let client = reqwest::Client::new();
         let keystore = test_keystore();
         let identity = peer_identity();
-        let peer = PeerProtocolClient::new(Some(&base), &client, &keystore, identity).unwrap();
+        let peer =
+            PeerProtocolClient::new(Some(&base), &client, &keystore, source_full_id(), identity)
+                .unwrap();
         let url = base.join("/_arkret/peer/events/frontier").unwrap();
         let body = br#"{"realm_id":"ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K"}"#;
 

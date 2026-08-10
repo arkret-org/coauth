@@ -643,7 +643,6 @@ mod tests {
         IdentityServiceConfig {
             name: name.to_owned(),
             endpoint: endpoint.parse().unwrap(),
-            service_id: None,
             registration_bearer: format!("{name}-bearer"),
         }
     }
@@ -652,6 +651,7 @@ mod tests {
         PrincipalServerConfig {
             name: name.to_owned(),
             endpoint: endpoint.parse().unwrap(),
+            service_id: None,
             session_grant_introspection_bearer: None,
             embedded_webvh_registration_bearer: Some(format!("{name}-bearer")),
         }

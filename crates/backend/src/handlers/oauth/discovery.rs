@@ -52,9 +52,9 @@ struct DiscoveryDocument {
 #[derive(Debug, Serialize)]
 struct PrincipalServerMetadata {
     name: String,
-    audience: Option<arkret_identifiers::Did>,
+    audience: Option<arkret_identifiers::ServiceId>,
     endpoint: String,
-    did: Option<arkret_identifiers::Did>,
+    did: Option<arkret_identifiers::ServiceId>,
 }
 
 #[derive(Debug, Serialize)]
@@ -310,7 +310,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
         ],
         arkret_api_endpoint: url_builder.absolute_url("/_arkret").to_string(),
         arkret_server_describe: url_builder.absolute_url("/_arkret/describe").to_string(),
-        arkret_service_id: arkret::service_id_for(&arkret_config),
+        arkret_service_id: arkret::issuer_did_for(&arkret_config),
         arkret_did_binding_methods: vec!["session_grant".to_owned()],
         arkret_supported_scopes: vec![
             scope::COAUTH_ADMIN.to_string(),

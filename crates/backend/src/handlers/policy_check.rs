@@ -129,9 +129,10 @@ pub async fn post_policy_check(
                     .ok()?;
             Some((
                 key_store.clone(),
+                arkret::issuer_did_for(&arkret_config),
                 arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
-                    source_service_id: arkret::service_id_for(&arkret_config),
-                    destination_service_id,
+                    source_service_id: arkret::service_id_for(&arkret_config).into(),
+                    destination_service_id: destination_service_id.into(),
                     source_trust_domain: trust_domain.clone(),
                     destination_trust_domain: trust_domain,
                 },
@@ -192,7 +193,7 @@ pub(crate) async fn build_policy_check_response(
 ) -> Result<PolicyCheckOutcome, ArkretRouteError> {
     // Policy server identity: coauth's own service DID (signs the
     // response with its preferred signing key).
-    let policy_server_did = arkret::service_id_for(arkret_config);
+    let policy_server_did = arkret::issuer_did_for(arkret_config);
     let policy_server_id = policy_server_did.clone();
 
     // Step 1 — frontier. On any frontier error we fall back to the
