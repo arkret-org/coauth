@@ -24,7 +24,7 @@ use arkret_signatures::http_signature::{
     format_signature_header, parse_signature_input,
 };
 use arkret_state::SnapshotManifest;
-use arkret_wire::{FullId, HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN};
+use arkret_wire::{DidFullId, HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable;
 use coauth_keystore::Keystore;
@@ -63,7 +63,7 @@ pub struct PeerProtocolClient<'a> {
     base_url: &'a Url,
     http_client: &'a reqwest::Client,
     keystore: &'a Keystore,
-    source_full_id: FullId,
+    source_full_id: DidFullId,
     identity: PeerKeyPackagesClaimTransportBinding,
 }
 
@@ -72,7 +72,7 @@ impl<'a> PeerProtocolClient<'a> {
         base_url: Option<&'a Url>,
         http_client: &'a reqwest::Client,
         keystore: &'a Keystore,
-        source_full_id: FullId,
+        source_full_id: DidFullId,
         identity: PeerKeyPackagesClaimTransportBinding,
     ) -> Result<Self, PeerProtocolClientError> {
         let Some(base_url) = base_url else {
@@ -406,7 +406,7 @@ mod tests {
 
     fn peer_identity() -> PeerKeyPackagesClaimTransportBinding {
         let service_id =
-            arkret_identifiers::ServiceId::new("ak:did_core:web:auth.example".to_owned()).unwrap();
+            arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap();
         let trust_domain =
             arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:auth.example").unwrap();
         PeerKeyPackagesClaimTransportBinding {
@@ -417,8 +417,8 @@ mod tests {
         }
     }
 
-    fn source_full_id() -> arkret_identifiers::FullId {
-        arkret_identifiers::FullId::new("did:web:auth.example".to_owned()).unwrap()
+    fn source_full_id() -> arkret_identifiers::DidFullId {
+        arkret_identifiers::DidFullId::new("did:web:auth.example".to_owned()).unwrap()
     }
 
     #[test]

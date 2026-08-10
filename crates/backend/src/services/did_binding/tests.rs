@@ -21,12 +21,12 @@ fn protocol_now() -> chrono::DateTime<Utc> {
 
 use super::*;
 
-fn did() -> Did {
-    Did::new("did:web:alice.example").unwrap()
+fn did() -> DidFullId {
+    DidFullId::new("did:web:alice.example").unwrap()
 }
 
-fn other_did() -> Did {
-    Did::new("did:web:mallory.example").unwrap()
+fn other_did() -> DidFullId {
+    DidFullId::new("did:web:mallory.example").unwrap()
 }
 
 fn trust_domain(scope: &str) -> TypedTrustDomainId {

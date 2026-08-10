@@ -565,7 +565,7 @@ mod tests {
                 name: "soland".to_owned(),
                 endpoint: endpoint.clone(),
                 service_id: Some(
-                    arkret_identifiers::ServiceId::new("ak:did_core:webvh:current").unwrap(),
+                    arkret_identifiers::DidCoreId::new("ak:did_core:webvh:current").unwrap(),
                 ),
                 session_grant_introspection_bearer: None,
                 embedded_webvh_registration_bearer: None,
@@ -579,7 +579,7 @@ mod tests {
         let server = MockServer::start().await;
         let endpoint = Url::parse(&server.uri()).unwrap();
         let config = principal_server_config_for(endpoint);
-        let service_id = arkret_identifiers::ServiceId::new("ak:did_core:webvh:current").unwrap();
+        let service_id = arkret_identifiers::DidCoreId::new("ak:did_core:webvh:current").unwrap();
 
         let resolved = ResolvedPrincipalAudiences::new();
         let url_builder = UrlBuilder::new("https://auth.example/".parse().unwrap(), None, None);

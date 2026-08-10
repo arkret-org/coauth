@@ -199,7 +199,7 @@ const MAX_IAT_SKEW_SECS: i64 = 5 * 60;
 const MAX_FRESHNESS_SECS: i64 = 5 * 60;
 
 /// Normalize a DID for any binding-write path: trim whitespace, then run
-/// the value through the SDK `Did::new` validator (which enforces the
+/// the value through the SDK `DidFullId::new` validator (which enforces the
 /// Round-4 `^did:[a-z0-9]+:[^\s]+$` regex).
 ///
 /// Returns the normalized DID string on success, or
@@ -216,12 +216,12 @@ pub fn normalize_did_for_binding(did: &str) -> Result<String, DidBindingProofErr
             "did must be a non-empty DID URI".to_owned(),
         ));
     }
-    if arkret_identifiers::Did::new(trimmed.to_owned()).is_err() {
+    if arkret_identifiers::DidFullId::new(trimmed.to_owned()).is_err() {
         return Err(DidBindingProofError::InvalidJws(format!(
             "did {trimmed:?} fails round-4 DID regex (^did:[a-z0-9]+:[^\\s]+$)"
         )));
     }
-    // `did:uuid` is a valid identifier method (accepted by `Did::new`) but is
+    // `did:uuid` is a valid identifier method (accepted by `DidFullId::new`) but is
     // not a resolvable identity method: a binding proof MUST reference a DID
     // whose controller key can be resolved (web / webvh / key / plc), so uuid
     // is rejected on this path (Round 4 reserves it).
@@ -275,7 +275,7 @@ pub async fn validate_control_proof(
     // refuses BEFORE invoking the resolver chain, so wire-broken DIDs
     // never trigger network I/O. Delegating to the SDK's validator
     // keeps coauth in lockstep with the canonical regex.
-    if arkret_identifiers::Did::new(account_did.to_owned()).is_err() {
+    if arkret_identifiers::DidFullId::new(account_did.to_owned()).is_err() {
         return Err(DidBindingProofError::InvalidJws(format!(
             "account_did {account_did:?} fails round-4 DID regex"
         )));

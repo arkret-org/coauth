@@ -15,23 +15,24 @@ pub struct VerifiedPrincipalDidBindingInput {
     pub principal_id: String,
     /// Verified head of the principal DID's WebVH history.
     pub key_log_head: arkret_identifiers::Hash,
-    /// Complete DID that was independently resolved and verified when this
-    /// private account binding was accepted. `None` is reserved for legacy
-    /// administrative bindings; protocol registration always supplies it.
-    pub verified_full_id: Option<arkret_identifiers::FullId>,
+    /// Complete DID independently verified when this private binding was accepted.
+    pub verified_full_id: arkret_identifiers::DidFullId,
     /// Adapter-defined version identifier pinned at verification time.
-    pub verified_version_id: Option<String>,
+    pub verified_version_id: String,
     /// Canonical Account Authority binding receipt retained for exact replay
     /// and audit. This snapshot is private state, never PCR resolution truth.
-    pub binding_receipt: Option<serde_json::Value>,
+    pub binding_receipt: serde_json::Value,
     /// Stable service identity core accepted by the principal binding. Gate
-    /// attestations fail closed for legacy/debug bindings without this value.
-    pub accepted_service_id: Option<arkret_identifiers::ServiceId>,
+    /// attestations bind to this exact accepting service identity.
+    pub accepted_service_id: arkret_identifiers::DidCoreId,
     /// Monotonic private Account Authority binding generation.
-    pub binding_version: Option<u64>,
+    pub binding_version: u64,
     /// Digest of the complete authority-signed binding receipt that installed
     /// this generation.
-    pub binding_frontier_digest: Option<arkret_identifiers::Hash>,
+    pub binding_frontier_digest: arkret_identifiers::Hash,
+    /// Exact PCR authority selected at registration. Bare identity equality
+    /// must never substitute for this five-field instance.
+    pub authority_instance: arkret_wire::PrincipalAuthorityInstance,
 }
 
 /// Persistence boundary for principal DIDs verified by an authoritative host.

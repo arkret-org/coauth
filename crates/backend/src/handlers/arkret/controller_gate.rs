@@ -78,11 +78,7 @@ pub async fn issue_controller_gate_attestation(
             request.agent_authority_service_id.as_str(),
         )
         .await?
-        .filter(|binding| {
-            binding.accepted_service_id.as_ref() == Some(&request.agent_authority_service_id)
-                && binding.binding_version.is_some()
-                && binding.binding_frontier_digest.is_some()
-        })
+        .filter(|binding| binding.accepted_service_id == request.agent_authority_service_id)
         .ok_or_else(not_found)?;
     let user = repo
         .user()
@@ -141,10 +137,8 @@ pub async fn issue_controller_gate_attestation(
     };
     let expires_at = now + GATE_TTL;
     let basis = ControllerAccountGateBasis::AccountBindingDefault {
-        binding_version: binding.binding_version.expect("filtered binding version"),
-        binding_frontier_digest: binding
-            .binding_frontier_digest
-            .expect("filtered binding frontier"),
+        binding_version: binding.binding_version,
+        binding_frontier_digest: binding.binding_frontier_digest,
     };
     let basis_digest = arkret_identifiers::Hash::new(
         arkret_canonical::canonical_sha256(&serde_json::json!({

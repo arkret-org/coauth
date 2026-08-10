@@ -140,7 +140,7 @@ pub struct VerifiedUnpublishedWebvhCandidate {
 
 pub async fn verify_unpublished_webvh_candidate(
     http_client: &reqwest::Client,
-    did: &arkret_identifiers::Did,
+    did: &arkret_identifiers::DidFullId,
     expected_previous_version_id: &str,
     candidate_entry_bytes: &[u8],
     expected_candidate_version_id: &str,
@@ -203,7 +203,7 @@ pub async fn verify_unpublished_webvh_candidate(
 /// receipt was signed, not merely the current post-rotation document.
 pub async fn resolve_verified_webvh_document_at(
     http_client: &reqwest::Client,
-    did: &arkret_identifiers::Did,
+    did: &arkret_identifiers::DidFullId,
     decided_at: chrono::DateTime<chrono::Utc>,
 ) -> Result<DidDocument, DidResolveError> {
     if !did.as_str().starts_with("did:webvh:") {
@@ -257,7 +257,7 @@ pub async fn resolve_verified_webvh_document_at(
 }
 
 fn verified_webvh_document_at(
-    did: &arkret_identifiers::Did,
+    did: &arkret_identifiers::DidFullId,
     verified: &arkret_identity::VerifiedDidWebvhLog,
     decided_at: chrono::DateTime<chrono::Utc>,
 ) -> Result<DidDocument, DidResolveError> {
@@ -283,7 +283,7 @@ fn verified_webvh_document_at(
 }
 
 pub fn verify_unpublished_webvh_candidate_from_history(
-    did: &arkret_identifiers::Did,
+    did: &arkret_identifiers::DidFullId,
     expected_previous_version_id: &str,
     history: &[u8],
     candidate_entry_bytes: &[u8],
@@ -607,7 +607,7 @@ fn delegated_resolver_request(
     url: &Url,
     did: &str,
 ) -> Result<reqwest::RequestBuilder, DidResolveError> {
-    let typed_did = arkret_identifiers::Did::new(did.to_owned())
+    let typed_did = arkret_identifiers::DidFullId::new(did.to_owned())
         .map_err(|error| DidResolveError::InvalidDid(error.to_string()))?;
     let body = arkret_models_identity::IdentityResolveRequestBody {
         did: typed_did,
@@ -905,7 +905,7 @@ fn did_method(did: &str) -> Option<String> {
     // any value the SDK validator rejects is wire-broken and MUST NOT
     // be routed by this resolver.
     Some(
-        arkret_identifiers::Did::new(did.to_owned())
+        arkret_identifiers::DidFullId::new(did.to_owned())
             .ok()?
             .method()
             .to_owned(),
@@ -913,7 +913,7 @@ fn did_method(did: &str) -> Option<String> {
 }
 
 fn did_web_document_url(did: &str) -> Result<Url, DidResolveError> {
-    let did = arkret_identifiers::Did::new(did.to_owned())
+    let did = arkret_identifiers::DidFullId::new(did.to_owned())
         .map_err(|_| DidResolveError::InvalidDid(did.to_owned()))?;
     let url = arkret_models_identity::did_web_document_url(&did)
         .map_err(|_| DidResolveError::InvalidDid(did.to_string()))?;
@@ -1114,9 +1114,10 @@ mod tests {
 
     #[test]
     fn verified_webvh_history_resolves_the_key_document_as_of_receipt_time() {
-        let did =
-            arkret_identifiers::Did::new("did:webvh:z6mkfixture:principal.example".to_owned())
-                .unwrap();
+        let did = arkret_identifiers::DidFullId::new(
+            "did:webvh:z6mkfixture:principal.example".to_owned(),
+        )
+        .unwrap();
         let old_time = Utc.with_ymd_and_hms(2026, 8, 8, 10, 0, 0).unwrap();
         let rotated_time = Utc.with_ymd_and_hms(2026, 8, 8, 11, 0, 0).unwrap();
         let document = |key: &str| {

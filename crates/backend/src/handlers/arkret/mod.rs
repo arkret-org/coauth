@@ -25,9 +25,7 @@ mod tests;
 use anyhow::Error as AnyhowError;
 use arkret_wire::ErrorEnvelope;
 use coauth_config::ArkretConfig;
-use coauth_data::user::{
-    PrincipalDidRepository as _, UserRepository as _, VerifiedPrincipalDidBindingInput,
-};
+use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
 use coauth_data::{RepositoryAccess, UrlBuilder, User};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable;
@@ -80,11 +78,6 @@ pub enum SessionGrantError {
     /// validation. Carries the SDK / shared wire reason code.
     #[error(transparent)]
     HandleClaimSubject(#[from] crate::services::handle_subject_validator::HandleClaimSubjectError),
-
-    #[error(
-        "did:web principal requires arkret.deployment_profile=personal_node and arkret.principal_method=did:web"
-    )]
-    DidWebPrincipalNotExplicit,
 
     #[error("principal_unknown")]
     PrincipalUnknown,
@@ -561,29 +554,8 @@ impl Scribe for ArkretRouteError {
     }
 }
 
-fn map_did_resolve_error(
-    error: crate::services::did_resolver::DidResolveError,
-) -> ArkretRouteError {
-    match error {
-        crate::services::did_resolver::DidResolveError::NotFound
-        | crate::services::did_resolver::DidResolveError::UnsupportedMethod => {
-            ArkretRouteError::NotFound
-        }
-        crate::services::did_resolver::DidResolveError::InvalidDid(message) => {
-            ArkretRouteError::BadRequest(format!("invalid did: {message}"))
-        }
-        crate::services::did_resolver::DidResolveError::DidWebPrincipalNotExplicit => {
-            ArkretRouteError::BadRequest(
-                "did:web principal requires deployment_profile=personal_node and principal_method=did:web"
-                    .to_owned(),
-            )
-        }
-        other => ArkretRouteError::Internal(Box::new(other)),
-    }
-}
-
 /// The deployment's Provider-resolved stable service core id.
-pub(crate) fn service_id_for(arkret_config: &ArkretConfig) -> arkret_identifiers::ServiceId {
+pub(crate) fn service_id_for(arkret_config: &ArkretConfig) -> arkret_identifiers::DidCoreId {
     arkret_config
         .runtime_service_identity
         .service_id()
@@ -591,26 +563,11 @@ pub(crate) fn service_id_for(arkret_config: &ArkretConfig) -> arkret_identifiers
 }
 
 /// The deployment's current complete service DID used for proof verification methods.
-pub(crate) fn issuer_did_for(arkret_config: &ArkretConfig) -> arkret_identifiers::FullId {
+pub(crate) fn issuer_did_for(arkret_config: &ArkretConfig) -> arkret_identifiers::DidFullId {
     arkret_config
         .runtime_service_identity
         .full_id()
         .expect("identity readiness gate prevents handlers from running without a service DID")
-}
-
-#[must_use]
-pub(crate) fn is_did_web_principal(did: &str) -> bool {
-    did.starts_with("did:web:")
-}
-
-pub(crate) fn ensure_principal_did_method_allowed(
-    arkret_config: &ArkretConfig,
-    did: &str,
-) -> Result<(), SessionGrantError> {
-    if is_did_web_principal(did) && !arkret_config.did_web_principal_allowed() {
-        return Err(SessionGrantError::DidWebPrincipalNotExplicit);
-    }
-    Ok(())
 }
 
 /// Local OIDC subject for Account Authority-issued OAuth tokens.
@@ -623,9 +580,10 @@ pub(crate) fn oidc_subject_for_user(_arkret_config: &ArkretConfig, user: &User) 
 
 #[derive(Debug, Clone)]
 pub(crate) struct PrincipalDidBinding {
-    pub did: String,
+    pub principal_id: arkret_identifiers::DidCoreId,
+    pub full_id: arkret_identifiers::DidFullId,
     pub audience: String,
-    pub principal_server_did: Option<String>,
+    pub accepted_service_id: arkret_identifiers::DidCoreId,
 }
 
 pub(crate) async fn principal_did_binding_for_user<R>(
@@ -647,8 +605,10 @@ where
             .await?
         {
             return Ok(Some(PrincipalDidBinding {
-                did: row.principal_id,
-                principal_server_did: Some(audience.to_string()),
+                principal_id: arkret_identifiers::DidCoreId::new(row.principal_id)
+                    .expect("repository validates principal core IDs"),
+                full_id: row.verified_full_id,
+                accepted_service_id: row.accepted_service_id,
                 audience: audience.to_string(),
             }));
         }
@@ -667,14 +627,10 @@ where
 {
     Ok(principal_did_binding_for_user(repo, arkret_config, user)
         .await?
-        .map(|binding| binding.did))
+        .map(|binding| binding.principal_id.to_string()))
 }
 
-/// Persisted principal DID that is allowed to leave the Account Authority.
-///
-/// The custom OAuth/UserInfo/viewer claims must not synthesize or publish a
-/// `did:web` principal unless the deployment explicitly opted into the
-/// personal-node profile and `did:web` principal method.
+/// Persisted stable principal identity that is allowed to leave the Account Authority.
 pub(crate) async fn published_principal_did_for_user<R>(
     repo: &mut R,
     arkret_config: &ArkretConfig,
@@ -683,8 +639,7 @@ pub(crate) async fn published_principal_did_for_user<R>(
 where
     R: RepositoryAccess,
 {
-    let did = principal_did_for_user(repo, arkret_config, user).await?;
-    Ok(did.filter(|did| ensure_principal_did_method_allowed(arkret_config, did).is_ok()))
+    principal_did_for_user(repo, arkret_config, user).await
 }
 
 /// Display form `local@host` used by logging / display paths.
@@ -967,20 +922,6 @@ impl Scribe for DebugIssueDpopGrantCanonicalJson {
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub struct DebugBindPrincipalRequestBody {
-    pub actor_id: String,
-    pub audience: String,
-    pub key_log_head: String,
-    pub account_handle: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct DebugBindPrincipalOutcome {
-    pub actor_id: String,
-    pub audience: String,
-}
-
 /// Returns true when test-only endpoints are explicitly allowed at runtime.
 /// The route is only mounted in debug builds, and this env gate must still
 /// be enabled there.
@@ -992,88 +933,6 @@ pub fn test_endpoints_enabled() -> bool {
             .as_deref(),
         Some("1" | "true" | "yes")
     )
-}
-
-/// Test-only setup seam for a principal whose DID inception was accepted by
-/// the live Principal Server. Recovery behavior still uses the standard
-/// authorization, recovery-completion, and session-grant endpoints.
-#[handler]
-pub async fn debug_bind_principal(
-    req: &mut Request,
-    depot: &Depot,
-) -> Result<Json<DebugBindPrincipalOutcome>, ArkretRouteError> {
-    if !test_endpoints_enabled() {
-        return Err(ArkretRouteError::NotFound);
-    }
-    let body: DebugBindPrincipalRequestBody = req
-        .parse_json()
-        .await
-        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
-    let principal_id = arkret_identifiers::Did::new(body.actor_id.clone())
-        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
-    let audience = arkret_identifiers::Did::new(body.audience.clone())
-        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
-    let key_log_head = arkret_identifiers::Hash::new(body.key_log_head)
-        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
-    let clock = crate::handlers::make_clock();
-    let mut rng = crate::handlers::make_rng();
-    let mut repo = depot.repo().await?;
-    let existing_user = {
-        let mut users = repo.user();
-        users.find_by_handle(&body.account_handle).await?
-    };
-    let user = match existing_user {
-        Some(user) => user,
-        None => {
-            repo.user()
-                .add(&mut *rng, &*clock, body.account_handle)
-                .await?
-        }
-    };
-    let existing_binding = {
-        let mut bindings = repo.principal_did();
-        bindings
-            .get_for_user_and_audience(&user, audience.as_str())
-            .await?
-    };
-    match existing_binding {
-        Some(binding)
-            if binding.principal_id == principal_id.as_str()
-                && binding.key_log_head == key_log_head => {}
-        Some(_) => {
-            repo.cancel().await.ok();
-            return Err(ArkretRouteError::coded(
-                StatusCode::CONFLICT,
-                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
-                "test principal binding already exists with different facts",
-            ));
-        }
-        None => {
-            repo.principal_did()
-                .add_verified(
-                    &mut *rng,
-                    &*clock,
-                    &user,
-                    VerifiedPrincipalDidBindingInput {
-                        audience: audience.to_string(),
-                        principal_id: principal_id.to_string(),
-                        key_log_head,
-                        verified_full_id: None,
-                        verified_version_id: None,
-                        binding_receipt: None,
-                        accepted_service_id: None,
-                        binding_version: None,
-                        binding_frontier_digest: None,
-                    },
-                )
-                .await?;
-        }
-    }
-    repo.save().await?;
-    Ok(Json(DebugBindPrincipalOutcome {
-        actor_id: principal_id.to_string(),
-        audience: audience.to_string(),
-    }))
 }
 
 /// `POST /api/v1/test/debug/issue-dpop-grant` — deterministic DPoP-bound
@@ -1136,6 +995,14 @@ pub async fn debug_issue_dpop_grant(
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .ok_or(ArkretRouteError::NotFound)?;
+    binding.authority_instance.validate().map_err(|error| {
+        ArkretRouteError::coded(
+            StatusCode::PRECONDITION_FAILED,
+            arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            error.to_string(),
+        )
+    })?;
+    let authority_instance = binding.authority_instance;
     let principal_did = binding.principal_id;
     let scopes = body.scopes.clone().unwrap_or_else(|| {
         vec![
@@ -1247,6 +1114,7 @@ pub async fn debug_issue_dpop_grant(
         audience,
         scopes,
         Some(&principal_did),
+        &authority_instance,
         jkt.clone(),
         arkret_models_identity::SessionGrantProofKind::PairedDeviceProof,
     )

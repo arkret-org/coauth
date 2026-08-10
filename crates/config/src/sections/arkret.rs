@@ -1,8 +1,8 @@
 use std::sync::{Arc, RwLock};
 
-use arkret_identifiers::{FullId, ServiceId, project_full_id_to_core_id};
+use arkret_identifiers::{DidCoreId, DidFullId, project_full_id_to_core_id};
 use arkret_identity::service_identity::{
-    LocalServiceIdentity, ServiceIdentityDiagnostic, ServiceIdentityKeyRef, ServiceIdentityState,
+    DidCoreIdentityDiagnostic, DidCoreIdentityKeyRef, DidCoreIdentityState, LocalDidCoreIdentity,
 };
 use arkret_models_identity::service_identity::{CanonicalServiceUrl, ServiceRegistrationKey};
 use arkret_wire::ServiceKind;
@@ -98,7 +98,7 @@ impl PrincipalMethodConfig {
 /// This handle is skipped by serde and schema generation because the DID is
 /// resolved from a trusted Provider and never belongs in configuration.
 #[derive(Clone)]
-pub struct RuntimeServiceIdentity(Arc<RwLock<ServiceIdentityState>>);
+pub struct RuntimeServiceIdentity(Arc<RwLock<DidCoreIdentityState>>);
 
 impl std::fmt::Debug for RuntimeServiceIdentity {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -111,8 +111,8 @@ impl std::fmt::Debug for RuntimeServiceIdentity {
 
 impl Default for RuntimeServiceIdentity {
     fn default() -> Self {
-        Self(Arc::new(RwLock::new(ServiceIdentityState::Faulted {
-            diagnostic: ServiceIdentityDiagnostic::ProviderNotConfigured,
+        Self(Arc::new(RwLock::new(DidCoreIdentityState::Faulted {
+            diagnostic: DidCoreIdentityDiagnostic::ProviderNotConfigured,
             next_action: "configure one trusted service-registration Provider endpoint and bearer"
                 .to_owned(),
         })))
@@ -122,7 +122,7 @@ impl Default for RuntimeServiceIdentity {
 impl RuntimeServiceIdentity {
     /// Returns a snapshot of the current lifecycle state.
     #[must_use]
-    pub fn state(&self) -> ServiceIdentityState {
+    pub fn state(&self) -> DidCoreIdentityState {
         self.0
             .read()
             .expect("service identity lock poisoned")
@@ -130,14 +130,14 @@ impl RuntimeServiceIdentity {
     }
 
     /// Replaces the current state after validating its invariants.
-    pub fn store(&self, state: ServiceIdentityState) {
+    pub fn store(&self, state: DidCoreIdentityState) {
         state.validate().expect("valid service identity state");
         *self.0.write().expect("service identity lock poisoned") = state;
     }
 
     /// Returns the stable service core id when the state carries an identity.
     #[must_use]
-    pub fn service_id(&self) -> Option<ServiceId> {
+    pub fn service_id(&self) -> Option<DidCoreId> {
         self.state()
             .identity()
             .map(|identity| identity.service_id.clone())
@@ -145,7 +145,7 @@ impl RuntimeServiceIdentity {
 
     /// Returns the current complete service DID when the state carries an identity.
     #[must_use]
-    pub fn full_id(&self) -> Option<FullId> {
+    pub fn full_id(&self) -> Option<DidFullId> {
         self.state()
             .identity()
             .map(|identity| identity.full_id.clone())
@@ -160,15 +160,15 @@ impl RuntimeServiceIdentity {
     #[doc(hidden)]
     #[must_use]
     pub fn fixture(service_id: &str) -> Self {
-        let full_id = FullId::new(service_id.to_owned()).expect("fixture service DID");
-        let service_id = ServiceId::from(
+        let full_id = DidFullId::new(service_id.to_owned()).expect("fixture service DID");
+        let service_id = DidCoreId::from(
             project_full_id_to_core_id(&full_id).expect("fixture service DID adapter"),
         );
         let signing_key_ref =
-            ServiceIdentityKeyRef::new("fixture:coauth:signing").expect("fixture key ref");
+            DidCoreIdentityKeyRef::new("fixture:coauth:signing").expect("fixture key ref");
         let handle = Self::default();
-        handle.store(ServiceIdentityState::Ready {
-            identity: LocalServiceIdentity {
+        handle.store(DidCoreIdentityState::Ready {
+            identity: LocalDidCoreIdentity {
                 service_id,
                 full_id,
                 registration_key: ServiceRegistrationKey::new(
@@ -180,7 +180,7 @@ impl RuntimeServiceIdentity {
                 provider: None,
                 signing_key_refs: vec![signing_key_ref.clone()],
                 active_signing_key_ref: signing_key_ref,
-                control_key_ref: ServiceIdentityKeyRef::new("fixture:coauth:control")
+                control_key_ref: DidCoreIdentityKeyRef::new("fixture:coauth:control")
                     .expect("fixture control key ref"),
                 version_id: "fixture-v1".to_owned(),
                 last_verified_at: chrono::DateTime::UNIX_EPOCH,
@@ -622,7 +622,7 @@ pub struct PrincipalServerConfig {
     /// endpoint URL or bearer token is never converted into an identity core.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<String>")]
-    pub service_id: Option<arkret_identifiers::ServiceId>,
+    pub service_id: Option<arkret_identifiers::DidCoreId>,
 
     /// Optional static bearer for the Account Authority / Principal Server
     /// trust edge. The Principal Server presents it to coauth introspection and

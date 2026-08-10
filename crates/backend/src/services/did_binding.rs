@@ -57,7 +57,7 @@
 
 use std::sync::Arc;
 
-use arkret_identifiers::{Did, Hash, TypedTrustDomainId};
+use arkret_identifiers::{DidFullId, Hash, TypedTrustDomainId};
 use arkret_identity::{
     AcceptedDidBinding, BindingInvalidation, DidBindingPurpose, DidBindingStatus, EvidenceReceipt,
     FreshnessProfile, FreshnessRequirement, LimitedTrust, MethodEvidence, ResolverFailMode,
@@ -134,7 +134,7 @@ pub const CONTROLLER_MAX_AGE: Duration = Duration::minutes(15);
 pub const HARD_EXPIRY: Duration = Duration::hours(24);
 
 /// The profile every high-risk authority write references
-/// ([`DidFreshnessProfileId::AuthorityHighRiskV1`], see [`HIGH_RISK_MAX_AGE`]).
+/// ([`DidFreshnessProfileId::CurrentExternalClaimV1`], see [`HIGH_RISK_MAX_AGE`]).
 ///
 /// The id comes from the generated registry surface: §5.4 registers the id and
 /// its tier, and the deployment declares only the numbers. coauth therefore
@@ -142,18 +142,18 @@ pub const HARD_EXPIRY: Duration = Duration::hours(24);
 #[must_use]
 pub fn high_risk_freshness() -> FreshnessProfile {
     FreshnessProfile::high_tier(
-        DidFreshnessProfileId::AuthorityHighRiskV1,
+        DidFreshnessProfileId::CurrentExternalClaimV1,
         HIGH_RISK_MAX_AGE,
         Some(HARD_EXPIRY),
     )
 }
 
 /// The profile the controller / agent-pairing authority paths reference
-/// ([`DidFreshnessProfileId::AuthorityControllerV1`], see [`CONTROLLER_MAX_AGE`]).
+/// ([`DidFreshnessProfileId::OngoingGovernanceV1`], see [`CONTROLLER_MAX_AGE`]).
 #[must_use]
 pub fn controller_freshness() -> FreshnessProfile {
     FreshnessProfile::high_tier(
-        DidFreshnessProfileId::AuthorityControllerV1,
+        DidFreshnessProfileId::OngoingGovernanceV1,
         CONTROLLER_MAX_AGE,
         Some(HARD_EXPIRY),
     )
@@ -561,7 +561,7 @@ impl CoauthBindingRequest<'_> {
     /// `BindingResolveRequest::key`.
     pub fn key(&self) -> Result<VerifiedDidBindingKey, DidBindingError> {
         Ok(VerifiedDidBindingKey {
-            did: Did::new(self.did.to_owned())
+            did: DidFullId::new(self.did.to_owned())
                 .map_err(|error| DidBindingError::Document(error.to_string()))?,
             trust_domain: self.trust_domain.clone(),
             purpose: self.purpose,
@@ -822,7 +822,7 @@ pub async fn ordinary_read_document(
     now: DateTime<Utc>,
 ) -> Result<AuthorityDocument, DidBindingError> {
     let key = VerifiedDidBindingKey {
-        did: Did::new(did.to_owned())
+        did: DidFullId::new(did.to_owned())
             .map_err(|error| DidBindingError::Document(error.to_string()))?,
         trust_domain: trust_domain_id(url_builder, arkret_config)?,
         purpose,
@@ -943,7 +943,7 @@ pub fn mirrored_acceptance(
 pub async fn invalidate_did_bindings(
     repo: &mut BoxRepository,
     store: &DurableVerifiedDidBindingStore,
-    did: &Did,
+    did: &DidFullId,
 ) -> Result<usize, DidBindingError> {
     store
         .invalidate_durable(repo, &BindingInvalidation::for_did(did.clone()))

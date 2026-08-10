@@ -129,7 +129,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
     validate_completion_evidence(&request, &receipt, &initial, &handoff, &dpop.jkt)?;
 
     let mut prerequisite_repo = depot.repo().await?;
-    verify_account_principal_binding(
+    let authority_instance = verify_account_principal_binding(
         &mut prerequisite_repo,
         handoff.service_account_id,
         &handoff.audience,
@@ -254,16 +254,13 @@ pub async fn issue_recovery_completion_grant_endpoint(
         initial.audience.to_string(),
         initial.requested_scope.clone(),
         Some(receipt.principal_id.as_str()),
+        &authority_instance,
         handoff.cnf_jkt.clone(),
         SessionGrantProofKind::DidBoundSignature,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let principal_core_id = arkret_identifiers::CoreId::from(
-        arkret_identifiers::project_full_id_to_core_id(&receipt.principal_id)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-    );
     let wire_grant = SessionGrantOutcome {
-        principal_id: principal_core_id,
+        principal_id: receipt.principal_id.clone(),
         device_id: Some(initial.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
@@ -443,7 +440,7 @@ async fn verify_account_principal_binding(
     account_id: coauth_data::Ulid,
     audience: &str,
     principal_id: &str,
-) -> Result<(), ArkretRouteError> {
+) -> Result<arkret_wire::PrincipalAuthorityInstance, ArkretRouteError> {
     let binding = repo
         .principal_did()
         .get_by_did_and_audience(principal_id, audience)
@@ -456,7 +453,11 @@ async fn verify_account_principal_binding(
             "recovered principal is bound to a different service account",
         ));
     }
-    Ok(())
+    binding
+        .authority_instance
+        .validate()
+        .map_err(|error| failed_precondition(error.to_string()))?;
+    Ok(binding.authority_instance)
 }
 
 async fn verify_coordinator_signatures(

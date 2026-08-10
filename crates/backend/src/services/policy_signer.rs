@@ -168,7 +168,7 @@ fn preferred_service_signing_key(
 
 #[cfg(test)]
 mod tests {
-    use arkret_identifiers::{Did, Hash, RealmId};
+    use arkret_identifiers::{DidCoreId, Hash, RealmId};
     use arkret_models_collaboration::governance::policy_check::PolicyCheckBoundTo;
     use arkret_wire::{AuthzDecision, FreshnessState};
     use chrono::{TimeZone as _, Utc};
@@ -191,10 +191,10 @@ mod tests {
             bound_to: PolicyCheckBoundTo {
                 realm_id: RealmId::new("ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO")
                     .unwrap(),
-                actor_id: Did::new("did:web:alice.example").unwrap(),
+                actor_id: DidCoreId::new("ak:did_core:web:alice.example").unwrap(),
                 action: "ak.message.create".into(),
                 request_canonical_digest: digest.clone(),
-                policy_server_id: Did::new("did:web:coauth.example").unwrap(),
+                policy_server_id: DidCoreId::new("ak:did_core:web:coauth.example").unwrap(),
             },
             reason_code: arkret_wire::ReasonCode::Ok,
             freshness_state: FreshnessState::Fresh,

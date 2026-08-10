@@ -463,14 +463,7 @@ pub async fn issue_session_grant_endpoint(
                         format!("issued grant carried a non-protocol device_id: {e}"),
                     ))
                 })?;
-            let principal_full_id = arkret_identifiers::FullId::new(success.principal_did.clone())
-                .map_err(|e| {
-                    ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
-                        format!("issued grant carried an invalid full principal_id: {e}"),
-                    ))
-                })?;
-            let principal_id = arkret_identifiers::project_full_id_to_core_id(&principal_full_id)
-                .map_err(|e| ArkretRouteError::Internal(Box::new(e)))?;
+            let principal_id = success.principal_id;
 
             // Human (OIDC) grant: grant_id / session_public_key / audience are
             // SessionGrantOutcome top-level fields (mirroring
@@ -488,7 +481,7 @@ pub async fn issue_session_grant_endpoint(
                         )
                     })?;
             let audience =
-                arkret_identifiers::ServiceId::new(success.session_grant.audience.clone())
+                arkret_identifiers::DidCoreId::new(success.session_grant.audience.clone())
                     .map_err(|e| {
                         ArkretRouteError::Internal(
                             Box::<dyn std::error::Error + Send + Sync>::from(format!(
@@ -749,7 +742,7 @@ async fn issue_agent_key_proof_session_grant(
     .map_err(map_session_grant_material_error)?;
 
     let principal_id =
-        arkret_identifiers::CoreId::new(authorization.agent_id.clone()).map_err(|e| {
+        arkret_identifiers::DidCoreId::new(authorization.agent_id.clone()).map_err(|e| {
             ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
                 "agent principal is not a valid DID: {e}"
             )))
@@ -763,7 +756,7 @@ async fn issue_agent_key_proof_session_grant(
     // above.
     let grant_id = material.grant_id.clone();
     let wire_audience =
-        arkret_identifiers::ServiceId::new(material.audience.clone()).map_err(|e| {
+        arkret_identifiers::DidCoreId::new(material.audience.clone()).map_err(|e| {
             ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
                 "issued agent grant carried a non-DID audience: {e}"
             )))
@@ -876,11 +869,6 @@ fn require_principal_id(raw_body: &serde_json::Value) -> Result<(), ArkretRouteE
 
 fn map_session_grant_material_error(error: SessionGrantError) -> ArkretRouteError {
     match error {
-        error @ SessionGrantError::DidWebPrincipalNotExplicit => ArkretRouteError::coded(
-            StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::INVALID_PARAM,
-            error.to_string(),
-        ),
         SessionGrantError::PrincipalUnknown => ArkretRouteError::coded(
             StatusCode::NOT_FOUND,
             arkret_wire::ErrorCode::PRINCIPAL_UNKNOWN,

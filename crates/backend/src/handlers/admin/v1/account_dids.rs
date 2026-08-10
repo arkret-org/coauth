@@ -164,7 +164,7 @@ pub async fn add_account_did(
     enforce_captcha(req, depot, body.captcha_token.as_deref()).await?;
 
     // Phase P2 (B-D): all DID binding writes round-trip through the SDK
-    // `Did::new` validator (Round-4 regex `^did:[a-z0-9]+:[^\s]+$`). Reject
+    // `DidFullId::new` validator (Round-4 regex `^did:[a-z0-9]+:[^\s]+$`). Reject
     // malformed DIDs BEFORE invoking the resolver chain so network I/O
     // never fires on a non-canonical value.
     let did = normalize_did_for_binding(&body.did)
@@ -261,48 +261,7 @@ pub async fn add_account_did(
             "principal binding acceptance failed: {error}"
         )))
     })?;
-    let key_log_head = validated_control
-        .binding
-        .history_head
-        .clone()
-        .ok_or_else(|| {
-            AppError::bad_request(
-                "control_proof_invalid: authoritative DID history head is required",
-            )
-        })?;
     let mut rng = crate::handlers::account::make_rng();
-    let audiences: Vec<String> = arkret_config
-        .principal_servers
-        .iter()
-        .filter_map(crate::services::resolved_principal_audiences::effective_audience_shared)
-        .map(|audience| audience.to_string())
-        .collect();
-    if audiences.is_empty() {
-        repo.cancel().await?;
-        return Err(AppError::bad_request(
-            "principal_unknown: no authoritative Principal Server audience is configured",
-        ));
-    }
-    for audience in audiences {
-        repo.principal_did()
-            .add_verified(
-                &mut rng,
-                &*clock,
-                &account,
-                coauth_data::user::VerifiedPrincipalDidBindingInput {
-                    audience,
-                    principal_id: did.clone(),
-                    key_log_head: key_log_head.clone(),
-                    verified_full_id: None,
-                    verified_version_id: None,
-                    binding_receipt: None,
-                    accepted_service_id: None,
-                    binding_version: None,
-                    binding_frontier_digest: None,
-                },
-            )
-            .await?;
-    }
     let audit_log = repo
         .audit()
         .add_admin_operation(
@@ -404,10 +363,10 @@ fn enforce_same_core_primary_refresh(
         return Ok(());
     };
     let current_full =
-        arkret_identifiers::FullId::new(current_primary.did.clone()).map_err(|error| {
+        arkret_identifiers::DidFullId::new(current_primary.did.clone()).map_err(|error| {
             AppError::bad_request(format!("current_primary_full_id_invalid: {error}"))
         })?;
-    let next_full = arkret_identifiers::FullId::new(new_did.to_owned())
+    let next_full = arkret_identifiers::DidFullId::new(new_did.to_owned())
         .map_err(|error| AppError::bad_request(format!("full_id_invalid: {error}")))?;
     let current_core =
         arkret_identifiers::project_full_id_to_core_id(&current_full).map_err(|error| {

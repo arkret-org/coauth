@@ -139,7 +139,7 @@ pub struct SolandFrontierSource {
     request_timeout: Duration,
     signing: Option<(
         coauth_keystore::Keystore,
-        arkret_identifiers::FullId,
+        arkret_identifiers::DidFullId,
         PeerKeyPackagesClaimTransportBinding,
     )>,
 }
@@ -155,7 +155,7 @@ impl SolandFrontierSource {
         http_client: reqwest::Client,
         signing: Option<(
             coauth_keystore::Keystore,
-            arkret_identifiers::FullId,
+            arkret_identifiers::DidFullId,
             PeerKeyPackagesClaimTransportBinding,
         )>,
     ) -> Self {

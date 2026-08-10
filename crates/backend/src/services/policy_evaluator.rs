@@ -673,7 +673,7 @@ pub type PolicyEvaluatorHandle = Arc<dyn PolicyEvaluator>;
 
 #[cfg(test)]
 mod tests {
-    use arkret_identifiers::{Did, Hash, RealmId};
+    use arkret_identifiers::{DidCoreId, Hash, RealmId};
     use arkret_models_collaboration::governance::policy_check::PolicyCheckSource;
 
     use super::*;
@@ -683,12 +683,12 @@ mod tests {
             request_id: "req-1".into(),
             realm_id: RealmId::new("ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO")
                 .unwrap(),
-            actor_id: Did::new(actor.to_owned()).unwrap(),
+            actor_id: DidCoreId::new(actor.to_owned()).unwrap(),
             device_id: None,
             action: action.to_owned(),
             request_canonical_digest: Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
             source: PolicyCheckSource {
-                service_id: Did::new("did:web:soland.example").unwrap(),
+                service_id: DidCoreId::new("ak:did_core:web:soland.example").unwrap(),
                 service_kind: "principal_server".into(),
                 source_ip_digest: Some(Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap()),
                 signed_transport: true,
@@ -715,7 +715,7 @@ mod tests {
             capability_grant_id: "ak:grant:AYdnNxQil6MnHQLqm01XNizblBlrjoob6Q1JlIVBUGig".to_owned(),
             grant_event_id: "ak:event:AQICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC".to_owned(),
             revoke_event_id: None,
-            subject: "did:web:alice.example".to_owned(),
+            subject: "ak:did_core:web:alice.example".to_owned(),
             realm_id: "ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO".to_owned(),
             action,
             expires_at: None,
@@ -733,7 +733,7 @@ mod tests {
     #[test]
     fn empty_rules_yield_allow() {
         let data = serde_json::json!({});
-        let r = req("did:web:alice.example", "ak.message.create");
+        let r = req("ak:did_core:web:alice.example", "ak.message.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
         assert_eq!(d.reason_code.as_str(), "ok");
@@ -745,7 +745,7 @@ mod tests {
         let data = serde_json::json!({
             "throttle_actions": {"ak.message.create": {"retry_after_ms": 45_000}}
         });
-        let r = req("did:web:alice.example", "ak.message.create");
+        let r = req("ak:did_core:web:alice.example", "ak.message.create");
         let before = Utc::now();
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
 
@@ -761,7 +761,7 @@ mod tests {
     #[test]
     fn bare_throttle_action_list_uses_the_default_window() {
         let data = serde_json::json!({"throttle_actions": ["ak.message.create"]});
-        let r = req("did:web:alice.example", "ak.message.create");
+        let r = req("ak:did_core:web:alice.example", "ak.message.create");
         let before = Utc::now();
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
 
@@ -783,7 +783,7 @@ mod tests {
             serde_json::json!({"throttle_actions": ["ak.message.update"]}),
             serde_json::json!({"throttle_actions": {"ak.message.create": {"retry_after_ms": 0}}}),
         ] {
-            let r = req("did:web:alice.example", "ak.message.create");
+            let r = req("ak:did_core:web:alice.example", "ak.message.create");
             let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
             assert!(matches!(d.decision, AuthzDecision::Allow), "{data}");
             assert!(d.next_retry_at.is_none(), "{data}");
@@ -796,7 +796,7 @@ mod tests {
             "deny_actions": ["ak.message.create"],
             "throttle_actions": ["ak.message.create"]
         });
-        let r = req("did:web:alice.example", "ak.message.create");
+        let r = req("ak:did_core:web:alice.example", "ak.message.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
 
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
@@ -805,7 +805,7 @@ mod tests {
 
     #[test]
     fn absent_rules_still_reject_candidate_join_policy_profile_action() {
-        let r = req("did:web:alice.example", "ak.realm.join.review");
+        let r = req("ak:did_core:web:alice.example", "ak.realm.join.review");
         let d = match_rules(
             &Value::Null,
             &r,
@@ -821,7 +821,7 @@ mod tests {
         let data = serde_json::json!({
             "require_review_actions": ["ak.realm.join.review"]
         });
-        let r = req("did:web:alice.example", "ak.realm.join.review");
+        let r = req("ak:did_core:web:alice.example", "ak.realm.join.review");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code.as_str(), "unsupported_feature");
@@ -833,7 +833,7 @@ mod tests {
             "enabled_profile_refs": ["ak.profile.candidate.join_policy.v1"],
             "require_review_actions": ["ak.realm.join.review"]
         });
-        let r = req("did:web:alice.example", "ak.realm.join.review");
+        let r = req("ak:did_core:web:alice.example", "ak.realm.join.review");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code.as_str(), "unsupported_feature");
@@ -842,7 +842,7 @@ mod tests {
     #[test]
     fn bare_candidate_member_application_actions_fail_closed() {
         let data = serde_json::json!({});
-        let r = req("did:web:alice.example", "member.application.review");
+        let r = req("ak:did_core:web:alice.example", "member.application.review");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code.as_str(), "unsupported_feature");
@@ -851,7 +851,7 @@ mod tests {
     #[test]
     fn unknown_capability_action_fails_closed() {
         let data = serde_json::json!({});
-        let r = req("did:web:alice.example", "ak.not_registered.action");
+        let r = req("ak:did_core:web:alice.example", "ak.not_registered.action");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code.as_str(), "unsupported_feature");
@@ -859,7 +859,7 @@ mod tests {
 
     #[test]
     fn profile_capability_action_requires_declared_profile_and_grant() {
-        let r = req("did:web:alice.example", "ak.pin.add");
+        let r = req("ak:did_core:web:alice.example", "ak.pin.add");
 
         let denied = match_rules(
             &serde_json::json!({}),
@@ -897,7 +897,7 @@ mod tests {
 
     #[test]
     fn expired_collaboration_capability_grant_denies() {
-        let r = req("did:web:alice.example", "ak.pin.add");
+        let r = req("ak:did_core:web:alice.example", "ak.pin.add");
         let mut grant = collaboration_grant(CapabilityActionId::PinAdd);
         grant.expires_at = Some(Utc::now() - chrono::Duration::seconds(1));
 
@@ -919,7 +919,7 @@ mod tests {
         let data = serde_json::json!({
             "deny_actors": ["did:web:mallory.example"]
         });
-        let r = req("did:web:mallory.example", "ak.message.create");
+        let r = req("ak:did_core:web:mallory.example", "ak.message.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code.as_str(), "policy_violation");
@@ -930,7 +930,7 @@ mod tests {
         let data = serde_json::json!({
             "deny_actions": ["ak.invite.create"]
         });
-        let r = req("did:web:alice.example", "ak.invite.create");
+        let r = req("ak:did_core:web:alice.example", "ak.invite.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
     }
@@ -940,7 +940,7 @@ mod tests {
         let data = serde_json::json!({
             "require_review_actions": ["ak.invite.create"]
         });
-        let r = req("did:web:alice.example", "ak.invite.create");
+        let r = req("ak:did_core:web:alice.example", "ak.invite.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::RequireReview));
         assert_eq!(d.reason_code.as_str(), "policy_review_required");
@@ -949,7 +949,7 @@ mod tests {
     #[test]
     fn unknown_freshness_fails_closed_for_high_risk_action() {
         let data = serde_json::json!({});
-        let r = req("did:web:alice.example", "ak.capability.revoke");
+        let r = req("ak:did_core:web:alice.example", "ak.capability.revoke");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Unknown), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code.as_str(), "revocation_freshness_unknown");
@@ -959,7 +959,7 @@ mod tests {
     #[test]
     fn unknown_freshness_keeps_local_pending_actions_out_of_high_risk_bucket() {
         let data = serde_json::json!({});
-        let r = req("did:web:alice.example", "ak.message.create");
+        let r = req("ak:did_core:web:alice.example", "ak.message.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Unknown), "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
         assert_eq!(d.reason_code.as_str(), "ok");
@@ -968,7 +968,7 @@ mod tests {
     #[test]
     fn realm_scope_overrides_default() {
         let data = serde_json::json!({
-            "deny_actors": ["did:web:alice.example"],
+            "deny_actors": ["ak:did_core:web:alice.example"],
             "realms": {
                 "ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO": {
                     // Realm-specific scope: NO deny_actors, so alice is
@@ -978,7 +978,7 @@ mod tests {
                 }
             }
         });
-        let r = req("did:web:alice.example", "ak.message.create");
+        let r = req("ak:did_core:web:alice.example", "ak.message.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
     }
@@ -998,7 +998,7 @@ mod tests {
         let data = serde_json::json!({
             "deny_actions": ["ak.call.join"]
         });
-        let r = req("did:web:alice.example", "ak.call.join");
+        let r = req("ak:did_core:web:alice.example", "ak.call.join");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code.as_str(), "policy_violation");
@@ -1025,7 +1025,7 @@ mod tests {
                 }
             }
         });
-        let mut r = req("did:web:alice.example", "ak.call.record");
+        let mut r = req("ak:did_core:web:alice.example", "ak.call.record");
         r.auth_context =
             Some(serde_json::from_value(serde_json::json!({ "circle_id": circle_id })).unwrap());
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
@@ -1037,7 +1037,7 @@ mod tests {
         let data = serde_json::json!({
             "strict_reject_profile": true,
         });
-        let mut r = req("did:web:alice.example", "ak.actor.profile.update");
+        let mut r = req("ak:did_core:web:alice.example", "ak.actor.profile.update");
         r.event_preview = Some(
             serde_json::from_value(
                 serde_json::json!({ "accountable_principal_ids_unverified": true }),
@@ -1054,7 +1054,7 @@ mod tests {
     #[test]
     fn policy1_strict_reject_inert_when_profile_off() {
         let data = serde_json::json!({});
-        let mut r = req("did:web:alice.example", "ak.actor.profile.update");
+        let mut r = req("ak:did_core:web:alice.example", "ak.actor.profile.update");
         r.event_preview = Some(
             serde_json::from_value(
                 serde_json::json!({ "accountable_principal_ids_unverified": true }),

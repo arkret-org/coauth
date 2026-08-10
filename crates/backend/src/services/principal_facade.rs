@@ -43,8 +43,8 @@ pub struct DbConnectorAdmin {
 #[derive(Clone)]
 struct PeerSigningContext {
     keystore: coauth_keystore::Keystore,
-    source_service_id: arkret_identifiers::ServiceId,
-    source_full_id: arkret_identifiers::FullId,
+    source_service_id: arkret_identifiers::DidCoreId,
+    source_full_id: arkret_identifiers::DidFullId,
     source_trust_domain: arkret_identifiers::TypedTrustDomainId,
 }
 
@@ -72,8 +72,8 @@ impl DbConnectorAdmin {
     pub fn with_peer_signing(
         mut self,
         keystore: coauth_keystore::Keystore,
-        source_service_id: arkret_identifiers::ServiceId,
-        source_full_id: arkret_identifiers::FullId,
+        source_service_id: arkret_identifiers::DidCoreId,
+        source_full_id: arkret_identifiers::DidFullId,
         source_trust_domain: arkret_identifiers::TypedTrustDomainId,
     ) -> Self {
         self.peer_signing = Some(PeerSigningContext {

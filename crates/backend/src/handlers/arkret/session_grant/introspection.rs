@@ -1,4 +1,4 @@
-use arkret_identifiers::{DeviceId, ServiceId};
+use arkret_identifiers::{DeviceId, DidCoreId};
 use arkret_models_collaboration::session_grant_bodies::{
     SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND, SessionGrantIntrospectGrant,
     SessionGrantIntrospectOutcome, SessionGrantIntrospectRequestBody, SessionGrantIntrospectStatus,
@@ -49,7 +49,7 @@ fn introspection_grant_record(
                 "stored session grant device_id is invalid: {error}"
             )))
         })?;
-    let audience = ServiceId::new(grant.audience.clone()).map_err(|error| {
+    let audience = DidCoreId::new(grant.audience.clone()).map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "stored session grant audience is not a service core_id: {error}"
         )))
@@ -262,7 +262,7 @@ pub async fn introspect_session_grant(
         &grant,
         user.as_ref(),
         clock.now(),
-        requested_audience.as_ref().map(ServiceId::as_str),
+        requested_audience.as_ref().map(DidCoreId::as_str),
     );
     let mut proof_required = false;
     if status == SessionGrantIntrospectStatus::Active {

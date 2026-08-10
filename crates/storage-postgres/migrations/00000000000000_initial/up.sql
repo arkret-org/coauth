@@ -608,16 +608,17 @@ CREATE TABLE public.principal_did_bindings (
     principal_did_owner_id uuid NOT NULL,
     user_id uuid NOT NULL,
     audience text NOT NULL,
-    verified_full_id text,
-    verified_version_id text,
-    binding_receipt jsonb,
-    accepted_service_id text,
-    binding_version bigint,
-    binding_frontier_digest text,
+    verified_full_id text NOT NULL,
+    verified_version_id text NOT NULL,
+    binding_receipt jsonb NOT NULL,
+    accepted_service_id text NOT NULL,
+    binding_version bigint NOT NULL,
+    binding_frontier_digest text NOT NULL,
+    authority_instance jsonb NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
-    ,CONSTRAINT principal_did_binding_basis_shape CHECK ((accepted_service_id IS NULL AND binding_version IS NULL AND binding_frontier_digest IS NULL) OR (accepted_service_id IS NOT NULL AND binding_version >= 1 AND binding_frontier_digest ~ '^sha256:[0-9a-f]{64}$'::text))
-    ,CONSTRAINT principal_did_binding_resolution_snapshot_shape CHECK ((verified_full_id IS NULL AND verified_version_id IS NULL AND binding_receipt IS NULL) OR (verified_full_id IS NOT NULL AND verified_version_id IS NOT NULL AND binding_receipt IS NOT NULL AND verified_full_id ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text AND btrim(verified_version_id) <> ''::text AND jsonb_typeof(binding_receipt) = 'object'::text))
+    ,CONSTRAINT principal_did_binding_basis_shape CHECK (audience = accepted_service_id AND audience LIKE 'ak:did_core:%' AND binding_version >= 1 AND binding_frontier_digest ~ '^sha256:[0-9a-f]{64}$'::text)
+    ,CONSTRAINT principal_did_binding_resolution_snapshot_shape CHECK (verified_full_id ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text AND btrim(verified_version_id) <> ''::text AND jsonb_typeof(binding_receipt) = 'object'::text AND jsonb_typeof(authority_instance) = 'object'::text)
 );
 
 -- Durable exact-replay ledger for short-lived Account Authority controller
@@ -1462,7 +1463,7 @@ ALTER TABLE ONLY public.principal_did_owners
 
 ALTER TABLE ONLY public.principal_did_owners
     ADD CONSTRAINT principal_did_owners_fields_nonempty CHECK (
-        btrim(principal_id) <> '' AND
+        principal_id LIKE 'ak:did_core:%' AND
         btrim(key_log_head) <> ''
     );
 

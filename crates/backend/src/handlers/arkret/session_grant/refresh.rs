@@ -1,7 +1,7 @@
-use arkret_identifiers::{DeviceId, ServiceId};
+use arkret_identifiers::{DeviceId, DidCoreId};
 use arkret_models_collaboration::session_grant_bodies::{
     SessionGrantRefreshOutcome, SessionGrantRefreshProof, SessionGrantRefreshRequestBody,
-    session_grant_refresh_proof_signing_bytes, session_grant_refresh_request_digest,
+    session_grant_refresh_request_digest,
 };
 use arkret_models_identity::SessionGrantProofKind;
 use chrono::{DateTime, Utc};
@@ -15,10 +15,6 @@ use sha2::Digest as _;
 
 use super::*;
 use crate::handlers::arkret::*;
-use crate::services::device_signing_directory::{
-    ResolvedDeviceSigningKey, resolve_authorized_device_signing_key,
-};
-use crate::services::resolved_principal_audiences;
 
 const SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS: i64 = 300;
 const SOFT_LOGOUT_DID_PROOF_REPLAY_REASON: &str = "did_proof_replay_window_exceeded";
@@ -159,7 +155,7 @@ fn soft_logout_restore_request_canonical_digest(
     audience: &str,
     grant_binding_key_id: &str,
 ) -> Result<String, ArkretRouteError> {
-    let audience = ServiceId::new(audience.to_owned()).map_err(|error| {
+    let audience = DidCoreId::new(audience.to_owned()).map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "session grant audience is not a service core_id: {error}"
         )))
@@ -179,150 +175,44 @@ fn soft_logout_restore_request_canonical_digest(
     })
 }
 
-fn verification_method_did(verification_method: &str) -> &str {
-    let without_fragment = verification_method
-        .split_once('#')
-        .map_or(verification_method, |(did, _)| did);
-    without_fragment
-        .split_once('?')
-        .map_or(without_fragment, |(did, _)| did)
-}
-
-/// Verify the soft-logout proof against the device signing key resolved from
-/// the Principal Server directory and return its protected-header `kid`.
-fn verify_detached_jws_with_device_key(
-    detached_jws: &str,
-    payload_bytes: &[u8],
-    device_multibase: &str,
-) -> Result<String, String> {
-    use arkret_signatures::proof::{Ed25519DetachedJwsVerifier, PublicKeyMaterial};
-
-    let material = PublicKeyMaterial::Ed25519Multibase {
-        value: device_multibase.to_owned(),
-    };
-    let verified = Ed25519DetachedJwsVerifier::new()
-        .verify_detached_jws_with_metadata(detached_jws, payload_bytes, &material)
-        .map_err(|error| error.to_string())?;
-    verified
-        .key_id()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned)
-        .ok_or_else(|| "protected header missing kid".to_owned())
-}
-
-async fn verify_soft_logout_did_proof(
-    http_client: &reqwest::Client,
-    arkret_config: &coauth_config::ArkretConfig,
+fn verify_soft_logout_did_proof(
     body: &SessionGrantRefreshRequestBody,
     prior_grant: &coauth_data::SessionGrant,
     device_id: &str,
     now: DateTime<Utc>,
-) -> Result<ResolvedDeviceSigningKey, ArkretRouteError> {
+) -> Result<(), ArkretRouteError> {
     let proof = required_soft_logout_proof(body);
     validate_soft_logout_proof_kind(proof.proof_kind)?;
-
-    let challenge = required_proof_str(&proof.challenge, "challenge")?;
-    let proof_audience = &proof.audience;
-    let request_canonical_digest = proof.request_canonical_digest.as_str();
-    let proof_jws = required_proof_str(&proof.signature, "signature")?;
-    let issued_at = proof.issued_at;
-    let expires_at = proof.expires_at;
-
-    if proof_audience.as_str() != prior_grant.audience {
+    let _challenge = required_proof_str(&proof.challenge, "challenge")?;
+    let verification_method = proof
+        .verification_method
+        .as_ref()
+        .map(|value| value.as_str())
+        .ok_or_else(|| did_proof_required("DID proof verification_method is required"))?;
+    required_proof_str(&proof.signature, "signature")?;
+    if proof.audience.as_str() != prior_grant.audience {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
             "soft logout DID proof audience must match the session grant audience",
         ));
     }
-
-    validate_soft_logout_did_proof_window(issued_at, expires_at, now)?;
-
-    let payload = session_grant_refresh_proof_signing_bytes(
-        &prior_grant.subject,
-        device_id,
-        proof_audience,
-        challenge,
-        request_canonical_digest,
-        issued_at,
-        expires_at,
-    )
-    .map_err(|error| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "soft logout DID proof canonicalization failed: {error}"
-        )))
-    })?;
-
-    // Device-identity source of truth is the Principal Server's device directory,
-    // NOT the principal DID document. The device signing key was authorized by a
-    // `ak.device.authorize` event and projected into soland's device directory; a
-    // `ak.device.revoke` masks it. Resolve the authorized, non-revoked key for
-    // this human `(principal, device)` and verify the detached DID-proof JWS
-    // against it. Agent runtimes use the separate `agent_key_proof` branch.
-    // The directory only surfaces verified, non-revoked devices, so a resolved
-    // key is itself proof the device is currently authorized.
-    let resolved = resolve_authorized_device_signing_key(
-        http_client,
-        arkret_config,
-        resolved_principal_audiences::shared(),
-        &prior_grant.audience,
-        &prior_grant.subject,
-        device_id,
-    )
-    .await
-    .map_err(|error| did_proof_invalid(format!("device signing key resolution failed: {error}")))?;
-
-    let verification_method =
-        verify_detached_jws_with_device_key(proof_jws, &payload, &resolved.multibase)
-            .map_err(|error| did_proof_invalid(format!("DID proof JWS invalid: {error}")))?;
-    if let Some(expected_method) = proof
-        .verification_method
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        && expected_method != verification_method.as_str()
-    {
-        return Err(did_proof_invalid(
-            "DID proof verification_method does not match the detached JWS kid",
-        ));
-    }
-    // The kid principal MUST still be the session-grant subject, so a proof
-    // signed under a different principal's device key cannot restore this
-    // session. The kid may carry either the principal DID prefix
-    // (`{principal}#{device}`) or the bare device `did:key`; accept either, but
-    // when it is principal-prefixed it MUST match the subject.
-    let kid_principal = verification_method_did(&verification_method);
-    let kid_is_principal_prefixed =
-        kid_principal.starts_with("did:webvh:") || kid_principal.starts_with("did:web:");
-    if kid_is_principal_prefixed && kid_principal != prior_grant.subject {
-        return Err(did_proof_invalid(
-            "DID proof verification_method principal does not match the session grant subject",
-        ));
-    }
-    if !kid_is_principal_prefixed
-        && !kid_principal.starts_with("did:key:")
-        && verification_method.as_str() != resolved.device_signing_key_did
-    {
-        return Err(did_proof_invalid(
-            "DID proof verification_method does not match the authorized device signing key",
-        ));
-    }
-
+    validate_soft_logout_did_proof_window(proof.issued_at, proof.expires_at, now)?;
     let expected_digest = soft_logout_restore_request_canonical_digest(
         &body.grant_jwt,
         &prior_grant.subject,
         device_id,
-        proof_audience.as_str(),
-        &verification_method,
+        proof.audience.as_str(),
+        verification_method,
     )?;
-    if request_canonical_digest != expected_digest {
+    if proof.request_canonical_digest.as_str() != expected_digest {
         return Err(did_proof_invalid(
             "DID proof request_canonical_digest does not match the presented restore request",
         ));
     }
-
-    Ok(resolved)
+    Err(did_proof_invalid(
+        "federated device signing evidence with an exact PrincipalAuthorityInstance is required; transport-only device directory assertions are not accepted",
+    ))
 }
 
 // ── DPoP-bound session-grant refresh + debug seed ──────────────
@@ -341,9 +231,10 @@ async fn verify_soft_logout_did_proof(
 /// * A request body carrying the prior grant JWT, the bound `device_id`, and a fresh human-device
 ///   DID proof over the soft-logout restore transcript.
 ///
-/// On success the old grant is revoked (single-use semantics — its
-/// `revoked_at` is persisted) and a new grant is issued with the same
-/// `cnf.jkt`, a rotated id, and a fresh expiry.
+/// The route currently fails closed before rotation because its request DTO
+/// does not yet carry the SDK aggregate device evidence needed to verify an
+/// exact PCR authority instance. A current product-local directory assertion
+/// is deliberately insufficient.
 #[handler]
 pub async fn refresh_session_grant(
     req: &mut Request,
@@ -756,7 +647,7 @@ pub async fn refresh_session_grant(
             issuance_seed.expires_at,
         )
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-        let audience = ServiceId::new(new_material.audience.clone()).map_err(|error| {
+        let audience = DidCoreId::new(new_material.audience.clone()).map_err(|error| {
             ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
                 "refreshed Agent grant carried an invalid service core_id audience: {error}"
             )))
@@ -942,15 +833,16 @@ pub async fn refresh_session_grant(
     // one Principal Server must not be able to rotate it into a grant for a
     // different audience (which it could then exchange there). Ignore any
     // client-supplied audience; reject an explicit mismatch defensively.
-    let authorized_device = verify_soft_logout_did_proof(
-        &http_client,
-        &arkret_config,
-        &body,
-        &prior_grant,
-        device_id,
-        now,
-    )
-    .await?;
+    let principal_binding = repo
+        .principal_did()
+        .get_by_did_and_audience(&prior_grant.subject, &prior_grant.audience)
+        .await?
+        .ok_or_else(|| did_proof_invalid("session grant authority instance is unavailable"))?;
+    principal_binding
+        .authority_instance
+        .validate()
+        .map_err(|error| did_proof_invalid(error.to_string()))?;
+    verify_soft_logout_did_proof(&body, &prior_grant, device_id, now)?;
 
     // 6. Rebuild the successor solely from the durable reservation seed. The
     // signing window, nonce, chain id and signing key therefore remain byte
@@ -976,12 +868,13 @@ pub async fn refresh_session_grant(
         audience,
         scopes,
         Some(&prior_grant.subject),
+        &principal_binding.authority_instance,
         verification.jkt.clone(),
         proof_kind,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
-    let response_audience = ServiceId::new(new_material.audience.clone()).map_err(|error| {
+    let response_audience = DidCoreId::new(new_material.audience.clone()).map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "refreshed grant carried an invalid service core_id audience: {error}"
         )))

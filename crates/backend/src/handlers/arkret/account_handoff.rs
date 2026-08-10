@@ -1,7 +1,7 @@
 //! Canonical account-first handoff, lease, and identity-binding operations.
 use arkret_models_identity::{
     ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffAllowedOperation, AccountHandoffBinding,
-    AccountHandoffOutcome, AccountHandoffRequestBody, DidBindingChallengeRequestBody, Handle,
+    AccountHandoffOutcome, AccountHandoffRequestBody, Handle,
     IdentityAbandonmentChallengeRequestBody, IdentityAbandonmentRequestBody,
     IdentityBindingChallengeRequestBody,
 };
@@ -11,11 +11,10 @@ use coauth_data::{
     AccountHandoffAuthorizationCheckpoint, AccountHandoffCreation, AccountHandoffCreationAttempt,
     AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve,
     AccountHandoffCreationAttemptState, AccountHandoffGrant, AccountHandoffGrantInput,
-    DidBindingChallengeInput, DidBindingChallengeIssue, IdentityAbandonmentChallengeInput,
-    IdentityAbandonmentChallengeIssue, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
-    IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
-    IdentityCreationLeaseRiskDecision, NewAccountHandoffCreationAttempt, RepositoryAccess as _,
-    Ulid, new_id,
+    IdentityAbandonmentChallengeInput, IdentityAbandonmentChallengeIssue,
+    IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
+    IdentityBindingChallengeIssue, IdentityCreationLeaseRiskDecision,
+    NewAccountHandoffCreationAttempt, RepositoryAccess as _, Ulid, new_id,
 };
 use rand_core::RngCore;
 use salvo::prelude::*;
@@ -182,7 +181,7 @@ pub async fn create_account_handoff(
     let checkpoint = AccountHandoffAuthorizationCheckpoint {
         service_account_id: authenticated.user.id.to_string(),
         browser_session_id: authenticated.browser_session_id.map(|id| id.to_string()),
-        audience: arkret_identifiers::ServiceId::new(authenticated.audience)
+        audience: arkret_identifiers::DidCoreId::new(authenticated.audience)
             .map_err(|error| failed_precondition(error.to_string()))?,
         account_handle: account_handle.to_string(),
         preferred_locale: preferred_locale.map(|locale| locale.code().to_owned()),
@@ -398,184 +397,6 @@ fn indeterminate_handoff_replay() -> ArkretRouteError {
     )
 }
 
-pub(crate) struct PublishedDidVerification {
-    pub document: crate::handlers::arkret::DidDocument,
-    pub did_version_id: String,
-    pub log_head_digest: arkret_identifiers::Hash,
-    pub control_key_digest: arkret_identifiers::Hash,
-}
-
-pub(crate) async fn resolve_published_did(
-    depot: &Depot,
-    repo: &mut coauth_data::BoxRepository,
-    principal_id: &arkret_identifiers::CoreId,
-    full_id: &arkret_identifiers::FullId,
-    verification_method: Option<&arkret_wire::DidUrl>,
-    now: chrono::DateTime<chrono::Utc>,
-) -> Result<PublishedDidVerification, ArkretRouteError> {
-    let projected = arkret_identifiers::project_full_id_to_core_id(full_id)
-        .map_err(|error| failed_precondition(error.to_string()))?;
-    if &projected != principal_id {
-        return Err(failed_precondition(
-            "published DID full_id does not project to principal_id",
-        ));
-    }
-    let config = depot.arkret_config()?;
-    let binding = crate::services::did_binding::authority_document(
-        &depot.http_client()?,
-        &depot.url_builder()?,
-        &config,
-        &depot.key_store()?,
-        repo,
-        depot.did_resolver_service()?.as_ref(),
-        depot.verified_did_binding_store()?.as_ref(),
-        full_id.as_str(),
-        arkret_identity::DidBindingPurpose::AccountBinding,
-        crate::services::did_binding::high_risk_freshness(),
-        now,
-    )
-    .await
-    .map_err(|error| failed_precondition(error.to_string()))?;
-    let method = match verification_method {
-        Some(expected) => binding
-            .document
-            .verification_method
-            .iter()
-            .find(|method| method.id == expected.as_str()),
-        None => binding.document.verification_method.first(),
-    }
-    .ok_or_else(|| failed_precondition("resolved DID has no matching control key"))?;
-    let controller = method
-        .id
-        .split_once('#')
-        .map(|(controller, _)| controller)
-        .ok_or_else(|| failed_precondition("resolved control key is not a DID URL"))?;
-    if controller != full_id.as_str() {
-        return Err(failed_precondition(
-            "resolved control key controller does not match full_id",
-        ));
-    }
-    let control_key_digest = arkret_identifiers::Hash::new(
-        arkret_canonical::canonical_sha256(method)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let binding_version = binding
-        .accepted
-        .binding()
-        .version_id()
-        .map(ToOwned::to_owned);
-    let document_digest = arkret_identifiers::Hash::new(
-        arkret_canonical::canonical_sha256(&binding.document)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let did_version_id =
-        binding_version.unwrap_or_else(|| format!("synthetic:{}", document_digest.as_str()));
-    let log_head_digest = binding.history_head.unwrap_or(document_digest);
-    Ok(PublishedDidVerification {
-        document: binding.document,
-        did_version_id,
-        log_head_digest,
-        control_key_digest,
-    })
-}
-
-/// `POST /_arkret/gate/account/did-binding-challenges`.
-#[handler]
-pub async fn issue_did_binding_challenge(
-    req: &mut Request,
-    depot: &Depot,
-) -> Result<Json<arkret_models_identity::DidBindingChallengeOutcome>, ArkretRouteError> {
-    let (grant, _dpop) = authenticate_account_handoff(
-        req,
-        depot,
-        AccountHandoffAllowedOperation::IssueDidBindingChallenge,
-    )
-    .await?;
-    enforce_handoff_operation(
-        &grant,
-        AccountHandoffAllowedOperation::IssueDidBindingChallenge,
-    )?;
-    let body: DidBindingChallengeRequestBody = req
-        .parse_json()
-        .await
-        .map_err(|_| schema_violation("invalid published DID challenge body"))?;
-    let request_digest = body
-        .canonical_request_digest()
-        .map_err(|error| schema_violation(error.to_string()))?;
-    let config = depot.arkret_config()?;
-    let account_subject =
-        account_subject(&super::service_id_for(&config), grant.service_account_id)?;
-    let trust_domain = arkret_identifiers::TypedTrustDomainId::new(trust_domain_for(
-        &depot.url_builder()?,
-        &config,
-    ))
-    .map_err(|error| failed_precondition(error.to_string()))?;
-    let audience = arkret_identifiers::ServiceId::new(grant.audience.clone())
-        .map_err(|error| failed_precondition(error.to_string()))?;
-    let origin = depot
-        .url_builder()?
-        .http_base()
-        .origin()
-        .ascii_serialization();
-    let clock = make_clock();
-    let now = clock.now();
-    let mut repo = depot.repo().await?;
-    let verified = resolve_published_did(
-        depot,
-        &mut repo,
-        &body.principal_id,
-        &body.full_id,
-        None,
-        now,
-    )
-    .await?;
-    let mut rng = make_rng();
-    let issue = repo
-        .account_handoff()
-        .issue_did_binding_challenge(DidBindingChallengeInput {
-            request_id: body.request_id,
-            request_digest,
-            issuing_handoff_grant_id: grant.id,
-            service_account_id: grant.service_account_id,
-            account_subject,
-            principal_id: body.principal_id,
-            full_id: body.full_id,
-            did_version_id: verified.did_version_id,
-            log_head_digest: verified.log_head_digest,
-            control_key_digest: verified.control_key_digest,
-            witness_evidence: None,
-            challenge_id: random_opaque(&mut *rng, 24),
-            challenge: random_opaque(&mut *rng, 32),
-            dpop_jkt: grant.cnf_jkt,
-            audience,
-            origin,
-            trust_domain,
-            issued_at: now,
-            expires_at: now + IDENTITY_BINDING_CHALLENGE_TTL,
-        })
-        .await?;
-    match issue {
-        DidBindingChallengeIssue::Issued(challenge)
-        | DidBindingChallengeIssue::Replay(challenge) => {
-            repo.save().await?;
-            Ok(Json(challenge.wire_outcome()))
-        }
-        DidBindingChallengeIssue::DuplicateConflict => {
-            repo.cancel().await.ok();
-            Err(duplicate_handoff_conflict())
-        }
-        DidBindingChallengeIssue::StaleRequest => {
-            repo.cancel().await.ok();
-            Err(failed_precondition(
-                "published DID challenge request is stale",
-            ))
-        }
-    }
-}
-
-/// `POST /_arkret/gate/account/identity-binding-challenges`.
 #[handler]
 pub async fn issue_identity_binding_challenge(
     req: &mut Request,
@@ -603,7 +424,7 @@ pub async fn issue_identity_binding_challenge(
             .map_err(|error| failed_precondition(error.to_string()))?;
     let principal_id = arkret_identifiers::project_full_id_to_core_id(&body.full_id)
         .map_err(|error| failed_precondition(error.to_string()))?;
-    if body.full_id != body.did_operation.did || validated.principal_id != body.full_id {
+    if body.full_id != body.did_operation.did || validated.principal_id != principal_id {
         return Err(failed_precondition(
             "identity creation full_id/core projection does not match the inception operation",
         ));
@@ -618,7 +439,7 @@ pub async fn issue_identity_binding_challenge(
     let trust_domain = trust_domain_for(&url_builder, &arkret_config);
     let trust_domain = arkret_identifiers::TypedTrustDomainId::new(trust_domain)
         .map_err(|error| failed_precondition(error.to_string()))?;
-    let audience = arkret_identifiers::ServiceId::new(grant.audience.clone())
+    let audience = arkret_identifiers::DidCoreId::new(grant.audience.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
     let origin = depot
         .url_builder()?
@@ -731,7 +552,7 @@ pub async fn issue_identity_abandonment_challenge(
     let trust_domain =
         arkret_identifiers::TypedTrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
             .map_err(|error| failed_precondition(error.to_string()))?;
-    let audience = arkret_identifiers::ServiceId::new(grant.audience.clone())
+    let audience = arkret_identifiers::DidCoreId::new(grant.audience.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
     let origin = url_builder.http_base().origin().ascii_serialization();
     let now = make_clock().now();
@@ -827,7 +648,7 @@ pub async fn abandon_identity_creation(
     let request_digest = body
         .canonical_request_digest()
         .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
-    let audience = arkret_identifiers::ServiceId::new(grant.audience.clone())
+    let audience = arkret_identifiers::DidCoreId::new(grant.audience.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
     let mut repo = depot.repo().await?;
     let commit = repo
@@ -911,15 +732,7 @@ pub(crate) async fn authenticate_account_handoff(
     depot: &Depot,
     operation: AccountHandoffAllowedOperation,
 ) -> Result<(AccountHandoffGrant, DpopVerification), ArkretRouteError> {
-    authenticate_account_handoff_inner(req, depot, operation, true).await
-}
-
-pub(crate) async fn authenticate_account_handoff_without_replay(
-    req: &Request,
-    depot: &Depot,
-    operation: AccountHandoffAllowedOperation,
-) -> Result<(AccountHandoffGrant, DpopVerification), ArkretRouteError> {
-    authenticate_account_handoff_inner(req, depot, operation, false).await
+    authenticate_account_handoff_inner(req, depot, operation).await
 }
 
 /// Re-authenticate possession of a presented handoff token without requiring
@@ -947,7 +760,6 @@ async fn authenticate_account_handoff_inner(
     req: &Request,
     depot: &Depot,
     operation: AccountHandoffAllowedOperation,
-    consume_jti: bool,
 ) -> Result<(AccountHandoffGrant, DpopVerification), ArkretRouteError> {
     let token = account_handoff_authorization(req)?;
     let now = chrono::Utc::now();
@@ -969,15 +781,11 @@ async fn authenticate_account_handoff_inner(
     let dpop = dpop_header_from_request(req)
         .ok_or_else(|| proof_invalid("account handoff request requires a DPoP proof"))?;
     let htu = dpop_htu(&depot.url_builder()?.http_base(), req);
-    let verification = if consume_jti {
-        depot
-            .dpop_verifier()?
-            .verify(&dpop, req.method().as_str(), &htu, now, Some(token))
-            .await
-    } else {
-        DpopVerifier::verify_without_replay(&dpop, req.method().as_str(), &htu, now, Some(token))
-    }
-    .map_err(|error| proof_invalid(format!("account handoff DPoP proof failed: {error}")))?;
+    let verification = depot
+        .dpop_verifier()?
+        .verify(&dpop, req.method().as_str(), &htu, now, Some(token))
+        .await
+        .map_err(|error| proof_invalid(format!("account handoff DPoP proof failed: {error}")))?;
     if verification.jkt != grant.cnf_jkt {
         return Err(proof_invalid(
             "account handoff DPoP key does not match the credential cnf.jkt",
@@ -1136,7 +944,7 @@ fn creation_to_outcome(
 }
 
 fn account_subject(
-    account_authority_id: &arkret_identifiers::ServiceId,
+    account_authority_id: &arkret_identifiers::DidCoreId,
     service_account_id: Ulid,
 ) -> Result<arkret_identifiers::Hash, ArkretRouteError> {
     let value = serde_json::json!({
@@ -1186,14 +994,6 @@ fn proof_invalid(message: impl Into<String>) -> ArkretRouteError {
     )
 }
 
-fn schema_violation(message: impl Into<String>) -> ArkretRouteError {
-    ArkretRouteError::coded(
-        StatusCode::UNPROCESSABLE_ENTITY,
-        arkret_wire::ErrorCode::SCHEMA_VIOLATION,
-        message,
-    )
-}
-
 fn failed_precondition(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::CONFLICT,
@@ -1232,7 +1032,7 @@ mod tests {
                     "0".repeat(64)
                 ))
                 .unwrap(),
-                audience: arkret_identifiers::ServiceId::new("ak:did_core:web:principal.example")
+                audience: arkret_identifiers::DidCoreId::new("ak:did_core:web:principal.example")
                     .unwrap(),
                 issuer: "https://issuer.example".to_owned(),
                 client_id: "arkret-client".to_owned(),

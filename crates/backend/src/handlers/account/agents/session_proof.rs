@@ -6,7 +6,7 @@
 
 use std::collections::BTreeSet;
 
-use arkret_identifiers::{ServiceId, new_prefixed_uuid7};
+use arkret_identifiers::{DidCoreId, new_prefixed_uuid7};
 use coauth_config::ArkretConfig;
 use coauth_data::RepositoryAccess;
 use coauth_data::agent_key::NewAgentSessionProofReplay;
@@ -31,7 +31,7 @@ fn agent_session_refresh_request_digest(
     verification_method: &str,
 ) -> Result<String, AgentAuthRejection> {
     let audience =
-        ServiceId::new(audience.to_owned()).map_err(|_| AgentAuthRejection::ProofInvalid)?;
+        DidCoreId::new(audience.to_owned()).map_err(|_| AgentAuthRejection::ProofInvalid)?;
     arkret_models_collaboration::session_grant_bodies::session_grant_refresh_request_digest(
         prior_grant_jwt,
         principal_id,
@@ -1633,7 +1633,7 @@ mod tests {
                 name: "soland-test".to_owned(),
                 endpoint: server.uri().parse().unwrap(),
                 service_id: Some(
-                    arkret_identifiers::ServiceId::new("ak:did_core:web:soland.test").unwrap(),
+                    arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.test").unwrap(),
                 ),
                 session_grant_introspection_bearer: Some("lifecycle-secret".to_owned()),
                 embedded_webvh_registration_bearer: None,
@@ -2419,7 +2419,8 @@ mod tests {
     #[test]
     fn session_request_digest_ignores_signature_but_binds_scope() {
         let mut body = arkret_models_collaboration::session_grant_bodies::SessionGrantRequestBody {
-            principal_id: arkret_identifiers::CoreId::new("ak:did_core:web:agent.example").unwrap(),
+            principal_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:agent.example")
+                .unwrap(),
             device_id: None,
             requested_scope: vec!["ak.message.create".to_owned()],
             requested_scope_disclosure: None,
@@ -2448,7 +2449,7 @@ mod tests {
                     "0".repeat(64)
                 ))
                 .unwrap(),
-                audience: arkret_identifiers::ServiceId::new("ak:did_core:web:soland.example")
+                audience: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example")
                     .unwrap(),
                 expires_at: Some(chrono::Utc::now() + chrono::Duration::minutes(5)),
                 signature: "sig-a".to_owned(),

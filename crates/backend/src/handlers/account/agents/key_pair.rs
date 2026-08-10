@@ -10,16 +10,13 @@
 //! idempotent request before the runtime is reported active.
 
 use arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload;
-use arkret_signatures::proof::{PublicKeyMaterial, verify_ed25519_detached_jws_proof};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
-use coauth_config::ArkretConfig;
+use coauth_data::RepositoryAccess;
 use coauth_data::accountability::AccountabilityGrantFanoutState;
 use coauth_data::agent_key::NewAgentKeyAuthorization;
 use coauth_data::audit::AdminOperation;
 use coauth_data::queue::{AgentKeyPairCommitJob, QueueJobRepositoryExt as _};
-use coauth_data::{BoxRepository, RepositoryAccess, UrlBuilder};
-use coauth_keystore::Keystore;
 use coauth_principal::PrincipalAgentKeyPairCommitRequest;
 use salvo::prelude::*;
 #[cfg(test)]
@@ -31,11 +28,9 @@ use crate::AppError;
 use crate::handlers::account::{DepotExt, make_clock, make_rng};
 use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
 use crate::handlers::arkret::{
-    ArkretRouteError, VerificationMethod, is_allowed_session_grant_audience, service_id_for,
+    ArkretRouteError, is_allowed_session_grant_audience, service_id_for,
 };
-use crate::services::device_signing_directory::resolve_authorized_device_signing_key;
 use crate::services::did_binding_proof::normalize_did_for_binding;
-use crate::services::did_resolver::DidResolverService;
 
 /// Durable retry queue used when the authoritative Principal Server cannot be
 /// reached after the exact pairing request has been persisted locally.
@@ -52,6 +47,10 @@ const AGENT_KEY_PAIR_COMMIT_QUEUE: &str = "principal-agent-key-pair-commit";
 /// controller-signed `authorize_event.event.payload.supersedes[]`; Coauth never
 /// fabricates controller-authored revoke Events. Returns the SDK
 /// [`AgentKeyPairOutcome`] carrying the accepted authorization Event ref.
+///
+/// This endpoint currently fails closed before persistence: the legacy
+/// product-local device directory did not carry the SDK aggregate authority
+/// evidence required to verify the controller's exact PCR instance.
 #[handler]
 #[tracing::instrument(name = "handler.account.agents.agent_key_pair", skip_all)]
 pub async fn post_agent_key_pair(
@@ -64,9 +63,6 @@ pub async fn post_agent_key_pair(
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
-    let key_store = depot.key_store()?;
-    let did_resolver = depot.did_resolver_service()?;
-    let binding_store = depot.verified_did_binding_store()?;
 
     let body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody = req
         .parse_json()
@@ -245,7 +241,7 @@ pub async fn post_agent_key_pair(
     let (authoritative_view, authoritative_server) = super::enforce_authoritative_pairing_handle(
         &http_client,
         &arkret_config,
-        &agent_id,
+        agent_id.as_str(),
         &body.pairing_request_id,
         now,
     )
@@ -264,11 +260,11 @@ pub async fn post_agent_key_pair(
         return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
     }
 
-    let agent_did = arkret_identifiers::Did::new(agent_id.clone())
+    let agent_id = arkret_identifiers::DidCoreId::new(agent_id.clone())
         .map_err(|error| AppError::bad_request(format!("agent_id invalid: {error}")))?;
     let expected_binding =
         arkret_models_collaboration::agent_operations::agent_runtime_key_binding_digest(
-            &agent_did,
+            &agent_id,
             &body.pairing_request_id,
             &body.verification_method,
             &body.public_key,
@@ -292,7 +288,7 @@ pub async fn post_agent_key_pair(
         .ok_or_else(|| AppError::forbidden("authoritative pairing expiry is missing"))?;
     let transcript = pop
         .validate_shape(
-            &agent_did,
+            &agent_id,
             &body.pairing_request_id,
             &body.verification_method,
             &body.public_key,
@@ -317,7 +313,7 @@ pub async fn post_agent_key_pair(
 
     let authorize_event = validate_controller_authorize_event(
         &body.authorize_event.event,
-        &agent_id,
+        agent_id.as_str(),
         &body.verification_method,
         &body.public_key,
         &body.signing_key_binding,
@@ -327,46 +323,7 @@ pub async fn post_agent_key_pair(
         now,
     )?;
 
-    if let Err(error) = verify_authorize_event_controller_signature(
-        &body.authorize_event.event,
-        &agent_id,
-        &authorize_event.controller_id,
-        pop.audience.as_str(),
-        &http_client,
-        &url_builder,
-        &arkret_config,
-        &key_store,
-        &mut repo,
-        did_resolver.as_ref(),
-        binding_store.as_ref(),
-        now,
-    )
-    .await
-    {
-        repo.cancel().await.ok();
-        return Err(error.into());
-    }
-    if let Err(error) = verify_pairing_signing_key_binding(
-        &body.signing_key_binding,
-        &authorize_event.controller_id,
-        &body.agent_id,
-        authorize_event.payload.key_id.as_str(),
-        &body.verification_method,
-        &body.authorize_event.event.event_id,
-        &authorize_event.payload.public_key_digest,
-        &authorize_event.payload.signing_key_binding_digest,
-        pop.audience.as_str(),
-        &http_client,
-        &url_builder,
-        &arkret_config,
-        &key_store,
-        &mut repo,
-        did_resolver.as_ref(),
-        binding_store.as_ref(),
-        now,
-    )
-    .await
-    {
+    if let Err(error) = require_federated_controller_device_evidence() {
         repo.cancel().await.ok();
         return Err(error.into());
     }
@@ -395,7 +352,7 @@ pub async fn post_agent_key_pair(
     // pairing (no prior active key) is a no-op here.
     let superseded_authorizations = repo
         .agent_key_authorization()
-        .list_active_for_agent(&agent_id)
+        .list_active_for_agent(agent_id.as_str())
         .await?;
     let service_id = service_id_for(&arkret_config);
     let outcome_event_id = arkret_identifiers::EventId::new(authorized_event_id.clone())
@@ -414,7 +371,7 @@ pub async fn post_agent_key_pair(
             &*clock,
             NewAgentKeyAuthorization {
                 authorized_event_id: authorized_event_id.clone(),
-                agent_id: agent_id.clone(),
+                agent_id: agent_id.to_string(),
                 key_id: key_id.clone(),
                 verification_method: body.verification_method.to_string(),
                 public_key: public_key_value.clone(),
@@ -564,7 +521,7 @@ fn validate_controller_authorize_event(
     let payload = AgentKeyAuthorizePayload::try_from(event)
         .map_err(|error| AppError::bad_request(format!("authorize_event.event {error}")))?;
 
-    let expected_agent_id = project_full_id_str_to_actor_id(agent_id, "agent_id")?;
+    let expected_agent_id = parse_actor_id(agent_id, "agent_id")?;
     if event.actor_id != expected_agent_id {
         return Err(AppError::forbidden(
             "authorize_event.event.actor_id must equal the managed Agent DID",
@@ -573,7 +530,7 @@ fn validate_controller_authorize_event(
     let controller_id = event
         .executed_by
         .as_ref()
-        .map(arkret_identifiers::ActorId::as_str)
+        .map(arkret_identifiers::DidCoreId::as_str)
         .ok_or_else(|| AppError::bad_request("authorize_event.event.executed_by is required"))?;
     if authoritative_key_state.agent_id != expected_agent_id
         || authoritative_key_state.controller_id.as_str() != controller_id
@@ -610,7 +567,7 @@ fn validate_controller_authorize_event(
             "authorize_event.event.payload.verification_method must match the request",
         ));
     }
-    if project_full_id_str_to_actor_id(
+    if parse_actor_id(
         payload.accountable_principal_id.as_str(),
         "authorize_event.event.payload.accountable_principal_id",
     )?
@@ -728,7 +685,7 @@ fn validate_controller_authorize_event(
         .approved_by
         .as_ref()
         .map(|approved_by| {
-            project_full_id_str_to_actor_id(
+            parse_actor_id(
                 approved_by.as_str(),
                 "authorize_event.event.payload.approval_evidence.approved_by",
             )
@@ -833,299 +790,13 @@ fn ensure_authorize_event_has_controller_signature(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn verify_authorize_event_controller_signature(
-    event: &arkret_wire::Event,
-    agent_id: &str,
-    controller_id: &str,
-    audience: &str,
-    http_client: &reqwest::Client,
-    url_builder: &UrlBuilder,
-    arkret_config: &ArkretConfig,
-    key_store: &Keystore,
-    repo: &mut BoxRepository,
-    did_resolver: &dyn DidResolverService,
-    binding_store: &crate::services::did_binding::DurableVerifiedDidBindingStore,
-    now: DateTime<Utc>,
-) -> Result<(), AppError> {
-    let canonical_bytes = authorize_event_signature_input(event, agent_id, controller_id)?;
-    let controller_core_id = project_full_id_str_to_actor_id(controller_id, "controller_id")?;
-    let mut has_controller_key_proof = false;
-    let mut saw_controller_proof = false;
-
-    for proof in &event.proofs {
-        if !verification_method_controller_actor_id(&proof.verification_method)
-            .is_some_and(|proof_controller| proof_controller == controller_core_id)
-        {
-            continue;
-        }
-        saw_controller_proof = true;
-        let Some(device_id) = verification_method_device_id(&proof.verification_method) else {
-            has_controller_key_proof = true;
-            continue;
-        };
-        let resolved = match resolve_authorized_device_signing_key(
-            http_client,
-            arkret_config,
-            crate::services::resolved_principal_audiences::shared(),
-            audience,
-            controller_id,
-            &device_id,
-        )
-        .await
-        {
-            Ok(resolved) => resolved,
-            Err(error) => {
-                tracing::warn!(
-                    %controller_id,
-                    %device_id,
-                    %error,
-                    "authorize_event controller device key resolution failed"
-                );
-                continue;
-            }
-        };
-        let public_key = PublicKeyMaterial::Ed25519Multibase {
-            value: resolved.multibase,
-        };
-        if verify_ed25519_detached_jws_proof(proof, &canonical_bytes, &event.actor_id, &public_key)
-            .is_ok()
-        {
-            return Ok(());
-        }
-    }
-
-    if !saw_controller_proof {
-        return Err(AppError::bad_request(
-            "authorize_event proof verification_method must be controlled by actor_id",
-        ));
-    }
-    if !has_controller_key_proof {
-        return Err(AgentAuthRejection::ProofInvalid.into_app_error());
-    }
-
-    // §4 row 3 — a new agent signer epoch / verification method is an
-    // authority trigger, so this resolves under the closed `Controller`
-    // purpose. Degraded / fallback / unproven-controller evidence lands as
-    // `Stale` / `Quarantined` and fails closed inside `authority_document`,
-    // which subsumes the previous `identity_fact_rejection` gate.
-    let binding = crate::services::did_binding::authority_document(
-        http_client,
-        url_builder,
-        arkret_config,
-        key_store,
-        repo,
-        did_resolver,
-        binding_store,
-        controller_id,
-        arkret_identity::DidBindingPurpose::Controller,
-        crate::services::did_binding::controller_freshness(),
-        now,
-    )
-    .await
-    .map_err(|error| {
-        AppError::unauthorized(format!(
-            "proof_invalid: authorize_event controller DID has no fresh accepted binding: {error}"
-        ))
-    })?;
-    let resolution = binding;
-    verify_authorize_event_controller_signature_with_methods(
-        event,
-        agent_id,
-        controller_id,
-        &resolution.document.verification_method,
-    )
-}
-
-fn verify_authorize_event_controller_signature_with_methods(
-    event: &arkret_wire::Event,
-    agent_id: &str,
-    controller_id: &str,
-    verification_methods: &[VerificationMethod],
-) -> Result<(), AppError> {
-    let canonical_bytes = authorize_event_signature_input(event, agent_id, controller_id)?;
-    let controller_core_id = project_full_id_str_to_actor_id(controller_id, "controller_id")?;
-
-    let mut saw_controller_proof = false;
-    for proof in &event.proofs {
-        if !verification_method_controller_actor_id(&proof.verification_method)
-            .is_some_and(|proof_controller| proof_controller == controller_core_id)
-        {
-            continue;
-        }
-        saw_controller_proof = true;
-        let Some(method) = verification_methods
-            .iter()
-            .find(|method| method.id == proof.verification_method)
-        else {
-            continue;
-        };
-        let public_key = method.public_key_material().map_err(|error| {
-            AppError::bad_request(format!(
-                "authorize_event controller verification method invalid: {error}"
-            ))
-        })?;
-        if verify_ed25519_detached_jws_proof(proof, &canonical_bytes, &event.actor_id, &public_key)
-            .is_ok()
-        {
-            return Ok(());
-        }
-    }
-
-    if saw_controller_proof {
-        Err(AgentAuthRejection::ProofInvalid.into_app_error())
-    } else {
-        Err(AppError::bad_request(
-            "authorize_event proof verification_method must be controlled by actor_id",
-        ))
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn verify_pairing_signing_key_binding(
-    binding: &arkret_models_identity::agent_signer_evidence::AgentSigningKeyBinding,
-    expected_controller_id: &str,
-    agent_id: &arkret_identifiers::Did,
-    agent_key_id: &str,
-    verification_method: &arkret_wire::DidUrl,
-    authorize_event_id: &arkret_identifiers::EventId,
-    expected_public_key_digest: &arkret_identifiers::Hash,
-    expected_binding_digest: &arkret_identifiers::Hash,
-    audience: &str,
-    http_client: &reqwest::Client,
-    url_builder: &UrlBuilder,
-    arkret_config: &ArkretConfig,
-    key_store: &Keystore,
-    repo: &mut BoxRepository,
-    did_resolver: &dyn DidResolverService,
-    binding_store: &crate::services::did_binding::DurableVerifiedDidBindingStore,
-    now: DateTime<Utc>,
-) -> Result<(), AppError> {
-    let controller_id = expected_controller_id;
-    let expected_controller = arkret_identifiers::Did::new(controller_id.to_owned())
-        .map_err(|error| AppError::bad_request(format!("controller DID invalid: {error}")))?;
-    let controller_method = binding.controller_proof.verification_method.as_str();
-    let public_key = if let Some(device_id) = verification_method_device_id(controller_method) {
-        let resolved = resolve_authorized_device_signing_key(
-            http_client,
-            arkret_config,
-            crate::services::resolved_principal_audiences::shared(),
-            audience,
-            controller_id,
-            &device_id,
-        )
-        .await
-        .map_err(|error| {
-            AppError::unauthorized(format!(
-                "agent_signing_key_mismatch: controller device key could not be resolved: {error}"
-            ))
-        })?;
-        PublicKeyMaterial::Ed25519Multibase {
-            value: resolved.multibase,
-        }
-    } else {
-        // Same §4 row 3 trigger and same closed `Controller` purpose as
-        // `verify_authorize_event_controller_signature`; within
-        // `CONTROLLER_MAX_AGE` the two share one acceptance and perform a
-        // single network fetch between them.
-        let resolution = crate::services::did_binding::authority_document(
-            http_client,
-            url_builder,
-            arkret_config,
-            key_store,
-            repo,
-            did_resolver,
-            binding_store,
-            controller_id,
-            arkret_identity::DidBindingPurpose::Controller,
-            crate::services::did_binding::controller_freshness(),
-            now,
-        )
-        .await
-        .map_err(|error| {
-            AppError::unauthorized(format!(
-                "agent_signing_key_mismatch: controller DID has no fresh accepted binding: {error}"
-            ))
-        })?;
-        resolution
-            .document
-            .verification_method
-            .iter()
-            .find(|method| method.id == controller_method)
-            .ok_or_else(|| {
-                AppError::unauthorized(
-                    "agent_signing_key_mismatch: controller verification method is absent",
-                )
-            })?
-            .public_key_material()
-            .map_err(|error| {
-                AppError::bad_request(format!(
-                    "agent_signing_key_mismatch: controller verification method invalid: {error}"
-                ))
-            })?
-    };
-    let expected_agent = arkret_identifiers::ActorId::from(
-        arkret_identifiers::project_full_id_to_core_id(agent_id).map_err(|error| {
-            AppError::bad_request(format!("agent_id cannot be projected: {error}"))
-        })?,
-    );
-    let expected_controller = arkret_identifiers::ActorId::from(
-        arkret_identifiers::project_full_id_to_core_id(&expected_controller).map_err(|error| {
-            AppError::bad_request(format!("controller_id cannot be projected: {error}"))
-        })?,
-    );
-    arkret_signatures::agent_evidence::verify_agent_signing_key_binding(
-        binding,
-        &expected_agent,
-        &arkret_wire::NonEmptyString::new(agent_key_id.to_owned()).map_err(|error| {
-            AppError::bad_request(format!("authorize_event payload key_id invalid: {error}"))
-        })?,
-        &expected_controller,
-        verification_method,
-        authorize_event_id,
-        expected_public_key_digest,
-        expected_binding_digest,
-        &public_key,
-    )
-    .map(|_| ())
-    .map_err(|reason| AppError::unauthorized(reason.as_str()))
-}
-
-/// Canonical signing transcript for the authorize Event.
-///
-/// Deliberately derived from the caller-supplied Event envelope itself: the
-/// typed payload above is for business checks only and MUST NOT be
-/// re-serialized to stand in for the signed bytes.
-fn authorize_event_signature_input(
-    event: &arkret_wire::Event,
-    agent_id: &str,
-    controller_id: &str,
-) -> Result<Vec<u8>, AppError> {
-    let expected_agent_id = project_full_id_str_to_actor_id(agent_id, "agent_id")?;
-    if event.actor_id != expected_agent_id {
-        return Err(AppError::bad_request(
-            "authorize_event.event.actor_id must match the managed Agent DID",
-        ));
-    }
-    let expected_controller_id = project_full_id_str_to_actor_id(controller_id, "controller_id")?;
-    if event.executed_by.as_ref() != Some(&expected_controller_id) {
-        return Err(AppError::bad_request(
-            "authorize_event.event.executed_by must match the resolved controller DID",
-        ));
-    }
-    event.validate_proof_bindings().map_err(|error| {
-        AppError::bad_request(format!("authorize_event proof binding invalid: {error}"))
-    })?;
-    let digest_payload = event.digest_payload().map_err(|error| {
-        AppError::bad_request(format!(
-            "authorize_event digest payload could not be built: {error}"
-        ))
-    })?;
-    arkret_canonical::canonical_json_bytes(&digest_payload).map_err(|error| {
-        AppError::bad_request(format!(
-            "authorize_event canonical payload could not be encoded: {error}"
-        ))
-    })
+/// Fail closed until the Principal Server returns the SDK-owned aggregate
+/// \`FederatedDeviceSigningKeyEvidence\` and Coauth can verify its exact five-field
+/// authority instance, frozen registration evidence, PCR chain, Seal, range and key.
+fn require_federated_controller_device_evidence() -> Result<(), AppError> {
+    Err(AppError::unauthorized(
+        "federated controller device evidence is required; the legacy product-local key directory is not an authority source",
+    ))
 }
 
 fn verification_method_controller(verification_method: &str) -> &str {
@@ -1138,33 +809,19 @@ fn verification_method_controller(verification_method: &str) -> &str {
         .unwrap_or("")
 }
 
-fn project_full_id_str_to_actor_id(
-    full_id: &str,
-    field: &str,
-) -> Result<arkret_identifiers::ActorId, AppError> {
-    let full_id = arkret_identifiers::FullId::new(full_id.to_owned())
-        .map_err(|error| AppError::bad_request(format!("{field} invalid: {error}")))?;
-    arkret_identifiers::project_full_id_to_core_id(&full_id)
-        .map(arkret_identifiers::ActorId::from)
-        .map_err(|error| AppError::bad_request(format!("{field} cannot be projected: {error}")))
+fn parse_actor_id(actor_id: &str, field: &str) -> Result<arkret_identifiers::DidCoreId, AppError> {
+    arkret_identifiers::DidCoreId::new(actor_id.to_owned())
+        .map_err(|error| AppError::bad_request(format!("{field} invalid: {error}")))
 }
 
 fn verification_method_controller_actor_id(
     verification_method: &str,
-) -> Option<arkret_identifiers::ActorId> {
-    project_full_id_str_to_actor_id(
-        verification_method_controller(verification_method),
-        "verification_method controller",
+) -> Option<arkret_identifiers::DidCoreId> {
+    let full_id = arkret_identifiers::DidFullId::new(
+        verification_method_controller(verification_method).to_owned(),
     )
-    .ok()
-}
-
-fn verification_method_device_id(verification_method: &str) -> Option<String> {
-    let (_, fragment) = verification_method.split_once('#')?;
-    let fragment = fragment.split('?').next().unwrap_or("").trim();
-    arkret_identifiers::DeviceId::new(fragment.to_owned())
-        .ok()
-        .map(|device_id| device_id.to_string())
+    .ok()?;
+    arkret_identifiers::project_full_id_to_core_id(&full_id).ok()
 }
 
 async fn commit_and_mark_agent_key_authorization(
@@ -1759,106 +1416,14 @@ mod tests {
     }
 
     #[test]
-    fn authorize_event_rejects_fake_controller_jws() {
-        let event = full_fake_signed_authorize_event();
-        let method = controller_verification_method();
-
-        let err = verify_authorize_event_controller_signature_with_methods(
-            &event,
-            AGENT_FULL,
-            CONTROLLER_FULL,
-            std::slice::from_ref(&method),
-        )
-        .expect_err("fake detached JWS must fail closed");
-
-        assert_eq!(err.status(), http::StatusCode::UNAUTHORIZED);
-    }
-
-    #[test]
-    fn controller_device_verification_method_uses_device_directory_identity() {
-        let device_id = "ak:device:01999999-0000-7000-8000-000000000042";
-        let verification_method = format!("{CONTROLLER_FULL}#{device_id}");
-
-        assert_eq!(
-            verification_method_device_id(&verification_method).as_deref(),
-            Some(device_id)
+    fn agent_pairing_fails_closed_without_federated_device_evidence() {
+        let error = require_federated_controller_device_evidence()
+            .expect_err("transport-only device directory assertions must never authorize pairing");
+        assert_eq!(error.status(), http::StatusCode::UNAUTHORIZED);
+        assert!(
+            error
+                .message()
+                .contains("federated controller device evidence")
         );
-        assert!(verification_method_device_id(&format!("{CONTROLLER_FULL}#key-1")).is_none());
-    }
-
-    #[test]
-    fn authorize_event_accepts_controller_device_multibase_signature() {
-        let device_id = "ak:device:01999999-0000-7000-8000-000000000042";
-        let verification_method = format!("{CONTROLLER_FULL}#{device_id}");
-        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
-        let multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
-            &signing_key.verifying_key().to_bytes(),
-        );
-        let mut unsigned_event = valid_authorize_event(PAIRING_REQUEST_ID);
-        unsigned_event["proofs"] = json!([]);
-        let mut event: arkret_wire::Event = serde_json::from_value(unsigned_event).unwrap();
-        let canonical_bytes =
-            arkret_canonical::canonical_json_bytes(&event.digest_payload().unwrap()).unwrap();
-        let mut proof = arkret_wire::Proof {
-            kind: "detached_jws".to_owned(),
-            proof_purpose: None,
-            verification_method: arkret_wire::DidUrl::new(verification_method.clone()).unwrap(),
-            event_digest: arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(
-                &canonical_bytes,
-            ))
-            .unwrap(),
-            created_at: "2026-07-06T00:01:00.000Z".parse().unwrap(),
-            domain: None,
-            audience: None,
-            jws: String::new(),
-        };
-        let binding_bytes = proof.canonical_binding_bytes(&event.actor_id).unwrap();
-        proof.jws =
-            arkret_signatures::proof::sign_ed25519_detached_jws(&signing_key, &binding_bytes)
-                .unwrap();
-        event.proofs.push(proof);
-        let method = VerificationMethod {
-            id: verification_method,
-            kind: "Multikey".to_owned(),
-            controller: CONTROLLER_FULL.to_owned(),
-            public_key_jwk: None,
-            public_key_multibase: Some(multibase),
-        };
-
-        verify_authorize_event_controller_signature_with_methods(
-            &event,
-            AGENT_FULL,
-            CONTROLLER_FULL,
-            &[method],
-        )
-        .expect("authorized controller device signature accepts");
-    }
-
-    fn full_fake_signed_authorize_event() -> arkret_wire::Event {
-        // The fixture already carries a spec-shaped proof; only its digest is a
-        // placeholder. Rebind that one field rather than rebuilding the array,
-        // so this helper cannot drift away from the fixture's proof shape.
-        let mut envelope = valid_authorize_event(PAIRING_REQUEST_ID);
-        let parsed = authorize_event(envelope.clone());
-        envelope["proofs"][0]["event_digest"] = json!(parsed.event_digest().unwrap());
-        authorize_event(envelope)
-    }
-
-    fn controller_verification_method() -> VerificationMethod {
-        let x = Base64UrlUnpadded::encode_string(&[7u8; 32]);
-        VerificationMethod {
-            id: "did:web:controller.example#key-1".to_owned(),
-            kind: "JsonWebKey2020".to_owned(),
-            controller: CONTROLLER_FULL.to_owned(),
-            public_key_jwk: Some(
-                serde_json::from_value(json!({
-                    "kty": "OKP",
-                    "crv": "Ed25519",
-                    "x": x,
-                }))
-                .unwrap(),
-            ),
-            public_key_multibase: None,
-        }
     }
 }

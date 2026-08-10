@@ -73,6 +73,20 @@ fn test_keystore() -> Keystore {
     Keystore::new(JsonWebKeySet::new(vec![ed25519]))
 }
 
+fn test_principal_authority(
+    principal_id: &str,
+    principal_server_id: &str,
+) -> arkret_wire::PrincipalAuthorityInstance {
+    arkret_wire::PrincipalAuthorityInstance::new(
+        arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
+        arkret_identifiers::DidCoreId::new(principal_server_id).unwrap(),
+        arkret_identifiers::RealmId::new("ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO")
+            .unwrap(),
+        arkret_identifiers::Hash::new(format!("sha256:{}", "e".repeat(64))).unwrap(),
+    )
+    .unwrap()
+}
+
 fn test_session_public_jwk(session_key: &PrivateKey, kid: impl Into<String>) -> PublicJsonWebKey {
     JsonWebKey::new(JsonWebKeyPublicParameters::from(session_key))
         .with_use(JsonWebKeyUse::Sig)
@@ -198,7 +212,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
             name: "soland-prod".to_owned(),
             endpoint: "https://soland.example.com/arkret".parse().unwrap(),
             service_id: Some(
-                arkret_identifiers::ServiceId::new("ak:did_core:web:session-grant-static.test")
+                arkret_identifiers::DidCoreId::new("ak:did_core:web:session-grant-static.test")
                     .unwrap(),
             ),
             session_grant_introspection_bearer: None,
@@ -395,7 +409,7 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
             name: "soland-dev".to_owned(),
             endpoint: "https://session-grant-static.test/".parse().unwrap(),
             service_id: Some(
-                arkret_identifiers::ServiceId::new("ak:did_core:web:session-grant-static.test")
+                arkret_identifiers::DidCoreId::new("ak:did_core:web:session-grant-static.test")
                     .unwrap(),
             ),
             session_grant_introspection_bearer: Some(bearer.to_owned()),
@@ -469,7 +483,7 @@ fn shared_static_bearer_is_scoped_to_every_matching_server() {
         name: "soland-beta".to_owned(),
         endpoint: "https://session-grant-static-beta.test/".parse().unwrap(),
         service_id: Some(
-            arkret_identifiers::ServiceId::new("ak:did_core:web:session-grant-static-beta.test")
+            arkret_identifiers::DidCoreId::new("ak:did_core:web:session-grant-static-beta.test")
                 .unwrap(),
         ),
         session_grant_introspection_bearer: Some("shared-cluster-token".to_owned()),
@@ -722,7 +736,14 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
     let mut signing_rng = ChaChaRng::seed_from_u64(11);
     let session_key = PrivateKey::generate_ed25519(&mut signing_rng);
     let session_public_key = test_session_public_jwk(&session_key, "test-session-key");
-    let principal_did = format!("did:web:auth.example.com:users:{}", browser_session.user.id);
+    let principal_did = format!(
+        "ak:did_core:web:auth.example.com:users:{}",
+        browser_session.user.id
+    );
+    let authority_instance = test_principal_authority(
+        &principal_did,
+        &required_audience_for(&url_builder, &arkret_config),
+    );
 
     let device_scope = "urn:arkret:client:device:ak:device:01964137-0000-7000-8000-000000000001";
     let grant = issue_session_grant(
@@ -734,6 +755,7 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
         &browser_session,
         session_public_key,
         &principal_did,
+        &authority_instance,
         vec![
             PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
             device_scope.to_owned(),
@@ -781,50 +803,6 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
 }
 
 #[test]
-fn session_grant_rejects_implicit_did_web_fallback() {
-    let clock = SystemClock::default();
-    let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
-    // A did:web service DID derives a did:web user principal; without an
-    // explicit `did_web_principal_allowed` opt-in the grant MUST be rejected
-    // with `DidWebPrincipalNotExplicit`.
-    let arkret_config = ArkretConfig {
-        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
-            "did:web:auth.example.com",
-        ),
-        ..ArkretConfig::default()
-    };
-    let key_store = test_keystore();
-    let now = clock.now();
-    let mut fixture_rng = ChaChaRng::seed_from_u64(9);
-    let browser_session = BrowserSession::samples(now, &mut fixture_rng)
-        .into_iter()
-        .next()
-        .unwrap();
-    let mut signing_rng = ChaChaRng::seed_from_u64(11);
-    let session_key = PrivateKey::generate_ed25519(&mut signing_rng);
-    let session_public_key = test_session_public_jwk(&session_key, "test-session-key");
-    let principal_did = format!("did:web:auth.example.com:users:{}", browser_session.user.id);
-
-    let error = issue_session_grant(
-        &mut signing_rng,
-        &clock,
-        &url_builder,
-        &arkret_config,
-        &key_store,
-        &browser_session,
-        session_public_key,
-        &principal_did,
-        vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
-    )
-    .unwrap_err();
-
-    assert!(matches!(
-        error,
-        SessionGrantError::DidWebPrincipalNotExplicit
-    ));
-}
-
-#[test]
 fn session_grant_uses_configured_ttl() {
     let clock = SystemClock::default();
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
@@ -850,7 +828,14 @@ fn session_grant_uses_configured_ttl() {
     let mut signing_rng = ChaChaRng::seed_from_u64(11);
     let session_key = PrivateKey::generate_ed25519(&mut signing_rng);
     let session_public_key = test_session_public_jwk(&session_key, "ttl-session-key");
-    let principal_did = format!("did:web:auth.example.com:users:{}", browser_session.user.id);
+    let principal_did = format!(
+        "ak:did_core:web:auth.example.com:users:{}",
+        browser_session.user.id
+    );
+    let authority_instance = test_principal_authority(
+        &principal_did,
+        &required_audience_for(&url_builder, &arkret_config),
+    );
 
     let grant = issue_session_grant(
         &mut signing_rng,
@@ -861,6 +846,7 @@ fn session_grant_uses_configured_ttl() {
         &browser_session,
         session_public_key,
         &principal_did,
+        &authority_instance,
         vec![
             PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
             "urn:arkret:client:device:ak:device:01964137-0000-7000-8000-000000000001".to_owned(),
@@ -1032,7 +1018,11 @@ async fn seed_persisted_session_grant(
         .unwrap();
     let session_key = PrivateKey::generate_ed25519(&mut rng);
     let grant_config = personal_node_did_web_config();
-    let principal_did = format!("did:web:auth.example.com:users:{}", user.id);
+    let principal_did = format!("ak:did_core:web:auth.example.com:users:{}", user.id);
+    let authority_instance = test_principal_authority(
+        &principal_did,
+        &required_audience_for(&state.url_builder, &grant_config),
+    );
     let material = issue_session_grant(
         &mut rng,
         &*state.clock,
@@ -1042,6 +1032,7 @@ async fn seed_persisted_session_grant(
         &browser_session,
         test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
         &principal_did,
+        &authority_instance,
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
     )
     .unwrap();
@@ -1078,7 +1069,7 @@ fn session_grant_introspection_proof(
         kind: SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND.to_owned(),
         grant_id: grant.grant_id.to_string(),
         grant_jwt_hash: session_grant_jwt_hash(&material.grant_jwt),
-        audience: arkret_identifiers::ServiceId::new(grant.audience.clone()).unwrap(),
+        audience: arkret_identifiers::DidCoreId::new(grant.audience.clone()).unwrap(),
         challenge: challenge.to_owned(),
         issued_at: now,
         expires_at: now + Duration::try_minutes(1).unwrap(),
@@ -1270,7 +1261,9 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         "test-ed25519",
     )
     .unwrap();
-    let principal_did = format!("did:web:auth.example.com:users:{}", user.id);
+    let principal_did = format!("ak:did_core:web:auth.example.com:users:{}", user.id);
+    let audience = required_audience_for(&state.url_builder, &grant_config);
+    let authority_instance = test_principal_authority(&principal_did, &audience);
     let material = issue_session_grant_for_audience(
         &issuance_seed,
         &*state.clock,
@@ -1278,9 +1271,10 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         &state.key_store,
         &browser_session,
         test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
-        required_audience_for(&state.url_builder, &grant_config),
+        audience,
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
         Some(&principal_did),
+        &authority_instance,
         bound_jkt.clone(),
         arkret_models_identity::SessionGrantProofKind::DidBoundSignature,
     )
@@ -1743,7 +1737,8 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     let key_store = test_keystore();
 
     let hint = arkret_models_identity::DeliveryBindingHint {
-        recipient_service_id: arkret_identifiers::Did::new("did:web:soland.example").unwrap(),
+        recipient_service_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example")
+            .unwrap(),
         recipient_service_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
         binding_source: arkret_models_identity::HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: [arkret_models_identity::DeliveryMode::Events]
@@ -1754,14 +1749,14 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     };
 
     // Subject is the client-created webvh principal DID, passed by the caller.
-    let subject_did = "did:webvh:zQmExampleScid:soland.example:webvh:01arz3ndektsv4rrffq69g5fav";
+    let subject_id = "ak:did_core:webvh:zQmExampleScid:soland.example";
     let material = issue_handle_claim(
         &clock,
         &url_builder,
         &arkret_config,
         &key_store,
         &user,
-        subject_did,
+        subject_id,
         arkret_models_identity::HandleClaimKind::HandleBinding,
         "did:web:space.example".to_owned(),
         hint.clone(),
@@ -1772,8 +1767,8 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
             .payload
             .subject
             .as_ref()
-            .map(arkret_identifiers::Did::as_str),
-        Some(subject_did)
+            .map(arkret_identifiers::DidCoreId::as_str),
+        Some(subject_id)
     );
 
     let canonical = user_handle(&url_builder, &user);
@@ -1837,46 +1832,6 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
 }
 
 #[test]
-fn issue_handle_claim_rejects_did_web_subject_without_explicit_personal_node_gate() {
-    use coauth_data::clock::MockClock;
-    let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let arkret_config = test_arkret_config();
-    let mut rng = ChaChaRng::seed_from_u64(0xc15c);
-    let clock = MockClock::default();
-    let now = clock.now();
-    let user = User::samples(now, &mut rng).into_iter().next().unwrap();
-    let key_store = test_keystore();
-    let hint = arkret_models_identity::DeliveryBindingHint {
-        recipient_service_id: arkret_identifiers::Did::new("did:web:soland.example").unwrap(),
-        recipient_service_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
-        binding_source: arkret_models_identity::HandleHintBindingSource::OrganizationPolicy,
-        delivery_modes: [arkret_models_identity::DeliveryMode::Events]
-            .into_iter()
-            .collect(),
-        service_acceptance_ref: None,
-        policy_event_ref: None,
-    };
-
-    let error = issue_handle_claim(
-        &clock,
-        &url_builder,
-        &arkret_config,
-        &key_store,
-        &user,
-        "did:web:alice.example",
-        arkret_models_identity::HandleClaimKind::HandleBinding,
-        "did:web:space.example".to_owned(),
-        hint,
-    )
-    .unwrap_err();
-
-    assert!(matches!(
-        error,
-        SessionGrantError::DidWebPrincipalNotExplicit
-    ));
-}
-
-#[test]
 fn issue_handle_claim_accepts_organization_handle_claim_kind() {
     use coauth_data::clock::MockClock;
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
@@ -1888,7 +1843,8 @@ fn issue_handle_claim_accepts_organization_handle_claim_kind() {
     let key_store = test_keystore();
 
     let hint = arkret_models_identity::DeliveryBindingHint {
-        recipient_service_id: arkret_identifiers::Did::new("did:web:soland.example").unwrap(),
+        recipient_service_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example")
+            .unwrap(),
         recipient_service_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
         binding_source: arkret_models_identity::HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: [arkret_models_identity::DeliveryMode::Events]
@@ -1904,7 +1860,7 @@ fn issue_handle_claim_accepts_organization_handle_claim_kind() {
         &arkret_config,
         &key_store,
         &user,
-        "did:webvh:zQmExampleScid:soland.example:webvh:01arz3ndektsv4rrffq69g5fav",
+        "ak:did_core:webvh:zQmExampleScid:soland.example",
         arkret_models_identity::HandleClaimKind::OrganizationHandle,
         "did:web:space.example".to_owned(),
         hint,

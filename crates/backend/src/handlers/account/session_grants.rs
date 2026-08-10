@@ -31,7 +31,6 @@ pub async fn list_session_grants(
     depot: &Depot,
 ) -> Result<Json<SessionGrantListOutcome>, ArkretRouteError> {
     let clock = crate::handlers::make_clock();
-    let mut rng = crate::handlers::make_rng();
     let subject = req.query::<String>("subject");
     let device_id = req.query::<String>("device_id");
     let requested_audience = req.query::<String>("audience");

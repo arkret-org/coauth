@@ -70,7 +70,7 @@ pub struct InviteRelayRequestBody {
     pub target_principal_url: Option<Url>,
 
     /// DID of the holder whose cell we're consulting. Embedded in the
-    /// `X-Arkret-Holder-Did` header on the soland query.
+    /// `X-Arkret-Holder-DidFullId` header on the soland query.
     pub target_holder_did: String,
 
     /// Consent-cell identifier per spec §6.
@@ -383,7 +383,7 @@ mod tests {
 
     fn peer_identity() -> arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
         let service_id =
-            arkret_identifiers::ServiceId::new("ak:did_core:web:auth.example".to_owned()).unwrap();
+            arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap();
         let trust_domain =
             arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:auth.example").unwrap();
         arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
@@ -394,8 +394,8 @@ mod tests {
         }
     }
 
-    fn source_full_id() -> arkret_identifiers::FullId {
-        arkret_identifiers::FullId::new("did:web:auth.example".to_owned()).unwrap()
+    fn source_full_id() -> arkret_identifiers::DidFullId {
+        arkret_identifiers::DidFullId::new("did:web:auth.example".to_owned()).unwrap()
     }
 
     fn service_resolution() -> arkret_models_identity::identity_resolution::ServiceResolutionCarrier
@@ -410,9 +410,9 @@ mod tests {
 
     fn payload() -> serde_json::Value {
         arkret_models_collaboration::governance::membership_invite::InviteCreatePayload::new(
-            arkret_identifiers::CoreId::new("ak:did_core:web:holder".to_owned()).unwrap(),
+            arkret_identifiers::DidCoreId::new("ak:did_core:web:holder".to_owned()).unwrap(),
             arkret_models_collaboration::governance::invite_addressing::InviteDeliveryTarget::principal_server(
-                arkret_identifiers::ServiceId::new("ak:did_core:web:auth.example".to_owned()).unwrap(),
+                arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap(),
                 service_resolution(),
             ),
             arkret_identifiers::Hash::new(
@@ -439,7 +439,7 @@ mod tests {
                     )
                     .unwrap(),
                 },
-                arkret_identifiers::ActorId::new(
+                arkret_identifiers::DidCoreId::new(
                     "ak:did_core:web:inviter".to_owned(),
                 )
                 .unwrap(),
@@ -449,8 +449,8 @@ mod tests {
             )
             .unwrap(),
             arkret_models_collaboration::governance::invite_addressing::InviteAddress::principal_server(
-                arkret_identifiers::CoreId::new("ak:did_core:web:holder".to_owned()).unwrap(),
-                arkret_identifiers::ServiceId::new("ak:did_core:web:auth.example".to_owned()).unwrap(),
+                arkret_identifiers::DidCoreId::new("ak:did_core:web:holder".to_owned()).unwrap(),
+                arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap(),
                 service_resolution(),
             ),
             arkret_models_collaboration::governance::invite_addressing::IntroductionEvidence::ExplicitAddress,

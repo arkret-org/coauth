@@ -44,9 +44,9 @@ const IMPLEMENTED_PROFILE_SCHEMAS: &[&str] =
 #[derive(Debug, Clone, Serialize)]
 struct PrincipalServerDescriptor {
     name: String,
-    audience: Option<arkret_identifiers::ServiceId>,
+    audience: Option<arkret_identifiers::DidCoreId>,
     endpoint: String,
-    did: Option<arkret_identifiers::ServiceId>,
+    did: Option<arkret_identifiers::DidCoreId>,
 }
 
 #[derive(Debug, Serialize)]
@@ -228,7 +228,7 @@ fn build_verified_profile_descriptors(
                 verification_run_id: entry.verification_run_id.clone(),
                 artifact_digest: entry.artifact_digest.clone(),
                 artifact_ref: entry.artifact_ref.clone(),
-                verifier_did: entry.verifier_did.clone(),
+                verifier_service_id: entry.verifier_service_id.clone(),
                 signature: entry.signature.clone(),
                 timestamp: entry.timestamp,
                 expires_at: entry.expires_at,

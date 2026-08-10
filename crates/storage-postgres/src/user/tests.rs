@@ -25,21 +25,51 @@ fn principal_binding_test_material(label: &str) -> (String, arkret_identifiers::
     (principal_id, key_log_head)
 }
 
+fn principal_authority_instance(
+    principal_id: &str,
+    principal_server_id: &str,
+) -> arkret_wire::PrincipalAuthorityInstance {
+    arkret_wire::PrincipalAuthorityInstance::new(
+        arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
+        arkret_identifiers::DidCoreId::new(principal_server_id).unwrap(),
+        arkret_identifiers::RealmId::new("ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO")
+            .unwrap(),
+        arkret_identifiers::Hash::new(format!("sha256:{}", "d".repeat(64))).unwrap(),
+    )
+    .unwrap()
+}
+
 fn verified_principal_binding_input(
     audience: impl Into<String>,
     principal_id: String,
     key_log_head: arkret_identifiers::Hash,
 ) -> VerifiedPrincipalDidBindingInput {
+    let audience = audience.into();
+    let method_specific_id = principal_id
+        .strip_prefix("ak:did_core:webvh:")
+        .expect("webvh test principal core");
+    let full_id = format!("did:webvh:{method_specific_id}:fixture.example");
+    let authority_instance = principal_authority_instance(&principal_id, &audience);
     VerifiedPrincipalDidBindingInput {
-        audience: audience.into(),
-        principal_id,
-        key_log_head,
-        verified_full_id: None,
-        verified_version_id: None,
-        binding_receipt: None,
-        accepted_service_id: None,
-        binding_version: None,
-        binding_frontier_digest: None,
+        audience: audience.clone(),
+        principal_id: principal_id.clone(),
+        key_log_head: key_log_head.clone(),
+        verified_full_id: arkret_identifiers::DidFullId::new(full_id.clone()).unwrap(),
+        verified_version_id: "1-fixture".to_owned(),
+        binding_receipt: serde_json::json!({
+            "principal_id": principal_id,
+            "full_id": full_id,
+            "did_version_id": "1-fixture",
+            "head_event_digest": key_log_head,
+        }),
+        accepted_service_id: arkret_identifiers::DidCoreId::new(audience).unwrap(),
+        binding_version: 1,
+        binding_frontier_digest: arkret_identifiers::Hash::new(format!(
+            "sha256:{}",
+            "b".repeat(64)
+        ))
+        .unwrap(),
+        authority_instance,
     }
 }
 
@@ -50,22 +80,29 @@ fn registration_binding_input(
     key_log_head: arkret_identifiers::Hash,
     version_id: &str,
 ) -> VerifiedPrincipalDidBindingInput {
+    let audience = audience.into();
+    let authority_instance = principal_authority_instance(&principal_id, &audience);
     VerifiedPrincipalDidBindingInput {
-        audience: audience.into(),
+        audience: audience.clone(),
         principal_id: principal_id.clone(),
         key_log_head: key_log_head.clone(),
-        verified_full_id: Some(arkret_identifiers::FullId::new(full_id.clone()).unwrap()),
-        verified_version_id: Some(version_id.to_owned()),
-        binding_receipt: Some(serde_json::json!({
+        verified_full_id: arkret_identifiers::DidFullId::new(full_id.clone()).unwrap(),
+        verified_version_id: version_id.to_owned(),
+        binding_receipt: serde_json::json!({
             "binding_state": "bound",
             "principal_id": principal_id.clone(),
             "full_id": full_id.clone(),
             "did_version_id": version_id,
             "head_event_digest": key_log_head.clone(),
-        })),
-        accepted_service_id: None,
-        binding_version: None,
-        binding_frontier_digest: None,
+        }),
+        accepted_service_id: arkret_identifiers::DidCoreId::new(audience).unwrap(),
+        binding_version: 1,
+        binding_frontier_digest: arkret_identifiers::Hash::new(format!(
+            "sha256:{}",
+            "c".repeat(64)
+        ))
+        .unwrap(),
+        authority_instance,
     }
 }
 
@@ -1382,7 +1419,7 @@ async fn principal_did_has_one_global_owner_under_concurrent_binding() {
                 &MockClock::default(),
                 &alice,
                 verified_principal_binding_input(
-                    "https://ps-a.example",
+                    "ak:did_core:web:ps-a.example",
                     first_principal_id,
                     first_head,
                 ),
@@ -1409,7 +1446,7 @@ async fn principal_did_has_one_global_owner_under_concurrent_binding() {
                 &MockClock::default(),
                 &bob,
                 verified_principal_binding_input(
-                    "https://ps-b.example",
+                    "ak:did_core:web:ps-b.example",
                     second_principal_id,
                     key_log_head,
                 ),
@@ -1449,7 +1486,7 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
     let factory = PgRepositoryFactory::new(pool);
     let label = uuid::Uuid::now_v7().simple().to_string();
     let clock = MockClock::default();
-    let audience = "https://ps.example";
+    let audience = "ak:did_core:web:ps.example";
     let mut rng = ChaChaRng::seed_from_u64(74);
 
     let mut repo = factory.create().await.unwrap();
@@ -1501,6 +1538,56 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
             .await
             .unwrap()
             .is_none()
+    );
+    repo.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn principal_did_rejects_same_core_cross_pcr_substitution() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let factory = PgRepositoryFactory::new(pool);
+    let label = uuid::Uuid::now_v7().simple().to_string();
+    let clock = MockClock::default();
+    let audience = "ak:did_core:web:ps.example";
+    let mut rng = ChaChaRng::seed_from_u64(76);
+    let mut repo = factory.create().await.unwrap();
+    let user = repo
+        .user()
+        .add(&mut rng, &clock, format!("alice-pcr-{label}"))
+        .await
+        .unwrap();
+    let (principal_id, head) = principal_binding_test_material(&label);
+    repo.principal_did()
+        .add_verified(
+            &mut rng,
+            &clock,
+            &user,
+            verified_principal_binding_input(audience, principal_id.clone(), head.clone()),
+        )
+        .await
+        .unwrap();
+    repo.save().await.unwrap();
+
+    let mut substitute = verified_principal_binding_input(audience, principal_id, head);
+    substitute.authority_instance = arkret_wire::PrincipalAuthorityInstance::new(
+        substitute.authority_instance.principal_id.clone(),
+        substitute.authority_instance.principal_server_id.clone(),
+        arkret_identifiers::RealmId::new("ak:realm:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB")
+            .unwrap(),
+        substitute
+            .authority_instance
+            .principal_genesis_receipt_digest
+            .clone(),
+    )
+    .unwrap();
+    let mut repo = factory.create().await.unwrap();
+    assert!(
+        repo.principal_did()
+            .add_verified(&mut rng, &clock, &user, substitute)
+            .await
+            .is_err()
     );
     repo.cancel().await.unwrap();
 }
@@ -1559,15 +1646,14 @@ async fn principal_binding_refreshes_verified_snapshot_only_within_the_same_core
         .unwrap();
     assert_eq!(refreshed.principal_id, principal_id);
     assert_eq!(
-        refreshed.verified_full_id.unwrap().as_str(),
+        refreshed.verified_full_id.as_str(),
         format!("did:webvh:z{label}:new.example")
     );
-    assert_eq!(refreshed.verified_version_id.as_deref(), Some("2-rotation"));
+    assert_eq!(refreshed.verified_version_id, "2-rotation");
     assert_eq!(
         refreshed
             .binding_receipt
-            .as_ref()
-            .and_then(|value| value.get("did_version_id"))
+            .get("did_version_id")
             .and_then(serde_json::Value::as_str),
         Some("2-rotation")
     );

@@ -34,7 +34,7 @@ use arkret_policy::{
     NoDelegationResolver, RealmOrganizationDelegation, RealmOrganizationDelegationResolver,
     verify_realm_organization_statement,
 };
-use arkret_wire::{Did, DidUrl, Hash, NonEmptyString, RealmId};
+use arkret_wire::{DidCoreId, DidUrl, Hash, NonEmptyString, RealmId};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::organization_control::OrganizationDelegation;
 use coauth_jose::constraints::Constrainable as _;
@@ -69,7 +69,7 @@ pub enum OrganizationStatementError {
 pub struct OrganizationStatementRequest {
     pub statement_id: String,
     pub realm_id: RealmId,
-    pub organization_id: Did,
+    pub organization_id: DidCoreId,
     pub relationship: RealmOrganizationRelationship,
     pub status: RealmOrganizationStatus,
     pub control_scopes: Vec<RealmOrganizationControlScope>,
@@ -80,14 +80,14 @@ pub struct OrganizationStatementRequest {
     pub revokes_statement_id: Option<String>,
     pub realm_frontier_digest: Option<Hash>,
     pub organization_policy_ref: Option<String>,
-    pub issuer: Did,
+    pub issuer: DidCoreId,
     pub issuer_role: RealmOrganizationIssuerRole,
     /// REQUIRED for delegated issuer roles; MUST be absent otherwise. This is
     /// the same ref the [`RepositoryDelegationResolver`] resolves.
     pub delegation_ref: Option<String>,
     /// Human admin / service principal that initiated the decision. Recorded on
     /// the proof, never elevated to the organization principal.
-    pub executed_by: Option<Did>,
+    pub executed_by: Option<DidCoreId>,
 }
 
 /// Issue a signed `ak.realm.organization` statement.
@@ -212,7 +212,7 @@ impl RealmOrganizationDelegationResolver for RepositoryDelegationResolver {
     fn resolve_delegation(
         &self,
         delegation_ref: &ObjectRef,
-        organization_id: &Did,
+        organization_id: &DidCoreId,
     ) -> Result<Option<RealmOrganizationDelegation>, Self::Error> {
         let Some(delegation) = self.delegation.as_ref() else {
             return Ok(None);
@@ -281,8 +281,8 @@ mod tests {
         RealmId::new("ak:realm:AXXwKm5bWs7Plj3J5iRyqGeeNU99_oZCMnjtWom6sFeR").unwrap()
     }
 
-    fn org_did() -> Did {
-        Did::new("did:webvh:example.test:orgs:org1".to_owned()).unwrap()
+    fn org_did() -> DidCoreId {
+        DidCoreId::new("ak:did_core:webvh:example.test".to_owned()).unwrap()
     }
 
     fn now() -> chrono::DateTime<chrono::Utc> {

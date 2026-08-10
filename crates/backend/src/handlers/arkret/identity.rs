@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
-use arkret_identifiers::Did;
+use arkret_identifiers::DidFullId;
 use arkret_identity::DidBindingPurpose;
 use arkret_models_discovery::{
     DirectoryHandleResolutionOutcome, DirectoryResolveHandleRequestBody,
@@ -32,7 +32,7 @@ pub async fn identity_describe(
     };
 
     Ok(Json(IdentityDescribeOutcome(IdentityDescription {
-        service_id: issuer_did_for(&arkret_config),
+        service_id: service_id_for(&arkret_config),
         registry_mode: registry_mode.to_owned(),
         supported_receipts: Vec::new(),
         protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
@@ -211,12 +211,12 @@ pub async fn directory_resolve_handle(
     let Some(principal_binding) = principal_binding else {
         return Err(directory_resolve_not_found(started_at).await);
     };
-    let did = principal_binding.did.clone();
+    let principal_id = principal_binding.principal_id.clone();
 
     let verified = body
-        .expected_did
+        .expected_principal_id
         .as_ref()
-        .is_some_and(|expected| expected.as_str() == did);
+        .is_some_and(|expected| expected == &principal_id);
     if !verified {
         return Err(directory_resolve_not_found(started_at).await);
     }
@@ -229,7 +229,7 @@ pub async fn directory_resolve_handle(
         &arkret_config,
         &mut repo,
         binding_store.as_ref(),
-        &did,
+        principal_binding.full_id.as_str(),
         DidBindingPurpose::Principal,
         crate::handlers::make_clock().now(),
     )
@@ -243,15 +243,14 @@ pub async fn directory_resolve_handle(
     }
     let clock = crate::handlers::make_clock();
     let handle_claim_audience = directory_handle_claim_audience(&body, &principal_binding.audience);
-    let member_delivery_binding =
-        directory_handle_delivery_binding(&arkret_config, &principal_binding)?;
+    let member_delivery_binding = directory_handle_delivery_binding(&principal_binding)?;
     let claim_material = issue_handle_claim(
         &*clock,
         &url_builder,
         &arkret_config,
         &key_store,
         &user,
-        &did,
+        principal_id.as_str(),
         arkret_models_identity::HandleClaimKind::HandleBinding,
         handle_claim_audience.clone(),
         member_delivery_binding,
@@ -264,7 +263,7 @@ pub async fn directory_resolve_handle(
     })?;
 
     Ok(Json(DirectoryHandleResolutionOutcome {
-        did: parse_did_field("did", did)?,
+        principal_id,
         handle: canonical_handle,
         verified,
         claims: Some(vec![claim_material.payload.clone()]),
@@ -292,20 +291,9 @@ fn directory_handle_claim_audience(
 }
 
 fn directory_handle_delivery_binding(
-    arkret_config: &ArkretConfig,
     principal_binding: &PrincipalDidBinding,
 ) -> Result<arkret_models_identity::DeliveryBindingHint, ArkretRouteError> {
-    let recipient_service_id = principal_binding
-        .principal_server_did
-        .as_ref()
-        .and_then(|did| arkret_identifiers::Did::new(did.clone()).ok())
-        .or_else(|| arkret_identifiers::Did::new(principal_binding.audience.clone()).ok())
-        .or_else(|| Some(issuer_did_for(arkret_config)))
-        .ok_or_else(|| {
-            ArkretRouteError::Internal(Box::new(std::io::Error::other(
-                "no valid DID available for handle claim delivery binding",
-            )))
-        })?;
+    let recipient_service_id = principal_binding.accepted_service_id.clone();
     Ok(arkret_models_identity::DeliveryBindingHint {
         recipient_service_id,
         recipient_service_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
@@ -325,11 +313,6 @@ fn directory_handle_delivery_binding(
 fn map_handle_claim_issue_error(error: SessionGrantError) -> ArkretRouteError {
     match error {
         SessionGrantError::HandleClaimSubject(error) => ArkretRouteError::coded(
-            StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::INVALID_PARAM,
-            error.to_string(),
-        ),
-        error @ SessionGrantError::DidWebPrincipalNotExplicit => ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             arkret_wire::ErrorCode::INVALID_PARAM,
             error.to_string(),
@@ -394,14 +377,14 @@ fn directory_resolve_request_has_disclosure_gate(body: &DirectoryResolveHandleRe
         .is_some_and(|challenge| !challenge.trim().is_empty());
 
     intent_allowed
-        && body.expected_did.is_some()
+        && body.expected_principal_id.is_some()
         && body.requester.is_some()
         && challenge_present
         && !body.proofs.is_empty()
 }
 
-fn parse_did_field(field: &str, value: String) -> Result<Did, ArkretRouteError> {
-    Did::new(value)
+fn parse_did_field(field: &str, value: String) -> Result<DidFullId, ArkretRouteError> {
+    DidFullId::new(value)
         .map_err(|error| ArkretRouteError::BadRequest(format!("invalid {field}: {error}")))
 }
 

@@ -143,11 +143,6 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                 .post(arkret::create_account_handoff),
         )
         .push(
-            Router::with_path("gate/account/did-binding-challenges")
-                .options(oidc_preflight_handler)
-                .post(arkret::issue_did_binding_challenge),
-        )
-        .push(
             Router::with_path("gate/account/identity-binding-challenges")
                 .options(oidc_preflight_handler)
                 .post(arkret::issue_identity_binding_challenge),
@@ -438,15 +433,10 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
 
     #[cfg(debug_assertions)]
     if arkret::test_endpoints_enabled() {
-        coauth_router = coauth_router
-            .push(
-                Router::with_path("account/test/debug/bind-principal")
-                    .post(arkret::debug_bind_principal),
-            )
-            .push(
-                Router::with_path("account/test/debug/issue-dpop-grant")
-                    .post(arkret::debug_issue_dpop_grant),
-            );
+        coauth_router = coauth_router.push(
+            Router::with_path("account/test/debug/issue-dpop-grant")
+                .post(arkret::debug_issue_dpop_grant),
+        );
     }
 
     let docs_router = openapi::build_openapi_router(&coauth_router);

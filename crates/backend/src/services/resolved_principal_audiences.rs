@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
 use std::time::{Duration, Instant};
 
-use arkret_identifiers::ServiceId;
+use arkret_identifiers::DidCoreId;
 use coauth_config::{ArkretConfig, PrincipalServerConfig};
 use url::Url;
 
@@ -68,7 +68,7 @@ pub struct ResolvedPrincipalAudiences {
 
 #[derive(Debug, Clone)]
 struct ResolvedAudience {
-    value: ServiceId,
+    value: DidCoreId,
     resolved_at: Instant,
 }
 
@@ -93,11 +93,11 @@ impl ResolvedPrincipalAudiences {
     /// first successful probe and after expiry, so callers MUST fail closed on
     /// `None`.
     #[must_use]
-    pub fn resolve(&self, endpoint: &Url) -> Option<ServiceId> {
+    pub fn resolve(&self, endpoint: &Url) -> Option<DidCoreId> {
         self.resolve_at(endpoint, Instant::now())
     }
 
-    fn resolve_at(&self, endpoint: &Url, now: Instant) -> Option<ServiceId> {
+    fn resolve_at(&self, endpoint: &Url, now: Instant) -> Option<DidCoreId> {
         let key = endpoint_key(endpoint);
         let map = self.inner.read().ok()?;
         let resolved = map.get(&key)?;
@@ -108,12 +108,12 @@ impl ResolvedPrincipalAudiences {
     /// Test/seed helper: insert a resolved value directly without a probe.
     #[cfg(test)]
     pub fn insert_for_test(&self, endpoint: &Url, service_id: impl Into<String>) {
-        let service_id = ServiceId::new(service_id.into()).expect("valid test service core ID");
+        let service_id = DidCoreId::new(service_id.into()).expect("valid test service core ID");
         self.insert_at_for_test(endpoint, service_id, Instant::now());
     }
 
     #[cfg(test)]
-    fn insert_at_for_test(&self, endpoint: &Url, service_id: ServiceId, resolved_at: Instant) {
+    fn insert_at_for_test(&self, endpoint: &Url, service_id: DidCoreId, resolved_at: Instant) {
         self.inner
             .write()
             .expect("resolved-audience lock poisoned")
@@ -179,7 +179,7 @@ impl ResolvedPrincipalAudiences {
     fn apply_refresh_result(
         &self,
         server: &PrincipalServerConfig,
-        result: Result<ServiceId, String>,
+        result: Result<DidCoreId, String>,
         now: Instant,
     ) {
         let key = endpoint_key(&server.endpoint);
@@ -277,14 +277,14 @@ impl ResolvedPrincipalAudiences {
 pub fn effective_audience(
     server: &PrincipalServerConfig,
     _resolved: &ResolvedPrincipalAudiences,
-) -> Option<ServiceId> {
+) -> Option<DidCoreId> {
     server.service_id.clone()
 }
 
 /// [`effective_audience`] against the process-wide [`shared`] cache — the
 /// common form for call sites that don't thread a cache handle.
 #[must_use]
-pub fn effective_audience_shared(server: &PrincipalServerConfig) -> Option<ServiceId> {
+pub fn effective_audience_shared(server: &PrincipalServerConfig) -> Option<DidCoreId> {
     effective_audience(server, shared())
 }
 
@@ -297,7 +297,7 @@ fn endpoint_key(endpoint: &Url) -> String {
 async fn fetch_service_id(
     http_client: &reqwest::Client,
     endpoint: &Url,
-) -> Result<ServiceId, String> {
+) -> Result<DidCoreId, String> {
     let describe_url = endpoint
         .join(DESCRIBE_PATH)
         .map_err(|error| format!("invalid principal-server endpoint: {error}"))?;
@@ -335,7 +335,7 @@ mod tests {
         PrincipalServerConfig {
             name: "soland".to_owned(),
             endpoint: Url::parse(endpoint).unwrap(),
-            service_id: Some(ServiceId::new("ak:did_core:webvh:configured".to_owned()).unwrap()),
+            service_id: Some(DidCoreId::new("ak:did_core:webvh:configured".to_owned()).unwrap()),
             session_grant_introspection_bearer: None,
             embedded_webvh_registration_bearer: None,
         }
@@ -350,7 +350,7 @@ mod tests {
         assert_eq!(
             effective_audience(&server, &resolved)
                 .as_ref()
-                .map(arkret_identifiers::ServiceId::as_str),
+                .map(arkret_identifiers::DidCoreId::as_str),
             Some("ak:did_core:webvh:configured"),
         );
     }
@@ -362,7 +362,7 @@ mod tests {
         assert_eq!(
             effective_audience(&server, &resolved)
                 .as_ref()
-                .map(ServiceId::as_str),
+                .map(DidCoreId::as_str),
             Some("ak:did_core:webvh:configured")
         );
     }
@@ -392,7 +392,7 @@ mod tests {
         let resolved_at = Instant::now();
         resolved.insert_at_for_test(
             &endpoint,
-            ServiceId::new("ak:did_core:webvh:current".to_owned()).unwrap(),
+            DidCoreId::new("ak:did_core:webvh:current".to_owned()).unwrap(),
             resolved_at,
         );
 
@@ -413,7 +413,7 @@ mod tests {
         let resolved_at = Instant::now();
         resolved.apply_refresh_result(
             &server,
-            Ok(ServiceId::new("ak:did_core:webvh:configured".to_owned()).unwrap()),
+            Ok(DidCoreId::new("ak:did_core:webvh:configured".to_owned()).unwrap()),
             resolved_at,
         );
 
@@ -441,12 +441,12 @@ mod tests {
         let resolved = ResolvedPrincipalAudiences::new();
         let server = server("https://local.host/");
         let resolved_at = Instant::now();
-        let original = ServiceId::new("ak:did_core:webvh:configured".to_owned()).unwrap();
+        let original = DidCoreId::new("ak:did_core:webvh:configured".to_owned()).unwrap();
         resolved.apply_refresh_result(&server, Ok(original.clone()), resolved_at);
 
         resolved.apply_refresh_result(
             &server,
-            Ok(ServiceId::new("ak:did_core:webvh:changed".to_owned()).unwrap()),
+            Ok(DidCoreId::new("ak:did_core:webvh:changed".to_owned()).unwrap()),
             resolved_at + Duration::from_secs(1),
         );
 

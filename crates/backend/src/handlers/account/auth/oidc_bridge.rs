@@ -14,7 +14,7 @@
 // `coauth_admin_types::integration_manifest_admin` so the sodmin admin SPA
 // decodes them through the same typed shape. The `integration_describe`
 // endpoint below returns the shared `IntegrationManifest` directly.
-use arkret_identifiers::{CoreId, DeviceId, FullId};
+use arkret_identifiers::{DeviceId, DidCoreId, DidFullId};
 use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
 };
@@ -76,7 +76,7 @@ pub(crate) struct OidcCodeExchangeInput {
 /// Successful OIDC exchange result. The caller (the canonical session-grant
 /// handler) turns this into a `SessionGrantOutcome`.
 pub(crate) struct OidcExchangeSuccess {
-    pub principal_did: String,
+    pub principal_id: DidCoreId,
     pub device_id: String,
     pub session_grant: SessionGrantMaterial,
     pub persisted_grant_id: String,
@@ -90,23 +90,19 @@ async fn commit_oidc_session_grant(
     operation: &SessionGrantOperation,
     dpop_binding: &DpopSessionBinding,
     browser_session_id: Ulid,
-    principal_did: &str,
+    principal_id: &DidCoreId,
     device_id: &str,
     material: &SessionGrantMaterial,
 ) -> Result<coauth_data::SessionGrant, OidcExchangeError> {
-    let principal_full_id = FullId::new(principal_did.to_owned())
-        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-    let principal_id = arkret_identifiers::project_full_id_to_core_id(&principal_full_id)
-        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
     let device_id_typed = arkret_identifiers::DeviceId::new(device_id.to_owned())
         .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-    let audience = arkret_identifiers::ServiceId::new(material.audience.clone())
+    let audience = arkret_identifiers::DidCoreId::new(material.audience.clone())
         .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
     let session_public_key =
         arkret_models_identity::CanonicalSessionPublicJwk::new(&material.session_public_key)
             .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
     let wire_outcome = arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome {
-        principal_id,
+        principal_id: principal_id.clone(),
         device_id: Some(device_id_typed),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
@@ -121,7 +117,7 @@ async fn commit_oidc_session_grant(
     let outcome_digest: [u8; 32] = sha2::Sha256::digest(&canonical_outcome).into();
     let checkpoint = serde_json::json!({
         "kind": "oidc_code_exchange",
-        "principal_id": principal_did,
+        "principal_id": principal_id,
         "device_id": device_id,
         "browser_session_id": browser_session_id.to_string(),
         "grant_id": material.grant_id,
@@ -344,24 +340,20 @@ pub(crate) fn principal_server_operation_bearer<'a>(
 /// invoke it after the canonical binding flow has completed.
 #[derive(Debug, serde::Serialize)]
 struct AccountProjectionRegisterRequestBody {
-    principal_id: CoreId,
-    full_id: FullId,
+    principal_id: DidCoreId,
+    full_id: DidFullId,
     display_name: Option<String>,
     device_id: Option<DeviceId>,
 }
 
 fn soland_account_register_body(
-    principal_did: &str,
+    principal: &VerifiedPrincipalIdentity,
     display_name: Option<&str>,
     device_id: Option<&str>,
 ) -> Result<AccountProjectionRegisterRequestBody, String> {
-    let full_id = FullId::new(principal_did.to_owned())
-        .map_err(|error| format!("principal DID is invalid: {error}"))?;
-    let principal_id = arkret_identifiers::project_full_id_to_core_id(&full_id)
-        .map_err(|error| format!("principal DID cannot be projected: {error}"))?;
     Ok(AccountProjectionRegisterRequestBody {
-        principal_id,
-        full_id,
+        principal_id: principal.principal_id.clone(),
+        full_id: principal.full_id.clone(),
         display_name: display_name.map(ToOwned::to_owned),
         device_id: device_id
             .map(|value| {
@@ -444,23 +436,43 @@ fn soland_account_localpart_failure(status: reqwest::StatusCode, body: &str) -> 
     )
 }
 
-/// Load the verified full DID snapshot for `user` and `audience`.
-///
-/// The durable binding is keyed by the stable principal core, while the
-/// legacy session-grant DTO still requires a full DID. Never reconstruct that
-/// full value from the core; only return the snapshot captured by the
-/// canonical binding flow.
+#[derive(Clone, Debug)]
+pub(crate) struct VerifiedPrincipalIdentity {
+    pub principal_id: DidCoreId,
+    pub full_id: DidFullId,
+    pub authority_instance: arkret_wire::PrincipalAuthorityInstance,
+}
+
+/// Load the stable principal id and its registration-time full DID snapshot.
 pub(super) async fn load_verified_principal_did(
     repo: &mut coauth_data::BoxRepository,
     user: &User,
     audience: &str,
-) -> Result<String, String> {
+) -> Result<VerifiedPrincipalIdentity, String> {
     repo.principal_did()
         .get_for_user_and_audience(user, audience)
         .await
         .map_err(|error| format!("principal binding lookup failed: {error}"))?
-        .and_then(|binding| binding.verified_full_id.map(|full_id| full_id.to_string()))
-        .ok_or_else(|| "principal binding has no verified full_id snapshot".to_owned())
+        .map(|binding| {
+            let principal_id = DidCoreId::new(binding.principal_id)
+                .map_err(|error| format!("stored principal_id is invalid: {error}"))?;
+            binding
+                .authority_instance
+                .validate()
+                .map_err(|error| format!("stored authority instance is invalid: {error}"))?;
+            if binding.authority_instance.principal_id != principal_id
+                || binding.authority_instance.principal_server_id.as_str() != audience
+            {
+                return Err("stored authority instance does not match principal binding".to_owned());
+            }
+            Ok(VerifiedPrincipalIdentity {
+                principal_id,
+                full_id: binding.verified_full_id,
+                authority_instance: binding.authority_instance,
+            })
+        })
+        .transpose()?
+        .ok_or_else(|| "principal binding is missing".to_owned())
 }
 
 /// Load a verified principal DID in an isolated read transaction.
@@ -468,7 +480,7 @@ pub(crate) async fn load_verified_principal_did_committed(
     depot: &Depot,
     user: &User,
     audience: &str,
-) -> Result<String, String> {
+) -> Result<VerifiedPrincipalIdentity, String> {
     let mut did_repo = depot
         .repo()
         .await
@@ -487,7 +499,7 @@ pub(crate) async fn load_verified_principal_did_committed(
 pub(crate) async fn ensure_soland_account_registered(
     http_client: &reqwest::Client,
     principal_endpoint: Option<&str>,
-    principal_did: &str,
+    principal: &VerifiedPrincipalIdentity,
     operation_bearer: Option<&str>,
     display_name: Option<&str>,
     device_id: Option<&str>,
@@ -508,13 +520,14 @@ pub(crate) async fn ensure_soland_account_registered(
                 .to_owned()
         })?;
     let endpoint = soland_account_register_endpoint(principal_endpoint)?;
-    let request_body = soland_account_register_body(principal_did, display_name, device_id)?;
+    let request_body = soland_account_register_body(principal, display_name, device_id)?;
     let (status, response_body) =
         send_soland_account_register(http_client, &endpoint, bearer, &request_body).await?;
     if !status.is_success() {
         return Err(soland_account_register_failure(status, &response_body));
     }
-    let endpoint = soland_account_localparts_endpoint(principal_endpoint, principal_did)?;
+    let endpoint =
+        soland_account_localparts_endpoint(principal_endpoint, principal.principal_id.as_str())?;
     let (status, response_body) =
         send_soland_primary_localpart(http_client, &endpoint, bearer, primary_localpart).await?;
     if status.is_success() {
@@ -922,19 +935,18 @@ async fn exchange_oidc_code(
                 .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
             return Ok(OidcExchangeResult::AccountHandoff(Box::new(success)));
         }
-        let principal_did =
-            load_verified_principal_did_committed(depot, &user, &grant_target.audience)
-                .await
-                .map_err(|message| OidcExchangeError::new("principal_unknown", message))?;
+        let principal = load_verified_principal_did_committed(depot, &user, &grant_target.audience)
+            .await
+            .map_err(|message| OidcExchangeError::new("principal_unknown", message))?;
 
-        validate_expected_principal(&principal_did, &input.expected_principal_id)?;
+        validate_expected_principal(&principal.principal_id, &input.expected_principal_id)?;
 
         let operation_bearer =
             principal_server_operation_bearer(&arkret_config, &grant_target.audience);
         ensure_soland_account_registered(
             &http_client,
             grant_target.principal_server_endpoint.as_deref(),
-            &principal_did,
+            &principal,
             operation_bearer,
             user.display_name.as_deref(),
             Some(device_id.as_str()),
@@ -960,7 +972,8 @@ async fn exchange_oidc_code(
             dpop_binding.public_jwk.clone(),
             grant_target.audience.clone(),
             principal_session_grant_scopes(&device_id),
-            Some(&principal_did),
+            Some(principal.principal_id.as_str()),
+            &principal.authority_instance,
             dpop_binding.jkt.clone(),
             arkret_models_identity::SessionGrantProofKind::OidcCodeExchange,
         )
@@ -974,7 +987,7 @@ async fn exchange_oidc_code(
                 .expect("session grant exchange must carry a reserved operation"),
             &dpop_binding,
             browser_session.id,
-            &principal_did,
+            &principal.principal_id,
             device_id.as_str(),
             &session_grant,
         )
@@ -984,7 +997,7 @@ async fn exchange_oidc_code(
         let _ = &grant_target;
         return Ok(OidcExchangeResult::SessionGrant(Box::new(
             OidcExchangeSuccess {
-                principal_did,
+                principal_id: principal.principal_id,
                 device_id,
                 session_grant,
                 persisted_grant_id: persisted.grant_id.to_string(),
@@ -1382,7 +1395,7 @@ async fn exchange_oidc_code(
                 format!("fresh OAuth access token failed local userinfo validation: {error}"),
             )
         })?;
-    let mut repo = depot
+    let repo = depot
         .repo()
         .await
         .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
@@ -1429,18 +1442,18 @@ async fn exchange_oidc_code(
             .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
         return Ok(OidcExchangeResult::AccountHandoff(Box::new(success)));
     }
-    let principal_did = load_verified_principal_did_committed(depot, user, &grant_target.audience)
+    let principal = load_verified_principal_did_committed(depot, user, &grant_target.audience)
         .await
         .map_err(|message| OidcExchangeError::new("principal_unknown", message))?;
 
-    validate_expected_principal(&principal_did, &input.expected_principal_id)?;
+    validate_expected_principal(&principal.principal_id, &input.expected_principal_id)?;
 
     let operation_bearer =
         principal_server_operation_bearer(&arkret_config, &grant_target.audience);
     ensure_soland_account_registered(
         &http_client,
         grant_target.principal_server_endpoint.as_deref(),
-        &principal_did,
+        &principal,
         operation_bearer,
         user.display_name.as_deref(),
         Some(device_id.as_str()),
@@ -1464,7 +1477,8 @@ async fn exchange_oidc_code(
         dpop_binding.public_jwk.clone(),
         grant_target.audience.clone(),
         principal_session_grant_scopes(&device_id),
-        Some(&principal_did),
+        Some(principal.principal_id.as_str()),
+        &principal.authority_instance,
         dpop_binding.jkt.clone(),
         arkret_models_identity::SessionGrantProofKind::OidcCodeExchange,
     )
@@ -1478,7 +1492,7 @@ async fn exchange_oidc_code(
             .expect("session grant exchange must carry a reserved operation"),
         &dpop_binding,
         browser_session.id,
-        &principal_did,
+        &principal.principal_id,
         device_id.as_str(),
         &session_grant,
     )
@@ -1487,7 +1501,7 @@ async fn exchange_oidc_code(
     let _ = &grant_target;
     Ok(OidcExchangeResult::SessionGrant(Box::new(
         OidcExchangeSuccess {
-            principal_did,
+            principal_id: principal.principal_id,
             device_id,
             session_grant,
             persisted_grant_id: persisted.grant_id.to_string(),
@@ -1497,7 +1511,7 @@ async fn exchange_oidc_code(
 
 /// The request principal DID must equal the verified service-account binding.
 fn validate_expected_principal(
-    resolved_principal_did: &str,
+    resolved_principal_id: &DidCoreId,
     expected_principal_id: &str,
 ) -> Result<(), OidcExchangeError> {
     let expected = expected_principal_id.trim();
@@ -1507,13 +1521,13 @@ fn validate_expected_principal(
             "principal_id must name an existing verified principal binding",
         ));
     }
-    if expected != resolved_principal_did {
+    if expected != resolved_principal_id.as_str() {
         // Do not echo the resolved principal DID back to the client: it is an
         // internal binding value the caller does not necessarily own.
         tracing::debug!(
             target: "coauth.oidc_exchange",
             request_principal_id = %expected,
-            resolved_principal_did = %resolved_principal_did,
+            resolved_principal_id = %resolved_principal_id,
             "principal binding mismatch",
         );
         return Err(OidcExchangeError::proof_invalid(
@@ -1585,10 +1599,29 @@ mod tests {
     use super::*;
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
 
-    const TEST_PRINCIPAL_DID: &str = "did:webvh:scid:local.host:webvh:01k";
+    const TEST_PRINCIPAL_ID: &str = "ak:did_core:webvh:scid:local.host";
+    const TEST_PRINCIPAL_FULL_ID: &str = "did:webvh:scid:local.host:webvh:01k";
     const TEST_DEVICE_ID: &str = "ak:device:01964137-0000-7000-8000-000000000001";
     const TEST_OPERATION_BEARER: &str = "account-operation-secret";
     const ACCOUNT_REGISTER_PATH: &str = "/_arkret/gate/account/register";
+
+    fn test_principal() -> VerifiedPrincipalIdentity {
+        let principal_id = DidCoreId::new(TEST_PRINCIPAL_ID).unwrap();
+        VerifiedPrincipalIdentity {
+            authority_instance: arkret_wire::PrincipalAuthorityInstance::new(
+                principal_id.clone(),
+                DidCoreId::new("ak:did_core:web:principal-server.test").unwrap(),
+                arkret_identifiers::RealmId::new(
+                    "ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO",
+                )
+                .unwrap(),
+                arkret_identifiers::Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
+            )
+            .unwrap(),
+            principal_id,
+            full_id: DidFullId::new(TEST_PRINCIPAL_FULL_ID).unwrap(),
+        }
+    }
 
     fn wire_error(code: &str, message: &str) -> serde_json::Value {
         serde_json::json!({
@@ -1652,23 +1685,15 @@ mod tests {
 
     #[test]
     fn expected_principal_binding_is_exact() {
+        let principal = DidCoreId::new("ak:did_core:webvh:scid:host").unwrap();
         // Matching client assertion → ok.
-        assert!(
-            validate_expected_principal(
-                "did:webvh:scid:host:webvh:01k",
-                "did:webvh:scid:host:webvh:01k"
-            )
-            .is_ok()
-        );
-        let error = validate_expected_principal("did:webvh:scid:host:webvh:01k", "").unwrap_err();
+        assert!(validate_expected_principal(&principal, principal.as_str()).is_ok());
+        let error = validate_expected_principal(&principal, "").unwrap_err();
         assert_eq!(error.code, "principal_unknown");
-        let error =
-            validate_expected_principal("did:webvh:scid:host:webvh:01k", "   ").unwrap_err();
+        let error = validate_expected_principal(&principal, "   ").unwrap_err();
         assert_eq!(error.code, "principal_unknown");
         // A present-but-mismatched assertion is still a hard binding failure.
-        let error = validate_expected_principal("did:webvh:a", "did:webvh:b")
-            .err()
-            .unwrap();
+        let error = validate_expected_principal(&principal, "ak:did_core:webvh:other").unwrap_err();
         assert_eq!(error.code, "proof_invalid");
         assert!(error.message.contains("principal binding mismatch"));
     }
@@ -1688,12 +1713,12 @@ mod tests {
     #[test]
     fn soland_account_localparts_endpoint_encodes_principal_did_segment() {
         let endpoint =
-            soland_account_localparts_endpoint("https://local.host/base/path", TEST_PRINCIPAL_DID)
+            soland_account_localparts_endpoint("https://local.host/base/path", TEST_PRINCIPAL_ID)
                 .unwrap();
 
         assert_eq!(
             endpoint.as_str(),
-            "https://local.host/_soland/accounts/did:webvh:scid:local.host:webvh:01k/localparts"
+            "https://local.host/_soland/accounts/ak:did_core:webvh:scid:local.host/localparts"
         );
     }
 
@@ -1705,7 +1730,7 @@ mod tests {
             .and(request_has_bearer(TEST_OPERATION_BEARER))
             .and(|request: &WiremockRequest| request_json(request).get("handle").is_none())
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "principal_id": TEST_PRINCIPAL_DID,
+                "principal_id": TEST_PRINCIPAL_ID,
                 "state": "active",
                 "devices": [],
                 "handle_claim_digests": []
@@ -1713,7 +1738,7 @@ mod tests {
             .expect(1)
             .mount(&server)
             .await;
-        let localparts_path = soland_account_localparts_endpoint(&server.uri(), TEST_PRINCIPAL_DID)
+        let localparts_path = soland_account_localparts_endpoint(&server.uri(), TEST_PRINCIPAL_ID)
             .unwrap()
             .path()
             .to_owned();
@@ -1743,7 +1768,7 @@ mod tests {
         ensure_soland_account_registered(
             &reqwest::Client::new(),
             Some(&server.uri()),
-            TEST_PRINCIPAL_DID,
+            &test_principal(),
             Some(TEST_OPERATION_BEARER),
             Some("Alice"),
             Some(TEST_DEVICE_ID),
@@ -1769,7 +1794,7 @@ mod tests {
         let error = ensure_soland_account_registered(
             &reqwest::Client::new(),
             Some(&server.uri()),
-            TEST_PRINCIPAL_DID,
+            &test_principal(),
             Some(TEST_OPERATION_BEARER),
             Some("Alice"),
             Some(TEST_DEVICE_ID),
@@ -1787,7 +1812,7 @@ mod tests {
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "principal_id": TEST_PRINCIPAL_DID,
+                "principal_id": TEST_PRINCIPAL_ID,
                 "state": "active",
                 "devices": [],
                 "handle_claim_digests": []
@@ -1795,7 +1820,7 @@ mod tests {
             .expect(1)
             .mount(&server)
             .await;
-        let localparts_path = soland_account_localparts_endpoint(&server.uri(), TEST_PRINCIPAL_DID)
+        let localparts_path = soland_account_localparts_endpoint(&server.uri(), TEST_PRINCIPAL_ID)
             .unwrap()
             .path()
             .to_owned();
@@ -1812,7 +1837,7 @@ mod tests {
         let error = ensure_soland_account_registered(
             &reqwest::Client::new(),
             Some(&server.uri()),
-            TEST_PRINCIPAL_DID,
+            &test_principal(),
             Some(TEST_OPERATION_BEARER),
             Some("Alice"),
             Some(TEST_DEVICE_ID),
@@ -1832,7 +1857,7 @@ mod tests {
         let error = ensure_soland_account_registered(
             &reqwest::Client::new(),
             Some(&server.uri()),
-            TEST_PRINCIPAL_DID,
+            &test_principal(),
             Some(TEST_OPERATION_BEARER),
             Some("Alice"),
             Some(TEST_DEVICE_ID),
@@ -1851,7 +1876,7 @@ mod tests {
         let error = ensure_soland_account_registered(
             &reqwest::Client::new(),
             Some(&server.uri()),
-            TEST_PRINCIPAL_DID,
+            &test_principal(),
             None,
             Some("Alice"),
             Some(TEST_DEVICE_ID),

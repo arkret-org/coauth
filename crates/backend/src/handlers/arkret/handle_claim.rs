@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use arkret_identifiers::{Did, Hash};
+use arkret_identifiers::Hash;
 use arkret_models_identity::{
     DeliveryBindingHint as HandleClaimDeliveryBindingHint, Handle, HandleBindingState,
     HandleClaim as HandleClaimPayload, HandleClaimKind,
@@ -30,10 +30,6 @@ pub struct HandleClaimMaterial {
 /// to round-trip through a directory / candidate builder in seconds, not
 /// be stored as long-lived bearer credentials.
 pub(crate) const HANDLE_CLAIM_TTL_MINUTES: i64 = 5;
-
-fn did_for_handle_claim(value: impl Into<String>) -> Result<Did, SessionGrantError> {
-    Did::new(value).map_err(|error| SessionGrantError::Other(error.into()))
-}
 
 fn hash_for_handle_claim(value: impl Into<String>) -> Result<Hash, SessionGrantError> {
     Hash::new(value).map_err(|error| SessionGrantError::Other(error.into()))
@@ -66,24 +62,17 @@ pub(crate) fn issue_handle_claim(
     arkret_config: &ArkretConfig,
     key_store: &Keystore,
     user: &User,
-    subject_did: &str,
+    subject_id: &str,
     claim_kind: HandleClaimKind,
     audience: String,
     member_delivery_binding: HandleClaimDeliveryBindingHint,
 ) -> Result<HandleClaimMaterial, SessionGrantError> {
-    use crate::services::handle_subject_validator::ensure_subject_is_principal_did;
+    use crate::services::handle_subject_validator::ensure_subject_is_principal_core_id;
 
-    let issuer_service_id = issuer_did_for(arkret_config);
-    // The subject is the verified principal DID supplied by the caller.
-    let subject_id = subject_did.to_owned();
-
-    // HC-COAUTH-2 — the subject MUST be a holder/principal DID, not a
-    // `ak:actor:` / `ak:account:` typed id or a service DID. Validating
-    // here keeps the issuer honest about whatever the caller passed and
-    // lets the same reason code surface as soland / the SDK.
-    ensure_subject_is_principal_did(&subject_id)?;
-    ensure_principal_did_method_allowed(arkret_config, &subject_id)?;
-    let subject = did_for_handle_claim(subject_id.clone())?;
+    let issuer_service_id = service_id_for(arkret_config);
+    let issuer_full_id = issuer_did_for(arkret_config);
+    let subject = arkret_identifiers::DidCoreId::new(subject_id.to_owned())?;
+    ensure_subject_is_principal_core_id(subject.as_str())?;
     let issuer_service = issuer_service_id.clone();
 
     // Spec 7157ee8 §3.1 — canonical handle wire form is
@@ -106,7 +95,7 @@ pub(crate) fn issue_handle_claim(
         handle: Some(handle),
         handle_aliases: aliases.clone(),
         subject: Some(subject),
-        issuer: Some(issuer_service_id.to_string()),
+        issuer: Some(issuer_service_id),
         issuer_service_id: Some(issuer_service),
         binding_state: Some(HandleBindingState::Verified),
         claim_kind: Some(claim_kind),
@@ -131,7 +120,7 @@ pub(crate) fn issue_handle_claim(
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
-    let verification_method = did_url_for_handle_claim(format!("{issuer_service_id}#{key_id}"))?;
+    let verification_method = did_url_for_handle_claim(format!("{issuer_full_id}#{key_id}"))?;
     let proof_payload_digest = hash_for_handle_claim(claim_digest.clone())?;
 
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());

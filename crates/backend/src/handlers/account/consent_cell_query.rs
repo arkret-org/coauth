@@ -216,14 +216,14 @@ async fn query_consent_cell_scope(
     };
 
     if !parsed.ok
-        || parsed.holder_did.as_str() != holder_did
-        || parsed.peer_did.as_str() != peer_did
+        || parsed.holder_principal_id.as_str() != holder_did
+        || parsed.peer_principal_id.as_str() != peer_did
         || normalize_scope(&parsed.consent_scope) != scope
     {
         warn!(
             cell_id = %parsed.cell_id,
-            response_holder = parsed.holder_did.as_str(),
-            response_peer = parsed.peer_did.as_str(),
+            response_holder = parsed.holder_principal_id.as_str(),
+            response_peer = parsed.peer_principal_id.as_str(),
             response_scope = parsed.consent_scope.as_str(),
             holder_did,
             peer_did,

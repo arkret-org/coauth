@@ -577,6 +577,19 @@ mod tests {
         let session_public = coauth_jose::jwk::PublicJsonWebKey::new(
             coauth_jose::jwk::JsonWebKeyPublicParameters::from(&session_private),
         );
+        let principal_id = "ak:did_core:web:alice.example";
+        let principal_server_id =
+            crate::handlers::arkret::required_audience_for(&state.url_builder, &grant_config);
+        let authority_instance = arkret_wire::PrincipalAuthorityInstance::new(
+            arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
+            arkret_identifiers::DidCoreId::new(principal_server_id).unwrap(),
+            arkret_identifiers::RealmId::new(
+                "ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO",
+            )
+            .unwrap(),
+            arkret_identifiers::Hash::new(format!("sha256:{}", "e".repeat(64))).unwrap(),
+        )
+        .unwrap();
         let material = crate::handlers::arkret::issue_session_grant(
             &mut rng,
             &*state.clock,
@@ -585,7 +598,8 @@ mod tests {
             &state.key_store,
             &browser_session,
             session_public,
-            "did:web:alice.example",
+            principal_id,
+            &authority_instance,
             vec![
                 crate::handlers::arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
                 format!("urn:arkret:client:device:{device_id}"),

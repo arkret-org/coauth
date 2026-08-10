@@ -60,7 +60,7 @@ fn is_registered_agent_capability(action: &str) -> bool {
 #[derive(Deserialize, JsonSchema, ToSchema)]
 pub struct AccountabilityGrantRequestBody {
     /// DID of the controller (account holder) issuing the grant. MUST
-    /// round-trip through the SDK `Did::new` validator (Round-4 regex
+    /// round-trip through the SDK `DidFullId::new` validator (Round-4 regex
     /// `^did:[a-z0-9]+:[^\s]+$`).
     pub controller_id: String,
 

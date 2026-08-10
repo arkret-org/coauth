@@ -1,7 +1,6 @@
 pub mod account_claims;
 pub mod account_status_publication;
 pub mod device_revoke;
-pub mod device_signing_directory;
 pub mod did_binding;
 pub mod did_binding_proof;
 pub mod did_resolver;

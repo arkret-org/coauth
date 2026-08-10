@@ -44,9 +44,11 @@ Per the R3.2 issuer hardening:
 - coauth rejects `claim_type=service_handle` at issuance
   (reason `claim_type_unsupported`); only `handle_binding` /
   `organization_handle` are minted.
-- coauth rejects any handle-claim subject that is not a holder/principal
-  DID — `ak:actor:` / `ak:account:` typed ids and service DIDs are
-  refused (reason `handle_claim_subject_not_principal_did`).
+- coauth emits the subject as a canonical `DidCoreId` (`ak:did_core:...`).
+  Principal role and authority are established by the audience-specific,
+  registration-time binding; the core-id bytes alone do not prove a role.
+  Retired role-prefixed ids and bare full DIDs are rejected
+  (reason `handle_claim_subject_not_principal_did`).
 
 ### Optional org-operator audit API
 

@@ -1,4 +1,4 @@
-use arkret_identifiers::{DeviceId, Did, SessionGrantId};
+use arkret_identifiers::{DeviceId, DidCoreId, SessionGrantId};
 use arkret_models_collaboration::account_lifecycle::{
     AccountLifecycleProof, SessionRevokeRequestBody,
 };
@@ -238,24 +238,21 @@ fn validate_lifecycle_proof_window(
 
 #[allow(clippy::too_many_arguments)]
 async fn verify_cross_session_lifecycle_proof(
-    http_client: &reqwest::Client,
     url_builder: &coauth_data::UrlBuilder,
     arkret_config: &coauth_config::ArkretConfig,
-    key_store: &coauth_keystore::Keystore,
     repo: &mut coauth_data::BoxRepository,
-    did_resolver: &dyn crate::services::did_resolver::DidResolverService,
     binding_store: &crate::services::did_binding::DurableVerifiedDidBindingStore,
     body: &SessionRevokeRequestBody,
     proof: &AccountLifecycleProof,
     current_grant: &SessionGrant,
     current_device_id: &DeviceId,
-    service_id: &Did,
+    service_id: &DidCoreId,
     now: DateTime<Utc>,
 ) -> Result<(), ArkretRouteError> {
     validate_lifecycle_proof_kind(&proof.proof_kind)?;
     validate_lifecycle_proof_window(proof.issued_at, proof.expires_at, now)?;
 
-    if proof.audience != current_grant.audience {
+    if proof.audience.as_str() != current_grant.audience {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
@@ -263,7 +260,7 @@ async fn verify_cross_session_lifecycle_proof(
         ));
     }
 
-    let actor_id = Did::new(current_grant.subject.clone()).map_err(|error| {
+    let actor_id = DidCoreId::new(current_grant.subject.clone()).map_err(|error| {
         ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             arkret_wire::ErrorCode::INVALID_PARAM,
@@ -296,28 +293,28 @@ async fn verify_cross_session_lifecycle_proof(
         )))
     })?;
 
-    // §4 row 7 — a cross-session revoke is a high-risk write, so it demands
-    // `fresh_within(HIGH_RISK_MAX_AGE)` under the closed `Principal` purpose.
-    // Degraded / fallback / unproven-controller evidence maps to
-    // `Stale` / `Quarantined` and fails closed inside `authority_document`,
-    // which replaces the previous `identity_fact_rejection` gate.
-    let resolution = crate::services::did_binding::authority_document(
-        http_client,
+    // Historical lifecycle authorization replays the DID document frozen by
+    // the accepted registration binding. It must not turn a current resolver
+    // response into authority for an already-issued grant.
+    let principal_binding = repo
+        .principal_did()
+        .get_by_did_and_audience(&current_grant.subject, &current_grant.audience)
+        .await
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .ok_or_else(|| lifecycle_proof_invalid("accepted principal binding is missing"))?;
+    let resolution = crate::services::did_binding::ordinary_read_document(
         url_builder,
         arkret_config,
-        key_store,
         repo,
-        did_resolver,
         binding_store,
-        &current_grant.subject,
-        arkret_identity::DidBindingPurpose::Principal,
-        crate::services::did_binding::high_risk_freshness(),
+        principal_binding.verified_full_id.as_str(),
+        arkret_identity::DidBindingPurpose::AccountBinding,
         now,
     )
     .await
     .map_err(|error| {
         lifecycle_proof_invalid(format!(
-            "no fresh accepted principal binding for the session subject: {error}"
+            "accepted registration DID evidence is unavailable: {error}"
         ))
     })?;
     if resolution.document.verification_method.is_empty() {
@@ -343,7 +340,15 @@ async fn verify_cross_session_lifecycle_proof(
             "lifecycle proof verification_method does not match the detached JWS kid",
         ));
     }
-    if verification_method_did(&verification_method) != current_grant.subject {
+    let verification_full_id =
+        arkret_identifiers::DidFullId::new(verification_method_did(&verification_method)).map_err(
+            |error| lifecycle_proof_invalid(format!("invalid verification method DID: {error}")),
+        )?;
+    let verification_principal_id =
+        arkret_identifiers::project_full_id_to_core_id(&verification_full_id).map_err(|error| {
+            lifecycle_proof_invalid(format!("verification method projection failed: {error}"))
+        })?;
+    if verification_principal_id.as_str() != current_grant.subject {
         return Err(lifecycle_proof_invalid(
             "lifecycle proof verification_method principal does not match the current session grant subject",
         ));
@@ -375,9 +380,6 @@ pub async fn revoke_session_grant_endpoint(
 
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
-    let key_store = depot.key_store()?;
-    let http_client = depot.http_client()?;
-    let did_resolver = depot.did_resolver_service()?;
     let binding_store = depot.verified_did_binding_store()?;
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
@@ -395,7 +397,7 @@ pub async fn revoke_session_grant_endpoint(
         ArkretRouteError::Unauthorized(format!("invalid session grant: {error}"))
     })?;
 
-    let service_id = issuer_did_for(&arkret_config);
+    let service_id = service_id_for(&arkret_config);
 
     let mut repo = depot.repo().await?;
     let current_grant = repo
@@ -455,12 +457,9 @@ pub async fn revoke_session_grant_endpoint(
             lifecycle_proof_required("cross-session revoke requires a fresh lifecycle proof")
         })?;
         verify_cross_session_lifecycle_proof(
-            &http_client,
             &url_builder,
             &arkret_config,
-            &key_store,
             &mut repo,
-            &*did_resolver,
             binding_store.as_ref(),
             &body,
             proof,

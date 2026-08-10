@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use arkret_http_client::{Auth, Client, ClientBuilder};
 use arkret_identity::service_identity::{
-    LocalServiceIdentity, ServiceIdentityDiagnostic, ServiceIdentityKeyRef,
-    ServiceIdentityProviderRef, ServiceIdentityState, StoredServiceIdentity,
+    DidCoreIdentityDiagnostic, DidCoreIdentityKeyRef, DidCoreIdentityProviderRef,
+    DidCoreIdentityState, LocalDidCoreIdentity, StoredDidCoreIdentity,
 };
 use arkret_models_identity::service_identity::{
     CanonicalServiceUrl, ServiceRegistrationEnsureRequestBody, ServiceRegistrationKey,
@@ -35,7 +35,7 @@ pub(crate) const SERVICE_IDENTITY_VERIFICATION_METHOD_FRAGMENT: &str = "service-
 
 #[derive(Clone)]
 struct ProviderCandidate {
-    reference: ServiceIdentityProviderRef,
+    reference: DidCoreIdentityProviderRef,
     bearer: String,
 }
 
@@ -47,19 +47,19 @@ struct IdentityRow {
 
 enum StoredIdentityLoad {
     Missing,
-    Loaded(Box<StoredServiceIdentity>),
+    Loaded(Box<StoredDidCoreIdentity>),
     Invalid(String),
 }
 
 impl StoredIdentityLoad {
     fn into_runtime_result(
         self,
-    ) -> Result<Option<StoredServiceIdentity>, Box<ServiceIdentityState>> {
+    ) -> Result<Option<StoredDidCoreIdentity>, Box<DidCoreIdentityState>> {
         match self {
             Self::Missing => Ok(None),
             Self::Loaded(stored) => Ok(Some(*stored)),
-            Self::Invalid(error) => Err(Box::new(ServiceIdentityState::Faulted {
-                diagnostic: ServiceIdentityDiagnostic::RestoreFailed,
+            Self::Invalid(error) => Err(Box::new(DidCoreIdentityState::Faulted {
+                diagnostic: DidCoreIdentityDiagnostic::RestoreFailed,
                 next_action: format!(
                     "restore a verified service_identity database record; the stored record cannot be decoded: {error}"
                 ),
@@ -94,8 +94,8 @@ pub async fn initialize_and_spawn(
     let signing_seed = match key_store.service_identity_seed() {
         Ok(seed) => seed,
         Err(error) => {
-            handle.store(ServiceIdentityState::Faulted {
-                diagnostic: ServiceIdentityDiagnostic::KeyMismatch,
+            handle.store(DidCoreIdentityState::Faulted {
+                diagnostic: DidCoreIdentityDiagnostic::KeyMismatch,
                 next_action: format!(
                     "restore the Ed25519 key backend entry with kid `{}`: {error}",
                     coauth_keystore::SERVICE_IDENTITY_KEY_ID
@@ -115,7 +115,7 @@ pub async fn initialize_and_spawn(
     .await?;
     let retry = matches!(
         state,
-        ServiceIdentityState::WaitingProvider { .. } | ServiceIdentityState::DegradedStored { .. }
+        DidCoreIdentityState::WaitingProvider { .. } | DidCoreIdentityState::DegradedStored { .. }
     );
     handle.store(state);
 
@@ -156,8 +156,8 @@ async fn run_supervisor(
             Ok(state) => {
                 let retry = matches!(
                     state,
-                    ServiceIdentityState::WaitingProvider { .. }
-                        | ServiceIdentityState::DegradedStored { .. }
+                    DidCoreIdentityState::WaitingProvider { .. }
+                        | DidCoreIdentityState::DegradedStored { .. }
                 );
                 handle.store(state);
                 if !retry {
@@ -169,7 +169,7 @@ async fn run_supervisor(
     }
 }
 
-fn select_provider(config: &ArkretConfig) -> Result<ProviderCandidate, Box<ServiceIdentityState>> {
+fn select_provider(config: &ArkretConfig) -> Result<ProviderCandidate, Box<DidCoreIdentityState>> {
     let mut candidates = config
         .principal_servers
         .iter()
@@ -191,28 +191,28 @@ fn select_provider(config: &ArkretConfig) -> Result<ProviderCandidate, Box<Servi
         candidates.retain(|(name, ..)| name == selected);
     }
     match candidates.as_slice() {
-        [] => Err(Box::new(ServiceIdentityState::Faulted {
-            diagnostic: ServiceIdentityDiagnostic::ProviderNotConfigured,
+        [] => Err(Box::new(DidCoreIdentityState::Faulted {
+            diagnostic: DidCoreIdentityDiagnostic::ProviderNotConfigured,
             next_action: "configure registration credentials on one trusted principal_servers[] or identity_services[] entry"
                 .to_owned(),
         })),
         [(name, provider_endpoint, bearer)] => {
             let endpoint = CanonicalServiceUrl::canonicalize(provider_endpoint.as_str()).map_err(
-                |error| Box::new(ServiceIdentityState::Faulted {
-                    diagnostic: ServiceIdentityDiagnostic::ProviderNotConfigured,
+                |error| Box::new(DidCoreIdentityState::Faulted {
+                    diagnostic: DidCoreIdentityDiagnostic::ProviderNotConfigured,
                     next_action: format!("fix Provider endpoint {provider_endpoint}: {error}"),
                 }),
             )?;
             Ok(ProviderCandidate {
-                reference: ServiceIdentityProviderRef {
+                reference: DidCoreIdentityProviderRef {
                     name: name.clone(),
                     endpoint,
                 },
                 bearer: bearer.clone(),
             })
         }
-        _ => Err(Box::new(ServiceIdentityState::Faulted {
-            diagnostic: ServiceIdentityDiagnostic::ProviderAmbiguous,
+        _ => Err(Box::new(DidCoreIdentityState::Faulted {
+            diagnostic: DidCoreIdentityDiagnostic::ProviderAmbiguous,
             next_action: format!(
                 "set `arkret.identity_provider` to one of: {}",
                 candidates
@@ -231,7 +231,7 @@ async fn resolve_once(
     registration_key: &ServiceRegistrationKey,
     signing_seed: &[u8; 32],
     http: &reqwest::Client,
-) -> anyhow::Result<ServiceIdentityState> {
+) -> anyhow::Result<DidCoreIdentityState> {
     let stored = match load_stored(repository_factory).await?.into_runtime_result() {
         Ok(stored) => stored,
         Err(state) => return Ok(*state),
@@ -239,31 +239,31 @@ async fn resolve_once(
     let prepared = match prepare_inception(provider, registration_key, signing_seed) {
         Ok(prepared) => prepared,
         Err(error) => {
-            return Ok(ServiceIdentityState::Faulted {
-                diagnostic: ServiceIdentityDiagnostic::KeyMismatch,
+            return Ok(DidCoreIdentityState::Faulted {
+                diagnostic: DidCoreIdentityDiagnostic::KeyMismatch,
                 next_action: format!("repair the configured service-identity key backend: {error}"),
             });
         }
     };
     if let Some(stored) = &stored {
         if let Err(error) = stored.validate() {
-            return Ok(ServiceIdentityState::Faulted {
-                diagnostic: ServiceIdentityDiagnostic::RestoreFailed,
+            return Ok(DidCoreIdentityState::Faulted {
+                diagnostic: DidCoreIdentityDiagnostic::RestoreFailed,
                 next_action: format!(
                     "restore a verified service_identity database record; the stored record is invalid: {error}"
                 ),
             });
         }
         if let Err(error) = validate_local_key_binding(stored, signing_seed, &prepared) {
-            return Ok(ServiceIdentityState::Faulted {
-                diagnostic: ServiceIdentityDiagnostic::KeyMismatch,
+            return Ok(DidCoreIdentityState::Faulted {
+                diagnostic: DidCoreIdentityDiagnostic::KeyMismatch,
                 next_action: format!(
                     "restore the key backend that controls the persisted service identity: {error}"
                 ),
             });
         }
         if stored.identity.registration_key != *registration_key {
-            return Ok(ServiceIdentityState::RegistrationKeyDrift {
+            return Ok(DidCoreIdentityState::RegistrationKeyDrift {
                 identity: stored.identity.clone(),
                 stored_key: stored.identity.registration_key.clone(),
                 computed_key: registration_key.clone(),
@@ -274,8 +274,8 @@ async fn resolve_once(
     let client = match provider_client(provider, http.clone()) {
         Ok(client) => client,
         Err(error) => {
-            return Ok(ServiceIdentityState::Faulted {
-                diagnostic: ServiceIdentityDiagnostic::ProviderNotConfigured,
+            return Ok(DidCoreIdentityState::Faulted {
+                diagnostic: DidCoreIdentityDiagnostic::ProviderNotConfigured,
                 next_action: format!("fix the configured Provider endpoint: {error}"),
             });
         }
@@ -299,8 +299,8 @@ async fn resolve_once(
                 match prepared.service_registration_operation() {
                     Ok(operation) => operation,
                     Err(error) => {
-                        return Ok(ServiceIdentityState::Faulted {
-                            diagnostic: ServiceIdentityDiagnostic::KeyMismatch,
+                        return Ok(DidCoreIdentityState::Faulted {
+                            diagnostic: DidCoreIdentityDiagnostic::KeyMismatch,
                             next_action: format!(
                                 "repair the configured service-identity key backend: {error}"
                             ),
@@ -311,8 +311,8 @@ async fn resolve_once(
             ) {
                 Ok(request) => request,
                 Err(error) => {
-                    return Ok(ServiceIdentityState::Faulted {
-                        diagnostic: ServiceIdentityDiagnostic::RestoreFailed,
+                    return Ok(DidCoreIdentityState::Faulted {
+                        diagnostic: DidCoreIdentityDiagnostic::RestoreFailed,
                         next_action: format!(
                             "repair the service-registration inception input: {error}"
                         ),
@@ -354,8 +354,8 @@ async fn resolve_once(
                         Err(error) if provider_unavailable(&error) => {
                             Ok(waiting_provider(registration_key))
                         }
-                        Err(lookup_error) => Ok(ServiceIdentityState::Faulted {
-                            diagnostic: ServiceIdentityDiagnostic::RestoreFailed,
+                        Err(lookup_error) => Ok(DidCoreIdentityState::Faulted {
+                            diagnostic: DidCoreIdentityDiagnostic::RestoreFailed,
                             next_action: format!(
                                 "Provider rejected service registration ({ensure_error}) and the follow-up mapping lookup failed ({lookup_error}); verify the endpoint, transport credential, and retained key backend"
                             ),
@@ -366,7 +366,7 @@ async fn resolve_once(
         }
         Err(error) if provider_unavailable(&error) => {
             if let Some(stored) = stored {
-                Ok(ServiceIdentityState::DegradedStored {
+                Ok(DidCoreIdentityState::DegradedStored {
                     identity: stored.identity,
                     retry_at: retry_at(),
                     last_error: error.to_string(),
@@ -375,8 +375,8 @@ async fn resolve_once(
                 Ok(waiting_provider(registration_key))
             }
         }
-        Err(error) => Ok(ServiceIdentityState::Faulted {
-            diagnostic: ServiceIdentityDiagnostic::RestoreFailed,
+        Err(error) => Ok(DidCoreIdentityState::Faulted {
+            diagnostic: DidCoreIdentityDiagnostic::RestoreFailed,
             next_action: format!(
                 "Provider mapping lookup failed: {error}; verify the endpoint, transport credential, and retained key backend"
             ),
@@ -391,13 +391,13 @@ async fn accept_provider_outcome(
     registration_key: &ServiceRegistrationKey,
     signing_seed: &[u8; 32],
     prepared: &PreparedInception,
-    prior: Option<&StoredServiceIdentity>,
+    prior: Option<&StoredDidCoreIdentity>,
     outcome: ServiceRegistrationOutcome,
-) -> anyhow::Result<ServiceIdentityState> {
+) -> anyhow::Result<DidCoreIdentityState> {
     if let Some(prior) = prior
         && prior.identity.service_id != outcome.service_id
     {
-        return Ok(ServiceIdentityState::Conflict {
+        return Ok(DidCoreIdentityState::Conflict {
             stored_service_id: prior.identity.service_id.clone(),
             provider_service_id: outcome.service_id,
         });
@@ -412,11 +412,11 @@ async fn accept_provider_outcome(
         Ok(stored) => stored,
         Err(error) => {
             let diagnostic = if error.to_string().contains("service_identity_key_mismatch") {
-                ServiceIdentityDiagnostic::KeyMismatch
+                DidCoreIdentityDiagnostic::KeyMismatch
             } else {
-                ServiceIdentityDiagnostic::RestoreFailed
+                DidCoreIdentityDiagnostic::RestoreFailed
             };
-            return Ok(ServiceIdentityState::Faulted {
+            return Ok(DidCoreIdentityState::Faulted {
                 diagnostic,
                 next_action: format!(
                     "reject the Provider result and restore the expected mapping/key backend: {error}"
@@ -425,7 +425,7 @@ async fn accept_provider_outcome(
         }
     };
     save_stored(repository_factory, &stored).await?;
-    Ok(ServiceIdentityState::Ready {
+    Ok(DidCoreIdentityState::Ready {
         identity: stored.identity,
     })
 }
@@ -469,21 +469,21 @@ fn stored_from_outcome(
     signing_seed: &[u8; 32],
     prepared: &PreparedInception,
     outcome: ServiceRegistrationOutcome,
-) -> anyhow::Result<StoredServiceIdentity> {
+) -> anyhow::Result<StoredDidCoreIdentity> {
     outcome
         .validate_for(registration_key)
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let expected_assertion = assertion_public_key(signing_seed);
     let signing_key_ref =
-        ServiceIdentityKeyRef::new(format!("coauth:secrets:ed25519:{expected_assertion}"))
+        DidCoreIdentityKeyRef::new(format!("coauth:secrets:ed25519:{expected_assertion}"))
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-    let control_key_ref = ServiceIdentityKeyRef::new(format!(
+    let control_key_ref = DidCoreIdentityKeyRef::new(format!(
         "coauth:secrets:derived-webvh-update:{}",
         prepared.update_public_key_multibase
     ))
     .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-    let stored = StoredServiceIdentity {
-        identity: LocalServiceIdentity {
+    let stored = StoredDidCoreIdentity {
+        identity: LocalDidCoreIdentity {
             service_id: outcome.service_id,
             full_id: outcome.full_id,
             registration_key: registration_key.clone(),
@@ -514,7 +514,7 @@ fn assertion_public_key(signing_seed: &[u8; 32]) -> String {
 }
 
 fn validate_local_key_binding(
-    stored: &StoredServiceIdentity,
+    stored: &StoredDidCoreIdentity,
     signing_seed: &[u8; 32],
     prepared: &PreparedInception,
 ) -> anyhow::Result<()> {
@@ -541,7 +541,7 @@ fn validate_local_key_binding(
     }
 
     let expected_signing_ref =
-        ServiceIdentityKeyRef::new(format!("coauth:secrets:ed25519:{expected_assertion}"))
+        DidCoreIdentityKeyRef::new(format!("coauth:secrets:ed25519:{expected_assertion}"))
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     if stored.identity.active_signing_key_ref != expected_signing_ref
         || !stored
@@ -555,7 +555,7 @@ fn validate_local_key_binding(
         );
     }
 
-    let expected_control_ref = ServiceIdentityKeyRef::new(format!(
+    let expected_control_ref = DidCoreIdentityKeyRef::new(format!(
         "coauth:secrets:derived-webvh-update:{}",
         prepared.update_public_key_multibase
     ))
@@ -598,7 +598,7 @@ async fn load_stored(
 
 async fn save_stored(
     repository_factory: &PgRepositoryFactory,
-    identity: &StoredServiceIdentity,
+    identity: &StoredDidCoreIdentity,
 ) -> anyhow::Result<()> {
     let mut connection = repository_factory.pool().get().await?;
     diesel::sql_query(
@@ -611,8 +611,8 @@ async fn save_stored(
     Ok(())
 }
 
-fn waiting_provider(registration_key: &ServiceRegistrationKey) -> ServiceIdentityState {
-    ServiceIdentityState::WaitingProvider {
+fn waiting_provider(registration_key: &ServiceRegistrationKey) -> DidCoreIdentityState {
+    DidCoreIdentityState::WaitingProvider {
         registration_key: registration_key.clone(),
         retry_at: retry_at(),
     }
@@ -680,8 +680,8 @@ mod tests {
         };
         assert!(select_provider(&config).is_err_and(|state| matches!(
             *state,
-            ServiceIdentityState::Faulted {
-                diagnostic: ServiceIdentityDiagnostic::ProviderAmbiguous,
+            DidCoreIdentityState::Faulted {
+                diagnostic: DidCoreIdentityDiagnostic::ProviderAmbiguous,
                 ..
             }
         )));
@@ -701,7 +701,7 @@ mod tests {
 
     #[test]
     fn malformed_persisted_identity_is_a_faulted_runtime_state() {
-        let load = match serde_json::from_value::<StoredServiceIdentity>(Value::Null) {
+        let load = match serde_json::from_value::<StoredDidCoreIdentity>(Value::Null) {
             Ok(stored) => StoredIdentityLoad::Loaded(Box::new(stored)),
             Err(error) => StoredIdentityLoad::Invalid(error.to_string()),
         };
@@ -712,8 +712,8 @@ mod tests {
 
         assert!(matches!(
             *state,
-            ServiceIdentityState::Faulted {
-                diagnostic: ServiceIdentityDiagnostic::RestoreFailed,
+            DidCoreIdentityState::Faulted {
+                diagnostic: DidCoreIdentityDiagnostic::RestoreFailed,
                 ..
             }
         ));

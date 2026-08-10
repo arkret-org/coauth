@@ -1,14 +1,6 @@
-//! R3.2 (arkret-spec @ b56cab1) handle-claim issuer guards.
-//!
-//! The normative subject validator is shared by every coauth code path
-//! that mints a `ak.handle.claim` artefact. A handle claim subject MUST be a holder / principal
-//! DID. It is      NOT a Realm `actor_id` (`ak:actor:`), a server-local `account_id`
-//! (`ak:account:`), a      service DID, or a generic resource id. We delegate to the SDK's
-//!      [`arkret_models_identity::validate_handle_claim_subject`] so the wire code
-//!      (`handle_claim_subject_not_principal_did`) stays in lockstep with soland / cotest / the
-//!      spec.
+//! Handle-claim subject guards shared by every Coauth issuer path.
 
-use arkret_identifiers::Did;
+use arkret_identifiers::DidCoreId;
 use thiserror::Error;
 
 /// Wire-level reason code returned when the handle-claim subject is not a
@@ -24,27 +16,18 @@ pub enum HandleClaimSubjectError {
     SubjectNotPrincipalDid(String),
 }
 
-/// HC-COAUTH-2 — reject `ak:actor:` / `ak:account:` / non-DID subjects.
-///
-/// Delegates to the SDK's [`arkret_models_identity::validate_handle_claim_subject`]
-/// so the rejection logic (and thus the wire code) matches the spec and
-/// the other Arkret services. The input is parsed through
-/// [`arkret_identifiers::Did::new`] first; a value that is not even a structural
-/// DID is rejected with the same `handle_claim_subject_not_principal_did`
-/// code (a `ak:actor:`/`ak:account:` typed id is not a `did:` and would be
-/// rejected by `Did::new` anyway, but we keep the message explicit).
-pub fn ensure_subject_is_principal_did(subject: &str) -> Result<(), HandleClaimSubjectError> {
-    // The SDK validator wants an already-parsed `Did`. A `ak:actor:` /
-    // `ak:account:` typed id will fail `Did::new`, so we surface the
-    // principal-DID reason directly rather than the generic DID parse
-    // error to keep the wire code stable.
-    let did = Did::new(subject.to_owned()).map_err(|error| {
+/// Validate the stable holder identity used by a handle claim.
+pub fn ensure_subject_is_principal_core_id(
+    subject: &str,
+) -> Result<DidCoreId, HandleClaimSubjectError> {
+    let principal_id = DidCoreId::new(subject.to_owned()).map_err(|error| {
         HandleClaimSubjectError::SubjectNotPrincipalDid(format!(
-            "subject must be a holder/principal DID ({subject}): {error}"
+            "subject must be a holder/principal did_core_id ({subject}): {error}"
         ))
     })?;
-    arkret_models_identity::validate_handle_claim_subject(&did)
-        .map_err(|error| HandleClaimSubjectError::SubjectNotPrincipalDid(error.to_string()))
+    arkret_models_identity::validate_handle_claim_subject(&principal_id)
+        .map_err(|error| HandleClaimSubjectError::SubjectNotPrincipalDid(error.to_string()))?;
+    Ok(principal_id)
 }
 
 #[cfg(test)]
@@ -52,20 +35,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn accepts_principal_did_subject() {
-        ensure_subject_is_principal_did("did:web:auth.example.com:users:01ABC").unwrap();
-        ensure_subject_is_principal_did("did:key:z6Mk...").unwrap();
+    fn accepts_principal_core_id_subject() {
+        ensure_subject_is_principal_core_id("ak:did_core:web:auth.example.com:users:01ABC")
+            .unwrap();
+        ensure_subject_is_principal_core_id("ak:did_core:key:z6MkFixture").unwrap();
     }
 
     #[test]
-    fn rejects_actor_and_account_typed_ids() {
-        let actor = ensure_subject_is_principal_did("ak:actor:01ABCDEF").unwrap_err();
-        assert!(
-            actor
-                .to_string()
-                .starts_with(HANDLE_CLAIM_SUBJECT_NOT_PRINCIPAL_DID_CODE)
-        );
-        let account = ensure_subject_is_principal_did("ak:account:01ABCDEF").unwrap_err();
+    fn rejects_non_core_ids() {
+        let account = ensure_subject_is_principal_core_id("ak:account:01ABCDEF").unwrap_err();
         assert!(
             account
                 .to_string()
@@ -75,6 +53,6 @@ mod tests {
 
     #[test]
     fn rejects_non_did_subject() {
-        assert!(ensure_subject_is_principal_did("not-a-did").is_err());
+        assert!(ensure_subject_is_principal_core_id("not-a-did").is_err());
     }
 }

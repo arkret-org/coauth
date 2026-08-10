@@ -21,7 +21,6 @@ use coauth_policy::{
 use coauth_principal::ConnectorAdmin;
 use minijinja::Environment;
 use rand_core::RngCore;
-use serde_json::Value as JsonValue;
 use thiserror::Error;
 use ulid::Ulid;
 

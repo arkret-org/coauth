@@ -37,7 +37,7 @@ use std::time::Duration;
 #[cfg(test)]
 use arkret_canonical::format_timestamp_canonical;
 #[cfg(test)]
-use arkret_identifiers::Did;
+use arkret_identifiers::DidCoreId;
 use arkret_models_collaboration::governance::policy_check::{
     PolicyCheckBoundTo, PolicyCheckOutcome, PolicyCheckRequestBody, PolicyCheckSignature,
 };
@@ -103,7 +103,7 @@ pub async fn post_policy_check(
         .map_err(|e| ArkretRouteError::BadRequest(format!("invalid policy-check body: {e}")))?;
 
     // Reject obviously malformed requests early. The SDK newtype
-    // validators already enforced `Did` / `RealmId` / `Hash` shapes
+    // validators already enforced `DidCoreId` / `RealmId` / `Hash` shapes
     // during deserialise, so this is purely defence-in-depth.
     if body.action.trim().is_empty() {
         return Err(ArkretRouteError::BadRequest("action is required".into()));
@@ -193,8 +193,8 @@ pub(crate) async fn build_policy_check_response(
 ) -> Result<PolicyCheckOutcome, ArkretRouteError> {
     // Policy server identity: coauth's own service DID (signs the
     // response with its preferred signing key).
-    let policy_server_did = arkret::issuer_did_for(arkret_config);
-    let policy_server_id = policy_server_did.clone();
+    let policy_server_id = arkret::service_id_for(arkret_config);
+    let policy_server_full_id = arkret::issuer_did_for(arkret_config);
 
     // Step 1 — frontier. On any frontier error we fall back to the
     // "unknown frontier" sentinel and let the evaluator produce a
@@ -300,7 +300,7 @@ pub(crate) async fn build_policy_check_response(
         next_retry_at: decision.next_retry_at,
         obligations: obligations_wire,
     };
-    let signer = PolicySigner::new(key_store, policy_server_did.to_string());
+    let signer = PolicySigner::new(key_store, policy_server_full_id.to_string());
     outcome.signature = match signer.sign_decision(&outcome) {
         Ok(sig) => sig,
         Err(e) => {
@@ -382,12 +382,12 @@ mod tests {
         PolicyCheckRequestBody {
             request_id: "req-1".into(),
             realm_id: realm(),
-            actor_id: Did::new("did:web:alice.example").unwrap(),
+            actor_id: DidCoreId::new("ak:did_core:web:alice.example").unwrap(),
             device_id: None,
             action: "ak.message.create".into(),
             request_canonical_digest: Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
             source: PolicyCheckSource {
-                service_id: Did::new("did:web:soland.example").unwrap(),
+                service_id: DidCoreId::new("ak:did_core:web:soland.example").unwrap(),
                 service_kind: "principal_server".into(),
                 source_ip_digest: Some(Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap()),
                 signed_transport: true,

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Context as _;
-use arkret_identity::service_identity::{ServiceIdentityDiagnostic, ServiceIdentityState};
+use arkret_identity::service_identity::{DidCoreIdentityDiagnostic, DidCoreIdentityState};
 use coauth_config::ArkretConfig;
 use coauth_keystore::Keystore;
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
@@ -39,7 +39,7 @@ pub async fn readyz(
     Ok(Json(health_payload(depot)))
 }
 
-fn runtime_identity(depot: &Depot) -> Result<ServiceIdentityState, InternalError> {
+fn runtime_identity(depot: &Depot) -> Result<DidCoreIdentityState, InternalError> {
     depot
         .get::<ArkretConfig>("arkret_config")
         .map(|config| config.runtime_service_identity.state())
@@ -49,8 +49,8 @@ fn runtime_identity(depot: &Depot) -> Result<ServiceIdentityState, InternalError
 }
 
 fn health_payload(depot: &Depot) -> serde_json::Value {
-    let state = runtime_identity(depot).unwrap_or(ServiceIdentityState::Faulted {
-        diagnostic: ServiceIdentityDiagnostic::ProviderNotConfigured,
+    let state = runtime_identity(depot).unwrap_or(DidCoreIdentityState::Faulted {
+        diagnostic: DidCoreIdentityDiagnostic::ProviderNotConfigured,
         next_action: "initialize runtime service identity".to_owned(),
     });
     let configured_provider_endpoint = depot
@@ -59,7 +59,7 @@ fn health_payload(depot: &Depot) -> serde_json::Value {
         .and_then(configured_provider_endpoint);
     let (state_name, service_id, provider_endpoint, last_verified_at, retry_at, next_action) =
         match &state {
-            ServiceIdentityState::Ready { identity } => (
+            DidCoreIdentityState::Ready { identity } => (
                 "ready",
                 Some(identity.service_id.to_string()),
                 identity
@@ -70,7 +70,7 @@ fn health_payload(depot: &Depot) -> serde_json::Value {
                 None,
                 None,
             ),
-            ServiceIdentityState::DegradedStored {
+            DidCoreIdentityState::DegradedStored {
                 identity, retry_at, ..
             } => (
                 "degraded_stored",
@@ -83,7 +83,7 @@ fn health_payload(depot: &Depot) -> serde_json::Value {
                 Some(*retry_at),
                 None,
             ),
-            ServiceIdentityState::WaitingProvider { retry_at, .. } => (
+            DidCoreIdentityState::WaitingProvider { retry_at, .. } => (
                 "waiting_provider",
                 None,
                 configured_provider_endpoint,
@@ -91,7 +91,7 @@ fn health_payload(depot: &Depot) -> serde_json::Value {
                 Some(*retry_at),
                 None,
             ),
-            ServiceIdentityState::RegistrationKeyDrift { identity, .. } => (
+            DidCoreIdentityState::RegistrationKeyDrift { identity, .. } => (
                 "registration_key_drift",
                 Some(identity.service_id.to_string()),
                 identity
@@ -105,7 +105,7 @@ fn health_payload(depot: &Depot) -> serde_json::Value {
                         .to_owned(),
                 ),
             ),
-            ServiceIdentityState::Conflict {
+            DidCoreIdentityState::Conflict {
                 stored_service_id, ..
             } => (
                 "conflict",
@@ -115,7 +115,7 @@ fn health_payload(depot: &Depot) -> serde_json::Value {
                 None,
                 Some("run `coauth service-identity doctor`".to_owned()),
             ),
-            ServiceIdentityState::Faulted { next_action, .. } => (
+            DidCoreIdentityState::Faulted { next_action, .. } => (
                 "faulted",
                 None,
                 None,
