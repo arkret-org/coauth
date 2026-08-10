@@ -195,7 +195,7 @@ pub fn shared_verified_did_binding_store() -> VerifiedDidBindingStoreHandle {
 /// Reuses the existing [`crate::handlers::arkret::trust_domain_for`] derivation
 /// — `arkret.trust_domain` when configured, otherwise `ak:trust_domain:<public
 /// hostname>` — so a binding's trust domain is exactly the value that already
-/// enters root-anchored recovery transcripts and DID continuity proof audiences.
+/// enters root-anchored recovery and account-binding transcripts.
 /// No new string is invented for the binding layer.
 pub fn trust_domain_id(
     url_builder: &UrlBuilder,
@@ -207,10 +207,14 @@ pub fn trust_domain_id(
 
 /// The [`ResolverPolicy`] this deployment's DID resolver enforces.
 ///
-/// coauth resolves `did:web`, `did:plc` and `did:key` natively and delegates
+/// coauth resolves `did:web`, `did:plc` and `did:key` natively, but the base
+/// principal-binding policy admits only the v1 active `did:web` / `did:key`
+/// adapters. Native PLC resolution remains available for external interop
+/// claims; it MUST NOT become a long-lived principal binding unless a future
+/// explicit PLC interop profile extends this policy snapshot. coauth delegates
 /// **every** other method — `did:webvh` included, per the CAU-SPEC-02 ruling in
 /// `did_resolver.rs` — to `identity_registry.resolver`. A deployment without a
-/// delegated resolver therefore accepts exactly the native three and fails
+/// delegated resolver therefore accepts exactly the base two and fails
 /// closed with `UnsupportedMethod` on anything else.
 ///
 /// The delegated arm is written out as `did:webvh:` rather than as "any
@@ -223,11 +227,7 @@ pub fn trust_domain_id(
 /// policy, which is exactly the §5.3 obligation.
 fn resolver_policy(arkret_config: &ArkretConfig) -> ResolverPolicy {
     let delegated = delegated_resolver(arkret_config);
-    let mut allowed_methods = vec![
-        "did:web:".to_owned(),
-        "did:plc:".to_owned(),
-        "did:key:".to_owned(),
-    ];
+    let mut allowed_methods = vec!["did:web:".to_owned(), "did:key:".to_owned()];
     if delegated.is_some() {
         allowed_methods.push("did:webvh:".to_owned());
     }

@@ -9,7 +9,7 @@
 //! by the `ak.device.authorize` projector and masked by `ak.device.revoke`.
 //!
 //! This module is the Auth Server's read into that directory: given the
-//! principal DID (the session-grant subject) and the bound `device_id`, it
+//! principal identity (the session-grant subject) and the bound `device_id`, it
 //! returns the authorized, non-revoked device signing key as an Ed25519
 //! `did:key` multibase. The Principal Server is selected from the configured
 //! `principal_servers` by the session-grant audience, and the request rides the
@@ -135,11 +135,22 @@ pub async fn resolve_authorized_device_signing_key(
 
     let endpoint = server.endpoint.join(DEVICE_SIGNING_KEY_DIRECTORY_PATH)?;
 
-    let typed_principal = arkret_identifiers::Did::new(principal_id.to_owned()).map_err(|_| {
-        DeviceSigningDirectoryError::DeviceNotAuthorized {
-            device_id: device_id.to_owned(),
+    let typed_principal = match arkret_identifiers::CoreId::new(principal_id.to_owned()) {
+        Ok(core_id) => core_id,
+        Err(_) => {
+            let full_id =
+                arkret_identifiers::FullId::new(principal_id.to_owned()).map_err(|_| {
+                    DeviceSigningDirectoryError::DeviceNotAuthorized {
+                        device_id: device_id.to_owned(),
+                    }
+                })?;
+            arkret_identifiers::project_full_id_to_core_id(&full_id).map_err(|_| {
+                DeviceSigningDirectoryError::DeviceNotAuthorized {
+                    device_id: device_id.to_owned(),
+                }
+            })?
         }
-    })?;
+    };
     let typed_device = arkret_identifiers::DeviceId::new(device_id.to_owned()).map_err(|_| {
         DeviceSigningDirectoryError::DeviceNotAuthorized {
             device_id: device_id.to_owned(),

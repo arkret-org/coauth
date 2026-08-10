@@ -933,11 +933,13 @@ fn the_policy_digest_is_the_shared_sdk_snapshot() {
     );
     assert_eq!(value["fail_mode"], serde_json::json!("fail_closed"));
     assert_eq!(value["profile_policy"], serde_json::json!({}));
-    // Without a delegated resolver the allow list is exactly the three methods
-    // coauth resolves natively; CAU-SPEC-02 keeps `did:webvh` out of it.
+    // Native resolution capability is not principal-binding authority. The
+    // base profile admits only active v1 web/key adapters; PLC remains an
+    // external-claim resolver until an explicit interop profile widens this
+    // snapshot. CAU-SPEC-02 keeps `did:webvh` out without delegation.
     assert_eq!(
         value["accepted_did_methods"],
-        serde_json::json!(["did:key:", "did:plc:", "did:web:"])
+        serde_json::json!(["did:key:", "did:web:"])
     );
     assert_eq!(snapshot.digest().unwrap(), policy_digest(&config).unwrap());
 }
@@ -960,7 +962,7 @@ fn a_delegated_resolver_declares_webvh_rather_than_any_method() {
     let snapshot = policy_snapshot(&config).expect("policy is declarable");
     assert_eq!(
         snapshot.accepted_did_methods(),
-        ["did:key:", "did:plc:", "did:web:", "did:webvh:"]
+        ["did:key:", "did:web:", "did:webvh:"]
     );
     assert_eq!(
         snapshot.trust_roots(),

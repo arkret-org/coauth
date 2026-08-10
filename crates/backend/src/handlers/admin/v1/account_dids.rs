@@ -45,7 +45,7 @@ const DID_BINDING_ADDED_OPERATION: &str = "account_did_binding_added";
 const DID_BINDING_REVOKED_OPERATION: &str = "account_did_binding_revoked";
 
 #[derive(Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "AddAccountDidBindingRequestBody")]
+#[serde(rename = "AddAccountDidBindingRequestBody", deny_unknown_fields)]
 pub struct AddAccountDidBindingRequestBody {
     /// DID to bind to the account.
     pub did: String,
@@ -58,13 +58,6 @@ pub struct AddAccountDidBindingRequestBody {
     /// with the canonical binding statement as its attached payload (see
     /// [`crate::services::did_binding_proof`]).
     pub control_proof: ControlProofPayload,
-
-    /// Optional SDK `ak.schema.did_continuity_proof.v1` payload. Required
-    /// when promoting a weak `did:web` primary binding to `did:webvh`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(with = "Option<serde_json::Value>")]
-    #[salvo(schema(value_type = Option<serde_json::Value>))]
-    pub continuity_proof: Option<arkret_models_identity::DidContinuityProof>,
 
     /// Whether the new binding should become the primary DID when accepted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -230,15 +223,7 @@ pub async fn add_account_did(
     let expected_audience = crate::handlers::arkret::service_id_for(&arkret_config);
     let expected_trust_domain =
         crate::handlers::arkret::trust_domain_for(&url_builder, &arkret_config);
-    enforce_did_continuity_for_primary_upgrade(
-        &current_bindings,
-        &did,
-        body.make_primary.unwrap_or(false),
-        body.continuity_proof.as_ref(),
-        expected_audience.as_str(),
-        &expected_trust_domain,
-        now,
-    )?;
+    enforce_same_core_primary_refresh(&current_bindings, &did, body.make_primary.unwrap_or(false))?;
     let nonce_store = shared_did_binding_nonce_store();
     let validated_control = validate_control_proof(
         &http_client,
@@ -334,7 +319,6 @@ pub async fn add_account_did(
                     "kind": did_binding_kind_wire(body.kind),
                     "state": "active",
                     "make_primary": body.make_primary.unwrap_or(false),
-                    "continuity_proof_present": body.continuity_proof.is_some(),
                     "verification_status": "verified",
                     "verification_method": body.verification_method,
                     "resolver_submission_present": body.resolver_submission_context.is_some(),
@@ -405,14 +389,10 @@ fn map_did_binding_proof_error(error: DidBindingProofError) -> AppError {
     }
 }
 
-fn enforce_did_continuity_for_primary_upgrade(
+fn enforce_same_core_primary_refresh(
     current_bindings: &[AccountDidBinding],
     new_did: &str,
     make_primary: bool,
-    continuity_proof: Option<&arkret_models_identity::DidContinuityProof>,
-    expected_audience: &str,
-    expected_trust_domain: &str,
-    now: chrono::DateTime<chrono::Utc>,
 ) -> Result<(), AppError> {
     if !make_primary {
         return Ok(());
@@ -423,75 +403,58 @@ fn enforce_did_continuity_for_primary_upgrade(
     else {
         return Ok(());
     };
-    if !current_primary.did.starts_with("did:web:") || !new_did.starts_with("did:webvh:") {
-        return Ok(());
-    }
-    let proof = continuity_proof.ok_or_else(|| {
-        AppError::bad_request("did_continuity_proof_required: did:web to did:webvh primary upgrade")
-    })?;
-    proof
-        .validate_minimal()
-        .map_err(|error| AppError::bad_request(format!("did_continuity_proof_invalid: {error}")))?;
-    if proof.purpose != arkret_models_identity::DidContinuityPurpose::PrincipalMethodUpgrade {
-        return Err(AppError::bad_request(
-            "did_continuity_proof_invalid: purpose must be principal_method_upgrade",
-        ));
-    }
-    if proof.old_did.as_str() != current_primary.did || proof.new_did.as_str() != new_did {
-        return Err(AppError::bad_request(
-            "did_continuity_proof_invalid: old_did/new_did mismatch",
-        ));
-    }
-    if !proof
-        .audience
-        .iter()
-        .any(|audience| audience == expected_audience)
-        || !proof
-            .audience
-            .iter()
-            .any(|audience| audience == expected_trust_domain)
-    {
-        return Err(AppError::bad_request(
-            "did_continuity_proof_invalid: audience/trust_domain binding missing",
-        ));
-    }
-    if let Some(expires_at) = proof.expires_at
-        && now >= expires_at
-    {
-        return Err(AppError::bad_request(
-            "did_continuity_proof_invalid: proof expired",
-        ));
-    }
-    if proof.old_did_document_digest.is_none() {
-        return Err(AppError::bad_request(
-            "did_continuity_proof_invalid: old_did_document_digest required",
-        ));
-    }
-    if proof.new_did_document_digest.is_none() {
-        return Err(AppError::bad_request(
-            "did_continuity_proof_invalid: new_did_document_digest required",
-        ));
-    }
-    if proof
-        .transfer_proof
-        .user_oob_confirmation_id
-        .trim()
-        .is_empty()
-    {
-        return Err(AppError::bad_request(
-            "did_continuity_proof_invalid: OOB confirmation is required",
-        ));
-    }
-    let fingerprint = proof
-        .transfer_proof
-        .inception_public_key_fingerprint
-        .as_str();
-    if !fingerprint.starts_with("sha256:") {
-        return Err(AppError::bad_request(
-            "did_continuity_proof_invalid: inception fingerprint must be sha256",
+    let current_full =
+        arkret_identifiers::FullId::new(current_primary.did.clone()).map_err(|error| {
+            AppError::bad_request(format!("current_primary_full_id_invalid: {error}"))
+        })?;
+    let next_full = arkret_identifiers::FullId::new(new_did.to_owned())
+        .map_err(|error| AppError::bad_request(format!("full_id_invalid: {error}")))?;
+    let current_core =
+        arkret_identifiers::project_full_id_to_core_id(&current_full).map_err(|error| {
+            AppError::bad_request(format!("current_primary_projection_failed: {error}"))
+        })?;
+    let next_core = arkret_identifiers::project_full_id_to_core_id(&next_full)
+        .map_err(|error| AppError::bad_request(format!("full_id_projection_failed: {error}")))?;
+    if current_core != next_core {
+        return Err(AppError::conflict(
+            "principal_core_changed: a different core_id is a new principal and cannot replace the current primary binding",
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod primary_refresh_tests {
+    use super::*;
+
+    fn primary(did: &str) -> AccountDidBinding {
+        AccountDidBinding {
+            did: did.to_owned(),
+            primary: true,
+            active: true,
+            ..AccountDidBinding::default()
+        }
+    }
+
+    #[test]
+    fn same_webvh_scid_can_refresh_its_location() {
+        let current = [primary("did:webvh:ztest:old.example:principal")];
+        enforce_same_core_primary_refresh(
+            &current,
+            "did:webvh:ztest:new.example:renamed-principal",
+            true,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_different_core_cannot_replace_the_primary_principal() {
+        let current = [primary("did:web:alice.example")];
+        let error =
+            enforce_same_core_primary_refresh(&current, "did:webvh:ztest:alice.example", true)
+                .unwrap_err();
+        assert!(error.to_string().contains("principal_core_changed"));
+    }
 }
 
 #[endpoint]
