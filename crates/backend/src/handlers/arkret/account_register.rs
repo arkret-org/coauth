@@ -6,14 +6,15 @@ use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_models_collaboration::principal_operations::PcrGenesisSubmitRequestBody;
 use arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
 use arkret_models_identity::{
-    AccountBindingReceipt, AccountBindingState, AccountHandoffAllowedOperation,
+    AccountBindingKind, AccountBindingReceipt, AccountBindingState, AccountHandoffAllowedOperation,
     DidOperationSubmitOutcome, DidOperationSubmitStatus, IdentityCreationOperationStatus,
 };
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::RepositoryAccess as _;
 use coauth_data::account_handoff::{
     IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
-    IdentityCreationRegistrationContext, IdentityCreationSagaState,
+    IdentityCreationRegistrationContext, IdentityCreationSagaState, PublishedDidRegisterCommit,
+    PublishedDidRegisterReplay,
 };
 use coauth_data::storage::user::BrowserSessionRepository as _;
 use coauth_data::user::{
@@ -26,7 +27,7 @@ use serde_json::Value;
 use signature::RandomizedSigner as _;
 
 use super::account_handoff::{
-    authenticate_account_handoff, enforce_handoff_operation,
+    authenticate_account_handoff, enforce_handoff_operation, resolve_published_did,
     verify_account_handoff_holder_without_lookup,
 };
 use super::session_grant::{
@@ -72,6 +73,13 @@ pub async fn account_register_endpoint(
         .await
         .map_err(|_| schema_violation("invalid account register body"))?;
     let request_digest = canonical_register_request_digest(&raw_body)?;
+    let body: AccountRegisterRequestBody = serde_json::from_value(raw_body.clone())
+        .map_err(|_| schema_violation("invalid account register body"))?;
+    body.validate()
+        .map_err(|error| schema_violation(error.to_string()))?;
+    if body.proof.is_some() {
+        return register_published_did(depot, req, grant, body, request_digest).await;
+    }
     let replay_key: AccountRegisterReplayKey = serde_json::from_value(raw_body.clone())
         .map_err(|_| schema_violation("invalid account register identity_creation key"))?;
 
@@ -110,26 +118,18 @@ pub async fn account_register_endpoint(
             ));
         }
     }
-    let body: AccountRegisterRequestBody = serde_json::from_value(raw_body)
-        .map_err(|_| schema_violation("invalid account register body"))?;
-    body.validate()
-        .map_err(|error| schema_violation(error.to_string()))?;
     let identity_creation = body
         .identity_creation
         .as_ref()
         .ok_or_else(|| schema_violation("account handoff register requires identity_creation"))?;
-    if body.proof.is_some() {
-        return Err(schema_violation(
-            "identity_creation and ordinary account lifecycle proof are mutually exclusive",
-        ));
-    }
     if body.device_id.is_some() {
         return Err(failed_precondition(
             "top-level device_id is not used by the atomic identity-creation flow",
         ));
     }
-    if identity_creation.did_operation.did != body.principal_id
+    if identity_creation.did_operation.did != body.full_id
         || identity_creation.control_proof.principal_id != body.principal_id
+        || identity_creation.control_proof.full_id != body.full_id
     {
         return Err(failed_precondition(
             "principal_id does not match the identity-creation operation and control proof",
@@ -160,6 +160,15 @@ pub async fn account_register_endpoint(
         .validate()
         .map_err(|error| proof_invalid(error.to_string()))?;
     validate_registration_transcript(&context, identity_creation)?;
+    let create_event = identity_creation.pcr_genesis_unit.create();
+    if arkret_identifiers::RealmId::from_event_id(&create_event.event_id)
+        != identity_creation.control_proof.pcr_realm_id
+        || create_event.realm_id != identity_creation.control_proof.pcr_realm_id
+    {
+        return Err(proof_invalid(
+            "PCR realm_id is not the root-signed create event_id retyped as a realm",
+        ));
+    }
     validate_initial_session_request(identity_creation, &grant)?;
     let browser_session_id = grant.browser_session_id.ok_or_else(|| {
         failed_precondition("identity creation requires its originating browser session")
@@ -206,7 +215,7 @@ pub async fn account_register_endpoint(
                     format!("principal registry rejected identity creation: {error}"),
                 )
             })?;
-            validate_registry_outcome(&outcome, &body.principal_id)?;
+            validate_registry_outcome(&outcome, &body.full_id)?;
             let head = outcome.head_event_digest.as_ref().expect("validated head");
             let receipt = serde_json::to_value(&outcome)
                 .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
@@ -231,7 +240,7 @@ pub async fn account_register_endpoint(
                 context.lease.registry_receipt.clone().ok_or_else(|| {
                     failed_precondition("published identity has no registry receipt")
                 })?;
-            validate_registry_outcome(&outcome, &body.principal_id)?;
+            validate_registry_outcome(&outcome, &body.full_id)?;
             let head = outcome.head_event_digest.as_ref().expect("validated head");
             if context.lease.state == IdentityCreationSagaState::DidPublished {
                 let receipt = serde_json::to_value(&outcome)
@@ -355,11 +364,15 @@ pub async fn account_register_endpoint(
         .expect("registry outcome head validated above");
     let mut receipt = AccountBindingReceipt {
         binding_state: AccountBindingState::Bound,
+        binding_kind: AccountBindingKind::IdentityCreation,
         account_authority_id: service_id_for(&depot.arkret_config()?),
         account_subject: context.challenge.account_subject.clone(),
         principal_id: body.principal_id.clone(),
-        identity_creation_lease_id: identity_creation.identity_creation_lease_id.clone(),
-        lease_fence: identity_creation.lease_fence,
+        full_id: body.full_id.clone(),
+        did_version_id: identity_creation.control_proof.did_version_id.clone(),
+        control_key_digest: identity_creation.control_proof.control_key_digest.clone(),
+        identity_creation_lease_id: Some(identity_creation.identity_creation_lease_id.clone()),
+        lease_fence: Some(identity_creation.lease_fence),
         operation_status,
         operation_digest: validated.operation_digest,
         head_event_digest: head_event_digest.clone(),
@@ -428,6 +441,27 @@ pub async fn account_register_endpoint(
                             audience: grant.audience.clone(),
                             principal_id: body.principal_id.to_string(),
                             key_log_head: head_event_digest,
+                            verified_full_id: Some(body.full_id.clone()),
+                            verified_version_id: Some(
+                                identity_creation.control_proof.did_version_id.clone(),
+                            ),
+                            binding_receipt: Some(
+                                serde_json::to_value(&receipt)
+                                    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+                            ),
+                            accepted_service_id: Some(
+                                arkret_identifiers::ServiceId::new(grant.audience.clone())
+                                    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+                            ),
+                            binding_version: Some(1),
+                            binding_frontier_digest: Some(
+                                arkret_identifiers::Hash::new(
+                                    arkret_canonical::canonical_sha256(&receipt).map_err(
+                                        |error| ArkretRouteError::Internal(Box::new(error)),
+                                    )?,
+                                )
+                                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+                            ),
                         },
                     )
                     .await?;
@@ -460,14 +494,15 @@ pub async fn account_register_endpoint(
         session_public_key,
         initial.audience.to_string(),
         initial.requested_scope.clone(),
-        Some(body.principal_id.as_str()),
+        Some(body.full_id.as_str()),
         grant.cnf_jkt.clone(),
         arkret_models_identity::SessionGrantProofKind::DidBoundSignature,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     persist_session_grant(&mut repo, &mut *rng, &*clock, &browser_session, &material).await?;
     let session_grant_outcome = SessionGrantOutcome {
-        principal_id: body.principal_id.clone(),
+        principal_id: arkret_identifiers::Did::new(body.full_id.to_string())
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         device_id: Some(initial.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
@@ -486,7 +521,7 @@ pub async fn account_register_endpoint(
         handle_claim_digests: Vec::new(),
         profile: None,
         registration_audit: None,
-        binding_receipt: Some(receipt),
+        binding_receipt: receipt,
         pcr_genesis_receipt: Some(pcr_outcome.receipt),
         session_grant_outcome: Some(session_grant_outcome),
     };
@@ -527,6 +562,252 @@ pub async fn account_register_endpoint(
     Ok(Json(outcome))
 }
 
+async fn register_published_did(
+    depot: &Depot,
+    req: &mut Request,
+    mut grant: coauth_data::AccountHandoffGrant,
+    body: AccountRegisterRequestBody,
+    request_digest: arkret_identifiers::Hash,
+) -> Result<Json<AccountRegisterOutcome>, ArkretRouteError> {
+    let proof = body
+        .proof
+        .as_ref()
+        .ok_or_else(|| schema_violation("published DID registration requires proof"))?;
+    let clock = make_clock();
+    let now = clock.now();
+    let mut repo = depot.repo().await?;
+    let replay = repo
+        .account_handoff()
+        .published_did_registration_replay(&grant, &proof.challenge_id, &request_digest, now)
+        .await?;
+    let challenge = match replay {
+        PublishedDidRegisterReplay::Pending(challenge) => {
+            repo.cancel().await.ok();
+            let (active_grant, _dpop) =
+                authenticate_account_handoff(req, depot, AccountHandoffAllowedOperation::Register)
+                    .await?;
+            if active_grant.id != grant.id {
+                return Err(proof_invalid(
+                    "account handoff identity changed during published DID replay check",
+                ));
+            }
+            grant = active_grant;
+            challenge
+        }
+        PublishedDidRegisterReplay::Replay(outcome) => {
+            repo.cancel().await.ok();
+            outcome
+                .validate_against_request(&body)
+                .map_err(|error| failed_precondition(error.to_string()))?;
+            return Ok(Json(*outcome));
+        }
+        PublishedDidRegisterReplay::DuplicateConflict => {
+            repo.cancel().await.ok();
+            return Err(duplicate_conflict(
+                "published DID register request differs from the completed request",
+            ));
+        }
+        PublishedDidRegisterReplay::Stale => {
+            repo.cancel().await.ok();
+            return Err(failed_precondition(
+                "published DID challenge is unknown, expired, consumed, or belongs to another handoff",
+            ));
+        }
+    };
+    let expected = challenge.wire_outcome();
+    let exact = proof.challenge_id == expected.challenge_id
+        && proof.challenge == expected.challenge
+        && proof.purpose == expected.purpose
+        && proof.account_subject == expected.account_subject
+        && proof.principal_id == expected.principal_id
+        && proof.full_id == expected.full_id
+        && proof.did_version_id == expected.did_version_id
+        && proof.log_head_digest == expected.log_head_digest
+        && proof.control_key_digest == expected.control_key_digest
+        && proof.dpop_jkt == expected.dpop_jkt
+        && proof.audience == expected.audience
+        && proof.origin == expected.origin
+        && proof.trust_domain == expected.trust_domain
+        && proof.issued_at == expected.issued_at
+        && proof.expires_at == expected.expires_at
+        && proof.witness_evidence == expected.witness_evidence
+        && proof.request_canonical_digest == challenge.input.request_digest;
+    if !exact {
+        return Err(proof_invalid(
+            "published DID proof does not exactly replay its durable challenge transcript",
+        ));
+    }
+    let mut repo = depot.repo().await?;
+    let verified = resolve_published_did(
+        depot,
+        &mut repo,
+        &body.principal_id,
+        &body.full_id,
+        Some(&proof.verification_method),
+        now,
+    )
+    .await?;
+    if verified.did_version_id != proof.did_version_id
+        || verified.log_head_digest != proof.log_head_digest
+        || verified.control_key_digest != proof.control_key_digest
+    {
+        repo.cancel().await.ok();
+        return Err(failed_precondition(
+            "published DID resolution advanced or no longer matches the challenged control key",
+        ));
+    }
+    let signing_bytes = proof
+        .canonical_signing_bytes()
+        .map_err(|error| proof_invalid(error.to_string()))?;
+    let verified_method = crate::services::did_binding_proof::verify_detached_jws_with_sdk(
+        &proof.signature,
+        &signing_bytes,
+        &verified.document.verification_method,
+    )
+    .map_err(|error| proof_invalid(error.to_string()))?;
+    if verified_method != proof.verification_method.as_str() {
+        repo.cancel().await.ok();
+        return Err(proof_invalid(
+            "published DID signature kid does not match proof verification_method",
+        ));
+    }
+
+    let key_store = depot.key_store()?;
+    let (_, signing_key) = preferred_signing_key(&key_store)
+        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
+    let signing_key_id = signing_key
+        .kid()
+        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
+    let mut receipt = AccountBindingReceipt {
+        binding_state: AccountBindingState::Bound,
+        binding_kind: AccountBindingKind::PublishedDid,
+        account_authority_id: service_id_for(&depot.arkret_config()?),
+        account_subject: challenge.input.account_subject.clone(),
+        principal_id: body.principal_id.clone(),
+        full_id: body.full_id.clone(),
+        did_version_id: verified.did_version_id.clone(),
+        control_key_digest: verified.control_key_digest.clone(),
+        identity_creation_lease_id: None,
+        lease_fence: None,
+        operation_status: IdentityCreationOperationStatus::Accepted,
+        operation_digest: request_digest.clone(),
+        head_event_digest: verified.log_head_digest.clone(),
+        issued_at: now,
+        proof: arkret_wire::PayloadProof {
+            kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
+            verification_method: arkret_wire::DidUrl::new(format!(
+                "{}#{signing_key_id}",
+                service_id_for(&depot.arkret_config()?)
+            ))
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            payload_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            created_at: now,
+            domain: None,
+            audience: None,
+            proof_purpose: None,
+            jws: String::new(),
+        },
+    };
+    sign_account_binding_receipt(&mut receipt, &key_store)?;
+    let receipt_value = serde_json::to_value(&receipt)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let receipt_digest = arkret_identifiers::Hash::new(
+        arkret_canonical::canonical_sha256(&receipt)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+    )
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let user = repo
+        .user()
+        .lookup(grant.service_account_id)
+        .await?
+        .ok_or(ArkretRouteError::NotFound)?;
+    if let Some(existing) = repo
+        .principal_did()
+        .get_for_user_and_audience(&user, &grant.audience)
+        .await?
+        && existing.principal_id != body.principal_id.as_str()
+    {
+        repo.cancel().await.ok();
+        return Err(duplicate_conflict(
+            "service account is already bound to a different principal core",
+        ));
+    }
+    let mut rng = make_rng();
+    repo.principal_did()
+        .add_verified(
+            &mut *rng,
+            &*clock,
+            &user,
+            VerifiedPrincipalDidBindingInput {
+                audience: grant.audience.clone(),
+                principal_id: body.principal_id.to_string(),
+                key_log_head: verified.log_head_digest,
+                verified_full_id: Some(body.full_id.clone()),
+                verified_version_id: Some(verified.did_version_id),
+                binding_receipt: Some(receipt_value),
+                accepted_service_id: Some(
+                    arkret_identifiers::ServiceId::new(grant.audience.clone())
+                        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+                ),
+                binding_version: Some(1),
+                binding_frontier_digest: Some(receipt_digest),
+            },
+        )
+        .await?;
+    let outcome = AccountRegisterOutcome {
+        principal_id: body.principal_id.clone(),
+        state: AccountStatus::Active,
+        devices: Vec::new(),
+        primary_handle_claim: None,
+        primary_handle_claim_ref: None,
+        handle_claim_digests: Vec::new(),
+        profile: None,
+        registration_audit: None,
+        binding_receipt: receipt,
+        pcr_genesis_receipt: None,
+        session_grant_outcome: None,
+    };
+    outcome
+        .validate_against_request(&body)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    match repo
+        .account_handoff()
+        .commit_published_did_registration(
+            &grant,
+            &proof.challenge_id,
+            &request_digest,
+            &outcome,
+            now,
+        )
+        .await?
+    {
+        PublishedDidRegisterCommit::Committed => {}
+        PublishedDidRegisterCommit::Replay(stored) => {
+            repo.cancel().await.ok();
+            return Ok(Json(*stored));
+        }
+        PublishedDidRegisterCommit::DuplicateConflict => {
+            repo.cancel().await.ok();
+            return Err(duplicate_conflict(
+                "published DID register lost a race to a different request",
+            ));
+        }
+        PublishedDidRegisterCommit::Stale => {
+            repo.cancel().await.ok();
+            return Err(failed_precondition(
+                "published DID challenge expired before registration committed",
+            ));
+        }
+    }
+    if !repo.account_handoff().consume_grant(&grant, now).await? {
+        repo.cancel().await.ok();
+        return Err(failed_precondition("account handoff was already consumed"));
+    }
+    repo.save().await?;
+    Ok(Json(outcome))
+}
+
 fn validate_registration_transcript(
     context: &IdentityCreationRegistrationContext,
     registration: &arkret_models_identity::IdentityCreationRegistration,
@@ -544,12 +825,16 @@ fn validate_registration_transcript(
         ));
     }
     if reserved.did_operation != registration.did_operation
-        || reserved.principal_id != proof.principal_id
+        || arkret_identifiers::project_full_id_to_core_id(&registration.full_id)
+            .map_err(|error| proof_invalid(error.to_string()))?
+            != proof.principal_id
+        || registration.full_id != proof.full_id
         || reserved.operation_digest != proof.operation_digest
         || challenge.challenge_id != proof.challenge_id
         || challenge.challenge != proof.challenge
         || challenge.purpose != proof.purpose
         || challenge.principal_id != proof.principal_id
+        || challenge.full_id != proof.full_id
         || challenge.operation_digest != proof.operation_digest
         || challenge.did_version_id != proof.did_version_id
         || challenge.log_head_digest != proof.log_head_digest
@@ -590,11 +875,14 @@ fn sign_account_binding_receipt(
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     receipt.proof.payload_digest = payload_digest.clone();
     let transcript = serde_json::json!({
-        "context": "ak.account-binding-receipt-proof-v1",
+        "context": arkret_wire::ProofContextId::ACCOUNT_BINDING_RECEIPT_PROOF_V1,
         "payload_digest": payload_digest,
         "account_authority_id": &receipt.account_authority_id,
         "account_subject": &receipt.account_subject,
         "principal_id": &receipt.principal_id,
+        "full_id": &receipt.full_id,
+        "did_version_id": &receipt.did_version_id,
+        "control_key_digest": &receipt.control_key_digest,
         "verification_method": &receipt.proof.verification_method,
         "created_at": arkret_canonical::format_timestamp_canonical(receipt.issued_at),
     });
@@ -659,9 +947,9 @@ struct AccountRegisterControlProofReplayKey {
 
 fn validate_registry_outcome(
     outcome: &DidOperationSubmitOutcome,
-    principal_id: &arkret_identifiers::Did,
+    full_id: &arkret_identifiers::FullId,
 ) -> Result<(), ArkretRouteError> {
-    if outcome.did != *principal_id
+    if outcome.did.as_str() != full_id.as_str()
         || !matches!(
             outcome.status,
             DidOperationSubmitStatus::Accepted | DidOperationSubmitStatus::Duplicate

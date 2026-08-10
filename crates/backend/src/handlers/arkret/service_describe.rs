@@ -482,8 +482,22 @@ pub(crate) fn service_describe_response(
             .unwrap_or(serde_json::Value::Null),
     );
 
+    let service_id = service_id_for(arkret_config);
+    let service_full_id = issuer_did_for(arkret_config);
+    let service_version_id = arkret_config
+        .runtime_service_identity
+        .state()
+        .identity()
+        .expect("ready runtime service identity has current control state")
+        .version_id
+        .clone();
     ServiceDescribe {
-        service_id: service_id_for(arkret_config),
+        service_id,
+        service_resolution: arkret_models_identity::ResolutionCommitment {
+            full_id: service_full_id,
+            method_history_head: service_version_id.clone(),
+            version_id: service_version_id,
+        },
         trust_domain: arkret_wire::TypedTrustDomainId::new(trust_domain_for(
             url_builder,
             arkret_config,

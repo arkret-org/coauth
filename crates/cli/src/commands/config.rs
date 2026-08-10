@@ -171,6 +171,7 @@ fn apply_generated_config_options(
         config.arkret.principal_servers = vec![PrincipalServerConfig {
             name: "soland-dev".to_owned(),
             endpoint: DEV_SOLAND_URL.parse().expect("valid dev soland URL"),
+            service_id: None,
             session_grant_introspection_bearer: Some(DEV_SOLAND_SESSION_GRANT_BEARER.to_owned()),
             embedded_webvh_registration_bearer: Some(
                 DEV_SOLAND_WEBVH_REGISTRATION_BEARER.to_owned(),

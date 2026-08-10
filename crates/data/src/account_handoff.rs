@@ -6,6 +6,47 @@ use serde::{Deserialize, Serialize};
 use crate::Ulid;
 pub use crate::storage::account_handoff::AccountHandoffRepository;
 
+/// Durable issuance fence for one Account Authority controller gate request.
+#[derive(Clone, Debug)]
+pub struct ControllerGateAttestationIssuance {
+    pub request_id: arkret_identifiers::RequestId,
+    pub canonical_intent_digest: arkret_identifiers::Hash,
+    pub principal_id: arkret_identifiers::PrincipalId,
+    pub agent_authority_service_id: arkret_identifiers::ServiceId,
+    pub canonical_outcome: Option<Vec<u8>>,
+    pub outcome_digest: Option<arkret_identifiers::Hash>,
+    pub attestation_expires_at: Option<DateTime<Utc>>,
+    pub retained_until: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub committed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct NewControllerGateAttestationIssuance {
+    pub request_id: arkret_identifiers::RequestId,
+    pub canonical_intent_digest: arkret_identifiers::Hash,
+    pub principal_id: arkret_identifiers::PrincipalId,
+    pub agent_authority_service_id: arkret_identifiers::ServiceId,
+    pub retained_until: DateTime<Utc>,
+    pub now: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug)]
+pub enum ControllerGateAttestationReserve {
+    Reserved(ControllerGateAttestationIssuance),
+    Replay(ControllerGateAttestationIssuance),
+    Conflict(ControllerGateAttestationIssuance),
+    Indeterminate(ControllerGateAttestationIssuance),
+}
+
+#[derive(Clone, Debug)]
+pub enum ControllerGateAttestationCommit {
+    Committed(ControllerGateAttestationIssuance),
+    Replay(ControllerGateAttestationIssuance),
+    Conflict(ControllerGateAttestationIssuance),
+    Indeterminate(ControllerGateAttestationIssuance),
+}
+
 /// Closed lifecycle for the durable, authorization-code-backed handoff
 /// creation fence. `Reserved` means an external exchange may already have
 /// consumed the code, so an uncheckpointed retry must fail indeterminate.
@@ -120,7 +161,7 @@ pub struct AccountHandoffGrant {
     pub browser_session_id: Option<Ulid>,
     pub audience: String,
     pub cnf_jkt: String,
-    pub allowed_operations: [arkret_models_identity::AccountHandoffAllowedOperation; 6],
+    pub allowed_operations: [arkret_models_identity::AccountHandoffAllowedOperation; 7],
     pub account_handoff_grant: String,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -287,7 +328,8 @@ pub enum AccountHandoffCreation {
     },
     Bound {
         grant: AccountHandoffGrant,
-        principal_id: arkret_identifiers::Did,
+        principal_id: arkret_identifiers::CoreId,
+        full_id: arkret_identifiers::FullId,
     },
     RateLimited {
         grant: AccountHandoffGrant,
@@ -310,6 +352,8 @@ pub struct IdentityBindingChallengeInput {
     pub lease_fence: u64,
     pub holder_jkt: String,
     pub did_operation: arkret_models_identity::DidOperationSubmitRequestBody,
+    pub principal_id: arkret_identifiers::CoreId,
+    pub full_id: arkret_identifiers::FullId,
     pub operation_digest: arkret_identifiers::Hash,
     pub account_subject: arkret_identifiers::Hash,
     pub did_version_id: String,
@@ -337,7 +381,8 @@ pub struct IdentityBindingChallengeRecord {
     pub challenge: String,
     pub purpose: arkret_models_identity::IdentityBindingPurpose,
     pub account_subject: arkret_identifiers::Hash,
-    pub principal_id: arkret_identifiers::Did,
+    pub principal_id: arkret_identifiers::CoreId,
+    pub full_id: arkret_identifiers::FullId,
     pub operation_digest: arkret_identifiers::Hash,
     pub did_version_id: String,
     pub log_head_digest: arkret_identifiers::Hash,
@@ -367,6 +412,7 @@ impl IdentityBindingChallengeRecord {
             purpose: self.purpose,
             account_subject: self.account_subject.clone(),
             principal_id: self.principal_id.clone(),
+            full_id: self.full_id.clone(),
             operation_digest: self.operation_digest.clone(),
             did_version_id: self.did_version_id.clone(),
             log_head_digest: self.log_head_digest.clone(),
@@ -397,6 +443,88 @@ pub enum IdentityBindingChallengeIssue {
     ReservationConflict,
     StaleRequest,
     RateLimited { retry_after_ms: u64 },
+}
+
+/// Durable challenge for proving control of an already-published DID.
+#[derive(Clone, Debug)]
+pub struct DidBindingChallengeInput {
+    pub request_id: arkret_identifiers::RequestId,
+    pub request_digest: arkret_identifiers::Hash,
+    pub issuing_handoff_grant_id: Ulid,
+    pub service_account_id: Ulid,
+    pub account_subject: arkret_identifiers::Hash,
+    pub principal_id: arkret_identifiers::CoreId,
+    pub full_id: arkret_identifiers::FullId,
+    pub did_version_id: String,
+    pub log_head_digest: arkret_identifiers::Hash,
+    pub control_key_digest: arkret_identifiers::Hash,
+    pub witness_evidence: Option<String>,
+    pub challenge_id: String,
+    pub challenge: String,
+    pub dpop_jkt: String,
+    pub audience: arkret_identifiers::Did,
+    pub origin: String,
+    pub trust_domain: arkret_identifiers::TypedTrustDomainId,
+    pub issued_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug)]
+pub struct DidBindingChallengeRecord {
+    pub input: DidBindingChallengeInput,
+    pub consumed_at: Option<DateTime<Utc>>,
+    pub register_request_digest: Option<arkret_identifiers::Hash>,
+    pub register_outcome:
+        Option<Box<arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome>>,
+}
+
+impl DidBindingChallengeRecord {
+    pub fn wire_outcome(&self) -> arkret_models_identity::DidBindingChallengeOutcome {
+        let input = &self.input;
+        arkret_models_identity::DidBindingChallengeOutcome {
+            request_id: input.request_id.clone(),
+            challenge_id: input.challenge_id.clone(),
+            challenge: input.challenge.clone(),
+            purpose: arkret_models_identity::DidBindingPurpose::AccountBindingForPublishedDid,
+            account_subject: input.account_subject.clone(),
+            principal_id: input.principal_id.clone(),
+            full_id: input.full_id.clone(),
+            did_version_id: input.did_version_id.clone(),
+            log_head_digest: input.log_head_digest.clone(),
+            control_key_digest: input.control_key_digest.clone(),
+            witness_evidence: input.witness_evidence.clone(),
+            dpop_jkt: input.dpop_jkt.clone(),
+            audience: input.audience.clone(),
+            origin: input.origin.clone(),
+            trust_domain: input.trust_domain.clone(),
+            issued_at: input.issued_at,
+            expires_at: input.expires_at,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum DidBindingChallengeIssue {
+    Issued(DidBindingChallengeRecord),
+    Replay(DidBindingChallengeRecord),
+    DuplicateConflict,
+    StaleRequest,
+}
+
+#[derive(Clone, Debug)]
+pub enum PublishedDidRegisterReplay {
+    Pending(DidBindingChallengeRecord),
+    Replay(Box<arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome>),
+    DuplicateConflict,
+    Stale,
+}
+
+#[derive(Clone, Debug)]
+pub enum PublishedDidRegisterCommit {
+    Committed,
+    Replay(Box<arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome>),
+    DuplicateConflict,
+    Stale,
 }
 
 /// Durable issue input for the explicit provisional-identity abandonment

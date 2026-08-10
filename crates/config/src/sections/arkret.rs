@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use arkret_identifiers::Did;
+use arkret_identifiers::{FullId, ServiceId, project_full_id_to_core_id};
 use arkret_identity::service_identity::{
     LocalServiceIdentity, ServiceIdentityDiagnostic, ServiceIdentityKeyRef, ServiceIdentityState,
 };
@@ -135,12 +135,20 @@ impl RuntimeServiceIdentity {
         *self.0.write().expect("service identity lock poisoned") = state;
     }
 
-    /// Returns the resolved service DID when the state carries an identity.
+    /// Returns the stable service core id when the state carries an identity.
     #[must_use]
-    pub fn service_id(&self) -> Option<Did> {
+    pub fn service_id(&self) -> Option<ServiceId> {
         self.state()
             .identity()
             .map(|identity| identity.service_id.clone())
+    }
+
+    /// Returns the current complete service DID when the state carries an identity.
+    #[must_use]
+    pub fn full_id(&self) -> Option<FullId> {
+        self.state()
+            .identity()
+            .map(|identity| identity.full_id.clone())
     }
 
     /// Returns whether normal request handling may proceed.
@@ -152,12 +160,17 @@ impl RuntimeServiceIdentity {
     #[doc(hidden)]
     #[must_use]
     pub fn fixture(service_id: &str) -> Self {
+        let full_id = FullId::new(service_id.to_owned()).expect("fixture service DID");
+        let service_id = ServiceId::from(
+            project_full_id_to_core_id(&full_id).expect("fixture service DID adapter"),
+        );
         let signing_key_ref =
             ServiceIdentityKeyRef::new("fixture:coauth:signing").expect("fixture key ref");
         let handle = Self::default();
         handle.store(ServiceIdentityState::Ready {
             identity: LocalServiceIdentity {
-                service_id: Did::new(service_id.to_owned()).expect("fixture service DID"),
+                service_id,
+                full_id,
                 registration_key: ServiceRegistrationKey::new(
                     ServiceKind::AuthServer,
                     CanonicalServiceUrl::canonicalize("https://auth.test/")
@@ -602,6 +615,12 @@ pub struct PrincipalServerConfig {
 
     /// Base URL of the Principal Server integration point.
     pub endpoint: Url,
+
+    /// Stable service identity core for authenticated S2S authorization.
+    /// Gate-attestation issuance fails closed when this is absent; an endpoint
+    /// URL or bearer token is never converted into an identity core.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_id: Option<arkret_identifiers::ServiceId>,
 
     /// Optional static bearer for the Account Authority / Principal Server
     /// trust edge. The Principal Server presents it to coauth introspection and

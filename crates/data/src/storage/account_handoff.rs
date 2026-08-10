@@ -5,10 +5,13 @@ use chrono::{DateTime, Utc};
 use coauth_data::{
     AccountHandoffAuthorizationCheckpoint, AccountHandoffCreation,
     AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve, AccountHandoffGrant,
-    AccountHandoffGrantInput, IdentityAbandonmentChallengeInput, IdentityAbandonmentChallengeIssue,
-    IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
-    IdentityBindingChallengeIssue, IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
-    IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
+    AccountHandoffGrantInput, ControllerGateAttestationCommit, ControllerGateAttestationReserve,
+    DidBindingChallengeInput, DidBindingChallengeIssue, IdentityAbandonmentChallengeInput,
+    IdentityAbandonmentChallengeIssue, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
+    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityCreationBindingCommit,
+    IdentityCreationRegisterReplay, IdentityCreationRegistrationContext,
+    NewAccountHandoffCreationAttempt, NewControllerGateAttestationIssuance,
+    PublishedDidRegisterCommit, PublishedDidRegisterReplay,
 };
 
 use crate::repository_impl;
@@ -18,6 +21,24 @@ use crate::repository_impl;
 pub trait AccountHandoffRepository: Send + Sync {
     /// Backend-specific failure type.
     type Error;
+
+    /// Install the durable external-effect fence for one gate issuance.
+    async fn reserve_controller_gate_attestation(
+        &mut self,
+        input: NewControllerGateAttestationIssuance,
+    ) -> Result<ControllerGateAttestationReserve, Self::Error>;
+
+    /// Commit the exact canonical signed outcome. A retry can only replay the
+    /// same bytes and can never mint a second attestation.
+    async fn commit_controller_gate_attestation(
+        &mut self,
+        request_id: &arkret_identifiers::RequestId,
+        canonical_intent_digest: &arkret_identifiers::Hash,
+        canonical_outcome: &[u8],
+        outcome_digest: &arkret_identifiers::Hash,
+        attestation_expires_at: DateTime<Utc>,
+        now: DateTime<Utc>,
+    ) -> Result<ControllerGateAttestationCommit, Self::Error>;
 
     /// Install the durable fence before contacting the external OIDC token
     /// endpoint. Same-intent `Pending(Reserved)` must never re-exchange.
@@ -86,6 +107,34 @@ pub trait AccountHandoffRepository: Send + Sync {
         &mut self,
         input: IdentityBindingChallengeInput,
     ) -> Result<IdentityBindingChallengeIssue, Self::Error>;
+
+    /// Persist or exactly replay the high-freshness challenge for an
+    /// already-published DID.
+    async fn issue_did_binding_challenge(
+        &mut self,
+        input: DidBindingChallengeInput,
+    ) -> Result<DidBindingChallengeIssue, Self::Error>;
+
+    /// Lock and classify a published-DID registration retry against its
+    /// durable challenge and canonical request digest.
+    async fn published_did_registration_replay(
+        &mut self,
+        grant: &AccountHandoffGrant,
+        challenge_id: &str,
+        request_digest: &arkret_identifiers::Hash,
+        now: DateTime<Utc>,
+    ) -> Result<PublishedDidRegisterReplay, Self::Error>;
+
+    /// Consume the published-DID challenge and retain the exact registration
+    /// outcome in the caller's account-binding transaction.
+    async fn commit_published_did_registration(
+        &mut self,
+        grant: &AccountHandoffGrant,
+        challenge_id: &str,
+        request_digest: &arkret_identifiers::Hash,
+        outcome: &arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome,
+        now: DateTime<Utc>,
+    ) -> Result<PublishedDidRegisterCommit, Self::Error>;
 
     /// Issue or replay the durable explicit-abandonment challenge while the
     /// reserved identity has a published DID but no accepted PCR.
@@ -166,6 +215,19 @@ pub trait AccountHandoffRepository: Send + Sync {
 }
 
 repository_impl!(AccountHandoffRepository:
+    async fn reserve_controller_gate_attestation(
+        &mut self,
+        input: NewControllerGateAttestationIssuance,
+    ) -> Result<ControllerGateAttestationReserve, Self::Error>;
+    async fn commit_controller_gate_attestation(
+        &mut self,
+        request_id: &arkret_identifiers::RequestId,
+        canonical_intent_digest: &arkret_identifiers::Hash,
+        canonical_outcome: &[u8],
+        outcome_digest: &arkret_identifiers::Hash,
+        attestation_expires_at: DateTime<Utc>,
+        now: DateTime<Utc>,
+    ) -> Result<ControllerGateAttestationCommit, Self::Error>;
     async fn reserve_creation_attempt(
         &mut self,
         input: NewAccountHandoffCreationAttempt,
@@ -212,6 +274,25 @@ repository_impl!(AccountHandoffRepository:
         &mut self,
         input: IdentityBindingChallengeInput,
     ) -> Result<IdentityBindingChallengeIssue, Self::Error>;
+    async fn issue_did_binding_challenge(
+        &mut self,
+        input: DidBindingChallengeInput,
+    ) -> Result<DidBindingChallengeIssue, Self::Error>;
+    async fn published_did_registration_replay(
+        &mut self,
+        grant: &AccountHandoffGrant,
+        challenge_id: &str,
+        request_digest: &arkret_identifiers::Hash,
+        now: DateTime<Utc>,
+    ) -> Result<PublishedDidRegisterReplay, Self::Error>;
+    async fn commit_published_did_registration(
+        &mut self,
+        grant: &AccountHandoffGrant,
+        challenge_id: &str,
+        request_digest: &arkret_identifiers::Hash,
+        outcome: &arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome,
+        now: DateTime<Utc>,
+    ) -> Result<PublishedDidRegisterCommit, Self::Error>;
     async fn issue_identity_abandonment_challenge(
         &mut self,
         input: IdentityAbandonmentChallengeInput,

@@ -608,8 +608,35 @@ CREATE TABLE public.principal_did_bindings (
     principal_did_owner_id uuid NOT NULL,
     user_id uuid NOT NULL,
     audience text NOT NULL,
+    verified_full_id text,
+    verified_version_id text,
+    binding_receipt jsonb,
+    accepted_service_id text,
+    binding_version bigint,
+    binding_frontier_digest text,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
+    ,CONSTRAINT principal_did_binding_basis_shape CHECK ((accepted_service_id IS NULL AND binding_version IS NULL AND binding_frontier_digest IS NULL) OR (accepted_service_id IS NOT NULL AND binding_version >= 1 AND binding_frontier_digest ~ '^sha256:[0-9a-f]{64}$'::text))
+    ,CONSTRAINT principal_did_binding_resolution_snapshot_shape CHECK ((verified_full_id IS NULL AND verified_version_id IS NULL AND binding_receipt IS NULL) OR (verified_full_id IS NOT NULL AND verified_version_id IS NOT NULL AND binding_receipt IS NOT NULL AND verified_full_id ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text AND btrim(verified_version_id) <> ''::text AND jsonb_typeof(binding_receipt) = 'object'::text))
+);
+
+-- Durable exact-replay ledger for short-lived Account Authority controller
+-- lifecycle gate attestations. A reserved row without canonical_outcome is an
+-- indeterminate issuance fence and is never re-signed on retry.
+CREATE TABLE public.controller_gate_attestation_issuances (
+    request_id uuid PRIMARY KEY,
+    canonical_intent_digest text NOT NULL,
+    principal_id text NOT NULL,
+    agent_authority_service_id text NOT NULL,
+    canonical_outcome bytea,
+    outcome_digest text,
+    attestation_expires_at timestamp with time zone,
+    retained_until timestamp with time zone NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    committed_at timestamp with time zone,
+    CONSTRAINT controller_gate_intent_digest_valid CHECK (canonical_intent_digest ~ '^sha256:[0-9a-f]{64}$'),
+    CONSTRAINT controller_gate_outcome_shape CHECK ((canonical_outcome IS NULL AND outcome_digest IS NULL AND attestation_expires_at IS NULL AND committed_at IS NULL) OR (canonical_outcome IS NOT NULL AND outcome_digest ~ '^sha256:[0-9a-f]{64}$' AND attestation_expires_at IS NOT NULL AND committed_at IS NOT NULL)),
+    CONSTRAINT controller_gate_retention_valid CHECK (retained_until > created_at)
 );
 
 CREATE TABLE public.account_handoff_creation_attempts (
@@ -658,7 +685,7 @@ CREATE TABLE public.account_handoff_grants (
     CONSTRAINT account_handoff_grants_request_digest_valid CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT account_handoff_grants_audience_nonempty CHECK ((btrim(audience) <> ''::text)),
     CONSTRAINT account_handoff_grants_cnf_jkt_valid CHECK ((cnf_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
-    CONSTRAINT account_handoff_grants_allowed_operations_closed CHECK ((allowed_operations = ARRAY['ak.gate.account.command.issue_identity_binding_challenge'::text, 'ak.gate.account.command.issue_identity_abandonment_challenge'::text, 'ak.gate.account.command.abandon_identity_creation'::text, 'ak.gate.account.command.register'::text, 'ak.gate.account.command.issue_session_grant'::text, 'ak.gate.account.command.issue_recovery_completion_grant'::text])),
+    CONSTRAINT account_handoff_grants_allowed_operations_closed CHECK ((allowed_operations = ARRAY['ak.gate.account.command.issue_did_binding_challenge'::text, 'ak.gate.account.command.issue_identity_binding_challenge'::text, 'ak.gate.account.command.issue_identity_abandonment_challenge'::text, 'ak.gate.account.command.abandon_identity_creation'::text, 'ak.gate.account.command.register'::text, 'ak.gate.account.command.issue_session_grant'::text, 'ak.gate.account.command.issue_recovery_completion_grant'::text])),
     CONSTRAINT account_handoff_grants_token_nonempty CHECK ((length(account_handoff_grant) >= 32)),
     CONSTRAINT account_handoff_grants_expiry_valid CHECK ((expires_at > issued_at))
 );
@@ -729,6 +756,7 @@ CREATE TABLE public.identity_binding_challenges (
     purpose text NOT NULL,
     account_subject text NOT NULL,
     principal_id text NOT NULL,
+    full_id text NOT NULL,
     operation_digest text NOT NULL,
     did_version_id text NOT NULL,
     log_head_digest text NOT NULL,
@@ -753,6 +781,8 @@ CREATE TABLE public.identity_binding_challenges (
     CONSTRAINT identity_binding_challenges_purpose_valid CHECK ((purpose = 'account_binding_and_pcr_genesis'::text)),
     CONSTRAINT identity_binding_challenges_operation_digest_valid CHECK ((operation_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT identity_binding_challenges_account_subject_valid CHECK ((account_subject ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_binding_challenges_principal_core_valid CHECK ((principal_id ~ '^ak:did_core:[a-z0-9]+:[^[:space:]/?#]+$'::text)),
+    CONSTRAINT identity_binding_challenges_full_id_bare CHECK ((full_id ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text)),
     CONSTRAINT identity_binding_challenges_did_version_nonempty CHECK ((btrim(did_version_id) <> ''::text)),
     CONSTRAINT identity_binding_challenges_log_head_digest_valid CHECK ((log_head_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT identity_binding_challenges_control_key_digest_valid CHECK ((control_key_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
@@ -764,6 +794,43 @@ CREATE TABLE public.identity_binding_challenges (
     CONSTRAINT identity_binding_challenges_lease_fence_positive CHECK ((lease_fence >= 1)),
     CONSTRAINT identity_binding_challenges_dpop_jkt_valid CHECK ((dpop_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
     CONSTRAINT identity_binding_challenges_expiry_valid CHECK ((expires_at > issued_at AND expires_at <= (issued_at + '00:05:00'::interval)))
+);
+
+CREATE TABLE public.did_binding_challenges (
+    request_id uuid PRIMARY KEY,
+    request_digest text NOT NULL,
+    issuing_handoff_grant_id uuid NOT NULL,
+    service_account_id uuid NOT NULL,
+    account_subject text NOT NULL,
+    principal_id text NOT NULL,
+    full_id text NOT NULL,
+    did_version_id text NOT NULL,
+    log_head_digest text NOT NULL,
+    control_key_digest text NOT NULL,
+    witness_evidence text,
+    challenge_id text NOT NULL UNIQUE,
+    challenge text NOT NULL,
+    dpop_jkt text NOT NULL,
+    audience text NOT NULL,
+    origin text NOT NULL,
+    trust_domain text NOT NULL,
+    issued_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    consumed_at timestamp with time zone,
+    register_request_digest text,
+    register_outcome jsonb,
+    CONSTRAINT did_binding_challenges_request_digest_valid CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT did_binding_challenges_account_subject_valid CHECK ((account_subject ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT did_binding_challenges_principal_core_valid CHECK ((principal_id ~ '^ak:did_core:[a-z0-9]+:[^[:space:]/?#]+$'::text)),
+    CONSTRAINT did_binding_challenges_full_id_bare CHECK ((full_id ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text)),
+    CONSTRAINT did_binding_challenges_version_nonempty CHECK ((btrim(did_version_id) <> ''::text)),
+    CONSTRAINT did_binding_challenges_log_head_valid CHECK ((log_head_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT did_binding_challenges_control_key_valid CHECK ((control_key_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT did_binding_challenges_challenge_id_valid CHECK ((challenge_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
+    CONSTRAINT did_binding_challenges_challenge_nonempty CHECK ((length(challenge) >= 22)),
+    CONSTRAINT did_binding_challenges_dpop_jkt_valid CHECK ((dpop_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
+    CONSTRAINT did_binding_challenges_expiry_valid CHECK ((expires_at > issued_at AND expires_at <= (issued_at + '00:05:00'::interval))),
+    CONSTRAINT did_binding_challenges_register_complete CHECK (((consumed_at IS NULL AND register_request_digest IS NULL AND register_outcome IS NULL) OR (consumed_at IS NOT NULL AND register_request_digest ~ '^sha256:[0-9a-f]{64}$'::text AND jsonb_typeof(register_outcome) = 'object'::text)))
 );
 
 -- Durable explicit-abandonment transcript. The challenge retains both the

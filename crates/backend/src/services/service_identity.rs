@@ -485,6 +485,7 @@ fn stored_from_outcome(
     let stored = StoredServiceIdentity {
         identity: LocalServiceIdentity {
             service_id: outcome.service_id,
+            full_id: outcome.full_id,
             registration_key: registration_key.clone(),
             provider: Some(provider.reference.clone()),
             signing_key_refs: vec![signing_key_ref.clone()],
@@ -642,6 +643,7 @@ mod tests {
         IdentityServiceConfig {
             name: name.to_owned(),
             endpoint: endpoint.parse().unwrap(),
+            service_id: None,
             registration_bearer: format!("{name}-bearer"),
         }
     }

@@ -316,6 +316,7 @@ mod tests {
         PrincipalServerConfig {
             name: "soland".to_owned(),
             endpoint: Url::parse(endpoint).unwrap(),
+            service_id: None,
             session_grant_introspection_bearer: None,
             embedded_webvh_registration_bearer: None,
         }

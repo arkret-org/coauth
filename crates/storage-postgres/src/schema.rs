@@ -1053,6 +1053,12 @@ diesel::table! {
         principal_did_owner_id -> Uuid,
         user_id -> Uuid,
         audience -> Text,
+        verified_full_id -> Nullable<Text>,
+        verified_version_id -> Nullable<Text>,
+        binding_receipt -> Nullable<Jsonb>,
+        accepted_service_id -> Nullable<Text>,
+        binding_version -> Nullable<Int8>,
+        binding_frontier_digest -> Nullable<Text>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
     }

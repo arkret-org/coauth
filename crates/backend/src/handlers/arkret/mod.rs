@@ -1,5 +1,6 @@
 mod account_handoff;
 mod account_register;
+mod controller_gate;
 mod did_document;
 mod handle_claim;
 mod identity;
@@ -10,6 +11,7 @@ mod test_chaos;
 
 pub use account_handoff::*;
 pub use account_register::*;
+pub use controller_gate::*;
 pub use did_document::*;
 pub use handle_claim::*;
 pub use identity::*;
@@ -580,16 +582,20 @@ fn map_did_resolve_error(
     }
 }
 
-/// The deployment's Provider-resolved runtime service DID.
-pub(crate) fn service_id_for(arkret_config: &ArkretConfig) -> arkret_identifiers::Did {
+/// The deployment's Provider-resolved stable service core id.
+pub(crate) fn service_id_for(arkret_config: &ArkretConfig) -> arkret_identifiers::ServiceId {
     arkret_config
         .runtime_service_identity
         .service_id()
         .expect("identity readiness gate prevents handlers from running without a service DID")
 }
 
-pub(crate) fn issuer_did_for(arkret_config: &ArkretConfig) -> arkret_identifiers::Did {
-    service_id_for(arkret_config)
+/// The deployment's current complete service DID used for proof verification methods.
+pub(crate) fn issuer_did_for(arkret_config: &ArkretConfig) -> arkret_identifiers::FullId {
+    arkret_config
+        .runtime_service_identity
+        .full_id()
+        .expect("identity readiness gate prevents handlers from running without a service DID")
 }
 
 #[must_use]
@@ -1052,6 +1058,12 @@ pub async fn debug_bind_principal(
                         audience: audience.to_string(),
                         principal_id: principal_id.to_string(),
                         key_log_head,
+                        verified_full_id: None,
+                        verified_version_id: None,
+                        binding_receipt: None,
+                        accepted_service_id: None,
+                        binding_version: None,
+                        binding_frontier_digest: None,
                     },
                 )
                 .await?;

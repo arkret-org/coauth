@@ -51,7 +51,7 @@ arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
 arkret-wire = {workspace = true}
 arkret-http-client = {workspace = true}
 arkret-egress-policy = {workspace = true}
-arkret-signatures = {workspace = true,features = ["signer"]}
+arkret-signatures = {workspace = true,features = ["signer", "service-identity"]}
 arkret-state = {workspace = true}
 cookie = {workspace = true}
 deadpool = {workspace = true}

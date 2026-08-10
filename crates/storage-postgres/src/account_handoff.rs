@@ -5,13 +5,16 @@ use chrono::{DateTime, Duration, Utc};
 use coauth_data::account_handoff::{
     AccountHandoffCreation, AccountHandoffCreationAttempt, AccountHandoffCreationAttemptCommit,
     AccountHandoffCreationAttemptReserve, AccountHandoffCreationAttemptState, AccountHandoffGrant,
-    AccountHandoffGrantInput, IdentityAbandonmentChallengeInput, IdentityAbandonmentChallengeIssue,
-    IdentityAbandonmentChallengeRecord, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
-    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityBindingChallengeRecord,
-    IdentityCreationBindingCommit, IdentityCreationLeaseRecord, IdentityCreationLeaseRiskDecision,
-    IdentityCreationRegisterLedger, IdentityCreationRegisterReplay,
-    IdentityCreationRegistrationContext, IdentityCreationSagaState,
-    NewAccountHandoffCreationAttempt,
+    AccountHandoffGrantInput, ControllerGateAttestationCommit, ControllerGateAttestationIssuance,
+    ControllerGateAttestationReserve, DidBindingChallengeInput, DidBindingChallengeIssue,
+    DidBindingChallengeRecord, IdentityAbandonmentChallengeInput,
+    IdentityAbandonmentChallengeIssue, IdentityAbandonmentChallengeRecord,
+    IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
+    IdentityBindingChallengeIssue, IdentityBindingChallengeRecord, IdentityCreationBindingCommit,
+    IdentityCreationLeaseRecord, IdentityCreationLeaseRiskDecision, IdentityCreationRegisterLedger,
+    IdentityCreationRegisterReplay, IdentityCreationRegistrationContext, IdentityCreationSagaState,
+    NewAccountHandoffCreationAttempt, NewControllerGateAttestationIssuance,
+    PublishedDidRegisterCommit, PublishedDidRegisterReplay,
 };
 use coauth_data::{AccountHandoffRepository, Ulid};
 use diesel::OptionalExtension as _;
@@ -25,7 +28,8 @@ use uuid::Uuid;
 
 use crate::DatabaseError;
 
-const ALLOWED_OPERATIONS: [&str; 6] = [
+const ALLOWED_OPERATIONS: [&str; 7] = [
+    "ak.gate.account.command.issue_did_binding_challenge",
     "ak.gate.account.command.issue_identity_binding_challenge",
     "ak.gate.account.command.issue_identity_abandonment_challenge",
     "ak.gate.account.command.abandon_identity_creation",
@@ -55,6 +59,27 @@ impl<'c> PgAccountHandoffRepository<'c> {
     #[must_use]
     pub fn new(conn: &'c mut AsyncPgConnection) -> Self {
         Self { conn }
+    }
+
+    async fn controller_gate_issuance(
+        &mut self,
+        request_id: Uuid,
+        for_update: bool,
+    ) -> Result<Option<ControllerGateAttestationIssuance>, DatabaseError> {
+        let suffix = if for_update { " FOR UPDATE" } else { "" };
+        let query = format!(
+            "SELECT request_id, canonical_intent_digest, principal_id, \
+             agent_authority_service_id, canonical_outcome, outcome_digest, \
+             attestation_expires_at, retained_until, created_at, committed_at \
+             FROM controller_gate_attestation_issuances WHERE request_id = $1{suffix}"
+        );
+        diesel::sql_query(query)
+            .bind::<SqlUuid, _>(request_id)
+            .get_result::<ControllerGateAttestationIssuanceRow>(self.conn)
+            .await
+            .optional()?
+            .map(controller_gate_issuance_from_row)
+            .transpose()
     }
 
     async fn creation_attempt(
@@ -123,9 +148,10 @@ impl<'c> PgAccountHandoffRepository<'c> {
         &mut self,
         service_account_id: Uuid,
         audience: &str,
-    ) -> Result<Option<arkret_identifiers::Did>, DatabaseError> {
+    ) -> Result<Option<(arkret_identifiers::CoreId, arkret_identifiers::FullId)>, DatabaseError>
+    {
         let row = diesel::sql_query(
-            "SELECT owners.principal_id \
+            "SELECT owners.principal_id, owners.verified_full_id \
              FROM principal_did_bindings bindings \
              JOIN principal_did_owners owners ON owners.id = bindings.principal_did_owner_id \
              WHERE bindings.user_id = $1 AND bindings.audience = $2",
@@ -135,9 +161,18 @@ impl<'c> PgAccountHandoffRepository<'c> {
         .get_result::<PrincipalRow>(self.conn)
         .await
         .optional()?;
-        row.map(|row| arkret_identifiers::Did::new(row.principal_id))
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())
+        row.map(|row| {
+            Ok((
+                arkret_identifiers::CoreId::new(row.principal_id)
+                    .map_err(|_| DatabaseError::invalid_operation())?,
+                arkret_identifiers::FullId::new(
+                    row.verified_full_id
+                        .ok_or_else(DatabaseError::invalid_operation)?,
+                )
+                .map_err(|_| DatabaseError::invalid_operation())?,
+            ))
+        })
+        .transpose()
     }
 
     async fn challenge_by_request(
@@ -146,7 +181,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
     ) -> Result<Option<IdentityBindingChallengeRecord>, DatabaseError> {
         let row = diesel::sql_query(
             "SELECT request_id, request_digest, service_account_id, challenge_id, challenge, \
-             purpose, account_subject, principal_id, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
+             purpose, account_subject, principal_id, full_id, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
              founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience, \
              origin, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
              FROM identity_binding_challenges WHERE request_id = $1",
@@ -166,7 +201,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let suffix = if for_update { " FOR UPDATE" } else { "" };
         let query = format!(
             "SELECT request_id, request_digest, service_account_id, challenge_id, challenge, \
-             purpose, account_subject, principal_id, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
+             purpose, account_subject, principal_id, full_id, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
              founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience, \
              origin, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
              FROM identity_binding_challenges WHERE challenge_id = $1{suffix}"
@@ -177,6 +212,47 @@ impl<'c> PgAccountHandoffRepository<'c> {
             .await
             .optional()?;
         row.map(challenge_from_row).transpose()
+    }
+
+    async fn did_binding_challenge_by_request(
+        &mut self,
+        request_id: Uuid,
+    ) -> Result<Option<DidBindingChallengeRecord>, DatabaseError> {
+        diesel::sql_query(
+            "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
+             account_subject, principal_id, full_id, did_version_id, log_head_digest, \
+             control_key_digest, witness_evidence, challenge_id, challenge, dpop_jkt, audience, \
+             origin, trust_domain, issued_at, expires_at, consumed_at, register_request_digest, \
+             register_outcome FROM did_binding_challenges WHERE request_id = $1",
+        )
+        .bind::<SqlUuid, _>(request_id)
+        .get_result::<DidBindingChallengeRow>(self.conn)
+        .await
+        .optional()?
+        .map(did_binding_challenge_from_row)
+        .transpose()
+    }
+
+    async fn did_binding_challenge_by_id(
+        &mut self,
+        challenge_id: &str,
+        for_update: bool,
+    ) -> Result<Option<DidBindingChallengeRecord>, DatabaseError> {
+        let suffix = if for_update { " FOR UPDATE" } else { "" };
+        let query = format!(
+            "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
+             account_subject, principal_id, full_id, did_version_id, log_head_digest, \
+             control_key_digest, witness_evidence, challenge_id, challenge, dpop_jkt, audience, \
+             origin, trust_domain, issued_at, expires_at, consumed_at, register_request_digest, \
+             register_outcome FROM did_binding_challenges WHERE challenge_id = $1{suffix}"
+        );
+        diesel::sql_query(query)
+            .bind::<Text, _>(challenge_id)
+            .get_result::<DidBindingChallengeRow>(self.conn)
+            .await
+            .optional()?
+            .map(did_binding_challenge_from_row)
+            .transpose()
     }
 
     async fn abandonment_challenge_by_request(
@@ -500,6 +576,8 @@ struct RateWindowRow {
 struct PrincipalRow {
     #[diesel(sql_type = Text)]
     principal_id: String,
+    #[diesel(sql_type = Nullable<Text>)]
+    verified_full_id: Option<String>,
 }
 
 #[derive(QueryableByName)]
@@ -568,6 +646,56 @@ struct HandoffCreationAttemptRow {
     authorized_at: Option<DateTime<Utc>>,
     #[diesel(sql_type = Nullable<Timestamptz>)]
     committed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(QueryableByName)]
+struct ControllerGateAttestationIssuanceRow {
+    #[diesel(sql_type = SqlUuid)]
+    request_id: Uuid,
+    #[diesel(sql_type = Text)]
+    canonical_intent_digest: String,
+    #[diesel(sql_type = Text)]
+    principal_id: String,
+    #[diesel(sql_type = Text)]
+    agent_authority_service_id: String,
+    #[diesel(sql_type = Nullable<Bytea>)]
+    canonical_outcome: Option<Vec<u8>>,
+    #[diesel(sql_type = Nullable<Text>)]
+    outcome_digest: Option<String>,
+    #[diesel(sql_type = Nullable<Timestamptz>)]
+    attestation_expires_at: Option<DateTime<Utc>>,
+    #[diesel(sql_type = Timestamptz)]
+    retained_until: DateTime<Utc>,
+    #[diesel(sql_type = Timestamptz)]
+    created_at: DateTime<Utc>,
+    #[diesel(sql_type = Nullable<Timestamptz>)]
+    committed_at: Option<DateTime<Utc>>,
+}
+
+fn controller_gate_issuance_from_row(
+    row: ControllerGateAttestationIssuanceRow,
+) -> Result<ControllerGateAttestationIssuance, DatabaseError> {
+    Ok(ControllerGateAttestationIssuance {
+        request_id: arkret_identifiers::RequestId::from_uuid(row.request_id),
+        canonical_intent_digest: arkret_identifiers::Hash::new(row.canonical_intent_digest)
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        principal_id: arkret_identifiers::PrincipalId::new(row.principal_id)
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        agent_authority_service_id: arkret_identifiers::ServiceId::new(
+            row.agent_authority_service_id,
+        )
+        .map_err(|_| DatabaseError::invalid_operation())?,
+        canonical_outcome: row.canonical_outcome,
+        outcome_digest: row
+            .outcome_digest
+            .map(arkret_identifiers::Hash::new)
+            .transpose()
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        attestation_expires_at: row.attestation_expires_at,
+        retained_until: row.retained_until,
+        created_at: row.created_at,
+        committed_at: row.committed_at,
+    })
 }
 
 #[derive(QueryableByName)]
@@ -699,14 +827,17 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
     ) {
         (None, None, None) => None,
         (Some(principal_id), Some(operation_digest), Some(did_operation)) => {
-            Some(arkret_models_identity::ReservedIdentityCreation {
-                principal_id: arkret_identifiers::Did::new(principal_id)
-                    .map_err(|_| DatabaseError::invalid_operation())?,
-                operation_digest: arkret_identifiers::Hash::new(operation_digest)
-                    .map_err(|_| DatabaseError::invalid_operation())?,
-                did_operation: serde_json::from_value(did_operation)
-                    .map_err(|_| DatabaseError::invalid_operation())?,
-            })
+            let did_operation = serde_json::from_value(did_operation)
+                .map_err(|_| DatabaseError::invalid_operation())?;
+            let reserved =
+                arkret_models_identity::ReservedIdentityCreation::from_operation(did_operation)
+                    .map_err(|_| DatabaseError::invalid_operation())?;
+            if reserved.principal_id.as_str() != principal_id
+                || reserved.operation_digest.as_str() != operation_digest
+            {
+                return Err(DatabaseError::invalid_operation());
+            }
+            Some(reserved)
         }
         _ => return Err(DatabaseError::invalid_operation()),
     };
@@ -789,6 +920,8 @@ struct ChallengeRow {
     #[diesel(sql_type = Text)]
     principal_id: String,
     #[diesel(sql_type = Text)]
+    full_id: String,
+    #[diesel(sql_type = Text)]
     operation_digest: String,
     #[diesel(sql_type = Text)]
     did_version_id: String,
@@ -824,6 +957,106 @@ struct ChallengeRow {
     consumed_at: Option<DateTime<Utc>>,
     #[diesel(sql_type = Nullable<Timestamptz>)]
     replaced_at: Option<DateTime<Utc>>,
+}
+
+#[derive(QueryableByName)]
+struct DidBindingChallengeRow {
+    #[diesel(sql_type = SqlUuid)]
+    request_id: Uuid,
+    #[diesel(sql_type = Text)]
+    request_digest: String,
+    #[diesel(sql_type = SqlUuid)]
+    issuing_handoff_grant_id: Uuid,
+    #[diesel(sql_type = SqlUuid)]
+    service_account_id: Uuid,
+    #[diesel(sql_type = Text)]
+    account_subject: String,
+    #[diesel(sql_type = Text)]
+    principal_id: String,
+    #[diesel(sql_type = Text)]
+    full_id: String,
+    #[diesel(sql_type = Text)]
+    did_version_id: String,
+    #[diesel(sql_type = Text)]
+    log_head_digest: String,
+    #[diesel(sql_type = Text)]
+    control_key_digest: String,
+    #[diesel(sql_type = Nullable<Text>)]
+    witness_evidence: Option<String>,
+    #[diesel(sql_type = Text)]
+    challenge_id: String,
+    #[diesel(sql_type = Text)]
+    challenge: String,
+    #[diesel(sql_type = Text)]
+    dpop_jkt: String,
+    #[diesel(sql_type = Text)]
+    audience: String,
+    #[diesel(sql_type = Text)]
+    origin: String,
+    #[diesel(sql_type = Text)]
+    trust_domain: String,
+    #[diesel(sql_type = Timestamptz)]
+    issued_at: DateTime<Utc>,
+    #[diesel(sql_type = Timestamptz)]
+    expires_at: DateTime<Utc>,
+    #[diesel(sql_type = Nullable<Timestamptz>)]
+    consumed_at: Option<DateTime<Utc>>,
+    #[diesel(sql_type = Nullable<Text>)]
+    register_request_digest: Option<String>,
+    #[diesel(sql_type = Nullable<Jsonb>)]
+    register_outcome: Option<serde_json::Value>,
+}
+
+fn did_binding_challenge_from_row(
+    row: DidBindingChallengeRow,
+) -> Result<DidBindingChallengeRecord, DatabaseError> {
+    Ok(DidBindingChallengeRecord {
+        input: DidBindingChallengeInput {
+            request_id: arkret_identifiers::RequestId::new(format!(
+                "ak:request:{}",
+                row.request_id
+            ))
+            .map_err(|_| DatabaseError::invalid_operation())?,
+            request_digest: arkret_identifiers::Hash::new(row.request_digest)
+                .map_err(|_| DatabaseError::invalid_operation())?,
+            issuing_handoff_grant_id: Ulid::from(row.issuing_handoff_grant_id),
+            service_account_id: Ulid::from(row.service_account_id),
+            account_subject: arkret_identifiers::Hash::new(row.account_subject)
+                .map_err(|_| DatabaseError::invalid_operation())?,
+            principal_id: arkret_identifiers::CoreId::new(row.principal_id)
+                .map_err(|_| DatabaseError::invalid_operation())?,
+            full_id: arkret_identifiers::FullId::new(row.full_id)
+                .map_err(|_| DatabaseError::invalid_operation())?,
+            did_version_id: row.did_version_id,
+            log_head_digest: arkret_identifiers::Hash::new(row.log_head_digest)
+                .map_err(|_| DatabaseError::invalid_operation())?,
+            control_key_digest: arkret_identifiers::Hash::new(row.control_key_digest)
+                .map_err(|_| DatabaseError::invalid_operation())?,
+            witness_evidence: row.witness_evidence,
+            challenge_id: row.challenge_id,
+            challenge: row.challenge,
+            dpop_jkt: row.dpop_jkt,
+            audience: arkret_identifiers::Did::new(row.audience)
+                .map_err(|_| DatabaseError::invalid_operation())?,
+            origin: row.origin,
+            trust_domain: arkret_identifiers::TypedTrustDomainId::new(row.trust_domain)
+                .map_err(|_| DatabaseError::invalid_operation())?,
+            issued_at: row.issued_at,
+            expires_at: row.expires_at,
+        },
+        consumed_at: row.consumed_at,
+        register_request_digest: row
+            .register_request_digest
+            .map(arkret_identifiers::Hash::new)
+            .transpose()
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        register_outcome: row
+            .register_outcome
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|_| DatabaseError::invalid_operation())?
+            .map(Box::new),
+    })
 }
 
 #[derive(QueryableByName)]
@@ -934,7 +1167,9 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
         purpose: arkret_models_identity::IdentityBindingPurpose::AccountBindingAndPcrGenesis,
         account_subject: arkret_identifiers::Hash::new(row.account_subject)
             .map_err(|_| DatabaseError::invalid_operation())?,
-        principal_id: arkret_identifiers::Did::new(row.principal_id)
+        principal_id: arkret_identifiers::CoreId::new(row.principal_id)
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        full_id: arkret_identifiers::FullId::new(row.full_id)
             .map_err(|_| DatabaseError::invalid_operation())?,
         operation_digest: arkret_identifiers::Hash::new(row.operation_digest)
             .map_err(|_| DatabaseError::invalid_operation())?,
@@ -984,6 +1219,7 @@ fn challenge_matches_context(
         && challenge.purpose == expected.purpose
         && challenge.account_subject == expected.account_subject
         && challenge.principal_id == expected.principal_id
+        && challenge.full_id == expected.full_id
         && challenge.operation_digest == expected.operation_digest
         && challenge.did_version_id == expected.did_version_id
         && challenge.log_head_digest == expected.log_head_digest
@@ -1009,6 +1245,105 @@ fn retry_after_ms(expires_at: DateTime<Utc>, now: DateTime<Utc>) -> u64 {
 #[async_trait]
 impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
     type Error = DatabaseError;
+
+    async fn reserve_controller_gate_attestation(
+        &mut self,
+        input: NewControllerGateAttestationIssuance,
+    ) -> Result<ControllerGateAttestationReserve, Self::Error> {
+        if input.retained_until <= input.now {
+            return Err(DatabaseError::invalid_operation());
+        }
+        let inserted = diesel::sql_query(
+            "INSERT INTO controller_gate_attestation_issuances \
+             (request_id, canonical_intent_digest, principal_id, \
+              agent_authority_service_id, retained_until, created_at) \
+             VALUES ($1, $2, $3, $4, $5, $6) \
+             ON CONFLICT (request_id) DO NOTHING",
+        )
+        .bind::<SqlUuid, _>(input.request_id.uuid())
+        .bind::<Text, _>(input.canonical_intent_digest.as_str())
+        .bind::<Text, _>(input.principal_id.as_str())
+        .bind::<Text, _>(input.agent_authority_service_id.as_str())
+        .bind::<Timestamptz, _>(input.retained_until)
+        .bind::<Timestamptz, _>(input.now)
+        .execute(self.conn)
+        .await?
+            == 1;
+        let issuance = self
+            .controller_gate_issuance(input.request_id.uuid(), true)
+            .await?
+            .ok_or_else(DatabaseError::invalid_operation)?;
+        if issuance.canonical_intent_digest != input.canonical_intent_digest
+            || issuance.principal_id != input.principal_id
+            || issuance.agent_authority_service_id != input.agent_authority_service_id
+        {
+            return Ok(ControllerGateAttestationReserve::Conflict(issuance));
+        }
+        if issuance.retained_until <= input.now {
+            return Ok(ControllerGateAttestationReserve::Indeterminate(issuance));
+        }
+        if inserted {
+            return Ok(ControllerGateAttestationReserve::Reserved(issuance));
+        }
+        if issuance.canonical_outcome.is_some() {
+            Ok(ControllerGateAttestationReserve::Replay(issuance))
+        } else {
+            Ok(ControllerGateAttestationReserve::Indeterminate(issuance))
+        }
+    }
+
+    async fn commit_controller_gate_attestation(
+        &mut self,
+        request_id: &arkret_identifiers::RequestId,
+        canonical_intent_digest: &arkret_identifiers::Hash,
+        canonical_outcome: &[u8],
+        outcome_digest: &arkret_identifiers::Hash,
+        attestation_expires_at: DateTime<Utc>,
+        now: DateTime<Utc>,
+    ) -> Result<ControllerGateAttestationCommit, Self::Error> {
+        if !canonical_json_digest_matches(canonical_outcome, outcome_digest)
+            || attestation_expires_at <= now
+            || attestation_expires_at - now > Duration::minutes(5)
+        {
+            return Err(DatabaseError::invalid_operation());
+        }
+        let issuance = self
+            .controller_gate_issuance(request_id.uuid(), true)
+            .await?
+            .ok_or_else(DatabaseError::invalid_operation)?;
+        if issuance.canonical_intent_digest != *canonical_intent_digest {
+            return Ok(ControllerGateAttestationCommit::Conflict(issuance));
+        }
+        if let Some(existing) = issuance.canonical_outcome.as_ref() {
+            return Ok(if existing == canonical_outcome {
+                ControllerGateAttestationCommit::Replay(issuance)
+            } else {
+                ControllerGateAttestationCommit::Conflict(issuance)
+            });
+        }
+        let updated = diesel::sql_query(
+            "UPDATE controller_gate_attestation_issuances SET canonical_outcome = $3, \
+             outcome_digest = $4, attestation_expires_at = $5, committed_at = $6 \
+             WHERE request_id = $1 AND canonical_intent_digest = $2 \
+               AND canonical_outcome IS NULL",
+        )
+        .bind::<SqlUuid, _>(request_id.uuid())
+        .bind::<Text, _>(canonical_intent_digest.as_str())
+        .bind::<Bytea, _>(canonical_outcome)
+        .bind::<Text, _>(outcome_digest.as_str())
+        .bind::<Timestamptz, _>(attestation_expires_at)
+        .bind::<Timestamptz, _>(now)
+        .execute(self.conn)
+        .await?;
+        if updated != 1 {
+            return Ok(ControllerGateAttestationCommit::Indeterminate(issuance));
+        }
+        let committed = self
+            .controller_gate_issuance(request_id.uuid(), true)
+            .await?
+            .ok_or_else(DatabaseError::invalid_operation)?;
+        Ok(ControllerGateAttestationCommit::Committed(committed))
+    }
 
     async fn reserve_creation_attempt(
         &mut self,
@@ -1259,13 +1594,14 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(AccountHandoffCreation::ExpiredReplay);
         }
 
-        if let Some(principal_id) = self
+        if let Some((principal_id, full_id)) = self
             .bound_principal(Uuid::from(input.service_account_id), &input.audience)
             .await?
         {
             return Ok(AccountHandoffCreation::Bound {
                 grant,
                 principal_id,
+                full_id,
             });
         }
 
@@ -1288,14 +1624,14 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
                 lease.state,
                 IdentityCreationSagaState::AccountBound | IdentityCreationSagaState::Completed
             ) {
-                let principal_id = lease
+                let reserved = lease
                     .reserved_identity
                     .as_ref()
-                    .map(|reserved| reserved.principal_id.clone())
                     .ok_or_else(DatabaseError::invalid_operation)?;
                 return Ok(AccountHandoffCreation::Bound {
                     grant,
-                    principal_id,
+                    principal_id: reserved.principal_id.clone(),
+                    full_id: reserved.full_id.clone(),
                 });
             }
             if lease.expires_at > input.issued_at && lease.holder_jkt != input.cnf_jkt {
@@ -1408,13 +1744,14 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         if grant.expires_at <= now || grant.revoked_at.is_some() || grant.consumed_at.is_some() {
             return Ok(AccountHandoffCreation::ExpiredReplay);
         }
-        if let Some(principal_id) = self
+        if let Some((principal_id, full_id)) = self
             .bound_principal(Uuid::from(grant.service_account_id), &grant.audience)
             .await?
         {
             return Ok(AccountHandoffCreation::Bound {
                 grant: grant.clone(),
                 principal_id,
+                full_id,
             });
         }
         let lease = self
@@ -1427,14 +1764,14 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             lease.state,
             IdentityCreationSagaState::AccountBound | IdentityCreationSagaState::Completed
         ) {
-            let principal_id = lease
+            let reserved = lease
                 .reserved_identity
                 .as_ref()
-                .map(|reserved| reserved.principal_id.clone())
                 .ok_or_else(DatabaseError::invalid_operation)?;
             return Ok(AccountHandoffCreation::Bound {
                 grant: grant.clone(),
-                principal_id,
+                principal_id: reserved.principal_id.clone(),
+                full_id: reserved.full_id.clone(),
             });
         }
         if lease.expires_at <= now {
@@ -1540,7 +1877,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             "SELECT EXISTS(SELECT 1 FROM identity_orphan_anchor_tombstones \
              WHERE principal_id = $1) AS present",
         )
-        .bind::<Text, _>(reserved.principal_id.as_str())
+        .bind::<Text, _>(input.principal_id.as_str())
         .get_result::<ExistsRow>(self.conn)
         .await?
         .present;
@@ -1608,10 +1945,10 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         diesel::sql_query(
             "INSERT INTO identity_binding_challenges \
              (request_id, request_digest, service_account_id, challenge_id, challenge, purpose, \
-              account_subject, principal_id, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
+              account_subject, principal_id, full_id, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
               founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience, origin, \
               trust_domain, issued_at, expires_at) \
-             VALUES ($1, $2, $3, $4, $5, 'account_binding_and_pcr_genesis', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23) \
+             VALUES ($1, $2, $3, $4, $5, 'account_binding_and_pcr_genesis', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24) \
              ON CONFLICT (request_id) DO NOTHING",
         )
         .bind::<SqlUuid, _>(input.request_id.uuid())
@@ -1621,6 +1958,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(&input.challenge)
         .bind::<Text, _>(input.account_subject.as_str())
         .bind::<Text, _>(reserved.principal_id.as_str())
+        .bind::<Text, _>(input.full_id.as_str())
         .bind::<Text, _>(input.operation_digest.as_str())
         .bind::<Text, _>(&input.did_version_id)
         .bind::<Text, _>(input.log_head_digest.as_str())
@@ -1649,6 +1987,146 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(IdentityBindingChallengeIssue::DuplicateConflict);
         }
         Ok(IdentityBindingChallengeIssue::Issued(challenge))
+    }
+
+    async fn issue_did_binding_challenge(
+        &mut self,
+        input: DidBindingChallengeInput,
+    ) -> Result<DidBindingChallengeIssue, Self::Error> {
+        let input = DidBindingChallengeInput {
+            issued_at: arkret_canonical::normalize_timestamp_canonical(input.issued_at),
+            expires_at: arkret_canonical::normalize_timestamp_canonical(input.expires_at),
+            ..input
+        };
+        if let Some(existing) = self
+            .did_binding_challenge_by_request(input.request_id.uuid())
+            .await?
+        {
+            if existing.input.request_digest != input.request_digest
+                || existing.input.issuing_handoff_grant_id != input.issuing_handoff_grant_id
+            {
+                return Ok(DidBindingChallengeIssue::DuplicateConflict);
+            }
+            if existing.consumed_at.is_some() || existing.input.expires_at <= input.issued_at {
+                return Ok(DidBindingChallengeIssue::StaleRequest);
+            }
+            return Ok(DidBindingChallengeIssue::Replay(existing));
+        }
+        diesel::sql_query(
+            "INSERT INTO did_binding_challenges \
+             (request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
+              account_subject, principal_id, full_id, did_version_id, log_head_digest, \
+              control_key_digest, witness_evidence, challenge_id, challenge, dpop_jkt, audience, \
+              origin, trust_domain, issued_at, expires_at) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) \
+             ON CONFLICT (request_id) DO NOTHING",
+        )
+        .bind::<SqlUuid, _>(input.request_id.uuid())
+        .bind::<Text, _>(input.request_digest.as_str())
+        .bind::<SqlUuid, _>(Uuid::from(input.issuing_handoff_grant_id))
+        .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
+        .bind::<Text, _>(input.account_subject.as_str())
+        .bind::<Text, _>(input.principal_id.as_str())
+        .bind::<Text, _>(input.full_id.as_str())
+        .bind::<Text, _>(&input.did_version_id)
+        .bind::<Text, _>(input.log_head_digest.as_str())
+        .bind::<Text, _>(input.control_key_digest.as_str())
+        .bind::<Nullable<Text>, _>(input.witness_evidence.as_deref())
+        .bind::<Text, _>(&input.challenge_id)
+        .bind::<Text, _>(&input.challenge)
+        .bind::<Text, _>(&input.dpop_jkt)
+        .bind::<Text, _>(input.audience.as_str())
+        .bind::<Text, _>(&input.origin)
+        .bind::<Text, _>(input.trust_domain.as_str())
+        .bind::<Timestamptz, _>(input.issued_at)
+        .bind::<Timestamptz, _>(input.expires_at)
+        .execute(self.conn)
+        .await?;
+        let stored = self
+            .did_binding_challenge_by_request(input.request_id.uuid())
+            .await?
+            .ok_or_else(DatabaseError::invalid_operation)?;
+        if stored.input.request_digest != input.request_digest
+            || stored.input.issuing_handoff_grant_id != input.issuing_handoff_grant_id
+        {
+            return Ok(DidBindingChallengeIssue::DuplicateConflict);
+        }
+        Ok(DidBindingChallengeIssue::Issued(stored))
+    }
+
+    async fn published_did_registration_replay(
+        &mut self,
+        grant: &AccountHandoffGrant,
+        challenge_id: &str,
+        request_digest: &arkret_identifiers::Hash,
+        now: DateTime<Utc>,
+    ) -> Result<PublishedDidRegisterReplay, Self::Error> {
+        let Some(record) = self.did_binding_challenge_by_id(challenge_id, true).await? else {
+            return Ok(PublishedDidRegisterReplay::Stale);
+        };
+        let input = &record.input;
+        if input.issuing_handoff_grant_id != grant.id
+            || input.service_account_id != grant.service_account_id
+            || input.dpop_jkt != grant.cnf_jkt
+            || input.audience.as_str() != grant.audience
+        {
+            return Ok(PublishedDidRegisterReplay::Stale);
+        }
+        if let Some(stored_digest) = record.register_request_digest.as_ref() {
+            if stored_digest != request_digest {
+                return Ok(PublishedDidRegisterReplay::DuplicateConflict);
+            }
+            return record
+                .register_outcome
+                .map(PublishedDidRegisterReplay::Replay)
+                .ok_or_else(DatabaseError::invalid_operation);
+        }
+        if record.consumed_at.is_some() || input.expires_at <= now {
+            return Ok(PublishedDidRegisterReplay::Stale);
+        }
+        Ok(PublishedDidRegisterReplay::Pending(record))
+    }
+
+    async fn commit_published_did_registration(
+        &mut self,
+        grant: &AccountHandoffGrant,
+        challenge_id: &str,
+        request_digest: &arkret_identifiers::Hash,
+        outcome: &arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome,
+        now: DateTime<Utc>,
+    ) -> Result<PublishedDidRegisterCommit, Self::Error> {
+        match self
+            .published_did_registration_replay(grant, challenge_id, request_digest, now)
+            .await?
+        {
+            PublishedDidRegisterReplay::Replay(outcome) => {
+                return Ok(PublishedDidRegisterCommit::Replay(outcome));
+            }
+            PublishedDidRegisterReplay::DuplicateConflict => {
+                return Ok(PublishedDidRegisterCommit::DuplicateConflict);
+            }
+            PublishedDidRegisterReplay::Stale => return Ok(PublishedDidRegisterCommit::Stale),
+            PublishedDidRegisterReplay::Pending(_) => {}
+        }
+        let affected = diesel::sql_query(
+            "UPDATE did_binding_challenges SET consumed_at = $1, register_request_digest = $2, \
+             register_outcome = $3 WHERE challenge_id = $4 AND issuing_handoff_grant_id = $5 \
+             AND consumed_at IS NULL AND expires_at > $1",
+        )
+        .bind::<Timestamptz, _>(now)
+        .bind::<Text, _>(request_digest.as_str())
+        .bind::<Jsonb, _>(
+            serde_json::to_value(outcome).map_err(|_| DatabaseError::invalid_operation())?,
+        )
+        .bind::<Text, _>(challenge_id)
+        .bind::<SqlUuid, _>(Uuid::from(grant.id))
+        .execute(self.conn)
+        .await?;
+        if affected == 1 {
+            Ok(PublishedDidRegisterCommit::Committed)
+        } else {
+            Ok(PublishedDidRegisterCommit::Stale)
+        }
     }
 
     async fn issue_identity_abandonment_challenge(
@@ -1730,7 +2208,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .operation
             .get("versionId")
             .and_then(serde_json::Value::as_str);
-        if reserved.principal_id != input.principal_id
+        if reserved.full_id.as_str() != input.principal_id.as_str()
             || reserved_version != Some(input.did_version_id.as_str())
         {
             return Ok(IdentityAbandonmentChallengeIssue::CheckpointMismatch);
@@ -1879,7 +2357,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .operation
             .get("versionId")
             .and_then(serde_json::Value::as_str);
-        if reserved.principal_id != input.principal_id
+        if reserved.full_id.as_str() != input.principal_id.as_str()
             || reserved_version != Some(input.did_version_id.as_str())
         {
             return Ok(IdentityAbandonmentCommit::ChallengeMismatch);
@@ -2228,8 +2706,8 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         {
             return Ok(false);
         }
-        if binding_receipt.identity_creation_lease_id != lease.lease_id
-            || binding_receipt.lease_fence != lease.fence
+        if binding_receipt.identity_creation_lease_id.as_deref() != Some(lease.lease_id.as_str())
+            || binding_receipt.lease_fence != Some(lease.fence)
             || binding_receipt.operation_digest != context.challenge.operation_digest
             || lease.head_event_digest.as_ref() != Some(&binding_receipt.head_event_digest)
         {

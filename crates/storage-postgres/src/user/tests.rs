@@ -20,7 +20,7 @@ use rand_core::SeedableRng;
 use crate::PgRepositoryFactory;
 
 fn principal_binding_test_material(label: &str) -> (String, arkret_identifiers::Hash) {
-    let principal_id = format!("did:webvh:z{label}:example.com:users:alice");
+    let principal_id = format!("ak:did_core:webvh:z{label}");
     let key_log_head = arkret_identifiers::Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();
     (principal_id, key_log_head)
 }
@@ -34,6 +34,38 @@ fn verified_principal_binding_input(
         audience: audience.into(),
         principal_id,
         key_log_head,
+        verified_full_id: None,
+        verified_version_id: None,
+        binding_receipt: None,
+        accepted_service_id: None,
+        binding_version: None,
+        binding_frontier_digest: None,
+    }
+}
+
+fn registration_binding_input(
+    audience: impl Into<String>,
+    principal_id: String,
+    full_id: String,
+    key_log_head: arkret_identifiers::Hash,
+    version_id: &str,
+) -> VerifiedPrincipalDidBindingInput {
+    VerifiedPrincipalDidBindingInput {
+        audience: audience.into(),
+        principal_id: principal_id.clone(),
+        key_log_head: key_log_head.clone(),
+        verified_full_id: Some(arkret_identifiers::FullId::new(full_id.clone()).unwrap()),
+        verified_version_id: Some(version_id.to_owned()),
+        binding_receipt: Some(serde_json::json!({
+            "binding_state": "bound",
+            "principal_id": principal_id.clone(),
+            "full_id": full_id.clone(),
+            "did_version_id": version_id,
+            "head_event_digest": key_log_head.clone(),
+        })),
+        accepted_service_id: None,
+        binding_version: None,
+        binding_frontier_digest: None,
     }
 }
 
@@ -1471,4 +1503,87 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
             .is_none()
     );
     repo.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn principal_binding_refreshes_verified_snapshot_only_within_the_same_core() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let factory = PgRepositoryFactory::new(pool);
+    let label = uuid::Uuid::now_v7().simple().to_string();
+    let principal_id = format!("ak:did_core:webvh:z{label}");
+    let audience = "ak:did_core:web:principal-server.example";
+    let clock = MockClock::default();
+    let mut rng = ChaChaRng::seed_from_u64(75);
+
+    let mut repo = factory.create().await.unwrap();
+    let user = repo
+        .user()
+        .add(&mut rng, &clock, format!("alice-refresh-{label}"))
+        .await
+        .unwrap();
+    repo.principal_did()
+        .add_verified(
+            &mut rng,
+            &clock,
+            &user,
+            registration_binding_input(
+                audience,
+                principal_id.clone(),
+                format!("did:webvh:z{label}:old.example"),
+                arkret_identifiers::Hash::new(format!("sha256:{}", "1".repeat(64))).unwrap(),
+                "1-inception",
+            ),
+        )
+        .await
+        .unwrap();
+    repo.save().await.unwrap();
+
+    let mut repo = factory.create().await.unwrap();
+    let refreshed = repo
+        .principal_did()
+        .add_verified(
+            &mut rng,
+            &clock,
+            &user,
+            registration_binding_input(
+                audience,
+                principal_id.clone(),
+                format!("did:webvh:z{label}:new.example"),
+                arkret_identifiers::Hash::new(format!("sha256:{}", "2".repeat(64))).unwrap(),
+                "2-rotation",
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(refreshed.principal_id, principal_id);
+    assert_eq!(
+        refreshed.verified_full_id.unwrap().as_str(),
+        format!("did:webvh:z{label}:new.example")
+    );
+    assert_eq!(refreshed.verified_version_id.as_deref(), Some("2-rotation"));
+    assert_eq!(
+        refreshed
+            .binding_receipt
+            .as_ref()
+            .and_then(|value| value.get("did_version_id"))
+            .and_then(serde_json::Value::as_str),
+        Some("2-rotation")
+    );
+    repo.save().await.unwrap();
+
+    let mut repo = factory.create().await.unwrap();
+    repo.principal_did()
+        .remove_for_user_and_core(&user, &principal_id)
+        .await
+        .unwrap();
+    assert!(
+        repo.principal_did()
+            .get_for_user_and_audience(&user, audience)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    repo.save().await.unwrap();
 }

@@ -15,6 +15,23 @@ pub struct VerifiedPrincipalDidBindingInput {
     pub principal_id: String,
     /// Verified head of the principal DID's WebVH history.
     pub key_log_head: arkret_identifiers::Hash,
+    /// Complete DID that was independently resolved and verified when this
+    /// private account binding was accepted. `None` is reserved for legacy
+    /// administrative bindings; protocol registration always supplies it.
+    pub verified_full_id: Option<arkret_identifiers::FullId>,
+    /// Adapter-defined version identifier pinned at verification time.
+    pub verified_version_id: Option<String>,
+    /// Canonical Account Authority binding receipt retained for exact replay
+    /// and audit. This snapshot is private state, never PCR resolution truth.
+    pub binding_receipt: Option<serde_json::Value>,
+    /// Stable service identity core accepted by the principal binding. Gate
+    /// attestations fail closed for legacy/debug bindings without this value.
+    pub accepted_service_id: Option<arkret_identifiers::ServiceId>,
+    /// Monotonic private Account Authority binding generation.
+    pub binding_version: Option<u64>,
+    /// Digest of the complete authority-signed binding receipt that installed
+    /// this generation.
+    pub binding_frontier_digest: Option<arkret_identifiers::Hash>,
 }
 
 /// Persistence boundary for principal DIDs verified by an authoritative host.
@@ -50,8 +67,10 @@ pub trait PrincipalDidRepository: Send + Sync {
         input: VerifiedPrincipalDidBindingInput,
     ) -> Result<PrincipalDidBinding, Self::Error>;
 
-    /// Remove every audience binding for this account and principal DID.
-    async fn remove_for_user_and_did(
+    /// Remove every audience binding for this account and stable principal
+    /// core. Revocation is deliberately core-only: callers do not select a
+    /// stale `full_id` to decide which binding is revoked.
+    async fn remove_for_user_and_core(
         &mut self,
         user: &User,
         principal_id: &str,
@@ -80,7 +99,7 @@ repository_impl!(PrincipalDidRepository:
         user: &User,
         input: VerifiedPrincipalDidBindingInput,
     ) -> Result<PrincipalDidBinding, Self::Error>;
-    async fn remove_for_user_and_did(
+    async fn remove_for_user_and_core(
         &mut self,
         user: &User,
         principal_id: &str,

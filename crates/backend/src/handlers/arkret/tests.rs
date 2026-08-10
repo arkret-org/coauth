@@ -198,6 +198,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         principal_servers: vec![PrincipalServerConfig {
             name: "soland-prod".to_owned(),
             endpoint: "https://soland.example.com/arkret".parse().unwrap(),
+            service_id: None,
             session_grant_introspection_bearer: None,
             embedded_webvh_registration_bearer: None,
         }],
@@ -388,6 +389,7 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
         principal_servers: vec![PrincipalServerConfig {
             name: "soland-dev".to_owned(),
             endpoint: "https://session-grant-static.test/".parse().unwrap(),
+            service_id: None,
             session_grant_introspection_bearer: Some(bearer.to_owned()),
             embedded_webvh_registration_bearer: None,
         }],
@@ -462,6 +464,7 @@ fn shared_static_bearer_is_scoped_to_every_matching_server() {
     config.principal_servers.push(PrincipalServerConfig {
         name: "soland-beta".to_owned(),
         endpoint: "https://session-grant-static-beta.test/".parse().unwrap(),
+        service_id: None,
         session_grant_introspection_bearer: Some("shared-cluster-token".to_owned()),
         embedded_webvh_registration_bearer: None,
     });

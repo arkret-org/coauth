@@ -565,6 +565,7 @@ mod tests {
             principal_servers: vec![PrincipalServerConfig {
                 name: "soland".to_owned(),
                 endpoint: endpoint.clone(),
+                service_id: None,
                 session_grant_introspection_bearer: None,
                 embedded_webvh_registration_bearer: None,
             }],

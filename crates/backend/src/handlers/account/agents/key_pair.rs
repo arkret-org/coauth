@@ -553,7 +553,7 @@ fn validate_controller_authorize_event(
     agent_id: &str,
     verification_method: &str,
     runtime_public_key: &arkret_models_collaboration::governance::agent_artifacts::PublicKey,
-    signing_key_binding: &arkret_models_collaboration::agent_signer_evidence::AgentSigningKeyBinding,
+    signing_key_binding: &arkret_models_identity::agent_signer_evidence::AgentSigningKeyBinding,
     pairing_request_id: &str,
     audience: &str,
     authoritative_key_state: &arkret_models_collaboration::agent_operations::KeyState,
@@ -963,7 +963,7 @@ fn verify_authorize_event_controller_signature_with_methods(
 
 #[allow(clippy::too_many_arguments)]
 async fn verify_pairing_signing_key_binding(
-    binding: &arkret_models_collaboration::agent_signer_evidence::AgentSigningKeyBinding,
+    binding: &arkret_models_identity::agent_signer_evidence::AgentSigningKeyBinding,
     expected_controller_id: &str,
     agent_id: &arkret_identifiers::Did,
     agent_key_id: &str,
@@ -1254,7 +1254,7 @@ mod tests {
     }
 
     fn valid_signing_key_binding_core()
-    -> arkret_models_collaboration::agent_signer_evidence::AgentSigningKeyBindingCore {
+    -> arkret_models_identity::agent_signer_evidence::AgentSigningKeyBindingCore {
         serde_json::from_value(json!({
             "schema": "ak.schema.agent_signing_key_binding.v1",
             "agent_id": AGENT,
@@ -1335,7 +1335,7 @@ mod tests {
 
     fn valid_signing_key_binding_for(
         pairing_request_id: &str,
-    ) -> arkret_models_collaboration::agent_signer_evidence::AgentSigningKeyBinding {
+    ) -> arkret_models_identity::agent_signer_evidence::AgentSigningKeyBinding {
         let event_id = valid_authorize_event_typed(pairing_request_id).event_id;
         serde_json::from_value(json!({
             "schema": "ak.schema.agent_signing_key_binding.v1",
@@ -1362,7 +1362,7 @@ mod tests {
     }
 
     fn valid_signing_key_binding()
-    -> arkret_models_collaboration::agent_signer_evidence::AgentSigningKeyBinding {
+    -> arkret_models_identity::agent_signer_evidence::AgentSigningKeyBinding {
         valid_signing_key_binding_for(PAIRING_REQUEST_ID)
     }
 

@@ -1630,6 +1630,7 @@ mod tests {
             .push(coauth_config::PrincipalServerConfig {
                 name: "soland-test".to_owned(),
                 endpoint: server.uri().parse().unwrap(),
+                service_id: None,
                 session_grant_introspection_bearer: Some("lifecycle-secret".to_owned()),
                 embedded_webvh_registration_bearer: None,
             });

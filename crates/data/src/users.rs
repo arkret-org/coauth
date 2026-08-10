@@ -595,6 +595,14 @@ pub struct PrincipalDidBinding {
     pub principal_id: String,
     /// Verified DID history head returned by the authoritative host.
     pub key_log_head: arkret_identifiers::Hash,
+    /// Verification-time full DID snapshot. It is Account Authority-private
+    /// evidence and is not the principal's published resolution projection.
+    pub verified_full_id: Option<arkret_identifiers::FullId>,
+    pub verified_version_id: Option<String>,
+    pub binding_receipt: Option<serde_json::Value>,
+    pub accepted_service_id: Option<arkret_identifiers::ServiceId>,
+    pub binding_version: Option<u64>,
+    pub binding_frontier_digest: Option<arkret_identifiers::Hash>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

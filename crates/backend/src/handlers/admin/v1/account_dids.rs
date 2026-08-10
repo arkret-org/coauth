@@ -308,6 +308,12 @@ pub async fn add_account_did(
                     audience,
                     principal_id: did.clone(),
                     key_log_head: key_log_head.clone(),
+                    verified_full_id: None,
+                    verified_version_id: None,
+                    binding_receipt: None,
+                    accepted_service_id: None,
+                    binding_version: None,
+                    binding_frontier_digest: None,
                 },
             )
             .await?;
@@ -553,7 +559,7 @@ pub async fn remove_account_did(
     let revoked_at = clock.now();
     let mut rng = crate::handlers::account::make_rng();
     repo.principal_did()
-        .remove_for_user_and_did(&user, &did)
+        .remove_for_user_and_core(&user, &did)
         .await?;
     repo.audit()
         .add_admin_operation(
