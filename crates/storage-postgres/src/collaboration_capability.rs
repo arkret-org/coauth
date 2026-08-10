@@ -250,12 +250,23 @@ mod tests {
     use super::*;
     use crate::PgRepositoryFactory;
 
+    fn event_id(label: &str) -> String {
+        let digest = arkret_canonical::sha256_bytes(label.as_bytes());
+        arkret_identifiers::EventId::from_digest(arkret_canonical::DigestSuite::Sha256, digest)
+            .to_string()
+    }
+
+    fn realm_id(label: &str) -> String {
+        let event_id = arkret_identifiers::EventId::new(event_id(label)).unwrap();
+        arkret_identifiers::RealmId::from_event_id(&event_id).to_string()
+    }
+
     fn sample(label: &str) -> NewCollaborationCapabilityGrant {
         NewCollaborationCapabilityGrant {
             capability_grant_id: format!("ak:grant:{label}"),
-            grant_event_id: format!("ak:event:{label}"),
+            grant_event_id: event_id(label),
             subject: format!("did:web:{label}.example"),
-            realm_id: format!("ak:realm:{label}"),
+            realm_id: realm_id(label),
             action: CapabilityActionId::PinAdd,
             expires_at: None,
             approval_evidence_ref: None,
@@ -296,7 +307,7 @@ mod tests {
                 &clock,
                 &grant.id,
                 CollaborationCapabilityRevokeFanout {
-                    revoke_event_id: format!("ak:event:{label}-revoke"),
+                    revoke_event_id: event_id(&format!("{label}-revoke")),
                 },
             )
             .await

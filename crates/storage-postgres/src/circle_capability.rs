@@ -190,12 +190,20 @@ mod tests {
     use super::*;
     use crate::PgRepositoryFactory;
 
+    fn event_id(label: &str) -> arkret_identifiers::EventId {
+        let digest = arkret_canonical::sha256_bytes(label.as_bytes());
+        arkret_identifiers::EventId::from_digest(arkret_canonical::DigestSuite::Sha256, digest)
+    }
+
     fn sample(label: &str) -> NewCircleCapabilityGrant {
+        let event_id = event_id(label);
         NewCircleCapabilityGrant {
             subject: format!("did:web:{label}.example"),
-            realm_id: format!("ak:realm:{label}"),
+            realm_id: arkret_identifiers::RealmId::from_event_id(&event_id).to_string(),
             action: CapabilityActionId::CircleManage,
-            allowed_circle_ids: vec![format!("ak:circle:{label}")],
+            allowed_circle_ids: vec![
+                arkret_identifiers::CircleId::from_event_id(&event_id).to_string(),
+            ],
             granted_by: "did:web:admin.example".to_owned(),
         }
     }

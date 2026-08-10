@@ -83,12 +83,11 @@ pub fn handle_valid(handle: &str) -> bool {
 /// Validate that a string is a Arkret typed wire id of shape
 /// `ak:<prefix>:<uuid-v7>`, where `<uuid-v7>` parses as a strict v7 UUID.
 ///
-/// This is the Move/Anchor/Lattice typed-id surface (spec `wire-ids.md` —
-/// rebased onto `UUIDv7` in 2026-05). coauth's internal admin tokens and
-/// personal session ids stay ULID; this helper is for the few admin /
-/// session-grant handler call-sites that consume Arkret wire ids
-/// (`ak:device:<uuid7>`, `ak:space:<uuid7>`, `ak:cell:<family>:<id>`,
-/// etc.) from external requests.
+/// This helper is only for producer-allocated Arkret kinds such as
+/// `ak:device:<uuid7>`. Event-derived kinds (`event`, `realm`, `space`,
+/// `circle`, `strand`, and peers) carry complete 44-character Event tokens
+/// and must use their SDK newtypes instead. coauth's internal admin tokens and
+/// personal session ids remain ULID.
 ///
 /// ULID bodies are intentionally rejected. Callers that must accept ULID
 /// for some other reason should not use this helper.
@@ -101,7 +100,7 @@ pub fn handle_valid(handle: &str) -> bool {
 ///     "ak:device:0190a3c0-0000-7000-8000-000000000000",
 ///     "device"
 /// ));
-/// // wrong prefix → false
+/// // event-derived token and wrong prefix → false
 /// assert!(!is_typed_uuid7(
 ///     "ak:space:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
 ///     "device"

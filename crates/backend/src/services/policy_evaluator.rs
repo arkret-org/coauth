@@ -87,7 +87,7 @@ pub fn is_recognised_call_capability_action(action: &str) -> bool {
 }
 
 /// CAP-2: returns true when the candidate resource selector wire string
-/// is a `ak:circle:<uuid>` typed id. The evaluator accepts `circle`
+/// is a complete event-derived `ak:circle:<44-char token>` typed id. The evaluator accepts `circle`
 /// selectors verbatim as `deny_actors` / `deny_actions` / target lists
 /// per `resource-selector-grammar.md` §6 (R3).
 #[must_use]
