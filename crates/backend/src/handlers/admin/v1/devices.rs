@@ -600,6 +600,7 @@ mod tests {
             session_public,
             principal_id,
             &authority_instance,
+            arkret_identifiers::DeviceId::new(device_id.to_owned()).unwrap(),
             vec![
                 crate::handlers::arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
                 format!("urn:arkret:client:device:{device_id}"),

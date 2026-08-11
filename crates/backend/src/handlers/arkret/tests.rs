@@ -756,6 +756,8 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
         session_public_key,
         &principal_did,
         &authority_instance,
+        arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
+            .unwrap(),
         vec![
             PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
             device_scope.to_owned(),
@@ -847,6 +849,8 @@ fn session_grant_uses_configured_ttl() {
         session_public_key,
         &principal_did,
         &authority_instance,
+        arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
+            .unwrap(),
         vec![
             PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
             "urn:arkret:client:device:ak:device:01964137-0000-7000-8000-000000000001".to_owned(),
@@ -1033,6 +1037,8 @@ async fn seed_persisted_session_grant(
         test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
         &principal_did,
         &authority_instance,
+        arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
+            .unwrap(),
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
     )
     .unwrap();
@@ -1272,8 +1278,10 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         &browser_session,
         test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
         audience,
+        arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
+            .unwrap(),
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
-        Some(&principal_did),
+        Some(principal_did.as_str()),
         &authority_instance,
         bound_jkt.clone(),
         arkret_models_identity::SessionGrantProofKind::DidBoundSignature,

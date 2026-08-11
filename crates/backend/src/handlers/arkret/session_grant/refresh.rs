@@ -866,6 +866,8 @@ pub async fn refresh_session_grant(
         &browser_session,
         verification.jwk.clone(),
         audience,
+        arkret_identifiers::DeviceId::new(device_id.to_owned())
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         scopes,
         Some(&prior_grant.subject),
         &principal_binding.authority_instance,

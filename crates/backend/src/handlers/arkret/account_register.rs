@@ -33,8 +33,8 @@ use super::session_grant::{
     SessionGrantIssuanceSeed, issue_session_grant_for_audience, persist_session_grant,
 };
 use super::{
-    ArkretRouteError, DepotExt, PRINCIPAL_SERVER_SESSION_BIND_SCOPE, SessionGrantError,
-    issuer_did_for, preferred_signing_key, service_id_for, trust_domain_for,
+    ArkretRouteError, DepotExt, SessionGrantError, issuer_did_for, preferred_signing_key,
+    service_id_for, standard_initial_session_scope_within_ceiling, trust_domain_for,
 };
 use crate::handlers::{make_clock, make_rng};
 use crate::services::peer_protocol_client::{PeerProtocolClient, PeerProtocolClientError};
@@ -518,6 +518,7 @@ pub async fn account_register_endpoint(
         &browser_session,
         session_public_key,
         initial.audience.to_string(),
+        initial.device_id.clone(),
         initial.requested_scope.clone(),
         Some(body.principal_id.as_str()),
         &authority_instance,
@@ -792,16 +793,7 @@ fn validate_initial_session_request(
             "initial SessionGrant audience does not match the account handoff audience",
         ));
     }
-    let device_scope = format!("urn:arkret:client:device:{}", initial.device_id.as_str());
-    if !initial
-        .requested_scope
-        .iter()
-        .any(|scope| scope == &device_scope)
-        || initial
-            .requested_scope
-            .iter()
-            .any(|scope| scope != PRINCIPAL_SERVER_SESSION_BIND_SCOPE && scope != &device_scope)
-    {
+    if !standard_initial_session_scope_within_ceiling(&initial.requested_scope) {
         return Err(failed_precondition(
             "initial SessionGrant requested_scope exceeds the founding-device issuer ceiling",
         ));

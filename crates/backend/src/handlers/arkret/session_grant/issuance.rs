@@ -37,6 +37,7 @@ pub(crate) fn issue_session_grant(
     session_public_key: PublicJsonWebKey,
     subject: &str,
     authority_instance: &arkret_wire::PrincipalAuthorityInstance,
+    device_id: DeviceId,
     scopes: Vec<String>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
@@ -60,6 +61,7 @@ pub(crate) fn issue_session_grant(
         browser_session,
         session_public_key,
         required_audience_for(url_builder, arkret_config),
+        device_id,
         scopes,
         Some(subject),
         authority_instance,
@@ -79,6 +81,7 @@ pub(crate) fn issue_session_grant_for_audience(
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
     audience: String,
+    device_id: DeviceId,
     scopes: Vec<String>,
     subject_override: Option<&str>,
     authority_instance: &arkret_wire::PrincipalAuthorityInstance,
@@ -94,8 +97,6 @@ pub(crate) fn issue_session_grant_for_audience(
 
     let now = issuance_seed.not_before;
     let expires_at = issuance_seed.expires_at;
-    let device_id = primary_device_id_from_tokens(scopes.iter().map(String::as_str))
-        .ok_or(SessionGrantError::MissingDeviceBinding)?;
     let issuer = service_id_for(arkret_config);
     let cnf = SessionGrantCnf {
         jkt: dpop_jkt.clone(),
@@ -128,7 +129,7 @@ pub(crate) fn issue_session_grant_for_audience(
         cnf: cnf.clone(),
         credential_class: SessionGrantCredentialClass::Standard,
         holder_binding: SessionGrantHolderBinding::HumanDevice {
-            device_binding: device_id.clone(),
+            device_binding: device_id.to_string(),
         },
         device_binding: None,
         proof_kind: Some(proof_kind),
@@ -175,7 +176,7 @@ pub(crate) fn issue_session_grant_for_audience(
         not_before_timestamp: now,
         issuer: issuer.to_string(),
         subject,
-        device_id: Some(device_id),
+        device_id: Some(device_id.to_string()),
         audience: audience_id.to_string(),
         scopes,
         dpop_jkt: Some(dpop_jkt),
@@ -196,6 +197,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
     audience: String,
+    device_id: DeviceId,
     scopes: Vec<String>,
     subject_override: Option<&str>,
     authority_instance: &arkret_wire::PrincipalAuthorityInstance,
@@ -210,6 +212,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
         browser_session,
         session_public_key,
         audience,
+        device_id,
         scopes,
         subject_override,
         authority_instance,

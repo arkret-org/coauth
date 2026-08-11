@@ -375,6 +375,8 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
         grant_public_jwk,
         principal_id,
         &authority_instance,
+        arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
+            .unwrap(),
         vec![
             crate::handlers::arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
             "urn:arkret:client:device:device-1".to_owned(),

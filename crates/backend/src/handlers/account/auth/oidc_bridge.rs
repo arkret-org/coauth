@@ -971,6 +971,9 @@ async fn exchange_oidc_code(
             &browser_session,
             dpop_binding.public_jwk.clone(),
             grant_target.audience.clone(),
+            DeviceId::new(device_id.clone()).map_err(|error| {
+                OidcExchangeError::new("device_binding_invalid", error.to_string())
+            })?,
             principal_session_grant_scopes(&device_id),
             Some(principal.principal_id.as_str()),
             &principal.authority_instance,
@@ -1476,6 +1479,8 @@ async fn exchange_oidc_code(
         &browser_session,
         dpop_binding.public_jwk.clone(),
         grant_target.audience.clone(),
+        DeviceId::new(device_id.clone())
+            .map_err(|error| OidcExchangeError::new("device_binding_invalid", error.to_string()))?,
         principal_session_grant_scopes(&device_id),
         Some(principal.principal_id.as_str()),
         &principal.authority_instance,

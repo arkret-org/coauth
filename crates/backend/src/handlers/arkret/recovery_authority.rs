@@ -26,7 +26,9 @@ use super::account_handoff::{
 use super::session_grant::{
     SessionGrantIssuanceSeed, issue_session_grant_for_audience, new_session_grant_record,
 };
-use super::{ArkretRouteError, PRINCIPAL_SERVER_SESSION_BIND_SCOPE, preferred_signing_key};
+use super::{
+    ArkretRouteError, preferred_signing_key, standard_initial_session_scope_within_ceiling,
+};
 use crate::handlers::common::DepotExt;
 use crate::services::resolved_principal_audiences::{effective_audience, shared};
 
@@ -252,6 +254,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         &browser_session,
         session_public_key,
         initial.audience.to_string(),
+        initial.device_id.clone(),
         initial.requested_scope.clone(),
         Some(receipt.principal_id.as_str()),
         &authority_instance,
@@ -410,8 +413,7 @@ fn validate_completion_evidence(
             "initial SessionGrant audience does not match the account handoff audience",
         ));
     }
-    let device_scope = format!("urn:arkret:client:device:{}", initial.device_id);
-    if !recovery_scope_within_ceiling(&initial.requested_scope, &device_scope) {
+    if !recovery_scope_within_ceiling(&initial.requested_scope) {
         return Err(failed_precondition(
             "initial SessionGrant requested_scope exceeds the recovery-completion issuer ceiling",
         ));
@@ -428,11 +430,8 @@ fn validate_completion_evidence(
     Ok(())
 }
 
-fn recovery_scope_within_ceiling(requested_scope: &[String], device_scope: &str) -> bool {
-    requested_scope.iter().any(|scope| scope == device_scope)
-        && requested_scope
-            .iter()
-            .all(|scope| scope == PRINCIPAL_SERVER_SESSION_BIND_SCOPE || scope == device_scope)
+fn recovery_scope_within_ceiling(requested_scope: &[String]) -> bool {
+    standard_initial_session_scope_within_ceiling(requested_scope)
 }
 
 async fn verify_account_principal_binding(
@@ -653,34 +652,28 @@ fn indeterminate_replay() -> ArkretRouteError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::handlers::arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE;
 
     #[test]
-    fn recovery_completion_scope_requires_the_replacement_device() {
-        let device_scope = "urn:arkret:client:device:ak:device:replacement";
-        assert!(!recovery_scope_within_ceiling(
-            &[PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
-            device_scope,
-        ));
+    fn recovery_completion_scope_rejects_internal_binding_scope() {
+        assert!(!recovery_scope_within_ceiling(&[
+            PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()
+        ],));
     }
 
     #[test]
     fn recovery_completion_scope_rejects_privilege_expansion() {
-        let device_scope = "urn:arkret:client:device:ak:device:replacement";
-        assert!(!recovery_scope_within_ceiling(
-            &[device_scope.to_owned(), "urn:arkret:admin".to_owned()],
-            device_scope,
-        ));
+        assert!(!recovery_scope_within_ceiling(&[
+            "ak.self.account.read.describe".to_owned(),
+            "urn:arkret:admin".to_owned()
+        ],));
     }
 
     #[test]
     fn recovery_completion_scope_accepts_the_closed_standard_pair() {
-        let device_scope = "urn:arkret:client:device:ak:device:replacement";
-        assert!(recovery_scope_within_ceiling(
-            &[
-                PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
-                device_scope.to_owned(),
-            ],
-            device_scope,
-        ));
+        assert!(recovery_scope_within_ceiling(&[
+            "ak.self.account.read.describe".to_owned(),
+            "ak.self.events.read.scan".to_owned(),
+        ],));
     }
 }

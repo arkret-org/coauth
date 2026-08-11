@@ -50,6 +50,17 @@ pub const CLAIM_DEVICE_ID: &str = "org.arkret.device_id";
 pub const CLAIM_SESSION_ID: &str = "org.arkret.session_id";
 
 pub const PRINCIPAL_SERVER_SESSION_BIND_SCOPE: &str = "urn:arkret:principal-server:session.bind";
+pub(crate) const STANDARD_INITIAL_SESSION_SCOPE_CEILING: [&str; 2] =
+    ["ak.self.account.read.describe", "ak.self.events.read.scan"];
+
+pub(crate) fn standard_initial_session_scope_within_ceiling(scopes: &[String]) -> bool {
+    !scopes.is_empty()
+        && scopes.iter().all(|scope| {
+            STANDARD_INITIAL_SESSION_SCOPE_CEILING
+                .iter()
+                .any(|allowed| scope == allowed)
+        })
+}
 
 #[derive(Debug, Error)]
 pub enum SessionGrantError {
@@ -1112,6 +1123,8 @@ pub async fn debug_issue_dpop_grant(
         &browser_session,
         public_jwk,
         audience,
+        arkret_identifiers::DeviceId::new(body.device_id.clone())
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         scopes,
         Some(&principal_did),
         &authority_instance,
