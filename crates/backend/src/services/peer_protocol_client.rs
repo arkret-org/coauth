@@ -25,8 +25,6 @@ use arkret_signatures::http_signature::{
 };
 use arkret_state::SnapshotManifest;
 use arkret_wire::{DidFullId, HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN};
-use coauth_iana::jose::JsonWebSignatureAlg;
-use coauth_jose::constraints::Constrainable;
 use coauth_keystore::Keystore;
 use serde::Serialize;
 use thiserror::Error;
@@ -366,14 +364,8 @@ fn request_parts(
 fn ed25519_signer(
     keystore: &Keystore,
 ) -> Result<std::sync::Arc<coauth_jose::jwa::AsymmetricSigningKey>, PeerProtocolClientError> {
-    let key = keystore
-        .signing_key_for_algorithm(&JsonWebSignatureAlg::Ed25519)
-        .ok_or(PeerProtocolClientError::NoSigningKey)?;
-    key.kid()
-        .filter(|kid| !kid.trim().is_empty())
-        .ok_or(PeerProtocolClientError::NoSigningKey)?;
     keystore
-        .signer_for_algorithm(&JsonWebSignatureAlg::Ed25519)
+        .service_identity_signer()
         .map_err(|_| PeerProtocolClientError::NoSigningKey)
 }
 
@@ -393,15 +385,18 @@ where
 
 #[cfg(test)]
 mod tests {
-    use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
+    use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey, SERVICE_IDENTITY_KEY_ID};
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
 
     fn test_keystore() -> Keystore {
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(7);
-        let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("svc-key");
-        Keystore::new(JsonWebKeySet::new(vec![key]))
+        let service_key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+            .with_kid(SERVICE_IDENTITY_KEY_ID);
+        let unrelated_device_key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+            .with_kid("device-enrollment-key");
+        Keystore::new(JsonWebKeySet::new(vec![service_key, unrelated_device_key]))
     }
 
     fn peer_identity() -> PeerKeyPackagesClaimTransportBinding {
@@ -465,6 +460,37 @@ mod tests {
                 .contains("keyid=\"did:web:auth.example#service-key\"")
         );
         assert!(header("Signature").unwrap().starts_with("sig1=:"));
+
+        let service_key = arkret_signatures::http_signature::Ed25519SigningKey::from_bytes(
+            &keystore.service_identity_seed().unwrap(),
+        );
+        let policy = arkret_signatures::http_signature::SignatureVerificationPolicy::new(vec![
+            Component::Method,
+            Component::TargetUri,
+            Component::Authority,
+            Component::Header("source-service-id".to_owned()),
+            Component::Header("destination-service-id".to_owned()),
+            Component::Header("source-trust-domain".to_owned()),
+            Component::Header("destination-trust-domain".to_owned()),
+            Component::Header("content-digest".to_owned()),
+            Component::Header("idempotency-key".to_owned()),
+        ])
+        .require_content_digest(true);
+        arkret_signatures::http_signature::verify_signed_http_message(
+            "POST",
+            url.as_str(),
+            "server.example",
+            url.path(),
+            signed
+                .headers
+                .iter()
+                .map(|(name, value)| (name.as_str(), value.as_str())),
+            body,
+            &service_key.verifying_key(),
+            &policy,
+            chrono::Utc::now().timestamp(),
+        )
+        .expect("peer HTTP signature must verify with the reserved service-identity key");
     }
 
     #[test]

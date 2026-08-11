@@ -325,12 +325,24 @@ fn service_identity_key_is_selected_by_reserved_kid() {
         PrivateKey::OkpEd25519(key) => key.to_bytes(),
         _ => unreachable!(),
     };
+    let expected_verifying_key =
+        ed25519_dalek::SigningKey::from_bytes(&expected_seed).verifying_key();
     let store = Keystore::new(JsonWebKeySet::new(vec![
-        JsonWebKey::new(unrelated).with_kid("unrelated-ed25519"),
         JsonWebKey::new(expected).with_kid(SERVICE_IDENTITY_KEY_ID),
+        // Keep another Ed25519 key after the service key: the generic
+        // algorithm-only selector prefers this entry, which is the exact
+        // ordering that previously broke peer HTTP signatures.
+        JsonWebKey::new(unrelated).with_kid("unrelated-ed25519"),
     ]));
 
     assert_eq!(store.service_identity_seed().unwrap(), expected_seed);
+    let signer = store.service_identity_signer().unwrap();
+    match signer.as_ref() {
+        coauth_jose::jwa::AsymmetricSigningKey::Ed25519(key) => {
+            assert_eq!(key.verifying_key(), expected_verifying_key);
+        }
+        _ => panic!("service identity signer must be Ed25519"),
+    }
 }
 
 #[test]

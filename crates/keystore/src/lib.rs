@@ -700,9 +700,6 @@ pub struct Keystore {
 /// Selecting by `kid` keeps service-identity custody independent from the
 /// order of OIDC/JWT keys and permits unrelated Ed25519 keys to coexist.
 pub const SERVICE_IDENTITY_KEY_ID: &str = "coauth-service-identity-v1";
-/// Stable key identifier reserved for the B-model first-device enrollment
-/// authority. This key is intentionally distinct from the service identity
-/// key and must survive process and database replacement.
 
 /// Invalid service-identity key selection from the configured key backend.
 #[derive(Debug, Error)]
@@ -759,6 +756,39 @@ impl Keystore {
             PrivateKey::OkpEd25519(key) => Ok(key.to_bytes()),
             _ => Err(ServiceIdentityKeyError::WrongKeyType),
         }
+    }
+
+    /// Return the signer backed by the explicitly designated service-identity
+    /// key.
+    ///
+    /// Service-to-service protocols must use this selector instead of the
+    /// generic algorithm-only selector: a deployment can legitimately contain
+    /// other Ed25519 keys (for example, the device-enrollment authority), and
+    /// their ordering must not change the service identity used on the wire.
+    pub fn service_identity_signer(
+        &self,
+    ) -> Result<Arc<AsymmetricSigningKey>, ServiceIdentityKeyError> {
+        let seed = self.service_identity_seed()?;
+        let alg = JsonWebSignatureAlg::Ed25519;
+        let cache_key = (SERVICE_IDENTITY_KEY_ID.to_owned(), alg);
+
+        if let Ok(cache) = self.signer_cache.read()
+            && let Some(signer) = cache.get(&cache_key)
+        {
+            return Ok(Arc::clone(signer));
+        }
+
+        let signer = Arc::new(AsymmetricSigningKey::ed25519(
+            ed25519_dalek::SigningKey::from_bytes(&seed),
+        ));
+        if let Ok(mut cache) = self.signer_cache.write() {
+            let entry = cache
+                .entry(cache_key)
+                .or_insert_with(|| Arc::clone(&signer));
+            return Ok(Arc::clone(entry));
+        }
+
+        Ok(signer)
     }
 
     /// Get a signer for the given algorithm, reusing a previously built signer
