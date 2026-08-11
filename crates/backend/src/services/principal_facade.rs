@@ -43,8 +43,6 @@ pub struct DbConnectorAdmin {
 #[derive(Clone)]
 struct PeerSigningContext {
     keystore: coauth_keystore::Keystore,
-    source_service_id: arkret_identifiers::DidCoreId,
-    source_full_id: arkret_identifiers::DidFullId,
     source_trust_domain: arkret_identifiers::TypedTrustDomainId,
 }
 
@@ -72,18 +70,30 @@ impl DbConnectorAdmin {
     pub fn with_peer_signing(
         mut self,
         keystore: coauth_keystore::Keystore,
-        source_service_id: arkret_identifiers::DidCoreId,
-        source_full_id: arkret_identifiers::DidFullId,
         source_trust_domain: arkret_identifiers::TypedTrustDomainId,
     ) -> Self {
         self.peer_signing = Some(PeerSigningContext {
             keystore,
-            source_service_id,
-            source_full_id,
             source_trust_domain,
         });
         self
     }
+}
+
+/// Snapshot both halves of the runtime service identity from one lifecycle
+/// state. The Provider supervisor can move the shared handle from
+/// `WaitingProvider` to `Ready` after this facade is constructed, so peer
+/// signing must never freeze an empty (or stale) identity at process startup.
+fn runtime_peer_identity(
+    arkret_config: &ArkretConfig,
+) -> Result<(arkret_identifiers::DidCoreId, arkret_identifiers::DidFullId), anyhow::Error> {
+    let state = arkret_config.runtime_service_identity.state();
+    let identity = state.identity().ok_or_else(|| {
+        anyhow::anyhow!(
+            "account-status peer signing identity is unavailable while the runtime service identity is {state:?}"
+        )
+    })?;
+    Ok((identity.service_id.clone(), identity.full_id.clone()))
 }
 
 pub(crate) async fn commit_agent_key_pair_to_principal_server(
@@ -290,12 +300,13 @@ impl ConnectorAdmin for DbConnectorAdmin {
         let signing = self
             .peer_signing
             .as_ref()
-            .context("account-status peer signing identity is unavailable")?;
+            .context("account-status peer signing configuration is unavailable")?;
+        let (source_service_id, source_full_id) = runtime_peer_identity(&self.arkret_config)?;
         let destination_service_id =
             crate::services::resolved_principal_audiences::effective_audience_shared(target)
                 .context("account-status destination service identity is unavailable or stale")?;
         let identity = arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
-            source_service_id: signing.source_service_id.clone().into(),
+            source_service_id: source_service_id.into(),
             destination_service_id: destination_service_id.into(),
             source_trust_domain: signing.source_trust_domain.clone(),
             destination_trust_domain: signing.source_trust_domain.clone(),
@@ -304,7 +315,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
             Some(&target.endpoint),
             &self.http_client,
             &signing.keystore,
-            signing.source_full_id.clone(),
+            source_full_id,
             identity,
         )?;
         let outcome = client
@@ -354,5 +365,38 @@ impl ConnectorAdmin for DbConnectorAdmin {
 
     async fn unset_displayname(&self, _handle: &str) -> Result<(), anyhow::Error> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::runtime_peer_identity;
+
+    #[test]
+    fn runtime_peer_identity_is_unavailable_before_provider_readiness() {
+        let config = coauth_config::ArkretConfig::default();
+
+        let error = runtime_peer_identity(&config).expect_err("default identity is faulted");
+
+        assert!(error.to_string().contains("identity is unavailable"));
+    }
+
+    #[test]
+    fn runtime_peer_identity_observes_identity_installed_after_construction() {
+        let config = coauth_config::ArkretConfig::default();
+        let shared = config.runtime_service_identity.clone();
+        let ready = coauth_config::RuntimeServiceIdentity::fixture(
+            "did:webvh:QmService:auth.example:webvh:service",
+        )
+        .state();
+
+        shared.store(ready);
+        let (service_id, full_id) = runtime_peer_identity(&config).expect("identity became ready");
+
+        assert_eq!(service_id.as_str(), "ak:did_core:webvh:QmService");
+        assert_eq!(
+            full_id.as_str(),
+            "did:webvh:QmService:auth.example:webvh:service"
+        );
     }
 }

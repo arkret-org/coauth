@@ -174,7 +174,7 @@ impl Options {
             http_client.clone(),
             &key_store,
             &url_builder,
-        );
+        )?;
 
         if !self.no_worker {
             let notifications =

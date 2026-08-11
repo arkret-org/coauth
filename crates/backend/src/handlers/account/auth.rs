@@ -12,11 +12,6 @@ use coauth_account_types::{
     CurrentAccountInfo, LoginOutcome, LoginReqBody, LogoutOutcome, ProviderInfo, ProvidersOutcome,
     ViewerInfo,
 };
-// Only the password-bootstrap scaffold emits a session grant one-shot.
-#[cfg(feature = "password-bootstrap")]
-use coauth_account_types::{
-    SessionGrantKind, SessionGrantOneShotInfo, SessionGrantPrincipalServerInfo,
-};
 use coauth_data::oauth::{LoginHint, OAuthAuthorizationGrantRepository};
 use coauth_data::{AuthorizationGrant, PostAuthAction, SiteConfig, UrlBuilder};
 use coauth_jose::jwk::PublicJsonWebKey;
@@ -139,7 +134,6 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     let site_config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
-    let key_store = depot.key_store()?;
     let limiter = depot.limiter()?;
     let principal_server = depot.principal_server()?;
     let repo = depot.repo().await?;
@@ -209,12 +203,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     // extraction above is still performed for its security side effect of
     // rejecting present-but-broken proofs.
     #[cfg(not(feature = "password-bootstrap"))]
-    let _ = (
-        &dpop_binding,
-        &requested_audience,
-        &requested_device_id,
-        &key_store,
-    );
+    let _ = (&dpop_binding, &requested_audience, &requested_device_id);
 
     match login_with_password(
         repo,

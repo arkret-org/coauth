@@ -93,7 +93,7 @@ impl Options {
             arkret_http_client,
             &key_store,
             &urls,
-        );
+        )?;
 
         drop(app_cfg);
 

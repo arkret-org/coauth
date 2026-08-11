@@ -293,21 +293,67 @@ pub async fn inject_app_state(
         path,
         "/health" | "/healthz" | "/livez" | "/readyz" | "/metrics"
     );
-    if !operational_probe && !state.arkret_config.runtime_service_identity.is_ready() {
+    let runtime_identity = state.arkret_config.runtime_service_identity.state();
+    if !operational_probe && !runtime_identity.is_ready() {
         res.status_code(StatusCode::SERVICE_UNAVAILABLE);
-        res.headers_mut().insert(
-            salvo::http::header::RETRY_AFTER,
-            salvo::http::HeaderValue::from_static("5"),
-        );
-        res.render(Json(serde_json::json!({
-            "errcode": "service_identity_unavailable",
-            "error": "service identity is not ready; retry after the Provider recovers",
-        })));
+        let (payload, retry_after) = service_identity_unavailable_response(&runtime_identity);
+        if let Some(retry_after) = retry_after {
+            res.headers_mut().insert(
+                salvo::http::header::RETRY_AFTER,
+                salvo::http::HeaderValue::from_static(retry_after),
+            );
+        }
+        res.render(Json(payload));
         ctrl.skip_rest();
         return;
     }
 
     ctrl.call_next(req, depot, res).await;
+}
+
+fn service_identity_unavailable_response(
+    state: &arkret_identity::service_identity::DidCoreIdentityState,
+) -> (serde_json::Value, Option<&'static str>) {
+    use arkret_identity::service_identity::DidCoreIdentityState;
+
+    let (state_name, error, retry_after, next_action) = match state {
+        DidCoreIdentityState::WaitingProvider { .. } => (
+            "waiting_provider",
+            "service identity is waiting for its Provider",
+            Some("5"),
+            None,
+        ),
+        DidCoreIdentityState::Conflict { .. } => (
+            "conflict",
+            "service identity conflicts with the Provider mapping",
+            None,
+            Some("run `coauth service-identity doctor`".to_owned()),
+        ),
+        DidCoreIdentityState::Faulted { next_action, .. } => (
+            "faulted",
+            "service identity requires operator repair",
+            None,
+            Some(next_action.clone()),
+        ),
+        // This helper is called only after `is_ready()` returned false. Keep a
+        // defensive fallback so a future non-ready lifecycle variant produces
+        // a controlled 503 instead of reopening a startup/request panic.
+        _ => (
+            "unavailable",
+            "service identity is not ready",
+            Some("5"),
+            None,
+        ),
+    };
+    (
+        serde_json::json!({
+            "errcode": "service_identity_unavailable",
+            "error": error,
+            "service_identity_state": state_name,
+            "next_action": next_action,
+        }),
+        retry_after,
+    )
 }
 
 /// Convenience accessors for pulling typed components out of a Salvo [`Depot`].
@@ -422,5 +468,46 @@ impl DepotExt for Depot {
 
     fn get_trusted_proxies(&self) -> Option<&Vec<IpNetwork>> {
         self.get::<Vec<IpNetwork>>("trusted_proxies").ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use arkret_identity::service_identity::{DidCoreIdentityDiagnostic, DidCoreIdentityState};
+    use arkret_models_identity::service_identity::{CanonicalServiceUrl, ServiceRegistrationKey};
+    use arkret_wire::ServiceKind;
+
+    use super::service_identity_unavailable_response;
+
+    #[test]
+    fn waiting_provider_response_is_retryable_and_diagnostic() {
+        let state = DidCoreIdentityState::WaitingProvider {
+            registration_key: ServiceRegistrationKey::new(
+                ServiceKind::AuthServer,
+                CanonicalServiceUrl::canonicalize("https://auth.example/").unwrap(),
+            )
+            .unwrap(),
+            retry_at: chrono::Utc::now(),
+        };
+
+        let (payload, retry_after) = service_identity_unavailable_response(&state);
+
+        assert_eq!(retry_after, Some("5"));
+        assert_eq!(payload["service_identity_state"], "waiting_provider");
+        assert!(payload["next_action"].is_null());
+    }
+
+    #[test]
+    fn faulted_response_requires_repair_instead_of_claiming_retry() {
+        let state = DidCoreIdentityState::Faulted {
+            diagnostic: DidCoreIdentityDiagnostic::KeyMismatch,
+            next_action: "restore the service identity key".to_owned(),
+        };
+
+        let (payload, retry_after) = service_identity_unavailable_response(&state);
+
+        assert_eq!(retry_after, None);
+        assert_eq!(payload["service_identity_state"], "faulted");
+        assert_eq!(payload["next_action"], "restore the service identity key");
     }
 }
