@@ -218,44 +218,7 @@ pub enum IdentityCreationLeaseRiskDecision {
     Rejected,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum IdentityCreationSagaState {
-    Active,
-    Reserved,
-    DidPublished,
-    PcrAccepted,
-    AccountBound,
-    Completed,
-}
-
-impl IdentityCreationSagaState {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Active => "active",
-            Self::Reserved => "reserved",
-            Self::DidPublished => "did_published",
-            Self::PcrAccepted => "pcr_accepted",
-            Self::AccountBound => "account_bound",
-            Self::Completed => "completed",
-        }
-    }
-}
-
-impl TryFrom<&str> for IdentityCreationSagaState {
-    type Error = String;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "active" => Ok(Self::Active),
-            "reserved" => Ok(Self::Reserved),
-            "did_published" => Ok(Self::DidPublished),
-            "pcr_accepted" => Ok(Self::PcrAccepted),
-            "account_bound" => Ok(Self::AccountBound),
-            "completed" => Ok(Self::Completed),
-            other => Err(format!("unknown identity creation saga state: {other}")),
-        }
-    }
-}
+pub use arkret_models_identity::IdentityCreationLeaseState as IdentityCreationSagaState;
 
 #[derive(Clone, Debug)]
 pub struct IdentityCreationLeaseRecord {
@@ -269,6 +232,11 @@ pub struct IdentityCreationLeaseRecord {
     pub state: IdentityCreationSagaState,
     pub registry_receipt: Option<arkret_models_identity::DidOperationSubmitOutcome>,
     pub head_event_digest: Option<arkret_identifiers::Hash>,
+    /// Complete historical registration evidence frozen at the registry's
+    /// original acceptance time.  Renewed handoffs and replacement devices
+    /// must reuse this object instead of combining a new client proof with an
+    /// older registry receipt.
+    pub registration_did_evidence: Option<arkret_wire::RegistrationDidEvidence>,
     pub pcr_genesis_request_digest: Option<arkret_identifiers::Hash>,
     pub pcr_genesis_receipt:
         Option<arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome>,
@@ -283,6 +251,7 @@ impl IdentityCreationLeaseRecord {
         arkret_models_identity::IdentityCreationLease {
             identity_creation_lease_id: self.lease_id.clone(),
             fence: self.fence,
+            state: self.state,
             expires_at: self.expires_at,
             reserved_identity: self.reserved_identity.clone(),
         }

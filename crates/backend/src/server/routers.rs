@@ -143,6 +143,11 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                 .post(arkret::create_account_handoff),
         )
         .push(
+            Router::with_path("gate/account/onboarding")
+                .options(oidc_preflight_handler)
+                .get(arkret::account_onboarding_snapshot),
+        )
+        .push(
             Router::with_path("gate/account/identity-binding-challenges")
                 .options(oidc_preflight_handler)
                 .post(arkret::issue_identity_binding_challenge),
@@ -492,6 +497,7 @@ fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
         "/_arkret/describe"
         | "/_arkret/root/identity/describe"
         | "/_arkret/root/identity/document" => Some("GET"),
+        "/_arkret/gate/account/onboarding" => Some("GET, OPTIONS"),
         "/_arkret/root/identity/resolve"
         | "/_arkret/find/directory/resolve-handle"
         | "/_arkret/gate/account/auth-sessions/logout"

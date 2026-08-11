@@ -49,6 +49,20 @@ fn canonical_json_digest_matches(bytes: &[u8], expected: &arkret_identifiers::Ha
         && expected.as_str() == format!("sha256:{:x}", sha2::Sha256::digest(bytes)).as_str()
 }
 
+fn reserved_identity_matches_abandonment_checkpoint(
+    reserved: &arkret_models_identity::ReservedIdentityCreation,
+    principal_id: &arkret_identifiers::DidCoreId,
+    did_version_id: &str,
+) -> bool {
+    reserved.principal_id == *principal_id
+        && reserved
+            .did_operation
+            .operation
+            .get("versionId")
+            .and_then(serde_json::Value::as_str)
+            == Some(did_version_id)
+}
+
 /// PostgreSQL-backed account-handoff state machine.
 pub struct PgAccountHandoffRepository<'c> {
     conn: &'c mut AsyncPgConnection,
@@ -130,7 +144,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let query = format!(
             "SELECT service_account_id, audience, lease_id, holder_jkt, fence, expires_at, \
              reserved_principal_id, reserved_operation_digest, did_operation, state, \
-             registry_receipt, head_event_digest, pcr_genesis_request_digest, \
+             registry_receipt, head_event_digest, registration_did_evidence, pcr_genesis_request_digest, \
              pcr_genesis_receipt, binding_receipt, register_handoff_grant_id, \
              register_challenge_id, register_request_digest, register_outcome, created_at, updated_at \
              FROM identity_creation_leases WHERE service_account_id = $1 AND audience = $2{suffix}"
@@ -802,6 +816,8 @@ struct LeaseRow {
     registry_receipt: Option<serde_json::Value>,
     #[diesel(sql_type = Nullable<Text>)]
     head_event_digest: Option<String>,
+    #[diesel(sql_type = Nullable<Jsonb>)]
+    registration_did_evidence: Option<serde_json::Value>,
     #[diesel(sql_type = Nullable<Text>)]
     pcr_genesis_request_digest: Option<String>,
     #[diesel(sql_type = Nullable<Jsonb>)]
@@ -881,6 +897,11 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
         head_event_digest: row
             .head_event_digest
             .map(arkret_identifiers::Hash::new)
+            .transpose()
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        registration_did_evidence: row
+            .registration_did_evidence
+            .map(serde_json::from_value)
             .transpose()
             .map_err(|_| DatabaseError::invalid_operation())?,
         pcr_genesis_request_digest: row
@@ -1601,11 +1622,21 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .bound_principal(Uuid::from(input.service_account_id), &input.audience)
             .await?
         {
-            return Ok(AccountHandoffCreation::Bound {
-                grant,
-                principal_id,
-                full_id,
-            });
+            let incomplete_lease = self
+                .lease_for_account(
+                    Uuid::from(input.service_account_id),
+                    input.audience.as_str(),
+                    false,
+                )
+                .await?
+                .is_some_and(|lease| lease.state == IdentityCreationSagaState::AccountBound);
+            if !incomplete_lease {
+                return Ok(AccountHandoffCreation::Bound {
+                    grant,
+                    principal_id,
+                    full_id,
+                });
+            }
         }
 
         if input.risk_decision != IdentityCreationLeaseRiskDecision::Allowed
@@ -1627,10 +1658,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             )
             .await?;
         if let Some(lease) = existing_lease.as_ref() {
-            if matches!(
-                lease.state,
-                IdentityCreationSagaState::AccountBound | IdentityCreationSagaState::Completed
-            ) {
+            if lease.state == IdentityCreationSagaState::Completed {
                 let reserved = lease
                     .reserved_identity
                     .as_ref()
@@ -1751,26 +1779,24 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         if grant.expires_at <= now || grant.revoked_at.is_some() || grant.consumed_at.is_some() {
             return Ok(AccountHandoffCreation::ExpiredReplay);
         }
-        if let Some((principal_id, full_id)) = self
-            .bound_principal(Uuid::from(grant.service_account_id), &grant.audience)
-            .await?
-        {
-            return Ok(AccountHandoffCreation::Bound {
-                grant: grant.clone(),
-                principal_id,
-                full_id,
-            });
-        }
         let lease = self
             .lease_for_account(Uuid::from(grant.service_account_id), &grant.audience, false)
             .await?;
         let Some(lease) = lease else {
-            return Ok(AccountHandoffCreation::ExpiredReplay);
+            return if let Some((principal_id, full_id)) = self
+                .bound_principal(Uuid::from(grant.service_account_id), &grant.audience)
+                .await?
+            {
+                Ok(AccountHandoffCreation::Bound {
+                    grant: grant.clone(),
+                    principal_id,
+                    full_id,
+                })
+            } else {
+                Ok(AccountHandoffCreation::ExpiredReplay)
+            };
         };
-        if matches!(
-            lease.state,
-            IdentityCreationSagaState::AccountBound | IdentityCreationSagaState::Completed
-        ) {
+        if lease.state == IdentityCreationSagaState::Completed {
             let reserved = lease
                 .reserved_identity
                 .as_ref()
@@ -2218,14 +2244,15 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let Some(reserved) = lease.reserved_identity.as_ref() else {
             return Ok(IdentityAbandonmentChallengeIssue::CheckpointMismatch);
         };
-        let reserved_version = reserved
-            .did_operation
-            .operation
-            .get("versionId")
-            .and_then(serde_json::Value::as_str);
-        if reserved.full_id.as_str() != input.principal_id.as_str()
-            || reserved_version != Some(input.did_version_id.as_str())
-        {
+        // The abandonment transcript pins the stable projected principal id,
+        // not the method-specific full id.  For did:webvh those are distinct
+        // strings, so comparing `full_id` here rejects every valid reserved
+        // principal even though the lease carries the matching projection.
+        if !reserved_identity_matches_abandonment_checkpoint(
+            reserved,
+            &input.principal_id,
+            &input.did_version_id,
+        ) {
             return Ok(IdentityAbandonmentChallengeIssue::CheckpointMismatch);
         }
 
@@ -2269,6 +2296,34 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(IdentityAbandonmentChallengeIssue::DuplicateConflict);
         }
         Ok(IdentityAbandonmentChallengeIssue::Issued(challenge))
+    }
+
+    async fn active_identity_abandonment_challenge(
+        &mut self,
+        service_account_id: Ulid,
+        audience: &arkret_identifiers::DidCoreId,
+        lease_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<Option<IdentityAbandonmentChallengeRecord>, Self::Error> {
+        diesel::sql_query(
+            "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
+             audience, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
+             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
+             consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
+             FROM identity_abandonment_challenges \
+             WHERE service_account_id = $1 AND audience = $2 AND lease_id = $3 \
+             AND consumed_at IS NULL AND expires_at > $4 \
+             ORDER BY issued_at DESC LIMIT 1",
+        )
+        .bind::<SqlUuid, _>(Uuid::from(service_account_id))
+        .bind::<Text, _>(audience.as_str())
+        .bind::<Text, _>(lease_id)
+        .bind::<Timestamptz, _>(now)
+        .get_result::<AbandonmentChallengeRow>(self.conn)
+        .await
+        .optional()?
+        .map(abandonment_challenge_from_row)
+        .transpose()
     }
 
     async fn abandon_identity_creation(
@@ -2371,14 +2426,11 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let Some(reserved) = lease.reserved_identity.as_ref() else {
             return Ok(IdentityAbandonmentCommit::ChallengeMismatch);
         };
-        let reserved_version = reserved
-            .did_operation
-            .operation
-            .get("versionId")
-            .and_then(serde_json::Value::as_str);
-        if reserved.full_id.as_str() != input.principal_id.as_str()
-            || reserved_version != Some(input.did_version_id.as_str())
-        {
+        if !reserved_identity_matches_abandonment_checkpoint(
+            reserved,
+            &input.principal_id,
+            &input.did_version_id,
+        ) {
             return Ok(IdentityAbandonmentCommit::ChallengeMismatch);
         }
 
@@ -2527,8 +2579,9 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
     async fn mark_did_published(
         &mut self,
         context: &IdentityCreationRegistrationContext,
-        registry_receipt: &serde_json::Value,
+        registry_receipt: &arkret_models_identity::DidOperationSubmitOutcome,
         head_event_digest: &arkret_identifiers::Hash,
+        registration_did_evidence: &arkret_wire::RegistrationDidEvidence,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error> {
         let Some(lease) = self
@@ -2552,6 +2605,10 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
                 lease.state,
                 IdentityCreationSagaState::Reserved | IdentityCreationSagaState::DidPublished
             )
+            || (lease.state == IdentityCreationSagaState::Reserved
+                && lease.registration_did_evidence.is_some())
+            || (lease.state == IdentityCreationSagaState::DidPublished
+                && lease.registration_did_evidence.as_ref() != Some(registration_did_evidence))
         {
             return Ok(false);
         }
@@ -2601,15 +2658,21 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             }
             _ => return Ok(false),
         }
+        let registry_receipt = serde_json::to_value(registry_receipt)
+            .map_err(|_| DatabaseError::invalid_operation())?;
         let updated = diesel::sql_query(
             "UPDATE identity_creation_leases SET state = 'did_published', registry_receipt = $1, \
-             head_event_digest = $2, updated_at = $3 \
-             WHERE service_account_id = $4 AND audience = $5 AND lease_id = $6 AND fence = $7 \
-             AND holder_jkt = $8 AND reserved_operation_digest = $9 \
+             head_event_digest = $2, registration_did_evidence = $3, updated_at = $4 \
+             WHERE service_account_id = $5 AND audience = $6 AND lease_id = $7 AND fence = $8 \
+             AND holder_jkt = $9 AND reserved_operation_digest = $10 \
              AND state IN ('reserved', 'did_published')",
         )
         .bind::<Jsonb, _>(registry_receipt)
         .bind::<Text, _>(head_event_digest.as_str())
+        .bind::<Jsonb, _>(
+            serde_json::to_value(registration_did_evidence)
+                .map_err(|_| DatabaseError::invalid_operation())?,
+        )
         .bind::<Timestamptz, _>(now)
         .bind::<SqlUuid, _>(Uuid::from(context.grant.service_account_id))
         .bind::<Text, _>(&context.grant.audience)
@@ -2891,7 +2954,9 @@ fn registration_challenge_state_is_usable(
 
 #[cfg(test)]
 mod tests {
-    use super::lease_quota_advisory_key;
+    use std::collections::BTreeMap;
+
+    use super::{lease_quota_advisory_key, reserved_identity_matches_abandonment_checkpoint};
 
     #[test]
     fn lease_quota_advisory_key_is_postgres_text_safe() {
@@ -2903,5 +2968,49 @@ mod tests {
 
         assert_eq!(key, format!("71:{}{audience}", account_subject.as_str(),));
         assert!(!key.contains('\0'));
+    }
+
+    #[test]
+    fn abandonment_checkpoint_matches_projected_principal_not_full_id() {
+        let full_id = arkret_identifiers::DidFullId::new(
+            "did:webvh:zQ3shExampleScid:alice.example:webvh:user",
+        )
+        .expect("valid full id");
+        let principal_id = arkret_identifiers::project_full_id_to_core_id(&full_id)
+            .expect("projected principal id");
+        assert_ne!(full_id.as_str(), principal_id.as_str());
+
+        let mut operation = BTreeMap::new();
+        operation.insert(
+            "versionId".to_owned(),
+            serde_json::Value::String("version-1".to_owned()),
+        );
+        let reserved = arkret_models_identity::ReservedIdentityCreation {
+            principal_id: principal_id.clone(),
+            full_id,
+            operation_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
+                .expect("digest"),
+            did_operation: arkret_models_identity::DidOperationSubmitRequestBody {
+                did: arkret_identifiers::DidFullId::new(
+                    "did:webvh:zQ3shExampleScid:alice.example:webvh:user",
+                )
+                .expect("operation did"),
+                did_method: "webvh".to_owned(),
+                seq: None,
+                prev_event_digest: None,
+                operation,
+            },
+        };
+
+        assert!(reserved_identity_matches_abandonment_checkpoint(
+            &reserved,
+            &principal_id,
+            "version-1",
+        ));
+        assert!(!reserved_identity_matches_abandonment_checkpoint(
+            &reserved,
+            &principal_id,
+            "version-2",
+        ));
     }
 }

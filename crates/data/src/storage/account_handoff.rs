@@ -7,11 +7,12 @@ use coauth_data::{
     AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve, AccountHandoffGrant,
     AccountHandoffGrantInput, ControllerGateAttestationCommit, ControllerGateAttestationReserve,
     DidBindingChallengeInput, DidBindingChallengeIssue, IdentityAbandonmentChallengeInput,
-    IdentityAbandonmentChallengeIssue, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
-    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityCreationBindingCommit,
-    IdentityCreationRegisterReplay, IdentityCreationRegistrationContext,
-    NewAccountHandoffCreationAttempt, NewControllerGateAttestationIssuance,
-    PublishedDidRegisterCommit, PublishedDidRegisterReplay,
+    IdentityAbandonmentChallengeIssue, IdentityAbandonmentChallengeRecord,
+    IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
+    IdentityBindingChallengeIssue, IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
+    IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
+    NewControllerGateAttestationIssuance, PublishedDidRegisterCommit, PublishedDidRegisterReplay,
+    Ulid,
 };
 
 use crate::repository_impl;
@@ -143,6 +144,16 @@ pub trait AccountHandoffRepository: Send + Sync {
         input: IdentityAbandonmentChallengeInput,
     ) -> Result<IdentityAbandonmentChallengeIssue, Self::Error>;
 
+    /// Load the current durable abandonment goal for one identity-creation
+    /// lease. Expired and consumed challenges are never projected.
+    async fn active_identity_abandonment_challenge(
+        &mut self,
+        service_account_id: Ulid,
+        audience: &arkret_identifiers::DidCoreId,
+        lease_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<Option<IdentityAbandonmentChallengeRecord>, Self::Error>;
+
     /// Atomically consume the challenge, reserve the orphan anchor, suppress
     /// the holder checkpoint and release the identity-creation lease.
     async fn abandon_identity_creation(
@@ -175,8 +186,9 @@ pub trait AccountHandoffRepository: Send + Sync {
     async fn mark_did_published(
         &mut self,
         context: &IdentityCreationRegistrationContext,
-        registry_receipt: &serde_json::Value,
+        registry_receipt: &arkret_models_identity::DidOperationSubmitOutcome,
         head_event_digest: &arkret_identifiers::Hash,
+        registration_did_evidence: &arkret_wire::RegistrationDidEvidence,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error>;
 
@@ -297,6 +309,13 @@ repository_impl!(AccountHandoffRepository:
         &mut self,
         input: IdentityAbandonmentChallengeInput,
     ) -> Result<IdentityAbandonmentChallengeIssue, Self::Error>;
+    async fn active_identity_abandonment_challenge(
+        &mut self,
+        service_account_id: Ulid,
+        audience: &arkret_identifiers::DidCoreId,
+        lease_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<Option<IdentityAbandonmentChallengeRecord>, Self::Error>;
     async fn abandon_identity_creation(
         &mut self,
         input: IdentityAbandonmentCommitInput,
@@ -320,8 +339,9 @@ repository_impl!(AccountHandoffRepository:
     async fn mark_did_published(
         &mut self,
         context: &IdentityCreationRegistrationContext,
-        registry_receipt: &serde_json::Value,
+        registry_receipt: &arkret_models_identity::DidOperationSubmitOutcome,
         head_event_digest: &arkret_identifiers::Hash,
+        registration_did_evidence: &arkret_wire::RegistrationDidEvidence,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error>;
     async fn mark_pcr_accepted(

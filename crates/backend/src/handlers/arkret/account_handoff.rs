@@ -1,9 +1,9 @@
 //! Canonical account-first handoff, lease, and identity-binding operations.
 use arkret_models_identity::{
     ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffAllowedOperation, AccountHandoffBinding,
-    AccountHandoffOutcome, AccountHandoffRequestBody, Handle,
-    IdentityAbandonmentChallengeRequestBody, IdentityAbandonmentRequestBody,
-    IdentityBindingChallengeRequestBody,
+    AccountHandoffOutcome, AccountHandoffRequestBody, AccountOnboardingGoal,
+    AccountOnboardingSnapshot, Handle, IdentityAbandonmentChallengeRequestBody,
+    IdentityAbandonmentRequestBody, IdentityBindingChallengeRequestBody,
 };
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::Duration;
@@ -229,6 +229,87 @@ pub async fn create_account_handoff(
         }
     };
     commit_authorized_handoff(depot, authorized_attempt, checkpoint).await
+}
+
+/// Read-only reconciliation surface for a live account handoff. The Account
+/// Authority reloads the durable lease/binding state on every call; no client
+/// checkpoint participates in the projection.
+#[handler]
+pub async fn account_onboarding_snapshot(
+    req: &Request,
+    depot: &Depot,
+) -> Result<Json<AccountOnboardingSnapshot>, ArkretRouteError> {
+    let (grant, _dpop) = authenticate_account_handoff_snapshot(req, depot).await?;
+    let observed_at = make_clock().now();
+    let account_subject = account_subject(
+        &super::service_id_for(&depot.arkret_config()?),
+        grant.service_account_id,
+    )?;
+    let mut repo = depot.repo().await?;
+    let creation = repo
+        .account_handoff()
+        .resolve_creation(&grant, observed_at)
+        .await?;
+    let (resolved_grant, binding) = creation_binding(creation)?;
+    if resolved_grant.id != grant.id || resolved_grant.request_id != grant.request_id {
+        repo.cancel().await.ok();
+        return Err(indeterminate_handoff_replay());
+    }
+    let goal = if let AccountHandoffBinding::IdentityCreationActive {
+        identity_creation_lease,
+    } = &binding
+        && identity_creation_lease
+            .allowed_goals()
+            .contains(&arkret_models_identity::IdentityCreationGoal::AbandonProvisionalIdentity)
+    {
+        let audience = arkret_identifiers::DidCoreId::new(grant.audience.clone())
+            .map_err(|error| failed_precondition(error.to_string()))?;
+        repo.account_handoff()
+            .active_identity_abandonment_challenge(
+                grant.service_account_id,
+                &audience,
+                &identity_creation_lease.identity_creation_lease_id,
+                observed_at,
+            )
+            .await?
+            .map_or(AccountOnboardingGoal::CompleteIdentity, |challenge| {
+                AccountOnboardingGoal::AbandonProvisionalIdentity {
+                    requires_fresh_authentication: challenge.issuing_handoff_grant_id == grant.id,
+                    challenge: challenge.wire_outcome(),
+                }
+            })
+    } else {
+        AccountOnboardingGoal::CompleteIdentity
+    };
+    repo.cancel().await.ok();
+    let snapshot = AccountOnboardingSnapshot {
+        handoff_request_id: grant.request_id,
+        account_subject,
+        observed_at,
+        binding,
+        goal,
+    };
+    snapshot
+        .validate()
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let (binding_state, lease_state) = match &snapshot.binding {
+        AccountHandoffBinding::IdentityCreationActive {
+            identity_creation_lease,
+        } => (
+            "identity_creation_active",
+            Some(identity_creation_lease.state.as_str()),
+        ),
+        AccountHandoffBinding::IdentityCreationBusy { .. } => ("identity_creation_busy", None),
+        AccountHandoffBinding::Bound { .. } => ("bound", None),
+    };
+    tracing::info!(
+        handoff_request_id = %snapshot.handoff_request_id,
+        binding_state,
+        lease_state,
+        goal = ?snapshot.goal.kind(),
+        "projected authoritative account onboarding state"
+    );
+    Ok(Json(snapshot))
 }
 
 fn redacted_handoff_intent(
@@ -732,7 +813,7 @@ pub(crate) async fn authenticate_account_handoff(
     depot: &Depot,
     operation: AccountHandoffAllowedOperation,
 ) -> Result<(AccountHandoffGrant, DpopVerification), ArkretRouteError> {
-    authenticate_account_handoff_inner(req, depot, operation).await
+    authenticate_account_handoff_inner(req, depot, Some(operation)).await
 }
 
 /// Re-authenticate possession of a presented handoff token without requiring
@@ -759,7 +840,7 @@ pub(crate) fn verify_account_handoff_holder_without_lookup(
 async fn authenticate_account_handoff_inner(
     req: &Request,
     depot: &Depot,
-    operation: AccountHandoffAllowedOperation,
+    operation: Option<AccountHandoffAllowedOperation>,
 ) -> Result<(AccountHandoffGrant, DpopVerification), ArkretRouteError> {
     let token = account_handoff_authorization(req)?;
     let now = chrono::Utc::now();
@@ -775,7 +856,15 @@ async fn authenticate_account_handoff_inner(
                 "account handoff is expired, revoked, consumed, or unknown",
             )
         })?;
-    enforce_handoff_operation(&grant, operation)?;
+    match operation {
+        Some(operation) => enforce_handoff_operation(&grant, operation)?,
+        None if grant.allowed_operations != ACCOUNT_HANDOFF_ALLOWED_OPERATIONS => {
+            return Err(ArkretRouteError::Forbidden(
+                "account handoff has a non-canonical operation set".to_owned(),
+            ));
+        }
+        None => {}
+    }
     repo.cancel().await.ok();
 
     let dpop = dpop_header_from_request(req)
@@ -792,6 +881,13 @@ async fn authenticate_account_handoff_inner(
         ));
     }
     Ok((grant, verification))
+}
+
+async fn authenticate_account_handoff_snapshot(
+    req: &Request,
+    depot: &Depot,
+) -> Result<(AccountHandoffGrant, DpopVerification), ArkretRouteError> {
+    authenticate_account_handoff_inner(req, depot, None).await
 }
 
 pub(crate) fn enforce_handoff_operation(
@@ -869,7 +965,27 @@ fn creation_to_outcome(
     account_subject: arkret_identifiers::Hash,
     preferred_locale: Option<arkret_locale::UiLocale>,
 ) -> Result<AccountHandoffOutcome, ArkretRouteError> {
-    let (grant, binding) = match creation {
+    let (grant, binding) = creation_binding(creation)?;
+    let outcome = AccountHandoffOutcome {
+        request_id: grant.request_id,
+        account_handle,
+        account_subject,
+        preferred_locale,
+        account_handoff_grant: grant.account_handoff_grant,
+        expires_at: grant.expires_at,
+        allowed_operations: grant.allowed_operations,
+        binding,
+    };
+    outcome
+        .validate()
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    Ok(outcome)
+}
+
+fn creation_binding(
+    creation: AccountHandoffCreation,
+) -> Result<(AccountHandoffGrant, AccountHandoffBinding), ArkretRouteError> {
+    let result = match creation {
         AccountHandoffCreation::Active { grant, lease } => (
             grant,
             AccountHandoffBinding::IdentityCreationActive {
@@ -927,20 +1043,7 @@ fn creation_to_outcome(
             ));
         }
     };
-    let outcome = AccountHandoffOutcome {
-        request_id: grant.request_id,
-        account_handle,
-        account_subject,
-        preferred_locale,
-        account_handoff_grant: grant.account_handoff_grant,
-        expires_at: grant.expires_at,
-        allowed_operations: grant.allowed_operations,
-        binding,
-    };
-    outcome
-        .validate()
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    Ok(outcome)
+    Ok(result)
 }
 
 fn account_subject(

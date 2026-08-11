@@ -204,7 +204,7 @@ pub async fn account_register_endpoint(
     )
     .map_err(|error| proof_invalid(error.to_string()))?;
 
-    let registry_outcome = match context.lease.state {
+    let (registry_outcome, registration_did_evidence) = match context.lease.state {
         IdentityCreationSagaState::Reserved => {
             let target = principal_server_target(depot, &grant.audience)?;
             let outcome = soland_webvh::submit_did_operation(
@@ -222,13 +222,16 @@ pub async fn account_register_endpoint(
                 )
             })?;
             validate_registry_outcome(&outcome, &body.full_id)?;
+            let registration_did_evidence = identity_creation
+                .registration_did_evidence_draft
+                .clone()
+                .accept(outcome.accepted_at)
+                .map_err(|error| proof_invalid(error.to_string()))?;
             let head = outcome.head_event_digest.as_ref().expect("validated head");
-            let receipt = serde_json::to_value(&outcome)
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
             let mut repo = depot.repo().await?;
             if !repo
                 .account_handoff()
-                .mark_did_published(&context, &receipt, head, now)
+                .mark_did_published(&context, &outcome, head, &registration_did_evidence, now)
                 .await?
             {
                 repo.cancel().await.ok();
@@ -237,7 +240,7 @@ pub async fn account_register_endpoint(
                 ));
             }
             repo.save().await?;
-            outcome
+            (outcome, registration_did_evidence)
         }
         IdentityCreationSagaState::DidPublished
         | IdentityCreationSagaState::PcrAccepted
@@ -247,14 +250,26 @@ pub async fn account_register_endpoint(
                     failed_precondition("published identity has no registry receipt")
                 })?;
             validate_registry_outcome(&outcome, &body.full_id)?;
+            let registration_did_evidence = context
+                .lease
+                .registration_did_evidence
+                .clone()
+                .ok_or_else(|| {
+                    failed_precondition(
+                        "published identity has no frozen registration DID evidence",
+                    )
+                })?;
+            if registration_did_evidence.accepted_at != outcome.accepted_at {
+                return Err(failed_precondition(
+                    "frozen registration DID evidence does not carry the registry acceptance time",
+                ));
+            }
             let head = outcome.head_event_digest.as_ref().expect("validated head");
             if context.lease.state == IdentityCreationSagaState::DidPublished {
-                let receipt = serde_json::to_value(&outcome)
-                    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
                 let mut repo = depot.repo().await?;
                 if !repo
                     .account_handoff()
-                    .mark_did_published(&context, &receipt, head, now)
+                    .mark_did_published(&context, &outcome, head, &registration_did_evidence, now)
                     .await?
                 {
                     repo.cancel().await.ok();
@@ -264,7 +279,7 @@ pub async fn account_register_endpoint(
                 }
                 repo.save().await?;
             }
-            outcome
+            (outcome, registration_did_evidence)
         }
         IdentityCreationSagaState::Active => {
             return Err(failed_precondition(
@@ -277,12 +292,6 @@ pub async fn account_register_endpoint(
             ));
         }
     };
-
-    let registration_did_evidence = identity_creation
-        .registration_did_evidence_draft
-        .clone()
-        .accept(registry_outcome.accepted_at)
-        .map_err(|error| proof_invalid(error.to_string()))?;
 
     let pcr_request = PcrGenesisSubmitRequestBody {
         account_authority_id: service_id_for(&depot.arkret_config()?),
