@@ -152,6 +152,7 @@ arkret:
   principal_servers:
   - name: soland-dev
     endpoint: https://local.host/
+    service_id: ak:did_core:webvh:QmUz1hyNMdPEzWvu41UVazczohzzXmiWFy8w6xxrboxN3i
     session_grant_introspection_bearer: local-coauth-session-grant-introspection
     embedded_webvh_registration_bearer: local-soland-webvh-registration
   identity_registry:

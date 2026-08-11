@@ -533,6 +533,13 @@ impl ConfigurationSection for ArkretConfig {
                 )
                 .into());
             }
+            if server.service_id.is_none() {
+                return Err(std::io::Error::other(format!(
+                    "arkret principal server {:?} must configure service_id as an explicit authorization pin",
+                    server.name,
+                ))
+                .into());
+            }
             if server
                 .embedded_webvh_registration_bearer
                 .as_deref()
@@ -809,7 +816,30 @@ mod tests {
     }
 
     #[test]
-    fn principal_server_config_persists_endpoint_without_runtime_identity() {
+    fn principal_server_config_persists_explicit_service_identity_pin() {
+        let config: ArkretConfig = serde_json::from_value(serde_json::json!({
+            "principal_servers": [{
+                "name": "principal-a",
+                "endpoint": "https://principal.example/",
+                "service_id": "ak:did_core:webvh:QmUz1hyNMdPEzWvu41UVazczohzzXmiWFy8w6xxrboxN3i"
+            }]
+        }))
+        .unwrap();
+
+        let serialized = serde_json::to_value(&config.principal_servers[0]).unwrap();
+        assert_eq!(serialized["name"], "principal-a");
+        assert_eq!(serialized["endpoint"], "https://principal.example/");
+        assert_eq!(
+            serialized["service_id"],
+            "ak:did_core:webvh:QmUz1hyNMdPEzWvu41UVazczohzzXmiWFy8w6xxrboxN3i"
+        );
+        assert!(serialized.get("audience").is_none());
+        assert!(serialized.get("did").is_none());
+        assert!(config.validate(&figment::Figment::new()).is_ok());
+    }
+
+    #[test]
+    fn principal_server_config_rejects_missing_service_identity_pin() {
         let config: ArkretConfig = serde_json::from_value(serde_json::json!({
             "principal_servers": [{
                 "name": "principal-a",
@@ -818,11 +848,10 @@ mod tests {
         }))
         .unwrap();
 
-        let serialized = serde_json::to_value(&config.principal_servers[0]).unwrap();
-        assert_eq!(serialized["name"], "principal-a");
-        assert_eq!(serialized["endpoint"], "https://principal.example/");
-        assert!(serialized.get("audience").is_none());
-        assert!(serialized.get("did").is_none());
+        let error = config
+            .validate(&figment::Figment::new())
+            .expect_err("missing service_id must fail closed");
+        assert!(error.to_string().contains("must configure service_id"));
     }
 
     #[test]

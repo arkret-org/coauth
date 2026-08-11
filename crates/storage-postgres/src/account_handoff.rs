@@ -395,9 +395,10 @@ impl<'c> PgAccountHandoffRepository<'c> {
         account_subject: &arkret_identifiers::Hash,
         audience: &str,
     ) -> Result<(), DatabaseError> {
-        // Serialize the no-row acquisition case as well as renewal. The lock
-        // key contains only the salted account-subject digest and audience.
-        let key = format!("{}\0{audience}", account_subject.as_str());
+        // Serialize the no-row acquisition case as well as renewal. PostgreSQL
+        // `text` cannot contain NUL bytes, so use a length-prefixed transcript
+        // rather than the protocol-style NUL separator used by some hashes.
+        let key = lease_quota_advisory_key(account_subject, audience);
         let _ = diesel::sql_query(
             "SELECT pg_advisory_xact_lock(hashtextextended($1, 0)) IS NULL AS locked",
         )
@@ -534,6 +535,11 @@ impl<'c> PgAccountHandoffRepository<'c> {
         .await?;
         Ok(())
     }
+}
+
+fn lease_quota_advisory_key(account_subject: &arkret_identifiers::Hash, audience: &str) -> String {
+    let account_subject = account_subject.as_str();
+    format!("{}:{account_subject}{audience}", account_subject.len())
 }
 
 #[derive(QueryableByName)]
@@ -2880,5 +2886,22 @@ fn registration_challenge_state_is_usable(
             challenge_consumed
         }
         IdentityCreationSagaState::Active | IdentityCreationSagaState::Completed => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::lease_quota_advisory_key;
+
+    #[test]
+    fn lease_quota_advisory_key_is_postgres_text_safe() {
+        let account_subject = arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
+            .expect("valid account subject");
+        let audience = "ak:did_core:webvh:QmExample";
+
+        let key = lease_quota_advisory_key(&account_subject, audience);
+
+        assert_eq!(key, format!("71:{}{audience}", account_subject.as_str(),));
+        assert!(!key.contains('\0'));
     }
 }
