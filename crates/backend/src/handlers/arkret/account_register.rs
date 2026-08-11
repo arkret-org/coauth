@@ -198,6 +198,11 @@ pub async fn account_register_endpoint(
             "validated inception principal does not match the registration principal",
         ));
     }
+    arkret_signatures::webvh::verify_registration_did_evidence_draft(
+        &identity_creation.did_operation,
+        &identity_creation.registration_did_evidence_draft,
+    )
+    .map_err(|error| proof_invalid(error.to_string()))?;
 
     let registry_outcome = match context.lease.state {
         IdentityCreationSagaState::Reserved => {
@@ -273,6 +278,12 @@ pub async fn account_register_endpoint(
         }
     };
 
+    let registration_did_evidence = identity_creation
+        .registration_did_evidence_draft
+        .clone()
+        .accept(registry_outcome.accepted_at)
+        .map_err(|error| proof_invalid(error.to_string()))?;
+
     let pcr_request = PcrGenesisSubmitRequestBody {
         account_authority_id: service_id_for(&depot.arkret_config()?),
         principal_id: body.principal_id.clone(),
@@ -287,6 +298,8 @@ pub async fn account_register_endpoint(
         did_version_id: identity_creation.control_proof.did_version_id.clone(),
         log_head_digest: identity_creation.control_proof.log_head_digest.clone(),
         control_key_digest: identity_creation.control_proof.control_key_digest.clone(),
+        registration_did_operation: identity_creation.did_operation.clone(),
+        registration_did_evidence,
         identity_creation_control_proof: identity_creation.control_proof.clone(),
         genesis_unit: identity_creation.pcr_genesis_unit.clone(),
     };
