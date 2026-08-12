@@ -5,7 +5,7 @@
 //! check config/policy constraints, delegate to service functions, and map
 //! results to JSON responses.
 
-use coauth_account_types::{ChangeRegistrationEmailOutcome, RegisterOutcome};
+use coauth_account_types::{ChangeRegistrationEmailOutcome, RegisterInput, RegisterOutcome};
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -27,22 +27,6 @@ use crate::handlers::account::service::registration::{
 use crate::salvo_utils::SessionInfoExt;
 
 // ── POST /_coauth/account/auth/register ─────────────────────────────────
-
-#[derive(Deserialize, ToSchema)]
-pub struct RegisterInput {
-    pub handle: String,
-    #[serde(default)]
-    pub email: Option<String>,
-    #[serde(default)]
-    pub phone: Option<String>,
-    pub password: String,
-    pub password_confirm: String,
-    /// Solved CAPTCHA token, supplied when the deployment has a CAPTCHA
-    /// provider configured (`site.captcha`). Verified before the
-    /// registration policy / availability checks run.
-    #[serde(default)]
-    pub captcha_token: Option<String>,
-}
 
 #[endpoint]
 pub async fn post_register(
@@ -132,7 +116,7 @@ pub async fn post_register(
             ip_address,
             requester,
             notification_language,
-            post_auth_action: None,
+            post_auth_action: input.post_auth_action,
             password_registration_enabled: site_config.password_registration_enabled,
             password_registration_contact_required: site_config
                 .password_registration_contact_required,

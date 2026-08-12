@@ -1,7 +1,7 @@
 pub mod types;
 
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::config::api_base_url;
@@ -47,7 +47,10 @@ pub async fn api_get<T: for<'de> Deserialize<'de>>(path: &str) -> Result<T, Stri
 }
 
 /// Execute a POST request to the REST API.
-pub async fn api_post<T: for<'de> Deserialize<'de>>(path: &str, body: Value) -> Result<T, String> {
+pub async fn api_post<T: for<'de> Deserialize<'de>>(
+    path: &str,
+    body: impl Serialize,
+) -> Result<T, String> {
     let url = format!("{}{}", api_base_url(), path);
     let client = make_client();
 

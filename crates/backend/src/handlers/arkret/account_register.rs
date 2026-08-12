@@ -171,6 +171,11 @@ pub async fn account_register_endpoint(
         ));
     }
     validate_initial_session_request(identity_creation, &grant)?;
+    // Resolve the exact Principal Server once for the whole registration
+    // transaction. The same service identity is the handoff/session audience,
+    // the PCR submission target, and the server pinned by the resulting
+    // PrincipalAuthorityInstance.
+    let principal_server = principal_server_target(depot, &grant.audience)?;
     let browser_session_id = grant.browser_session_id.ok_or_else(|| {
         failed_precondition("identity creation requires its originating browser session")
     })?;
@@ -206,11 +211,10 @@ pub async fn account_register_endpoint(
 
     let (registry_outcome, registration_did_evidence) = match context.lease.state {
         IdentityCreationSagaState::Reserved => {
-            let target = principal_server_target(depot, &grant.audience)?;
             let outcome = soland_webvh::submit_did_operation(
                 &depot.http_client()?,
-                &target.endpoint,
-                target.bearer.as_deref(),
+                &principal_server.endpoint,
+                principal_server.bearer.as_deref(),
                 &identity_creation.did_operation,
             )
             .await
@@ -322,7 +326,6 @@ pub async fn account_register_endpoint(
         context.lease.state,
         IdentityCreationSagaState::Reserved | IdentityCreationSagaState::DidPublished
     ) {
-        let target = principal_server_target(depot, &grant.audience)?;
         let config = depot.arkret_config()?;
         let trust_domain = arkret_identifiers::TypedTrustDomainId::new(trust_domain_for(
             &depot.url_builder()?,
@@ -332,13 +335,13 @@ pub async fn account_register_endpoint(
         let http_client = depot.http_client()?;
         let key_store = depot.key_store()?;
         let peer = PeerProtocolClient::new(
-            Some(&target.endpoint),
+            Some(&principal_server.endpoint),
             &http_client,
             &key_store,
             issuer_did_for(&config),
             arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
                 source_service_id: service_id_for(&config).into(),
-                destination_service_id: target.service_id.into(),
+                destination_service_id: principal_server.service_id.clone().into(),
                 source_trust_domain: trust_domain.clone(),
                 destination_trust_domain: trust_domain,
             },
@@ -384,7 +387,7 @@ pub async fn account_register_endpoint(
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let authority_instance = arkret_wire::PrincipalAuthorityInstance::new(
         body.principal_id.clone(),
-        service_id_for(&depot.arkret_config()?),
+        principal_server.service_id.clone(),
         pcr_outcome.pcr_realm_id.clone(),
         principal_genesis_receipt_digest,
     )

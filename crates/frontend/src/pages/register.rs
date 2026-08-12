@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 
 use crate::api::types::{
-    BootstrapAdminStatus, ChangeRegistrationEmailOutcome, ProvidersOutcome, RegisterOutcome,
-    RegisterStatusOutcome, ResendEmailAuthCodePayload, StepOutcome,
+    BootstrapAdminStatus, ChangeRegistrationEmailOutcome, ProvidersOutcome, RegisterInput,
+    RegisterOutcome, RegisterStatusOutcome, ResendEmailAuthCodePayload, StepOutcome,
 };
 use crate::components::form_error::FormError;
 use crate::components::layout::Layout;
@@ -17,6 +17,10 @@ const REGISTER_EMAIL_VERIFY_STATUS_ID: &str = "register-email-verify-status";
 const REGISTER_PHONE_VERIFY_CODE_ID: &str = "register-phone-verify-code";
 const REGISTER_PHONE_VERIFY_ERROR_ID: &str = "register-phone-verify-error";
 const REGISTER_PHONE_VERIFY_STATUS_ID: &str = "register-phone-verify-status";
+
+fn registration_post_auth_action() -> Option<coauth_account_types::PostAuthAction> {
+    crate::post_auth_continuation::current().or_else(crate::post_auth_continuation::load)
+}
 
 /// Registration entry page — shows password registration form and/or upstream
 /// provider buttons.
@@ -68,6 +72,10 @@ fn RegisterPage(providers: ProvidersOutcome) -> Element {
     let nav = navigator();
     let has_providers = !providers.providers.is_empty();
     let reg_enabled = providers.password_registration_enabled;
+    // Freeze the OAuth continuation when this page is mounted.  The backend
+    // stores it on the registration record, so later verification/finish
+    // routes do not depend on browser URL or sessionStorage survival.
+    let post_auth_action = use_hook(registration_post_auth_action);
 
     rsx! {
         div { class: "login-page",
@@ -89,6 +97,7 @@ fn RegisterPage(providers: ProvidersOutcome) -> Element {
                             let ph = phone.to_string();
                             let pw = new_password.to_string();
                             let pw2 = new_password_again.to_string();
+                            let post_auth_action = post_auth_action.clone();
 
                             if user.is_empty() {
                                 error.set(Some("Username is required.".to_owned()));
@@ -109,13 +118,15 @@ fn RegisterPage(providers: ProvidersOutcome) -> Element {
                             spawn(async move {
                                 let result = crate::api::api_post::<RegisterOutcome>(
                                     "/account/auth/register",
-                                    serde_json::json!({
-                                        "handle": user,
-                                        "email": if em.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(em) },
-                                        "phone": if ph.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(ph) },
-                                        "password": pw,
-                                        "password_confirm": pw2,
-                                    }),
+                                    RegisterInput {
+                                        handle: user,
+                                        email: (!em.is_empty()).then_some(em),
+                                        phone: (!ph.is_empty()).then_some(ph),
+                                        password: pw,
+                                        password_confirm: pw2,
+                                        captcha_token: None,
+                                        post_auth_action,
+                                    },
                                 ).await;
                                 submitting.set(false);
                                 match result {
@@ -867,24 +878,17 @@ pub fn RegisterFinish(id: String) -> Element {
                 }
             }
 
-            #[cfg(target_arch = "wasm32")]
             if !redirected
-                && let Some(storage) =
-                    web_sys::window().and_then(|w| w.session_storage().ok().flatten())
+                && let Some(coauth_account_types::PostAuthAction::ContinueAuthorizationGrant { id }) =
+                    crate::post_auth_continuation::load()
             {
-                let kind = storage.get_item("post_auth_kind").ok().flatten();
-                let id = storage.get_item("post_auth_id").ok().flatten();
-                // Clean up regardless
-                let _ = storage.remove_item("post_auth_kind");
-                let _ = storage.remove_item("post_auth_id");
-
-                if kind.as_deref() == Some("continue_authorization_grant")
-                    && let Some(grant_id) = id
-                {
-                    nav.push(Route::OAuthApproval { grant_id });
-                    redirected = true;
-                }
+                nav.push(Route::OAuthApproval {
+                    grant_id: id.to_string(),
+                });
+                redirected = true;
             }
+
+            crate::post_auth_continuation::clear();
 
             if !redirected {
                 nav.push(Route::AccountOverview {});

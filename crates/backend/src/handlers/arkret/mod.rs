@@ -486,13 +486,16 @@ fn principal_server_static_session_grant_bearer_audiences(
 impl Scribe for ArkretRouteError {
     fn render(self, res: &mut Response) {
         let (status, envelope) = match self {
-            Self::Internal(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                ErrorEnvelope::new(
-                    arkret_wire::ErrorCode::INTERNAL_ERROR,
-                    "internal server error",
-                ),
-            ),
+            Self::Internal(error) => {
+                tracing::error!(error = %error, "Arkret route failed internally");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    ErrorEnvelope::new(
+                        arkret_wire::ErrorCode::INTERNAL_ERROR,
+                        "internal server error",
+                    ),
+                )
+            }
             Self::NotFound => (
                 StatusCode::NOT_FOUND,
                 ErrorEnvelope::new(arkret_wire::ErrorCode::NOT_FOUND, "not found"),

@@ -92,14 +92,7 @@ fn clear_preserved_login_query() {
 }
 
 fn store_post_auth_continuation(kind: &str, id: &str) {
-    #[cfg(target_arch = "wasm32")]
-    if let Some(storage) = web_sys::window().and_then(|w| w.session_storage().ok().flatten()) {
-        let _ = storage.set_item("post_auth_kind", kind);
-        let _ = storage.set_item("post_auth_id", id);
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    let _ = (kind, id);
+    crate::post_auth_continuation::save_parts(kind, id);
 }
 
 fn account_label(account: &CurrentAccountInfo) -> String {

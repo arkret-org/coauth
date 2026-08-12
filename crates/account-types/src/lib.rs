@@ -306,6 +306,24 @@ pub struct UpdateNotificationPreferencesOutcome {
     pub preferences: Vec<ChannelPreference>,
 }
 
+/// Start a password registration while durably preserving the authenticated
+/// strand that must resume after the account is created.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct RegisterInput {
+    pub handle: String,
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub phone: Option<String>,
+    pub password: String,
+    pub password_confirm: String,
+    #[serde(default)]
+    pub captcha_token: Option<String>,
+    #[serde(default)]
+    pub post_auth_action: Option<PostAuthAction>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 pub struct RegisterOutcome {
@@ -406,5 +424,23 @@ mod tests {
         assert_eq!(outcome.viewer.as_ref().expect("viewer").did, None);
         assert!(outcome.session_grant.is_none());
         assert_eq!(outcome.warnings.len(), 1);
+    }
+
+    #[test]
+    fn registration_request_preserves_typed_oauth_continuation() {
+        let grant_id = Ulid::from_string("01K00000000000000000000000").unwrap();
+        let request = RegisterInput {
+            handle: "alice".to_owned(),
+            email: Some("alice@example.test".to_owned()),
+            phone: None,
+            password: "correct horse battery staple".to_owned(),
+            password_confirm: "correct horse battery staple".to_owned(),
+            captcha_token: None,
+            post_auth_action: Some(PostAuthAction::ContinueAuthorizationGrant { id: grant_id }),
+        };
+
+        let encoded = serde_json::to_vec(&request).unwrap();
+        let decoded: RegisterInput = serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(decoded, request);
     }
 }

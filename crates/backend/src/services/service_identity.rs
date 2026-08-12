@@ -4,12 +4,12 @@ use std::time::Duration;
 
 use arkret_http_client::{Auth, Client, ClientBuilder};
 use arkret_identity::service_identity::{
-    DidCoreIdentityDiagnostic, DidCoreIdentityKeyRef, DidCoreIdentityProviderRef,
-    DidCoreIdentityState, LocalDidCoreIdentity, StoredDidCoreIdentity,
+    DidCoreIdentityBundle, DidCoreIdentityDiagnostic, DidCoreIdentityKeyRef,
+    DidCoreIdentityProviderRef, DidCoreIdentityState, LocalDidCoreIdentity, StoredDidCoreIdentity,
 };
 use arkret_models_identity::service_identity::{
     CanonicalServiceUrl, ServiceRegistrationEnsureRequestBody, ServiceRegistrationKey,
-    ServiceRegistrationOutcome,
+    ServiceRegistrationOutcome, ServiceWebvhInceptionOperation,
 };
 use arkret_signatures::webvh::{
     PreparedInception, ServiceRegistrationInceptionInput,
@@ -45,16 +45,22 @@ struct IdentityRow {
     identity: Value,
 }
 
+#[derive(Clone, Debug)]
+struct StoredIdentityRecord {
+    identity: StoredDidCoreIdentity,
+    inception_operation: ServiceWebvhInceptionOperation,
+}
+
 enum StoredIdentityLoad {
     Missing,
-    Loaded(Box<StoredDidCoreIdentity>),
+    Loaded(Box<StoredIdentityRecord>),
     Invalid(String),
 }
 
 impl StoredIdentityLoad {
     fn into_runtime_result(
         self,
-    ) -> Result<Option<StoredDidCoreIdentity>, Box<DidCoreIdentityState>> {
+    ) -> Result<Option<StoredIdentityRecord>, Box<DidCoreIdentityState>> {
         match self {
             Self::Missing => Ok(None),
             Self::Loaded(stored) => Ok(Some(*stored)),
@@ -246,7 +252,7 @@ async fn resolve_once(
         }
     };
     if let Some(stored) = &stored {
-        if let Err(error) = stored.validate() {
+        if let Err(error) = stored.identity.validate() {
             return Ok(DidCoreIdentityState::Faulted {
                 diagnostic: DidCoreIdentityDiagnostic::RestoreFailed,
                 next_action: format!(
@@ -254,7 +260,7 @@ async fn resolve_once(
                 ),
             });
         }
-        if let Err(error) = validate_local_key_binding(stored, signing_seed, &prepared) {
+        if let Err(error) = validate_local_key_binding(&stored.identity, signing_seed, &prepared) {
             return Ok(DidCoreIdentityState::Faulted {
                 diagnostic: DidCoreIdentityDiagnostic::KeyMismatch,
                 next_action: format!(
@@ -262,10 +268,10 @@ async fn resolve_once(
                 ),
             });
         }
-        if stored.identity.registration_key != *registration_key {
+        if stored.identity.identity.registration_key != *registration_key {
             return Ok(DidCoreIdentityState::RegistrationKeyDrift {
-                identity: stored.identity.clone(),
-                stored_key: stored.identity.registration_key.clone(),
+                identity: stored.identity.identity.clone(),
+                stored_key: stored.identity.identity.registration_key.clone(),
                 computed_key: registration_key.clone(),
             });
         }
@@ -293,28 +299,18 @@ async fn resolve_once(
             )
             .await
         }
-        Err(arkret_http_client::Error::Api { status: 404, .. }) if stored.is_none() => {
-            let request = match ServiceRegistrationEnsureRequestBody::new(
-                registration_key.clone(),
-                match prepared.service_registration_operation() {
-                    Ok(operation) => operation,
-                    Err(error) => {
-                        return Ok(DidCoreIdentityState::Faulted {
-                            diagnostic: DidCoreIdentityDiagnostic::KeyMismatch,
-                            next_action: format!(
-                                "repair the configured service-identity key backend: {error}"
-                            ),
-                        });
-                    }
-                },
-                None,
+        Err(arkret_http_client::Error::Api { status: 404, .. }) => {
+            let request = match service_registration_request(
+                registration_key,
+                &prepared,
+                stored.as_ref(),
             ) {
                 Ok(request) => request,
                 Err(error) => {
                     return Ok(DidCoreIdentityState::Faulted {
                         diagnostic: DidCoreIdentityDiagnostic::RestoreFailed,
                         next_action: format!(
-                            "repair the service-registration inception input: {error}"
+                            "restore the service identity bundle needed to replay the original registration: {error}"
                         ),
                     });
                 }
@@ -327,7 +323,7 @@ async fn resolve_once(
                         registration_key,
                         signing_seed,
                         &prepared,
-                        None,
+                        stored.as_ref(),
                         outcome,
                     )
                     .await
@@ -346,7 +342,7 @@ async fn resolve_once(
                                 registration_key,
                                 signing_seed,
                                 &prepared,
-                                None,
+                                stored.as_ref(),
                                 outcome,
                             )
                             .await
@@ -367,7 +363,7 @@ async fn resolve_once(
         Err(error) if provider_unavailable(&error) => {
             if let Some(stored) = stored {
                 Ok(DidCoreIdentityState::DegradedStored {
-                    identity: stored.identity,
+                    identity: stored.identity.identity,
                     retry_at: retry_at(),
                     last_error: error.to_string(),
                 })
@@ -384,6 +380,29 @@ async fn resolve_once(
     }
 }
 
+fn service_registration_request(
+    registration_key: &ServiceRegistrationKey,
+    prepared: &PreparedInception,
+    stored: Option<&StoredIdentityRecord>,
+) -> anyhow::Result<ServiceRegistrationEnsureRequestBody> {
+    let (operation, previous_receipt) = match stored {
+        Some(stored) => {
+            (
+                stored.inception_operation.clone(),
+                Some(stored.identity.registration_receipt.clone()),
+            )
+        }
+        None => (
+            prepared
+                .service_registration_operation()
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+            None,
+        ),
+    };
+    ServiceRegistrationEnsureRequestBody::new(registration_key.clone(), operation, previous_receipt)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn accept_provider_outcome(
     repository_factory: &PgRepositoryFactory,
@@ -391,14 +410,14 @@ async fn accept_provider_outcome(
     registration_key: &ServiceRegistrationKey,
     signing_seed: &[u8; 32],
     prepared: &PreparedInception,
-    prior: Option<&StoredDidCoreIdentity>,
+    prior: Option<&StoredIdentityRecord>,
     outcome: ServiceRegistrationOutcome,
 ) -> anyhow::Result<DidCoreIdentityState> {
     if let Some(prior) = prior
-        && prior.identity.service_id != outcome.service_id
+        && prior.identity.identity.service_id != outcome.service_id
     {
         return Ok(DidCoreIdentityState::Conflict {
-            stored_service_id: prior.identity.service_id.clone(),
+            stored_service_id: prior.identity.identity.service_id.clone(),
             provider_service_id: outcome.service_id,
         });
     }
@@ -424,7 +443,20 @@ async fn accept_provider_outcome(
             });
         }
     };
-    save_stored(repository_factory, &stored).await?;
+    let inception_operation = prior
+        .map(|prior| prior.inception_operation.clone())
+        .or_else(|| {
+            prepared
+                .service_registration_operation()
+                .ok()
+                .filter(|operation| operation.state.id == stored.identity.full_id)
+        })
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "provider outcome cannot be bound to a signed WebVH inception operation"
+            )
+        })?;
+    save_stored(repository_factory, &stored, inception_operation).await?;
     Ok(DidCoreIdentityState::Ready {
         identity: stored.identity,
     })
@@ -589,8 +621,14 @@ async fn load_stored(
         .optional()?;
     Ok(match row {
         None => StoredIdentityLoad::Missing,
-        Some(row) => match serde_json::from_value(row.identity) {
-            Ok(stored) => StoredIdentityLoad::Loaded(Box::new(stored)),
+        Some(row) => match serde_json::from_value::<DidCoreIdentityBundle>(row.identity) {
+            Ok(bundle) => match bundle.validate() {
+                Ok(()) => StoredIdentityLoad::Loaded(Box::new(StoredIdentityRecord {
+                    inception_operation: bundle.webvh_history[0].clone(),
+                    identity: bundle.identity,
+                })),
+                Err(error) => StoredIdentityLoad::Invalid(error.to_string()),
+            },
             Err(error) => StoredIdentityLoad::Invalid(error.to_string()),
         },
     })
@@ -599,13 +637,24 @@ async fn load_stored(
 async fn save_stored(
     repository_factory: &PgRepositoryFactory,
     identity: &StoredDidCoreIdentity,
+    inception_operation: ServiceWebvhInceptionOperation,
 ) -> anyhow::Result<()> {
+    let persisted = DidCoreIdentityBundle {
+        schema: DidCoreIdentityBundle::SCHEMA.to_owned(),
+        identity: identity.clone(),
+        webvh_history: vec![inception_operation],
+        receipt_chain: vec![identity.registration_receipt.clone()],
+        exported_at: arkret_canonical::normalize_timestamp_canonical(Utc::now()),
+    };
+    persisted
+        .validate()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let mut connection = repository_factory.pool().get().await?;
     diesel::sql_query(
         "INSERT INTO service_identity (id, identity, updated_at) VALUES (1, $1, now()) \
          ON CONFLICT (id) DO UPDATE SET identity = EXCLUDED.identity, updated_at = now()",
     )
-    .bind::<Jsonb, _>(serde_json::to_value(identity)?)
+    .bind::<Jsonb, _>(serde_json::to_value(persisted)?)
     .execute(&mut *connection)
     .await?;
     Ok(())

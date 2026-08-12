@@ -9,6 +9,7 @@ mod components;
 mod config;
 mod pages;
 mod passkey;
+mod post_auth_continuation;
 mod translations;
 mod utils;
 
@@ -23,6 +24,7 @@ use crate::pages::error_pages::ErrorPage;
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 
 fn main() {
+    crate::post_auth_continuation::capture_entry_request();
     crate::pages::login::preserve_login_query();
     init_theme();
     dioxus::launch(app);
