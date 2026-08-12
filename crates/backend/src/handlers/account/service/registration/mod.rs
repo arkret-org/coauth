@@ -1,11 +1,3 @@
-//! # Migration path
-//!
-//! The registration workflow currently uses `UserRegistrationRepository` for
-//! state tracking. It will be progressively migrated to use
-//! `WorkflowRepository` for unified workflow state management. The strand engine
-//! (`crate::handlers::strand`) can already orchestrate registration as a
-//! `default-registration` strand.
-
 mod admin_bootstrap;
 mod finish;
 mod operations;

@@ -1170,24 +1170,6 @@ CREATE TABLE public.user_terms (
     created_at timestamp with time zone NOT NULL
 );
 
-CREATE TABLE public.user_totp_configs (
-    id uuid NOT NULL,
-    user_id uuid NOT NULL,
-    secret text NOT NULL,
-    algorithm text DEFAULT 'SHA1'::text NOT NULL,
-    digits integer DEFAULT 6 NOT NULL,
-    period integer DEFAULT 30 NOT NULL,
-    confirmed_at timestamp with time zone,
-    created_at timestamp with time zone NOT NULL
-);
-
-CREATE TABLE public.user_unsupported_third_party_ids (
-    user_id uuid NOT NULL,
-    medium text NOT NULL,
-    address text NOT NULL,
-    created_at timestamp with time zone NOT NULL
-);
-
 CREATE TABLE public.users (
     id uuid NOT NULL,
     localpart text NOT NULL CHECK ((char_length(localpart) BETWEEN 1 AND 64) AND (octet_length(localpart) <= 256) AND (localpart !~ '[[:space:][:cntrl:]:@/#?]'::text) AND (POSITION(('\\'::text) IN (localpart)) = 0)),
@@ -1195,7 +1177,6 @@ CREATE TABLE public.users (
     locked_at timestamp with time zone,
     deactivated_at timestamp with time zone,
     can_request_admin boolean DEFAULT false NOT NULL,
-    is_guest boolean DEFAULT false NOT NULL,
     display_name text,
     avatar_url text,
     preferred_locale text CHECK (preferred_locale = ANY (ARRAY['en'::text, 'zh'::text])),
@@ -1230,69 +1211,6 @@ CREATE TABLE public.webauthn_ceremonies (
     expires_at timestamp with time zone NOT NULL,
     created_at timestamp with time zone NOT NULL,
     CONSTRAINT webauthn_ceremonies_expiry_check CHECK (expires_at > created_at)
-);
-
-CREATE TABLE public.workflow_audit_logs (
-    id uuid NOT NULL,
-    workflow_instance_id uuid NOT NULL,
-    workflow_step_id uuid,
-    action text NOT NULL,
-    actor jsonb NOT NULL,
-    summary text,
-    metadata jsonb NOT NULL,
-    occurred_at timestamp with time zone NOT NULL
-);
-
-CREATE TABLE public.workflow_deadlines (
-    id uuid NOT NULL,
-    workflow_instance_id uuid NOT NULL,
-    workflow_step_id uuid,
-    deadline_key text NOT NULL,
-    status text NOT NULL,
-    payload jsonb NOT NULL,
-    due_at timestamp with time zone NOT NULL,
-    satisfied_at timestamp with time zone,
-    cancelled_at timestamp with time zone,
-    created_at timestamp with time zone NOT NULL
-);
-
-CREATE TABLE public.workflow_instances (
-    id uuid NOT NULL,
-    workflow_key text NOT NULL,
-    subject jsonb NOT NULL,
-    trigger jsonb NOT NULL,
-    status text NOT NULL,
-    current_step_key text,
-    input jsonb NOT NULL,
-    context jsonb DEFAULT '{}'::jsonb NOT NULL,
-    correlation_key text,
-    started_at timestamp with time zone,
-    completed_at timestamp with time zone,
-    failed_at timestamp with time zone,
-    cancelled_at timestamp with time zone,
-    expires_at timestamp with time zone,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
-);
-
-CREATE TABLE public.workflow_steps (
-    id uuid NOT NULL,
-    workflow_instance_id uuid NOT NULL,
-    step_key text NOT NULL,
-    sequence integer NOT NULL,
-    status text NOT NULL,
-    assignee jsonb,
-    input jsonb NOT NULL,
-    output jsonb,
-    attempt_count integer NOT NULL,
-    last_error_code text,
-    last_error_message text,
-    scheduled_at timestamp with time zone,
-    started_at timestamp with time zone,
-    completed_at timestamp with time zone,
-    failed_at timestamp with time zone,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
 );
 
 ALTER TABLE ONLY public.account_claims
@@ -1583,15 +1501,6 @@ ALTER TABLE ONLY public.user_terms
 ALTER TABLE ONLY public.user_terms
     ADD CONSTRAINT user_terms_user_id_terms_url_key UNIQUE (user_id, terms_url);
 
-ALTER TABLE ONLY public.user_totp_configs
-    ADD CONSTRAINT user_totp_configs_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.user_totp_configs
-    ADD CONSTRAINT user_totp_configs_user_id_unique UNIQUE (user_id);
-
-ALTER TABLE ONLY public.user_unsupported_third_party_ids
-    ADD CONSTRAINT user_unsupported_third_party_ids_pkey PRIMARY KEY (user_id, medium, address);
-
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_localpart_key UNIQUE (localpart);
 
@@ -1603,18 +1512,6 @@ ALTER TABLE ONLY public.webauthn_credentials
 
 ALTER TABLE ONLY public.webauthn_ceremonies
     ADD CONSTRAINT webauthn_ceremonies_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.workflow_audit_logs
-    ADD CONSTRAINT workflow_audit_logs_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.workflow_deadlines
-    ADD CONSTRAINT workflow_deadlines_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.workflow_instances
-    ADD CONSTRAINT workflow_instances_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.workflow_steps
-    ADD CONSTRAINT workflow_steps_pkey PRIMARY KEY (id);
 
 CREATE INDEX account_claims_account_id_issued_idx ON public.account_claims USING btree (account_id, issued_at DESC) WHERE (account_id IS NOT NULL);
 
@@ -1720,8 +1617,6 @@ CREATE INDEX idx_identity_binding_challenges_reservation ON public.identity_bind
 
 CREATE INDEX idx_identity_binding_challenges_expiry ON public.identity_binding_challenges USING btree (expires_at) WHERE ((consumed_at IS NULL) AND (replaced_at IS NULL));
 
-CREATE INDEX idx_user_totp_configs_user_id ON public.user_totp_configs USING btree (user_id);
-
 CREATE INDEX invite_quarantine_queue_consent_id_idx ON public.invite_quarantine_queue USING btree (consent_id);
 
 CREATE INDEX invite_quarantine_queue_holder_did_idx ON public.invite_quarantine_queue USING btree (target_holder_did);
@@ -1801,18 +1696,6 @@ CREATE INDEX webauthn_credentials_account_idx ON public.webauthn_credentials USI
 CREATE UNIQUE INDEX webauthn_credentials_credential_idx ON public.webauthn_credentials USING btree (credential_id);
 
 CREATE INDEX webauthn_ceremonies_expiry_idx ON public.webauthn_ceremonies USING btree (expires_at);
-
-CREATE INDEX workflow_audit_logs_instance_idx ON public.workflow_audit_logs USING btree (workflow_instance_id, id);
-
-CREATE INDEX workflow_deadlines_status_due_idx ON public.workflow_deadlines USING btree (status, due_at);
-
-CREATE INDEX workflow_instances_correlation_key_idx ON public.workflow_instances USING btree (correlation_key) WHERE (correlation_key IS NOT NULL);
-
-CREATE INDEX workflow_instances_key_status_idx ON public.workflow_instances USING btree (workflow_key, status);
-
-CREATE INDEX workflow_instances_status_expires_idx ON public.workflow_instances USING btree (status, expires_at) WHERE (expires_at IS NOT NULL);
-
-CREATE INDEX workflow_steps_instance_sequence_idx ON public.workflow_steps USING btree (workflow_instance_id, sequence);
 
 CREATE TRIGGER handle_audit_log_no_delete BEFORE DELETE ON public.handle_audit_log FOR EACH ROW EXECUTE FUNCTION public.handle_audit_log_block_mutation();
 
@@ -2019,12 +1902,6 @@ ALTER TABLE ONLY public.user_sessions
 ALTER TABLE ONLY public.user_terms
     ADD CONSTRAINT user_terms_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
-ALTER TABLE ONLY public.user_totp_configs
-    ADD CONSTRAINT user_totp_configs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.user_unsupported_third_party_ids
-    ADD CONSTRAINT user_unsupported_third_party_ids_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
 ALTER TABLE ONLY public.webauthn_credentials
     ADD CONSTRAINT webauthn_credentials_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
@@ -2033,18 +1910,3 @@ ALTER TABLE ONLY public.webauthn_ceremonies
 
 ALTER TABLE ONLY public.user_session_authentications
     ADD CONSTRAINT user_session_authentications_webauthn_credential_id_fkey FOREIGN KEY (webauthn_credential_id) REFERENCES public.webauthn_credentials(id) ON DELETE SET NULL;
-
-ALTER TABLE ONLY public.workflow_audit_logs
-    ADD CONSTRAINT workflow_audit_logs_workflow_instance_id_fkey FOREIGN KEY (workflow_instance_id) REFERENCES public.workflow_instances(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.workflow_audit_logs
-    ADD CONSTRAINT workflow_audit_logs_workflow_step_id_fkey FOREIGN KEY (workflow_step_id) REFERENCES public.workflow_steps(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.workflow_deadlines
-    ADD CONSTRAINT workflow_deadlines_workflow_instance_id_fkey FOREIGN KEY (workflow_instance_id) REFERENCES public.workflow_instances(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.workflow_deadlines
-    ADD CONSTRAINT workflow_deadlines_workflow_step_id_fkey FOREIGN KEY (workflow_step_id) REFERENCES public.workflow_steps(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.workflow_steps
-    ADD CONSTRAINT workflow_steps_workflow_instance_id_fkey FOREIGN KEY (workflow_instance_id) REFERENCES public.workflow_instances(id) ON DELETE CASCADE;

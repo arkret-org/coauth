@@ -36,7 +36,7 @@ This includes:
  - [`coauth-storage-postgres`][coauth-storage-postgres]: PostgreSQL adapters, Diesel schema, and migrations; depends on `coauth-data`
  - [`coauth-email`][coauth-email]: High-level email sending abstraction
  - [`coauth-handlers`][coauth-handlers]: Main HTTP application logic
- - [`coauth-policy`][coauth-policy]: Policy engine abstraction layer supporting multiple backends (OPA/WASM, Cedar, Remote HTTP)
+ - [`coauth-policy`][coauth-policy]: Policy engine abstraction layer; the shipped backend is Cedar
  - [`coauth-iana`][coauth-iana]: Auto-generated enums from IANA registries
  - [`coauth-iana-codegen`][coauth-iana-codegen]: Code generator for the `coauth-iana` crate
  - [`coauth-jose`][coauth-jose]: JWT/JWS/JWE/JWK abstraction

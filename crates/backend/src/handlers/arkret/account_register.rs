@@ -19,8 +19,8 @@ use coauth_data::storage::user::BrowserSessionRepository as _;
 use coauth_data::user::{
     PrincipalDidRepository as _, UserRepository as _, VerifiedPrincipalDidBindingInput,
 };
-use coauth_jose::constraints::Constrainable as _;
 use coauth_iana::jose::JsonWebSignatureAlg;
+use coauth_jose::constraints::Constrainable as _;
 use salvo::prelude::*;
 use signature::RandomizedSigner as _;
 

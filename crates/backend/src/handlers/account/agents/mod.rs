@@ -32,8 +32,6 @@ mod tests;
 
 pub use accountability::{
     AccountabilityGrantOutcome, AccountabilityGrantRequestBody, post_accountability_grant,
-    revoke_accountability_grant_by_id, revoke_accountability_grants_for_agent,
-    revoke_accountability_grants_for_controller,
 };
 pub use error_matrix::{
     AgentAuthRejection, PAUSED_REVOCATION_FRESHNESS_WINDOW, enforce_agent_lifecycle_gate,

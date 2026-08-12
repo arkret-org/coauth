@@ -1,13 +1,12 @@
 # 策略引擎
 
-coauth 内置了一个可扩展的策略引擎，用于控制用户注册、客户端注册和授权请求等行为。通过策略提供者抽象层，支持多种不同的策略语言和后端。
+coauth 内置了一个可扩展的策略引擎，用于控制用户注册、客户端注册和授权请求等行为。策略提供者抽象层预留了多后端能力，当前随发行物提供的后端只有 Cedar。
 
 ## 支持的后端
 
 | 后端 | 策略语言 | 性能 | 灵活性 | 特性标志 |
 |------|---------|------|--------|---------|
 | **Cedar**（默认） | Cedar | 极高（原生 Rust） | 中 | `cedar` |
-| **Remote HTTP** | 任意语言 | 取决于网络 | 最高 | `remote` |
 
 ## 工作原理
 
@@ -82,79 +81,6 @@ permit(
     action == Action::"authorize",
     resource
 );
-```
-
-## Remote HTTP 后端
-
-Remote HTTP 后端将所有策略评估委托给外部 HTTP 服务。这是最灵活的方案：你可以用任何语言（Python、Go、Node.js 等）实现策略逻辑，甚至可以使用 AI 模型进行决策。
-
-### 启用 Remote
-
-Remote 需要在编译时启用 `remote` 特性标志：
-
-```bash
-cargo build --features remote
-```
-
-### 配置
-
-```yaml
-policy:
-  engine: remote
-  remote_endpoint: http://localhost:8181
-```
-
-### 协议
-
-远程服务必须实现以下 HTTP 端点：
-
-| 端点 | 用途 |
-|------|------|
-| `POST /evaluate/register` | 用户注册策略 |
-| `POST /evaluate/email` | 邮箱添加策略 |
-| `POST /evaluate/client_registration` | 客户端注册策略 |
-| `POST /evaluate/authorization_grant` | 授权许可策略 |
-| `POST /data` | 动态数据更新（可选） |
-
-**请求格式**：JSON Body，包含评估输入数据。
-
-**响应格式**：
-
-```json
-{
-    "violations": [
-        {
-            "msg": "用户名太短",
-            "field": "username",
-            "code": "username-too-short",
-            "redirect_uri": null
-        }
-    ]
-}
-```
-
-`violations` 数组为空表示请求被允许。
-
-### 示例远程服务（Python）
-
-```python
-from flask import Flask, request, jsonify
-
-app = Flask(__name__)
-
-@app.route("/evaluate/register", methods=["POST"])
-def evaluate_register():
-    data = request.json
-    violations = []
-
-    if len(data.get("username", "")) < 3:
-        violations.append({
-            "msg": "用户名太短",
-            "field": "username",
-            "code": "username-too-short"
-        })
-
-    return jsonify({"violations": violations})
 ```
 
 ## 自定义后端

@@ -58,7 +58,6 @@ macro_rules! select_user_columns {
             users::locked_at,
             users::deactivated_at,
             users::can_request_admin,
-            users::is_guest,
             users::display_name,
             users::avatar_url,
             users::preferred_locale,

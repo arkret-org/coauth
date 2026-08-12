@@ -385,25 +385,6 @@ pub async fn policy_factory_from_config(
                  Recompile with the `cedar` feature to enable it."
             )
         }
-
-        PolicyEngine::Remote => {
-            #[cfg(feature = "remote")]
-            {
-                let endpoint = config
-                    .remote_endpoint
-                    .as_ref()
-                    .context("remote_endpoint must be set when using the Remote engine")?;
-                let client = crate::reqwest_client();
-                PolicyFactory::load_remote(endpoint.clone(), client)
-                    .context("failed to create remote policy factory")
-            }
-
-            #[cfg(not(feature = "remote"))]
-            anyhow::bail!(
-                "Remote policy engine is not available. \
-                 Recompile with the `remote` feature to enable it."
-            )
-        }
     }
 }
 

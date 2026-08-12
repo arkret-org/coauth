@@ -144,8 +144,6 @@ pub mod recovery_authority;
 pub mod upstream_oauth;
 /// User repositories.
 pub mod user;
-/// Workflow instance, step, and event repositories.
-pub mod workflow;
 
 pub use self::notification_template::NotificationTemplateRepository;
 pub use self::pagination::{Page, Pagination};

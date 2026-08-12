@@ -7,12 +7,11 @@ A decision of the policy engine is deterministically made based on three compone
  - A static configuration
  - The action to be performed
 
-coauth supports multiple policy engine backends through an abstraction layer, allowing you to choose the best tool for your needs:
+coauth evaluates policy through an abstraction layer with a single shipped backend:
 
 | Backend | Language | Performance | Flexibility | Feature Flag |
 |---------|----------|-------------|-------------|--------------|
 | **Cedar** (default) | Cedar | Excellent (native Rust) | Medium | `cedar` |
-| **Remote HTTP** | Any | Depends on network | Maximum | `remote` |
 
 ## Cedar backend (default)
 
@@ -78,79 +77,6 @@ permit(
     action == Action::"authorize",
     resource
 );
-```
-
-## Remote HTTP backend
-
-The remote HTTP backend delegates all policy evaluation to an external HTTP service. This is the most flexible approach: you can implement your policy logic in any language (Python, Go, Node.js, etc.), use AI models, or integrate with existing authorization systems.
-
-### Enabling Remote
-
-Remote requires the `remote` feature flag at compile time:
-
-```bash
-cargo build --features remote
-```
-
-### Configuration
-
-```yaml
-policy:
-  engine: remote
-  remote_endpoint: http://localhost:8181
-```
-
-### Protocol
-
-The remote service must expose the following endpoints:
-
-| Endpoint | Purpose |
-|----------|---------|
-| `POST /evaluate/register` | User registration policy |
-| `POST /evaluate/email` | Email addition policy |
-| `POST /evaluate/client_registration` | Client registration policy |
-| `POST /evaluate/authorization_grant` | Authorization grant policy |
-| `POST /data` | Dynamic data update (optional) |
-
-**Request**: JSON body containing the evaluation input (same structure as the internal Rust types).
-
-**Response**: JSON with a `violations` array:
-
-```json
-{
-    "violations": [
-        {
-            "msg": "Username too short",
-            "field": "username",
-            "code": "username-too-short",
-            "redirect_uri": null
-        }
-    ]
-}
-```
-
-An empty `violations` array means the request is allowed.
-
-### Example remote service (Python)
-
-```python
-from flask import Flask, request, jsonify
-
-app = Flask(__name__)
-
-@app.route("/evaluate/register", methods=["POST"])
-def evaluate_register():
-    data = request.json
-    violations = []
-
-    if len(data.get("username", "")) < 3:
-        violations.append({
-            "msg": "Username too short",
-            "field": "username",
-            "code": "username-too-short"
-        })
-
-    return jsonify({"violations": violations})
 ```
 
 ## Custom backend

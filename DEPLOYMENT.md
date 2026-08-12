@@ -130,8 +130,6 @@ recipe in this workspace.
   moderate}` capability actions.
 - Organization-issued handle claims reject homograph violations at the wire
   boundary and are revalidated on refresh.
-- `ak.profile.accountable_principals.strict_reject.v1` is configurable per
-  deployment and defaults to strict accountability-principal validation.
 
 ## Security
 

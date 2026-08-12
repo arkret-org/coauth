@@ -63,8 +63,6 @@ pub mod spa;
 pub mod strand;
 /// Upstream (federated) OAuth / OIDC provider integration.
 pub mod upstream_oauth;
-/// Canonical SSR prelude for server-rendered view handlers (round 25).
-pub mod view_prelude;
 
 mod activity_tracker;
 mod captcha;

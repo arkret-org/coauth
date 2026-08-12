@@ -4,14 +4,6 @@
 //! These functions encapsulate the business logic for adding, verifying, and
 //! removing contact information on an existing user account. They are consumed
 //! by the REST handlers in [`crate::handlers::account::emails`].
-//!
-//! # Migration path
-//!
-//! The contact verification workflow currently uses direct repository calls for
-//! state tracking. It will be progressively migrated to use
-//! `WorkflowRepository` for unified workflow state management. The strand engine
-//! (`crate::handlers::strand`) can already orchestrate contact verification as a
-//! workflow.
 
 use anyhow::Error as AnyhowError;
 use coauth_data::queue::{ProvisionUserJob, QueueJobRepositoryExt as _};

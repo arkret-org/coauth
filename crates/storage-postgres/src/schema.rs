@@ -33,7 +33,6 @@ diesel::table! {
         locked_at -> Nullable<Timestamptz>,
         deactivated_at -> Nullable<Timestamptz>,
         can_request_admin -> Bool,
-        is_guest -> Bool,
         display_name -> Nullable<Text>,
         avatar_url -> Nullable<Text>,
         preferred_locale -> Nullable<Text>,
@@ -531,15 +530,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    user_unsupported_third_party_ids (user_id, medium, address) {
-        user_id -> Uuid,
-        medium -> Text,
-        address -> Text,
-        created_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
     oauth_clients (id) {
         id -> Uuid,
         encrypted_client_secret -> Nullable<Text>,
@@ -937,77 +927,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    workflow_instances (id) {
-        id -> Uuid,
-        workflow_key -> Text,
-        subject -> Jsonb,
-        trigger -> Jsonb,
-        status -> Text,
-        current_step_key -> Nullable<Text>,
-        input -> Jsonb,
-        context -> Jsonb,
-        correlation_key -> Nullable<Text>,
-        started_at -> Nullable<Timestamptz>,
-        completed_at -> Nullable<Timestamptz>,
-        failed_at -> Nullable<Timestamptz>,
-        cancelled_at -> Nullable<Timestamptz>,
-        expires_at -> Nullable<Timestamptz>,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    workflow_steps (id) {
-        id -> Uuid,
-        workflow_instance_id -> Uuid,
-        step_key -> Text,
-        sequence -> Int4,
-        status -> Text,
-        assignee -> Nullable<Jsonb>,
-        input -> Jsonb,
-        output -> Nullable<Jsonb>,
-        attempt_count -> Int4,
-        last_error_code -> Nullable<Text>,
-        last_error_message -> Nullable<Text>,
-        scheduled_at -> Nullable<Timestamptz>,
-        started_at -> Nullable<Timestamptz>,
-        completed_at -> Nullable<Timestamptz>,
-        failed_at -> Nullable<Timestamptz>,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    workflow_deadlines (id) {
-        id -> Uuid,
-        workflow_instance_id -> Uuid,
-        workflow_step_id -> Nullable<Uuid>,
-        deadline_key -> Text,
-        status -> Text,
-        payload -> Jsonb,
-        due_at -> Timestamptz,
-        satisfied_at -> Nullable<Timestamptz>,
-        cancelled_at -> Nullable<Timestamptz>,
-        created_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    workflow_audit_logs (id) {
-        id -> Uuid,
-        workflow_instance_id -> Uuid,
-        workflow_step_id -> Nullable<Uuid>,
-        action -> Text,
-        actor -> Jsonb,
-        summary -> Nullable<Text>,
-        metadata -> Jsonb,
-        occurred_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
     admin_operation_logs (id) {
         id -> Uuid,
         admin_user_id -> Uuid,
@@ -1030,19 +949,6 @@ diesel::table! {
         metadata -> Jsonb,
         ip_address -> Nullable<Inet>,
         user_agent -> Nullable<Text>,
-        created_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    user_totp_configs (id) {
-        id -> Uuid,
-        user_id -> Uuid,
-        secret -> Text,
-        algorithm -> Text,
-        digits -> Int4,
-        period -> Int4,
-        confirmed_at -> Nullable<Timestamptz>,
         created_at -> Timestamptz,
     }
 }
@@ -1091,7 +997,6 @@ diesel::table! {
 }
 
 // Foreign key relationships
-diesel::joinable!(user_totp_configs -> users (user_id));
 diesel::joinable!(user_primary_handle_preferences -> users (user_id));
 diesel::joinable!(principal_did_bindings -> principal_did_owners (principal_did_owner_id));
 diesel::joinable!(principal_did_owners -> users (user_id));
@@ -1121,11 +1026,6 @@ diesel::joinable!(queue_leader -> queue_workers (queue_worker_id));
 diesel::joinable!(notification_deliveries -> notification_requests (notification_request_id));
 diesel::joinable!(notification_event_logs -> notification_requests (notification_request_id));
 diesel::joinable!(notification_event_logs -> notification_deliveries (notification_delivery_id));
-diesel::joinable!(workflow_steps -> workflow_instances (workflow_instance_id));
-diesel::joinable!(workflow_deadlines -> workflow_instances (workflow_instance_id));
-diesel::joinable!(workflow_deadlines -> workflow_steps (workflow_step_id));
-diesel::joinable!(workflow_audit_logs -> workflow_instances (workflow_instance_id));
-diesel::joinable!(workflow_audit_logs -> workflow_steps (workflow_step_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     account_handoff_creation_attempts,
@@ -1136,7 +1036,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     webauthn_ceremonies,
     invite_quarantine_queue,
     user_passwords,
-    user_totp_configs,
     principal_did_bindings,
     principal_did_owners,
     user_emails,
@@ -1152,7 +1051,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     user_phones,
     user_phone_authentications,
     user_phone_authentication_codes,
-    user_unsupported_third_party_ids,
     oauth_clients,
     oauth_client_localized_metadata,
     oauth_sessions,
@@ -1180,10 +1078,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     notification_template_versions,
     admin_operation_logs,
     account_security_events,
-    workflow_instances,
-    workflow_steps,
-    workflow_deadlines,
-    workflow_audit_logs,
     handle_audit_log,
     user_primary_handle_preferences,
     accountability_grants,

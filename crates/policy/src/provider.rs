@@ -1,7 +1,8 @@
 //! Policy provider traits for supporting multiple policy engines.
 //!
-//! This module defines the core abstractions that allow different policy
-//! backends (Cedar, Remote HTTP) to be plugged in via a common interface.
+//! This module defines the core abstractions that allow a policy backend
+//! (Cedar, or a caller-supplied provider) to be plugged in via a common
+//! interface.
 
 use async_trait::async_trait;
 use coauth_data::PolicyData;

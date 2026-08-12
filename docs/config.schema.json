@@ -1376,7 +1376,7 @@
           "default": 2
         },
         "trust_domain": {
-          "description": "Deployment trust-domain identifier injected into Realm policy and the server-describe document.\n\nWire form: `ak:trust_domain:<scope>` where `<scope>` matches `[a-z0-9._:-]{1,128}`. This value binds peer and recovery authorization transcripts to the deployment.\n\nWhen omitted, callers expected to honour cross-deployment replay protection (`Realm` policy, principal-server describe) MUST be told the trust domain is unset and fail closed.\n\nTypically provisioned consistently across the deployment.",
+          "description": "Round R2/R3 (2026-05-20) — deployment trust-domain identifier\ninjected into Realm policy and the server-describe document.\n\nWire form: `ak:trust_domain:<scope>` where `<scope>` matches\n`[a-z0-9._:-]{1,128}`. This value binds peer and recovery\nauthorization transcripts to the deployment.\n\nWhen omitted, callers expected to honour cross-deployment replay\nprotection (`Realm` policy, principal-server describe) MUST be\ntold the trust domain is unset and fail closed.\n\nTypically provisioned consistently across the deployment.",
           "type": [
             "string",
             "null"
@@ -1421,6 +1421,13 @@
           "description": "Base URL of the Principal Server integration point.",
           "type": "string",
           "format": "uri"
+        },
+        "service_id": {
+          "description": "Stable service identity core for authenticated S2S authorization.\nThis is required for every configured Principal Server. Describe\nmetadata may confirm it but can never discover or replace it; an\nendpoint URL or bearer token is never converted into an identity core.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "session_grant_introspection_bearer": {
           "description": "Optional static bearer for the Account Authority / Principal Server\ntrust edge. The Principal Server presents it to coauth introspection and\nAuth-side logout; coauth presents the same deployment credential when\nreading the standard agent projection for lifecycle authorization.",
@@ -2831,11 +2838,11 @@
       ]
     },
     "PolicyConfig": {
-      "description": "Policy engine configuration.\n\nSupports multiple backends: Cedar (default) and Remote HTTP.",
+      "description": "Policy engine configuration.\n\nCurrently the only supported backend is Cedar.",
       "type": "object",
       "properties": {
         "engine": {
-          "description": "The policy engine to use.\n\nDefaults to `cedar`. Other option: `remote`.",
+          "description": "The policy engine to use.\n\nDefaults to `cedar`.",
           "allOf": [
             {
               "$ref": "#/definitions/PolicyEngine"
@@ -2844,13 +2851,6 @@
         },
         "cedar_policy_file": {
           "description": "Path to the Cedar policy file (used when engine is `cedar`).\n\nThe file should contain Cedar policy statements.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "remote_endpoint": {
-          "description": "Base URL of the remote policy service (used when engine is `remote`).\n\nThe service must implement the evaluation HTTP protocol:\n`POST {base_url}/evaluate/{policy_type}`",
           "type": [
             "string",
             "null"
@@ -2870,11 +2870,6 @@
           "description": "Amazon Cedar policy backend.\n\nUses Cedar policies evaluated natively in Rust.\nRequires the `cedar` feature to be enabled.",
           "type": "string",
           "const": "cedar"
-        },
-        {
-          "description": "Remote HTTP policy backend.\n\nDelegates policy evaluation to an external HTTP service.\nRequires the `remote` feature to be enabled.",
-          "type": "string",
-          "const": "remote"
         }
       ]
     },

@@ -64,28 +64,6 @@ use crate::services::policy_frontier::Frontier;
 /// declares no `retry_after_ms` of its own.
 const DEFAULT_THROTTLE_RETRY_AFTER_MS: u64 = 30_000;
 
-/// AKP-0010 (R3 spec-sync 2026-05-27, arkret-spec b47ff6ec) — call /
-/// media capability actions registered in
-/// `capability-action-registry.json`. CAP-1: capability evaluator MUST
-/// recognise these five actions so deny/review/allow rules can target
-/// them by name. Mirrors `arkret_wire::CALL_CAPABILITY_ACTIONS`.
-pub const RECOGNISED_CALL_CAPABILITY_ACTIONS: &[&str] = &[
-    CapabilityActionId::CALL_JOIN,
-    CapabilityActionId::CALL_SCREEN_SHARE,
-    CapabilityActionId::CALL_RECORD,
-    CapabilityActionId::CALL_TRANSCRIBE,
-    CapabilityActionId::CALL_MODERATE,
-];
-
-/// CAP-1: returns true when `action` is one of the five AKP-0010 call /
-/// media capability actions. Used by handlers that need to short-circuit
-/// validation when the realm policy hasn't loaded yet but the action is
-/// nevertheless known to the evaluator.
-#[must_use]
-pub fn is_recognised_call_capability_action(action: &str) -> bool {
-    RECOGNISED_CALL_CAPABILITY_ACTIONS.contains(&action)
-}
-
 /// CAP-2: returns true when the candidate resource selector wire string
 /// is a complete event-derived `ak:circle:<44-char token>` typed id. The evaluator accepts `circle`
 /// selectors verbatim as `deny_actors` / `deny_actions` / target lists
@@ -93,23 +71,6 @@ pub fn is_recognised_call_capability_action(action: &str) -> bool {
 #[must_use]
 pub fn is_circle_selector(selector: &str) -> bool {
     arkret_identifiers::CircleId::new(selector.to_owned()).is_ok()
-}
-
-/// POLICY-1: deployment-level "strict reject" mode for unverified
-/// `accountable_principal_ids[]` entries. When the
-/// `ak.profile.accountable_principals.strict_reject.v1` profile is
-/// declared by the deployment, Actor Profile create/update events that
-/// carry unverified `accountable_principal_ids[]` entries MUST be rejected
-/// wholesale with `failed_precondition / accountability_grant_missing`.
-///
-/// Signalled to the reducer / submit endpoint via shared policy
-/// decisions: see [`PolicyDecision::strict_reject_accountable_principals`] and
-/// the `obligations[]` carrying the `accountability_grant_required`
-/// kind so the caller knows the reducer will hard-reject rather than
-/// strip.
-#[must_use]
-pub fn strict_reject_profile_active(profile_ids: &[&str]) -> bool {
-    profile_ids.contains(&"ak.profile.accountable_principals.strict_reject.v1")
 }
 
 #[derive(Debug, Error)]
@@ -217,35 +178,6 @@ impl PolicyDecision {
                 payload: serde_json::json!({"bucket": bucket}),
             }],
             next_retry_at: Some(next_retry_at),
-            policy_version,
-        }
-    }
-
-    /// POLICY-1: signal "strict reject" mode for the
-    /// `ak.profile.accountable_principals.strict_reject.v1` deployment profile.
-    /// When the profile is declared, Actor Profile create/update events
-    /// containing unverified `accountable_principal_ids[]` entries MUST be
-    /// rejected with `failed_precondition / accountability_grant_missing`.
-    ///
-    /// The reason code on the wire is `failed_precondition`; the
-    /// obligation carries the canonical
-    /// [`arkret_wire::ReasonCode::ACCOUNTABILITY_GRANT_MISSING`]
-    /// string so downstream consumers can render the exact registry
-    /// rejection.
-    #[must_use]
-    pub fn strict_reject_accountable_principals(policy_version: String) -> Self {
-        Self {
-            decision: AuthzDecision::HardDeny,
-            reason_code: ReasonCode::from_wire(arkret_wire::ErrorCode::FAILED_PRECONDITION),
-            obligations: vec![PolicyObligation {
-                kind: "accountability_grant_required".to_owned(),
-                expires_at: None,
-                payload: serde_json::json!({
-                    "reason": arkret_wire::ReasonCode::ACCOUNTABILITY_GRANT_MISSING,
-                    "profile": "ak.profile.accountable_principals.strict_reject.v1",
-                }),
-            }],
-            next_retry_at: None,
             policy_version,
         }
     }
@@ -376,21 +308,6 @@ fn match_rules_with_grants(
     let actor_str = request.actor_id.as_str();
     let action_str = request.action.as_str();
 
-    // POLICY-1 (R3 spec-sync) — Actor Profile create/update with an
-    // unverified `accountable_principal_ids[]` entry must hard deny with
-    // `failed_precondition / accountability_grant_missing`.
-    if strict_reject_enabled(data)
-        && action_str.starts_with("ak.actor.profile.")
-        && request
-            .event_preview
-            .as_ref()
-            .and_then(|preview| preview.get("accountable_principal_ids_unverified"))
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-    {
-        return PolicyDecision::strict_reject_accountable_principals(policy_version.to_owned());
-    }
-
     // Per-realm scope: rules MAY be nested under a `realms` object keyed
     // by realm id, with a `default` fall-through. When the loose JSON
     // is a flat object we treat it as the default scope.
@@ -501,14 +418,6 @@ fn match_rules_with_grants(
         );
     }
 
-    // CAP-1 (R3 spec-sync) — `ak.call.{join,screen_share,record,
-    // transcribe,moderate}` are recognised capability actions even when
-    // no realm rule names them explicitly. Default-allow path; the
-    // recognition is a no-op for matching purposes but ensures the
-    // evaluator surface knows about the action namespace so handlers
-    // can branch on it without re-importing the constants.
-    let _recognised_call_action = is_recognised_call_capability_action(action_str);
-
     PolicyDecision::allow(policy_version.to_owned())
 }
 
@@ -531,9 +440,6 @@ fn capability_action_gate_decision(
     action: &str,
     policy_version: &str,
 ) -> Option<PolicyDecision> {
-    if action.starts_with("ak.actor.profile.") {
-        return None;
-    }
     if is_candidate_join_policy_action(action) {
         return Some(unsupported_feature(policy_version));
     }
@@ -574,10 +480,6 @@ fn unsupported_feature(policy_version: &str) -> PolicyDecision {
 
 fn is_candidate_join_policy_action(action: &str) -> bool {
     action == CapabilityActionId::REALM_JOIN_REVIEW
-        || action == "realm.join_policy"
-        || action.starts_with("realm.join_policy.")
-        || action == "member.application"
-        || action.starts_with("member.application.")
         || action == "ak.member.application"
         || action.starts_with("ak.member.application.")
 }
@@ -598,20 +500,6 @@ fn policy_scope_declares_profile(scope: &Value, profile: &str) -> bool {
     ]
     .into_iter()
     .any(|field| profile_list_contains(scope.get(field), profile))
-}
-
-fn strict_reject_enabled(data: &Value) -> bool {
-    data.get("strict_reject_profile")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-        || profile_list_contains(
-            data.get("enabled_profile_refs"),
-            "ak.profile.accountable_principals.strict_reject.v1",
-        )
-        || profile_list_contains(
-            data.get("claimed_profiles"),
-            "ak.profile.accountable_principals.strict_reject.v1",
-        )
 }
 
 fn profile_list_contains(haystack: Option<&Value>, needle: &str) -> bool {
@@ -984,16 +872,6 @@ mod tests {
     }
 
     #[test]
-    fn cap1_recognises_call_actions() {
-        assert!(is_recognised_call_capability_action("ak.call.join"));
-        assert!(is_recognised_call_capability_action("ak.call.screen_share"));
-        assert!(is_recognised_call_capability_action("ak.call.record"));
-        assert!(is_recognised_call_capability_action("ak.call.transcribe"));
-        assert!(is_recognised_call_capability_action("ak.call.moderate"));
-        assert!(!is_recognised_call_capability_action("ak.message.create"));
-    }
-
-    #[test]
     fn cap1_deny_action_on_cx_call_join_matches() {
         let data = serde_json::json!({
             "deny_actions": ["ak.call.join"]
@@ -1030,39 +908,6 @@ mod tests {
             Some(serde_json::from_value(serde_json::json!({ "circle_id": circle_id })).unwrap());
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
-    }
-
-    #[test]
-    fn policy1_strict_reject_yields_failed_precondition() {
-        let data = serde_json::json!({
-            "strict_reject_profile": true,
-        });
-        let mut r = req("ak:did_core:web:alice.example", "ak.actor.profile.update");
-        r.event_preview = Some(
-            serde_json::from_value(
-                serde_json::json!({ "accountable_principal_ids_unverified": true }),
-            )
-            .unwrap(),
-        );
-        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
-        assert!(matches!(d.decision, AuthzDecision::HardDeny));
-        assert_eq!(d.reason_code.as_str(), "failed_precondition");
-        assert_eq!(d.obligations.len(), 1);
-        assert_eq!(d.obligations[0].kind, "accountability_grant_required");
-    }
-
-    #[test]
-    fn policy1_strict_reject_inert_when_profile_off() {
-        let data = serde_json::json!({});
-        let mut r = req("ak:did_core:web:alice.example", "ak.actor.profile.update");
-        r.event_preview = Some(
-            serde_json::from_value(
-                serde_json::json!({ "accountable_principal_ids_unverified": true }),
-            )
-            .unwrap(),
-        );
-        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
-        assert!(matches!(d.decision, AuthzDecision::Allow));
     }
 
     #[test]

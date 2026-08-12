@@ -15,7 +15,7 @@ use serde::Serialize;
 use super::*;
 use crate::handlers::common::DepotExt;
 
-const CLAIMED_PROFILE_IDS: &[&str] = &["ak.profile.auth_server.v1"];
+const CLAIMED_PROFILE_IDS: &[&str] = &[arkret_wire::ProfileId::AUTH_SERVER_V1];
 
 const SUPPORTED_OPERATIONS: &[&str] = &[
     arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE,
@@ -29,17 +29,19 @@ const SUPPORTED_OPERATIONS: &[&str] = &[
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_RECOVERY_COMPLETION_GRANT,
-    "ak.gate.account.command.refresh_session_grant",
-    "ak.gate.account.command.logout_auth_session",
-    "ak.gate.account.command.introspect_session_grant",
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REFRESH_SESSION_GRANT,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_LOGOUT_AUTH_SESSION,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_INTROSPECT_SESSION_GRANT,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REVOKE_SESSION,
 ];
 
 const IMPLEMENTED_PROFILE_EVENT_KINDS: &[&str] = &[];
 
-const IMPLEMENTED_PROFILE_SCHEMAS: &[&str] =
-    &["ak.schema.handle_claim.v1", "ak.schema.service_describe.v1"];
+const IMPLEMENTED_PROFILE_SCHEMAS: &[&str] = &[
+    arkret_wire::SchemaId::HANDLE_CLAIM_V1,
+    arkret_wire::SchemaId::SERVICE_DESCRIBE_V1,
+];
 
 #[derive(Debug, Clone, Serialize)]
 struct PrincipalServerDescriptor {
@@ -413,15 +415,15 @@ pub(crate) fn service_describe_response(
     );
     let compat_surfaces = [
         (
-            "ak.root.identity.registry.read.describe",
+            arkret_wire::ServiceOperationId::ROOT_IDENTITY_REGISTRY_READ_DESCRIBE,
             "delegated-resolver interop: reports the upstream registry coauth proxies to; does not assert canonical ownership.",
         ),
         (
-            "ak.root.identity.read.resolve",
+            arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE,
             "delegated-resolver interop: DID resolution is performed against the configured identity_registry_resolver; coauth caches but does not author DID documents.",
         ),
         (
-            "ak.root.identity.document.resource.get",
+            arkret_wire::ServiceOperationId::ROOT_IDENTITY_DOCUMENT_RESOURCE_GET,
             "delegated-resolver interop: returns the cached/resolved DID document; coauth holds no authoritative key log for external DIDs.",
         ),
     ]

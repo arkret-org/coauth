@@ -153,7 +153,6 @@ vergen-gitcl = {workspace = true}
 [features]
 # Policy engine backends
 cedar = ["coauth-policy/cedar"]
-remote = ["coauth-policy/remote"]
 # Dev-only password-bootstrap session-grant scaffold (auth.rs). This P0
 # scaffold mints a principal-server session grant directly from a password
 # login, bypassing the canonical OIDC `authorize -> token` ceremony. It is

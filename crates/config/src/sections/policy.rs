@@ -15,12 +15,6 @@ pub enum PolicyEngine {
     /// Requires the `cedar` feature to be enabled.
     #[default]
     Cedar,
-
-    /// Remote HTTP policy backend.
-    ///
-    /// Delegates policy evaluation to an external HTTP service.
-    /// Requires the `remote` feature to be enabled.
-    Remote,
 }
 
 fn is_default_engine(value: &PolicyEngine) -> bool {
@@ -29,13 +23,13 @@ fn is_default_engine(value: &PolicyEngine) -> bool {
 
 /// Policy engine configuration.
 ///
-/// Supports multiple backends: Cedar (default) and Remote HTTP.
+/// Currently the only supported backend is Cedar.
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 pub struct PolicyConfig {
     /// The policy engine to use.
     ///
-    /// Defaults to `cedar`. Other option: `remote`.
+    /// Defaults to `cedar`.
     #[serde(default, skip_serializing_if = "is_default_engine")]
     pub engine: PolicyEngine,
 
@@ -46,14 +40,6 @@ pub struct PolicyConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<String>")]
     pub cedar_policy_file: Option<Utf8PathBuf>,
-
-    // -- Remote-specific configuration --
-    /// Base URL of the remote policy service (used when engine is `remote`).
-    ///
-    /// The service must implement the evaluation HTTP protocol:
-    /// `POST {base_url}/evaluate/{policy_type}`
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub remote_endpoint: Option<String>,
 
     /// Whether to enable audit logging for policy evaluations.
     ///
@@ -66,10 +52,7 @@ pub struct PolicyConfig {
 impl PolicyConfig {
     /// Returns true if the configuration is the default one
     pub(crate) fn is_default(&self) -> bool {
-        is_default_engine(&self.engine)
-            && self.cedar_policy_file.is_none()
-            && self.remote_endpoint.is_none()
-            && !self.audit_logging
+        is_default_engine(&self.engine) && self.cedar_policy_file.is_none() && !self.audit_logging
     }
 }
 

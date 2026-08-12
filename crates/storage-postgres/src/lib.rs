@@ -58,8 +58,6 @@ mod session_grant_codec;
 pub mod upstream_oauth;
 /// PostgreSQL user repositories.
 pub mod user;
-/// PostgreSQL workflow engine repositories.
-pub mod workflow;
 
 mod errors;
 /// PostgreSQL notification template version repository.

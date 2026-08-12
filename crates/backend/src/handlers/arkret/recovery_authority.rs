@@ -643,29 +643,38 @@ fn indeterminate_replay() -> ArkretRouteError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use arkret_models_identity::{
+        InitialSessionGrantOperation, STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,
+    };
+
     use crate::handlers::arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE;
+
+    /// The recovery-completion issuer ceiling is carried by the typed
+    /// `requested_scope` domain: anything outside the standard closed pair
+    /// fails to decode before `InitialSessionGrantRequest::validate` runs.
+    fn decode_requested_scope(scope: &[&str]) -> Result<Vec<InitialSessionGrantOperation>, String> {
+        serde_json::from_value::<Vec<InitialSessionGrantOperation>>(serde_json::json!(scope))
+            .map_err(|error| error.to_string())
+    }
 
     #[test]
     fn recovery_completion_scope_rejects_internal_binding_scope() {
-        assert!(!recovery_scope_within_ceiling(&[
-            PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()
-        ],));
+        assert!(decode_requested_scope(&[PRINCIPAL_SERVER_SESSION_BIND_SCOPE]).is_err());
     }
 
     #[test]
     fn recovery_completion_scope_rejects_privilege_expansion() {
-        assert!(!recovery_scope_within_ceiling(&[
-            "ak.self.account.read.describe".to_owned(),
-            "urn:arkret:admin".to_owned()
-        ],));
+        assert!(
+            decode_requested_scope(&["ak.self.account.read.describe", "urn:arkret:admin"]).is_err()
+        );
     }
 
     #[test]
     fn recovery_completion_scope_accepts_the_closed_standard_pair() {
-        assert!(recovery_scope_within_ceiling(&[
-            "ak.self.account.read.describe".to_owned(),
-            "ak.self.events.read.scan".to_owned(),
-        ],));
+        assert_eq!(
+            decode_requested_scope(&["ak.self.account.read.describe", "ak.self.events.read.scan",])
+                .expect("the standard closed pair stays within the issuer ceiling"),
+            STANDARD_INITIAL_SESSION_GRANT_OPERATIONS.to_vec()
+        );
     }
 }

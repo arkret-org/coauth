@@ -109,7 +109,7 @@ impl Options {
             &config.secrets.encryption().await?,
         );
 
-        // Load and compile the WASM policies (and fallback to the default embedded one)
+        // Load the Cedar policies (and fall back to the default embedded one)
         info!("Loading and compiling the policy module");
         let policy_factory =
             policy_factory_from_config(&config.policy, &config.experimental).await?;

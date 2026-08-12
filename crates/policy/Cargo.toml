@@ -15,7 +15,6 @@ workspace = true
 [features]
 default = []
 cedar = ["dep:cedar-policy", "dep:chrono"]
-remote = ["dep:reqwest"]
 
 [dependencies]
 # Always required
@@ -23,14 +22,12 @@ remote = ["dep:reqwest"]
 
 # Cedar backend (optional)
 
-# Remote HTTP backend (optional)
 anyhow = {workspace = true}
 async-trait = {workspace = true}
 cedar-policy = {workspace = true,optional = true}
 chrono = {workspace = true,optional = true}
 coauth-data = {workspace = true}
 coauth-oauth-types = {workspace = true}
-reqwest = {workspace = true,optional = true}
 schemars = {workspace = true}
 serde = {workspace = true}
 serde_json = {workspace = true}

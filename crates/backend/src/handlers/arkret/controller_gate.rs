@@ -26,7 +26,8 @@ use crate::handlers::common::DepotExt;
 
 const GATE_TTL: Duration = Duration::minutes(5);
 const REPLAY_RETENTION: Duration = Duration::days(7);
-const GATE_OPERATION_ID: &str = "ak.gate.account.command.issue_controller_gate_attestation";
+const GATE_OPERATION_ID: &str =
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_CONTROLLER_GATE_ATTESTATION;
 
 pub struct ControllerGateCanonicalJson(Vec<u8>);
 
@@ -151,8 +152,10 @@ pub async fn issue_controller_gate_attestation(
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let mut attestation = ControllerAccountGateAttestation {
-        schema: NonEmptyString::new("ak.schema.controller_account_gate_attestation.v1".to_owned())
-            .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?,
+        schema: NonEmptyString::new(
+            arkret_wire::SchemaId::CONTROLLER_ACCOUNT_GATE_ATTESTATION_V1.to_owned(),
+        )
+        .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?,
         principal_id: request.principal_id.clone(),
         eligibility,
         status,

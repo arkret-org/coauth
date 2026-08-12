@@ -123,32 +123,37 @@ fn binding_from_row(row: PrincipalDidJoinedRow) -> Result<PrincipalDidBinding, D
         audience,
         principal_id,
         key_log_head,
-        verified_full_id: arkret_identifiers::DidFullId::new(row.verified_full_id).map_err(|error| {
-            DatabaseInconsistencyError::on("principal_did_bindings")
-                .column("verified_full_id")
-                .row(id)
-                .source(error)
-        })?,
+        verified_full_id: arkret_identifiers::DidFullId::new(row.verified_full_id).map_err(
+            |error| {
+                DatabaseInconsistencyError::on("principal_did_bindings")
+                    .column("verified_full_id")
+                    .row(id)
+                    .source(error)
+            },
+        )?,
         verified_version_id: row.verified_version_id,
         binding_receipt,
-        accepted_service_id: arkret_identifiers::DidCoreId::new(row.accepted_service_id).map_err(|error| {
-            DatabaseInconsistencyError::on("principal_did_bindings")
-                .column("accepted_service_id")
-                .row(id)
-                .source(error)
-        })?,
+        accepted_service_id: arkret_identifiers::DidCoreId::new(row.accepted_service_id).map_err(
+            |error| {
+                DatabaseInconsistencyError::on("principal_did_bindings")
+                    .column("accepted_service_id")
+                    .row(id)
+                    .source(error)
+            },
+        )?,
         binding_version: u64::try_from(row.binding_version).map_err(|error| {
             DatabaseInconsistencyError::on("principal_did_bindings")
                 .column("binding_version")
                 .row(id)
                 .source(error)
         })?,
-        binding_frontier_digest: arkret_identifiers::Hash::new(row.binding_frontier_digest).map_err(|error| {
-            DatabaseInconsistencyError::on("principal_did_bindings")
-                .column("binding_frontier_digest")
-                .row(id)
-                .source(error)
-        })?,
+        binding_frontier_digest: arkret_identifiers::Hash::new(row.binding_frontier_digest)
+            .map_err(|error| {
+                DatabaseInconsistencyError::on("principal_did_bindings")
+                    .column("binding_frontier_digest")
+                    .row(id)
+                    .source(error)
+            })?,
         authority_instance,
         created_at: row.created_at,
         updated_at: row.updated_at,

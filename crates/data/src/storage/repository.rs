@@ -33,7 +33,6 @@ use crate::user::{
     UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
     UserTermsRepository,
 };
-use crate::workflow::WorkflowRepository;
 
 /// A [`RepositoryFactory`] is a factory that can create a [`BoxRepository`].
 ///
@@ -326,9 +325,6 @@ pub trait RepositoryAccess: Send {
     fn notification_template<'c>(
         &'c mut self,
     ) -> Box<dyn NotificationTemplateRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`WorkflowRepository`]
-    fn workflow<'c>(&'c mut self) -> Box<dyn WorkflowRepository<Error = Self::Error> + 'c>;
 }
 
 /// Implementations of the [`RepositoryAccess`], [`RepositoryTransaction`] and
@@ -370,7 +366,6 @@ mod impls {
         UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
         UserTermsRepository,
     };
-    use crate::workflow::WorkflowRepository;
     use crate::{MapErr, Repository, RepositoryTransaction};
 
     // --- Repository ---
@@ -709,10 +704,6 @@ mod impls {
                 &mut self.mapper,
             ))
         }
-
-        fn workflow<'c>(&'c mut self) -> Box<dyn WorkflowRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.workflow(), &mut self.mapper))
-        }
     }
 
     impl<R: RepositoryAccess + ?Sized> RepositoryAccess for Box<R> {
@@ -954,10 +945,6 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn NotificationTemplateRepository<Error = Self::Error> + 'c> {
             (**self).notification_template()
-        }
-
-        fn workflow<'c>(&'c mut self) -> Box<dyn WorkflowRepository<Error = Self::Error> + 'c> {
-            (**self).workflow()
         }
     }
 }

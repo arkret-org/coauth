@@ -29,13 +29,13 @@ use uuid::Uuid;
 use crate::DatabaseError;
 
 const ALLOWED_OPERATIONS: [&str; 7] = [
-    "ak.gate.account.command.issue_did_binding_challenge",
-    "ak.gate.account.command.issue_identity_binding_challenge",
-    "ak.gate.account.command.issue_identity_abandonment_challenge",
-    "ak.gate.account.command.abandon_identity_creation",
-    "ak.gate.account.command.register",
-    "ak.gate.account.command.issue_session_grant",
-    "ak.gate.account.command.issue_recovery_completion_grant",
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_DID_BINDING_CHALLENGE,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_ABANDONMENT_CHALLENGE,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ABANDON_IDENTITY_CREATION,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_RECOVERY_COMPLETION_GRANT,
 ];
 
 fn canonical_json_digest_matches(bytes: &[u8], expected: &arkret_identifiers::Hash) -> bool {

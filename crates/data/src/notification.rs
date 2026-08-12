@@ -62,11 +62,6 @@ pub enum NotificationRequestSource {
         /// The originating recovery session.
         user_recovery_session_id: Ulid,
     },
-    /// Triggered by a workflow instance outside the direct auth strands.
-    WorkflowInstance {
-        /// The originating workflow instance.
-        workflow_instance_id: Ulid,
-    },
     /// Triggered by an administrator-initiated operation.
     AdminOperation {
         /// The administrative operation that scheduled the notification.

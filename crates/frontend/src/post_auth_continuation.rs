@@ -1,5 +1,6 @@
 use coauth_account_types::PostAuthAction;
 
+#[cfg(target_arch = "wasm32")]
 const SESSION_KEY: &str = "coauth.session.post_auth_action.v1";
 
 fn from_parts(kind: &str, id: &str) -> Option<PostAuthAction> {

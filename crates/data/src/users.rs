@@ -34,7 +34,6 @@ pub struct User {
     pub locked_at: Option<DateTime<Utc>>,
     pub deactivated_at: Option<DateTime<Utc>>,
     pub can_request_admin: bool,
-    pub is_guest: bool,
     // Profile fields synced to the downstream principal projection.
     pub display_name: Option<String>,
     pub avatar_url: Option<String>,
@@ -200,7 +199,6 @@ impl User {
             locked_at: None,
             deactivated_at: None,
             can_request_admin: false,
-            is_guest: false,
             display_name: Some("John".to_owned()),
             avatar_url: None,
             preferred_locale: Some(UiLocale::En),

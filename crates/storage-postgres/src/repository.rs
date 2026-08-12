@@ -29,7 +29,6 @@ use coauth_data::user::{
     UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
     UserTermsRepository,
 };
-use coauth_data::workflow::WorkflowRepository;
 use coauth_data::{
     BoxRepository, BoxRepositoryFactory, MapErr, Repository, RepositoryAccess, RepositoryError,
     RepositoryFactory, RepositoryTransaction,
@@ -77,7 +76,6 @@ use crate::user::{
     PgUserRecoveryRepository, PgUserRegistrationRepository, PgUserRegistrationTokenRepository,
     PgUserRepository, PgUserTermsRepository,
 };
-use crate::workflow::PgWorkflowRepository;
 
 /// An implementation of the [`RepositoryFactory`] trait backed by a
 /// diesel-async deadpool connection pool.
@@ -432,9 +430,5 @@ impl RepositoryAccess for PgRepository {
         &'c mut self,
     ) -> Box<dyn NotificationTemplateRepository<Error = Self::Error> + 'c> {
         Box::new(PgNotificationTemplateRepository::new(&mut self.conn))
-    }
-
-    fn workflow<'c>(&'c mut self) -> Box<dyn WorkflowRepository<Error = Self::Error> + 'c> {
-        Box::new(PgWorkflowRepository::new(&mut self.conn))
     }
 }

@@ -368,69 +368,6 @@ fn build_soland_fanout_payload(
     }))
 }
 
-/// Revoke all active accountability grants for a controller DID and mark the
-/// subject as blocked for future grant issuance.
-pub async fn revoke_accountability_grants_for_controller(
-    repo: &mut coauth_data::BoxRepository,
-    rng: &mut (dyn rand_core::RngCore + Send),
-    clock: &dyn coauth_data::Clock,
-    controller_id: &str,
-    reason: &str,
-) -> Result<usize, coauth_data::RepositoryError> {
-    repo.accountability_grant()
-        .mark_subject_revoked(
-            rng,
-            clock,
-            AccountabilitySubjectKind::ControllerId,
-            controller_id,
-            reason,
-        )
-        .await?;
-    repo.accountability_grant()
-        .revoke_for_subject(
-            clock,
-            AccountabilitySubjectKind::ControllerId,
-            controller_id,
-            reason,
-        )
-        .await
-}
-
-/// Revoke all active accountability grants for an agent principal and mark the
-/// subject as blocked for future grant issuance.
-pub async fn revoke_accountability_grants_for_agent(
-    repo: &mut coauth_data::BoxRepository,
-    rng: &mut (dyn rand_core::RngCore + Send),
-    clock: &dyn coauth_data::Clock,
-    agent_id: &str,
-    reason: &str,
-) -> Result<usize, coauth_data::RepositoryError> {
-    repo.accountability_grant()
-        .mark_subject_revoked(
-            rng,
-            clock,
-            AccountabilitySubjectKind::AgentId,
-            agent_id,
-            reason,
-        )
-        .await?;
-    repo.accountability_grant()
-        .revoke_for_subject(clock, AccountabilitySubjectKind::AgentId, agent_id, reason)
-        .await
-}
-
-/// Revoke one accountability grant by its wire typed id.
-pub async fn revoke_accountability_grant_by_id(
-    repo: &mut coauth_data::BoxRepository,
-    clock: &dyn coauth_data::Clock,
-    accountability_grant_id: &str,
-    reason: &str,
-) -> Result<Option<coauth_data::AccountabilityGrant>, coauth_data::RepositoryError> {
-    repo.accountability_grant()
-        .revoke_by_grant_id(clock, accountability_grant_id, reason)
-        .await
-}
-
 /// Reject any caller that isn't soland / sodmin (no browser session, no
 /// end-user bearer). The single accepted credential is the static
 /// bearer configured under

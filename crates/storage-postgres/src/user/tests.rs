@@ -53,27 +53,18 @@ fn account_binding_receipt(
             "ak:did_core:webvh:zaccountauthority",
         )
         .unwrap(),
-        account_subject: arkret_identifiers::Hash::new(format!(
-            "sha256:{}",
-            "1".repeat(64)
-        ))
-        .unwrap(),
+        account_subject: arkret_identifiers::Hash::new(format!("sha256:{}", "1".repeat(64)))
+            .unwrap(),
         principal_id,
         full_id,
         did_version_id: version_id.to_owned(),
-        control_key_digest: arkret_identifiers::Hash::new(format!(
-            "sha256:{}",
-            "2".repeat(64)
-        ))
-        .unwrap(),
+        control_key_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "2".repeat(64)))
+            .unwrap(),
         identity_creation_lease_id: Some("test-identity-creation-lease".to_owned()),
         lease_fence: Some(1),
         operation_status: arkret_models_identity::IdentityCreationOperationStatus::Accepted,
-        operation_digest: arkret_identifiers::Hash::new(format!(
-            "sha256:{}",
-            "3".repeat(64)
-        ))
-        .unwrap(),
+        operation_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "3".repeat(64)))
+            .unwrap(),
         head_event_digest,
         issued_at,
         proof: arkret_wire::PayloadProof {
@@ -82,11 +73,8 @@ fn account_binding_receipt(
                 "did:webvh:zaccountauthority:account.example#service-key",
             )
             .unwrap(),
-            payload_digest: arkret_identifiers::Hash::new(format!(
-                "sha256:{}",
-                "0".repeat(64)
-            ))
-            .unwrap(),
+            payload_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
+                .unwrap(),
             created_at: issued_at,
             domain: None,
             audience: None,
@@ -119,12 +107,7 @@ fn verified_principal_binding_input(
         key_log_head: key_log_head.clone(),
         verified_full_id: full_id.clone(),
         verified_version_id: "1-fixture".to_owned(),
-        binding_receipt: account_binding_receipt(
-            principal_id,
-            full_id,
-            "1-fixture",
-            key_log_head,
-        ),
+        binding_receipt: account_binding_receipt(principal_id, full_id, "1-fixture", key_log_head),
         accepted_service_id: audience,
         binding_version: 1,
         binding_frontier_digest: arkret_identifiers::Hash::new(format!(
@@ -154,12 +137,7 @@ fn registration_binding_input(
         key_log_head: key_log_head.clone(),
         verified_full_id: full_id.clone(),
         verified_version_id: version_id.to_owned(),
-        binding_receipt: account_binding_receipt(
-            principal_id,
-            full_id,
-            version_id,
-            key_log_head,
-        ),
+        binding_receipt: account_binding_receipt(principal_id, full_id, version_id, key_log_head),
         accepted_service_id: audience,
         binding_version: 1,
         binding_frontier_digest: arkret_identifiers::Hash::new(format!(
@@ -1715,10 +1693,7 @@ async fn principal_binding_refreshes_verified_snapshot_only_within_the_same_core
         format!("did:webvh:z{label}:new.example")
     );
     assert_eq!(refreshed.verified_version_id, "2-rotation");
-    assert_eq!(
-        refreshed.binding_receipt.did_version_id,
-        "2-rotation"
-    );
+    assert_eq!(refreshed.binding_receipt.did_version_id, "2-rotation");
     repo.save().await.unwrap();
 
     let mut repo = factory.create().await.unwrap();

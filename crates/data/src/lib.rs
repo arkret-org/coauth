@@ -81,8 +81,6 @@ pub(crate) mod user_agent;
 pub(crate) mod users;
 mod utils;
 mod version;
-/// Persisted workflow instance, step, deadline, event, and audit models.
-pub mod workflow;
 
 /// Error when an invalid state transition is attempted.
 #[derive(Debug, Error)]
@@ -224,8 +222,3 @@ pub use self::users::{
 };
 pub use self::utils::{BoxClock, BoxRng};
 pub use self::version::AppVersion;
-pub use self::workflow::{
-    WorkflowActor, WorkflowAssignee, WorkflowAuditAction, WorkflowAuditLog, WorkflowDeadline,
-    WorkflowDeadlineStatus, WorkflowInstance, WorkflowInstanceStatus, WorkflowStep,
-    WorkflowStepStatus, WorkflowSubject,
-};

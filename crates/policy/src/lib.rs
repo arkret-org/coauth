@@ -1,12 +1,10 @@
 //! Policy evaluation abstraction layer.
 //!
-//! This crate provides a unified interface for policy evaluation that supports
-//! multiple backends:
+//! This crate provides a unified interface for policy evaluation. The shipped
+//! backend is:
 //!
 //! - **Cedar** (feature `cedar`): Amazon Cedar policies evaluated natively in Rust, offering a
 //!   simpler policy language with high performance.
-//! - **Remote HTTP** (feature `remote`): Delegates policy evaluation to an external HTTP service,
-//!   enabling any language or runtime for policy logic.
 //!
 //! ## Architecture
 //!
@@ -26,8 +24,6 @@ pub mod provider;
 
 #[cfg(feature = "cedar")]
 pub mod cedar;
-#[cfg(feature = "remote")]
-pub mod remote;
 
 use thiserror::Error;
 
@@ -132,21 +128,6 @@ impl PolicyFactory {
     #[cfg(feature = "cedar")]
     pub async fn load_cedar_from_file(path: &str) -> Result<Self, LoadError> {
         let factory = cedar::CedarProviderFactory::from_file(path).await?;
-        Ok(Self {
-            inner: Box::new(factory),
-        })
-    }
-
-    /// Create a policy factory backed by a remote HTTP service.
-    ///
-    /// Requires the `remote` feature to be enabled.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the Remote engine is not compiled in.
-    #[cfg(feature = "remote")]
-    pub fn load_remote(base_url: String, client: reqwest::Client) -> Result<Self, LoadError> {
-        let factory = remote::RemoteProviderFactory::new(base_url, client);
         Ok(Self {
             inner: Box::new(factory),
         })
