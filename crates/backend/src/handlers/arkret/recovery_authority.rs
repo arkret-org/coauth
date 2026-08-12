@@ -26,9 +26,7 @@ use super::account_handoff::{
 use super::session_grant::{
     SessionGrantIssuanceSeed, issue_session_grant_for_audience, new_session_grant_record,
 };
-use super::{
-    ArkretRouteError, preferred_signing_key, standard_initial_session_scope_within_ceiling,
-};
+use super::{ArkretRouteError, preferred_signing_key};
 use crate::handlers::common::DepotExt;
 use crate::services::resolved_principal_audiences::{effective_audience, shared};
 
@@ -255,7 +253,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         session_public_key,
         initial.audience.to_string(),
         initial.device_id.clone(),
-        initial.requested_scope.clone(),
+        initial.requested_scope_strings(),
         Some(receipt.principal_id.as_str()),
         &authority_instance,
         handoff.cnf_jkt.clone(),
@@ -413,11 +411,9 @@ fn validate_completion_evidence(
             "initial SessionGrant audience does not match the account handoff audience",
         ));
     }
-    if !recovery_scope_within_ceiling(&initial.requested_scope) {
-        return Err(failed_precondition(
-            "initial SessionGrant requested_scope exceeds the recovery-completion issuer ceiling",
-        ));
-    }
+    initial
+        .validate()
+        .map_err(|error| failed_precondition(error.to_string()))?;
     let session_jkt = initial
         .session_public_key
         .thumbprint_sha256()
@@ -428,10 +424,6 @@ fn validate_completion_evidence(
         ));
     }
     Ok(())
-}
-
-fn recovery_scope_within_ceiling(requested_scope: &[String]) -> bool {
-    standard_initial_session_scope_within_ceiling(requested_scope)
 }
 
 async fn verify_account_principal_binding(
@@ -447,7 +439,7 @@ async fn verify_account_principal_binding(
         .ok_or_else(|| {
             failed_precondition("principal is not bound to an account at this audience")
         })?;
-    if binding.user_id != account_id || binding.principal_id != principal_id {
+    if binding.user_id != account_id || binding.principal_id.as_str() != principal_id {
         return Err(failed_precondition(
             "recovered principal is bound to a different service account",
         ));

@@ -50,18 +50,6 @@ pub const CLAIM_DEVICE_ID: &str = "org.arkret.device_id";
 pub const CLAIM_SESSION_ID: &str = "org.arkret.session_id";
 
 pub const PRINCIPAL_SERVER_SESSION_BIND_SCOPE: &str = "urn:arkret:principal-server:session.bind";
-pub(crate) const STANDARD_INITIAL_SESSION_SCOPE_CEILING: [&str; 2] =
-    ["ak.self.account.read.describe", "ak.self.events.read.scan"];
-
-pub(crate) fn standard_initial_session_scope_within_ceiling(scopes: &[String]) -> bool {
-    !scopes.is_empty()
-        && scopes.iter().all(|scope| {
-            STANDARD_INITIAL_SESSION_SCOPE_CEILING
-                .iter()
-                .any(|allowed| scope == allowed)
-        })
-}
-
 #[derive(Debug, Error)]
 pub enum SessionGrantError {
     #[error("no signing key is configured for Arkret session grants")]
@@ -619,8 +607,7 @@ where
             .await?
         {
             return Ok(Some(PrincipalDidBinding {
-                principal_id: arkret_identifiers::DidCoreId::new(row.principal_id)
-                    .expect("repository validates principal core IDs"),
+                principal_id: row.principal_id,
                 full_id: row.verified_full_id,
                 accepted_service_id: row.accepted_service_id,
                 audience: audience.to_string(),
@@ -1129,7 +1116,7 @@ pub async fn debug_issue_dpop_grant(
         arkret_identifiers::DeviceId::new(body.device_id.clone())
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         scopes,
-        Some(&principal_did),
+        Some(principal_did.as_str()),
         &authority_instance,
         jkt.clone(),
         arkret_models_identity::SessionGrantProofKind::PairedDeviceProof,
@@ -1142,7 +1129,7 @@ pub async fn debug_issue_dpop_grant(
         audience: material.audience.clone(),
         scopes: material.scopes.clone(),
         expires_at: material.expires_at.clone(),
-        principal_did,
+        principal_did: principal_did.to_string(),
     };
     let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;

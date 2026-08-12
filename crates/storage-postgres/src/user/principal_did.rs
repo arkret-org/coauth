@@ -31,7 +31,7 @@ impl<'c> PgPrincipalDidRepository<'c> {
             .inner_join(principal_did_owners::table)
             .filter(principal_did_bindings::user_id.eq(user_id))
             .filter(principal_did_bindings::audience.eq(audience))
-            .select(binding_selection())
+            .select(PrincipalDidJoinedRow::as_select())
             .first::<PrincipalDidJoinedRow>(self.conn)
             .await
             .optional()?;
@@ -39,67 +39,48 @@ impl<'c> PgPrincipalDidRepository<'c> {
     }
 }
 
-type PrincipalDidJoinedRow = (
-    Uuid,
-    Uuid,
-    String,
-    String,
-    String,
-    String,
-    String,
-    serde_json::Value,
-    String,
-    i64,
-    String,
-    serde_json::Value,
-    DateTime<Utc>,
-    DateTime<Utc>,
-);
-
-fn binding_selection() -> (
-    principal_did_bindings::id,
-    principal_did_bindings::user_id,
-    principal_did_bindings::audience,
-    principal_did_owners::principal_id,
-    principal_did_owners::key_log_head,
-    principal_did_bindings::verified_full_id,
-    principal_did_bindings::verified_version_id,
-    principal_did_bindings::binding_receipt,
-    principal_did_bindings::accepted_service_id,
-    principal_did_bindings::binding_version,
-    principal_did_bindings::binding_frontier_digest,
-    principal_did_bindings::authority_instance,
-    principal_did_bindings::created_at,
-    principal_did_bindings::updated_at,
-) {
-    (
-        principal_did_bindings::id,
-        principal_did_bindings::user_id,
-        principal_did_bindings::audience,
-        principal_did_owners::principal_id,
-        principal_did_owners::key_log_head,
-        principal_did_bindings::verified_full_id,
-        principal_did_bindings::verified_version_id,
-        principal_did_bindings::binding_receipt,
-        principal_did_bindings::accepted_service_id,
-        principal_did_bindings::binding_version,
-        principal_did_bindings::binding_frontier_digest,
-        principal_did_bindings::authority_instance,
-        principal_did_bindings::created_at,
-        principal_did_bindings::updated_at,
-    )
+#[derive(Debug, Queryable, Selectable)]
+struct PrincipalDidJoinedRow {
+    #[diesel(select_expression = principal_did_bindings::id)]
+    id: Uuid,
+    #[diesel(select_expression = principal_did_bindings::user_id)]
+    user_id: Uuid,
+    #[diesel(select_expression = principal_did_bindings::audience)]
+    audience: String,
+    #[diesel(select_expression = principal_did_owners::principal_id)]
+    principal_id: String,
+    #[diesel(select_expression = principal_did_owners::key_log_head)]
+    key_log_head: String,
+    #[diesel(select_expression = principal_did_bindings::verified_full_id)]
+    verified_full_id: String,
+    #[diesel(select_expression = principal_did_bindings::verified_version_id)]
+    verified_version_id: String,
+    #[diesel(select_expression = principal_did_bindings::binding_receipt)]
+    binding_receipt: serde_json::Value,
+    #[diesel(select_expression = principal_did_bindings::accepted_service_id)]
+    accepted_service_id: String,
+    #[diesel(select_expression = principal_did_bindings::binding_version)]
+    binding_version: i64,
+    #[diesel(select_expression = principal_did_bindings::binding_frontier_digest)]
+    binding_frontier_digest: String,
+    #[diesel(select_expression = principal_did_bindings::authority_instance)]
+    authority_instance: serde_json::Value,
+    #[diesel(select_expression = principal_did_bindings::created_at)]
+    created_at: DateTime<Utc>,
+    #[diesel(select_expression = principal_did_bindings::updated_at)]
+    updated_at: DateTime<Utc>,
 }
 
 fn binding_from_row(row: PrincipalDidJoinedRow) -> Result<PrincipalDidBinding, DatabaseError> {
-    let id = Ulid::from(row.0);
-    let key_log_head = arkret_identifiers::Hash::new(row.4).map_err(|error| {
+    let id = Ulid::from(row.id);
+    let key_log_head = arkret_identifiers::Hash::new(row.key_log_head).map_err(|error| {
         DatabaseInconsistencyError::on("principal_did_owners")
             .column("key_log_head")
             .row(id)
             .source(error)
     })?;
     let authority_instance: arkret_wire::PrincipalAuthorityInstance =
-        serde_json::from_value(row.11).map_err(|error| {
+        serde_json::from_value(row.authority_instance).map_err(|error| {
             DatabaseInconsistencyError::on("principal_did_bindings")
                 .column("authority_instance")
                 .row(id)
@@ -111,41 +92,66 @@ fn binding_from_row(row: PrincipalDidJoinedRow) -> Result<PrincipalDidBinding, D
             .row(id)
             .source(error)
     })?;
+    let audience = arkret_identifiers::DidCoreId::new(row.audience).map_err(|error| {
+        DatabaseInconsistencyError::on("principal_did_bindings")
+            .column("audience")
+            .row(id)
+            .source(error)
+    })?;
+    let principal_id = arkret_identifiers::DidCoreId::new(row.principal_id).map_err(|error| {
+        DatabaseInconsistencyError::on("principal_did_owners")
+            .column("principal_id")
+            .row(id)
+            .source(error)
+    })?;
+    let binding_receipt: arkret_models_identity::AccountBindingReceipt =
+        serde_json::from_value(row.binding_receipt).map_err(|error| {
+            DatabaseInconsistencyError::on("principal_did_bindings")
+                .column("binding_receipt")
+                .row(id)
+                .source(error)
+        })?;
+    binding_receipt.validate_shape().map_err(|error| {
+        DatabaseInconsistencyError::on("principal_did_bindings")
+            .column("binding_receipt")
+            .row(id)
+            .source(error)
+    })?;
     Ok(PrincipalDidBinding {
         id,
-        user_id: Ulid::from(row.1),
-        audience: row.2,
-        principal_id: row.3,
+        user_id: Ulid::from(row.user_id),
+        audience,
+        principal_id,
         key_log_head,
-        verified_full_id: arkret_identifiers::DidFullId::new(row.5).map_err(|error| {
+        verified_full_id: arkret_identifiers::DidFullId::new(row.verified_full_id).map_err(|error| {
             DatabaseInconsistencyError::on("principal_did_bindings")
                 .column("verified_full_id")
                 .row(id)
                 .source(error)
         })?,
-        verified_version_id: row.6,
-        binding_receipt: row.7,
-        accepted_service_id: arkret_identifiers::DidCoreId::new(row.8).map_err(|error| {
+        verified_version_id: row.verified_version_id,
+        binding_receipt,
+        accepted_service_id: arkret_identifiers::DidCoreId::new(row.accepted_service_id).map_err(|error| {
             DatabaseInconsistencyError::on("principal_did_bindings")
                 .column("accepted_service_id")
                 .row(id)
                 .source(error)
         })?,
-        binding_version: u64::try_from(row.9).map_err(|error| {
+        binding_version: u64::try_from(row.binding_version).map_err(|error| {
             DatabaseInconsistencyError::on("principal_did_bindings")
                 .column("binding_version")
                 .row(id)
                 .source(error)
         })?,
-        binding_frontier_digest: arkret_identifiers::Hash::new(row.10).map_err(|error| {
+        binding_frontier_digest: arkret_identifiers::Hash::new(row.binding_frontier_digest).map_err(|error| {
             DatabaseInconsistencyError::on("principal_did_bindings")
                 .column("binding_frontier_digest")
                 .row(id)
                 .source(error)
         })?,
         authority_instance,
-        created_at: row.12,
-        updated_at: row.13,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
     })
 }
 
@@ -204,7 +210,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             .inner_join(principal_did_owners::table)
             .filter(principal_did_owners::principal_id.eq(did))
             .order(principal_did_bindings::created_at.asc())
-            .select(binding_selection())
+            .select(PrincipalDidJoinedRow::as_select())
             .first::<PrincipalDidJoinedRow>(self.conn)
             .await
             .optional()?;
@@ -220,7 +226,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             .inner_join(principal_did_owners::table)
             .filter(principal_did_owners::principal_id.eq(did))
             .filter(principal_did_bindings::audience.eq(audience))
-            .select(binding_selection())
+            .select(PrincipalDidJoinedRow::as_select())
             .first::<PrincipalDidJoinedRow>(self.conn)
             .await
             .optional()?;
@@ -252,39 +258,24 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
         let projected = arkret_identifiers::project_full_id_to_core_id(&verified_full_id)
             .map(arkret_identifiers::DidCoreId::from);
         let resolution_snapshot_is_valid = projected
-            .is_ok_and(|projected| projected.as_str() == principal_id)
+            .is_ok_and(|projected| projected == principal_id)
             && !verified_version_id.trim().is_empty()
-            && binding_receipt.is_object()
-            && binding_receipt
-                .get("principal_id")
-                .and_then(serde_json::Value::as_str)
-                == Some(principal_id.as_str())
-            && binding_receipt
-                .get("full_id")
-                .and_then(serde_json::Value::as_str)
-                == Some(verified_full_id.as_str())
-            && binding_receipt
-                .get("did_version_id")
-                .and_then(serde_json::Value::as_str)
-                == Some(verified_version_id.as_str())
-            && binding_receipt
-                .get("head_event_digest")
-                .and_then(serde_json::Value::as_str)
-                == Some(key_log_head.as_str());
-        if arkret_identifiers::DidCoreId::new(audience.clone()).is_err()
-            || principal_id.trim() != principal_id
-            || arkret_identifiers::DidCoreId::new(principal_id.clone()).is_err()
-            || !resolution_snapshot_is_valid
+            && binding_receipt.validate_shape().is_ok()
+            && binding_receipt.principal_id == principal_id
+            && binding_receipt.full_id == verified_full_id
+            && binding_receipt.did_version_id == verified_version_id
+            && binding_receipt.head_event_digest == key_log_head;
+        if !resolution_snapshot_is_valid
             || binding_version < 1
-            || accepted_service_id.as_str() != audience
-            || authority_instance.principal_id.as_str() != principal_id
+            || accepted_service_id != audience
+            || authority_instance.principal_id != principal_id
             || authority_instance.principal_server_id != accepted_service_id
         {
             return Err(DatabaseError::invalid_operation());
         }
 
         if let Some(binding) = self
-            .binding_query_for_user_and_audience(Uuid::from(user.id), &audience)
+            .binding_query_for_user_and_audience(Uuid::from(user.id), audience.as_str())
             .await?
             && (binding.principal_id != principal_id
                 || binding.authority_instance != authority_instance)
@@ -297,7 +288,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
         let owner_row = NewPrincipalDidOwner {
             id: Uuid::from(owner_id),
             user_id: Uuid::from(user.id),
-            principal_id: principal_id.clone(),
+            principal_id: principal_id.to_string(),
             key_log_head: key_log_head.to_string(),
             created_at: now,
             updated_at: now,
@@ -310,7 +301,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             .await?;
 
         let owner = principal_did_owners::table
-            .filter(principal_did_owners::principal_id.eq(&principal_id))
+            .filter(principal_did_owners::principal_id.eq(principal_id.as_str()))
             .select(PrincipalDidOwnerLookup::as_select())
             .first::<PrincipalDidOwnerLookup>(self.conn)
             .await?;
@@ -334,10 +325,11 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             id: Uuid::from(new_id(now, rng)),
             principal_did_owner_id: owner.id,
             user_id: Uuid::from(user.id),
-            audience: audience.clone(),
+            audience: audience.to_string(),
             verified_full_id: verified_full_id.to_string(),
             verified_version_id: verified_version_id.clone(),
-            binding_receipt: binding_receipt.clone(),
+            binding_receipt: serde_json::to_value(&binding_receipt)
+                .map_err(|_| DatabaseError::invalid_operation())?,
             accepted_service_id: accepted_service_id.to_string(),
             binding_version: i64::try_from(binding_version)
                 .map_err(|_| DatabaseError::invalid_operation())?,
@@ -357,7 +349,8 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             .set((
                 principal_did_bindings::verified_full_id.eq(verified_full_id.to_string()),
                 principal_did_bindings::verified_version_id.eq(verified_version_id),
-                principal_did_bindings::binding_receipt.eq(binding_receipt),
+                principal_did_bindings::binding_receipt.eq(serde_json::to_value(&binding_receipt)
+                    .map_err(|_| DatabaseError::invalid_operation())?),
                 principal_did_bindings::accepted_service_id.eq(accepted_service_id.to_string()),
                 principal_did_bindings::binding_version.eq(i64::try_from(binding_version)
                     .map_err(|_| DatabaseError::invalid_operation())?),
@@ -372,7 +365,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             .await?;
 
         let binding = self
-            .binding_query_for_user_and_audience(Uuid::from(user.id), &audience)
+            .binding_query_for_user_and_audience(Uuid::from(user.id), audience.as_str())
             .await?
             .ok_or_else(DatabaseError::invalid_operation)?;
         if binding.principal_id != principal_id {

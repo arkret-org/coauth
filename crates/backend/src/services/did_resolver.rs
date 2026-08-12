@@ -377,7 +377,7 @@ impl DidResolverService for DefaultDidResolverService {
                 .await
                 .map_err(|error| SessionGrantError::Other(error.into()))?
             {
-                return Ok(binding.principal_id);
+                return Ok(binding.principal_id.to_string());
             }
         }
         Err(SessionGrantError::PrincipalUnknown)

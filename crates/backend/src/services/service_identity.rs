@@ -750,10 +750,9 @@ mod tests {
 
     #[test]
     fn malformed_persisted_identity_is_a_faulted_runtime_state() {
-        let load = match serde_json::from_value::<StoredDidCoreIdentity>(Value::Null) {
-            Ok(stored) => StoredIdentityLoad::Loaded(Box::new(stored)),
-            Err(error) => StoredIdentityLoad::Invalid(error.to_string()),
-        };
+        let error = serde_json::from_value::<DidCoreIdentityBundle>(Value::Null)
+            .expect_err("null is not a persisted service identity bundle");
+        let load = StoredIdentityLoad::Invalid(error.to_string());
 
         let state = load
             .into_runtime_result()
@@ -766,5 +765,40 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn receipt_signing_method_is_the_configured_service_assertion_key() {
+        let config = ArkretConfig {
+            identity_services: vec![standalone("identity-a", "https://identity.example/")],
+            ..ArkretConfig::default()
+        };
+        let provider = select_provider(&config).unwrap();
+        let registration_key = ServiceRegistrationKey::new(
+            ServiceKind::AuthServer,
+            CanonicalServiceUrl::canonicalize("https://account.example/").unwrap(),
+        )
+        .unwrap();
+        let signing_seed = [7_u8; 32];
+        let prepared = prepare_inception(&provider, &registration_key, &signing_seed).unwrap();
+        let operation = prepared.service_registration_operation().unwrap();
+        let expected_method = format!(
+            "{}#{}",
+            prepared.did, SERVICE_IDENTITY_VERIFICATION_METHOD_FRAGMENT
+        );
+
+        assert_eq!(prepared.did_key_id, expected_method);
+        assert!(
+            operation
+                .state
+                .assertion_method
+                .iter()
+                .any(|method| method == &expected_method)
+        );
+        let expected_public_key = assertion_public_key(&signing_seed);
+        assert_eq!(
+            operation.state.signing_key_multibase(),
+            Some(expected_public_key.as_str())
+        );
     }
 }

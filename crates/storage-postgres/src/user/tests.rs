@@ -39,6 +39,66 @@ fn principal_authority_instance(
     .unwrap()
 }
 
+fn account_binding_receipt(
+    principal_id: arkret_identifiers::DidCoreId,
+    full_id: arkret_identifiers::DidFullId,
+    version_id: &str,
+    head_event_digest: arkret_identifiers::Hash,
+) -> arkret_models_identity::AccountBindingReceipt {
+    let issued_at = chrono::Utc::now();
+    let mut receipt = arkret_models_identity::AccountBindingReceipt {
+        binding_state: arkret_models_identity::AccountBindingState::Bound,
+        binding_kind: arkret_models_identity::AccountBindingKind::IdentityCreation,
+        account_authority_id: arkret_identifiers::DidCoreId::new(
+            "ak:did_core:webvh:zaccountauthority",
+        )
+        .unwrap(),
+        account_subject: arkret_identifiers::Hash::new(format!(
+            "sha256:{}",
+            "1".repeat(64)
+        ))
+        .unwrap(),
+        principal_id,
+        full_id,
+        did_version_id: version_id.to_owned(),
+        control_key_digest: arkret_identifiers::Hash::new(format!(
+            "sha256:{}",
+            "2".repeat(64)
+        ))
+        .unwrap(),
+        identity_creation_lease_id: Some("test-identity-creation-lease".to_owned()),
+        lease_fence: Some(1),
+        operation_status: arkret_models_identity::IdentityCreationOperationStatus::Accepted,
+        operation_digest: arkret_identifiers::Hash::new(format!(
+            "sha256:{}",
+            "3".repeat(64)
+        ))
+        .unwrap(),
+        head_event_digest,
+        issued_at,
+        proof: arkret_wire::PayloadProof {
+            kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
+            verification_method: arkret_wire::DidUrl::new(
+                "did:webvh:zaccountauthority:account.example#service-key",
+            )
+            .unwrap(),
+            payload_digest: arkret_identifiers::Hash::new(format!(
+                "sha256:{}",
+                "0".repeat(64)
+            ))
+            .unwrap(),
+            created_at: issued_at,
+            domain: None,
+            audience: None,
+            proof_purpose: None,
+            jws: "test-detached-jws".to_owned(),
+        },
+    };
+    receipt.proof.payload_digest = receipt.canonical_payload_digest().unwrap();
+    receipt.validate_shape().unwrap();
+    receipt
+}
+
 fn verified_principal_binding_input(
     audience: impl Into<String>,
     principal_id: String,
@@ -50,19 +110,22 @@ fn verified_principal_binding_input(
         .expect("webvh test principal core");
     let full_id = format!("did:webvh:{method_specific_id}:fixture.example");
     let authority_instance = principal_authority_instance(&principal_id, &audience);
+    let audience = arkret_identifiers::DidCoreId::new(audience).unwrap();
+    let principal_id = arkret_identifiers::DidCoreId::new(principal_id).unwrap();
+    let full_id = arkret_identifiers::DidFullId::new(full_id).unwrap();
     VerifiedPrincipalDidBindingInput {
         audience: audience.clone(),
         principal_id: principal_id.clone(),
         key_log_head: key_log_head.clone(),
-        verified_full_id: arkret_identifiers::DidFullId::new(full_id.clone()).unwrap(),
+        verified_full_id: full_id.clone(),
         verified_version_id: "1-fixture".to_owned(),
-        binding_receipt: serde_json::json!({
-            "principal_id": principal_id,
-            "full_id": full_id,
-            "did_version_id": "1-fixture",
-            "head_event_digest": key_log_head,
-        }),
-        accepted_service_id: arkret_identifiers::DidCoreId::new(audience).unwrap(),
+        binding_receipt: account_binding_receipt(
+            principal_id,
+            full_id,
+            "1-fixture",
+            key_log_head,
+        ),
+        accepted_service_id: audience,
         binding_version: 1,
         binding_frontier_digest: arkret_identifiers::Hash::new(format!(
             "sha256:{}",
@@ -82,20 +145,22 @@ fn registration_binding_input(
 ) -> VerifiedPrincipalDidBindingInput {
     let audience = audience.into();
     let authority_instance = principal_authority_instance(&principal_id, &audience);
+    let audience = arkret_identifiers::DidCoreId::new(audience).unwrap();
+    let principal_id = arkret_identifiers::DidCoreId::new(principal_id).unwrap();
+    let full_id = arkret_identifiers::DidFullId::new(full_id).unwrap();
     VerifiedPrincipalDidBindingInput {
         audience: audience.clone(),
         principal_id: principal_id.clone(),
         key_log_head: key_log_head.clone(),
-        verified_full_id: arkret_identifiers::DidFullId::new(full_id.clone()).unwrap(),
+        verified_full_id: full_id.clone(),
         verified_version_id: version_id.to_owned(),
-        binding_receipt: serde_json::json!({
-            "binding_state": "bound",
-            "principal_id": principal_id.clone(),
-            "full_id": full_id.clone(),
-            "did_version_id": version_id,
-            "head_event_digest": key_log_head.clone(),
-        }),
-        accepted_service_id: arkret_identifiers::DidCoreId::new(audience).unwrap(),
+        binding_receipt: account_binding_receipt(
+            principal_id,
+            full_id,
+            version_id,
+            key_log_head,
+        ),
+        accepted_service_id: audience,
         binding_version: 1,
         binding_frontier_digest: arkret_identifiers::Hash::new(format!(
             "sha256:{}",
@@ -1531,7 +1596,7 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
         .await
         .unwrap()
         .expect("the original audience binding must remain intact");
-    assert_eq!(binding.principal_id, first_did);
+    assert_eq!(binding.principal_id.as_str(), first_did);
     assert!(
         repo.principal_did()
             .get_by_did(&second_did)
@@ -1644,18 +1709,15 @@ async fn principal_binding_refreshes_verified_snapshot_only_within_the_same_core
         )
         .await
         .unwrap();
-    assert_eq!(refreshed.principal_id, principal_id);
+    assert_eq!(refreshed.principal_id.as_str(), principal_id);
     assert_eq!(
         refreshed.verified_full_id.as_str(),
         format!("did:webvh:z{label}:new.example")
     );
     assert_eq!(refreshed.verified_version_id, "2-rotation");
     assert_eq!(
-        refreshed
-            .binding_receipt
-            .get("did_version_id")
-            .and_then(serde_json::Value::as_str),
-        Some("2-rotation")
+        refreshed.binding_receipt.did_version_id,
+        "2-rotation"
     );
     repo.save().await.unwrap();
 

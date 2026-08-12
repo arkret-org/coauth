@@ -58,7 +58,7 @@ fn introspection_grant_record(
     Ok(SessionGrantIntrospectGrant {
         id: grant.grant_id.clone(),
         issuer: grant.issuer.clone(),
-        subject: grant.subject.clone(),
+        subject: parsed_payload.subject,
         service_account_id,
         device_id,
         audience,

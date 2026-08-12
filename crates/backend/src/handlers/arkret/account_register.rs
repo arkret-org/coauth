@@ -20,9 +20,8 @@ use coauth_data::user::{
     PrincipalDidRepository as _, UserRepository as _, VerifiedPrincipalDidBindingInput,
 };
 use coauth_jose::constraints::Constrainable as _;
+use coauth_iana::jose::JsonWebSignatureAlg;
 use salvo::prelude::*;
-use serde::Deserialize;
-use serde_json::Value;
 use signature::RandomizedSigner as _;
 
 use super::account_handoff::{
@@ -34,7 +33,7 @@ use super::session_grant::{
 };
 use super::{
     ArkretRouteError, DepotExt, SessionGrantError, issuer_did_for, preferred_signing_key,
-    service_id_for, standard_initial_session_scope_within_ceiling, trust_domain_for,
+    service_id_for, trust_domain_for,
 };
 use crate::handlers::{make_clock, make_rng};
 use crate::services::peer_protocol_client::{PeerProtocolClient, PeerProtocolClientError};
@@ -67,12 +66,9 @@ pub async fn account_register_endpoint(
     }
     enforce_handoff_operation(&grant, AccountHandoffAllowedOperation::Register)?;
 
-    let raw_body: Value = req
+    let body: AccountRegisterRequestBody = req
         .parse_json()
         .await
-        .map_err(|_| schema_violation("invalid account register body"))?;
-    let request_digest = canonical_register_request_digest(&raw_body)?;
-    let body: AccountRegisterRequestBody = serde_json::from_value(raw_body.clone())
         .map_err(|_| schema_violation("invalid account register body"))?;
     body.validate()
         .map_err(|error| schema_violation(error.to_string()))?;
@@ -81,17 +77,20 @@ pub async fn account_register_endpoint(
             "published-DID registration cannot establish a PCR authority instance",
         ));
     }
-    let replay_key: AccountRegisterReplayKey = serde_json::from_value(raw_body.clone())
-        .map_err(|_| schema_violation("invalid account register identity_creation key"))?;
+    let identity_creation = body
+        .identity_creation
+        .as_ref()
+        .ok_or_else(|| schema_violation("account handoff register requires identity_creation"))?;
+    let request_digest = canonical_register_request_digest(&body)?;
 
     let mut repo = depot.repo().await?;
     let replay = repo
         .account_handoff()
         .registration_replay(
             &grant,
-            &replay_key.identity_creation.identity_creation_lease_id,
-            replay_key.identity_creation.lease_fence,
-            &replay_key.identity_creation.control_proof.challenge_id,
+            &identity_creation.identity_creation_lease_id,
+            identity_creation.lease_fence,
+            &identity_creation.control_proof.challenge_id,
             &request_digest,
         )
         .await?;
@@ -119,10 +118,6 @@ pub async fn account_register_endpoint(
             ));
         }
     }
-    let identity_creation = body
-        .identity_creation
-        .as_ref()
-        .ok_or_else(|| schema_violation("account handoff register requires identity_creation"))?;
     if body.device_id.is_some() {
         return Err(failed_precondition(
             "top-level device_id is not used by the atomic identity-creation flow",
@@ -187,9 +182,9 @@ pub async fn account_register_endpoint(
         .ok_or_else(|| failed_precondition("originating browser session no longer exists"))?;
     prerequisite_repo.cancel().await.ok();
     let key_store = depot.key_store()?;
-    let (_, signing_key) = preferred_signing_key(&key_store)
+    let (_, session_signing_key) = preferred_signing_key(&key_store)
         .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
-    let signing_key_id = signing_key
+    let session_signing_key_id = session_signing_key
         .kid()
         .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?
         .to_owned();
@@ -422,7 +417,7 @@ pub async fn account_register_endpoint(
             verification_method: arkret_wire::DidUrl::new(format!(
                 "{}#{}",
                 issuer_did_for(&depot.arkret_config()?),
-                signing_key_id
+                crate::services::service_identity::SERVICE_IDENTITY_VERIFICATION_METHOD_FRAGMENT
             ))
             .map_err(|error| {
                 ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
@@ -463,7 +458,7 @@ pub async fn account_register_endpoint(
             .await?;
         match existing_binding {
             Some(existing)
-                if existing.principal_id == body.principal_id.as_str()
+                if existing.principal_id == body.principal_id
                     && existing.key_log_head == head_event_digest => {}
             Some(_) => {
                 repo.cancel().await.ok();
@@ -478,20 +473,16 @@ pub async fn account_register_endpoint(
                         &*clock,
                         &user,
                         VerifiedPrincipalDidBindingInput {
-                            audience: grant.audience.clone(),
-                            principal_id: body.principal_id.to_string(),
+                            audience: principal_server.service_id.clone(),
+                            principal_id: body.principal_id.clone(),
                             key_log_head: head_event_digest,
                             verified_full_id: body.full_id.clone(),
                             verified_version_id: identity_creation
                                 .control_proof
                                 .did_version_id
                                 .clone(),
-                            binding_receipt: serde_json::to_value(&receipt)
-                                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-                            accepted_service_id: arkret_identifiers::DidCoreId::new(
-                                grant.audience.clone(),
-                            )
-                            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+                            binding_receipt: receipt.clone(),
+                            accepted_service_id: principal_server.service_id.clone(),
                             binding_version: 1,
                             binding_frontier_digest: arkret_identifiers::Hash::new(
                                 arkret_canonical::canonical_sha256(&receipt)
@@ -515,7 +506,7 @@ pub async fn account_register_endpoint(
         coauth_data::new_id(now, &mut *rng).to_string(),
         now,
         now + depot.arkret_config()?.session_grant_ttl,
-        signing_key_id,
+        session_signing_key_id,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let initial = &identity_creation.initial_session;
@@ -531,7 +522,7 @@ pub async fn account_register_endpoint(
         session_public_key,
         initial.audience.to_string(),
         initial.device_id.clone(),
-        initial.requested_scope.clone(),
+        initial.requested_scope_strings(),
         Some(body.principal_id.as_str()),
         &authority_instance,
         grant.cnf_jkt.clone(),
@@ -666,34 +657,19 @@ fn sign_account_binding_receipt(
         .canonical_payload_digest()
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     receipt.proof.payload_digest = payload_digest.clone();
-    let transcript = serde_json::json!({
-        "context": arkret_wire::ProofContextId::ACCOUNT_BINDING_RECEIPT_PROOF_V1,
-        "payload_digest": payload_digest,
-        "account_authority_id": &receipt.account_authority_id,
-        "account_subject": &receipt.account_subject,
-        "principal_id": &receipt.principal_id,
-        "full_id": &receipt.full_id,
-        "did_version_id": &receipt.did_version_id,
-        "control_key_digest": &receipt.control_key_digest,
-        "verification_method": &receipt.proof.verification_method,
-        "created_at": arkret_canonical::format_timestamp_canonical(receipt.issued_at),
-    });
-    let payload = arkret_canonical::canonical_json_bytes(&transcript)
+    let payload = receipt
+        .canonical_proof_binding_bytes()
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let (algorithm, key) = preferred_signing_key(key_store)
-        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
-    let key_id = key
-        .kid()
-        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
-    let header = coauth_jose::jwt::JsonWebSignatureHeader::new(algorithm.clone())
-        .with_kid(key_id.to_owned());
+    let algorithm = JsonWebSignatureAlg::Ed25519;
+    let header = coauth_jose::jwt::JsonWebSignatureHeader::new(algorithm)
+        .with_kid(receipt.proof.verification_method.to_string());
     let protected =
         serde_json::to_vec(&header).map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let protected = Base64UrlUnpadded::encode_string(&protected);
     let payload = Base64UrlUnpadded::encode_string(&payload);
     let signing_input = format!("{protected}.{payload}");
     let signer = key_store
-        .signer_for_algorithm(&algorithm)
+        .service_identity_signer()
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let mut entropy = make_rng();
     let mut rng = crate::handlers::make_rng_from(&mut *entropy);
@@ -711,30 +687,13 @@ fn sign_account_binding_receipt(
 }
 
 fn canonical_register_request_digest(
-    raw_body: &Value,
+    body: &AccountRegisterRequestBody,
 ) -> Result<arkret_identifiers::Hash, ArkretRouteError> {
     arkret_identifiers::Hash::new(
-        arkret_canonical::canonical_sha256(raw_body)
+        arkret_canonical::canonical_sha256(body)
             .map_err(|_| schema_violation("account register body is not canonicalizable"))?,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
-}
-
-#[derive(Deserialize)]
-struct AccountRegisterReplayKey {
-    identity_creation: AccountRegisterIdentityCreationReplayKey,
-}
-
-#[derive(Deserialize)]
-struct AccountRegisterIdentityCreationReplayKey {
-    identity_creation_lease_id: String,
-    lease_fence: u64,
-    control_proof: AccountRegisterControlProofReplayKey,
-}
-
-#[derive(Deserialize)]
-struct AccountRegisterControlProofReplayKey {
-    challenge_id: String,
 }
 
 fn validate_registry_outcome(
@@ -805,11 +764,9 @@ fn validate_initial_session_request(
             "initial SessionGrant audience does not match the account handoff audience",
         ));
     }
-    if !standard_initial_session_scope_within_ceiling(&initial.requested_scope) {
-        return Err(failed_precondition(
-            "initial SessionGrant requested_scope exceeds the founding-device issuer ceiling",
-        ));
-    }
+    initial
+        .validate()
+        .map_err(|error| failed_precondition(error.to_string()))?;
     let jkt = initial
         .session_public_key
         .thumbprint_sha256()

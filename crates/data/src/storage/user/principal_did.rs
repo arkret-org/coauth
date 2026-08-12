@@ -10,9 +10,9 @@ use crate::repository_impl;
 #[derive(Clone, Debug)]
 pub struct VerifiedPrincipalDidBindingInput {
     /// Principal Server audience for which this binding was verified.
-    pub audience: String,
+    pub audience: arkret_identifiers::DidCoreId,
     /// Principal DID controlled by the account holder.
-    pub principal_id: String,
+    pub principal_id: arkret_identifiers::DidCoreId,
     /// Verified head of the principal DID's WebVH history.
     pub key_log_head: arkret_identifiers::Hash,
     /// Complete DID independently verified when this private binding was accepted.
@@ -21,7 +21,7 @@ pub struct VerifiedPrincipalDidBindingInput {
     pub verified_version_id: String,
     /// Canonical Account Authority binding receipt retained for exact replay
     /// and audit. This snapshot is private state, never PCR resolution truth.
-    pub binding_receipt: serde_json::Value,
+    pub binding_receipt: arkret_models_identity::AccountBindingReceipt,
     /// Stable service identity core accepted by the principal binding. Gate
     /// attestations bind to this exact accepting service identity.
     pub accepted_service_id: arkret_identifiers::DidCoreId,

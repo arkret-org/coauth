@@ -585,21 +585,21 @@ pub struct UserPhoneAuthenticationCode {
 /// Verified binding between a coauth service account and a principal DID.
 ///
 /// Coauth stores no principal root, recovery, or update private material.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PrincipalDidBinding {
     pub id: Ulid,
     pub user_id: Ulid,
-    /// Audience string of the principal server that verified the submitted DID.
-    pub audience: String,
+    /// Principal server that verified the submitted DID.
+    pub audience: arkret_identifiers::DidCoreId,
     /// Principal DID supplied by the client and verified by the authoritative host.
-    pub principal_id: String,
+    pub principal_id: arkret_identifiers::DidCoreId,
     /// Verified DID history head returned by the authoritative host.
     pub key_log_head: arkret_identifiers::Hash,
     /// Verification-time full DID snapshot. It is Account Authority-private
     /// evidence and is not the principal's published resolution projection.
     pub verified_full_id: arkret_identifiers::DidFullId,
     pub verified_version_id: String,
-    pub binding_receipt: serde_json::Value,
+    pub binding_receipt: arkret_models_identity::AccountBindingReceipt,
     pub accepted_service_id: arkret_identifiers::DidCoreId,
     pub binding_version: u64,
     pub binding_frontier_digest: arkret_identifiers::Hash,

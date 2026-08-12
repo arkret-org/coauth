@@ -2995,7 +2995,7 @@ mod tests {
                     "did:webvh:zQ3shExampleScid:alice.example:webvh:user",
                 )
                 .expect("operation did"),
-                did_method: "webvh".to_owned(),
+                did_method: arkret_models_identity::DidMethodName::Webvh,
                 seq: None,
                 prev_event_digest: None,
                 operation,

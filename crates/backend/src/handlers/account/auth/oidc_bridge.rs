@@ -454,8 +454,7 @@ pub(super) async fn load_verified_principal_did(
         .await
         .map_err(|error| format!("principal binding lookup failed: {error}"))?
         .map(|binding| {
-            let principal_id = DidCoreId::new(binding.principal_id)
-                .map_err(|error| format!("stored principal_id is invalid: {error}"))?;
+            let principal_id = binding.principal_id;
             binding
                 .authority_instance
                 .validate()

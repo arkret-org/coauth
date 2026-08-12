@@ -141,10 +141,8 @@ fn personal_node_did_web_config() -> ArkretConfig {
         runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
             "did:web:auth.example.com",
         ),
-        // Session-grant audiences are Principal Server DIDs. Keeping this
-        // explicit prevents the legacy HTTP admin URL fallback from entering
-        // the signed issuance preimage in these direct minting fixtures.
-        admin_audience: Some("did:web:principal.example.com".to_owned()),
+        // Session-grant audiences are Principal Server core DIDs.
+        admin_audience: Some("ak:did_core:web:principal.example.com".to_owned()),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
         ..ArkretConfig::default()
@@ -816,7 +814,7 @@ fn session_grant_uses_configured_ttl() {
         ),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
-        admin_audience: Some("did:web:principal.example.com".to_owned()),
+        admin_audience: Some("ak:did_core:web:principal.example.com".to_owned()),
         session_grant_ttl: Duration::try_minutes(15).unwrap(),
         ..ArkretConfig::default()
     };
