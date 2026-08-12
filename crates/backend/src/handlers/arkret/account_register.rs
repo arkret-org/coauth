@@ -385,6 +385,11 @@ pub async fn account_register_endpoint(
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    if pcr_outcome.receipt.issuer != principal_server.service_id {
+        return Err(failed_precondition(
+            "PCR genesis receipt issuer does not match the selected Principal Server",
+        ));
+    }
     let authority_instance = arkret_wire::PrincipalAuthorityInstance::new(
         body.principal_id.clone(),
         principal_server.service_id.clone(),

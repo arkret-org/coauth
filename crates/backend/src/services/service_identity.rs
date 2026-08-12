@@ -386,12 +386,10 @@ fn service_registration_request(
     stored: Option<&StoredIdentityRecord>,
 ) -> anyhow::Result<ServiceRegistrationEnsureRequestBody> {
     let (operation, previous_receipt) = match stored {
-        Some(stored) => {
-            (
-                stored.inception_operation.clone(),
-                Some(stored.identity.registration_receipt.clone()),
-            )
-        }
+        Some(stored) => (
+            stored.inception_operation.clone(),
+            Some(stored.identity.registration_receipt.clone()),
+        ),
         None => (
             prepared
                 .service_registration_operation()
@@ -621,17 +619,21 @@ async fn load_stored(
         .optional()?;
     Ok(match row {
         None => StoredIdentityLoad::Missing,
-        Some(row) => match serde_json::from_value::<DidCoreIdentityBundle>(row.identity) {
-            Ok(bundle) => match bundle.validate() {
-                Ok(()) => StoredIdentityLoad::Loaded(Box::new(StoredIdentityRecord {
-                    inception_operation: bundle.webvh_history[0].clone(),
-                    identity: bundle.identity,
-                })),
-                Err(error) => StoredIdentityLoad::Invalid(error.to_string()),
-            },
+        Some(row) => decode_stored_identity(row.identity),
+    })
+}
+
+fn decode_stored_identity(value: Value) -> StoredIdentityLoad {
+    match serde_json::from_value::<DidCoreIdentityBundle>(value) {
+        Ok(bundle) => match bundle.validate() {
+            Ok(()) => StoredIdentityLoad::Loaded(Box::new(StoredIdentityRecord {
+                inception_operation: bundle.webvh_history[0].clone(),
+                identity: bundle.identity,
+            })),
             Err(error) => StoredIdentityLoad::Invalid(error.to_string()),
         },
-    })
+        Err(error) => StoredIdentityLoad::Invalid(error.to_string()),
+    }
 }
 
 async fn save_stored(
@@ -750,10 +752,7 @@ mod tests {
 
     #[test]
     fn malformed_persisted_identity_is_a_faulted_runtime_state() {
-        let load = match serde_json::from_value::<StoredDidCoreIdentity>(Value::Null) {
-            Ok(stored) => StoredIdentityLoad::Loaded(Box::new(stored)),
-            Err(error) => StoredIdentityLoad::Invalid(error.to_string()),
-        };
+        let load = decode_stored_identity(Value::Null);
 
         let state = load
             .into_runtime_result()
