@@ -4,7 +4,7 @@ use arkret_models_discovery::{
     SupportedBinding,
 };
 use arkret_models_identity::SessionGrantProofKind;
-use arkret_schema::generated::profile_requirements::{
+use arkret_wire::generated::profile_requirements::{
     requirements_for, validate_profile_requirements,
 };
 use coauth_config::ArkretConfig;
