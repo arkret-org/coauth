@@ -30,9 +30,8 @@ pub struct VerifiedPrincipalDidBindingInput {
     /// Digest of the complete authority-signed binding receipt that installed
     /// this generation.
     pub binding_frontier_digest: arkret_identifiers::Hash,
-    /// Exact PCR authority selected at registration. Bare identity equality
-    /// must never substitute for this five-field instance.
-    pub authority_instance: arkret_wire::PrincipalAuthorityInstance,
+    /// Public account authority coordinate accepted at registration.
+    pub principal_authority: arkret_wire::PrincipalAuthorityKey,
 }
 
 /// Persistence boundary for principal DIDs verified by an authoritative host.

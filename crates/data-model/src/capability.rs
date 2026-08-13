@@ -21,7 +21,6 @@ pub const COLLABORATION_CAPABILITY_ACTIONS: &[CapabilityActionId] = &[
     CapabilityActionId::PinAdd,
     CapabilityActionId::PinRemove,
     CapabilityActionId::PinReorder,
-    CapabilityActionId::RealmDisappearingPolicy,
     CapabilityActionId::RealmSearchPolicy,
 ];
 
@@ -119,7 +118,6 @@ mod tests {
                 "ak.pin.add",
                 "ak.pin.remove",
                 "ak.pin.reorder",
-                "ak.realm.disappearing_policy",
                 "ak.realm.search_policy",
             ]
         );

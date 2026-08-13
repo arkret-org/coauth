@@ -1594,7 +1594,7 @@ mod tests {
             .and(header("authorization", "Bearer lifecycle-secret"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "agent": {
-                    "agent_id": "did:web:agent.example",
+                    "agent_id": "ak:did_core:web:agent.example",
                     "slug": "agent",
                     "lifecycle": status,
                     "readiness": {

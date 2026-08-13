@@ -36,7 +36,7 @@ pub(crate) fn issue_session_grant(
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
     subject: &str,
-    authority_instance: &arkret_wire::PrincipalAuthorityInstance,
+    principal_authority: &arkret_wire::PrincipalAuthorityKey,
     device_id: DeviceId,
     scopes: Vec<String>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
@@ -64,7 +64,7 @@ pub(crate) fn issue_session_grant(
         device_id,
         scopes,
         Some(subject),
-        authority_instance,
+        principal_authority,
         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
         SessionGrantProofKind::DidBoundSignature,
     )
@@ -84,7 +84,7 @@ pub(crate) fn issue_session_grant_for_audience(
     device_id: DeviceId,
     scopes: Vec<String>,
     subject_override: Option<&str>,
-    authority_instance: &arkret_wire::PrincipalAuthorityInstance,
+    principal_authority: &arkret_wire::PrincipalAuthorityKey,
     dpop_jkt: String,
     proof_kind: SessionGrantProofKind,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
@@ -104,9 +104,9 @@ pub(crate) fn issue_session_grant_for_audience(
     let subject_id =
         DidCoreId::new(subject.clone()).map_err(|_| SessionGrantError::PrincipalUnknown)?;
     let audience_id = DidCoreId::new(audience.clone())?;
-    authority_instance.validate()?;
-    if authority_instance.principal_id != subject_id
-        || authority_instance.principal_server_id != audience_id
+    principal_authority.validate()?;
+    if principal_authority.principal_id != subject_id
+        || principal_authority.principal_server_id != audience_id
     {
         return Err(SessionGrantError::PrincipalUnknown);
     }
@@ -200,7 +200,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
     device_id: DeviceId,
     scopes: Vec<String>,
     subject_override: Option<&str>,
-    authority_instance: &arkret_wire::PrincipalAuthorityInstance,
+    principal_authority: &arkret_wire::PrincipalAuthorityKey,
     dpop_jkt: String,
     proof_kind: SessionGrantProofKind,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
@@ -215,7 +215,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
         device_id,
         scopes,
         subject_override,
-        authority_instance,
+        principal_authority,
         dpop_jkt,
         proof_kind,
     )

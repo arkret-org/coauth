@@ -357,14 +357,10 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
     let principal_id = "ak:did_core:web:subject.example";
     let principal_server_id =
         crate::handlers::arkret::required_audience_for(&grant_url_builder, &grant_config);
-    let authority_instance = arkret_wire::PrincipalAuthorityInstance::new(
+    let principal_authority = arkret_wire::PrincipalAuthorityKey::new(
         arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
         arkret_identifiers::DidCoreId::new(principal_server_id).unwrap(),
-        arkret_identifiers::RealmId::new("ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO")
-            .unwrap(),
-        arkret_identifiers::Hash::new(format!("sha256:{}", "e".repeat(64))).unwrap(),
-    )
-    .unwrap();
+    );
     let grant_material = crate::handlers::arkret::issue_session_grant(
         &mut rng,
         &*clock,
@@ -374,7 +370,7 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
         &browser_session,
         grant_public_jwk,
         principal_id,
-        &authority_instance,
+        &principal_authority,
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
             .unwrap(),
         vec![

@@ -614,11 +614,11 @@ CREATE TABLE public.principal_did_bindings (
     accepted_service_id text NOT NULL,
     binding_version bigint NOT NULL,
     binding_frontier_digest text NOT NULL,
-    authority_instance jsonb NOT NULL,
+    principal_authority jsonb NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
     ,CONSTRAINT principal_did_binding_basis_shape CHECK (audience = accepted_service_id AND audience LIKE 'ak:did_core:%' AND binding_version >= 1 AND binding_frontier_digest ~ '^sha256:[0-9a-f]{64}$'::text)
-    ,CONSTRAINT principal_did_binding_resolution_snapshot_shape CHECK (verified_full_id ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text AND btrim(verified_version_id) <> ''::text AND jsonb_typeof(binding_receipt) = 'object'::text AND jsonb_typeof(authority_instance) = 'object'::text)
+    ,CONSTRAINT principal_did_binding_resolution_snapshot_shape CHECK (verified_full_id ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text AND btrim(verified_version_id) <> ''::text AND jsonb_typeof(binding_receipt) = 'object'::text AND jsonb_typeof(principal_authority) = 'object'::text)
 );
 
 -- Durable exact-replay ledger for short-lived Account Authority controller

@@ -965,7 +965,7 @@ diesel::table! {
         accepted_service_id -> Text,
         binding_version -> Int8,
         binding_frontier_digest -> Text,
-        authority_instance -> Jsonb,
+        principal_authority -> Jsonb,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
     }

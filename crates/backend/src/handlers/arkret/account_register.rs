@@ -74,7 +74,7 @@ pub async fn account_register_endpoint(
         .map_err(|error| schema_violation(error.to_string()))?;
     if body.proof.is_some() {
         return Err(failed_precondition(
-            "published-DID registration cannot establish a PCR authority instance",
+            "published-DID registration cannot establish a pair-bound local PCR lineage",
         ));
     }
     let identity_creation = body
@@ -169,7 +169,7 @@ pub async fn account_register_endpoint(
     // Resolve the exact Principal Server once for the whole registration
     // transaction. The same service identity is the handoff/session audience,
     // the PCR submission target, and the server pinned by the resulting
-    // PrincipalAuthorityInstance.
+    // PrincipalAuthorityKey.
     let principal_server = principal_server_target(depot, &grant.audience)?;
     let browser_session_id = grant.browser_session_id.ok_or_else(|| {
         failed_precondition("identity creation requires its originating browser session")
@@ -375,23 +375,15 @@ pub async fn account_register_endpoint(
             .map_err(|error| failed_precondition(error.to_string()))?;
         outcome
     };
-    let principal_genesis_receipt_digest = arkret_identifiers::Hash::new(
-        arkret_canonical::canonical_sha256(&pcr_outcome.receipt)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     if pcr_outcome.receipt.issuer != principal_server.service_id {
         return Err(failed_precondition(
             "PCR genesis receipt issuer does not match the selected Principal Server",
         ));
     }
-    let authority_instance = arkret_wire::PrincipalAuthorityInstance::new(
+    let principal_authority = arkret_wire::PrincipalAuthorityKey::new(
         body.principal_id.clone(),
         principal_server.service_id.clone(),
-        pcr_outcome.pcr_realm_id.clone(),
-        principal_genesis_receipt_digest,
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    );
 
     let operation_status = match registry_outcome.status {
         DidOperationSubmitStatus::Accepted => IdentityCreationOperationStatus::Accepted,
@@ -494,7 +486,7 @@ pub async fn account_register_endpoint(
                                     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
                             )
                             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-                            authority_instance: authority_instance.clone(),
+                            principal_authority: principal_authority.clone(),
                         },
                     )
                     .await?;
@@ -529,7 +521,7 @@ pub async fn account_register_endpoint(
         initial.device_id.clone(),
         initial.requested_scope_strings(),
         Some(body.principal_id.as_str()),
-        &authority_instance,
+        &principal_authority,
         grant.cnf_jkt.clone(),
         arkret_models_identity::SessionGrantProofKind::DidBoundSignature,
     )

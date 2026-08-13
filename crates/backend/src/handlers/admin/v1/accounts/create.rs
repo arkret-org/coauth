@@ -526,8 +526,8 @@ mod consent_gate_tests {
                 arkret_wire::CellFamilyId::CONSENT_GRANT_V1,
                 &format!("c-{scope}"),
             ),
-            "holder_did": "did:web:holder",
-            "peer_did": peer,
+            "holder_principal_id": "ak:did_core:web:holder",
+            "peer_principal_id": peer,
             "consent_scope": scope,
             "state": "active",
             "updated_at": "2026-05-01T00:00:00.000Z",
@@ -555,17 +555,18 @@ mod consent_gate_tests {
 
         Mock::given(method("GET"))
             .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
-            .and(query_param("peer", "did:web:peer"))
+            .and(query_param("peer", "ak:did_core:web:peer"))
             .and(query_param("consent_scope", "invite"))
             .respond_with(
-                ResponseTemplate::new(200).set_body_json(active_cell("did:web:peer", "invite")),
+                ResponseTemplate::new(200)
+                    .set_body_json(active_cell("ak:did_core:web:peer", "invite")),
             )
             .expect(1)
             .mount(&server)
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let mut gate = gate_for("c-allow", "did:web:peer", "did:web:holder");
+        let mut gate = gate_for("c-allow", "ak:did_core:web:peer", "ak:did_core:web:holder");
         gate.target_principal_url = Some(base);
 
         let outcome = evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
@@ -587,7 +588,11 @@ mod consent_gate_tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let mut gate = gate_for("c-missing", "did:web:peer", "did:web:holder");
+        let mut gate = gate_for(
+            "c-missing",
+            "ak:did_core:web:peer",
+            "ak:did_core:web:holder",
+        );
         gate.target_principal_url = Some(base);
         gate.require_consent = true;
 
@@ -609,7 +614,11 @@ mod consent_gate_tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let mut gate = gate_for("c-unknown", "did:web:peer", "did:web:holder");
+        let mut gate = gate_for(
+            "c-unknown",
+            "ak:did_core:web:peer",
+            "ak:did_core:web:holder",
+        );
         gate.target_principal_url = Some(base);
         gate.require_consent = false;
 
@@ -632,7 +641,7 @@ mod consent_gate_tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let mut gate = gate_for("c-other", "did:web:peer", "did:web:holder");
+        let mut gate = gate_for("c-other", "ak:did_core:web:peer", "ak:did_core:web:holder");
         gate.target_principal_url = Some(base);
 
         let outcome = evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
@@ -645,7 +654,7 @@ mod consent_gate_tests {
     async fn batch_invite_gate_fails_closed_when_no_principal_url() {
         setup();
         let client = reqwest::Client::new();
-        let mut gate = gate_for("c-none", "did:web:peer", "did:web:holder");
+        let mut gate = gate_for("c-none", "ak:did_core:web:peer", "ak:did_core:web:holder");
         gate.target_principal_url = None;
         gate.require_consent = true;
 

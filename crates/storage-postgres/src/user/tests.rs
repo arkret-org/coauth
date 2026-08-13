@@ -25,18 +25,14 @@ fn principal_binding_test_material(label: &str) -> (String, arkret_identifiers::
     (principal_id, key_log_head)
 }
 
-fn principal_authority_instance(
+fn principal_authority(
     principal_id: &str,
     principal_server_id: &str,
-) -> arkret_wire::PrincipalAuthorityInstance {
-    arkret_wire::PrincipalAuthorityInstance::new(
+) -> arkret_wire::PrincipalAuthorityKey {
+    arkret_wire::PrincipalAuthorityKey::new(
         arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
         arkret_identifiers::DidCoreId::new(principal_server_id).unwrap(),
-        arkret_identifiers::RealmId::new("ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO")
-            .unwrap(),
-        arkret_identifiers::Hash::new(format!("sha256:{}", "d".repeat(64))).unwrap(),
     )
-    .unwrap()
 }
 
 fn account_binding_receipt(
@@ -97,7 +93,7 @@ fn verified_principal_binding_input(
         .strip_prefix("ak:did_core:webvh:")
         .expect("webvh test principal core");
     let full_id = format!("did:webvh:{method_specific_id}:fixture.example");
-    let authority_instance = principal_authority_instance(&principal_id, &audience);
+    let principal_authority = principal_authority(&principal_id, &audience);
     let audience = arkret_identifiers::DidCoreId::new(audience).unwrap();
     let principal_id = arkret_identifiers::DidCoreId::new(principal_id).unwrap();
     let full_id = arkret_identifiers::DidFullId::new(full_id).unwrap();
@@ -115,7 +111,7 @@ fn verified_principal_binding_input(
             "b".repeat(64)
         ))
         .unwrap(),
-        authority_instance,
+        principal_authority,
     }
 }
 
@@ -127,7 +123,7 @@ fn registration_binding_input(
     version_id: &str,
 ) -> VerifiedPrincipalDidBindingInput {
     let audience = audience.into();
-    let authority_instance = principal_authority_instance(&principal_id, &audience);
+    let principal_authority = principal_authority(&principal_id, &audience);
     let audience = arkret_identifiers::DidCoreId::new(audience).unwrap();
     let principal_id = arkret_identifiers::DidCoreId::new(principal_id).unwrap();
     let full_id = arkret_identifiers::DidFullId::new(full_id).unwrap();
@@ -145,7 +141,7 @@ fn registration_binding_input(
             "c".repeat(64)
         ))
         .unwrap(),
-        authority_instance,
+        principal_authority,
     }
 }
 
@@ -1581,56 +1577,6 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
             .await
             .unwrap()
             .is_none()
-    );
-    repo.cancel().await.unwrap();
-}
-
-#[tokio::test]
-async fn principal_did_rejects_same_core_cross_pcr_substitution() {
-    let Some(pool) = crate::test_utils::setup_test_pool().await else {
-        return;
-    };
-    let factory = PgRepositoryFactory::new(pool);
-    let label = uuid::Uuid::now_v7().simple().to_string();
-    let clock = MockClock::default();
-    let audience = "ak:did_core:web:ps.example";
-    let mut rng = ChaChaRng::seed_from_u64(76);
-    let mut repo = factory.create().await.unwrap();
-    let user = repo
-        .user()
-        .add(&mut rng, &clock, format!("alice-pcr-{label}"))
-        .await
-        .unwrap();
-    let (principal_id, head) = principal_binding_test_material(&label);
-    repo.principal_did()
-        .add_verified(
-            &mut rng,
-            &clock,
-            &user,
-            verified_principal_binding_input(audience, principal_id.clone(), head.clone()),
-        )
-        .await
-        .unwrap();
-    repo.save().await.unwrap();
-
-    let mut substitute = verified_principal_binding_input(audience, principal_id, head);
-    substitute.authority_instance = arkret_wire::PrincipalAuthorityInstance::new(
-        substitute.authority_instance.principal_id.clone(),
-        substitute.authority_instance.principal_server_id.clone(),
-        arkret_identifiers::RealmId::new("ak:realm:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB")
-            .unwrap(),
-        substitute
-            .authority_instance
-            .principal_genesis_receipt_digest
-            .clone(),
-    )
-    .unwrap();
-    let mut repo = factory.create().await.unwrap();
-    assert!(
-        repo.principal_did()
-            .add_verified(&mut rng, &clock, &user, substitute)
-            .await
-            .is_err()
     );
     repo.cancel().await.unwrap();
 }

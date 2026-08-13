@@ -996,14 +996,14 @@ pub async fn debug_issue_dpop_grant(
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .ok_or(ArkretRouteError::NotFound)?;
-    binding.authority_instance.validate().map_err(|error| {
+    binding.principal_authority.validate().map_err(|error| {
         ArkretRouteError::coded(
             StatusCode::PRECONDITION_FAILED,
             arkret_wire::ErrorCode::FAILED_PRECONDITION,
             error.to_string(),
         )
     })?;
-    let authority_instance = binding.authority_instance;
+    let principal_authority = binding.principal_authority;
     let principal_did = binding.principal_id;
     let scopes = body.scopes.clone().unwrap_or_else(|| {
         vec![
@@ -1117,7 +1117,7 @@ pub async fn debug_issue_dpop_grant(
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         scopes,
         Some(principal_did.as_str()),
-        &authority_instance,
+        &principal_authority,
         jkt.clone(),
         arkret_models_identity::SessionGrantProofKind::PairedDeviceProof,
     )

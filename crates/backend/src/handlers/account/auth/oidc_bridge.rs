@@ -440,7 +440,7 @@ fn soland_account_localpart_failure(status: reqwest::StatusCode, body: &str) -> 
 pub(crate) struct VerifiedPrincipalIdentity {
     pub principal_id: DidCoreId,
     pub full_id: DidFullId,
-    pub authority_instance: arkret_wire::PrincipalAuthorityInstance,
+    pub principal_authority: arkret_wire::PrincipalAuthorityKey,
 }
 
 /// Load the stable principal id and its registration-time full DID snapshot.
@@ -456,18 +456,20 @@ pub(super) async fn load_verified_principal_did(
         .map(|binding| {
             let principal_id = binding.principal_id;
             binding
-                .authority_instance
+                .principal_authority
                 .validate()
-                .map_err(|error| format!("stored authority instance is invalid: {error}"))?;
-            if binding.authority_instance.principal_id != principal_id
-                || binding.authority_instance.principal_server_id.as_str() != audience
+                .map_err(|error| format!("stored principal authority is invalid: {error}"))?;
+            if binding.principal_authority.principal_id != principal_id
+                || binding.principal_authority.principal_server_id.as_str() != audience
             {
-                return Err("stored authority instance does not match principal binding".to_owned());
+                return Err(
+                    "stored principal authority does not match principal binding".to_owned(),
+                );
             }
             Ok(VerifiedPrincipalIdentity {
                 principal_id,
                 full_id: binding.verified_full_id,
-                authority_instance: binding.authority_instance,
+                principal_authority: binding.principal_authority,
             })
         })
         .transpose()?
@@ -975,7 +977,7 @@ async fn exchange_oidc_code(
             })?,
             principal_session_grant_scopes(&device_id),
             Some(principal.principal_id.as_str()),
-            &principal.authority_instance,
+            &principal.principal_authority,
             dpop_binding.jkt.clone(),
             arkret_models_identity::SessionGrantProofKind::OidcCodeExchange,
         )
@@ -1482,7 +1484,7 @@ async fn exchange_oidc_code(
             .map_err(|error| OidcExchangeError::new("device_binding_invalid", error.to_string()))?,
         principal_session_grant_scopes(&device_id),
         Some(principal.principal_id.as_str()),
-        &principal.authority_instance,
+        &principal.principal_authority,
         dpop_binding.jkt.clone(),
         arkret_models_identity::SessionGrantProofKind::OidcCodeExchange,
     )
@@ -1612,16 +1614,10 @@ mod tests {
     fn test_principal() -> VerifiedPrincipalIdentity {
         let principal_id = DidCoreId::new(TEST_PRINCIPAL_ID).unwrap();
         VerifiedPrincipalIdentity {
-            authority_instance: arkret_wire::PrincipalAuthorityInstance::new(
+            principal_authority: arkret_wire::PrincipalAuthorityKey::new(
                 principal_id.clone(),
                 DidCoreId::new("ak:did_core:web:principal-server.test").unwrap(),
-                arkret_identifiers::RealmId::new(
-                    "ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO",
-                )
-                .unwrap(),
-                arkret_identifiers::Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
-            )
-            .unwrap(),
+            ),
             principal_id,
             full_id: DidFullId::new(TEST_PRINCIPAL_FULL_ID).unwrap(),
         }

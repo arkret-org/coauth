@@ -129,7 +129,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
     validate_completion_evidence(&request, &receipt, &initial, &handoff, &dpop.jkt)?;
 
     let mut prerequisite_repo = depot.repo().await?;
-    let authority_instance = verify_account_principal_binding(
+    let principal_authority = verify_account_principal_binding(
         &mut prerequisite_repo,
         handoff.service_account_id,
         &handoff.audience,
@@ -255,7 +255,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         initial.device_id.clone(),
         initial.requested_scope_strings(),
         Some(receipt.principal_id.as_str()),
-        &authority_instance,
+        &principal_authority,
         handoff.cnf_jkt.clone(),
         SessionGrantProofKind::DidBoundSignature,
     )
@@ -431,7 +431,7 @@ async fn verify_account_principal_binding(
     account_id: coauth_data::Ulid,
     audience: &str,
     principal_id: &str,
-) -> Result<arkret_wire::PrincipalAuthorityInstance, ArkretRouteError> {
+) -> Result<arkret_wire::PrincipalAuthorityKey, ArkretRouteError> {
     let binding = repo
         .principal_did()
         .get_by_did_and_audience(principal_id, audience)
@@ -445,10 +445,10 @@ async fn verify_account_principal_binding(
         ));
     }
     binding
-        .authority_instance
+        .principal_authority
         .validate()
         .map_err(|error| failed_precondition(error.to_string()))?;
-    Ok(binding.authority_instance)
+    Ok(binding.principal_authority)
 }
 
 async fn verify_coordinator_signatures(

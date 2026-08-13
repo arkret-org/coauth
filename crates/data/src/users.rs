@@ -601,7 +601,7 @@ pub struct PrincipalDidBinding {
     pub accepted_service_id: arkret_identifiers::DidCoreId,
     pub binding_version: u64,
     pub binding_frontier_digest: arkret_identifiers::Hash,
-    pub authority_instance: arkret_wire::PrincipalAuthorityInstance,
+    pub principal_authority: arkret_wire::PrincipalAuthorityKey,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

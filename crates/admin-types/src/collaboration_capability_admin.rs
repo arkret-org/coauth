@@ -233,7 +233,6 @@ mod tests {
                 "ak.pin.add",
                 "ak.pin.remove",
                 "ak.pin.reorder",
-                "ak.realm.disappearing_policy",
                 "ak.realm.search_policy",
             ]
         );
@@ -242,7 +241,7 @@ mod tests {
     #[test]
     fn templates_match_spec_registry_fields() {
         let templates = collaboration_capability_templates();
-        assert_eq!(templates.len(), 6);
+        assert_eq!(templates.len(), 5);
 
         let rsvp = &templates[0];
         assert_eq!(rsvp.action, CapabilityActionId::RsvpSet);
@@ -314,11 +313,11 @@ mod tests {
     }
 
     #[test]
-    fn high_risk_policy_actions_require_expiry_and_approval() {
+    fn collaboration_policy_actions_validate_approval_requirements() {
         let req = CreateCollaborationCapabilityGrant {
             subject: "did:web:admin.example".into(),
             realm_id: "ak:realm:01JS0SP000000000000000000".into(),
-            action: CapabilityActionId::RealmDisappearingPolicy,
+            action: CapabilityActionId::RealmSearchPolicy,
             issuer_authority_refs: vec![IssuerAuthorityRef::Grant {
                 grant_id: arkret_identifiers::GrantId::new(
                     "ak:grant:ATmMdimZScB3dyV-t4q3cq3H-_deWGSYRAHS0N-uU0Pe",

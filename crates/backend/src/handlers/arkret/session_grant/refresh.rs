@@ -211,7 +211,7 @@ fn verify_soft_logout_did_proof(
         ));
     }
     Err(did_proof_invalid(
-        "federated device signing evidence with an exact PrincipalAuthorityInstance is required; transport-only device directory assertions are not accepted",
+        "soft logout restore requires host-local validation of the current account authority and device authorization state",
     ))
 }
 
@@ -232,9 +232,9 @@ fn verify_soft_logout_did_proof(
 ///   DID proof over the soft-logout restore transcript.
 ///
 /// The route currently fails closed before rotation because its request DTO
-/// does not yet carry the SDK aggregate device evidence needed to verify an
-/// exact PCR authority instance. A current product-local directory assertion
-/// is deliberately insufficient.
+/// does not yet carry the SDK aggregate device evidence needed to verify the
+/// exact principal authority pair and its pair-bound local PCR lineage. A
+/// current product-local directory assertion is deliberately insufficient.
 #[handler]
 pub async fn refresh_session_grant(
     req: &mut Request,
@@ -837,9 +837,9 @@ pub async fn refresh_session_grant(
         .principal_did()
         .get_by_did_and_audience(&prior_grant.subject, &prior_grant.audience)
         .await?
-        .ok_or_else(|| did_proof_invalid("session grant authority instance is unavailable"))?;
+        .ok_or_else(|| did_proof_invalid("session grant principal authority is unavailable"))?;
     principal_binding
-        .authority_instance
+        .principal_authority
         .validate()
         .map_err(|error| did_proof_invalid(error.to_string()))?;
     verify_soft_logout_did_proof(&body, &prior_grant, device_id, now)?;
@@ -870,7 +870,7 @@ pub async fn refresh_session_grant(
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         scopes,
         Some(&prior_grant.subject),
-        &principal_binding.authority_instance,
+        &principal_binding.principal_authority,
         verification.jkt.clone(),
         proof_kind,
     )

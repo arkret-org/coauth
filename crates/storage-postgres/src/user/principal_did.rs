@@ -63,8 +63,8 @@ struct PrincipalDidJoinedRow {
     binding_version: i64,
     #[diesel(select_expression = principal_did_bindings::binding_frontier_digest)]
     binding_frontier_digest: String,
-    #[diesel(select_expression = principal_did_bindings::authority_instance)]
-    authority_instance: serde_json::Value,
+    #[diesel(select_expression = principal_did_bindings::principal_authority)]
+    principal_authority: serde_json::Value,
     #[diesel(select_expression = principal_did_bindings::created_at)]
     created_at: DateTime<Utc>,
     #[diesel(select_expression = principal_did_bindings::updated_at)]
@@ -79,16 +79,16 @@ fn binding_from_row(row: PrincipalDidJoinedRow) -> Result<PrincipalDidBinding, D
             .row(id)
             .source(error)
     })?;
-    let authority_instance: arkret_wire::PrincipalAuthorityInstance =
-        serde_json::from_value(row.authority_instance).map_err(|error| {
+    let principal_authority: arkret_wire::PrincipalAuthorityKey =
+        serde_json::from_value(row.principal_authority).map_err(|error| {
             DatabaseInconsistencyError::on("principal_did_bindings")
-                .column("authority_instance")
+                .column("principal_authority")
                 .row(id)
                 .source(error)
         })?;
-    authority_instance.validate().map_err(|error| {
+    principal_authority.validate().map_err(|error| {
         DatabaseInconsistencyError::on("principal_did_bindings")
-            .column("authority_instance")
+            .column("principal_authority")
             .row(id)
             .source(error)
     })?;
@@ -154,7 +154,7 @@ fn binding_from_row(row: PrincipalDidJoinedRow) -> Result<PrincipalDidBinding, D
                     .row(id)
                     .source(error)
             })?,
-        authority_instance,
+        principal_authority,
         created_at: row.created_at,
         updated_at: row.updated_at,
     })
@@ -192,7 +192,7 @@ struct NewPrincipalDidBinding {
     accepted_service_id: String,
     binding_version: i64,
     binding_frontier_digest: String,
-    authority_instance: serde_json::Value,
+    principal_authority: serde_json::Value,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -255,9 +255,9 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             accepted_service_id,
             binding_version,
             binding_frontier_digest,
-            authority_instance,
+            principal_authority,
         } = input;
-        authority_instance
+        principal_authority
             .validate()
             .map_err(|_| DatabaseError::invalid_operation())?;
         let projected = arkret_identifiers::project_full_id_to_core_id(&verified_full_id)
@@ -273,8 +273,8 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
         if !resolution_snapshot_is_valid
             || binding_version < 1
             || accepted_service_id != audience
-            || authority_instance.principal_id != principal_id
-            || authority_instance.principal_server_id != accepted_service_id
+            || principal_authority.principal_id != principal_id
+            || principal_authority.principal_server_id != accepted_service_id
         {
             return Err(DatabaseError::invalid_operation());
         }
@@ -283,7 +283,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             .binding_query_for_user_and_audience(Uuid::from(user.id), audience.as_str())
             .await?
             && (binding.principal_id != principal_id
-                || binding.authority_instance != authority_instance)
+                || binding.principal_authority != principal_authority)
         {
             return Err(DatabaseError::invalid_operation());
         }
@@ -339,7 +339,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             binding_version: i64::try_from(binding_version)
                 .map_err(|_| DatabaseError::invalid_operation())?,
             binding_frontier_digest: binding_frontier_digest.to_string(),
-            authority_instance: serde_json::to_value(&authority_instance)
+            principal_authority: serde_json::to_value(&principal_authority)
                 .map_err(|_| DatabaseError::invalid_operation())?,
             created_at: now,
             updated_at: now,
@@ -361,8 +361,8 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
                     .map_err(|_| DatabaseError::invalid_operation())?),
                 principal_did_bindings::binding_frontier_digest
                     .eq(binding_frontier_digest.to_string()),
-                principal_did_bindings::authority_instance
-                    .eq(serde_json::to_value(&authority_instance)
+                principal_did_bindings::principal_authority
+                    .eq(serde_json::to_value(&principal_authority)
                         .map_err(|_| DatabaseError::invalid_operation())?),
                 principal_did_bindings::updated_at.eq(now),
             ))

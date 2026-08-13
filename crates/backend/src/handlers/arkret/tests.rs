@@ -76,15 +76,11 @@ fn test_keystore() -> Keystore {
 fn test_principal_authority(
     principal_id: &str,
     principal_server_id: &str,
-) -> arkret_wire::PrincipalAuthorityInstance {
-    arkret_wire::PrincipalAuthorityInstance::new(
+) -> arkret_wire::PrincipalAuthorityKey {
+    arkret_wire::PrincipalAuthorityKey::new(
         arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
         arkret_identifiers::DidCoreId::new(principal_server_id).unwrap(),
-        arkret_identifiers::RealmId::new("ak:realm:AfF-hFqRoMbajXkPapH-xaq0xwK-UKt2ph2zTs9JZRAO")
-            .unwrap(),
-        arkret_identifiers::Hash::new(format!("sha256:{}", "e".repeat(64))).unwrap(),
     )
-    .unwrap()
 }
 
 fn test_session_public_jwk(session_key: &PrivateKey, kid: impl Into<String>) -> PublicJsonWebKey {
@@ -738,7 +734,7 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
         "ak:did_core:web:auth.example.com:users:{}",
         browser_session.user.id
     );
-    let authority_instance = test_principal_authority(
+    let principal_authority = test_principal_authority(
         &principal_did,
         &required_audience_for(&url_builder, &arkret_config),
     );
@@ -753,7 +749,7 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
         &browser_session,
         session_public_key,
         &principal_did,
-        &authority_instance,
+        &principal_authority,
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
             .unwrap(),
         vec![
@@ -832,7 +828,7 @@ fn session_grant_uses_configured_ttl() {
         "ak:did_core:web:auth.example.com:users:{}",
         browser_session.user.id
     );
-    let authority_instance = test_principal_authority(
+    let principal_authority = test_principal_authority(
         &principal_did,
         &required_audience_for(&url_builder, &arkret_config),
     );
@@ -846,7 +842,7 @@ fn session_grant_uses_configured_ttl() {
         &browser_session,
         session_public_key,
         &principal_did,
-        &authority_instance,
+        &principal_authority,
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
             .unwrap(),
         vec![
@@ -1021,7 +1017,7 @@ async fn seed_persisted_session_grant(
     let session_key = PrivateKey::generate_ed25519(&mut rng);
     let grant_config = personal_node_did_web_config();
     let principal_did = format!("ak:did_core:web:auth.example.com:users:{}", user.id);
-    let authority_instance = test_principal_authority(
+    let principal_authority = test_principal_authority(
         &principal_did,
         &required_audience_for(&state.url_builder, &grant_config),
     );
@@ -1034,7 +1030,7 @@ async fn seed_persisted_session_grant(
         &browser_session,
         test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
         &principal_did,
-        &authority_instance,
+        &principal_authority,
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
             .unwrap(),
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
@@ -1267,7 +1263,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     .unwrap();
     let principal_did = format!("ak:did_core:web:auth.example.com:users:{}", user.id);
     let audience = required_audience_for(&state.url_builder, &grant_config);
-    let authority_instance = test_principal_authority(&principal_did, &audience);
+    let principal_authority = test_principal_authority(&principal_did, &audience);
     let material = issue_session_grant_for_audience(
         &issuance_seed,
         &*state.clock,
@@ -1280,7 +1276,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
             .unwrap(),
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
         Some(principal_did.as_str()),
-        &authority_instance,
+        &principal_authority,
         bound_jkt.clone(),
         arkret_models_identity::SessionGrantProofKind::DidBoundSignature,
     )

@@ -323,11 +323,6 @@ pub async fn post_agent_key_pair(
         now,
     )?;
 
-    if let Err(error) = require_federated_controller_device_evidence() {
-        repo.cancel().await.ok();
-        return Err(error.into());
-    }
-
     // `pair_agent_key` validates the current Principal-Server pairing handle
     // above and the controller-signed authorization here. Accountability-grant
     // issuance is a precondition of the aggregate `provision` operation, not
@@ -778,25 +773,20 @@ fn ensure_authorize_event_has_controller_signature(
             "authorize_event must carry controller signature proofs",
         ));
     }
-    let signed_by_controller = event.proofs.iter().any(|proof| {
-        verification_method_controller_actor_id(&proof.verification_method)
-            .is_some_and(|proof_controller| proof_controller.as_str() == controller_id)
-    });
+    let signed_by_controller = event
+        .proofs
+        .iter()
+        .filter_map(|proof| proof.as_producer())
+        .any(|proof| {
+            verification_method_controller_actor_id(&proof.verification_method)
+                .is_some_and(|proof_controller| proof_controller.as_str() == controller_id)
+        });
     if !signed_by_controller {
         return Err(AppError::bad_request(
             "authorize_event proof verification_method must be controlled by actor_id",
         ));
     }
     Ok(())
-}
-
-/// Fail closed until the Principal Server returns the SDK-owned aggregate
-/// \`FederatedDeviceSigningKeyEvidence\` and Coauth can verify its exact five-field
-/// authority instance, frozen registration evidence, PCR chain, Seal, range and key.
-fn require_federated_controller_device_evidence() -> Result<(), AppError> {
-    Err(AppError::unauthorized(
-        "federated controller device evidence is required; the legacy product-local key directory is not an authority source",
-    ))
 }
 
 fn verification_method_controller(verification_method: &str) -> &str {
@@ -901,7 +891,6 @@ mod tests {
     const AGENT: &str = "ak:did_core:web:agent.example";
     const AGENT_FULL: &str = "did:web:agent.example";
     const CONTROLLER: &str = "ak:did_core:web:controller.example";
-    const CONTROLLER_FULL: &str = "did:web:controller.example";
     const VM: &str = "did:web:agent.example#runtime-key-1";
     const AUDIENCE: &str = "ak:did_core:web:soland.local";
     const PAIRING_REQUEST_ID: &str = "agent_pairing_request:01999999-0000-7000-8000-00000000feed";
@@ -995,6 +984,7 @@ mod tests {
                 "realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG"
             },
             "actor_id": AGENT,
+            "principal_server_id": "ak:did_core:web:auth.example",
             "executed_by": CONTROLLER,
             "authorization_ref": format!("{AGENT_FULL}#managed-controller"),
             "actor_seq": 1,
@@ -1002,12 +992,12 @@ mod tests {
             "hlc": "01970e589d21-0001-a13f9c2e",
             "prev_refs": [],
             "payload": {
-                "agent_id": AGENT_FULL,
+                "agent_id": AGENT,
                 "key_id": "runtime-key-1",
                 "verification_method": VM,
                 "public_key_digest": SIGNING_KEY_PUBLIC_KEY_DIGEST,
                 "signing_key_binding_digest": binding_digest,
-                "accountable_principal_id": CONTROLLER_FULL,
+                "accountable_principal_id": CONTROLLER,
                 "agent_key_scope": {
                     "actions": [
                         "ak.self.events.stream.subscribe",
@@ -1022,7 +1012,7 @@ mod tests {
                     "kind": "pairing_request",
                     "request_canonical_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "pairing_request_id": pairing_request_id,
-                    "approved_by": CONTROLLER_FULL
+                    "approved_by": CONTROLLER
                 }
             },
             "proofs": [{
@@ -1036,7 +1026,10 @@ mod tests {
         .unwrap();
         event.refresh_content_bound_identity().unwrap();
         let digest = arkret_identifiers::Hash::new(event.event_digest().unwrap()).unwrap();
-        event.proofs[0].event_digest = digest;
+        event.proofs[0]
+            .as_producer_mut()
+            .expect("fixture carries a producer proof")
+            .event_digest = digest;
         event
     }
 
@@ -1131,7 +1124,7 @@ mod tests {
 
         let err = validate_controller_authorize_event(
             &authorize_event(envelope),
-            AGENT_FULL,
+            AGENT,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1153,7 +1146,7 @@ mod tests {
 
         let err = validate_controller_authorize_event(
             &authorize_event(envelope),
-            AGENT_FULL,
+            AGENT,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1180,7 +1173,7 @@ mod tests {
         let binding = valid_signing_key_binding();
         validate_controller_authorize_event(
             &authorize_event(valid_authorize_event(PAIRING_REQUEST_ID)),
-            AGENT_FULL,
+            AGENT,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1195,7 +1188,7 @@ mod tests {
         let wrong_binding = valid_signing_key_binding_for(wrong_pairing_request_id);
         let err = validate_controller_authorize_event(
             &authorize_event(valid_authorize_event(wrong_pairing_request_id)),
-            AGENT_FULL,
+            AGENT,
             VM,
             &valid_public_key_typed(),
             &wrong_binding,
@@ -1216,7 +1209,7 @@ mod tests {
         assert_ne!(binding.public_key_digest.as_str(), PUBLIC_KEY_DIGEST);
         validate_controller_authorize_event(
             &authorize_event(valid_authorize_event(PAIRING_REQUEST_ID)),
-            AGENT_FULL,
+            AGENT,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1281,7 +1274,7 @@ mod tests {
 
         let err = validate_controller_authorize_event(
             &authorize_event(event),
-            AGENT_FULL,
+            AGENT,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1310,7 +1303,7 @@ mod tests {
 
         let validated = validate_controller_authorize_event(
             &authorize_event(event),
-            AGENT_FULL,
+            AGENT,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1332,7 +1325,7 @@ mod tests {
 
         let err = validate_controller_authorize_event(
             &authorize_event(event),
-            AGENT_FULL,
+            AGENT,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1373,7 +1366,7 @@ mod tests {
 
         validate_controller_authorize_event(
             &authorize_event(event),
-            AGENT_FULL,
+            AGENT,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1401,7 +1394,7 @@ mod tests {
 
         let err = validate_controller_authorize_event(
             &authorize_event(event),
-            AGENT_FULL,
+            AGENT,
             VM,
             &valid_public_key_typed(),
             &binding,
@@ -1413,17 +1406,5 @@ mod tests {
         .expect_err("key authorization must end after it is issued");
 
         assert!(err.message().contains("must be after issued_at"));
-    }
-
-    #[test]
-    fn agent_pairing_fails_closed_without_federated_device_evidence() {
-        let error = require_federated_controller_device_evidence()
-            .expect_err("transport-only device directory assertions must never authorize pairing");
-        assert_eq!(error.status(), http::StatusCode::UNAUTHORIZED);
-        assert!(
-            error
-                .message()
-                .contains("federated controller device evidence")
-        );
     }
 }

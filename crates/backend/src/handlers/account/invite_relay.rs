@@ -377,7 +377,8 @@ mod tests {
         use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
         use rand_chacha::rand_core::SeedableRng as _;
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(9);
-        let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("relay-key");
+        let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+            .with_kid(coauth_keystore::SERVICE_IDENTITY_KEY_ID);
         coauth_keystore::Keystore::new(JsonWebKeySet::new(vec![key]))
     }
 
@@ -443,6 +444,10 @@ mod tests {
                     "ak:did_core:web:inviter".to_owned(),
                 )
                 .unwrap(),
+                arkret_identifiers::DidCoreId::new(
+                    "ak:did_core:web:auth.example".to_owned(),
+                )
+                .unwrap(),
                 1,
                 arkret_identifiers::Hlc::new("01970e589d21-0001-a13f9c2e").unwrap(),
                 payload(),
@@ -465,8 +470,8 @@ mod tests {
                 arkret_wire::CellFamilyId::CONSENT_GRANT_V1,
                 &format!("c-{scope}"),
             ),
-            "holder_did": "did:web:holder",
-            "peer_did": "did:web:inviter",
+            "holder_principal_id": "ak:did_core:web:holder",
+            "peer_principal_id": "ak:did_core:web:inviter",
             "consent_scope": scope,
             "state": "active",
             "updated_at": "2026-05-01T00:00:00.000Z",
@@ -486,7 +491,7 @@ mod tests {
         // Cell-query mock: granted with matching peer/scope tag.
         Mock::given(method("GET"))
             .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
-            .and(query_param("peer", "did:web:inviter"))
+            .and(query_param("peer", "ak:did_core:web:inviter"))
             .and(query_param("consent_scope", "invite"))
             .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("invite")))
             .expect(1)
@@ -517,9 +522,9 @@ mod tests {
 
         let outcome = relay_invite_with(
             Some(&base),
-            "did:web:holder",
+            "ak:did_core:web:holder",
             "c-allow",
-            "did:web:inviter",
+            "ak:did_core:web:inviter",
             "invite",
             true,
             Some(&peer),
@@ -558,9 +563,9 @@ mod tests {
 
         let outcome = relay_invite_with(
             Some(&base),
-            "did:web:holder",
+            "ak:did_core:web:holder",
             "c-missing",
-            "did:web:inviter",
+            "ak:did_core:web:inviter",
             "invite",
             true, // require_consent
             None,
@@ -594,9 +599,9 @@ mod tests {
 
         let outcome = relay_invite_with(
             Some(&base),
-            "did:web:holder",
+            "ak:did_core:web:holder",
             "c-unknown",
-            "did:web:inviter",
+            "ak:did_core:web:inviter",
             "invite",
             false, // require_consent off
             None,
@@ -621,9 +626,9 @@ mod tests {
 
         let err = relay_invite_with(
             None, // no URL
-            "did:web:holder",
+            "ak:did_core:web:holder",
             "c-x",
-            "did:web:inviter",
+            "ak:did_core:web:inviter",
             "invite",
             true,
             None,
@@ -684,9 +689,9 @@ mod tests {
 
         let outcome = relay_invite_with(
             Some(&base),
-            "did:web:holder",
+            "ak:did_core:web:holder",
             "c-allow",
-            "did:web:inviter",
+            "ak:did_core:web:inviter",
             "invite",
             true,
             Some(&peer),
@@ -717,7 +722,7 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
-            .and(query_param("peer", "did:web:inviter"))
+            .and(query_param("peer", "ak:did_core:web:inviter"))
             .and(query_param("consent_scope", "invite"))
             .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("invite")))
             .expect(1)
@@ -733,9 +738,9 @@ mod tests {
 
         let outcome = relay_invite_with(
             Some(&base),
-            "did:web:holder",
+            "ak:did_core:web:holder",
             "c-allow",
-            "did:web:inviter",
+            "ak:did_core:web:inviter",
             "invite",
             true,
             None, // no forward target

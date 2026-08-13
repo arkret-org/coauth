@@ -805,7 +805,7 @@ mod tests {
     #[test]
     fn deny_actor_matches() {
         let data = serde_json::json!({
-            "deny_actors": ["did:web:mallory.example"]
+            "deny_actors": ["ak:did_core:web:mallory.example"]
         });
         let r = req("ak:did_core:web:mallory.example", "ak.message.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
