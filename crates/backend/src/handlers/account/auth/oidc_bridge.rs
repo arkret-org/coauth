@@ -259,6 +259,18 @@ impl OidcExchangeError {
     }
 }
 
+fn map_device_revocation_gate_oidc_error(error: arkret::ArkretRouteError) -> OidcExchangeError {
+    match error {
+        arkret::ArkretRouteError::Coded { code, message, .. }
+            if code == arkret_wire::ErrorCode::DEVICE_REVOCATION_PENDING
+                || code == arkret_wire::ErrorCode::DEVICE_REVOKED =>
+        {
+            OidcExchangeError::new(code, message)
+        }
+        other => OidcExchangeError::new("internal_error", other.to_string()),
+    }
+}
+
 fn validate_returned_nonce(grant_nonce: Option<&str>, expected_nonce: &str) -> Result<(), String> {
     let returned_nonce = grant_nonce.unwrap_or_default();
     // Constant-time compare (COA-SEC-04): the nonce binds the proof to the
@@ -958,12 +970,25 @@ async fn exchange_oidc_code(
             OidcExchangeError::new("principal_account_registration_failed", message)
         })?;
 
-        let issuance_seed = arkret::SessionGrantIssuanceSeed::from_operation(
-            session_grant_operation
-                .as_ref()
-                .expect("session grant exchange must carry a reserved operation"),
+        let operation = session_grant_operation
+            .as_ref()
+            .expect("session grant exchange must carry a reserved operation");
+        let issuance_seed = arkret::SessionGrantIssuanceSeed::from_operation(operation)
+            .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+        let typed_device_id = DeviceId::new(device_id.clone())
+            .map_err(|error| OidcExchangeError::new("device_binding_invalid", error.to_string()))?;
+        let device_binding = arkret::acquire_human_device_binding(
+            depot,
+            &principal.principal_authority,
+            typed_device_id.clone(),
+            arkret_wire::DeviceRevocationGateActionClass::SessionGrantIssue,
+            None,
+            arkret::operation_intent_digest(operation)
+                .map_err(map_device_revocation_gate_oidc_error)?,
+            clock.now(),
         )
-        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+        .await
+        .map_err(map_device_revocation_gate_oidc_error)?;
         let session_grant = arkret::issue_session_grant_for_audience(
             &issuance_seed,
             &*clock,
@@ -972,13 +997,12 @@ async fn exchange_oidc_code(
             &browser_session,
             dpop_binding.public_jwk.clone(),
             grant_target.audience.clone(),
-            DeviceId::new(device_id.clone()).map_err(|error| {
-                OidcExchangeError::new("device_binding_invalid", error.to_string())
-            })?,
+            typed_device_id,
             principal_session_grant_scopes(&device_id),
             Some(principal.principal_id.as_str()),
             &principal.principal_authority,
             dpop_binding.jkt.clone(),
+            device_binding,
             arkret_models_identity::SessionGrantProofKind::OidcCodeExchange,
         )
         .map_err(|error| OidcExchangeError::new("session_grant_denied", error.to_string()))?;
@@ -1466,12 +1490,25 @@ async fn exchange_oidc_code(
     .await
     .map_err(|message| OidcExchangeError::new("principal_account_registration_failed", message))?;
 
-    let issuance_seed = arkret::SessionGrantIssuanceSeed::from_operation(
-        session_grant_operation
-            .as_ref()
-            .expect("session grant exchange must carry a reserved operation"),
+    let operation = session_grant_operation
+        .as_ref()
+        .expect("session grant exchange must carry a reserved operation");
+    let issuance_seed = arkret::SessionGrantIssuanceSeed::from_operation(operation)
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+    let typed_device_id = DeviceId::new(device_id.clone())
+        .map_err(|error| OidcExchangeError::new("device_binding_invalid", error.to_string()))?;
+    let device_binding = arkret::acquire_human_device_binding(
+        depot,
+        &principal.principal_authority,
+        typed_device_id.clone(),
+        arkret_wire::DeviceRevocationGateActionClass::SessionGrantIssue,
+        None,
+        arkret::operation_intent_digest(operation)
+            .map_err(map_device_revocation_gate_oidc_error)?,
+        clock.now(),
     )
-    .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+    .await
+    .map_err(map_device_revocation_gate_oidc_error)?;
     let session_grant = arkret::issue_session_grant_for_audience(
         &issuance_seed,
         &clock,
@@ -1480,12 +1517,12 @@ async fn exchange_oidc_code(
         &browser_session,
         dpop_binding.public_jwk.clone(),
         grant_target.audience.clone(),
-        DeviceId::new(device_id.clone())
-            .map_err(|error| OidcExchangeError::new("device_binding_invalid", error.to_string()))?,
+        typed_device_id,
         principal_session_grant_scopes(&device_id),
         Some(principal.principal_id.as_str()),
         &principal.principal_authority,
         dpop_binding.jkt.clone(),
+        device_binding,
         arkret_models_identity::SessionGrantProofKind::OidcCodeExchange,
     )
     .map_err(|error| OidcExchangeError::new("session_grant_denied", error.to_string()))?;

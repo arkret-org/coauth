@@ -1119,6 +1119,15 @@ pub async fn debug_issue_dpop_grant(
         Some(principal_did.as_str()),
         &principal_authority,
         jkt.clone(),
+        Some(arkret_models_identity::SessionGrantDeviceBinding {
+            device_id: arkret_identifiers::DeviceId::new(body.device_id.clone())
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            authorization_event_id: arkret_identifiers::EventId::new(
+                "ak:event:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e",
+            )
+            .expect("cotest fixture authorization Event id"),
+            model_generation_ref: 1,
+        }),
         arkret_models_identity::SessionGrantProofKind::PairedDeviceProof,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;

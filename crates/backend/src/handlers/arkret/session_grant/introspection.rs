@@ -61,6 +61,7 @@ fn introspection_grant_record(
         subject: parsed_payload.subject,
         service_account_id,
         device_id,
+        device_binding: parsed_payload.device_binding,
         audience,
         scopes: grant
             .scope

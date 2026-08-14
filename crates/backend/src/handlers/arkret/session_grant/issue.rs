@@ -912,6 +912,8 @@ pub(crate) fn map_oidc_exchange_error(
             StatusCode::NOT_FOUND,
             arkret_wire::ErrorCode::PRINCIPAL_UNKNOWN,
         ),
+        code @ (arkret_wire::ErrorCode::DEVICE_REVOCATION_PENDING
+        | arkret_wire::ErrorCode::DEVICE_REVOKED) => (StatusCode::CONFLICT, code),
         // Account lifecycle statuses are context-dependent: the Spec registry
         // splits them per entry point, and issuance is the
         // `session_issuance_or_refresh` context. Read the split from the

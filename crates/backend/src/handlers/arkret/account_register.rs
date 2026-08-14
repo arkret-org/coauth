@@ -29,7 +29,8 @@ use super::account_handoff::{
     verify_account_handoff_holder_without_lookup,
 };
 use super::session_grant::{
-    SessionGrantIssuanceSeed, issue_session_grant_for_audience, persist_session_grant,
+    SessionGrantIssuanceSeed, acquire_human_device_binding, issue_session_grant_for_audience,
+    persist_session_grant,
 };
 use super::{
     ArkretRouteError, DepotExt, SessionGrantError, issuer_did_for, preferred_signing_key,
@@ -510,6 +511,16 @@ pub async fn account_register_endpoint(
     let session_public_key: coauth_jose::jwk::PublicJsonWebKey =
         serde_json::from_str(initial.session_public_key.as_str())
             .map_err(|error| proof_invalid(error.to_string()))?;
+    let device_binding = acquire_human_device_binding(
+        depot,
+        &principal_authority,
+        initial.device_id.clone(),
+        arkret_wire::DeviceRevocationGateActionClass::SessionGrantIssue,
+        None,
+        request_digest.clone(),
+        now,
+    )
+    .await?;
     let material = issue_session_grant_for_audience(
         &issuance_seed,
         &*clock,
@@ -523,6 +534,7 @@ pub async fn account_register_endpoint(
         Some(body.principal_id.as_str()),
         &principal_authority,
         grant.cnf_jkt.clone(),
+        device_binding,
         arkret_models_identity::SessionGrantProofKind::DidBoundSignature,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;

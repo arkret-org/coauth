@@ -24,7 +24,11 @@ use arkret_signatures::http_signature::{
     format_signature_header, parse_signature_input,
 };
 use arkret_state::SnapshotManifest;
-use arkret_wire::{DidFullId, HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN};
+use arkret_wire::{
+    DeviceRevocationGateCheckOutcome, DeviceRevocationGateCheckRequestBody, DidFullId,
+    HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN,
+    PATH_PEER_DEVICE_REVOCATIONS_CHECK,
+};
 use coauth_keystore::Keystore;
 use serde::Serialize;
 use thiserror::Error;
@@ -145,6 +149,25 @@ impl<'a> PeerProtocolClient<'a> {
             .await?;
         outcome
             .validate_against(request)
+            .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
+        Ok(outcome)
+    }
+
+    /// Linearize one exact session-grant issue or refresh intent against the
+    /// origin Principal Server's durable device-revocation state.
+    pub async fn post_device_revocation_gate_check(
+        &self,
+        request: &DeviceRevocationGateCheckRequestBody,
+    ) -> Result<DeviceRevocationGateCheckOutcome, PeerProtocolClientError> {
+        request
+            .validate()
+            .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
+        let url = self.join_absolute(PATH_PEER_DEVICE_REVOCATIONS_CHECK)?;
+        let outcome: DeviceRevocationGateCheckOutcome = self
+            .post_json("peer_device_revocations_check", url, request, None)
+            .await?;
+        outcome
+            .validate_for_request(request)
             .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
         Ok(outcome)
     }

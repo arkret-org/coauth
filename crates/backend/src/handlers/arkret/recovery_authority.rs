@@ -24,7 +24,8 @@ use super::account_handoff::{
     verify_account_handoff_holder_without_lookup,
 };
 use super::session_grant::{
-    SessionGrantIssuanceSeed, issue_session_grant_for_audience, new_session_grant_record,
+    SessionGrantIssuanceSeed, acquire_human_device_binding, issue_session_grant_for_audience,
+    new_session_grant_record,
 };
 use super::{ArkretRouteError, preferred_signing_key};
 use crate::handlers::common::DepotExt;
@@ -244,6 +245,28 @@ pub async fn issue_recovery_completion_grant_endpoint(
     let session_public_key: coauth_jose::jwk::PublicJsonWebKey =
         serde_json::from_str(initial.session_public_key.as_str())
             .map_err(|error| signature_invalid(error.to_string()))?;
+    let expected_device_binding = arkret_models_identity::SessionGrantDeviceBinding {
+        device_id: initial.device_id.clone(),
+        authorization_event_id: request.device_authorization_event_id.clone(),
+        model_generation_ref: request.result_model_generation_ref,
+    };
+    let device_binding = acquire_human_device_binding(
+        depot,
+        &principal_authority,
+        initial.device_id.clone(),
+        arkret_wire::DeviceRevocationGateActionClass::SessionGrantIssue,
+        Some(&expected_device_binding),
+        request.canonical_request_digest.clone(),
+        clock.now(),
+    )
+    .await?;
+    if device_binding.as_ref() != Some(&expected_device_binding) {
+        return Err(ArkretRouteError::coded(
+            StatusCode::CONFLICT,
+            arkret_wire::ErrorCode::DEVICE_REVOKED,
+            "recovery completion device binding is unavailable or generation-fenced",
+        ));
+    }
     let material = issue_session_grant_for_audience(
         &issuance_seed,
         &*clock,
@@ -257,6 +280,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         Some(receipt.principal_id.as_str()),
         &principal_authority,
         handoff.cnf_jkt.clone(),
+        device_binding,
         SessionGrantProofKind::DidBoundSignature,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;

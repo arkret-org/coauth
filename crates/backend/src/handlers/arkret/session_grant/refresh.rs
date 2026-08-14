@@ -858,6 +858,31 @@ pub async fn refresh_session_grant(
     let proof_kind = prior_payload.proof_kind.ok_or_else(|| {
         did_proof_required("session-grant refresh predecessor is missing proof_kind")
     })?;
+    let expected_device_binding = prior_payload.device_binding.as_ref().ok_or_else(|| {
+        ArkretRouteError::coded(
+            StatusCode::CONFLICT,
+            arkret_wire::ErrorCode::DEVICE_REVOKED,
+            "fresh-device restricted grant cannot be refreshed before device authorization",
+        )
+    })?;
+    let device_binding = acquire_human_device_binding(
+        depot,
+        &principal_binding.principal_authority,
+        arkret_identifiers::DeviceId::new(device_id.to_owned())
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        arkret_wire::DeviceRevocationGateActionClass::SessionGrantRefresh,
+        Some(expected_device_binding),
+        operation_intent_digest(&operation)?,
+        now,
+    )
+    .await?;
+    if device_binding.as_ref() != Some(expected_device_binding) {
+        return Err(ArkretRouteError::coded(
+            StatusCode::CONFLICT,
+            arkret_wire::ErrorCode::DEVICE_REVOKED,
+            "device authorization generation changed before refresh",
+        ));
+    }
     let new_material = issue_session_grant_for_audience(
         &issuance_seed,
         &*clock,
@@ -872,6 +897,7 @@ pub async fn refresh_session_grant(
         Some(&prior_grant.subject),
         &principal_binding.principal_authority,
         verification.jkt.clone(),
+        device_binding,
         proof_kind,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;

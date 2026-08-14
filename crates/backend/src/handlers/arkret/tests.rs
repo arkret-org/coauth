@@ -1278,6 +1278,17 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         Some(principal_did.as_str()),
         &principal_authority,
         bound_jkt.clone(),
+        Some(arkret_models_identity::SessionGrantDeviceBinding {
+            device_id: arkret_identifiers::DeviceId::new(
+                "ak:device:01964137-0000-7000-8000-000000000001",
+            )
+            .unwrap(),
+            authorization_event_id: arkret_identifiers::EventId::new(
+                "ak:event:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e",
+            )
+            .unwrap(),
+            model_generation_ref: 1,
+        }),
         arkret_models_identity::SessionGrantProofKind::DidBoundSignature,
     )
     .unwrap();

@@ -1,3 +1,4 @@
+mod device_revocation_gate;
 mod introspection;
 mod issuance;
 mod issue;
@@ -7,6 +8,7 @@ mod session_logout;
 mod types;
 
 pub(crate) use arkret_models_identity::SignedSessionGrantClaims;
+pub(crate) use device_revocation_gate::{acquire_human_device_binding, operation_intent_digest};
 pub use introspection::introspect_session_grant;
 #[cfg(test)]
 pub(crate) use introspection::{introspection_status, session_grant_jwt_hash};

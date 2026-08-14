@@ -2,8 +2,9 @@ use arkret_canonical::format_timestamp_canonical;
 use arkret_identifiers::{DeviceId, DidCoreId, EventId};
 use arkret_models_identity::{
     CanonicalSessionPublicJwk, SESSION_GRANT_CREDENTIAL_KIND, SESSION_GRANT_ISSUANCE_SCHEMA,
-    SessionGrantCnf, SessionGrantCredentialClass, SessionGrantHolderBinding,
-    SessionGrantIssuancePreimage, SessionGrantProofKind, SignedSessionGrantClaims,
+    SessionGrantCnf, SessionGrantCredentialClass, SessionGrantDeviceBinding,
+    SessionGrantHolderBinding, SessionGrantIssuancePreimage, SessionGrantProofKind,
+    SignedSessionGrantClaims,
 };
 use arkret_wire::DidUrl;
 use chrono::{DateTime, Utc};
@@ -53,6 +54,14 @@ pub(crate) fn issue_session_grant(
         now + arkret_config.session_grant_ttl,
         signing_key_id,
     )?;
+    let device_binding = SessionGrantDeviceBinding {
+        device_id: device_id.clone(),
+        authorization_event_id: EventId::new(
+            "ak:event:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e",
+        )
+        .expect("test authorization Event id"),
+        model_generation_ref: 1,
+    };
     issue_session_grant_for_audience(
         &issuance_seed,
         clock,
@@ -66,6 +75,7 @@ pub(crate) fn issue_session_grant(
         Some(subject),
         principal_authority,
         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
+        Some(device_binding),
         SessionGrantProofKind::DidBoundSignature,
     )
 }
@@ -86,6 +96,7 @@ pub(crate) fn issue_session_grant_for_audience(
     subject_override: Option<&str>,
     principal_authority: &arkret_wire::PrincipalAuthorityKey,
     dpop_jkt: String,
+    device_binding: Option<SessionGrantDeviceBinding>,
     proof_kind: SessionGrantProofKind,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     let _ = (clock, browser_session);
@@ -131,7 +142,7 @@ pub(crate) fn issue_session_grant_for_audience(
         holder_binding: SessionGrantHolderBinding::HumanDevice {
             device_binding: device_id.to_string(),
         },
-        device_binding: None,
+        device_binding,
         proof_kind: Some(proof_kind),
         scope_details: None,
     };
@@ -202,6 +213,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
     subject_override: Option<&str>,
     principal_authority: &arkret_wire::PrincipalAuthorityKey,
     dpop_jkt: String,
+    device_binding: Option<SessionGrantDeviceBinding>,
     proof_kind: SessionGrantProofKind,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     issue_session_grant_for_audience(
@@ -217,6 +229,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
         subject_override,
         principal_authority,
         dpop_jkt,
+        device_binding,
         proof_kind,
     )
 }
