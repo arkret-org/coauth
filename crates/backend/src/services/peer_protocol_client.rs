@@ -13,7 +13,7 @@ use arkret_models_collaboration::account_lifecycle::{
 use arkret_models_collaboration::event_query::PeerEventsFrontierRequestBody;
 use arkret_models_collaboration::event_sync::EventsFrontierFederationPeerState;
 use arkret_models_collaboration::governance::invite_addressing::{
-    InviteDeliveryOutcome, InviteDeliveryRequestBodyBody,
+    InviteDeliveryOutcome, InviteDeliveryRequestBody,
 };
 use arkret_models_collaboration::principal_operations::{
     PcrGenesisSubmitOutcome, PcrGenesisSubmitRequestBody,
@@ -94,7 +94,7 @@ impl<'a> PeerProtocolClient<'a> {
 
     pub async fn post_invite_delivery(
         &self,
-        request: &InviteDeliveryRequestBodyBody,
+        request: &InviteDeliveryRequestBody,
     ) -> Result<InviteDeliveryOutcome, PeerProtocolClientError> {
         let url = self.join_absolute("/_arkret/peer/invites")?;
         self.post_json(

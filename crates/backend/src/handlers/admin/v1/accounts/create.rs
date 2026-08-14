@@ -178,10 +178,10 @@ pub struct BatchInviteConsentGate {
     pub target_principal_url: Option<Url>,
 
     /// Mirror of the holder's
-    /// the `ak.realm.policy_bundle` payload path `preauth.require_consent` policy bit.
+    /// the `ak.realm.policy_bundle` payload path `preauth.consent_required` policy bit.
     /// Defaults to `true` (fail closed: missing / revoked consent → 422).
     #[serde(default = "default_require_consent")]
-    pub require_consent: bool,
+    pub consent_required: bool,
 }
 
 fn default_invite_scope() -> String {
@@ -269,13 +269,13 @@ pub async fn evaluate_batch_invite_gate(
 
     let Some(principal_url) = principal_url else {
         // Gate metadata supplied, but no server to query. Mirror the
-        // relay handler: when require_consent is on, fail closed; when
+        // relay handler: when consent_required is on, fail closed; when
         // off, treat as quarantine. (We never silently allow.)
         debug!(
             consent_id = %gate.consent_id,
-            "batch_invite consent gate: no server_name URL — falling back per require_consent",
+            "batch_invite consent gate: no server_name URL — falling back per consent_required",
         );
-        return if gate.require_consent {
+        return if gate.consent_required {
             BatchInviteGateOutcome::ConsentRequired
         } else {
             BatchInviteGateOutcome::Quarantined
@@ -292,7 +292,8 @@ pub async fn evaluate_batch_invite_gate(
     )
     .await;
 
-    let decision = evaluate_invite_gate(&lookup, &gate.peer_did, &gate.scope, gate.require_consent);
+    let decision =
+        evaluate_invite_gate(&lookup, &gate.peer_did, &gate.scope, gate.consent_required);
     match decision {
         InviteGateDecision::Allow => BatchInviteGateOutcome::Allow,
         InviteGateDecision::ConsentRequired => BatchInviteGateOutcome::ConsentRequired,
@@ -416,7 +417,7 @@ pub async fn batch_invite(
         }
         BatchInviteGateOutcome::Quarantined => {
             // Spec §6.1 default-profile path: no consent + no
-            // require_consent flag → route to the holder's quarantine
+            // consent_required flag → route to the holder's quarantine
             // outbox. As of round 20 we persist the intent to
             // `invite_quarantine_queue` so admins (sodmin / inkson)
             // can review and either re-run the invite or reject it.
@@ -515,7 +516,7 @@ mod consent_gate_tests {
             consent_id: consent_id.to_owned(),
             scope: "invite".to_owned(),
             target_principal_url: None,
-            require_consent: true,
+            consent_required: true,
         }
     }
 
@@ -573,7 +574,7 @@ mod consent_gate_tests {
         assert_eq!(outcome, BatchInviteGateOutcome::Allow);
     }
 
-    /// Cell missing (404) + `require_consent=true` → `ConsentRequired`.
+    /// Cell missing (404) + `consent_required=true` → `ConsentRequired`.
     #[tokio::test]
     async fn batch_invite_gate_returns_consent_required_when_missing() {
         setup();
@@ -594,13 +595,13 @@ mod consent_gate_tests {
             "ak:did_core:web:holder",
         );
         gate.target_principal_url = Some(base);
-        gate.require_consent = true;
+        gate.consent_required = true;
 
         let outcome = evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
         assert_eq!(outcome, BatchInviteGateOutcome::ConsentRequired);
     }
 
-    /// soland 500 (Unknown) + `require_consent=false` → Quarantined.
+    /// soland 500 (Unknown) + `consent_required=false` → Quarantined.
     #[tokio::test]
     async fn batch_invite_gate_quarantines_when_unknown_and_not_required() {
         setup();
@@ -620,7 +621,7 @@ mod consent_gate_tests {
             "ak:did_core:web:holder",
         );
         gate.target_principal_url = Some(base);
-        gate.require_consent = false;
+        gate.consent_required = false;
 
         let outcome = evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
         assert_eq!(outcome, BatchInviteGateOutcome::Quarantined);
@@ -649,14 +650,14 @@ mod consent_gate_tests {
     }
 
     /// Gate metadata supplied but no principal URL anywhere +
-    /// `require_consent=true` → `ConsentRequired` (fail closed). No HTTP.
+    /// `consent_required=true` → `ConsentRequired` (fail closed). No HTTP.
     #[tokio::test]
     async fn batch_invite_gate_fails_closed_when_no_principal_url() {
         setup();
         let client = reqwest::Client::new();
         let mut gate = gate_for("c-none", "ak:did_core:web:peer", "ak:did_core:web:holder");
         gate.target_principal_url = None;
-        gate.require_consent = true;
+        gate.consent_required = true;
 
         let outcome = evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
         assert_eq!(outcome, BatchInviteGateOutcome::ConsentRequired);

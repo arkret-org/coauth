@@ -32,7 +32,7 @@ pub enum Error {
     InvalidCaptcha(Vec<CaptchaProviderErrorCode>),
 
     #[error("The CAPTCHA provider returned an invalid response")]
-    InvalidResponse,
+    ResponseInvalid,
 
     #[error(
         "The hostname in the CAPTCHA response ({got:?}) does not match the site hostname ({expected:?})"
@@ -204,11 +204,11 @@ pub async fn verify_token(
     }
 
     let Some(hostname) = response.hostname else {
-        return Err(Error::InvalidResponse);
+        return Err(Error::ResponseInvalid);
     };
 
     let Some(challenge_ts) = response.challenge_ts else {
-        return Err(Error::InvalidResponse);
+        return Err(Error::ResponseInvalid);
     };
 
     span.record("captcha.hostname", &hostname);

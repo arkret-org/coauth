@@ -263,7 +263,7 @@ async fn verify_cross_session_lifecycle_proof(
     let actor_id = DidCoreId::new(current_grant.subject.clone()).map_err(|error| {
         ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::INVALID_PARAM,
+            arkret_wire::ErrorCode::PARAM_INVALID,
             format!("current session grant subject is not a DID: {error}"),
         )
     })?;
@@ -437,7 +437,7 @@ pub async fn revoke_session_grant_endpoint(
         .map_err(|error| {
             ArkretRouteError::coded(
                 StatusCode::BAD_REQUEST,
-                arkret_wire::ErrorCode::INVALID_PARAM,
+                arkret_wire::ErrorCode::PARAM_INVALID,
                 format!("current session grant device_id is invalid: {error}"),
             )
         })?;

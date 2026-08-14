@@ -100,7 +100,7 @@ fn require_soft_logout_bound_device_id<'a>(
     DeviceId::new(presented.to_owned()).map_err(|error| {
         ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::INVALID_PARAM,
+            arkret_wire::ErrorCode::PARAM_INVALID,
             format!("device_id is not a protocol device identifier: {error}"),
         )
     })?;
@@ -306,7 +306,7 @@ pub async fn refresh_session_grant(
             .map_err(|error| {
             ArkretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
-                arkret_wire::ErrorCode::INVALID_SIGNATURE,
+                arkret_wire::ErrorCode::SIGNATURE_INVALID,
                 error.to_string(),
             )
         })?;
@@ -314,7 +314,7 @@ pub async fn refresh_session_grant(
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
         ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::INVALID_SIGNATURE,
+            arkret_wire::ErrorCode::SIGNATURE_INVALID,
             error.to_string(),
         )
     })?;
@@ -547,7 +547,7 @@ pub async fn refresh_session_grant(
         let device_id = DeviceId::new(device_id.to_owned()).map_err(|error| {
             ArkretRouteError::coded(
                 StatusCode::BAD_REQUEST,
-                arkret_wire::ErrorCode::INVALID_PARAM,
+                arkret_wire::ErrorCode::PARAM_INVALID,
                 format!("device_id is not a protocol device identifier: {error}"),
             )
         })?;

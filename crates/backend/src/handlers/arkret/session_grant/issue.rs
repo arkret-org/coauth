@@ -561,7 +561,7 @@ async fn extract_kickoff_dpop(
     .map_err(|error| {
         ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::INVALID_SIGNATURE,
+            arkret_wire::ErrorCode::SIGNATURE_INVALID,
             format!("reason_code=proof_invalid; invalid grant-binding DPoP proof: {error}"),
         )
     })
@@ -583,14 +583,14 @@ fn require_agent_key_proof_dpop_binding(
     let body_binding = body_binding.ok_or_else(|| {
         ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::INVALID_SIGNATURE,
+            arkret_wire::ErrorCode::SIGNATURE_INVALID,
             "reason_code=proof_invalid; agent_key_proof body must carry dpop_binding_proof",
         )
     })?;
     if body_binding.proof_jwt != binding.proof_jwt {
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::INVALID_SIGNATURE,
+            arkret_wire::ErrorCode::SIGNATURE_INVALID,
             "reason_code=proof_invalid; DPoP header does not match body dpop_binding_proof",
         ));
     }
@@ -790,7 +790,7 @@ async fn issue_agent_key_proof_session_grant(
         repo.cancel().await.ok();
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::INVALID_SIGNATURE,
+            arkret_wire::ErrorCode::SIGNATURE_INVALID,
             "reason_code=proof_invalid; agent DPoP JTI was already consumed",
         ));
     }
@@ -1095,7 +1095,7 @@ mod tests {
         assert_coded(
             err,
             StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::INVALID_SIGNATURE,
+            arkret_wire::ErrorCode::SIGNATURE_INVALID,
         );
     }
 
@@ -1113,7 +1113,7 @@ mod tests {
         assert_coded(
             err,
             StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::INVALID_SIGNATURE,
+            arkret_wire::ErrorCode::SIGNATURE_INVALID,
         );
     }
 }

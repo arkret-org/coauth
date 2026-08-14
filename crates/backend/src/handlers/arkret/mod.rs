@@ -106,7 +106,7 @@ pub enum ArkretRouteError {
     /// A protocol failure whose registry error code MUST surface as the
     /// envelope's top-level `code` (e.g. `grant_already_consumed`,
     /// `session_logged_out`, `audience_mismatch`, `session_grant_not_found`)
-    /// rather than being collapsed into `bad_json`. This lets conformant
+    /// rather than being collapsed into `json_invalid`. This lets conformant
     /// clients discriminate the failure structurally (account-lifecycle §4.1,
     /// error-code-registry `codes`) instead of string-matching the message.
     #[error("{message}")]
@@ -190,7 +190,7 @@ impl From<crate::AppError> for ArkretRouteError {
         }
         match status {
             StatusCode::BAD_REQUEST => {
-                Self::coded(status, arkret_wire::ErrorCode::INVALID_PARAM, message)
+                Self::coded(status, arkret_wire::ErrorCode::PARAM_INVALID, message)
             }
             StatusCode::UNAUTHORIZED => Self::Unauthorized(message),
             StatusCode::FORBIDDEN => Self::Forbidden(message),
@@ -490,7 +490,7 @@ impl Scribe for ArkretRouteError {
             ),
             Self::BadRequest(message) => (
                 StatusCode::BAD_REQUEST,
-                ErrorEnvelope::new(arkret_wire::ErrorCode::BAD_JSON, message),
+                ErrorEnvelope::new(arkret_wire::ErrorCode::JSON_INVALID, message),
             ),
             Self::Coded {
                 status,
@@ -670,12 +670,12 @@ pub(crate) fn user_handle(url_builder: &UrlBuilder, user: &User) -> String {
 /// Reject any inbound `handle` that is not in the canonical
 /// `<localpart>:<domain>` shape (spec 7157ee8 §3.1). Returns a
 /// [`ArkretRouteError::Coded`] wrapping the standard error envelope
-/// `code = "invalid_param"`.
+/// `code = "param_invalid"`.
 pub(crate) fn require_canonical_handle(input: &str) -> Result<&str, ArkretRouteError> {
     coauth_data::user::validate_canonical_handle(input).map_err(|(_code, message)| {
         ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::INVALID_PARAM,
+            arkret_wire::ErrorCode::PARAM_INVALID,
             format!("reason_code=handle_not_canonical; {message}"),
         )
     })

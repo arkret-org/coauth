@@ -1121,7 +1121,7 @@ async fn session_grant_http_list_and_filter_work() {
         .await;
     response.assert_status(StatusCode::BAD_REQUEST);
     let body: serde_json::Value = response.json();
-    assert_eq!(body["error"]["code"], "bad_json");
+    assert_eq!(body["error"]["code"], "json_invalid");
     assert_eq!(body["error"]["message"], "invalid browser_session_id");
 }
 
@@ -1475,7 +1475,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
     // ambiguous selector is a 400 schema_violation regardless of bearer.
 
     // Both present → 400 schema_violation (the body parsed; it fails the
-    // oneOf selector constraint, which is not bad_json).
+    // oneOf selector constraint, which is not json_invalid).
     let response = state
         .request(
             Request::post("/_arkret/gate/account/session-grants/introspect").json(
@@ -1698,7 +1698,7 @@ fn require_canonical_handle_rejects_acct_aliases() {
     let err = require_canonical_handle("acct:alice@example.com").unwrap_err();
     match err {
         ArkretRouteError::Coded { code, message, .. } => {
-            assert_eq!(code, arkret_wire::ErrorCode::INVALID_PARAM);
+            assert_eq!(code, arkret_wire::ErrorCode::PARAM_INVALID);
             assert!(
                 message.contains("reason_code=handle_not_canonical"),
                 "expected canonical-handle reason code, got {message}"

@@ -110,7 +110,7 @@ impl AgentAuthRejection {
             | Self::AgentRequestedScopeCommitmentInvalid
             | Self::AgentDeactivated
             | Self::AgentPaused => arkret_wire::ErrorCode::FAILED_PRECONDITION,
-            Self::ProofInvalid => arkret_wire::ErrorCode::INVALID_SIGNATURE,
+            Self::ProofInvalid => arkret_wire::ErrorCode::SIGNATURE_INVALID,
             // `accountability_grant_missing` is delivered as a
             // `failed_precondition` HTTP rejection with `reason` carrying
             // this canonical string (see operations↔error mapping §0.8).

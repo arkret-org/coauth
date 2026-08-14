@@ -43,7 +43,7 @@ pub enum ConsentLookup {
 
     /// soland is not configured, the endpoint is unreachable, or the
     /// response could not be parsed. Callers must apply their own fail-safe
-    /// policy (default-deny for `require_consent` profiles, quarantine
+    /// policy (default-deny for `consent_required` profiles, quarantine
     /// otherwise).
     Unknown { reason: &'static str },
 }
@@ -259,8 +259,8 @@ fn normalize_scope(scope: &str) -> String {
 /// Decide whether an invite should pass the consent gate, given a cell
 /// lookup result and the requested `(peer_did, scope)` pair.
 ///
-/// `require_consent` mirrors the principal control Realm's
-/// the `ak.realm.policy_bundle` payload path `preauth.require_consent` toggle. When `true`
+/// `consent_required` mirrors the principal control Realm's
+/// the `ak.realm.policy_bundle` payload path `preauth.consent_required` toggle. When `true`
 /// and the lookup result is `Unknown` or revoked/absent, the invite is
 /// rejected with `ConsentRequired`. When `false` the same condition routes
 /// to a holder-side quarantine (caller decides how to enact that).
@@ -275,7 +275,7 @@ pub enum InviteGateDecision {
     Quarantine,
 }
 
-/// Pure function: turn a `(ConsentLookup, peer, scope, require_consent)`
+/// Pure function: turn a `(ConsentLookup, peer, scope, consent_required)`
 /// tuple into a gate decision. No I/O, easy to unit-test and reuse from
 /// other invite-style handlers.
 #[must_use]
@@ -283,7 +283,7 @@ pub fn evaluate_invite_gate(
     lookup: &ConsentLookup,
     peer_did: &str,
     scope: &str,
-    require_consent: bool,
+    consent_required: bool,
 ) -> InviteGateDecision {
     match lookup {
         ConsentLookup::Known(state) if state.granted => {
@@ -296,7 +296,7 @@ pub fn evaluate_invite_gate(
                 .any(|t| t == &want_scoped || t == &want_any)
             {
                 InviteGateDecision::Allow
-            } else if require_consent {
+            } else if consent_required {
                 InviteGateDecision::ConsentRequired
             } else {
                 InviteGateDecision::Quarantine
@@ -304,14 +304,14 @@ pub fn evaluate_invite_gate(
         }
         ConsentLookup::Known(_) => {
             // granted == false: explicit revocation / empty cell.
-            if require_consent {
+            if consent_required {
                 InviteGateDecision::ConsentRequired
             } else {
                 InviteGateDecision::Quarantine
             }
         }
         ConsentLookup::Unknown { .. } => {
-            if require_consent {
+            if consent_required {
                 InviteGateDecision::ConsentRequired
             } else {
                 InviteGateDecision::Quarantine

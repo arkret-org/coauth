@@ -17,7 +17,7 @@
 //!    /_coauth/self/account/invites/relay` along with `(target_principal_url, target_holder_did,
 //!    consent_id, scope)`.
 //! 2. Coauth queries the target's consent cell via `consent_cell_query::query_consent_cell`.
-//! 3. Coauth runs `evaluate_invite_gate(...)` to translate the lookup + `require_consent` policy
+//! 3. Coauth runs `evaluate_invite_gate(...)` to translate the lookup + `consent_required` policy
 //!    bit into an `Allow / ConsentRequired / Quarantine` decision.
 //! 4. On `Allow`, coauth forwards the typed invite-delivery request to the target principal's
 //!    `/_arkret/peer/invites` endpoint and returns 200. On `ConsentRequired`, coauth returns 403
@@ -81,15 +81,15 @@ pub struct InviteRelayRequestBody {
     pub scope: String,
 
     /// Mirror of the holder's `ak.realm.policy_bundle` payload path
-    /// `preauth.require_consent` policy bit. Defaults to `true` (fail closed).
+    /// `preauth.consent_required` policy bit. Defaults to `true` (fail closed).
     #[serde(default = "default_require_consent")]
-    pub require_consent: bool,
+    pub consent_required: bool,
 
     /// Typed v1 invite-delivery body for `POST /_arkret/peer/invites`.
     /// When omitted, the endpoint runs as a consent gate check only.
     #[serde(default)]
     pub invite_delivery: Option<
-        arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBodyBody,
+        arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBody,
     >,
 }
 
@@ -173,10 +173,10 @@ pub async fn relay_invite_with(
     consent_id: &str,
     peer_did: &str,
     scope: &str,
-    require_consent: bool,
+    consent_required: bool,
     peer_protocol_client: Option<&PeerProtocolClient<'_>>,
     invite_delivery: Option<
-        &arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBodyBody,
+        &arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBody,
     >,
     http_client: &reqwest::Client,
 ) -> Result<RelayOutcome, RouteError> {
@@ -194,7 +194,7 @@ pub async fn relay_invite_with(
     )
     .await;
 
-    let decision = evaluate_invite_gate(&lookup, peer_did, scope, require_consent);
+    let decision = evaluate_invite_gate(&lookup, peer_did, scope, consent_required);
     debug!(
         ?decision,
         consent_id, peer_did, scope, "invite-relay gate decision"
@@ -350,7 +350,7 @@ pub async fn post_invite_relay(
         &params.consent_id,
         &params.inviter_did,
         &params.scope,
-        params.require_consent,
+        params.consent_required,
         peer_client.as_ref(),
         params.invite_delivery.as_ref(),
         &http_client,
@@ -429,9 +429,8 @@ mod tests {
     }
 
     fn invite_delivery()
-    -> arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBodyBody
-    {
-        arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBodyBody::new(
+    -> arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBody {
+        arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBody::new(
             arkret_wire::test_support::raw_event(
                 arkret_wire::EventKind::InviteCreate.as_str(),
                 arkret_wire::ScopeRef::Realm {
@@ -541,7 +540,7 @@ mod tests {
         assert_eq!(body.forwarded_ok, Some(true));
     }
 
-    /// `ConsentRequired` path: cell missing (404) + `require_consent=true`
+    /// `ConsentRequired` path: cell missing (404) + `consent_required=true`
     /// → no forward attempt, decision is `ConsentRequired`.
     #[tokio::test]
     async fn relay_returns_consent_required_when_no_consent() {
@@ -567,7 +566,7 @@ mod tests {
             "c-missing",
             "ak:did_core:web:inviter",
             "invite",
-            true, // require_consent
+            true, // consent_required
             None,
             None,
             &client,
@@ -603,7 +602,7 @@ mod tests {
             "c-unknown",
             "ak:did_core:web:inviter",
             "invite",
-            false, // require_consent off
+            false, // consent_required off
             None,
             None,
             &client,

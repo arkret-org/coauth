@@ -378,7 +378,7 @@ async fn validate_response(
                 errors: vec![StageValidationError {
                     field: None,
                     message: "Invalid response for this stage".into(),
-                    code: "invalid_response".into(),
+                    code: "response_invalid".into(),
                 }],
             }
         }

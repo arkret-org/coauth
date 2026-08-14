@@ -314,7 +314,7 @@ fn map_handle_claim_issue_error(error: SessionGrantError) -> ArkretRouteError {
     match error {
         SessionGrantError::HandleClaimSubject(error) => ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::INVALID_PARAM,
+            arkret_wire::ErrorCode::PARAM_INVALID,
             error.to_string(),
         ),
         SessionGrantError::PrincipalUnknown => ArkretRouteError::coded(

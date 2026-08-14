@@ -180,7 +180,7 @@ fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
             },
             request_id: "ak:request:01964137-0000-7000-8000-000000000000",
         },
-        codes: vec!["bad_json", "not_found", "internal_error"],
+        codes: vec!["json_invalid", "not_found", "internal_error"],
     }
 }
 
@@ -576,7 +576,7 @@ pub async fn server_describe(
     {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::INVALID_PARAM,
+            arkret_wire::ErrorCode::PARAM_INVALID,
             format!("service_kind {service_kind:?} is not available on this binding"),
         ));
     }

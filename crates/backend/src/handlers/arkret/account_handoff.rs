@@ -274,7 +274,7 @@ pub async fn account_onboarding_snapshot(
             .await?
             .map_or(AccountOnboardingGoal::CompleteIdentity, |challenge| {
                 AccountOnboardingGoal::AbandonProvisionalIdentity {
-                    requires_fresh_authentication: challenge.issuing_handoff_grant_id == grant.id,
+                    fresh_authentication_required: challenge.issuing_handoff_grant_id == grant.id,
                     challenge: challenge.wire_outcome(),
                 }
             })
@@ -1092,7 +1092,7 @@ fn random_opaque(rng: &mut (impl RngCore + ?Sized), bytes: usize) -> String {
 fn proof_invalid(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::UNAUTHORIZED,
-        arkret_wire::ErrorCode::INVALID_SIGNATURE,
+        arkret_wire::ErrorCode::SIGNATURE_INVALID,
         format!("reason_code=proof_invalid; {}", message.into()),
     )
 }

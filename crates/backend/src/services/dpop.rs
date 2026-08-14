@@ -433,7 +433,7 @@ fn map_verification_error(error: DpopVerificationError) -> DpopError {
         DpopVerificationError::InvalidType => DpopError::BadTyp,
         DpopVerificationError::InvalidAlgorithm => DpopError::BadAlg("not Ed25519".to_owned()),
         DpopVerificationError::InvalidJwk => DpopError::MissingJwk,
-        DpopVerificationError::InvalidSignature => DpopError::BadSignature,
+        DpopVerificationError::SignatureInvalid => DpopError::BadSignature,
         DpopVerificationError::MissingClaim(claim) => DpopError::MissingClaim(claim),
         DpopVerificationError::MethodMismatch => DpopError::HtmMismatch,
         DpopVerificationError::InvalidTargetUri | DpopVerificationError::TargetUriMismatch => {

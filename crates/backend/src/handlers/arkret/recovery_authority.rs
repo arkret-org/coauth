@@ -3,7 +3,7 @@
 use arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
 use arkret_models_crypto::{RecoveryReceipt, RecoveryReceiptOutcome};
 use arkret_models_identity::{
-    AccountHandoffAllowedOperation, InitialSessionGrantRequest, SessionGrantProofKind,
+    AccountHandoffAllowedOperation, InitialSessionGrantIntent, SessionGrantProofKind,
 };
 use arkret_signatures::proof::verify_detached_ed25519_signature;
 use arkret_wire::{IssueRecoveryCompletionGrantOutcome, IssueRecoveryCompletionGrantRequest};
@@ -82,7 +82,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
     )?;
     if replay_dpop.jkt != replay_grant.cnf_jkt {
         replay_repo.cancel().await.ok();
-        return Err(invalid_signature(
+        return Err(signature_invalid(
             "account handoff DPoP key does not match the credential cnf.jkt",
         ));
     }
@@ -110,12 +110,12 @@ pub async fn issue_recovery_completion_grant_endpoint(
     )
     .await?;
     if handoff.id != replay_grant.id || dpop.jkt != handoff.cnf_jkt {
-        return Err(invalid_signature(
+        return Err(signature_invalid(
             "account handoff identity changed during recovery completion issuance",
         ));
     }
 
-    let initial: InitialSessionGrantRequest =
+    let initial: InitialSessionGrantIntent =
         serde_json::from_value(request.initial_session.clone())
             .map_err(|error| schema_violation(format!("initial_session is invalid: {error}")))?;
     initial
@@ -243,7 +243,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let session_public_key: coauth_jose::jwk::PublicJsonWebKey =
         serde_json::from_str(initial.session_public_key.as_str())
-            .map_err(|error| invalid_signature(error.to_string()))?;
+            .map_err(|error| signature_invalid(error.to_string()))?;
     let material = issue_session_grant_for_audience(
         &issuance_seed,
         &*clock,
@@ -372,7 +372,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
 fn validate_completion_evidence(
     request: &IssueRecoveryCompletionGrantRequest,
     receipt: &RecoveryReceipt,
-    initial: &InitialSessionGrantRequest,
+    initial: &InitialSessionGrantIntent,
     handoff: &coauth_data::account_handoff::AccountHandoffGrant,
     dpop_jkt: &str,
 ) -> Result<(), ArkretRouteError> {
@@ -417,9 +417,9 @@ fn validate_completion_evidence(
     let session_jkt = initial
         .session_public_key
         .thumbprint_sha256()
-        .map_err(|error| invalid_signature(error.to_string()))?;
+        .map_err(|error| signature_invalid(error.to_string()))?;
     if session_jkt != handoff.cnf_jkt || session_jkt != dpop_jkt {
-        return Err(invalid_signature(
+        return Err(signature_invalid(
             "initial session key thumbprint does not match the Bound handoff and HTTP DPoP key",
         ));
     }
@@ -464,7 +464,7 @@ async fn verify_coordinator_signatures(
         || verification_method_did(receipt.auth_data.verification_method.as_str())
             != expected_coordinator
     {
-        return Err(invalid_signature(
+        return Err(signature_invalid(
             "recovery receipt and completion attestation must be signed by the handoff audience",
         ));
     }
@@ -475,7 +475,7 @@ async fn verify_coordinator_signatures(
         .filter_map(|server| effective_audience(server, shared()))
         .any(|service_id| service_id.as_str() == expected_coordinator);
     if !trusted {
-        return Err(invalid_signature(
+        return Err(signature_invalid(
             "recovery coordinator is not a configured Principal Server",
         ));
     }
@@ -494,7 +494,7 @@ async fn verify_coordinator_signatures(
     )
     .await
     .map_err(|error| {
-        invalid_signature(format!(
+        signature_invalid(format!(
             "no fresh trusted recovery binding for the coordinator: {error}"
         ))
     })?;
@@ -503,7 +503,7 @@ async fn verify_coordinator_signatures(
         attestation.auth_data.verification_method.as_str(),
         &attestation
             .signing_bytes()
-            .map_err(|error| invalid_signature(error.to_string()))?,
+            .map_err(|error| signature_invalid(error.to_string()))?,
         &attestation.auth_data.signature,
         "completion attestation",
     )?;
@@ -512,7 +512,7 @@ async fn verify_coordinator_signatures(
         receipt.auth_data.verification_method.as_str(),
         &receipt
             .signature_transcript_bytes()
-            .map_err(|error| invalid_signature(error.to_string()))?,
+            .map_err(|error| signature_invalid(error.to_string()))?,
         &receipt.auth_data.signature,
         "terminal recovery receipt",
     )
@@ -529,10 +529,10 @@ fn verify_with_document_method(
         .verification_method
         .iter()
         .find(|method| method.id == verification_method)
-        .ok_or_else(|| invalid_signature(format!("{label} verification method is absent")))?;
-    let material = method.public_key_material().map_err(invalid_signature)?;
+        .ok_or_else(|| signature_invalid(format!("{label} verification method is absent")))?;
+    let material = method.public_key_material().map_err(signature_invalid)?;
     if !verify_detached_ed25519_signature(&material, signing_bytes, signature) {
-        return Err(invalid_signature(format!(
+        return Err(signature_invalid(format!(
             "{label} signature did not verify"
         )));
     }
@@ -609,10 +609,10 @@ fn schema_violation(message: impl Into<String>) -> ArkretRouteError {
     )
 }
 
-fn invalid_signature(message: impl Into<String>) -> ArkretRouteError {
+fn signature_invalid(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::UNAUTHORIZED,
-        arkret_wire::ErrorCode::INVALID_SIGNATURE,
+        arkret_wire::ErrorCode::SIGNATURE_INVALID,
         message,
     )
 }
@@ -651,7 +651,7 @@ mod tests {
 
     /// The recovery-completion issuer ceiling is carried by the typed
     /// `requested_scope` domain: anything outside the standard closed pair
-    /// fails to decode before `InitialSessionGrantRequest::validate` runs.
+    /// fails to decode before `InitialSessionGrantIntent::validate` runs.
     fn decode_requested_scope(scope: &[&str]) -> Result<Vec<InitialSessionGrantOperation>, String> {
         serde_json::from_value::<Vec<InitialSessionGrantOperation>>(serde_json::json!(scope))
             .map_err(|error| error.to_string())

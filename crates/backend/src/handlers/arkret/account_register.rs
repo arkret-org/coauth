@@ -795,7 +795,7 @@ fn schema_violation(message: impl Into<String>) -> ArkretRouteError {
 fn proof_invalid(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::UNAUTHORIZED,
-        arkret_wire::ErrorCode::INVALID_SIGNATURE,
+        arkret_wire::ErrorCode::SIGNATURE_INVALID,
         format!("reason_code=proof_invalid; {}", message.into()),
     )
 }
