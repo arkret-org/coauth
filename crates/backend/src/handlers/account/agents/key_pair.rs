@@ -47,10 +47,6 @@ const AGENT_KEY_PAIR_COMMIT_QUEUE: &str = "principal-agent-key-pair-commit";
 /// controller-signed `authorize_event.event.payload.supersedes[]`; Coauth never
 /// fabricates controller-authored revoke Events. Returns the SDK
 /// [`AgentKeyPairOutcome`] carrying the accepted authorization Event ref.
-///
-/// This endpoint currently fails closed before persistence: the legacy
-/// product-local device directory did not carry the SDK aggregate authority
-/// evidence required to verify the controller's exact PCR instance.
 #[handler]
 #[tracing::instrument(name = "handler.account.agents.agent_key_pair", skip_all)]
 pub async fn post_agent_key_pair(
