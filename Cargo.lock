@@ -247,6 +247,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkret-egress-reqwest"
+version = "0.3.0"
+dependencies = [
+ "arkret-egress-policy",
+ "reqwest 0.13.4",
+ "thiserror 2.0.18",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "arkret-event-draft"
 version = "0.3.0"
 dependencies = [
@@ -280,6 +291,7 @@ version = "0.3.0"
 dependencies = [
  "arkret-canonical",
  "arkret-egress-policy",
+ "arkret-egress-reqwest",
  "arkret-identity",
  "arkret-models-collaboration",
  "arkret-models-crypto",
@@ -443,6 +455,10 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
 ]
+
+[[package]]
+name = "arkret-retry"
+version = "0.3.0"
 
 [[package]]
 name = "arkret-schema"
@@ -1475,6 +1491,7 @@ dependencies = [
  "arkret-auth",
  "arkret-canonical",
  "arkret-egress-policy",
+ "arkret-egress-reqwest",
  "arkret-hlc",
  "arkret-http-client",
  "arkret-identifiers",
@@ -1485,6 +1502,7 @@ dependencies = [
  "arkret-models-discovery",
  "arkret-models-identity",
  "arkret-policy",
+ "arkret-retry",
  "arkret-schema",
  "arkret-signatures",
  "arkret-state",
@@ -1582,7 +1600,6 @@ dependencies = [
  "tokio-rustls",
  "tokio-test",
  "tokio-util",
- "tower-service",
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
@@ -1934,6 +1951,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "arkret-canonical",
+ "arkret-retry",
  "arkret-wire",
  "async-trait",
  "chrono",

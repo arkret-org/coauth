@@ -216,16 +216,20 @@ mod tests {
         );
         let revoked = repo
             .accountability_grant()
-            .revoke_by_grant_id(&clock, &loaded.accountability_grant_id, "manual_revoke")
+            .revoke_for_subject(
+                &clock,
+                AccountabilitySubjectKind::ControllerId,
+                &controller,
+                "controller_binding_revoked",
+            )
             .await
-            .unwrap()
-            .expect("manual revoke returns the durable grant");
-        assert!(revoked.revoked_at.is_some());
+            .unwrap();
+        assert_eq!(revoked, 1);
         repo.save().await.unwrap();
     }
 
     #[tokio::test]
-    async fn revocation_index_hits_controller_agent_and_manual_paths() {
+    async fn revocation_index_hits_controller_and_agent_paths() {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
@@ -245,8 +249,7 @@ mod tests {
             &agent_one,
             &controller,
         );
-        let grant_one = repo
-            .accountability_grant()
+        repo.accountability_grant()
             .add(&mut rng, &clock, grant_one_input)
             .await
             .unwrap();
@@ -291,18 +294,6 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
-
-        let manually_revoked = repo
-            .accountability_grant()
-            .revoke_by_grant_id(
-                &clock,
-                &grant_one.accountability_grant_id,
-                "manual_revoke_after_controller",
-            )
-            .await
-            .unwrap()
-            .expect("grant still loads after revoke");
-        assert!(manually_revoked.revoked_at.is_some());
 
         repo.accountability_grant()
             .mark_subject_revoked(
@@ -607,30 +598,6 @@ impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
             .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()
             .map_err(Into::into)
-    }
-
-    #[tracing::instrument(name = "db.accountability_grant.revoke_by_grant_id", skip_all, err)]
-    async fn revoke_by_grant_id(
-        &mut self,
-        clock: &dyn Clock,
-        accountability_grant_id: &str,
-        reason: &str,
-    ) -> Result<Option<AccountabilityGrant>, Self::Error> {
-        let now = clock.now();
-        diesel::update(
-            accountability_grants::table
-                .filter(accountability_grants::accountability_grant_id.eq(accountability_grant_id))
-                .filter(accountability_grants::revoked_at.is_null()),
-        )
-        .set((
-            accountability_grants::revoked_at.eq(Some(now)),
-            accountability_grants::revoked_reason.eq(Some(reason.to_owned())),
-            accountability_grants::updated_at.eq(now),
-        ))
-        .execute(self.conn)
-        .await?;
-
-        self.lookup_by_grant_id(accountability_grant_id).await
     }
 
     #[tracing::instrument(name = "db.accountability_grant.revoke_for_subject", skip_all, err)]

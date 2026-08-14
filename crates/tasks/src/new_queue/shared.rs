@@ -36,13 +36,37 @@ pub(super) const MAX_CONCURRENT_JOBS: usize = 10;
 /// Maximum number of jobs to pull from the database in a single fetch.
 pub(super) const MAX_JOBS_TO_FETCH: usize = 5;
 
+/// Back-off curve for durable queue jobs: 5 s, 10 s, 20 s, … saturating at
+/// 2,560 s (the value the tenth attempt reached before), with the shared 0–20%
+/// jitter span applied on top.
+///
+/// This is deliberately *not* [`arkret_retry::RetryPolicy::arkret_default`]:
+/// `sync/api-conventions.md` §9 scopes its curve — and its 5-retries-per-5-minutes
+/// budget — to retries of an HTTP endpoint, which would be wrong for a durable
+/// queue whose retry horizon is hours. Only the jitter span is adopted, because
+/// the queue previously jittered its poll loop but not its retry schedule.
+pub(super) const RETRY_POLICY: arkret_retry::RetryPolicy = arkret_retry::RetryPolicy::exponential(
+    std::time::Duration::from_secs(5),
+    std::time::Duration::from_secs(2_560),
+)
+.with_max_retries(10);
+
 /// Maximum number of times a failed job will be retried before being abandoned.
-pub(super) const MAX_ATTEMPTS: usize = 10;
+pub(super) const MAX_ATTEMPTS: usize = RETRY_POLICY.max_retries() as usize;
 
 /// Compute the back-off delay for a given attempt number.
-///
-/// Exponential: 5 s, 10 s, 20 s, 40 s, 80 s, 160 s, 320 s, 650 s, ...
 pub(super) fn retry_delay(attempt: usize) -> Duration {
-    let exp = u32::try_from(attempt).unwrap_or(u32::MAX);
-    Duration::milliseconds(2_i64.saturating_pow(exp) * 5_000)
+    let retry = u32::try_from(attempt).unwrap_or(u32::MAX);
+    let mut jitter = arkret_retry::Jitter::from_seed(retry_jitter_seed(retry));
+    Duration::from_std(RETRY_POLICY.delay(retry, &mut jitter))
+        .unwrap_or_else(|_| Duration::seconds(0))
+}
+
+/// Per-call jitter seed so concurrent workers retrying the same attempt number
+/// do not schedule themselves onto the same instant.
+fn retry_jitter_seed(retry: u32) -> u64 {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_nanos() as u64);
+    nanos ^ u64::from(retry).wrapping_mul(0x9E37_79B9_7F4A_7C15)
 }

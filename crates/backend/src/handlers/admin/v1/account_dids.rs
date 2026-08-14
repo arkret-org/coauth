@@ -10,6 +10,7 @@ use coauth_admin_types::{
     DidBindingVerificationStatus,
 };
 use coauth_config::ArkretConfig;
+use coauth_data::accountability::AccountabilitySubjectKind;
 use coauth_data::audit::{
     AdminOperation, AdminOperationFilter, AdminOperationLog, NewAdminOperationLog,
 };
@@ -483,6 +484,29 @@ pub async fn remove_account_did(
     repo.principal_did()
         .remove_for_user_and_core(&user, &did)
         .await?;
+    // AKP-0008 controller lifecycle cascade
+    // (`accountability-grant.schema.json`): a revoked controller DID can no
+    // longer carry accountability, so every grant it issued moves to
+    // `grant_status=revoked` and the subject gets a durable revocation marker
+    // that fails closed on any later issuance attempt.
+    let revoked_accountability_grants = repo
+        .accountability_grant()
+        .revoke_for_subject(
+            &clock,
+            AccountabilitySubjectKind::ControllerId,
+            &did,
+            DID_BINDING_REVOKED_OPERATION,
+        )
+        .await?;
+    repo.accountability_grant()
+        .mark_subject_revoked(
+            &mut rng,
+            &clock,
+            AccountabilitySubjectKind::ControllerId,
+            &did,
+            DID_BINDING_REVOKED_OPERATION,
+        )
+        .await?;
     repo.audit()
         .add_admin_operation(
             &mut rng,
@@ -501,6 +525,7 @@ pub async fn remove_account_did(
                     "approval_proof_present": body.approval_proof.as_ref().is_some_and(|value| !value.trim().is_empty()),
                     "approval_verification_method": approval_verification_method,
                     "revoke_related_sessions": body.revoke_related_sessions.unwrap_or(false),
+                    "revoked_accountability_grants": revoked_accountability_grants,
                     "revoked_by": admin_user.id,
                     "revoked_by_handle": admin_user.localpart,
                 }),

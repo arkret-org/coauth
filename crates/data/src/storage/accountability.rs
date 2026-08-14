@@ -79,14 +79,6 @@ pub trait AccountabilityGrantRepository: Send + Sync {
         subject_id: &str,
     ) -> Result<Vec<AccountabilityGrant>, Self::Error>;
 
-    /// Revoke one grant by wire typed id.
-    async fn revoke_by_grant_id(
-        &mut self,
-        clock: &dyn Clock,
-        accountability_grant_id: &str,
-        reason: &str,
-    ) -> Result<Option<AccountabilityGrant>, Self::Error>;
-
     /// Revoke every active grant associated with a controller or agent subject.
     async fn revoke_for_subject(
         &mut self,
@@ -136,12 +128,6 @@ repository_impl!(AccountabilityGrantRepository:
         subject_kind: AccountabilitySubjectKind,
         subject_id: &str,
     ) -> Result<Vec<AccountabilityGrant>, Self::Error>;
-    async fn revoke_by_grant_id(
-        &mut self,
-        clock: &dyn Clock,
-        accountability_grant_id: &str,
-        reason: &str,
-    ) -> Result<Option<AccountabilityGrant>, Self::Error>;
     async fn revoke_for_subject(
         &mut self,
         clock: &dyn Clock,

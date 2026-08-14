@@ -1,5 +1,10 @@
-//! AKP-0008 accountability-grant issuance endpoint and grant revocation
-//! helpers.
+//! AKP-0008 accountability-grant issuance endpoint.
+//!
+//! Revocation is not issued here: a grant loses effect through the controller
+//! lifecycle cascade in
+//! [`crate::handlers::admin::v1::account_dids::remove_account_did`], which
+//! revokes every grant a revoked controller DID issued and records the durable
+//! subject marker this endpoint fails closed on.
 //!
 //! When a controller approves provisioning of a native Personal Agent, coauth
 //! issues a typed `accountability_grant` credential to soland referencing the

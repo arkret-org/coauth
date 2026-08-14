@@ -51,6 +51,8 @@ arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
 arkret-wire = {workspace = true}
 arkret-http-client = {workspace = true}
 arkret-egress-policy = {workspace = true}
+arkret-egress-reqwest = {workspace = true}
+arkret-retry = {workspace = true}
 arkret-signatures = {workspace = true,features = ["signer", "service-identity"]}
 arkret-state = {workspace = true}
 cookie = {workspace = true}
@@ -121,7 +123,6 @@ time = {workspace = true}
 tokio = {workspace = true}
 tokio-rustls = {workspace = true}
 tokio-util = {workspace = true}
-tower-service = {workspace = true}
 tracing = {workspace = true}
 tracing-opentelemetry = {workspace = true}
 ulid = {workspace = true}

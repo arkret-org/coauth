@@ -1,17 +1,13 @@
-use std::collections::HashSet;
-use std::error::Error as StdError;
-use std::fmt;
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use arkret_egress_policy::{AddressClass, OutboundPolicy};
-use futures_util::FutureExt as _;
+use arkret_egress_policy::AddressClass;
+use arkret_egress_reqwest::{EgressGuard, GuardedDnsResolver, normalize_host};
+use arkret_retry::{RetryPolicy, RetrySchedule};
 use headers::{ContentLength, HeaderMapExt as _, UserAgent};
 use hyper_util::client::legacy::connect::HttpInfo;
-use hyper_util::client::legacy::connect::dns::{GaiResolver, Name};
 use opentelemetry::KeyValue;
 use opentelemetry::metrics::{Counter, Histogram, UpDownCounter};
 use opentelemetry_http::HeaderInjector;
@@ -26,9 +22,9 @@ use opentelemetry_semantic_conventions::trace::{
     NETWORK_LOCAL_PORT, NETWORK_PEER_ADDRESS, NETWORK_PEER_PORT, NETWORK_TRANSPORT, NETWORK_TYPE,
     SERVER_ADDRESS, SERVER_PORT, URL_FULL, URL_SCHEME, USER_AGENT_ORIGINAL,
 };
+use reqwest::dns::Resolve as _;
 use rustls_platform_verifier::ConfigVerifierExt;
 use tokio::time::{Instant, sleep};
-use tower_service::Service as _;
 use tracing::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
@@ -79,7 +75,7 @@ pub(crate) struct OutboundRequestPolicy {
     operation: &'static str,
     timeout: Duration,
     max_attempts: usize,
-    backoff: Duration,
+    retry: RetryPolicy,
 }
 
 impl OutboundRequestPolicy {
@@ -90,7 +86,7 @@ impl OutboundRequestPolicy {
             operation,
             timeout: Duration::from_secs(10),
             max_attempts: 1,
-            backoff: Duration::from_millis(100),
+            retry: RetryPolicy::arkret_default(),
         }
     }
 
@@ -107,8 +103,8 @@ impl OutboundRequestPolicy {
     }
 
     #[must_use]
-    pub(crate) const fn with_backoff(mut self, backoff: Duration) -> Self {
-        self.backoff = backoff;
+    pub(crate) const fn with_retry(mut self, retry: RetryPolicy) -> Self {
+        self.retry = retry;
         self
     }
 
@@ -117,12 +113,18 @@ impl OutboundRequestPolicy {
     }
 }
 
+/// Policy for calls to the principal server.
+///
+/// The backoff curve is `sync/api-conventions.md` §9 and is normative, not a
+/// coauth tuning knob: the previous flat 100 ms wait breached the 1,000 ms
+/// first-wait floor that §9 requires for every `(actor, service DID, endpoint)`
+/// retry. The attempt budget stays deliberately below the §9 ceiling of 5
+/// retries per 5 minutes.
 #[must_use]
 pub(crate) const fn soland_policy(operation: &'static str) -> OutboundRequestPolicy {
     OutboundRequestPolicy::new("soland", operation)
         .with_timeout(Duration::from_secs(10))
         .with_max_attempts(2)
-        .with_backoff(Duration::from_millis(100))
 }
 
 /// Policy for upstream OIDC / IdP authentication-path egress
@@ -130,158 +132,56 @@ pub(crate) const fn soland_policy(operation: &'static str) -> OutboundRequestPol
 /// timeout with a small bounded retry budget, replacing the previous reliance
 /// on the shared client's 60 s global timeout, so a slow/hung upstream cannot
 /// pile up coauth auth-processing tasks.
+///
+/// The spec does not cover upstream IdP retries, so this deliberately reuses
+/// the §9 curve rather than inventing a second one.
 #[must_use]
 pub(crate) const fn oidc_upstream_policy(operation: &'static str) -> OutboundRequestPolicy {
     OutboundRequestPolicy::new("oidc_upstream", operation)
         .with_timeout(Duration::from_secs(10))
         .with_max_attempts(2)
-        .with_backoff(Duration::from_millis(100))
 }
 
+/// The outbound posture of a coauth HTTP client.
+///
+/// Both loopback affordances are deployment configuration carried by the shared
+/// guard, not coauth-private code paths:
+///
+/// * `trusted_loopback_https_hosts` names operator-controlled hosts that may resolve *wholly* to
+///   loopback while HTTPS is still enforced, so a Caddy-fronted `auth.local.host` works without
+///   weakening any other target. An unnamed host, a private address, or a mixed DNS answer falls
+///   back to the public-HTTPS policy.
+/// * the debug client (`allow_insecure_loopback_http`) is restricted to loopback destinations only,
+///   so enabling plain HTTP in a debug build cannot also open a path off the machine.
+fn egress_guard(
+    allow_insecure_loopback_http: bool,
+    trusted_loopback_https_hosts: &[String],
+) -> EgressGuard {
+    if allow_insecure_loopback_http {
+        EgressGuard::local_development().loopback_only()
+    } else {
+        EgressGuard::public_https().with_trusted_loopback_https_hosts(trusted_loopback_https_hosts)
+    }
+}
+
+/// The shared guarded resolver, wrapped in the outbound `dns.resolve` span.
 struct TracingResolver {
-    inner: GaiResolver,
-    allow_loopback: bool,
-    trusted_loopback_https_hosts: Arc<HashSet<String>>,
+    inner: GuardedDnsResolver,
 }
 
 impl TracingResolver {
-    fn new(allow_loopback: bool, trusted_loopback_https_hosts: &[String]) -> Self {
+    fn new(guard: EgressGuard) -> Self {
         Self {
-            inner: GaiResolver::new(),
-            allow_loopback,
-            trusted_loopback_https_hosts: Arc::new(
-                trusted_loopback_https_hosts
-                    .iter()
-                    .map(|host| normalize_host(host))
-                    .collect(),
-            ),
+            inner: GuardedDnsResolver::new(guard),
         }
     }
 }
 
 impl reqwest::dns::Resolve for TracingResolver {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
-        let requested_name = name.as_str().to_owned();
-        let span = tracing::info_span!("dns.resolve", name = requested_name);
-        // Parse the hostname into the inner resolver's `Name` exactly once,
-        // mapping a parse failure to a resolver error instead of panicking
-        // (COA-COR-01). `name` was constructed by reqwest/hyper so this round
-        // trip normally succeeds; the explicit error path guards against any
-        // hostname-validation drift between hyper and this `Name::from_str`.
-        let parsed_name = match Name::from_str(name.as_str()) {
-            Ok(parsed) => parsed,
-            Err(error) => {
-                return Box::pin(
-                    async move { Err(Box::new(error) as Box<dyn StdError + Send + Sync>) },
-                );
-            }
-        };
-        if self.allow_loopback && !is_explicit_loopback_host(&requested_name) {
-            return Box::pin(async move {
-                Err(Box::new(BlockedEgressTarget::new(
-                    requested_name,
-                    "debug loopback client only permits localhost or loopback IP literals",
-                )) as Box<dyn StdError + Send + Sync>)
-            });
-        }
-        if let Some(reason) = blocked_domain_reason(&requested_name, self.allow_loopback) {
-            return Box::pin(async move {
-                Err(Box::new(BlockedEgressTarget::new(requested_name, reason))
-                    as Box<dyn StdError + Send + Sync>)
-            });
-        }
-        if let Ok(ip) = requested_name.parse::<IpAddr>()
-            && let Some(reason) = blocked_ip_reason(ip, self.allow_loopback)
-        {
-            return Box::pin(async move {
-                Err(Box::new(BlockedEgressTarget::new(requested_name, reason))
-                    as Box<dyn StdError + Send + Sync>)
-            });
-        }
-        let mut inner = self.inner.clone();
-        let allow_loopback = self.allow_loopback;
-        let trusted_loopback_https_hosts = Arc::clone(&self.trusted_loopback_https_hosts);
-        Box::pin(
-            inner
-                .call(parsed_name)
-                .map(move |result| {
-                    let addrs = result
-                        .map_err(|err| -> Box<dyn StdError + Send + Sync> { Box::new(err) })?;
-                    let addrs: Vec<SocketAddr> = addrs.collect();
-                    enforce_resolved_egress_policy(
-                        &requested_name,
-                        &addrs,
-                        allow_loopback,
-                        &trusted_loopback_https_hosts,
-                    )?;
-                    Ok(Box::new(addrs.into_iter()) as reqwest::dns::Addrs)
-                })
-                .instrument(span),
-        )
+        let span = tracing::info_span!("dns.resolve", name = name.as_str());
+        Box::pin(self.inner.resolve(name).instrument(span))
     }
-}
-
-#[derive(Debug)]
-struct BlockedEgressTarget {
-    target: String,
-    reason: String,
-}
-
-impl BlockedEgressTarget {
-    fn new(target: impl Into<String>, reason: impl Into<String>) -> Self {
-        Self {
-            target: target.into(),
-            reason: reason.into(),
-        }
-    }
-}
-
-impl fmt::Display for BlockedEgressTarget {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "outbound HTTP target {} blocked by egress policy: {}",
-            self.target, self.reason
-        )
-    }
-}
-
-impl StdError for BlockedEgressTarget {}
-
-fn enforce_resolved_egress_policy(
-    host: &str,
-    addrs: &[SocketAddr],
-    allow_loopback: bool,
-    trusted_loopback_https_hosts: &HashSet<String>,
-) -> Result<(), Box<dyn StdError + Send + Sync>> {
-    if let Some(reason) = blocked_domain_reason(host, allow_loopback) {
-        return Err(Box::new(BlockedEgressTarget::new(host, reason)));
-    }
-    if allow_loopback {
-        for addr in addrs {
-            if !addr.ip().is_loopback() {
-                return Err(Box::new(BlockedEgressTarget::new(
-                    host,
-                    "debug loopback client resolved outside the loopback range",
-                )));
-            }
-        }
-        return Ok(());
-    }
-    // Arkret service endpoints are operator-controlled trust anchors. Permit an
-    // exact configured hostname to resolve wholly to loopback so local HTTPS
-    // deployments can use stable names such as `local.host`. This exception is
-    // deliberately narrower than private-network egress: it never permits an
-    // unconfigured host, a private/LAN address, or a mixed DNS answer.
-    if trusted_loopback_https_hosts.contains(&normalize_host(host))
-        && !addrs.is_empty()
-        && addrs.iter().all(|addr| addr.ip().is_loopback())
-    {
-        return Ok(());
-    }
-    OutboundPolicy::public_https()
-        .validate_resolved_addresses(addrs)
-        .map_err(|error| Box::new(error) as Box<dyn StdError + Send + Sync>)
 }
 
 pub(crate) fn blocked_domain_reason(host: &str, allow_loopback: bool) -> Option<&'static str> {
@@ -292,36 +192,12 @@ pub(crate) fn blocked_domain_reason(host: &str, allow_loopback: bool) -> Option<
     Some(reason)
 }
 
-pub(crate) fn blocked_ip_reason(ip: IpAddr, allow_loopback: bool) -> Option<&'static str> {
+pub(crate) fn blocked_ip_reason(ip: IpAddr, allow_loopback: bool) -> Option<String> {
     let class = arkret_egress_policy::classify_ip(ip)?;
     if allow_loopback && class == AddressClass::Loopback {
         return None;
     }
-    Some(match class {
-        AddressClass::Unspecified => "unspecified address",
-        AddressClass::Loopback => "loopback address",
-        AddressClass::Private => "private address",
-        AddressClass::LinkLocal => "link-local address",
-        AddressClass::CarrierGradeNat => "carrier-grade NAT address",
-        AddressClass::Benchmark => "benchmark address",
-        AddressClass::ProtocolAssignment => "protocol-assignment address",
-        AddressClass::Documentation => "documentation address",
-        AddressClass::Multicast => "multicast address",
-        AddressClass::Reserved => "reserved address",
-        AddressClass::Broadcast => "broadcast address",
-        _ => "non-public address",
-    })
-}
-
-fn is_explicit_loopback_host(host: &str) -> bool {
-    host.eq_ignore_ascii_case("localhost")
-        || host
-            .parse::<IpAddr>()
-            .is_ok_and(|address| address.is_loopback())
-}
-
-fn normalize_host(host: &str) -> String {
-    host.trim_end_matches('.').to_ascii_lowercase()
+    Some(class.to_string())
 }
 
 /// Create a new [`reqwest::Client`] with sane parameters.
@@ -419,13 +295,11 @@ fn reqwest_client_builder(
 ) -> reqwest::ClientBuilder {
     let tls_config: rustls::ClientConfig =
         rustls::ClientConfig::with_platform_verifier().expect("failed to create TLS config");
+    let guard = egress_guard(allow_insecure_loopback_http, trusted_loopback_https_hosts);
 
     reqwest::Client::builder()
-        .https_only(!allow_insecure_loopback_http)
-        .dns_resolver(Arc::new(TracingResolver::new(
-            allow_insecure_loopback_http,
-            trusted_loopback_https_hosts,
-        )))
+        .https_only(!guard.policy().allows_http())
+        .dns_resolver(Arc::new(TracingResolver::new(guard)))
         .use_preconfigured_tls(tls_config)
         .redirect(reqwest::redirect::Policy::none())
         .no_proxy()
@@ -579,6 +453,8 @@ where
     F: Fn() -> reqwest::RequestBuilder,
 {
     let max_attempts = policy.max_attempts();
+    let mut schedule = RetrySchedule::from_policy(policy.retry)
+        .with_jitter(policy.retry.jitter_ratio(), retry_jitter_seed());
     for attempt in 1..max_attempts {
         let result = build_request().timeout(policy.timeout).send_traced().await;
         match result {
@@ -591,7 +467,9 @@ where
                         "http_status",
                         Some(i64::from(status.as_u16())),
                     );
-                    sleep(policy.backoff).await;
+                    // `api-conventions.md:545`/`:547` — the server hint wins
+                    // over the local ladder and MUST NOT be clamped shorter.
+                    sleep(schedule.next_delay_with_hint(retry_after_hint(&response))).await;
                     continue;
                 }
                 if !status.is_success() {
@@ -601,7 +479,7 @@ where
             }
             Err(error) if retryable_error(&error) => {
                 record_retry(policy, attempt, reqwest_error_type(&error), None);
-                sleep(policy.backoff).await;
+                sleep(schedule.next_delay()).await;
             }
             Err(error) => {
                 record_terminal_error(policy, reqwest_error_type(&error), None);
@@ -627,6 +505,37 @@ where
             Err(error)
         }
     }
+}
+
+/// The server's `Retry-After` hint, in either normative form.
+///
+/// `api-conventions.md:545` gives the header priority over a body
+/// `retry_after_ms`, and permits both delta-seconds and an HTTP-date.
+fn retry_after_hint(response: &reqwest::Response) -> Option<Duration> {
+    let raw = response
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)?
+        .to_str()
+        .ok()?
+        .trim();
+    if let Ok(seconds) = raw.parse::<u64>() {
+        return Some(Duration::from_secs(seconds));
+    }
+    let deadline = chrono::DateTime::parse_from_rfc2822(raw).ok()?;
+    (deadline.with_timezone(&chrono::Utc) - chrono::Utc::now())
+        .to_std()
+        .ok()
+}
+
+/// A fresh per-call jitter seed, folding a monotonic counter into a wall-clock
+/// sample so concurrent callers that share a timestamp do not line up.
+fn retry_jitter_seed() -> u64 {
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let counter = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_nanos() as u64);
+    nanos ^ counter.wrapping_mul(0x9E37_79B9_7F4A_7C15)
 }
 
 fn retryable_status(status: reqwest::StatusCode) -> bool {
@@ -685,7 +594,6 @@ fn record_retry(
         attempt,
         max_attempts = policy.max_attempts(),
         timeout_ms = policy.timeout.as_millis(),
-        backoff_ms = policy.backoff.as_millis(),
         outcome,
         status_code,
         "outbound HTTP request failed; retrying within budget"
@@ -723,8 +631,8 @@ impl RequestBuilderExt for reqwest::RequestBuilder {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
     use std::future::Future;
+    use std::net::SocketAddr;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Once};
     use std::time::Duration;
@@ -733,10 +641,14 @@ mod tests {
     use tokio::net::TcpListener;
 
     use super::{
-        OutboundPolicy, OutboundRequestPolicy, blocked_domain_reason, blocked_ip_reason,
-        enforce_resolved_egress_policy, reqwest_client_builder, send_with_policy,
-        server_trusted_loopback_https_hosts, telemetry_url,
+        EgressGuard, OutboundRequestPolicy, blocked_domain_reason, blocked_ip_reason, egress_guard,
+        reqwest_client_builder, send_with_policy, server_trusted_loopback_https_hosts,
+        telemetry_url,
     };
+
+    fn addr(raw: &str) -> SocketAddr {
+        raw.parse().expect("socket address")
+    }
 
     fn install_crypto_provider() {
         static ONCE: Once = Once::new();
@@ -797,18 +709,31 @@ mod tests {
 
     #[test]
     fn configured_arkret_host_allows_only_exact_loopback_resolution() {
-        let trusted = HashSet::from(["local.host".to_owned()]);
-        let loopback = ["127.0.0.1:443".parse().unwrap()];
-        assert!(enforce_resolved_egress_policy("LOCAL.HOST.", &loopback, false, &trusted).is_ok());
+        let guard = egress_guard(false, &["local.host".to_owned()]);
+        let loopback = [addr("127.0.0.1:443")];
+        assert!(
+            guard
+                .validate_addresses("LOCAL.HOST.", &loopback, "test")
+                .is_ok()
+        );
 
-        assert!(enforce_resolved_egress_policy("other.host", &loopback, false, &trusted).is_err());
-        let private = ["192.168.1.10:443".parse().unwrap()];
-        assert!(enforce_resolved_egress_policy("local.host", &private, false, &trusted).is_err());
-        let mixed = [
-            "127.0.0.1:443".parse().unwrap(),
-            "8.8.8.8:443".parse().unwrap(),
-        ];
-        assert!(enforce_resolved_egress_policy("local.host", &mixed, false, &trusted).is_err());
+        assert!(
+            guard
+                .validate_addresses("other.host", &loopback, "test")
+                .is_err()
+        );
+        let private = [addr("192.168.1.10:443")];
+        assert!(
+            guard
+                .validate_addresses("local.host", &private, "test")
+                .is_err()
+        );
+        let mixed = [addr("127.0.0.1:443"), addr("8.8.8.8:443")];
+        assert!(
+            guard
+                .validate_addresses("local.host", &mixed, "test")
+                .is_err()
+        );
     }
 
     #[test]
@@ -816,19 +741,24 @@ mod tests {
         let config = coauth_config::ArkretConfig::default();
         let public_base = url::Url::parse("https://auth.local.host/").unwrap();
         let trusted_hosts = server_trusted_loopback_https_hosts(&config, &public_base, None);
-        let trusted = HashSet::from_iter(trusted_hosts);
-        let loopback = ["127.0.0.1:443".parse().unwrap()];
+        let guard = egress_guard(false, &trusted_hosts);
+        let loopback = [addr("127.0.0.1:443")];
 
         assert!(
-            enforce_resolved_egress_policy("auth.local.host", &loopback, false, &trusted).is_ok()
+            guard
+                .validate_addresses("auth.local.host", &loopback, "test")
+                .is_ok()
         );
         assert!(
-            enforce_resolved_egress_policy("attacker.local.host", &loopback, false, &trusted)
+            guard
+                .validate_addresses("attacker.local.host", &loopback, "test")
                 .is_err()
         );
-        let private = ["192.168.1.10:443".parse().unwrap()];
+        let private = [addr("192.168.1.10:443")];
         assert!(
-            enforce_resolved_egress_policy("auth.local.host", &private, false, &trusted).is_err()
+            guard
+                .validate_addresses("auth.local.host", &private, "test")
+                .is_err()
         );
     }
 
@@ -847,13 +777,15 @@ mod tests {
         ] {
             let url = url::Url::parse(raw).unwrap();
             assert!(
-                OutboundPolicy::public_https().validate_url(&url).is_err(),
+                EgressGuard::public_https()
+                    .validate_url(&url, "test")
+                    .is_err(),
                 "{raw} should be rejected before dispatch"
             );
         }
         assert!(
-            OutboundPolicy::public_https()
-                .validate_url(&url::Url::parse("https://8.8.8.8/jwks").unwrap())
+            EgressGuard::public_https()
+                .validate_url(&url::Url::parse("https://8.8.8.8/jwks").unwrap(), "test")
                 .is_ok()
         );
     }
@@ -892,7 +824,7 @@ mod tests {
         let policy = OutboundRequestPolicy::new("test", "retry_budget")
             .with_timeout(Duration::from_secs(1))
             .with_max_attempts(2)
-            .with_backoff(Duration::ZERO);
+            .with_retry(arkret_retry::RetryPolicy::none());
 
         let response = send_with_policy(policy, || client.get(url.clone()))
             .await

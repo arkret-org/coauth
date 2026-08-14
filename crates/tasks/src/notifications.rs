@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::error::Error as StdError;
 
 use anyhow::Context;
+use arkret_retry::RetryLadder;
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
 use coauth_data::notification::{
@@ -35,6 +36,19 @@ const TEMPLATE_EMAIL_VERIFICATION: &str = "email_verification";
 const TEMPLATE_SMS_VERIFICATION: &str = "sms_verification_code";
 const TEMPLATE_EMAIL_RECOVERY: &str = "email_recovery";
 const EMAIL_VERIFICATION_LANGUAGE: &str = "en";
+
+/// Delay before each redelivery attempt of a notification.
+static DELIVERY_LADDER: &[std::time::Duration] = &[
+    std::time::Duration::from_secs(30),
+    std::time::Duration::from_secs(120),
+];
+
+/// The recovery-mail ladder, which carries one extra step.
+static RECOVERY_DELIVERY_LADDER: &[std::time::Duration] = &[
+    std::time::Duration::from_secs(30),
+    std::time::Duration::from_secs(120),
+    std::time::Duration::from_secs(600),
+];
 
 const RECOVERY_TICKET_CHARSET: &[u8] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -618,12 +632,16 @@ fn next_retry_delay(
         return None;
     }
 
-    let delay = match delivery.attempt_count {
-        1 => Duration::seconds(30),
-        2 => Duration::minutes(2),
-        3 if request.template_key == TEMPLATE_EMAIL_RECOVERY => Duration::minutes(10),
-        _ => return None,
+    // Not a spec curve: `arkret-spec` has no clause for out-of-band email/SMS
+    // delivery. The recovery ladder carries one extra step because a recovery
+    // mail's usefulness outlives a verification code's five-minute window.
+    let ladder = if request.template_key == TEMPLATE_EMAIL_RECOVERY {
+        RetryLadder::bounded(RECOVERY_DELIVERY_LADDER)
+    } else {
+        RetryLadder::bounded(DELIVERY_LADDER)
     };
+    let step = ladder.step(delivery.attempt_count.checked_sub(1)?)?;
+    let delay = Duration::from_std(step).ok()?;
 
     if matches!(
         request.template_key.as_str(),
