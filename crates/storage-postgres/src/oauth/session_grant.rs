@@ -1152,14 +1152,24 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
             .await?
             == 1;
 
-        let stored = oauth_session_grant_operations::table
+        let stored_query = oauth_session_grant_operations::table
             .filter(oauth_session_grant_operations::issuer.eq(operation.issuer))
             .filter(oauth_session_grant_operations::operation_kind.eq(operation_kind.as_str()))
-            .filter(oauth_session_grant_operations::proof_kind.eq(proof_kind.as_deref()))
             .filter(oauth_session_grant_operations::request_identity.eq(operation.request_identity))
-            .select(SessionGrantOperationRow::as_select())
-            .first::<SessionGrantOperationRow>(self.conn)
-            .await?;
+            .into_boxed();
+        let stored = if let Some(proof_kind) = proof_kind.as_deref() {
+            stored_query
+                .filter(oauth_session_grant_operations::proof_kind.eq(proof_kind))
+                .select(SessionGrantOperationRow::as_select())
+                .first::<SessionGrantOperationRow>(self.conn)
+                .await?
+        } else {
+            stored_query
+                .filter(oauth_session_grant_operations::proof_kind.is_null())
+                .select(SessionGrantOperationRow::as_select())
+                .first::<SessionGrantOperationRow>(self.conn)
+                .await?
+        };
         let stored = SessionGrantOperation::try_from(stored)?;
         if inserted {
             return Ok(SessionGrantReserveOutcome::Reserved(stored));

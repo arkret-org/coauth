@@ -1028,7 +1028,7 @@ pub async fn debug_issue_dpop_grant(
     let signing_key_id = signing_key
         .kid()
         .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
-    let issuer = issuer_did_for(&arkret_config).to_string();
+    let issuer = service_id_for(&arkret_config).to_string();
     let reserved = repo
         .oauth_session_grant()
         .reserve_operation(
