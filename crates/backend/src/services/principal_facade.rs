@@ -28,6 +28,7 @@ use coauth_data::{BoxRepositoryFactory, RepositoryAccess};
 use coauth_principal::{
     ConnectorAccountProfile, ConnectorAdmin, ConnectorProvisionRequest,
     PrincipalAccountStatusPublicationRequest, PrincipalAgentKeyPairCommitRequest,
+    PrincipalErasureReceiptRequest,
 };
 use url::Url;
 
@@ -44,6 +45,7 @@ pub struct DbConnectorAdmin {
 struct PeerSigningContext {
     keystore: coauth_keystore::Keystore,
     source_trust_domain: arkret_identifiers::TypedTrustDomainId,
+    url_builder: coauth_data::UrlBuilder,
 }
 
 impl DbConnectorAdmin {
@@ -71,10 +73,12 @@ impl DbConnectorAdmin {
         mut self,
         keystore: coauth_keystore::Keystore,
         source_trust_domain: arkret_identifiers::TypedTrustDomainId,
+        url_builder: coauth_data::UrlBuilder,
     ) -> Self {
         self.peer_signing = Some(PeerSigningContext {
             keystore,
             source_trust_domain,
+            url_builder,
         });
         self
     }
@@ -400,6 +404,109 @@ impl ConnectorAdmin for DbConnectorAdmin {
                 anyhow::bail!("account-status publication is pending Seal acceptance")
             }
         }
+    }
+
+    async fn erasure_receipt(
+        &self,
+        request: &PrincipalErasureReceiptRequest,
+    ) -> Result<
+        Option<arkret_models_collaboration::governance::erasure::ErasureReceiptPackage>,
+        anyhow::Error,
+    > {
+        use crate::services::peer_protocol_client::PeerProtocolClientError;
+        use arkret_models_collaboration::governance::erasure::{
+            ErasureStorageBoundary, ErasureSubjectKind, account_erasure_receipt_id,
+        };
+
+        let target = self
+            .arkret_config
+            .principal_servers
+            .iter()
+            .find(|server| server.name == request.destination_name())
+            .context("erasure-receipt destination Principal Server is no longer configured")?;
+        let signing = self
+            .peer_signing
+            .as_ref()
+            .context("erasure-receipt peer signing configuration is unavailable")?;
+        let (source_service_id, source_full_id) = runtime_peer_identity(&self.arkret_config)?;
+        let destination_service_id =
+            crate::services::resolved_principal_audiences::effective_audience_shared(target)
+                .context("erasure-receipt destination service identity is unavailable or stale")?;
+        let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
+            source_service_id: source_service_id.into(),
+            destination_service_id: destination_service_id.into(),
+        };
+        let client = crate::services::peer_protocol_client::PeerProtocolClient::new(
+            Some(&target.endpoint),
+            &self.http_client,
+            &signing.keystore,
+            source_full_id,
+            identity,
+            signing.source_trust_domain.clone(),
+            signing.source_trust_domain.clone(),
+        )?;
+        let receipt_id = account_erasure_receipt_id(
+            request.triggering_status_event_id(),
+            ErasureStorageBoundary::AccountPrivateStore,
+        );
+        let resource = match client.get_erasure_receipt(&receipt_id).await {
+            Ok(resource) => resource,
+            Err(PeerProtocolClientError::Status(404)) => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
+        let package = resource.package;
+        package.validate_bindings()?;
+        anyhow::ensure!(
+            package.receipt.receipt_id == receipt_id,
+            "receipt id mismatch"
+        );
+        anyhow::ensure!(
+            &package.receipt.triggering_event_id == request.triggering_status_event_id(),
+            "receipt triggering status Event mismatch"
+        );
+        anyhow::ensure!(
+            package.receipt.subject.kind == ErasureSubjectKind::Principal
+                && package.receipt.subject.subject_ref == request.principal_id().as_str(),
+            "receipt principal subject mismatch"
+        );
+        anyhow::ensure!(
+            package.receipt.scope.storage_boundary == ErasureStorageBoundary::AccountPrivateStore,
+            "receipt storage boundary mismatch"
+        );
+        anyhow::ensure!(
+            package.receipt.scope.service_scope.as_deref()
+                == Some("account_status.erasure_execution"),
+            "receipt service scope mismatch"
+        );
+        anyhow::ensure!(
+            package
+                .receipt
+                .scope
+                .target_refs
+                .iter()
+                .any(|target| target == request.principal_id().as_str()),
+            "receipt target refs do not cover the principal"
+        );
+        anyhow::ensure!(
+            !request.account_id().trim().is_empty(),
+            "account id is empty"
+        );
+        let mut repo = self.repository_factory.create().await?;
+        let resolver = crate::services::did_resolver::default_did_resolver_service();
+        let binding_store = crate::services::did_binding::shared_verified_did_binding_store();
+        crate::services::erasure_receipt::verify_erasure_receipt_package(
+            &self.http_client,
+            &signing.url_builder,
+            &self.arkret_config,
+            &signing.keystore,
+            &mut repo,
+            resolver.as_ref(),
+            binding_store.as_ref(),
+            &package,
+            chrono::Utc::now(),
+        )
+        .await?;
+        Ok(Some(package))
     }
 
     async fn commit_agent_key_pair(

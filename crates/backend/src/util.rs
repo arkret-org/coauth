@@ -688,7 +688,7 @@ pub fn principal_server_connection_from_config(
             arkret_config,
             http_client,
         )
-        .with_peer_signing(key_store.clone(), source_trust_domain),
+        .with_peer_signing(key_store.clone(), source_trust_domain, url_builder.clone()),
     );
     Ok((admin, registry))
 }

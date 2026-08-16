@@ -3,7 +3,7 @@
 use arkret_canonical::canonical_sha256;
 use async_trait::async_trait;
 use coauth_data::queue::AccountStatusPublicationJob;
-use coauth_principal::PrincipalAccountStatusPublicationRequest;
+use coauth_principal::{PrincipalAccountStatusPublicationRequest, PrincipalErasureReceiptRequest};
 
 use crate::State;
 use crate::new_queue::{JobContext, JobError, RunnableJob};
@@ -43,6 +43,40 @@ impl RunnableJob for AccountStatusPublicationJob {
             .principal_connection()
             .submit_account_status_publication(&request)
             .await
-            .map_err(JobError::retry)
+            .map_err(JobError::retry)?;
+
+        let payload: arkret_models_collaboration::events_payloads::account::AccountStatusPayload =
+            serde_json::from_value(
+                serde_json::to_value(&self.body().publication.event().payload)
+                    .map_err(JobError::fail)?,
+            )
+            .map_err(JobError::fail)?;
+        if payload.status
+            != arkret_models_collaboration::objects::account_status::AccountStatus::ErasurePending
+        {
+            return Ok(());
+        }
+        let receipt_request = PrincipalErasureReceiptRequest::new(
+            self.destination_name().to_owned(),
+            self.event_id().clone(),
+            self.body().authority_evidence.account_id.to_string(),
+            self.body().authority_evidence.principal_id.clone(),
+        );
+        let Some(package) = state
+            .principal_connection()
+            .erasure_receipt(&receipt_request)
+            .await
+            .map_err(JobError::retry)?
+        else {
+            return Err(JobError::retry(anyhow::anyhow!(
+                "physical erasure receipt is not available yet"
+            )));
+        };
+        tracing::info!(
+            receipt_id = package.receipt.receipt_id,
+            outcome = ?package.receipt.outcome,
+            "verified terminal physical-erasure receipt"
+        );
+        Ok(())
     }
 }

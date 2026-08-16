@@ -210,12 +210,16 @@ impl RunnableJob for DeactivateUserJob {
         // the job will retry, but the local state is already consistent.
         repo.save().await.map_err(JobError::retry)?;
 
-        // Finally, tell the principal to remove / erase the account.
-        info!(handle = %target.localpart, "requesting principal deactivation");
-        principal
-            .delete_user(&target.localpart, self.principal_erase())
-            .await
-            .map_err(JobError::retry)?;
+        // Hard erasure is driven exclusively by the signed erasure_pending
+        // account-status Event and its publication job. Never issue a second
+        // connector command for the same physical operation.
+        if !self.principal_erase() {
+            info!(handle = %target.localpart, "requesting principal deactivation");
+            principal
+                .delete_user(&target.localpart, false)
+                .await
+                .map_err(JobError::retry)?;
+        }
 
         Ok(())
     }

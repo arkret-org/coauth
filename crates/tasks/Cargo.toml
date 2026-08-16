@@ -40,6 +40,7 @@ coauth-messaging = {workspace = true}
 coauth-principal = {workspace = true}
 coauth-templates = {workspace = true}
 arkret-canonical = {workspace = true}
+arkret-models-collaboration = {workspace = true}
 arkret-retry = {workspace = true}
 arkret-wire = {workspace = true}
 cron = {workspace = true}

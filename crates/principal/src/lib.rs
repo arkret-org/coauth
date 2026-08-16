@@ -214,6 +214,51 @@ pub struct PrincipalAccountStatusPublicationRequest {
     body: arkret_models_collaboration::account_lifecycle::AccountStatusPublicationRequestBody,
 }
 
+#[derive(Debug, Clone)]
+pub struct PrincipalErasureReceiptRequest {
+    destination_name: String,
+    triggering_status_event_id: arkret_wire::EventId,
+    account_id: String,
+    principal_id: arkret_wire::DidCoreId,
+}
+
+impl PrincipalErasureReceiptRequest {
+    #[must_use]
+    pub fn new(
+        destination_name: String,
+        triggering_status_event_id: arkret_wire::EventId,
+        account_id: String,
+        principal_id: arkret_wire::DidCoreId,
+    ) -> Self {
+        Self {
+            destination_name,
+            triggering_status_event_id,
+            account_id,
+            principal_id,
+        }
+    }
+
+    #[must_use]
+    pub fn destination_name(&self) -> &str {
+        &self.destination_name
+    }
+
+    #[must_use]
+    pub fn triggering_status_event_id(&self) -> &arkret_wire::EventId {
+        &self.triggering_status_event_id
+    }
+
+    #[must_use]
+    pub fn account_id(&self) -> &str {
+        &self.account_id
+    }
+
+    #[must_use]
+    pub fn principal_id(&self) -> &arkret_wire::DidCoreId {
+        &self.principal_id
+    }
+}
+
 impl PrincipalAccountStatusPublicationRequest {
     /// Build a destination-scoped delivery request.
     #[must_use]
@@ -484,6 +529,21 @@ pub trait ConnectorAdmin: Send + Sync {
         ))
     }
 
+    /// Fetch and validate the terminal physical-erasure receipt created by an
+    /// accepted erasure_pending status Event. `None` means execution is still
+    /// pending and must be retried; it never means completed.
+    async fn erasure_receipt(
+        &self,
+        _request: &PrincipalErasureReceiptRequest,
+    ) -> Result<
+        Option<arkret_models_collaboration::governance::erasure::ErasureReceiptPackage>,
+        anyhow::Error,
+    > {
+        Err(anyhow::anyhow!(
+            "erasure receipt lookup is not implemented by this principal connector"
+        ))
+    }
+
     /// Deliver a controller-approved Agent key authorization to the
     /// downstream principal system.
     async fn commit_agent_key_pair(
@@ -627,6 +687,16 @@ where
         self.as_admin()
             .submit_account_status_publication(request)
             .await
+    }
+
+    async fn erasure_receipt(
+        &self,
+        request: &PrincipalErasureReceiptRequest,
+    ) -> Result<
+        Option<arkret_models_collaboration::governance::erasure::ErasureReceiptPackage>,
+        anyhow::Error,
+    > {
+        self.as_admin().erasure_receipt(request).await
     }
 
     async fn commit_agent_key_pair(

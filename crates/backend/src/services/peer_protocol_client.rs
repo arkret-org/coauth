@@ -13,6 +13,7 @@ use arkret_models_collaboration::account_lifecycle::{
 };
 use arkret_models_collaboration::event_query::PeerEventsFrontierRequestBody;
 use arkret_models_collaboration::event_sync::EventsFrontierFederationPeerState;
+use arkret_models_collaboration::governance::erasure::ErasureReceiptResource;
 use arkret_models_collaboration::governance::invite_addressing::{
     InviteDeliveryOutcome, InviteDeliveryRequestBody,
 };
@@ -133,6 +134,14 @@ impl<'a> PeerProtocolClient<'a> {
             Some(idempotency_key),
         )
         .await
+    }
+
+    pub async fn get_erasure_receipt(
+        &self,
+        receipt_id: &str,
+    ) -> Result<ErasureReceiptResource, PeerProtocolClientError> {
+        let url = self.join_absolute(&format!("/_arkret/peer/erasure-receipts/{receipt_id}"))?;
+        self.get_json("peer_erasure_receipt_get", url).await
     }
 
     /// Resolve the exact actor and Seal frontiers for one authority-bound
@@ -296,6 +305,30 @@ impl<'a> PeerProtocolClient<'a> {
         .await
         .map_err(|error| PeerProtocolClientError::Http(error.to_string()))?;
 
+        parse_json_response(response).await
+    }
+
+    async fn get_json<R>(
+        &self,
+        policy_name: &'static str,
+        url: Url,
+    ) -> Result<R, PeerProtocolClientError>
+    where
+        R: serde::de::DeserializeOwned,
+    {
+        let signed = self.signed_request("GET", &url, None, None)?;
+        let response = outbound_http::send_with_policy(
+            outbound_http::soland_policy(policy_name).with_timeout(Duration::from_secs(5)),
+            || {
+                let mut request = self.http_client.get(url.clone());
+                for (name, value) in &signed.headers {
+                    request = request.header(name.as_str(), value.as_str());
+                }
+                request
+            },
+        )
+        .await
+        .map_err(|error| PeerProtocolClientError::Http(error.to_string()))?;
         parse_json_response(response).await
     }
 
