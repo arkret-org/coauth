@@ -54,43 +54,43 @@ const AGENT_KEY_SCOPE_APPLET: &str = "applet";
 pub(super) const AGENT_KEY_SCOPE_LIMITED: &str = "limited";
 
 const AGENT_SERVICE_SCOPE_ACTIONS: &[&str] = &[
-    "ak.self.events.read.describe",
-    "ak.self.events.command.submit",
-    "ak.self.events.resource.get",
-    "ak.self.events.read.resolve",
-    "ak.self.events.read.scan",
-    "ak.self.events.stream.subscribe",
-    "ak.self.events.read.frontier",
-    "ak.self.authorization_leases.command.issue",
-    "ak.self.keys.keypackages.upload.create",
-    "ak.self.keys.keypackages.command.consume",
-    "ak.self.keys.keypackages.command.revoke",
-    "ak.self.device_messages.read.list",
-    "ak.self.device_messages.command.ack",
-    "ak.self.signal.command.send",
+    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_DESCRIBE,
+    arkret_wire::ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT,
+    arkret_wire::ServiceOperationId::SELF_EVENTS_RESOURCE_GET,
+    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_RESOLVE,
+    arkret_wire::CapabilityActionId::SELF_EVENTS_READ_SCAN,
+    arkret_wire::CapabilityActionId::SELF_EVENTS_STREAM_SUBSCRIBE,
+    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_FRONTIER,
+    arkret_wire::ServiceOperationId::SELF_AUTHORIZATION_LEASES_COMMAND_ISSUE,
+    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE,
+    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME,
+    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_REVOKE,
+    arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST,
+    arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK,
+    arkret_wire::ServiceOperationId::SELF_SIGNAL_COMMAND_SEND,
 ];
 
 /// Closed action set of the `limited` tier (AKP-0008 §4.5 baseline). Shared
 /// with `key_pair.rs`, which projects the same set into the spec-typed
 /// `agent_key_scope.actions` on the `ak.agent.key.authorize` fan-out payload.
 pub(super) const LIMITED_AGENT_SCOPE_ACTIONS: &[&str] = &[
-    "ak.self.events.read.describe",
-    "ak.self.events.command.submit",
-    "ak.self.events.resource.get",
-    "ak.self.events.read.resolve",
-    "ak.self.events.read.scan",
-    "ak.self.events.stream.subscribe",
-    "ak.self.events.read.frontier",
-    "ak.self.authorization_leases.command.issue",
-    "ak.self.keys.keypackages.upload.create",
-    "ak.self.keys.keypackages.command.consume",
-    "ak.self.keys.keypackages.command.revoke",
-    "ak.self.device_messages.read.list",
-    "ak.self.device_messages.command.ack",
-    "ak.self.signal.command.send",
-    "ak.event.read",
-    "ak.message.create",
-    "ak.reaction.add",
+    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_DESCRIBE,
+    arkret_wire::ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT,
+    arkret_wire::ServiceOperationId::SELF_EVENTS_RESOURCE_GET,
+    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_RESOLVE,
+    arkret_wire::CapabilityActionId::SELF_EVENTS_READ_SCAN,
+    arkret_wire::CapabilityActionId::SELF_EVENTS_STREAM_SUBSCRIBE,
+    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_FRONTIER,
+    arkret_wire::ServiceOperationId::SELF_AUTHORIZATION_LEASES_COMMAND_ISSUE,
+    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE,
+    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME,
+    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_REVOKE,
+    arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST,
+    arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK,
+    arkret_wire::ServiceOperationId::SELF_SIGNAL_COMMAND_SEND,
+    arkret_wire::CapabilityActionId::EVENT_READ,
+    arkret_wire::CapabilityActionId::MESSAGE_CREATE,
+    arkret_wire::CapabilityActionId::REACTION_ADD,
 ];
 
 /// Outcome of validating an `agent_key_proof` session-grant request.
@@ -1063,13 +1063,8 @@ fn service_surface_scope_token(token: &str) -> bool {
 }
 
 fn applet_service_scope_token(token: &str) -> bool {
-    matches!(
-        token,
-        "ak.applet.read.describe"
-            | "ak.applet.resource.get"
-            | "ak.applet.command.invoke"
-            | "ak.applet.action.request"
-    )
+    token == arkret_wire::ServiceOperationId::EDGE_APPLET_READ_DESCRIBE
+        || token == arkret_wire::ServiceOperationId::EDGE_APPLET_COMMAND_TRANSACTION
 }
 
 fn content_capability_scope_token(token: &str) -> Result<bool, AgentAuthRejection> {

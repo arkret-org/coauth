@@ -615,9 +615,10 @@ CREATE TABLE public.principal_did_bindings (
     binding_version bigint NOT NULL,
     binding_frontier_digest text NOT NULL,
     principal_authority jsonb NOT NULL,
+    principal_control_realm_id text NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
-    ,CONSTRAINT principal_did_binding_basis_shape CHECK (audience = accepted_service_id AND audience LIKE 'ak:did_core:%' AND binding_version >= 1 AND binding_frontier_digest ~ '^sha256:[0-9a-f]{64}$'::text)
+    ,CONSTRAINT principal_did_binding_basis_shape CHECK (audience = accepted_service_id AND audience LIKE 'ak:did_core:%' AND binding_version >= 1 AND binding_frontier_digest ~ '^sha256:[0-9a-f]{64}$'::text AND principal_control_realm_id LIKE 'ak:realm:%')
     ,CONSTRAINT principal_did_binding_resolution_snapshot_shape CHECK (verified_full_id ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text AND btrim(verified_version_id) <> ''::text AND jsonb_typeof(binding_receipt) = 'object'::text AND jsonb_typeof(principal_authority) = 'object'::text)
 );
 
@@ -833,7 +834,7 @@ CREATE TABLE public.did_binding_challenges (
     CONSTRAINT did_binding_challenges_challenge_nonempty CHECK ((length(challenge) >= 22)),
     CONSTRAINT did_binding_challenges_dpop_jkt_valid CHECK ((dpop_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
     CONSTRAINT did_binding_challenges_expiry_valid CHECK ((expires_at > issued_at AND expires_at <= (issued_at + '00:05:00'::interval))),
-    CONSTRAINT did_binding_challenges_register_complete CHECK (((consumed_at IS NULL AND register_request_digest IS NULL AND register_outcome IS NULL) OR (consumed_at IS NOT NULL AND register_request_digest ~ '^sha256:[0-9a-f]{64}$'::text AND jsonb_typeof(register_outcome) = 'object'::text)))
+    CONSTRAINT did_binding_challenges_register_complete CHECK (((register_request_digest IS NULL AND register_outcome IS NULL) OR (consumed_at IS NOT NULL AND register_request_digest ~ '^sha256:[0-9a-f]{64}$'::text AND jsonb_typeof(register_outcome) = 'object'::text)))
 );
 
 -- Durable explicit-abandonment transcript. The challenge retains both the

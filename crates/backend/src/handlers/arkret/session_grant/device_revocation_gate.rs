@@ -1,5 +1,5 @@
 use arkret_identifiers::{DidFullId, Hash, project_full_id_to_core_id};
-use arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding;
+use arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding;
 use arkret_models_identity::SessionGrantDeviceBinding;
 use arkret_wire::{
     DeviceId, DeviceRevocationGateActionClass, DeviceRevocationGateCheckRequestBody,
@@ -67,11 +67,9 @@ pub(crate) async fn acquire_human_device_binding(
         &config,
     ))
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let identity = PeerKeyPackagesClaimTransportBinding {
+    let identity = KeyPackagesClaimServiceBinding {
         source_service_id: source_service_id.into(),
         destination_service_id: principal_authority.principal_server_id.clone().into(),
-        source_trust_domain: trust_domain.clone(),
-        destination_trust_domain: trust_domain,
     };
     let http_client = depot.http_client()?;
     let key_store = depot.key_store()?;
@@ -81,6 +79,8 @@ pub(crate) async fn acquire_human_device_binding(
         &key_store,
         issuer_did_for(&config),
         identity,
+        trust_domain.clone(),
+        trust_domain,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let outcome = client

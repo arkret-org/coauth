@@ -148,6 +148,11 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                 .get(arkret::account_onboarding_snapshot),
         )
         .push(
+            Router::with_path("gate/account/did-binding-challenges")
+                .options(oidc_preflight_handler)
+                .post(arkret::issue_did_binding_challenge),
+        )
+        .push(
             Router::with_path("gate/account/identity-binding-challenges")
                 .options(oidc_preflight_handler)
                 .post(arkret::issue_identity_binding_challenge),

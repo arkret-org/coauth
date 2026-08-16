@@ -319,18 +319,18 @@ pub async fn post_invite_relay(
     }
 
     let service_id = arkret::service_id_for(&arkret_config);
-    let trust_domain = arkret::trust_domain_for(&url_builder, &arkret_config);
+    let trust_domain = arkret_identifiers::TypedTrustDomainId::new(arkret::trust_domain_for(
+        &url_builder,
+        &arkret_config,
+    ))
+    .map_err(|error| RouteError::Internal(Box::new(error)))?;
     let destination_service_id = match params.invite_delivery.as_ref() {
         Some(delivery) => delivery.invite_address.recipient_service_id.clone().into(),
         None => service_id.clone().into(),
     };
-    let trust_domain = arkret_identifiers::TypedTrustDomainId::new(trust_domain)
-        .map_err(|error| RouteError::Internal(Box::new(error)))?;
-    let identity = arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
+    let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
         source_service_id: service_id.into(),
         destination_service_id,
-        source_trust_domain: trust_domain.clone(),
-        destination_trust_domain: trust_domain,
     };
     let peer_client = match PeerProtocolClient::new(
         principal_url.as_ref(),
@@ -338,6 +338,8 @@ pub async fn post_invite_relay(
         &key_store,
         arkret::issuer_did_for(&arkret_config),
         identity,
+        trust_domain.clone(),
+        trust_domain,
     ) {
         Ok(client) => Some(client),
         Err(PeerProtocolClientError::BaseUrlNotConfigured) => None,
@@ -382,21 +384,22 @@ mod tests {
         coauth_keystore::Keystore::new(JsonWebKeySet::new(vec![key]))
     }
 
-    fn peer_identity() -> arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
+    fn peer_identity() -> arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
         let service_id =
             arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap();
-        let trust_domain =
-            arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:auth.example").unwrap();
-        arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
+        arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
             source_service_id: service_id.clone().into(),
             destination_service_id: service_id.into(),
-            source_trust_domain: trust_domain.clone(),
-            destination_trust_domain: trust_domain,
         }
     }
 
     fn source_full_id() -> arkret_identifiers::DidFullId {
         arkret_identifiers::DidFullId::new("did:web:auth.example".to_owned()).unwrap()
+    }
+
+    fn trust_domain() -> arkret_identifiers::TypedTrustDomainId {
+        arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:auth.example".to_owned())
+            .unwrap()
     }
 
     fn service_resolution() -> arkret_models_identity::identity_resolution::ServiceResolutionCarrier
@@ -515,6 +518,8 @@ mod tests {
             &keystore,
             source_full_id(),
             peer_identity(),
+            trust_domain(),
+            trust_domain(),
         )
         .unwrap();
         let delivery = invite_delivery();
@@ -682,6 +687,8 @@ mod tests {
             &keystore,
             source_full_id(),
             peer_identity(),
+            trust_domain(),
+            trust_domain(),
         )
         .unwrap();
         let delivery = invite_delivery();

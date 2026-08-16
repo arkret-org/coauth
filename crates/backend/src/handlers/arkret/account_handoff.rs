@@ -2,8 +2,9 @@
 use arkret_models_identity::{
     ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffAllowedOperation, AccountHandoffBinding,
     AccountHandoffOutcome, AccountHandoffRequestBody, AccountOnboardingGoal,
-    AccountOnboardingSnapshot, Handle, IdentityAbandonmentChallengeRequestBody,
-    IdentityAbandonmentRequestBody, IdentityBindingChallengeRequestBody,
+    AccountOnboardingSnapshot, DidBindingChallengeRequestBody, Handle,
+    IdentityAbandonmentChallengeRequestBody, IdentityAbandonmentRequestBody,
+    IdentityBindingChallengeRequestBody,
 };
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::Duration;
@@ -11,10 +12,11 @@ use coauth_data::{
     AccountHandoffAuthorizationCheckpoint, AccountHandoffCreation, AccountHandoffCreationAttempt,
     AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve,
     AccountHandoffCreationAttemptState, AccountHandoffGrant, AccountHandoffGrantInput,
-    IdentityAbandonmentChallengeInput, IdentityAbandonmentChallengeIssue,
-    IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
-    IdentityBindingChallengeIssue, IdentityCreationLeaseRiskDecision,
-    NewAccountHandoffCreationAttempt, RepositoryAccess as _, Ulid, new_id,
+    DidBindingChallengeInput, DidBindingChallengeIssue, IdentityAbandonmentChallengeInput,
+    IdentityAbandonmentChallengeIssue, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
+    IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
+    IdentityCreationLeaseRiskDecision, NewAccountHandoffCreationAttempt, RepositoryAccess as _,
+    Ulid, new_id,
 };
 use rand_core::RngCore;
 use salvo::prelude::*;
@@ -50,6 +52,129 @@ impl Scribe for AccountHandoffCanonicalJson {
         response
             .write_body(self.0)
             .expect("canonical JSON response body is writable");
+    }
+}
+
+/// `POST /_arkret/gate/account/did-binding-challenges`.
+#[handler]
+pub async fn issue_did_binding_challenge(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<arkret_models_identity::DidBindingChallengeOutcome>, ArkretRouteError> {
+    let (grant, _dpop) = authenticate_account_handoff(
+        req,
+        depot,
+        AccountHandoffAllowedOperation::IssueDidBindingChallenge,
+    )
+    .await?;
+    enforce_handoff_operation(
+        &grant,
+        AccountHandoffAllowedOperation::IssueDidBindingChallenge,
+    )?;
+    let body: DidBindingChallengeRequestBody = req
+        .parse_json()
+        .await
+        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
+    let request_digest = body
+        .canonical_request_digest()
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+
+    let arkret_config = depot.arkret_config()?;
+    let account_subject = account_subject(
+        &super::service_id_for(&arkret_config),
+        grant.service_account_id,
+    )?;
+    let url_builder = depot.url_builder()?;
+    let key_store = depot.key_store()?;
+    let resolver = depot.did_resolver_service()?;
+    let mut repo = depot.repo().await?;
+    let resolution = resolver
+        .resolve_did_binding_evidence(
+            &depot.http_client()?,
+            &url_builder,
+            &arkret_config,
+            &key_store,
+            &mut repo,
+            body.full_id.as_str(),
+        )
+        .await
+        .map_err(|error| {
+            failed_precondition(format!("published DID resolution failed: {error}"))
+        })?;
+    if resolution.document.id != body.full_id.as_str() {
+        return Err(failed_precondition(
+            "resolved DID document does not match the requested full_id",
+        ));
+    }
+    let (did_version_id, log_head_digest, control_key_digest) =
+        match resolution.closed_method_evidence {
+            Some(arkret_models_identity::IdentityMethodEvidence::DidWebvh {
+                version_id,
+                log_head_digest,
+                control_key_digest,
+            }) => (
+                version_id.as_str().to_owned(),
+                log_head_digest,
+                control_key_digest,
+            ),
+            None => {
+                return Err(failed_precondition(
+                    "resolver did not return requested closed did_webvh method evidence",
+                ));
+            }
+        };
+    let audience = arkret_identifiers::DidCoreId::new(grant.audience.clone())
+        .map_err(|error| failed_precondition(error.to_string()))?;
+    let trust_domain =
+        arkret_identifiers::TypedTrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
+            .map_err(|error| failed_precondition(error.to_string()))?;
+    let origin = url_builder.http_base().origin().ascii_serialization();
+    let now = make_clock().now();
+    let mut rng = make_rng();
+    let issue = repo
+        .account_handoff()
+        .issue_did_binding_challenge(DidBindingChallengeInput {
+            request_id: body.request_id,
+            request_digest,
+            issuing_handoff_grant_id: grant.id,
+            service_account_id: grant.service_account_id,
+            account_subject,
+            principal_id: body.principal_id,
+            full_id: body.full_id,
+            did_version_id,
+            log_head_digest,
+            control_key_digest,
+            witness_evidence: None,
+            challenge_id: random_opaque(&mut *rng, 24),
+            challenge: random_opaque(&mut *rng, 32),
+            dpop_jkt: grant.cnf_jkt,
+            audience,
+            origin,
+            trust_domain,
+            issued_at: now,
+            expires_at: now + IDENTITY_BINDING_CHALLENGE_TTL,
+        })
+        .await?;
+    match issue {
+        DidBindingChallengeIssue::Issued(challenge)
+        | DidBindingChallengeIssue::Replay(challenge) => {
+            repo.save().await?;
+            Ok(Json(challenge.wire_outcome()))
+        }
+        DidBindingChallengeIssue::DuplicateConflict => {
+            repo.cancel().await.ok();
+            Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
+                "request_id was reused for a different published-DID binding challenge",
+            ))
+        }
+        DidBindingChallengeIssue::StaleRequest => {
+            repo.cancel().await.ok();
+            Err(failed_precondition(
+                "published-DID binding challenge request is stale or already consumed",
+            ))
+        }
     }
 }
 
@@ -1046,7 +1171,7 @@ fn creation_binding(
     Ok(result)
 }
 
-fn account_subject(
+pub(crate) fn account_subject(
     account_authority_id: &arkret_identifiers::DidCoreId,
     service_account_id: Ulid,
 ) -> Result<arkret_identifiers::Hash, ArkretRouteError> {

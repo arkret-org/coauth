@@ -1,7 +1,5 @@
 //! Account DID binding administration endpoints.
 
-use std::sync::{Arc, OnceLock};
-
 use coauth_admin_types::{
     AdminAccountDidBinding as AccountDidBinding,
     AdminAccountDidBindingsMeta as AccountDidBindingsMeta,
@@ -25,27 +23,15 @@ use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::params::extract_ulid_param;
 use crate::handlers::common::DepotExt;
 use crate::services::did_binding_proof::{
-    DidBindingProofError, normalize_did_for_binding, validate_control_proof,
+    DidBindingProofError, normalize_did_for_binding, validate_account_registration_control_proof,
 };
 use crate::services::did_resolver::DidResolverService;
-use crate::services::nonce_store::NonceStore;
 use crate::{AppError, CreatedJsonResult, JsonResult};
-
-/// Process-global single-use store for DID-binding control-proof nonces.
-///
-/// Single-process semantics are acceptable while coauth runs as a single
-/// replica; a multi-replica deployment would back this with the shared DB.
-/// Held behind an `Arc` so verify calls can borrow a `&NonceStore` into it
-/// without cloning the underlying map.
-fn shared_did_binding_nonce_store() -> &'static Arc<NonceStore> {
-    static STORE: OnceLock<Arc<NonceStore>> = OnceLock::new();
-    STORE.get_or_init(|| Arc::new(NonceStore::new()))
-}
 
 const DID_BINDING_ADDED_OPERATION: &str = "account_did_binding_added";
 const DID_BINDING_REVOKED_OPERATION: &str = "account_did_binding_revoked";
 
-#[derive(Deserialize, JsonSchema, ToSchema)]
+#[derive(Deserialize, ToSchema)]
 #[serde(rename = "AddAccountDidBindingRequestBody", deny_unknown_fields)]
 pub struct AddAccountDidBindingRequestBody {
     /// DID to bind to the account.
@@ -54,26 +40,14 @@ pub struct AddAccountDidBindingRequestBody {
     /// Binding purpose.
     pub kind: DidBindingKind,
 
-    /// Proof that the account holder controls the DID. The proof MUST be a
-    /// compact JWS signed by one of the DID's verification-method keys
-    /// with the canonical binding statement as its attached payload (see
-    /// [`crate::services::did_binding_proof`]).
-    pub control_proof: ControlProofPayload,
+    /// Closed, challenge-bound proof signed by the WebVH update key active at
+    /// the exact method-native resolution pins carried by the challenge.
+    #[salvo(schema(value_type = Object))]
+    pub control_proof: arkret_models_identity::AccountRegistrationControlProof,
 
     /// Whether the new binding should become the primary DID when accepted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub make_primary: Option<bool>,
-
-    /// Hint about the proof type, for example `did_controller_key` or
-    /// `passkey`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub verification_method: Option<String>,
-
-    /// Optional raw input for the configured delegated resolver adapter. Its
-    /// shape is owned by that adapter and does not vary with the binding kind.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[serde(rename = "resolver_submission")]
-    pub resolver_submission_context: Option<serde_json::Value>,
 
     /// Optional operator note for audit and admin UI surfaces.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -85,18 +59,6 @@ pub struct AddAccountDidBindingRequestBody {
     /// ignored when no provider is configured.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub captcha_token: Option<String>,
-}
-
-/// Compact-serialised JWS string + the nonce that was embedded in the
-/// canonical binding statement.
-#[derive(Deserialize, JsonSchema, ToSchema)]
-pub struct ControlProofPayload {
-    /// Compact JWS whose attached payload is the canonical binding statement.
-    pub jws: String,
-
-    /// Nonce that was included in the canonical binding statement signed
-    /// by `jws`.
-    pub nonce: String,
 }
 
 #[derive(Default, Deserialize, JsonSchema, ToSchema)]
@@ -217,33 +179,87 @@ pub async fn add_account_did(
         return Err(AppError::conflict("account DID binding is already active"));
     }
 
-    // identity-did §5.1 / §3.6: the control proof MUST bind to this
-    // receiver (local coauth service DID) and this deployment
-    // (`trust_domain`) so it cannot be relayed cross-receiver or carried
-    // cross-deployment. The nonce is consumed single-use on success.
     let expected_audience = crate::handlers::arkret::service_id_for(&arkret_config);
-    let expected_trust_domain =
-        crate::handlers::arkret::trust_domain_for(&url_builder, &arkret_config);
+    let expected_trust_domain = arkret_identifiers::TypedTrustDomainId::new(
+        crate::handlers::arkret::trust_domain_for(&url_builder, &arkret_config),
+    )
+    .map_err(|error| AppError::bad_request(format!("control_proof_invalid: {error}")))?;
+    let expected_origin = url_builder.http_base().origin().ascii_serialization();
+    let account_subject = crate::handlers::arkret::account_subject(&expected_audience, account.id)
+        .map_err(|error| AppError::bad_request(format!("control_proof_invalid: {error}")))?;
     enforce_same_core_primary_refresh(&current_bindings, &did, body.make_primary.unwrap_or(false))?;
-    let nonce_store = shared_did_binding_nonce_store();
-    let validated_control = validate_control_proof(
-        &http_client,
+    if body.control_proof.full_id.as_str() != did {
+        repo.cancel().await?;
+        return Err(AppError::bad_request(
+            "control_proof_invalid: proof full_id does not match the requested DID",
+        ));
+    }
+    let resolution = did_resolver
+        .resolve_did_binding_evidence(
+            &http_client,
+            &url_builder,
+            &arkret_config,
+            &key_store,
+            &mut repo,
+            &did,
+        )
+        .await
+        .map_err(|error| AppError::bad_request(format!("did_resolver_failed: {error}")))?;
+    let challenge_consume = {
+        let mut account_handoff = repo.account_handoff();
+        account_handoff
+            .consume_did_binding_challenge(
+                account.id,
+                &account_subject,
+                &body.control_proof.challenge_id,
+                &body.control_proof.request_canonical_digest,
+                now,
+            )
+            .await?
+    };
+    let challenge = match challenge_consume {
+        coauth_data::DidBindingChallengeConsume::Consumed(challenge) => challenge,
+        coauth_data::DidBindingChallengeConsume::Mismatch => {
+            repo.cancel().await?;
+            return Err(AppError::bad_request(
+                "control_proof_invalid: challenge does not belong to the target account or request",
+            ));
+        }
+        coauth_data::DidBindingChallengeConsume::Stale => {
+            repo.cancel().await?;
+            return Err(AppError::conflict(
+                "control_proof_invalid: challenge is expired, consumed, or unknown",
+            ));
+        }
+    };
+    if let Err(error) = validate_account_registration_control_proof(
+        &body.control_proof,
+        &challenge,
+        &resolution,
+        account.id,
+        &account_subject,
+        &expected_audience,
+        &expected_origin,
+        &expected_trust_domain,
+        &challenge.input.dpop_jkt,
+        now,
+    ) {
+        repo.cancel().await?;
+        return Err(map_did_binding_proof_error(error));
+    }
+    let validated_control = crate::services::did_binding::accept_authority_resolution(
         &url_builder,
         &arkret_config,
-        &key_store,
         &mut repo,
-        did_resolver.as_ref(),
         binding_store.as_ref(),
-        nonce_store.as_ref(),
-        body.control_proof.jws.as_str(),
+        &resolution,
         &did,
-        body.control_proof.nonce.as_str(),
-        expected_audience.as_str(),
-        &expected_trust_domain,
+        arkret_identity::DidBindingPurpose::AccountBinding,
+        crate::services::did_binding::high_risk_freshness(),
         now,
     )
     .await
-    .map_err(map_did_binding_proof_error)?;
+    .map_err(|error| map_did_binding_proof_error(error.into()))?;
     // The controller proof just verified over this DID document is also the
     // moment the principal DID first crosses into this trust domain (§4 row 1),
     // so file a second, independently scoped `Principal` acceptance from the
@@ -252,7 +268,7 @@ pub async fn add_account_did(
     crate::services::did_binding::accept_for_additional_purpose(
         &mut repo,
         binding_store.as_ref(),
-        &validated_control.binding.accepted,
+        &validated_control.accepted,
         arkret_identity::DidBindingPurpose::Principal,
         now,
     )
@@ -280,8 +296,7 @@ pub async fn add_account_did(
                     "state": "active",
                     "make_primary": body.make_primary.unwrap_or(false),
                     "verification_status": "verified",
-                    "verification_method": body.verification_method,
-                    "resolver_submission_present": body.resolver_submission_context.is_some(),
+                    "verification_method": body.control_proof.verification_method,
                     "operator_note": body.operator_note,
                     "verified_at": now,
                     "added_by": admin_user_id,
@@ -309,40 +324,15 @@ pub async fn add_account_did(
 
 fn map_did_binding_proof_error(error: DidBindingProofError) -> AppError {
     match error {
-        DidBindingProofError::EmptyProof
-        | DidBindingProofError::InvalidJws(_)
-        | DidBindingProofError::NoVerificationKey
-        | DidBindingProofError::MissingVerificationMethod
-        | DidBindingProofError::UnsupportedAlgorithm(_)
-        | DidBindingProofError::VerificationMethodMismatch
+        DidBindingProofError::InvalidDid(_)
+        | DidBindingProofError::InvalidShape(_)
+        | DidBindingProofError::ChallengeMismatch(_)
+        | DidBindingProofError::ResolutionPinsMismatch
         | DidBindingProofError::VerificationMethodNotFound
         | DidBindingProofError::SignatureMismatch
-        | DidBindingProofError::CanonicalStatement(_)
-        | DidBindingProofError::CanonicalStatementMismatch
-        | DidBindingProofError::StatementSchemaMismatch
-        | DidBindingProofError::AccountDidMismatch
-        | DidBindingProofError::NonceMismatch
-        | DidBindingProofError::AudienceMismatch
-        | DidBindingProofError::TrustDomainMismatch
-        | DidBindingProofError::IatOutOfRange
-        | DidBindingProofError::FreshnessWindowExceeded
-        | DidBindingProofError::ProofExpired
-        | DidBindingProofError::NonceReplayed => {
+        | DidBindingProofError::Expired => {
             AppError::bad_request(format!("control_proof_invalid: {error}"))
         }
-        DidBindingProofError::ResolverNotFullIdentityFact(rejection) => {
-            AppError::bad_request(format!(
-                "control_proof_invalid: did_resolver_not_full_identity_fact: {}",
-                rejection.as_str()
-            ))
-        }
-        DidBindingProofError::Resolve(inner) => {
-            AppError::bad_request(format!("did_resolver_failed: {inner}"))
-        }
-        // An acceptance that cannot back a *fresh* `AccountBinding` (degraded
-        // resolver, did:web fallback, unproven controller proof, `did:key`
-        // echo) is the same client-visible failure the old
-        // `ResolverNotFullIdentityFact` gate produced.
         DidBindingProofError::Binding(inner) => {
             AppError::bad_request(format!("did_resolver_not_full_identity_fact: {inner}"))
         }

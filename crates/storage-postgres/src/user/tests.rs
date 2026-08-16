@@ -35,6 +35,13 @@ fn principal_authority(
     )
 }
 
+fn principal_control_realm_id() -> arkret_identifiers::RealmId {
+    arkret_identifiers::RealmId::from_event_id(&arkret_identifiers::EventId::from_digest(
+        arkret_canonical::DigestSuite::Sha256,
+        [0x42; 32],
+    ))
+}
+
 fn account_binding_receipt(
     principal_id: arkret_identifiers::DidCoreId,
     full_id: arkret_identifiers::DidFullId,
@@ -112,6 +119,7 @@ fn verified_principal_binding_input(
         ))
         .unwrap(),
         principal_authority,
+        principal_control_realm_id: principal_control_realm_id(),
     }
 }
 
@@ -142,6 +150,7 @@ fn registration_binding_input(
         ))
         .unwrap(),
         principal_authority,
+        principal_control_realm_id: principal_control_realm_id(),
     }
 }
 
@@ -1514,6 +1523,11 @@ async fn principal_did_has_one_global_owner_under_concurrent_binding() {
         .unwrap()
         .expect("winning DID owner must remain queryable");
     assert_eq!(binding.user_id, if first_won { alice_id } else { bob_id });
+    assert_eq!(
+        binding.principal_control_realm_id,
+        principal_control_realm_id(),
+        "the accepted PCR authority basis must survive a transaction boundary"
+    );
     repo.cancel().await.unwrap();
 }
 

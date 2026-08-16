@@ -6,13 +6,13 @@ use coauth_data::{
     AccountHandoffAuthorizationCheckpoint, AccountHandoffCreation,
     AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve, AccountHandoffGrant,
     AccountHandoffGrantInput, ControllerGateAttestationCommit, ControllerGateAttestationReserve,
-    DidBindingChallengeInput, DidBindingChallengeIssue, IdentityAbandonmentChallengeInput,
-    IdentityAbandonmentChallengeIssue, IdentityAbandonmentChallengeRecord,
-    IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
-    IdentityBindingChallengeIssue, IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
-    IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
-    NewControllerGateAttestationIssuance, PublishedDidRegisterCommit, PublishedDidRegisterReplay,
-    Ulid,
+    DidBindingChallengeConsume, DidBindingChallengeInput, DidBindingChallengeIssue,
+    IdentityAbandonmentChallengeInput, IdentityAbandonmentChallengeIssue,
+    IdentityAbandonmentChallengeRecord, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
+    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityCreationBindingCommit,
+    IdentityCreationRegisterReplay, IdentityCreationRegistrationContext,
+    NewAccountHandoffCreationAttempt, NewControllerGateAttestationIssuance,
+    PublishedDidRegisterCommit, PublishedDidRegisterReplay, Ulid,
 };
 
 use crate::repository_impl;
@@ -115,6 +115,17 @@ pub trait AccountHandoffRepository: Send + Sync {
         &mut self,
         input: DidBindingChallengeInput,
     ) -> Result<DidBindingChallengeIssue, Self::Error>;
+
+    /// Consume an exact challenge for the target service account inside the
+    /// caller's account-binding transaction.
+    async fn consume_did_binding_challenge(
+        &mut self,
+        service_account_id: Ulid,
+        account_subject: &arkret_identifiers::Hash,
+        challenge_id: &str,
+        request_digest: &arkret_identifiers::Hash,
+        now: DateTime<Utc>,
+    ) -> Result<DidBindingChallengeConsume, Self::Error>;
 
     /// Lock and classify a published-DID registration retry against its
     /// durable challenge and canonical request digest.
@@ -290,6 +301,14 @@ repository_impl!(AccountHandoffRepository:
         &mut self,
         input: DidBindingChallengeInput,
     ) -> Result<DidBindingChallengeIssue, Self::Error>;
+    async fn consume_did_binding_challenge(
+        &mut self,
+        service_account_id: Ulid,
+        account_subject: &arkret_identifiers::Hash,
+        challenge_id: &str,
+        request_digest: &arkret_identifiers::Hash,
+        now: DateTime<Utc>,
+    ) -> Result<DidBindingChallengeConsume, Self::Error>;
     async fn published_did_registration_replay(
         &mut self,
         grant: &AccountHandoffGrant,

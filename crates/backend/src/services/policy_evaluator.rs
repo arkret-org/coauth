@@ -480,8 +480,6 @@ fn unsupported_feature(policy_version: &str) -> PolicyDecision {
 
 fn is_candidate_join_policy_action(action: &str) -> bool {
     action == CapabilityActionId::REALM_JOIN_REVIEW
-        || action == "ak.member.application"
-        || action.starts_with("ak.member.application.")
 }
 
 fn profile_declared_for_policy(data: &Value, scopes: &[&Value], profile: &str) -> bool {
@@ -518,11 +516,11 @@ fn freshness_requires_fail_closed(freshness_state: FreshnessState, action: &str)
 fn is_local_pending_action(action: &str) -> bool {
     matches!(
         action,
-        "ak.message.create"
-            | "ak.reaction.add"
-            | "ak.read_cursor.advance"
-            | "ak.strand.move"
-            | "ak.strand.reorder"
+        arkret_wire::CapabilityActionId::MESSAGE_CREATE
+            | arkret_wire::CapabilityActionId::REACTION_ADD
+            | arkret_wire::CapabilityActionId::READ_CURSOR_ADVANCE
+            | arkret_wire::CapabilityActionId::STRAND_MOVE
+            | arkret_wire::CapabilityActionId::STRAND_REORDER
     )
 }
 

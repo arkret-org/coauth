@@ -130,12 +130,12 @@ pub async fn post_policy_check(
             Some((
                 key_store.clone(),
                 arkret::issuer_did_for(&arkret_config),
-                arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
+                arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
                     source_service_id: arkret::service_id_for(&arkret_config).into(),
                     destination_service_id: destination_service_id.into(),
-                    source_trust_domain: trust_domain.clone(),
-                    destination_trust_domain: trust_domain,
                 },
+                trust_domain.clone(),
+                trust_domain,
             ))
         });
     let frontier_source = SolandFrontierSource::new(
@@ -340,7 +340,7 @@ fn emit_audit_record(outcome: &PolicyCheckOutcome) {
     let canonical_str = String::from_utf8(canonical_bytes).unwrap_or_default();
     tracing::info!(
         target: "policy_audit",
-        kind = "ak.self.policy.read.check",
+        kind = arkret_wire::ServiceOperationId::SELF_POLICY_READ_CHECK,
         request_id = outcome.request_id,
         decision = ?outcome.decision,
         realm_id = outcome.bound_to.realm_id.as_str(),

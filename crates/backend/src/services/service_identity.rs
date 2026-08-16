@@ -57,6 +57,48 @@ enum StoredIdentityLoad {
     Invalid(String),
 }
 
+#[derive(Debug, thiserror::Error)]
+enum LocalKeyBindingError {
+    #[error("DID document does not publish the configured Ed25519 service key")]
+    AssertionKeyMissing,
+    #[error("configured Ed25519 service key is not an assertionMethod")]
+    AssertionMethodMissing,
+    #[error("persisted active signing key reference does not match the configured key")]
+    SigningKeyReferenceMismatch,
+    #[error("persisted control key reference does not match the configured key")]
+    ControlKeyReferenceMismatch,
+    #[error("registration receipt is controlled by different WebVH key material")]
+    RegistrationControlKeyMismatch,
+    #[error("invalid local service-identity key reference: {0}")]
+    InvalidKeyReference(String),
+    #[error("cannot derive the local WebVH control-key digest: {0}")]
+    ControlKeyDigest(String),
+}
+
+impl LocalKeyBindingError {
+    const fn is_key_mismatch(&self) -> bool {
+        matches!(
+            self,
+            Self::AssertionKeyMissing
+                | Self::AssertionMethodMissing
+                | Self::SigningKeyReferenceMismatch
+                | Self::ControlKeyReferenceMismatch
+                | Self::RegistrationControlKeyMismatch
+        )
+    }
+}
+
+fn local_key_binding_diagnostic(error: &anyhow::Error) -> DidCoreIdentityDiagnostic {
+    if error
+        .downcast_ref::<LocalKeyBindingError>()
+        .is_some_and(LocalKeyBindingError::is_key_mismatch)
+    {
+        DidCoreIdentityDiagnostic::KeyMismatch
+    } else {
+        DidCoreIdentityDiagnostic::RestoreFailed
+    }
+}
+
 impl StoredIdentityLoad {
     fn into_runtime_result(
         self,
@@ -428,11 +470,7 @@ async fn accept_provider_outcome(
     ) {
         Ok(stored) => stored,
         Err(error) => {
-            let diagnostic = if error.to_string().contains("service_identity_key_mismatch") {
-                DidCoreIdentityDiagnostic::KeyMismatch
-            } else {
-                DidCoreIdentityDiagnostic::RestoreFailed
-            };
+            let diagnostic = local_key_binding_diagnostic(&error);
             return Ok(DidCoreIdentityState::Faulted {
                 diagnostic,
                 next_action: format!(
@@ -547,7 +585,7 @@ fn validate_local_key_binding(
     stored: &StoredDidCoreIdentity,
     signing_seed: &[u8; 32],
     prepared: &PreparedInception,
-) -> anyhow::Result<()> {
+) -> Result<(), LocalKeyBindingError> {
     let expected_assertion = assertion_public_key(signing_seed);
     let Some(assertion_method) = stored
         .did_document
@@ -555,9 +593,7 @@ fn validate_local_key_binding(
         .iter()
         .find(|method| method.public_key_multibase == expected_assertion)
     else {
-        anyhow::bail!(
-            "service_identity_key_mismatch: DID document does not publish the configured Ed25519 service key"
-        );
+        return Err(LocalKeyBindingError::AssertionKeyMissing);
     };
     if !stored
         .did_document
@@ -565,14 +601,12 @@ fn validate_local_key_binding(
         .iter()
         .any(|method| method == &assertion_method.id)
     {
-        anyhow::bail!(
-            "service_identity_key_mismatch: configured Ed25519 service key is not an assertionMethod"
-        );
+        return Err(LocalKeyBindingError::AssertionMethodMissing);
     }
 
     let expected_signing_ref =
         DidCoreIdentityKeyRef::new(format!("coauth:secrets:ed25519:{expected_assertion}"))
-            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+            .map_err(|error| LocalKeyBindingError::InvalidKeyReference(error.to_string()))?;
     if stored.identity.active_signing_key_ref != expected_signing_ref
         || !stored
             .identity
@@ -580,31 +614,25 @@ fn validate_local_key_binding(
             .iter()
             .any(|key_ref| key_ref == &expected_signing_ref)
     {
-        anyhow::bail!(
-            "service_identity_key_mismatch: persisted active signing key reference does not match the configured key"
-        );
+        return Err(LocalKeyBindingError::SigningKeyReferenceMismatch);
     }
 
     let expected_control_ref = DidCoreIdentityKeyRef::new(format!(
         "coauth:secrets:derived-webvh-update:{}",
         prepared.update_public_key_multibase
     ))
-    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    .map_err(|error| LocalKeyBindingError::InvalidKeyReference(error.to_string()))?;
     if stored.identity.control_key_ref != expected_control_ref {
-        anyhow::bail!(
-            "service_identity_key_mismatch: persisted control key reference does not match the configured key"
-        );
+        return Err(LocalKeyBindingError::ControlKeyReferenceMismatch);
     }
 
     let control_digest = prepared
         .service_registration_operation()
-        .map_err(|error| anyhow::anyhow!(error.to_string()))?
+        .map_err(|error| LocalKeyBindingError::ControlKeyDigest(error.to_string()))?
         .control_key_digest()
-        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        .map_err(|error| LocalKeyBindingError::ControlKeyDigest(error.to_string()))?;
     if stored.registration_receipt.control_key_digest != control_digest {
-        anyhow::bail!(
-            "service_identity_key_mismatch: registration receipt is controlled by different WebVH key material"
-        );
+        return Err(LocalKeyBindingError::RegistrationControlKeyMismatch);
     }
     Ok(())
 }
@@ -799,6 +827,22 @@ mod tests {
         assert_eq!(
             operation.state.signing_key_multibase(),
             Some(expected_public_key.as_str())
+        );
+    }
+
+    #[test]
+    fn local_key_binding_diagnostic_uses_error_type_not_display_text() {
+        let typed = anyhow::Error::new(LocalKeyBindingError::AssertionKeyMissing);
+        assert_eq!(
+            local_key_binding_diagnostic(&typed),
+            DidCoreIdentityDiagnostic::KeyMismatch
+        );
+
+        let prose =
+            anyhow::anyhow!("service_identity_key_mismatch appears in untrusted diagnostic prose");
+        assert_eq!(
+            local_key_binding_diagnostic(&prose),
+            DidCoreIdentityDiagnostic::RestoreFailed
         );
     }
 }

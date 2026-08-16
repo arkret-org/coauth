@@ -170,7 +170,7 @@ fn service_boundary_descriptor() -> ServiceBoundaryDescriptor {
 
 fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
     StandardErrorEnvelopeDescriptor {
-        schema: "ak.error.envelope.v1",
+        schema: arkret_wire::SchemaId::HTTP_ERROR_ENVELOPE_V1,
         content_type: "application/json",
         example: StandardErrorEnvelopeExample {
             ok: false,
@@ -448,7 +448,7 @@ pub(crate) fn service_describe_response(
     );
     extensions.insert(
         "x_coauth_supported_schema_profiles".to_owned(),
-        serde_json::json!(["ak.schema.core.v1", "ak.schema.service_describe.v1"]),
+        serde_json::json!([]),
     );
     extensions.insert(
         "x_coauth_admin_audience".to_owned(),
@@ -555,10 +555,7 @@ pub(crate) fn service_describe_response(
         takedown_contact: None,
         rate_limits: None,
         supported_reducer_profiles: Vec::new(),
-        supported_schema_profiles: vec![
-            "ak.schema.core.v1".to_owned(),
-            "ak.schema.service_describe.v1".to_owned(),
-        ],
+        supported_schema_profiles: vec![arkret_wire::SchemaId::SERVICE_DESCRIBE_V1.to_owned()],
         frontier: Vec::new(),
         snapshot_frontier: Vec::new(),
         last_materialized_at: None,

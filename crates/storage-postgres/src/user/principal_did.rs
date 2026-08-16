@@ -65,6 +65,8 @@ struct PrincipalDidJoinedRow {
     binding_frontier_digest: String,
     #[diesel(select_expression = principal_did_bindings::principal_authority)]
     principal_authority: serde_json::Value,
+    #[diesel(select_expression = principal_did_bindings::principal_control_realm_id)]
+    principal_control_realm_id: String,
     #[diesel(select_expression = principal_did_bindings::created_at)]
     created_at: DateTime<Utc>,
     #[diesel(select_expression = principal_did_bindings::updated_at)]
@@ -155,6 +157,15 @@ fn binding_from_row(row: PrincipalDidJoinedRow) -> Result<PrincipalDidBinding, D
                     .source(error)
             })?,
         principal_authority,
+        principal_control_realm_id: arkret_identifiers::RealmId::new(
+            row.principal_control_realm_id,
+        )
+        .map_err(|error| {
+            DatabaseInconsistencyError::on("principal_did_bindings")
+                .column("principal_control_realm_id")
+                .row(id)
+                .source(error)
+        })?,
         created_at: row.created_at,
         updated_at: row.updated_at,
     })
@@ -193,6 +204,7 @@ struct NewPrincipalDidBinding {
     binding_version: i64,
     binding_frontier_digest: String,
     principal_authority: serde_json::Value,
+    principal_control_realm_id: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -256,6 +268,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             binding_version,
             binding_frontier_digest,
             principal_authority,
+            principal_control_realm_id,
         } = input;
         principal_authority
             .validate()
@@ -341,6 +354,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             binding_frontier_digest: binding_frontier_digest.to_string(),
             principal_authority: serde_json::to_value(&principal_authority)
                 .map_err(|_| DatabaseError::invalid_operation())?,
+            principal_control_realm_id: principal_control_realm_id.to_string(),
             created_at: now,
             updated_at: now,
         };
@@ -364,6 +378,8 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
                 principal_did_bindings::principal_authority
                     .eq(serde_json::to_value(&principal_authority)
                         .map_err(|_| DatabaseError::invalid_operation())?),
+                principal_did_bindings::principal_control_realm_id
+                    .eq(principal_control_realm_id.to_string()),
                 principal_did_bindings::updated_at.eq(now),
             ))
             .execute(self.conn)

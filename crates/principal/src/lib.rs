@@ -317,6 +317,16 @@ pub trait ConnectorAdmin: Send + Sync {
     /// identifiers.
     fn principal_authority(&self) -> &str;
 
+    /// Resolve the configured destination name and exact service audience
+    /// used to select a durable account/PCR binding.
+    fn account_status_destination(
+        &self,
+    ) -> Result<(String, arkret_wire::DidCoreId), anyhow::Error> {
+        Err(anyhow::anyhow!(
+            "account-status destination is not implemented by this principal connector"
+        ))
+    }
+
     /// Get the downstream principal account ID for the given handle.
     ///
     /// # Parameters
@@ -449,6 +459,20 @@ pub trait ConnectorAdmin: Send + Sync {
 
     /// Submit a collaboration capability grant/revoke fan-out payload to the
     /// downstream principal system.
+
+    /// Submit an exact authority-signed account-status publication.
+    async fn account_status_authoring_frontiers(
+        &self,
+        _destination_name: &str,
+        _request: &arkret_models_collaboration::account_lifecycle::AccountStatusAuthoringFrontiersRequestBody,
+    ) -> Result<
+        arkret_models_collaboration::account_lifecycle::AccountStatusAuthoringFrontiersOutcome,
+        anyhow::Error,
+    > {
+        Err(anyhow::anyhow!(
+            "account-status authoring frontiers are not implemented by this principal connector"
+        ))
+    }
 
     /// Submit an exact authority-signed account-status publication.
     async fn submit_account_status_publication(

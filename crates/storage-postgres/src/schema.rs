@@ -966,6 +966,7 @@ diesel::table! {
         binding_version -> Int8,
         binding_frontier_digest -> Text,
         principal_authority -> Jsonb,
+        principal_control_realm_id -> Text,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
     }

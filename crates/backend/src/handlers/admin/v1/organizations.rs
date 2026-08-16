@@ -79,7 +79,7 @@ fn organization_controller_bootstrap_transcript_bytes(
         control_stream_ref: body.control_stream_ref.as_deref(),
         pcr_frontier_digest: body.pcr_frontier_digest.as_deref(),
         purpose: "principal_control",
-        profile: "ak.profile.principal_control_realm.v1",
+        profile: arkret_wire::ProfileId::PRINCIPAL_CONTROL_REALM_V1,
     })
     .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))
 }

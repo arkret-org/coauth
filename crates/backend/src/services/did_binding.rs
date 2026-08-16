@@ -770,6 +770,61 @@ pub async fn authority_document(
     })
 }
 
+/// Accept one already-resolved authority-grade document without a second
+/// network lookup. This is used by challenge-bound writes that must compare
+/// method-native pins and verify the signature against the very same
+/// resolution that becomes durable.
+#[allow(clippy::too_many_arguments)]
+pub async fn accept_authority_resolution(
+    url_builder: &UrlBuilder,
+    arkret_config: &ArkretConfig,
+    repo: &mut BoxRepository,
+    store: &DurableVerifiedDidBindingStore,
+    resolution: &DidResolution,
+    did: &str,
+    purpose: DidBindingPurpose,
+    freshness: FreshnessProfile,
+    now: DateTime<Utc>,
+) -> Result<AuthorityDocument, DidBindingError> {
+    if resolution.document.id != did {
+        return Err(DidBindingError::Document(
+            "resolved DID document id differs from requested DID".to_owned(),
+        ));
+    }
+    let request = CoauthBindingRequest {
+        did,
+        trust_domain: trust_domain_id(url_builder, arkret_config)?,
+        purpose,
+        policy_digest: policy_digest(arkret_config)?,
+        verification_method: None,
+        freshness,
+    };
+    let accepted = binding_from_resolution(
+        resolution,
+        request.trust_domain,
+        request.purpose,
+        request.policy_digest,
+        request.verification_method,
+        &request.freshness,
+        now,
+    )?;
+    store.persist(repo, &accepted, now).await?;
+    if !accepted
+        .binding()
+        .is_usable_for_authority(&request.freshness.requirement(), now)
+    {
+        return Err(DidBindingError::NotAuthorityGrade {
+            did: did.to_owned(),
+            reason: "resolution does not satisfy high-risk freshness",
+        });
+    }
+    Ok(AuthorityDocument {
+        document: from_shared_document(accepted.document())?,
+        history_head: history_head_digest(&accepted)?,
+        accepted,
+    })
+}
+
 /// The product of an authority path: the pinned document in coauth's wire
 /// shape plus the acceptance it came from.
 pub struct AuthorityDocument {
@@ -994,6 +1049,7 @@ pub(crate) fn test_resolution(
         verified_local_binding: false,
         key_log_head,
         method_evidence,
+        closed_method_evidence: None,
         identity_fact_rejection: rejection,
     }
 }

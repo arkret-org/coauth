@@ -1493,6 +1493,7 @@ dependencies = [
  "arkret-canonical",
  "arkret-egress-policy",
  "arkret-egress-reqwest",
+ "arkret-event-draft",
  "arkret-hlc",
  "arkret-http-client",
  "arkret-identifiers",

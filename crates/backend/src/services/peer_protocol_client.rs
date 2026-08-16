@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use arkret_canonical::canonical_json_bytes;
 use arkret_models_collaboration::account_lifecycle::{
+    AccountStatusAuthoringFrontiersOutcome, AccountStatusAuthoringFrontiersRequestBody,
     AccountStatusPublicationOutcome, AccountStatusPublicationRequestBody,
 };
 use arkret_models_collaboration::event_query::PeerEventsFrontierRequestBody;
@@ -18,7 +19,7 @@ use arkret_models_collaboration::governance::invite_addressing::{
 use arkret_models_collaboration::principal_operations::{
     PcrGenesisSubmitOutcome, PcrGenesisSubmitRequestBody,
 };
-use arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding;
+use arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding;
 use arkret_signatures::http_signature::{
     Component, ContentDigest, ContentDigestAlgorithm, SignedRequestParts, canonical_message,
     format_signature_header, parse_signature_input,
@@ -66,7 +67,9 @@ pub struct PeerProtocolClient<'a> {
     http_client: &'a reqwest::Client,
     keystore: &'a Keystore,
     source_full_id: DidFullId,
-    identity: PeerKeyPackagesClaimTransportBinding,
+    identity: KeyPackagesClaimServiceBinding,
+    source_trust_domain: arkret_identifiers::TypedTrustDomainId,
+    destination_trust_domain: arkret_identifiers::TypedTrustDomainId,
 }
 
 impl<'a> PeerProtocolClient<'a> {
@@ -75,7 +78,9 @@ impl<'a> PeerProtocolClient<'a> {
         http_client: &'a reqwest::Client,
         keystore: &'a Keystore,
         source_full_id: DidFullId,
-        identity: PeerKeyPackagesClaimTransportBinding,
+        identity: KeyPackagesClaimServiceBinding,
+        source_trust_domain: arkret_identifiers::TypedTrustDomainId,
+        destination_trust_domain: arkret_identifiers::TypedTrustDomainId,
     ) -> Result<Self, PeerProtocolClientError> {
         let Some(base_url) = base_url else {
             return Err(PeerProtocolClientError::BaseUrlNotConfigured);
@@ -93,6 +98,8 @@ impl<'a> PeerProtocolClient<'a> {
             keystore,
             source_full_id,
             identity,
+            source_trust_domain,
+            destination_trust_domain,
         })
     }
 
@@ -126,6 +133,30 @@ impl<'a> PeerProtocolClient<'a> {
             Some(idempotency_key),
         )
         .await
+    }
+
+    /// Resolve the exact actor and Seal frontiers for one authority-bound
+    /// account-status Event. This read is intentionally not replay-keyed.
+    pub async fn post_account_status_authoring_frontiers(
+        &self,
+        request: &AccountStatusAuthoringFrontiersRequestBody,
+    ) -> Result<AccountStatusAuthoringFrontiersOutcome, PeerProtocolClientError> {
+        request
+            .validate()
+            .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
+        let url = self.join_absolute(arkret_wire::PATH_PEER_ACCOUNT_STATUS_AUTHORING_FRONTIERS)?;
+        let outcome: AccountStatusAuthoringFrontiersOutcome = self
+            .post_json(
+                "peer_account_status_authoring_frontiers",
+                url,
+                request,
+                None,
+            )
+            .await?;
+        outcome
+            .validate_for_request(request)
+            .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
+        Ok(outcome)
     }
 
     /// Relay the exact client-signed PCR genesis unit. The Account Authority
@@ -286,11 +317,11 @@ impl<'a> PeerProtocolClient<'a> {
             ),
             (
                 HEADER_SOURCE_TRUST_DOMAIN.to_owned(),
-                self.identity.source_trust_domain.to_string(),
+                self.source_trust_domain.to_string(),
             ),
             (
                 HEADER_DESTINATION_TRUST_DOMAIN.to_owned(),
-                self.identity.destination_trust_domain.to_string(),
+                self.destination_trust_domain.to_string(),
             ),
         ];
 
@@ -422,21 +453,22 @@ mod tests {
         Keystore::new(JsonWebKeySet::new(vec![service_key, unrelated_device_key]))
     }
 
-    fn peer_identity() -> PeerKeyPackagesClaimTransportBinding {
+    fn peer_identity() -> KeyPackagesClaimServiceBinding {
         let service_id =
             arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap();
-        let trust_domain =
-            arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:auth.example").unwrap();
-        PeerKeyPackagesClaimTransportBinding {
+        KeyPackagesClaimServiceBinding {
             source_service_id: service_id.clone().into(),
             destination_service_id: service_id.into(),
-            source_trust_domain: trust_domain.clone(),
-            destination_trust_domain: trust_domain,
         }
     }
 
     fn source_full_id() -> arkret_identifiers::DidFullId {
         arkret_identifiers::DidFullId::new("did:web:auth.example".to_owned()).unwrap()
+    }
+
+    fn trust_domain() -> arkret_identifiers::TypedTrustDomainId {
+        arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:auth.example".to_owned())
+            .unwrap()
     }
 
     #[test]
@@ -445,9 +477,16 @@ mod tests {
         let client = reqwest::Client::new();
         let keystore = test_keystore();
         let identity = peer_identity();
-        let peer =
-            PeerProtocolClient::new(Some(&base), &client, &keystore, source_full_id(), identity)
-                .unwrap();
+        let peer = PeerProtocolClient::new(
+            Some(&base),
+            &client,
+            &keystore,
+            source_full_id(),
+            identity,
+            trust_domain(),
+            trust_domain(),
+        )
+        .unwrap();
         let body = br#"{"a":1}"#;
         let url = base.join("/_arkret/peer/invites").unwrap();
 
@@ -522,9 +561,16 @@ mod tests {
         let client = reqwest::Client::new();
         let keystore = test_keystore();
         let identity = peer_identity();
-        let peer =
-            PeerProtocolClient::new(Some(&base), &client, &keystore, source_full_id(), identity)
-                .unwrap();
+        let peer = PeerProtocolClient::new(
+            Some(&base),
+            &client,
+            &keystore,
+            source_full_id(),
+            identity,
+            trust_domain(),
+            trust_domain(),
+        )
+        .unwrap();
         let url = base
             .join("/_arkret/peer/snapshot/head?realm_id=ak:realm:test")
             .unwrap();
@@ -545,9 +591,16 @@ mod tests {
         let client = reqwest::Client::new();
         let keystore = test_keystore();
         let identity = peer_identity();
-        let peer =
-            PeerProtocolClient::new(Some(&base), &client, &keystore, source_full_id(), identity)
-                .unwrap();
+        let peer = PeerProtocolClient::new(
+            Some(&base),
+            &client,
+            &keystore,
+            source_full_id(),
+            identity,
+            trust_domain(),
+            trust_domain(),
+        )
+        .unwrap();
         let url = base.join("/_arkret/peer/events/frontier").unwrap();
         let body = br#"{"realm_id":"ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K"}"#;
 

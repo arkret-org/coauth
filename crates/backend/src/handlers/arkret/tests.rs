@@ -296,17 +296,15 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     assert!(supported_profiles.is_empty());
     assert!(body.get("supported_reducer_profiles").is_none());
     assert!(body.get("x_coauth_supported_reducer_profiles").is_none());
-    // T6.3 — `ak.schema.v1` was a coauth-only placeholder. The actual
-    // schemas this surface emits are `ak.schema.core.v1` (umbrella
-    // core schemas, soland / SDK convention) and
-    // `ak.schema.service_describe.v1` (this very payload).
+    // This service advertises only schemas for concrete machine-readable
+    // surfaces; there is no monolithic "core schema" profile.
     let supported_schema_profiles = body["x_coauth_supported_schema_profiles"]
         .as_array()
         .unwrap();
-    assert!(supported_schema_profiles.contains(&serde_json::json!("ak.schema.core.v1")));
     assert!(
         supported_schema_profiles.contains(&serde_json::json!("ak.schema.service_describe.v1"))
     );
+    assert!(!supported_schema_profiles.contains(&serde_json::json!("ak.schema.core.v1")));
     assert!(
         !supported_schema_profiles.contains(&serde_json::json!("ak.schema.v1")),
         "the removed `ak.schema.v1` placeholder MUST NOT be advertised"

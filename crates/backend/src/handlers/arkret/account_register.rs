@@ -37,6 +37,9 @@ use super::{
     service_id_for, trust_domain_for,
 };
 use crate::handlers::{make_clock, make_rng};
+use crate::services::account_status_publication::{
+    author_transition_plan, enqueue_exact_publication, validate_transition_plan,
+};
 use crate::services::peer_protocol_client::{PeerProtocolClient, PeerProtocolClientError};
 use crate::services::soland_webvh;
 
@@ -335,12 +338,12 @@ pub async fn account_register_endpoint(
             &http_client,
             &key_store,
             issuer_did_for(&config),
-            arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
+            arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
                 source_service_id: service_id_for(&config).into(),
                 destination_service_id: principal_server.service_id.clone().into(),
-                source_trust_domain: trust_domain.clone(),
-                destination_trust_domain: trust_domain,
             },
+            trust_domain.clone(),
+            trust_domain,
         )
         .map_err(map_peer_error)?;
         let outcome = peer
@@ -454,10 +457,13 @@ pub async fn account_register_endpoint(
             .principal_did()
             .get_for_user_and_audience(&user, &grant.audience)
             .await?;
-        match existing_binding {
+        let durable_binding = match existing_binding {
             Some(existing)
                 if existing.principal_id == body.principal_id
-                    && existing.key_log_head == head_event_digest => {}
+                    && existing.key_log_head == head_event_digest =>
+            {
+                existing
+            }
             Some(_) => {
                 repo.cancel().await.ok();
                 return Err(duplicate_conflict(
@@ -488,11 +494,46 @@ pub async fn account_register_endpoint(
                             )
                             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
                             principal_authority: principal_authority.clone(),
+                            principal_control_realm_id: identity_creation
+                                .control_proof
+                                .pcr_realm_id
+                                .clone(),
                         },
                     )
-                    .await?;
+                    .await?
             }
-        }
+        };
+        let account_status_connector = depot.principal_server()?;
+        let account_authority_id = service_id_for(&depot.arkret_config()?);
+        let initial_status_publication = author_transition_plan(
+            account_status_connector.as_ref(),
+            &key_store,
+            account_authority_id.as_str(),
+            &user,
+            &durable_binding,
+            AccountStatus::Active,
+            now,
+            &mut *rng,
+        )
+        .await
+        .map_err(|error| failed_precondition(error.to_string()))?;
+        validate_transition_plan(
+            &user,
+            &durable_binding,
+            AccountStatus::Active,
+            &initial_status_publication,
+        )
+        .map_err(|error| failed_precondition(error.to_string()))?;
+        enqueue_exact_publication(
+            &mut repo,
+            &mut *rng,
+            &*clock,
+            &initial_status_publication.destination_name,
+            &initial_status_publication.idempotency_key,
+            initial_status_publication.body,
+        )
+        .await
+        .map_err(|error| failed_precondition(error.to_string()))?;
         repo.save().await?;
         repo = depot.repo().await?;
     }

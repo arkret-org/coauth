@@ -78,6 +78,7 @@ pub async fn identity_resolve(
         key_log_head: read.history_head,
         seq: None,
         receipts: Vec::new(),
+        method_evidence: None,
     }))
 }
 

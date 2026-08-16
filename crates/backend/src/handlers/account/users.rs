@@ -129,6 +129,10 @@ pub async fn deactivate_user(
     let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let password_manager = depot.password_manager()?;
+    let principal_server = depot.principal_server()?;
+    let key_store = depot.key_store()?;
+    let arkret_config = depot.arkret_config()?;
+    let service_id = crate::handlers::arkret::service_id_for(&arkret_config);
     let clock = make_clock();
     let mut rng = make_rng();
 
@@ -145,6 +149,9 @@ pub async fn deactivate_user(
         &clock,
         &config,
         &password_manager,
+        principal_server.as_ref(),
+        &key_store,
+        service_id.as_str(),
         input.password,
         input.principal_erase,
     )
@@ -166,6 +173,7 @@ fn map_account_profile_error(error: AccountProfileError) -> RouteError {
         }
         AccountProfileError::Password(error) => RouteError::Internal(error.into()),
         AccountProfileError::Repository(error) => RouteError::from(error),
+        AccountProfileError::AccountStatusPublication(error) => RouteError::Internal(error.into()),
     }
 }
 

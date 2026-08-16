@@ -451,6 +451,12 @@ fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) 
         crate::services::user_admin::UserAdminServiceError::PrincipalServer(error) => {
             AppError::internal(std::io::Error::other(error.to_string()))
         }
+        crate::services::user_admin::UserAdminServiceError::MissingAccountStatusPublication
+        | crate::services::user_admin::UserAdminServiceError::InvalidAccountStatusPublication(_) => {
+            AppError::internal(std::io::Error::other(
+                "unexpected account status publication error",
+            ))
+        }
     }
 }
 

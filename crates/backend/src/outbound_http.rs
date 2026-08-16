@@ -1,10 +1,7 @@
 use std::future::Future;
-use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
 use std::time::Duration;
 
-use arkret_egress_policy::AddressClass;
-use arkret_egress_reqwest::{EgressGuard, GuardedDnsResolver, normalize_host};
+use arkret_egress_reqwest::{EgressGuard, LockedEgressUrl, normalize_host};
 use arkret_retry::{RetryPolicy, RetrySchedule};
 use headers::{ContentLength, HeaderMapExt as _, UserAgent};
 use hyper_util::client::legacy::connect::HttpInfo;
@@ -22,7 +19,6 @@ use opentelemetry_semantic_conventions::trace::{
     NETWORK_LOCAL_PORT, NETWORK_PEER_ADDRESS, NETWORK_PEER_PORT, NETWORK_TRANSPORT, NETWORK_TYPE,
     SERVER_ADDRESS, SERVER_PORT, URL_FULL, URL_SCHEME, USER_AGENT_ORIGINAL,
 };
-use reqwest::dns::Resolve as _;
 use rustls_platform_verifier::ConfigVerifierExt;
 use tokio::time::{Instant, sleep};
 use tracing::Instrument;
@@ -103,6 +99,7 @@ impl OutboundRequestPolicy {
     }
 
     #[must_use]
+    #[cfg(test)]
     pub(crate) const fn with_retry(mut self, retry: RetryPolicy) -> Self {
         self.retry = retry;
         self
@@ -162,42 +159,6 @@ fn egress_guard(
     } else {
         EgressGuard::public_https().with_trusted_loopback_https_hosts(trusted_loopback_https_hosts)
     }
-}
-
-/// The shared guarded resolver, wrapped in the outbound `dns.resolve` span.
-struct TracingResolver {
-    inner: GuardedDnsResolver,
-}
-
-impl TracingResolver {
-    fn new(guard: EgressGuard) -> Self {
-        Self {
-            inner: GuardedDnsResolver::new(guard),
-        }
-    }
-}
-
-impl reqwest::dns::Resolve for TracingResolver {
-    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
-        let span = tracing::info_span!("dns.resolve", name = name.as_str());
-        Box::pin(self.inner.resolve(name).instrument(span))
-    }
-}
-
-pub(crate) fn blocked_domain_reason(host: &str, allow_loopback: bool) -> Option<&'static str> {
-    let reason = arkret_egress_policy::classify_host(host)?;
-    if allow_loopback && reason == "localhost name" {
-        return None;
-    }
-    Some(reason)
-}
-
-pub(crate) fn blocked_ip_reason(ip: IpAddr, allow_loopback: bool) -> Option<String> {
-    let class = arkret_egress_policy::classify_ip(ip)?;
-    if allow_loopback && class == AddressClass::Loopback {
-        return None;
-    }
-    Some(class.to_string())
 }
 
 /// Create a new [`reqwest::Client`] with sane parameters.
@@ -269,8 +230,8 @@ fn server_trusted_loopback_https_hosts(
     hosts
 }
 
-/// Create a new [`reqwest::Client`] that pins `host` to already-resolved
-/// socket addresses while retaining the standard outbound HTTP guardrails.
+/// Create a new [`reqwest::Client`] from a shared guard's already-judged,
+/// already-resolved target.
 ///
 /// This is used by SSRF-sensitive callers that pre-resolve and validate DNS
 /// answers before request dispatch and then need to prevent a second DNS lookup
@@ -279,27 +240,25 @@ fn server_trusted_loopback_https_hosts(
 /// # Panics
 ///
 /// Panics if the client fails to build, which should never happen.
-pub(crate) fn reqwest_client_with_static_resolution(
-    host: &str,
-    addrs: &[SocketAddr],
-) -> reqwest::Client {
-    reqwest_client_builder(false, &[])
-        .resolve_to_addrs(host, addrs)
+pub(crate) fn reqwest_client_for_locked_egress(target: &LockedEgressUrl) -> reqwest::Client {
+    target
+        .apply_to_client_builder(base_client_builder().https_only(true))
         .build()
-        .expect("failed to create static-resolution HTTP client")
+        .expect("failed to create locked-egress HTTP client")
 }
 
 fn reqwest_client_builder(
     allow_insecure_loopback_http: bool,
     trusted_loopback_https_hosts: &[String],
 ) -> reqwest::ClientBuilder {
+    let guard = egress_guard(allow_insecure_loopback_http, trusted_loopback_https_hosts);
+    guard.apply_to_client_builder(base_client_builder())
+}
+
+fn base_client_builder() -> reqwest::ClientBuilder {
     let tls_config: rustls::ClientConfig =
         rustls::ClientConfig::with_platform_verifier().expect("failed to create TLS config");
-    let guard = egress_guard(allow_insecure_loopback_http, trusted_loopback_https_hosts);
-
     reqwest::Client::builder()
-        .https_only(!guard.policy().allows_http())
-        .dns_resolver(Arc::new(TracingResolver::new(guard)))
         .use_preconfigured_tls(tls_config)
         .redirect(reqwest::redirect::Policy::none())
         .no_proxy()
@@ -641,9 +600,8 @@ mod tests {
     use tokio::net::TcpListener;
 
     use super::{
-        EgressGuard, OutboundRequestPolicy, blocked_domain_reason, blocked_ip_reason, egress_guard,
-        reqwest_client_builder, send_with_policy, server_trusted_loopback_https_hosts,
-        telemetry_url,
+        EgressGuard, OutboundRequestPolicy, egress_guard, reqwest_client_builder, retry_after_hint,
+        send_with_policy, server_trusted_loopback_https_hosts, telemetry_url,
     };
 
     fn addr(raw: &str) -> SocketAddr {
@@ -655,35 +613,6 @@ mod tests {
         ONCE.call_once(|| {
             let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         });
-    }
-
-    #[test]
-    fn egress_policy_blocks_internal_names() {
-        assert!(blocked_domain_reason("localhost", false).is_some());
-        assert!(blocked_domain_reason("api.internal", false).is_some());
-        assert!(blocked_domain_reason("metadata.google.internal", false).is_some());
-        assert!(blocked_domain_reason("example.com", false).is_none());
-    }
-
-    #[test]
-    fn egress_policy_blocks_non_public_ip_ranges() {
-        for ip in [
-            "127.0.0.1",
-            "10.0.0.1",
-            "172.16.0.1",
-            "192.168.1.1",
-            "169.254.169.254",
-            "100.64.0.1",
-            "::1",
-            "fc00::1",
-            "fe80::1",
-        ] {
-            let ip = ip.parse().unwrap();
-            assert!(blocked_ip_reason(ip, false).is_some(), "{ip}");
-        }
-
-        assert!(blocked_ip_reason("8.8.8.8".parse().unwrap(), false).is_none());
-        assert!(blocked_ip_reason("2001:4860:4860::8888".parse().unwrap(), false).is_none());
     }
 
     #[tokio::test]
@@ -835,6 +764,58 @@ mod tests {
             reqwest::StatusCode::INTERNAL_SERVER_ERROR
         );
         assert_eq!(attempts.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn send_with_policy_honours_retry_after_as_an_unclamped_floor() {
+        install_crypto_provider();
+        let (url, attempts) = spawn_http_server(|attempt| async move {
+            if attempt == 1 {
+                "HTTP/1.1 503 retry\r\nRetry-After: 1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned()
+            } else {
+                "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned()
+            }
+        })
+        .await;
+        let client = reqwest::Client::new();
+        let policy = OutboundRequestPolicy::new("test", "retry_after")
+            .with_timeout(Duration::from_secs(2))
+            .with_max_attempts(2)
+            .with_retry(arkret_retry::RetryPolicy::none());
+        let started = std::time::Instant::now();
+
+        let response = send_with_policy(policy, || client.get(url.clone()))
+            .await
+            .expect("retry should reach the second response");
+
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        assert!(
+            started.elapsed() >= Duration::from_millis(900),
+            "Retry-After must not be shortened to the local zero-delay schedule"
+        );
+    }
+
+    #[tokio::test]
+    async fn retry_after_parser_preserves_large_hints_and_rejects_invalid_values() {
+        install_crypto_provider();
+        let (large_url, _) = spawn_http_server(|_| async {
+            "HTTP/1.1 503 retry\r\nRetry-After: 86400\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned()
+        })
+        .await;
+        let large = reqwest::Client::new().get(large_url).send().await.unwrap();
+        assert_eq!(retry_after_hint(&large), Some(Duration::from_secs(86_400)));
+
+        let (invalid_url, _) = spawn_http_server(|_| async {
+            "HTTP/1.1 503 retry\r\nRetry-After: eventually\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned()
+        })
+        .await;
+        let invalid = reqwest::Client::new()
+            .get(invalid_url)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(retry_after_hint(&invalid), None);
     }
 
     async fn spawn_sleeping_http_server(delay: Duration) -> (String, Arc<AtomicUsize>) {

@@ -602,6 +602,10 @@ pub struct PrincipalDidBinding {
     pub binding_version: u64,
     pub binding_frontier_digest: arkret_identifiers::Hash,
     pub principal_authority: arkret_wire::PrincipalAuthorityKey,
+    /// Principal Control Realm accepted by the PCR genesis operation that
+    /// installed this exact account binding. Lifecycle authoring must use
+    /// this frozen authority basis and must never rediscover or guess a PCR.
+    pub principal_control_realm_id: arkret_identifiers::RealmId,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

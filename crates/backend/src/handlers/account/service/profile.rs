@@ -4,6 +4,8 @@ use coauth_data::queue::{
 };
 use coauth_data::user::UserRepository;
 use coauth_data::{BoxRepository, Clock, RepositoryAccess, RepositoryError, SiteConfig};
+use coauth_keystore::Keystore;
+use coauth_principal::ConnectorAdmin;
 use rand_chacha::rand_core::CryptoRngCore;
 use thiserror::Error;
 
@@ -29,6 +31,9 @@ pub enum AccountProfileError {
 
     #[error(transparent)]
     Repository(#[from] RepositoryError),
+
+    #[error("account status publication failed: {0}")]
+    AccountStatusPublication(String),
 }
 
 pub async fn deactivate_current_account(
@@ -38,6 +43,9 @@ pub async fn deactivate_current_account(
     clock: &dyn Clock,
     config: &SiteConfig,
     password_manager: &PasswordManager,
+    principal_server: &dyn ConnectorAdmin,
+    key_store: &Keystore,
+    service_id: &str,
     password: Option<String>,
     principal_erase: bool,
 ) -> Result<DeactivateAccountOutcome, AccountProfileError> {
@@ -72,10 +80,44 @@ pub async fn deactivate_current_account(
         return Ok(DeactivateAccountOutcome::IncorrectPassword);
     }
 
-    let user = repo
-        .user()
-        .deactivate(clock, browser_session.user.clone())
-        .await?;
+    let original_user = browser_session.user.clone();
+    let (_destination_name, audience) = principal_server
+        .account_status_destination()
+        .map_err(|error| AccountProfileError::AccountStatusPublication(error.to_string()))?;
+    let binding = repo
+        .principal_did()
+        .get_for_user_and_audience(&original_user, audience.as_str())
+        .await?
+        .ok_or_else(|| {
+            AccountProfileError::AccountStatusPublication(
+                "durable principal/PCR authority binding is missing".to_owned(),
+            )
+        })?;
+    let publication = crate::services::account_status_publication::author_transition_plan(
+        principal_server,
+        key_store,
+        service_id,
+        &original_user,
+        &binding,
+        arkret_models_collaboration::objects::account_status::AccountStatus::Deactivated,
+        clock.now(),
+        rng,
+    )
+    .await
+    .map_err(|error| AccountProfileError::AccountStatusPublication(error.to_string()))?;
+
+    let user = repo.user().deactivate(clock, original_user).await?;
+
+    crate::services::account_status_publication::enqueue_exact_publication(
+        &mut repo,
+        rng,
+        clock,
+        &publication.destination_name,
+        &publication.idempotency_key,
+        publication.body,
+    )
+    .await
+    .map_err(|error| AccountProfileError::AccountStatusPublication(error.to_string()))?;
 
     repo.queue_job()
         .schedule_job(rng, clock, DeactivateUserJob::new(&user, principal_erase))

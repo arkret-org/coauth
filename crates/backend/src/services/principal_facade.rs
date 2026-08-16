@@ -199,6 +199,21 @@ impl ConnectorAdmin for DbConnectorAdmin {
         self.server_name.as_str()
     }
 
+    fn account_status_destination(
+        &self,
+    ) -> Result<(String, arkret_identifiers::DidCoreId), anyhow::Error> {
+        let target = self
+            .arkret_config
+            .principal_servers
+            .iter()
+            .find(|server| server.name == self.server_name)
+            .context("configured Principal Server is no longer available")?;
+        let audience =
+            crate::services::resolved_principal_audiences::effective_audience_shared(target)
+                .context("configured Principal Server identity is unavailable or stale")?;
+        Ok((self.server_name.clone(), audience))
+    }
+
     async fn verify_token(&self, _token: &str) -> Result<bool, anyhow::Error> {
         // coauth IS the principal authority — there is no separate downstream
         // principal service whose bearer this would validate. Session-grant
@@ -287,6 +302,50 @@ impl ConnectorAdmin for DbConnectorAdmin {
         Ok(())
     }
 
+    async fn account_status_authoring_frontiers(
+        &self,
+        destination_name: &str,
+        request: &arkret_models_collaboration::account_lifecycle::AccountStatusAuthoringFrontiersRequestBody,
+    ) -> Result<
+        arkret_models_collaboration::account_lifecycle::AccountStatusAuthoringFrontiersOutcome,
+        anyhow::Error,
+    > {
+        let target = self
+            .arkret_config
+            .principal_servers
+            .iter()
+            .find(|server| server.name == destination_name)
+            .context("account-status destination Principal Server is no longer configured")?;
+        let signing = self
+            .peer_signing
+            .as_ref()
+            .context("account-status peer signing configuration is unavailable")?;
+        let (source_service_id, source_full_id) = runtime_peer_identity(&self.arkret_config)?;
+        anyhow::ensure!(
+            source_service_id == request.authority_evidence.issuer_service_id,
+            "runtime source service does not match account-status authority evidence issuer"
+        );
+        let destination_service_id =
+            crate::services::resolved_principal_audiences::effective_audience_shared(target)
+                .context("account-status destination service identity is unavailable or stale")?;
+        let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
+            source_service_id: source_service_id.into(),
+            destination_service_id: destination_service_id.into(),
+        };
+        let client = crate::services::peer_protocol_client::PeerProtocolClient::new(
+            Some(&target.endpoint),
+            &self.http_client,
+            &signing.keystore,
+            source_full_id,
+            identity,
+            signing.source_trust_domain.clone(),
+            signing.source_trust_domain.clone(),
+        )?;
+        Ok(client
+            .post_account_status_authoring_frontiers(request)
+            .await?)
+    }
+
     async fn submit_account_status_publication(
         &self,
         request: &PrincipalAccountStatusPublicationRequest,
@@ -305,11 +364,9 @@ impl ConnectorAdmin for DbConnectorAdmin {
         let destination_service_id =
             crate::services::resolved_principal_audiences::effective_audience_shared(target)
                 .context("account-status destination service identity is unavailable or stale")?;
-        let identity = arkret_models_crypto::http_bodies::PeerKeyPackagesClaimTransportBinding {
+        let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
             source_service_id: source_service_id.into(),
             destination_service_id: destination_service_id.into(),
-            source_trust_domain: signing.source_trust_domain.clone(),
-            destination_trust_domain: signing.source_trust_domain.clone(),
         };
         let client = crate::services::peer_protocol_client::PeerProtocolClient::new(
             Some(&target.endpoint),
@@ -317,6 +374,8 @@ impl ConnectorAdmin for DbConnectorAdmin {
             &signing.keystore,
             source_full_id,
             identity,
+            signing.source_trust_domain.clone(),
+            signing.source_trust_domain.clone(),
         )?;
         let outcome = client
             .post_account_status_publication(request.body(), request.idempotency_key())
@@ -351,8 +410,8 @@ impl ConnectorAdmin for DbConnectorAdmin {
             .await
     }
 
-    async fn delete_user(&self, _handle: &str, _erase: bool) -> Result<(), anyhow::Error> {
-        Ok(())
+    async fn delete_user(&self, _handle: &str, erase: bool) -> Result<(), anyhow::Error> {
+        anyhow::bail!(unsupported_principal_delete_reason(erase))
     }
 
     async fn set_displayname(
@@ -368,9 +427,17 @@ impl ConnectorAdmin for DbConnectorAdmin {
     }
 }
 
+fn unsupported_principal_delete_reason(erase: bool) -> &'static str {
+    if erase {
+        "hard erasure cannot be requested: the peer protocol has no typed erasure command carrier"
+    } else {
+        "principal account deactivation must be driven by the signed account-status publication"
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::runtime_peer_identity;
+    use super::{runtime_peer_identity, unsupported_principal_delete_reason};
 
     #[test]
     fn runtime_peer_identity_is_unavailable_before_provider_readiness() {
@@ -398,5 +465,11 @@ mod tests {
             full_id.as_str(),
             "did:webvh:QmService:auth.example:webvh:service"
         );
+    }
+
+    #[test]
+    fn unsupported_principal_delete_never_reports_false_success() {
+        assert!(unsupported_principal_delete_reason(false).contains("account-status publication"));
+        assert!(unsupported_principal_delete_reason(true).contains("no typed erasure command"));
     }
 }

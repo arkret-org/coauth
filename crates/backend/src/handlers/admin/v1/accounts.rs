@@ -536,6 +536,7 @@ async fn patch_account(
         patch,
         principal_erase,
         Some(audit_signing),
+        None,
     )
     .await
     .map_err(map_service_error)?;
@@ -639,19 +640,15 @@ fn account_claim_value(payload: &serde_json::Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use base64ct::{Base64UrlUnpadded, Encoding as _};
+    use coauth_data::RepositoryAccess;
     use coauth_data::personal::session::PersonalSessionOwner;
-    use coauth_data::{Clock, RepositoryAccess};
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::jwt::JsonWebSignatureHeader;
     use hyper::{Request, StatusCode};
-    use serde_json::Value;
     use signature::RandomizedSigner as _;
     use ulid::Ulid;
 
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
-    use crate::services::did_binding_proof::{
-        BindingStatementClaims, DID_BINDING_CONTROL_PROOF_SCHEMA,
-    };
 
     #[tokio::test]
     async fn test_list_and_get_accounts() {
@@ -1037,7 +1034,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_account_dids_add_list_and_revoke_use_audit_trail() {
+    async fn test_account_dids_list_uses_accepted_binding_projection() {
         setup();
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
@@ -1067,172 +1064,7 @@ mod tests {
         assert_eq!(body["data"][0]["state"], "active");
         assert_eq!(body["data"][0]["active"], true);
         assert_eq!(body["meta"]["supports_write_operations"], true);
-
-        let recovery_did = crate::handlers::arkret::service_id_for(&state.arkret_config);
-        let nonce = "did-binding-add-nonce";
-        let control_proof =
-            sign_did_binding_control_proof(&state, recovery_did.as_str(), user.id, nonce);
-        let response = state
-            .request(
-                Request::post(format!("/_coauth/admin/accounts/{}/dids", user.id))
-                    .bearer(&token)
-                    .json(serde_json::json!({
-                        "did": recovery_did,
-                        "kind": "recovery",
-                        "control_proof": {
-                            "jws": control_proof,
-                            "nonce": nonce
-                        },
-                        "verification_method": "did_controller_key",
-                        "operator_note": "bind recovery DID"
-                    })),
-            )
-            .await;
-        response.assert_status(StatusCode::CREATED);
-        let body: serde_json::Value = response.json();
-        let added = binding_for_did(&body, recovery_did.as_str());
-        assert_eq!(added["kind"], "recovery");
-        assert_eq!(added["state"], "active");
-        assert_eq!(added["active"], true);
-        assert_eq!(added["verification_status"], "verified");
-        assert!(added["last_resolver_receipt_id"].is_string());
-
-        let duplicate_proof = sign_did_binding_control_proof(
-            &state,
-            recovery_did.as_str(),
-            user.id,
-            "duplicate-nonce",
-        );
-        let response = state
-            .request(
-                Request::post(format!("/_coauth/admin/accounts/{}/dids", user.id))
-                    .bearer(&token)
-                    .json(serde_json::json!({
-                        "did": recovery_did,
-                        "kind": "recovery",
-                        "control_proof": {
-                            "jws": duplicate_proof,
-                            "nonce": "duplicate-nonce"
-                        }
-                    })),
-            )
-            .await;
-        response.assert_status(StatusCode::CONFLICT);
-
-        let response = state
-            .request(
-                Request::delete(format!(
-                    "/_coauth/admin/accounts/{}/dids/{}",
-                    user.id, recovery_did
-                ))
-                .bearer(&token)
-                .json(serde_json::json!({
-                "reason": "operator requested DID rotation",
-                    "revoke_related_sessions": true
-                })),
-            )
-            .await;
-        response.assert_status(StatusCode::OK);
-        let body: serde_json::Value = response.json();
-        let revoked = binding_for_did(&body, recovery_did.as_str());
-        assert_eq!(revoked["state"], "revoked");
-        assert_eq!(revoked["active"], false);
-        assert!(revoked["revoked_at"].is_string());
-
-        let response = state
-            .request(
-                Request::delete(format!(
-                    "/_coauth/admin/accounts/{}/dids/{}",
-                    user.id, recovery_did
-                ))
-                .bearer(&token)
-                .json(serde_json::json!({
-                "reason": "duplicate revoke"
-                })),
-            )
-            .await;
-        response.assert_status(StatusCode::CONFLICT);
-
-        let response = state
-            .request(
-                Request::get(format!("/_coauth/admin/accounts/{}/dids", user.id))
-                    .bearer(&token)
-                    .empty(),
-            )
-            .await;
-        response.assert_status(StatusCode::OK);
-        let body: serde_json::Value = response.json();
-        let primary = binding_for_did(&body, &did);
-        assert_eq!(primary["state"], "active");
-        assert_eq!(primary["active"], true);
-        let revoked = binding_for_did(&body, recovery_did.as_str());
-        assert_eq!(revoked["state"], "revoked");
-        assert_eq!(revoked["active"], false);
-    }
-
-    fn binding_for_did<'a>(body: &'a Value, did: &str) -> &'a Value {
-        body["data"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|binding| binding["did"] == did)
-            .expect("binding should be present")
-    }
-
-    fn sign_did_binding_control_proof(
-        state: &TestState,
-        did: &str,
-        _account_id: Ulid,
-        nonce: &str,
-    ) -> String {
-        let alg = [
-            JsonWebSignatureAlg::Ed25519,
-            JsonWebSignatureAlg::Es512,
-            JsonWebSignatureAlg::Es384,
-            JsonWebSignatureAlg::Es256,
-            JsonWebSignatureAlg::Rs512,
-            JsonWebSignatureAlg::Rs384,
-            JsonWebSignatureAlg::Rs256,
-            JsonWebSignatureAlg::Ps512,
-            JsonWebSignatureAlg::Ps384,
-            JsonWebSignatureAlg::Ps256,
-        ]
-        .into_iter()
-        .find(|alg| state.key_store.signing_key_for_algorithm(alg).is_some())
-        .expect("test keystore should expose a signing key");
-        let signer = state.key_store.signer_for_algorithm(&alg).unwrap();
-        let verification_method = format!("{did}#key-1");
-        let header = JsonWebSignatureHeader::new(alg).with_kid(verification_method.clone());
-        // identity-did §5.1 / §3.6: bind the proof to this receiver (local
-        // service DID) and this deployment (trust_domain), with a bounded
-        // freshness window (exp - iat <= 300s).
-        let audience = crate::handlers::arkret::service_id_for(&state.arkret_config);
-        let trust_domain =
-            crate::handlers::arkret::trust_domain_for(&state.url_builder, &state.arkret_config);
-        let iat = state.clock.now();
-        let claims = BindingStatementClaims {
-            schema: DID_BINDING_CONTROL_PROOF_SCHEMA.to_owned(),
-            account_did: did.to_owned(),
-            verification_method,
-            audience: audience.to_string(),
-            trust_domain,
-            nonce: nonce.to_owned(),
-            iat,
-            exp: iat + chrono::Duration::seconds(5 * 60),
-        };
-        let header_b64 = Base64UrlUnpadded::encode_string(&serde_json::to_vec(&header).unwrap());
-        let payload = arkret_canonical::canonical_json_bytes(&claims).unwrap();
-        let payload_b64 = Base64UrlUnpadded::encode_string(&payload);
-        let signing_input = format!("{header_b64}.{payload_b64}");
-        let mut rng = state.rng();
-        let raw_sig: coauth_jose::jwa::Signature = signer
-            .try_sign_with_rng(&mut rng, signing_input.as_bytes())
-            .unwrap();
-        let raw_sig: Box<[u8]> = raw_sig.into();
-        format!(
-            "{signing_input}.{}",
-            Base64UrlUnpadded::encode_string(raw_sig.as_ref())
-        )
+        assert_eq!(body["data"][0]["did"], did);
     }
 
     async fn admin_did_for_token(state: &TestState, token: &str) -> String {

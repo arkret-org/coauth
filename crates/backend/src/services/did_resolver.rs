@@ -1,3 +1,4 @@
+#[cfg(test)]
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -10,7 +11,7 @@ use thiserror::Error;
 use url::Url;
 
 use crate::handlers::arkret::{DidDocument, SessionGrantError, issuer_did_for, service_id_for};
-use crate::outbound_http::{RequestBuilderExt as _, blocked_domain_reason, blocked_ip_reason};
+use crate::outbound_http::RequestBuilderExt as _;
 
 pub type DidResolverServiceHandle = Arc<dyn DidResolverService>;
 
@@ -41,6 +42,8 @@ pub struct DidResolution {
     pub verified_local_binding: bool,
     pub key_log_head: Option<arkret_identifiers::Hash>,
     pub method_evidence: Value,
+    /// Closed method-native evidence returned only when explicitly requested.
+    pub closed_method_evidence: Option<arkret_models_identity::IdentityMethodEvidence>,
     pub identity_fact_rejection: Option<DidResolutionIdentityFactRejection>,
 }
 
@@ -139,7 +142,7 @@ pub struct VerifiedUnpublishedWebvhCandidate {
 }
 
 pub async fn verify_unpublished_webvh_candidate(
-    http_client: &reqwest::Client,
+    _http_client: &reqwest::Client,
     did: &arkret_identifiers::DidFullId,
     expected_previous_version_id: &str,
     candidate_entry_bytes: &[u8],
@@ -149,16 +152,7 @@ pub async fn verify_unpublished_webvh_candidate(
         &arkret_identity::DidWebvhResolver::log_url(did)
             .map_err(|error| DidResolveError::InvalidDid(error.to_string()))?,
     )?;
-    enforce_resolver_url_policy(&log_url)?;
-    let pinned_resolution = enforce_resolver_dns_policy(&log_url).await?;
-    let pinned_http_client;
-    let request_client = if let Some((host, addrs)) = pinned_resolution.as_ref() {
-        pinned_http_client =
-            crate::outbound_http::reqwest_client_with_static_resolution(host, addrs);
-        &pinned_http_client
-    } else {
-        http_client
-    };
+    let request_client = resolver_request_client(&log_url).await?;
     let response = request_client.get(log_url.clone()).send_traced().await?;
     if !response.status().is_success() {
         let status = response.status();
@@ -202,7 +196,7 @@ pub async fn verify_unpublished_webvh_candidate(
 /// verification must use the key that controlled the service DID when the
 /// receipt was signed, not merely the current post-rotation document.
 pub async fn resolve_verified_webvh_document_at(
-    http_client: &reqwest::Client,
+    _http_client: &reqwest::Client,
     did: &arkret_identifiers::DidFullId,
     decided_at: chrono::DateTime<chrono::Utc>,
 ) -> Result<DidDocument, DidResolveError> {
@@ -213,16 +207,7 @@ pub async fn resolve_verified_webvh_document_at(
         &arkret_identity::DidWebvhResolver::log_url(did)
             .map_err(|error| DidResolveError::InvalidDid(error.to_string()))?,
     )?;
-    enforce_resolver_url_policy(&log_url)?;
-    let pinned_resolution = enforce_resolver_dns_policy(&log_url).await?;
-    let pinned_http_client;
-    let request_client = if let Some((host, addrs)) = pinned_resolution.as_ref() {
-        pinned_http_client =
-            crate::outbound_http::reqwest_client_with_static_resolution(host, addrs);
-        &pinned_http_client
-    } else {
-        http_client
-    };
+    let request_client = resolver_request_client(&log_url).await?;
     let mut response = request_client.get(log_url.clone()).send_traced().await?;
     if !response.status().is_success() {
         return Err(DidResolveError::BadResolverResponse(format!(
@@ -337,13 +322,35 @@ pub trait DidResolverService: Send + Sync {
 
     async fn resolve_did_document(
         &self,
-        http_client: &reqwest::Client,
+        _http_client: &reqwest::Client,
         _url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
         _key_store: &Keystore,
         repo: &mut BoxRepository,
         did: &str,
     ) -> Result<DidResolution, DidResolveError>;
+
+    /// Resolve a published DID while requiring the closed method-native pins
+    /// needed to issue an account-registration control challenge.
+    async fn resolve_did_binding_evidence(
+        &self,
+        http_client: &reqwest::Client,
+        url_builder: &UrlBuilder,
+        arkret_config: &ArkretConfig,
+        key_store: &Keystore,
+        repo: &mut BoxRepository,
+        did: &str,
+    ) -> Result<DidResolution, DidResolveError> {
+        self.resolve_did_document(
+            http_client,
+            url_builder,
+            arkret_config,
+            key_store,
+            repo,
+            did,
+        )
+        .await
+    }
 }
 
 #[derive(Default)]
@@ -399,7 +406,7 @@ impl DidResolverService for DefaultDidResolverService {
 
     async fn resolve_did_document(
         &self,
-        http_client: &reqwest::Client,
+        _http_client: &reqwest::Client,
         _url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
         _key_store: &Keystore,
@@ -408,22 +415,10 @@ impl DidResolverService for DefaultDidResolverService {
     ) -> Result<DidResolution, DidResolveError> {
         match did_method(did).as_deref() {
             Some("web") => {
-                resolve_http_did(
-                    http_client,
-                    did,
-                    did_web_document_url(did)?,
-                    DidResolutionSource::DidWeb,
-                )
-                .await
+                resolve_http_did(did, did_web_document_url(did)?, DidResolutionSource::DidWeb).await
             }
             Some("plc") => {
-                resolve_http_did(
-                    http_client,
-                    did,
-                    did_plc_document_url(did)?,
-                    DidResolutionSource::DidPlc,
-                )
-                .await
+                resolve_http_did(did, did_plc_document_url(did)?, DidResolutionSource::DidPlc).await
             }
             Some("key") => Ok(local_resolution(
                 DidDocument {
@@ -451,12 +446,35 @@ impl DidResolverService for DefaultDidResolverService {
             Some(_) => match self.delegated_resolver(arkret_config) {
                 Some(resolver) => {
                     let url = delegated_resolver_url(&resolver)?;
-                    resolve_delegated_did(http_client, did, url).await
+                    resolve_delegated_did(did, url, Vec::new()).await
                 }
                 None => Err(DidResolveError::UnsupportedMethod),
             },
             None => Err(DidResolveError::InvalidDid(did.to_owned())),
         }
+    }
+
+    async fn resolve_did_binding_evidence(
+        &self,
+        _http_client: &reqwest::Client,
+        _url_builder: &UrlBuilder,
+        arkret_config: &ArkretConfig,
+        _key_store: &Keystore,
+        _repo: &mut BoxRepository,
+        did: &str,
+    ) -> Result<DidResolution, DidResolveError> {
+        if !did.starts_with("did:webvh:") {
+            return Err(DidResolveError::UnsupportedMethod);
+        }
+        let resolver = self
+            .delegated_resolver(arkret_config)
+            .ok_or(DidResolveError::UnsupportedMethod)?;
+        resolve_delegated_did(
+            did,
+            delegated_resolver_url(&resolver)?,
+            vec![arkret_models_identity::IdentityMethodEvidenceKind::DidWebvh],
+        )
+        .await
     }
 }
 
@@ -479,12 +497,12 @@ fn local_resolution(
             "resolver": source.as_str(),
             "verified_local_binding": verified_local_binding,
         }),
+        closed_method_evidence: None,
         identity_fact_rejection: None,
     }
 }
 
 async fn resolve_http_did(
-    http_client: &reqwest::Client,
     did: &str,
     url: Url,
     source: DidResolutionSource,
@@ -492,16 +510,7 @@ async fn resolve_http_did(
     // SSRF defence in depth: validate the URL, pre-resolve named hosts before
     // connecting, then pin the request client to that validated address set so
     // DNS cannot rebind between policy check and socket connection.
-    enforce_resolver_url_policy(&url)?;
-    let pinned_resolution = enforce_resolver_dns_policy(&url).await?;
-    let pinned_http_client;
-    let request_client = if let Some((host, addrs)) = pinned_resolution.as_ref() {
-        pinned_http_client =
-            crate::outbound_http::reqwest_client_with_static_resolution(host, addrs);
-        &pinned_http_client
-    } else {
-        http_client
-    };
+    let request_client = resolver_request_client(&url).await?;
 
     let response = request_client
         .get(url.clone())
@@ -546,7 +555,8 @@ async fn parse_resolution_http_response(
 
     let body: Value = serde_json::from_slice(&bytes)?;
     let key_log_head = parse_key_log_head(&body)?;
-    let (document, method_evidence) = parse_resolution_response(did, url, source, body)?;
+    let (document, method_evidence, closed_method_evidence) =
+        parse_resolution_response(did, url, source, body)?;
     if document.id != did {
         return Err(DidResolveError::DocumentIdMismatch {
             expected: did.to_owned(),
@@ -561,6 +571,7 @@ async fn parse_resolution_http_response(
         verified_local_binding: false,
         key_log_head,
         method_evidence,
+        closed_method_evidence,
         identity_fact_rejection,
     })
 }
@@ -580,24 +591,16 @@ fn parse_key_log_head(body: &Value) -> Result<Option<arkret_identifiers::Hash>, 
 }
 
 async fn resolve_delegated_did(
-    http_client: &reqwest::Client,
     did: &str,
     url: Url,
+    requested_evidence_kinds: Vec<arkret_models_identity::IdentityMethodEvidenceKind>,
 ) -> Result<DidResolution, DidResolveError> {
-    enforce_resolver_url_policy(&url)?;
-    let pinned_resolution = enforce_resolver_dns_policy(&url).await?;
-    let pinned_http_client;
-    let request_client = if let Some((host, addrs)) = pinned_resolution.as_ref() {
-        pinned_http_client =
-            crate::outbound_http::reqwest_client_with_static_resolution(host, addrs);
-        &pinned_http_client
-    } else {
-        http_client
-    };
-    let response = delegated_resolver_request(request_client, &url, did)?
-        .send_traced()
-        .await?
-        .error_for_status()?;
+    let request_client = resolver_request_client(&url).await?;
+    let response =
+        delegated_resolver_request(&request_client, &url, did, requested_evidence_kinds)?
+            .send_traced()
+            .await?
+            .error_for_status()?;
     parse_resolution_http_response(response, did, &url, DidResolutionSource::DelegatedResolver)
         .await
 }
@@ -606,12 +609,13 @@ fn delegated_resolver_request(
     http_client: &reqwest::Client,
     url: &Url,
     did: &str,
+    requested_evidence_kinds: Vec<arkret_models_identity::IdentityMethodEvidenceKind>,
 ) -> Result<reqwest::RequestBuilder, DidResolveError> {
     let typed_did = arkret_identifiers::DidFullId::new(did.to_owned())
         .map_err(|error| DidResolveError::InvalidDid(error.to_string()))?;
     let body = arkret_models_identity::IdentityResolveRequestBody {
         did: typed_did,
-        requested_evidence_kinds: Vec::new(),
+        requested_evidence_kinds,
     };
     let body_bytes = arkret_canonical::canonical_json_bytes(&body).map_err(|error| {
         DidResolveError::BadResolverResponse(format!(
@@ -629,7 +633,27 @@ fn parse_resolution_response(
     url: &Url,
     source: DidResolutionSource,
     body: Value,
-) -> Result<(DidDocument, Value), DidResolveError> {
+) -> Result<
+    (
+        DidDocument,
+        Value,
+        Option<arkret_models_identity::IdentityMethodEvidence>,
+    ),
+    DidResolveError,
+> {
+    if let Ok(outcome) =
+        serde_json::from_value::<arkret_models_identity::IdentityResolveOutcome>(body.clone())
+    {
+        let document =
+            serde_json::from_value::<DidDocument>(serde_json::to_value(&outcome.did_document)?)?;
+        let method_evidence = outcome
+            .method_evidence
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()?
+            .unwrap_or_else(|| default_method_evidence(source, url));
+        return Ok((document, method_evidence, outcome.method_evidence));
+    }
     if let Some(ref_value) = body.get("did_document") {
         if let Some(ref_did) = ref_value.get("did").and_then(Value::as_str)
             && ref_did != did
@@ -647,7 +671,7 @@ fn parse_resolution_response(
             .get("method_evidence")
             .cloned()
             .unwrap_or_else(|| default_method_evidence(source, url));
-        return Ok((document, method_evidence));
+        return Ok((document, method_evidence, None));
     }
 
     let document_value = body
@@ -659,7 +683,7 @@ fn parse_resolution_response(
         .get("method_evidence")
         .cloned()
         .unwrap_or_else(|| default_method_evidence(source, url));
-    Ok((document, method_evidence))
+    Ok((document, method_evidence, None))
 }
 
 fn default_method_evidence(source: DidResolutionSource, url: &Url) -> Value {
@@ -800,95 +824,49 @@ fn contains_key(value: &Value, key: &str) -> bool {
 ///   DNS rebinding window.
 ///
 /// Loopback is allowed when the `COAUTH_DID_RESOLVER_ALLOW_LOOPBACK`
-/// env var is set (the integration test harness uses this).
+/// env var is set (the integration test harness uses this). That flag selects
+/// the shared policy's loopback address exception; it does not introduce a
+/// Coauth-specific host class or allow plaintext HTTP.
+fn resolver_egress_guard(allow_loopback: bool) -> arkret_egress_reqwest::EgressGuard {
+    if allow_loopback {
+        arkret_egress_reqwest::EgressGuard::local_development()
+    } else {
+        arkret_egress_reqwest::EgressGuard::public_https()
+    }
+}
+
+fn resolver_loopback_enabled() -> bool {
+    coauth_config::runtime_var_os("COAUTH_DID_RESOLVER_ALLOW_LOOPBACK").is_some()
+}
+
 fn enforce_resolver_url_policy(url: &Url) -> Result<(), DidResolveError> {
+    enforce_resolver_url_policy_with(url, resolver_loopback_enabled())
+}
+
+fn enforce_resolver_url_policy_with(
+    url: &Url,
+    allow_loopback: bool,
+) -> Result<(), DidResolveError> {
     if url.scheme() != "https" {
         return Err(DidResolveError::ForbiddenResolverUrl(format!(
             "scheme must be https, got {}",
             url.scheme()
         )));
     }
-    let allow_loopback =
-        coauth_config::runtime_var_os("COAUTH_DID_RESOLVER_ALLOW_LOOPBACK").is_some();
-    let Some(host) = url.host() else {
-        return Err(DidResolveError::ForbiddenResolverUrl(
-            "missing host".to_owned(),
-        ));
-    };
-    match host {
-        url::Host::Domain(name) => {
-            // Reject obvious internal names. Full DNS-time resolution
-            // checks would require a custom resolver; this catches the
-            // common case where a config typo (or a malicious admin
-            // mutation) lets a `did:web` document URL point at
-            // localhost.
-            if let Some(reason) = blocked_domain_reason(name, allow_loopback) {
-                return Err(DidResolveError::ForbiddenResolverUrl(format!(
-                    "host {name} is blocked: {reason}"
-                )));
-            }
-            Ok(())
-        }
-        url::Host::Ipv4(addr) => {
-            if blocked_ip_reason(addr.into(), allow_loopback).is_some() {
-                return Err(DidResolveError::ForbiddenResolverUrl(format!(
-                    "IPv4 {addr} is in a blocked range"
-                )));
-            }
-            Ok(())
-        }
-        url::Host::Ipv6(addr) => {
-            if blocked_ip_reason(addr.into(), allow_loopback).is_some() {
-                return Err(DidResolveError::ForbiddenResolverUrl(format!(
-                    "IPv6 {addr} is in a blocked range"
-                )));
-            }
-            Ok(())
-        }
-    }
+    resolver_egress_guard(allow_loopback)
+        .validate_url(url, "DID resolver")
+        .map_err(|error| DidResolveError::ForbiddenResolverUrl(error.to_string()))
 }
 
-async fn enforce_resolver_dns_policy(
-    url: &Url,
-) -> Result<Option<(String, Vec<SocketAddr>)>, DidResolveError> {
-    let Some(url::Host::Domain(host)) = url.host() else {
-        return Ok(None);
-    };
-    let port = url
-        .port_or_known_default()
-        .ok_or_else(|| DidResolveError::ForbiddenResolverUrl("missing port".to_owned()))?;
-    let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host, port))
+async fn resolver_request_client(url: &Url) -> Result<reqwest::Client, DidResolveError> {
+    enforce_resolver_url_policy(url)?;
+    let locked = resolver_egress_guard(resolver_loopback_enabled())
+        .lock_url_async(url, "DID resolver")
         .await
-        .map_err(|err| {
-            DidResolveError::ForbiddenResolverUrl(format!("DNS lookup for {host} failed: {err}"))
-        })?
-        .collect();
-    enforce_resolved_resolver_ip_policy(host, &addrs)?;
-    Ok(Some((host.to_owned(), addrs)))
-}
-
-fn enforce_resolved_resolver_ip_policy(
-    host: &str,
-    addrs: &[SocketAddr],
-) -> Result<(), DidResolveError> {
-    if addrs.is_empty() {
-        return Err(DidResolveError::ForbiddenResolverUrl(format!(
-            "DNS lookup for {host} returned no addresses"
-        )));
-    }
-
-    let allow_loopback =
-        coauth_config::runtime_var_os("COAUTH_DID_RESOLVER_ALLOW_LOOPBACK").is_some();
-    for addr in addrs {
-        if let Some(reason) = blocked_ip_reason(addr.ip(), allow_loopback) {
-            return Err(DidResolveError::ForbiddenResolverUrl(format!(
-                "host {host} resolved to blocked address {} ({reason})",
-                addr.ip()
-            )));
-        }
-    }
-
-    Ok(())
+        .map_err(|error| DidResolveError::ForbiddenResolverUrl(error.to_string()))?;
+    Ok(crate::outbound_http::reqwest_client_for_locked_egress(
+        &locked,
+    ))
 }
 
 fn delegated_resolver_url(resolver: &str) -> Result<Url, DidResolveError> {
@@ -963,7 +941,8 @@ mod tests {
     }
 
     #[test]
-    fn resolved_resolver_ip_policy_rejects_private_and_rebinding_targets() {
+    fn shared_resolver_guard_rejects_private_and_rebinding_targets() {
+        let url = Url::parse("https://resolver.example/resolve").unwrap();
         for addrs in [
             vec![addr("10.0.0.1:443")],
             vec![addr("169.254.169.254:443")],
@@ -971,20 +950,41 @@ mod tests {
             vec![addr("[fc00::1]:443")],
             vec![addr("8.8.8.8:443"), addr("192.168.1.10:443")],
         ] {
-            assert!(matches!(
-                enforce_resolved_resolver_ip_policy("resolver.example", &addrs),
-                Err(DidResolveError::ForbiddenResolverUrl(_))
-            ));
+            assert!(
+                resolver_egress_guard(false)
+                    .lock_url_with(&url, "DID resolver test", |_host, _port| Ok(addrs))
+                    .is_err()
+            );
         }
     }
 
     #[test]
-    fn resolved_resolver_ip_policy_accepts_public_addresses() {
-        enforce_resolved_resolver_ip_policy(
-            "resolver.example",
-            &[addr("8.8.8.8:443"), addr("[2001:4860:4860::8888]:443")],
-        )
-        .expect("public resolver addresses should be accepted");
+    fn shared_resolver_guard_accepts_public_addresses() {
+        let url = Url::parse("https://resolver.example/resolve").unwrap();
+        resolver_egress_guard(false)
+            .lock_url_with(&url, "DID resolver test", |_host, _port| {
+                Ok(vec![
+                    addr("8.8.8.8:443"),
+                    addr("[2001:4860:4860::8888]:443"),
+                ])
+            })
+            .expect("public resolver addresses should be accepted");
+    }
+
+    #[test]
+    fn loopback_harness_mode_keeps_https_mandatory() {
+        let loopback = Url::parse("https://localhost/resolve").unwrap();
+        assert!(enforce_resolver_url_policy_with(&loopback, false).is_err());
+        enforce_resolver_url_policy_with(&loopback, true)
+            .expect("the explicit harness mode admits HTTPS loopback");
+        assert!(
+            enforce_resolver_url_policy_with(
+                &Url::parse("http://localhost/resolve").unwrap(),
+                true,
+            )
+            .is_err(),
+            "the harness exception must not widen the scheme"
+        );
     }
 
     #[test]
@@ -1006,11 +1006,12 @@ mod tests {
             }
         });
 
-        let (document, evidence) =
+        let (document, evidence, closed_evidence) =
             parse_resolution_response(did, &url, DidResolutionSource::DelegatedResolver, body)
                 .expect("SDK response should parse");
 
         assert_eq!(document.id, did);
+        assert!(closed_evidence.is_none());
         assert_eq!(
             evidence["resolver_state"],
             serde_json::json!("webvh_cache_only_degraded")
@@ -1026,7 +1027,7 @@ mod tests {
         let did = "did:webvh:ztest:resolver.example:users:alice";
         let url = delegated_resolver_url("https://resolver.example/_arkret/root/identity/resolve")
             .expect("resolver URL should parse");
-        let request = delegated_resolver_request(&reqwest::Client::new(), &url, did)
+        let request = delegated_resolver_request(&reqwest::Client::new(), &url, did, Vec::new())
             .expect("request should build")
             .build()
             .expect("request should be valid");

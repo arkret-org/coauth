@@ -6,8 +6,8 @@ use coauth_data::account_handoff::{
     AccountHandoffCreation, AccountHandoffCreationAttempt, AccountHandoffCreationAttemptCommit,
     AccountHandoffCreationAttemptReserve, AccountHandoffCreationAttemptState, AccountHandoffGrant,
     AccountHandoffGrantInput, ControllerGateAttestationCommit, ControllerGateAttestationIssuance,
-    ControllerGateAttestationReserve, DidBindingChallengeInput, DidBindingChallengeIssue,
-    DidBindingChallengeRecord, IdentityAbandonmentChallengeInput,
+    ControllerGateAttestationReserve, DidBindingChallengeConsume, DidBindingChallengeInput,
+    DidBindingChallengeIssue, DidBindingChallengeRecord, IdentityAbandonmentChallengeInput,
     IdentityAbandonmentChallengeIssue, IdentityAbandonmentChallengeRecord,
     IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
     IdentityBindingChallengeIssue, IdentityBindingChallengeRecord, IdentityCreationBindingCommit,
@@ -61,6 +61,33 @@ fn reserved_identity_matches_abandonment_checkpoint(
             .get("versionId")
             .and_then(serde_json::Value::as_str)
             == Some(did_version_id)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ExistingDidBindingChallengeDisposition {
+    Replay,
+    DuplicateConflict,
+    StaleRequest,
+}
+
+fn classify_existing_did_binding_challenge(
+    existing_request_digest: &arkret_identifiers::Hash,
+    existing_issuing_handoff_grant_id: Ulid,
+    existing_consumed_at: Option<DateTime<Utc>>,
+    existing_expires_at: DateTime<Utc>,
+    requested_digest: &arkret_identifiers::Hash,
+    requested_issuing_handoff_grant_id: Ulid,
+    requested_at: DateTime<Utc>,
+) -> ExistingDidBindingChallengeDisposition {
+    if existing_request_digest != requested_digest
+        || existing_issuing_handoff_grant_id != requested_issuing_handoff_grant_id
+    {
+        return ExistingDidBindingChallengeDisposition::DuplicateConflict;
+    }
+    if existing_consumed_at.is_some() || existing_expires_at <= requested_at {
+        return ExistingDidBindingChallengeDisposition::StaleRequest;
+    }
+    ExistingDidBindingChallengeDisposition::Replay
 }
 
 /// PostgreSQL-backed account-handoff state machine.
@@ -2039,15 +2066,27 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .did_binding_challenge_by_request(input.request_id.uuid())
             .await?
         {
-            if existing.input.request_digest != input.request_digest
-                || existing.input.issuing_handoff_grant_id != input.issuing_handoff_grant_id
-            {
-                return Ok(DidBindingChallengeIssue::DuplicateConflict);
-            }
-            if existing.consumed_at.is_some() || existing.input.expires_at <= input.issued_at {
-                return Ok(DidBindingChallengeIssue::StaleRequest);
-            }
-            return Ok(DidBindingChallengeIssue::Replay(existing));
+            return Ok(
+                match classify_existing_did_binding_challenge(
+                    &existing.input.request_digest,
+                    existing.input.issuing_handoff_grant_id,
+                    existing.consumed_at,
+                    existing.input.expires_at,
+                    &input.request_digest,
+                    input.issuing_handoff_grant_id,
+                    input.issued_at,
+                ) {
+                    ExistingDidBindingChallengeDisposition::Replay => {
+                        DidBindingChallengeIssue::Replay(existing)
+                    }
+                    ExistingDidBindingChallengeDisposition::DuplicateConflict => {
+                        DidBindingChallengeIssue::DuplicateConflict
+                    }
+                    ExistingDidBindingChallengeDisposition::StaleRequest => {
+                        DidBindingChallengeIssue::StaleRequest
+                    }
+                },
+            );
         }
         diesel::sql_query(
             "INSERT INTO did_binding_challenges \
@@ -2089,6 +2128,40 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(DidBindingChallengeIssue::DuplicateConflict);
         }
         Ok(DidBindingChallengeIssue::Issued(stored))
+    }
+
+    async fn consume_did_binding_challenge(
+        &mut self,
+        service_account_id: Ulid,
+        account_subject: &arkret_identifiers::Hash,
+        challenge_id: &str,
+        request_digest: &arkret_identifiers::Hash,
+        now: DateTime<Utc>,
+    ) -> Result<DidBindingChallengeConsume, Self::Error> {
+        let Some(record) = self.did_binding_challenge_by_id(challenge_id, true).await? else {
+            return Ok(DidBindingChallengeConsume::Stale);
+        };
+        if record.consumed_at.is_some() || record.input.expires_at <= now {
+            return Ok(DidBindingChallengeConsume::Stale);
+        }
+        if record.input.service_account_id != service_account_id
+            || &record.input.account_subject != account_subject
+            || &record.input.request_digest != request_digest
+        {
+            return Ok(DidBindingChallengeConsume::Mismatch);
+        }
+        let updated = diesel::sql_query(
+            "UPDATE did_binding_challenges SET consumed_at = $2 \
+             WHERE challenge_id = $1 AND consumed_at IS NULL AND expires_at > $2",
+        )
+        .bind::<Text, _>(challenge_id)
+        .bind::<Timestamptz, _>(now)
+        .execute(self.conn)
+        .await?;
+        if updated != 1 {
+            return Ok(DidBindingChallengeConsume::Stale);
+        }
+        Ok(DidBindingChallengeConsume::Consumed(record))
     }
 
     async fn published_did_registration_replay(
@@ -2956,7 +3029,13 @@ fn registration_challenge_state_is_usable(
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{lease_quota_advisory_key, reserved_identity_matches_abandonment_checkpoint};
+    use chrono::{Duration, TimeZone as _, Utc};
+    use coauth_data::Ulid;
+
+    use super::{
+        ExistingDidBindingChallengeDisposition, classify_existing_did_binding_challenge,
+        lease_quota_advisory_key, reserved_identity_matches_abandonment_checkpoint,
+    };
 
     #[test]
     fn lease_quota_advisory_key_is_postgres_text_safe() {
@@ -3012,5 +3091,52 @@ mod tests {
             &principal_id,
             "version-2",
         ));
+    }
+
+    #[test]
+    fn did_binding_challenge_reissue_replays_only_the_exact_live_request() {
+        let now = Utc.timestamp_opt(1_800_000_000, 0).single().expect("time");
+        let digest =
+            arkret_identifiers::Hash::new(format!("sha256:{}", "1".repeat(64))).expect("digest");
+        let other_digest =
+            arkret_identifiers::Hash::new(format!("sha256:{}", "2".repeat(64))).expect("digest");
+        let grant_id = Ulid::new();
+
+        assert_eq!(
+            classify_existing_did_binding_challenge(
+                &digest,
+                grant_id,
+                None,
+                now + Duration::minutes(5),
+                &digest,
+                grant_id,
+                now,
+            ),
+            ExistingDidBindingChallengeDisposition::Replay,
+        );
+        assert_eq!(
+            classify_existing_did_binding_challenge(
+                &digest,
+                grant_id,
+                None,
+                now + Duration::minutes(5),
+                &other_digest,
+                grant_id,
+                now,
+            ),
+            ExistingDidBindingChallengeDisposition::DuplicateConflict,
+        );
+        assert_eq!(
+            classify_existing_did_binding_challenge(
+                &digest,
+                grant_id,
+                Some(now),
+                now + Duration::minutes(5),
+                &digest,
+                grant_id,
+                now,
+            ),
+            ExistingDidBindingChallengeDisposition::StaleRequest,
+        );
     }
 }

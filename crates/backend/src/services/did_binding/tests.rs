@@ -87,6 +87,7 @@ fn healthy_resolution(did: &str) -> DidResolution {
             "history_evidence_kind": "webvh_key_log",
             "controller_proof_verified": true,
         }),
+        closed_method_evidence: None,
         identity_fact_rejection: None,
     }
 }

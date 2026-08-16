@@ -93,6 +93,7 @@ pub async fn update_account(
         patch,
         body.principal_erase.unwrap_or(true),
         Some(audit_signing),
+        None,
     )
     .await
     .map_err(map_service_error)?;
@@ -140,6 +141,18 @@ pub(super) fn map_service_error(
             from.as_str(),
             to.as_str(),
         )),
+        crate::services::user_admin::UserAdminServiceError::MissingAccountStatusPublication => {
+            AppError::new(
+                salvo::http::StatusCode::SERVICE_UNAVAILABLE,
+                "account status authority publication is unavailable",
+            )
+        }
+        crate::services::user_admin::UserAdminServiceError::InvalidAccountStatusPublication(
+            error,
+        ) => AppError::new(
+            salvo::http::StatusCode::FAILED_DEPENDENCY,
+            format!("account status authority publication rejected: {error}"),
+        ),
         crate::services::user_admin::UserAdminServiceError::InvalidEmail { email, .. } => {
             AppError::bad_request(format!("Email {email:?} is not valid"))
         }

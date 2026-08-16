@@ -32,6 +32,8 @@ pub struct VerifiedPrincipalDidBindingInput {
     pub binding_frontier_digest: arkret_identifiers::Hash,
     /// Public account authority coordinate accepted at registration.
     pub principal_authority: arkret_wire::PrincipalAuthorityKey,
+    /// Exact PCR accepted by the registration genesis operation.
+    pub principal_control_realm_id: arkret_identifiers::RealmId,
 }
 
 /// Persistence boundary for principal DIDs verified by an authoritative host.

@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 /// instead of trusting another caller-supplied hint.
 #[derive(Default, Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
-#[serde(rename = "AuthPasskeyAccountHint")]
+#[serde(rename = "AuthPasskeyAccountHint", deny_unknown_fields)]
 pub struct PasskeyAccountHint {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_id: Option<String>,
@@ -32,7 +32,7 @@ pub struct PasskeyAccountHint {
 /// human-readable name shown by the authenticator.
 #[derive(Default, Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
-#[serde(rename = "AuthPasskeyRegisterStartRequest")]
+#[serde(rename = "AuthPasskeyRegisterStartRequest", deny_unknown_fields)]
 pub struct PasskeyRegisterStartRequestBody {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
@@ -42,7 +42,7 @@ pub struct PasskeyRegisterStartRequestBody {
 /// attestation produced by `navigator.credentials.create`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
-#[serde(rename = "AuthPasskeyRegisterFinishRequest")]
+#[serde(rename = "AuthPasskeyRegisterFinishRequest", deny_unknown_fields)]
 pub struct PasskeyRegisterFinishRequestBody {
     pub ceremony_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -54,7 +54,7 @@ pub struct PasskeyRegisterFinishRequestBody {
 /// assertion produced by `navigator.credentials.get`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
-#[serde(rename = "AuthPasskeyAuthFinishRequest")]
+#[serde(rename = "AuthPasskeyAuthFinishRequest", deny_unknown_fields)]
 pub struct PasskeyAuthFinishRequestBody {
     pub ceremony_id: String,
     pub assertion: serde_json::Value,
@@ -128,9 +128,37 @@ pub struct PasskeyListOutcome {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+#[serde(deny_unknown_fields)]
 pub struct PasskeyRenameRequestBody {
     #[serde(default)]
     pub label: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn passkey_request_rejects_misspelled_ceremony_identifier() {
+        let error = serde_json::from_value::<PasskeyAuthFinishRequestBody>(serde_json::json!({
+            "ceremony_id": "ceremony-1",
+            "assertion": {},
+            "cerimony_id": "attacker-controlled-shadow"
+        }))
+        .expect_err("closed security request must reject unknown fields");
+        assert!(error.to_string().contains("cerimony_id"));
+    }
+
+    #[test]
+    fn account_hint_rejects_shadow_identity_fields() {
+        assert!(
+            serde_json::from_value::<PasskeyAccountHint>(serde_json::json!({
+                "account_id": "account-1",
+                "user_id": "shadow-account"
+            }))
+            .is_err()
+        );
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
