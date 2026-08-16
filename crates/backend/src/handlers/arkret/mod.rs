@@ -116,6 +116,13 @@ pub enum ArkretRouteError {
         message: String,
     },
 
+    /// A protocol rate limit with the mandatory structured retry hint.
+    #[error("{message}")]
+    RateLimited {
+        message: String,
+        retry_after_ms: u64,
+    },
+
     /// Agent runtime must correlate this opaque request with an out-of-band
     /// controller approval flow. It renders as a closed `claim_required`
     /// details object and never as a browser challenge.
@@ -146,6 +153,14 @@ impl ArkretRouteError {
             status,
             code,
             message: message.into(),
+        }
+    }
+
+    /// Build a `429 rate_limited` response with both canonical retry signals.
+    pub fn rate_limited(message: impl Into<String>, retry_after_ms: u64) -> Self {
+        Self::RateLimited {
+            message: message.into(),
+            retry_after_ms,
         }
     }
 
@@ -473,6 +488,10 @@ fn principal_server_static_session_grant_bearer_audiences(
 
 impl Scribe for ArkretRouteError {
     fn render(self, res: &mut Response) {
+        let retry_after_ms = match &self {
+            Self::RateLimited { retry_after_ms, .. } => Some(*retry_after_ms),
+            _ => None,
+        };
         let (status, envelope) = match self {
             Self::Internal(error) => {
                 tracing::error!(error = %error, "Arkret route failed internally");
@@ -497,6 +516,14 @@ impl Scribe for ArkretRouteError {
                 code,
                 message,
             } => (status, ErrorEnvelope::new(code, message)),
+            Self::RateLimited {
+                message,
+                retry_after_ms,
+            } => (
+                StatusCode::TOO_MANY_REQUESTS,
+                ErrorEnvelope::new(arkret_wire::ErrorCode::RATE_LIMITED, message)
+                    .with_retry_after_ms(Some(retry_after_ms)),
+            ),
             Self::HumanApprovalRequired(details) => (
                 StatusCode::FORBIDDEN,
                 ErrorEnvelope::claim_required_human_approval(
@@ -549,6 +576,13 @@ impl Scribe for ArkretRouteError {
                 http::header::WWW_AUTHENTICATE,
                 http::HeaderValue::from_static("Bearer realm=\"arkret\", error=\"invalid_token\""),
             );
+        }
+
+        if let Some(retry_after_ms) = retry_after_ms {
+            let retry_after_seconds = retry_after_ms.div_ceil(1_000).max(1);
+            if let Ok(value) = http::HeaderValue::try_from(retry_after_seconds.to_string()) {
+                res.headers_mut().insert(http::header::RETRY_AFTER, value);
+            }
         }
 
         res.status_code(status);

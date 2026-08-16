@@ -32,6 +32,34 @@ async fn human_approval_error_fixture() -> Result<(), ArkretRouteError> {
     ))
 }
 
+#[salvo::handler]
+async fn rate_limited_error_fixture() -> Result<(), ArkretRouteError> {
+    Err(ArkretRouteError::rate_limited("slow down", 59_728))
+}
+
+#[tokio::test]
+async fn rate_limited_endpoint_renders_canonical_retry_hints() {
+    let service = salvo::Service::new(
+        Router::with_path("rate-limited-error").get(rate_limited_error_fixture),
+    );
+    let mut response = TestClient::get("http://127.0.0.1:8698/rate-limited-error")
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code, Some(StatusCode::TOO_MANY_REQUESTS));
+    assert_eq!(
+        response
+            .headers()
+            .get(http::header::RETRY_AFTER)
+            .and_then(|value| value.to_str().ok()),
+        Some("60")
+    );
+    let body: serde_json::Value =
+        serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
+    assert_eq!(body["error"]["code"], "rate_limited");
+    assert_eq!(body["error"]["retry_after_ms"], 59_728);
+}
+
 #[tokio::test]
 async fn human_approval_endpoint_renders_closed_claim_required_details() {
     let service = salvo::Service::new(

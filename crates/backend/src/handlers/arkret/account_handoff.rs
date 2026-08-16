@@ -717,12 +717,11 @@ pub async fn issue_identity_binding_challenge(
         }
         IdentityBindingChallengeIssue::RateLimited { retry_after_ms } => {
             repo.cancel().await.ok();
-            Err(ArkretRouteError::coded(
-                StatusCode::TOO_MANY_REQUESTS,
-                arkret_wire::ErrorCode::RATE_LIMITED,
+            Err(ArkretRouteError::rate_limited(
                 format!(
                     "identity-creation lease renewal is rate limited; retry after {retry_after_ms} ms"
                 ),
+                retry_after_ms,
             ))
         }
     }
@@ -1140,10 +1139,9 @@ fn creation_binding(
             },
         ),
         AccountHandoffCreation::RateLimited { retry_after_ms, .. } => {
-            return Err(ArkretRouteError::coded(
-                StatusCode::TOO_MANY_REQUESTS,
-                arkret_wire::ErrorCode::RATE_LIMITED,
+            return Err(ArkretRouteError::rate_limited(
                 format!("identity-creation lease is rate limited; retry after {retry_after_ms} ms"),
+                retry_after_ms,
             ));
         }
         AccountHandoffCreation::RiskRejected { .. } => {
