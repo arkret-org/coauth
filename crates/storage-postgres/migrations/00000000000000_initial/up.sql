@@ -245,7 +245,7 @@ CREATE TABLE public.organization_principal_controls (
     id uuid NOT NULL,
     organization_did text NOT NULL,
     principal_control_realm_id text NOT NULL,
-    control_stream_ref text,
+    control_stream_ref text NOT NULL,
     pcr_frontier_digest text,
     bootstrap_authorization text NOT NULL,
     bootstrap_delegation_ref text,
@@ -1650,7 +1650,7 @@ CREATE INDEX invite_quarantine_queue_status_created_idx ON public.invite_quarant
 CREATE UNIQUE INDEX queue_jobs_account_status_pending_target_event_idx
     ON public.queue_jobs USING btree (
         (payload ->> 'destination_name'::text),
-        (payload #>> '{body,publication,record,record_id}')
+        (payload ->> 'record_id'::text)
     )
     WHERE queue_name = 'account-status-publication'::text
       AND status = ANY (ARRAY['available'::text, 'running'::text, 'scheduled'::text]);

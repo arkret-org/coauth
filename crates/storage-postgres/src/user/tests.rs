@@ -4,7 +4,7 @@ use coauth_data::clock::MockClock;
 use coauth_data::upstream_oauth::{UpstreamOAuthProviderParams, UpstreamOAuthSessionFilter};
 use coauth_data::user::{
     BrowserSessionFilter, BrowserSessionRepository, PrincipalDidRepository, UserEmailFilter,
-    UserEmailRepository, UserFilter, UserPasswordRepository, UserRepository,
+    UserEmailRepository, UserFilter, UserPasswordRepository, UserRepository, UserStatus,
     VerifiedPrincipalDidBindingInput,
 };
 use coauth_data::{
@@ -676,7 +676,11 @@ async fn test_user_patch_updates_profile_and_state() {
     );
     assert_eq!(updated.preferred_locale, Some(arkret_locale::UiLocale::Zh));
     assert!(updated.can_request_admin);
-    assert!(updated.locked_at.is_some());
+    // Account lifecycle is a single status ladder, not independent flags: a
+    // patch asking for both `locked` and `deactivated` settles on the stricter
+    // status, and only that status stamps its timestamp.
+    assert_eq!(updated.status, UserStatus::Deactivated);
+    assert!(updated.locked_at.is_none());
     assert!(updated.deactivated_at.is_some());
 
     let reloaded = repo.user().lookup(updated.id).await.unwrap().unwrap();
@@ -688,7 +692,8 @@ async fn test_user_patch_updates_profile_and_state() {
     // Round-trips through the `TEXT` column as the canonical `zh`.
     assert_eq!(reloaded.preferred_locale, Some(arkret_locale::UiLocale::Zh));
     assert!(reloaded.can_request_admin);
-    assert!(reloaded.locked_at.is_some());
+    assert_eq!(reloaded.status, UserStatus::Deactivated);
+    assert!(reloaded.locked_at.is_none());
     assert!(reloaded.deactivated_at.is_some());
 }
 
@@ -1433,7 +1438,7 @@ async fn principal_did_has_one_global_owner_under_concurrent_binding() {
     let Some(pool) = crate::test_utils::setup_test_pool().await else {
         return;
     };
-    let factory = PgRepositoryFactory::new(pool);
+    let factory = PgRepositoryFactory::new(pool.clone());
     let label = uuid::Uuid::now_v7().simple().to_string();
     let clock = MockClock::default();
     let mut rng = ChaChaRng::seed_from_u64(71);
@@ -1536,7 +1541,7 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
     let Some(pool) = crate::test_utils::setup_test_pool().await else {
         return;
     };
-    let factory = PgRepositoryFactory::new(pool);
+    let factory = PgRepositoryFactory::new(pool.clone());
     let label = uuid::Uuid::now_v7().simple().to_string();
     let clock = MockClock::default();
     let audience = "ak:did_core:web:ps.example";
@@ -1600,7 +1605,7 @@ async fn principal_binding_refreshes_verified_snapshot_only_within_the_same_core
     let Some(pool) = crate::test_utils::setup_test_pool().await else {
         return;
     };
-    let factory = PgRepositoryFactory::new(pool);
+    let factory = PgRepositoryFactory::new(pool.clone());
     let label = uuid::Uuid::now_v7().simple().to_string();
     let principal_id = format!("ak:did_core:webvh:z{label}");
     let audience = "ak:did_core:web:principal-server.example";

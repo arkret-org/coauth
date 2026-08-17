@@ -24,8 +24,7 @@ pub struct OrganizationPrincipalControl {
     pub id: String,
     pub organization_did: String,
     pub principal_control_realm_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub control_stream_ref: Option<String>,
+    pub control_stream_ref: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pcr_frontier_digest: Option<String>,
     pub bootstrap_authorization: OrganizationBootstrapAuthorization,
@@ -200,16 +199,23 @@ pub struct RenewOrganizationDelegationRequest {
 }
 
 /// Request body for `POST /_coauth/admin/organizations/{org}/rotate-controller`.
+///
+/// The body states the **complete** control state that must hold after the
+/// rotation, not a partial changeset. A missing field is therefore never an
+/// instruction to keep the stored value: `control_stream_ref` is required, and
+/// an absent (or explicitly null) `pcr_frontier_digest` is the post-rotation
+/// "no frontier yet" state. That is what makes an empty body a decode error
+/// instead of a silent erasure of a live control stream.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
 pub struct RotateOrganizationControllerRequest {
-    /// New control-stream / control-state reference after the rotation.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub control_stream_ref: Option<String>,
-    /// New control-frontier digest after the rotation.
+    /// Control-stream / control-state reference after the rotation.
+    pub control_stream_ref: String,
+    /// Control-frontier digest after the rotation. Absent and `null` both mean
+    /// the rotated-to state carries no frontier digest.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pcr_frontier_digest: Option<String>,
 }

@@ -70,9 +70,7 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
             .validate_shape()
             .map_err(DatabaseError::to_invalid_operation)?;
         let existing = account_status_records::table
-            .filter(
-                account_status_records::record_id.eq(record.account_status_record_id.as_str()),
-            )
+            .filter(account_status_records::record_id.eq(record.account_status_record_id.as_str()))
             .select(account_status_records::record)
             .first::<serde_json::Value>(self.conn)
             .await
@@ -114,16 +112,12 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
             .await?;
         if current
             .as_ref()
-            .is_some_and(|head| {
-                head.account_status_record_id == record.account_status_record_id
-            })
+            .is_some_and(|head| head.account_status_record_id == record.account_status_record_id)
         {
             return Ok(AccountStatusAppendOutcome::Duplicate);
         }
         let is_next = match &current {
-            None => {
-                record.status_seq == 1 && record.previous_account_status_record_id.is_none()
-            }
+            None => record.status_seq == 1 && record.previous_account_status_record_id.is_none(),
             Some(head) => {
                 record.status_seq == head.status_seq + 1
                     && record.previous_account_status_record_id.as_ref()
@@ -399,5 +393,137 @@ mod tests {
             .execute(&mut conn)
             .await
             .unwrap();
+    }
+
+    /// `account-lifecycle.md` §"每个 destination 最多一条未完成状态更新": a
+    /// destination may hold at most one unfinished publication per record. The
+    /// partial unique index is the only thing enforcing it, and it enforces
+    /// nothing unless its expressions actually resolve — a key that does not
+    /// exist yields NULL, and NULLs are never unique-constrained.
+    #[tokio::test]
+    async fn one_destination_holds_at_most_one_pending_job_per_record() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let factory = PgRepositoryFactory::new(pool.clone());
+        let clock = coauth_data::clock::MockClock::default();
+        let mut rng = ChaChaRng::seed_from_u64(0x626);
+        let account_id = ulid::Ulid::new();
+        let record = genesis_record(account_id, clock.now());
+        let body = AccountStatusPublicationRequestBody {
+            publication: AccountStatusPublication::Initial(AccountStatusInitialPublication {
+                record: record.clone(),
+            }),
+        };
+        let body_digest = Hash::new(arkret_canonical::canonical_sha256(&body).unwrap()).unwrap();
+        let destination = format!("principal-server-{account_id}");
+        let mirror = format!("mirror-{account_id}");
+        let record_id = record.account_status_record_id.to_string();
+
+        let mut repo = factory.create().await.unwrap();
+        repo.queue_job()
+            .schedule_job(
+                &mut rng,
+                &clock,
+                AccountStatusPublicationJob::new(
+                    destination.clone(),
+                    format!("{record_id}:first"),
+                    body_digest.clone(),
+                    body.clone(),
+                ),
+            )
+            .await
+            .unwrap();
+        repo.save().await.unwrap();
+
+        // The indexed expressions must resolve to real values; NULL keys would
+        // make the unique index vacuous no matter how many jobs are inserted.
+        let mut conn = pool.get().await.unwrap();
+        let payloads = queue_jobs::table
+            .filter(queue_jobs::queue_name.eq("account-status-publication"))
+            .select(queue_jobs::payload)
+            .load::<serde_json::Value>(&mut conn)
+            .await
+            .unwrap();
+        let mut indexed: Vec<String> = Vec::new();
+        for payload in &payloads {
+            if payload["destination_name"] == serde_json::Value::String(destination.clone()) {
+                indexed.push(payload["record_id"].as_str().unwrap_or_default().to_owned());
+            }
+        }
+        assert_eq!(
+            indexed,
+            vec![record_id.clone()],
+            "the queue payload must expose the record id the unique index reads"
+        );
+
+        // A second unfinished job for the same (destination, record) is refused
+        // by the database, not merely by an in-process check.
+        let mut duplicate = factory.create().await.unwrap();
+        let outcome = duplicate
+            .queue_job()
+            .schedule_job(
+                &mut rng,
+                &clock,
+                AccountStatusPublicationJob::new(
+                    destination.clone(),
+                    format!("{record_id}:second"),
+                    body_digest.clone(),
+                    body.clone(),
+                ),
+            )
+            .await;
+        assert!(
+            outcome.is_err(),
+            "a second pending publication for one destination + record must be rejected"
+        );
+        duplicate.cancel().await.unwrap();
+
+        // A different destination for the same record stays legal.
+        let mut other = factory.create().await.unwrap();
+        other
+            .queue_job()
+            .schedule_job(
+                &mut rng,
+                &clock,
+                AccountStatusPublicationJob::new(
+                    mirror.clone(),
+                    format!("{record_id}:mirror"),
+                    body_digest.clone(),
+                    body.clone(),
+                ),
+            )
+            .await
+            .unwrap();
+        other.save().await.unwrap();
+
+        let mut conn = pool.get().await.unwrap();
+        let survivors = queue_jobs::table
+            .filter(queue_jobs::queue_name.eq("account-status-publication"))
+            .select(queue_jobs::payload)
+            .load::<serde_json::Value>(&mut conn)
+            .await
+            .unwrap();
+        let mut destinations: Vec<String> = Vec::new();
+        for payload in &survivors {
+            let name = payload["destination_name"].as_str().unwrap_or_default();
+            if name == destination || name == mirror {
+                destinations.push(name.to_owned());
+            }
+        }
+        destinations.sort();
+        let mut expected = vec![destination.clone(), mirror.clone()];
+        expected.sort();
+        assert_eq!(
+            destinations, expected,
+            "each destination keeps exactly one pending publication for the record"
+        );
+
+        diesel::delete(
+            queue_jobs::table.filter(queue_jobs::queue_name.eq("account-status-publication")),
+        )
+        .execute(&mut conn)
+        .await
+        .unwrap();
     }
 }

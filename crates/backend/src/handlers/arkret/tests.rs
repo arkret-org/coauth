@@ -326,9 +326,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     assert!(body.get("x_coauth_supported_reducer_profiles").is_none());
     // This service advertises only schemas for concrete machine-readable
     // surfaces; there is no monolithic "core schema" profile.
-    let supported_schema_profiles = body["x_coauth_supported_schema_profiles"]
-        .as_array()
-        .unwrap();
+    let supported_schema_profiles = body["supported_schema_profiles"].as_array().unwrap();
     assert!(
         supported_schema_profiles.contains(&serde_json::json!("ak.schema.service_describe.v1"))
     );
@@ -357,15 +355,16 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     assert!(service_roles.contains(&serde_json::json!("identity_resolver")));
     assert!(service_roles.contains(&serde_json::json!("account_registry")));
 
-    // T6.3 — ak.identity.* operations MUST be declared as
-    // schema-valid external interop while preserving their delegated-
-    // resolver boundary in notes, not as canonical identity registry
-    // surface.
+    // T6.3 — the ak.root.identity.* surfaces are DID document / key-log
+    // faces served on behalf of a canonical authority coauth does not claim
+    // to be, so service-describe.schema.json requires kind
+    // `delegated_resolver`. `external_interop` is reserved for non-Arkret
+    // interop surfaces and MUST NOT be used for Arkret operation ids.
     let compat: Vec<(&str, &str)> = body["compat_surfaces"]
         .as_array()
         .expect("compat_surfaces array present")
         .iter()
-        .filter(|entry| entry["kind"].as_str() == Some("external_interop"))
+        .filter(|entry| entry["kind"].as_str() == Some("delegated_resolver"))
         .filter_map(|entry| Some((entry["name"].as_str()?, entry["notes"].as_str()?)))
         .collect();
     assert!(compat.iter().any(|(name, notes)| {

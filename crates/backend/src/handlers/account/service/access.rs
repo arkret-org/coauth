@@ -301,7 +301,7 @@ mod lockout_wiring_tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let state = TestState::from_pool(pool).await.unwrap();
+        let state = TestState::from_pool(pool.clone()).await.unwrap();
 
         let localpart = format!("lockout-{}", Ulid::new().to_string().to_lowercase());
         let mut repo = state.repository().await.unwrap();

@@ -3,6 +3,7 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_data::accountability::AccountabilityGrantFanoutState;
 use coauth_data::agent_key::{
     AgentEventCollisionVariant, AgentKeyAuthorization, AgentKeyAuthorizationRepository,
     NewAgentKeyAuthorization, NewAgentSessionProofReplay,
@@ -104,7 +105,10 @@ mod tests {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(0xa91e);
         let replay = proof_replay(&unique_label("agent-proof-replay"), &clock);
@@ -131,7 +135,10 @@ mod tests {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(0xa92e);
         let label = unique_label("agent-same-key-replacement");
@@ -209,7 +216,10 @@ mod tests {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(0xa93e);
         let label = unique_label("agent-event-collision");
@@ -535,7 +545,8 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
         .set((
             agent_key_authorizations::quarantined_at.eq(Some(now)),
             agent_key_authorizations::quarantine_reason.eq(Some("event_hash_collision")),
-            agent_key_authorizations::soland_fanout_state.eq("dead_letter"),
+            agent_key_authorizations::soland_fanout_state
+                .eq(AccountabilityGrantFanoutState::DeadLettered.as_str()),
             agent_key_authorizations::soland_fanout_next_retry_at.eq(Option::<DateTime<Utc>>::None),
             agent_key_authorizations::soland_fanout_dead_letter_reason
                 .eq(Some("event_hash_collision".to_owned())),
@@ -608,7 +619,8 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
                 .filter(agent_key_authorizations::quarantined_at.is_null()),
         )
         .set((
-            agent_key_authorizations::soland_fanout_state.eq("delivered"),
+            agent_key_authorizations::soland_fanout_state
+                .eq(AccountabilityGrantFanoutState::Delivered.as_str()),
             agent_key_authorizations::soland_fanout_next_retry_at.eq(Option::<DateTime<Utc>>::None),
             agent_key_authorizations::soland_fanout_dead_letter_reason.eq(Option::<String>::None),
             agent_key_authorizations::updated_at.eq(now),

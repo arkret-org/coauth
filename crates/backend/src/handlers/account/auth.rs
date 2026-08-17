@@ -9,11 +9,10 @@ pub mod passkey;
 use std::sync::LazyLock;
 
 use coauth_account_types::{
-    CurrentAccountInfo, LoginOutcome, LoginReqBody, LogoutOutcome, ProviderInfo, ProvidersOutcome,
-    ViewerInfo,
+    CurrentAccountInfo, LoginOutcome, LoginReqBody, LogoutOutcome, PostAuthAction, ProviderInfo,
+    ProvidersOutcome, ViewerInfo,
 };
 use coauth_data::oauth::{LoginHint, OAuthAuthorizationGrantRepository};
-use coauth_account_types::PostAuthAction;
 use coauth_data::{AuthorizationGrant, SiteConfig, UrlBuilder};
 use coauth_jose::jwk::PublicJsonWebKey;
 pub use oidc_bridge::integration_describe;

@@ -509,7 +509,7 @@ mod tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let state = TestState::from_pool(pool).await.unwrap();
+        let state = TestState::from_pool(pool.clone()).await.unwrap();
 
         let (_session, ticket) =
             create_recovery_ticket(&state, "alice@example.com".to_owned()).await;
@@ -535,7 +535,7 @@ mod tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let state = TestState::from_pool(pool).await.unwrap();
+        let state = TestState::from_pool(pool.clone()).await.unwrap();
 
         let (session, ticket) = create_recovery_ticket(&state, "bob@example.com".to_owned()).await;
 
@@ -566,7 +566,7 @@ mod tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let state = TestState::from_pool(pool).await.unwrap();
+        let state = TestState::from_pool(pool.clone()).await.unwrap();
 
         let (session, ticket) =
             create_recovery_ticket(&state, "carol@example.com".to_owned()).await;

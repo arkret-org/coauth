@@ -3,9 +3,7 @@
 use std::collections::BTreeMap;
 
 use coauth_account_types::PostAuthAction;
-use coauth_data::{
-    AuthorizationGrant, DeviceCodeGrant, UpstreamOAuthLink, UpstreamOAuthProvider,
-};
+use coauth_data::{AuthorizationGrant, DeviceCodeGrant, UpstreamOAuthLink, UpstreamOAuthProvider};
 use rand_core::RngCore as Rng;
 use serde::{Deserialize, Serialize};
 

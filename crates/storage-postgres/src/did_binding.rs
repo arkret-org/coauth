@@ -281,7 +281,10 @@ mod tests {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
         let now = Utc::now();
         let label = unique_label("roundtrip");
 
@@ -328,7 +331,10 @@ mod tests {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
         let now = Utc::now();
         let label = unique_label("expired");
 
@@ -360,7 +366,10 @@ mod tests {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
         let now = Utc::now();
         let label = unique_label("empty-selector");
 

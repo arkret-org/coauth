@@ -34,11 +34,15 @@ const SUPPORTED_OPERATIONS: &[&str] = &[
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_INTROSPECT_SESSION_GRANT,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REVOKE_SESSION,
+    // Account Authority issuer-ledger read, served at
+    // `POST /_arkret/peer/account-status/resolve`.
+    arkret_wire::ServiceOperationId::PEER_ACCOUNT_STATUS_READ_RESOLVE,
 ];
 
 const IMPLEMENTED_PROFILE_EVENT_KINDS: &[&str] = &[];
 
 const IMPLEMENTED_PROFILE_SCHEMAS: &[&str] = &[
+    arkret_wire::SchemaId::ACCOUNT_STATUS_RECORD_V1,
     arkret_wire::SchemaId::HANDLE_CLAIM_V1,
     arkret_wire::SchemaId::SERVICE_DESCRIBE_V1,
 ];
@@ -429,7 +433,7 @@ pub(crate) fn service_describe_response(
     ]
     .into_iter()
     .map(|(name, notes)| {
-        let mut entry = CompatSurfaceEntry::external_interop(name);
+        let mut entry = CompatSurfaceEntry::delegated_resolver(name);
         entry.notes = Some(notes.to_owned());
         entry
     })
@@ -445,10 +449,6 @@ pub(crate) fn service_describe_response(
     extensions.insert(
         "x_coauth_service_roles".to_owned(),
         serde_json::json!(["auth_server", "identity_resolver", "account_registry"]),
-    );
-    extensions.insert(
-        "x_coauth_supported_schema_profiles".to_owned(),
-        serde_json::json!([]),
     );
     extensions.insert(
         "x_coauth_admin_audience".to_owned(),
@@ -498,11 +498,8 @@ pub(crate) fn service_describe_response(
             method_history_head: service_version_id.clone(),
             version_id: service_version_id,
         },
-        trust_domain: arkret_wire::TrustDomainId::new(trust_domain_for(
-            url_builder,
-            arkret_config,
-        ))
-        .expect("validated coauth trust domain"),
+        trust_domain: arkret_wire::TrustDomainId::new(trust_domain_for(url_builder, arkret_config))
+            .expect("validated coauth trust domain"),
         service_kind: arkret_wire::ServiceKind::AuthServer,
         protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
         supported_profiles: Vec::new(),

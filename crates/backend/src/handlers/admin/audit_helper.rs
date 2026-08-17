@@ -472,7 +472,7 @@ mod tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut repo = coauth_storage_postgres::PgRepositoryFactory::new(pool)
+        let mut repo = coauth_storage_postgres::PgRepositoryFactory::new(pool.clone())
             .create()
             .await
             .unwrap();

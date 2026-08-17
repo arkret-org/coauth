@@ -17,7 +17,7 @@ Each archive contains:
   - `share/templates/`: the default templates
   - `share/translations/`: the default translations
 
-The location of all these assets can be overridden in the [configuration file](./configuration.md).
+The location of all these assets can be overridden in the [configuration file](../reference/configuration.md).
 
 ---
 

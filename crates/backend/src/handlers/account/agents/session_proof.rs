@@ -1397,8 +1397,14 @@ fn applet_agent_scope_token_allowed(token: &str) -> bool {
 }
 
 fn realm_agent_scope_token_allowed(token: &str) -> bool {
+    // `ak.self.account.*` is the account surface, which only the account tier
+    // grants (see `account_agent_scope_token_allowed`). The capability-action
+    // registry carries those non-event service surfaces as capability actions,
+    // so without this denial a realm-tier key would reach the account surface
+    // through `content_capability_scope_token`.
     if token.starts_with("ak.account.")
         || token.starts_with("ak.admin.")
+        || token.starts_with("ak.self.account.")
         || token.starts_with("ak.self.agent.")
         || token.starts_with("ak.gate.")
     {

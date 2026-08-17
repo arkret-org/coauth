@@ -249,7 +249,7 @@ diesel::table! {
         id -> Uuid,
         organization_did -> Text,
         principal_control_realm_id -> Text,
-        control_stream_ref -> Nullable<Text>,
+        control_stream_ref -> Text,
         pcr_frontier_digest -> Nullable<Text>,
         bootstrap_authorization -> Text,
         bootstrap_delegation_ref -> Nullable<Text>,

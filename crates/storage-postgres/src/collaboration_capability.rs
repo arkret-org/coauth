@@ -281,7 +281,7 @@ mod tests {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
-        let factory = PgRepositoryFactory::new(pool);
+        let factory = PgRepositoryFactory::new(pool.clone());
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(52);
         let label = uuid::Uuid::now_v7().to_string();

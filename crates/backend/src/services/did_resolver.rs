@@ -332,6 +332,13 @@ pub trait DidResolverService: Send + Sync {
 
     /// Resolve a published DID while requiring the closed method-native pins
     /// needed to issue an account-registration control challenge.
+    ///
+    /// Required, not defaulted. A default body delegating to
+    /// `resolve_did_document` would hand back an ordinary resolution — with no
+    /// method-native evidence — under the name of binding evidence, and it
+    /// would be a second `resolve_did_document` call site outside
+    /// `services::did_binding::resolve_and_accept_binding`. Every implementor
+    /// states its evidence requirement itself.
     async fn resolve_did_binding_evidence(
         &self,
         http_client: &reqwest::Client,
@@ -340,17 +347,7 @@ pub trait DidResolverService: Send + Sync {
         key_store: &Keystore,
         repo: &mut BoxRepository,
         did: &str,
-    ) -> Result<DidResolution, DidResolveError> {
-        self.resolve_did_document(
-            http_client,
-            url_builder,
-            arkret_config,
-            key_store,
-            repo,
-            did,
-        )
-        .await
-    }
+    ) -> Result<DidResolution, DidResolveError>;
 }
 
 #[derive(Default)]

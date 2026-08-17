@@ -60,7 +60,7 @@ mod tests {
             return;
         };
         let state = TestState::from_pool_with_site_config(
-            pool,
+            pool.clone(),
             coauth_data::SiteConfig {
                 bootstrap_admin_token: Some("bootstrap-secret".to_owned()),
                 ..test_site_config()
@@ -91,7 +91,7 @@ mod tests {
             return;
         };
         let state = TestState::from_pool_with_site_config(
-            pool,
+            pool.clone(),
             coauth_data::SiteConfig {
                 bootstrap_admin_token: Some("bootstrap-secret".to_owned()),
                 ..test_site_config()

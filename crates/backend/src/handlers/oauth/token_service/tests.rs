@@ -114,7 +114,7 @@ async fn authorization_code_openid_exchange_does_not_require_principal_did_row()
         return;
     };
 
-    let factory = PgRepositoryFactory::new(pool);
+    let factory = PgRepositoryFactory::new(pool.clone());
     let clock = Arc::new(MockClock::default());
     let task_tracker = TaskTracker::new();
     let cancellation_token = CancellationToken::new();
@@ -285,7 +285,7 @@ impl RefreshFixture {
 async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture> {
     let pool = coauth_storage_postgres::test_utils::setup_test_pool().await?;
 
-    let factory = PgRepositoryFactory::new(pool);
+    let factory = PgRepositoryFactory::new(pool.clone());
     let clock = Arc::new(MockClock::default());
     let task_tracker = TaskTracker::new();
     let cancellation_token = CancellationToken::new();

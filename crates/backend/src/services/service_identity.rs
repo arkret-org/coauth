@@ -29,6 +29,7 @@ use rand_core::SeedableRng;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use url::Url;
+use uuid::Uuid;
 
 const RETRY_DELAY_SECONDS: i64 = 5;
 pub(crate) const SERVICE_IDENTITY_VERIFICATION_METHOD_FRAGMENT: &str = "service-key";
@@ -439,8 +440,22 @@ fn service_registration_request(
             None,
         ),
     };
-    ServiceRegistrationEnsureRequestBody::new(registration_key.clone(), operation, previous_receipt)
-        .map_err(|error| anyhow::anyhow!(error.to_string()))
+    ServiceRegistrationEnsureRequestBody::new(
+        registration_key.clone(),
+        operation,
+        ensure_attempt_correlation_id(),
+        previous_receipt,
+    )
+    .map_err(|error| anyhow::anyhow!(error.to_string()))
+}
+
+/// Bounded opaque correlation string for a single ensure attempt. It only
+/// relates audit records for that attempt: registration identity is the
+/// canonical `(service_kind, public_base)` key, and the sole idempotency
+/// authority is the operation registry's `idempotency_mechanism=object_id`,
+/// so this value MUST NOT be derived from the registration key.
+fn ensure_attempt_correlation_id() -> String {
+    format!("coauth-service-registration-ensure-{}", Uuid::now_v7())
 }
 
 #[allow(clippy::too_many_arguments)]

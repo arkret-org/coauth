@@ -398,8 +398,7 @@ mod tests {
     }
 
     fn trust_domain() -> arkret_identifiers::TrustDomainId {
-        arkret_identifiers::TrustDomainId::new("ak:trust_domain:auth.example".to_owned())
-            .unwrap()
+        arkret_identifiers::TrustDomainId::new("ak:trust_domain:auth.example".to_owned()).unwrap()
     }
 
     fn service_resolution() -> arkret_models_identity::identity_resolution::ServiceResolutionCarrier

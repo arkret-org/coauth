@@ -62,11 +62,9 @@ pub(crate) async fn acquire_human_device_binding(
     request.validate().map_err(gate_protocol_error)?;
 
     let source_service_id = service_id_for(&config);
-    let trust_domain = arkret_identifiers::TrustDomainId::new(trust_domain_for(
-        &depot.url_builder()?,
-        &config,
-    ))
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let trust_domain =
+        arkret_identifiers::TrustDomainId::new(trust_domain_for(&depot.url_builder()?, &config))
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let identity = KeyPackagesClaimServiceBinding {
         source_service_id: source_service_id.into(),
         destination_service_id: principal_authority.principal_server_id.clone().into(),

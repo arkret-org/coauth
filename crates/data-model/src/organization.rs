@@ -45,8 +45,10 @@ pub struct OrganizationPrincipalControl {
     pub id: String,
     pub organization_did: String,
     pub principal_control_realm_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub control_stream_ref: Option<String>,
+    /// Current organization control-stream head. Bootstrap seeds it with the
+    /// accepted PCR create Event and rotation replaces it wholesale, so there
+    /// is no state in which an organization has control without a ref.
+    pub control_stream_ref: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pcr_frontier_digest: Option<String>,
     pub bootstrap_authorization: OrganizationBootstrapAuthorization,

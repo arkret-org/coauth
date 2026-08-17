@@ -36,7 +36,7 @@ fn sample_registration(created_at: DateTime<Utc>) -> UserRegistration {
 async fn test_repo() -> Option<BoxRepository> {
     let pool = coauth_storage_postgres::test_utils::setup_test_pool().await?;
     Some(
-        coauth_storage_postgres::PgRepositoryFactory::new(pool)
+        coauth_storage_postgres::PgRepositoryFactory::new(pool.clone())
             .create()
             .await
             .unwrap(),

@@ -9,7 +9,7 @@ use chrono::{DateTime, Utc};
 use coauth_data::organization_control::{
     NewOrganizationDelegation, NewOrganizationPrincipalControl, OrganizationBootstrapAuthorization,
     OrganizationControlRepository, OrganizationDelegation, OrganizationDelegationStatus,
-    OrganizationPrincipalControl,
+    OrganizationPrincipalControl, RotatedOrganizationControl,
 };
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
@@ -42,7 +42,7 @@ struct ControlRow {
     id: Uuid,
     organization_did: String,
     principal_control_realm_id: String,
-    control_stream_ref: Option<String>,
+    control_stream_ref: String,
     pcr_frontier_digest: Option<String>,
     bootstrap_authorization: String,
     bootstrap_delegation_ref: Option<String>,
@@ -71,11 +71,17 @@ impl TryFrom<ControlRow> for OrganizationPrincipalControl {
                     .column("principal_control_realm_id")
                     .row(id)
             })?;
+        let control_stream_ref = arkret_identifiers::EventId::new(value.control_stream_ref)
+            .map_err(|_| {
+                DatabaseInconsistencyError::on("organization_principal_controls")
+                    .column("control_stream_ref")
+                    .row(id)
+            })?;
         Ok(Self {
             id: id.to_string(),
             organization_did: value.organization_did,
             principal_control_realm_id: principal_control_realm_id.to_string(),
-            control_stream_ref: value.control_stream_ref,
+            control_stream_ref: control_stream_ref.to_string(),
             pcr_frontier_digest: value.pcr_frontier_digest,
             bootstrap_authorization,
             bootstrap_delegation_ref: value.bootstrap_delegation_ref,
@@ -93,7 +99,7 @@ struct InsertableControl {
     id: Uuid,
     organization_did: String,
     principal_control_realm_id: String,
-    control_stream_ref: Option<String>,
+    control_stream_ref: String,
     pcr_frontier_digest: Option<String>,
     bootstrap_authorization: String,
     bootstrap_delegation_ref: Option<String>,
@@ -243,14 +249,8 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
         let id = new_id(now, rng);
         let supplied_realm_id = arkret_identifiers::RealmId::new(params.principal_control_realm_id)
             .map_err(|_| DatabaseError::invalid_operation())?;
-        let create_event_id = params
-            .control_stream_ref
-            .as_deref()
-            .ok_or_else(DatabaseError::invalid_operation)
-            .and_then(|reference| {
-                arkret_identifiers::EventId::new(reference.to_owned())
-                    .map_err(|_| DatabaseError::invalid_operation())
-            })?;
+        let create_event_id = arkret_identifiers::EventId::new(params.control_stream_ref)
+            .map_err(|_| DatabaseError::invalid_operation())?;
         let principal_control_realm_id =
             arkret_identifiers::RealmId::from_event_id(&create_event_id);
         if supplied_realm_id != principal_control_realm_id {
@@ -260,7 +260,7 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
             id: Uuid::from(id),
             organization_did: params.organization_did,
             principal_control_realm_id: principal_control_realm_id.to_string(),
-            control_stream_ref: Some(create_event_id.to_string()),
+            control_stream_ref: create_event_id.to_string(),
             pcr_frontier_digest: params.pcr_frontier_digest,
             bootstrap_authorization: params.bootstrap_authorization.as_str().to_owned(),
             bootstrap_delegation_ref: params.bootstrap_delegation_ref,
@@ -306,13 +306,12 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(name = "db.organization_control.update_control", skip_all, err)]
-    async fn update_control(
+    #[tracing::instrument(name = "db.organization_control.replace_control_state", skip_all, err)]
+    async fn replace_control_state(
         &mut self,
         clock: &dyn Clock,
         organization_did: &str,
-        control_stream_ref: Option<String>,
-        pcr_frontier_digest: Option<String>,
+        rotated: RotatedOrganizationControl,
     ) -> Result<Option<OrganizationPrincipalControl>, Self::Error> {
         let now = clock.now();
         diesel::update(
@@ -320,8 +319,10 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
                 .filter(organization_principal_controls::organization_did.eq(organization_did)),
         )
         .set((
-            organization_principal_controls::control_stream_ref.eq(control_stream_ref),
-            organization_principal_controls::pcr_frontier_digest.eq(pcr_frontier_digest),
+            organization_principal_controls::control_stream_ref
+                .eq(rotated.control_stream_ref.to_string()),
+            organization_principal_controls::pcr_frontier_digest
+                .eq(rotated.pcr_frontier_digest.map(|digest| digest.to_string())),
             organization_principal_controls::updated_at.eq(now),
         ))
         .returning(ControlRow::as_returning())
@@ -508,8 +509,8 @@ mod tests {
                 &create_event_id,
             )
             .to_string(),
-            control_stream_ref: Some(create_event_id.to_string()),
-            pcr_frontier_digest: None,
+            control_stream_ref: create_event_id.to_string(),
+            pcr_frontier_digest: Some(format!("sha256:{}", "ab".repeat(32))),
             bootstrap_authorization: OrganizationBootstrapAuthorization::DidControllerProof,
             bootstrap_delegation_ref: None,
             executed_by: Some("did:web:admin.example".to_owned()),
@@ -541,7 +542,7 @@ mod tests {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
-        let factory = PgRepositoryFactory::new(pool);
+        let factory = PgRepositoryFactory::new(pool.clone());
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(73);
         let did = format!("did:web:{}.example", uuid::Uuid::now_v7());
@@ -595,7 +596,7 @@ mod tests {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
-        let factory = PgRepositoryFactory::new(pool);
+        let factory = PgRepositoryFactory::new(pool.clone());
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(74);
         let did = format!("did:web:{}.example", uuid::Uuid::now_v7());
@@ -610,6 +611,92 @@ mod tests {
                 .is_err(),
             "organization bootstrap must fail closed without a typed event-derived realm id"
         );
+        repo.cancel().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn rotation_replaces_the_whole_control_state() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let factory = PgRepositoryFactory::new(pool.clone());
+        let clock = MockClock::default();
+        let mut rng = ChaChaRng::seed_from_u64(75);
+        let did = format!("did:web:{}.example", uuid::Uuid::now_v7());
+        let rotated_head = arkret_identifiers::EventId::new(
+            "ak:event:AQcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH".to_owned(),
+        )
+        .unwrap();
+
+        let mut repo = factory.create().await.unwrap();
+        let bootstrapped = repo
+            .organization_control()
+            .bootstrap(&mut rng, &clock, control(&did))
+            .await
+            .unwrap();
+        assert!(bootstrapped.pcr_frontier_digest.is_some());
+        repo.save().await.unwrap();
+
+        // A rotation that does not restate the frontier rotates onto a state
+        // that has no frontier; the stored digest is replaced, not preserved.
+        let mut repo = factory.create().await.unwrap();
+        let rotated = repo
+            .organization_control()
+            .replace_control_state(
+                &clock,
+                &did,
+                RotatedOrganizationControl {
+                    control_stream_ref: rotated_head.clone(),
+                    pcr_frontier_digest: None,
+                },
+            )
+            .await
+            .unwrap()
+            .expect("bootstrapped organization is rotatable");
+        assert_eq!(rotated.control_stream_ref, rotated_head.to_string());
+        assert_eq!(rotated.pcr_frontier_digest, None);
+        repo.save().await.unwrap();
+
+        let mut repo = factory.create().await.unwrap();
+        let reloaded = repo
+            .organization_control()
+            .get_control_by_did(&did)
+            .await
+            .unwrap()
+            .expect("control persisted");
+        assert_eq!(reloaded.control_stream_ref, rotated_head.to_string());
+        assert_eq!(reloaded.pcr_frontier_digest, None);
+        repo.cancel().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn rotation_of_an_unknown_organization_reports_missing() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let factory = PgRepositoryFactory::new(pool.clone());
+        let clock = MockClock::default();
+        let did = format!("did:web:{}.example", uuid::Uuid::now_v7());
+
+        let mut repo = factory.create().await.unwrap();
+        let outcome = repo
+            .organization_control()
+            .replace_control_state(
+                &clock,
+                &did,
+                RotatedOrganizationControl {
+                    control_stream_ref: arkret_identifiers::EventId::from_identity(
+                        arkret_identifiers::EventIdentityKey::new(
+                            arkret_identifiers::EventDigestSuiteCode::Sha256,
+                            [8_u8; 32],
+                        ),
+                    ),
+                    pcr_frontier_digest: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(outcome.is_none());
         repo.cancel().await.unwrap();
     }
 }

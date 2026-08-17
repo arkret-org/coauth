@@ -101,7 +101,10 @@ mod tests {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(42);
         let label = unique_label("duplicate");
@@ -131,7 +134,10 @@ mod tests {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(43);
         let label = unique_label("fanout");
@@ -187,7 +193,7 @@ mod tests {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
-        let factory = PgRepositoryFactory::new(pool);
+        let factory = PgRepositoryFactory::new(pool.clone());
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(45);
         let label = unique_label("durable");
@@ -233,7 +239,10 @@ mod tests {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(44);
         let label = unique_label("revocation");

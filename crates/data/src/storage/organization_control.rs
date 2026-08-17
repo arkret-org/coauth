@@ -1,5 +1,6 @@
 //! Organization principal control + organization delegation repository.
 
+use arkret_identifiers::{EventId, Hash};
 use arkret_models_collaboration::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
 };
@@ -25,10 +26,10 @@ pub struct NewOrganizationPrincipalControl {
     /// Event-derived Realm id of the accepted PCR create Event named by
     /// `control_stream_ref`. Storage rejects a missing or mismatched pair.
     pub principal_control_realm_id: String,
-    /// Accepted PCR create Event at bootstrap. It is required for the initial
-    /// insert even though later projected rows may replace it with the current
-    /// organization control-stream head.
-    pub control_stream_ref: Option<String>,
+    /// Accepted PCR create Event at bootstrap. `principal_control_realm_id`
+    /// MUST be a retype of it; later rotations replace it with the current
+    /// organization control-stream head, never with nothing.
+    pub control_stream_ref: String,
     /// Optional digest of the PCR control frontier evaluated at bootstrap.
     pub pcr_frontier_digest: Option<String>,
     /// Authorization basis under which the bootstrap was accepted.
@@ -40,6 +41,20 @@ pub struct NewOrganizationPrincipalControl {
     pub executed_by: Option<String>,
     /// Digest of the verified bootstrap proof transcript.
     pub bootstrap_proof_digest: Option<String>,
+}
+
+/// Complete organization control state declared by one controller rotation.
+///
+/// Rotation is a whole-state replacement, so this struct carries every mutable
+/// control column. There is deliberately no way to express "leave this column
+/// as it is": a rotation that did not restate the frontier is a rotation onto a
+/// state that has no frontier yet.
+#[derive(Debug, Clone)]
+pub struct RotatedOrganizationControl {
+    /// Control-stream head the organization rotates onto.
+    pub control_stream_ref: EventId,
+    /// Control-frontier digest of the rotated-to state, when it already has one.
+    pub pcr_frontier_digest: Option<Hash>,
 }
 
 /// Parameters used to record an organization delegation.
@@ -89,14 +104,13 @@ pub trait OrganizationControlRepository: Send + Sync {
         organization_did: &str,
     ) -> Result<Option<OrganizationPrincipalControl>, Self::Error>;
 
-    /// Update the control-stream / frontier refs and (optionally) rotate the
-    /// recorded controller boundary. Returns `None` when the org is unknown.
-    async fn update_control(
+    /// Atomically replace the organization's control state with the state a
+    /// rotation declares. Returns `None` when the org is unknown.
+    async fn replace_control_state(
         &mut self,
         clock: &dyn Clock,
         organization_did: &str,
-        control_stream_ref: Option<String>,
-        pcr_frontier_digest: Option<String>,
+        rotated: RotatedOrganizationControl,
     ) -> Result<Option<OrganizationPrincipalControl>, Self::Error>;
 
     /// Record a new active delegation. The `(delegation_ref)` unique
@@ -151,12 +165,11 @@ repository_impl!(OrganizationControlRepository:
         &mut self,
         organization_did: &str,
     ) -> Result<Option<OrganizationPrincipalControl>, Self::Error>;
-    async fn update_control(
+    async fn replace_control_state(
         &mut self,
         clock: &dyn Clock,
         organization_did: &str,
-        control_stream_ref: Option<String>,
-        pcr_frontier_digest: Option<String>,
+        rotated: RotatedOrganizationControl,
     ) -> Result<Option<OrganizationPrincipalControl>, Self::Error>;
     async fn add_delegation(
         &mut self,

@@ -183,6 +183,7 @@ pub use self::organization_control::{
     NewOrganizationDelegation, NewOrganizationPrincipalControl, OrganizationBootstrapAuthorization,
     OrganizationControlRepository, OrganizationDelegation, OrganizationDelegationStatus,
     OrganizationPrincipalControl, PRINCIPAL_CONTROL_REALM_BOOTSTRAP_PURPOSE,
+    RotatedOrganizationControl,
 };
 pub use self::policy_data::{PolicyData, PolicyDataDocument};
 pub use self::recovery_authority::{

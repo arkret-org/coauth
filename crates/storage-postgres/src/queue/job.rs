@@ -569,7 +569,10 @@ mod tests {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(42);
         let queue_name = unique_queue_name();

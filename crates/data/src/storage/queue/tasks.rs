@@ -200,11 +200,7 @@ impl AccountStatusPublicationJob {
         body_digest: Hash,
         body: AccountStatusPublicationRequestBody,
     ) -> Self {
-        let record_id = body
-            .publication
-            .record()
-            .account_status_record_id
-            .clone();
+        let record_id = body.publication.record().account_status_record_id.clone();
         Self {
             destination_name,
             idempotency_key,

@@ -19,6 +19,13 @@ pub use self::session_grant::PgOAuthSessionGrantRepository;
 
 #[cfg(test)]
 mod tests {
+    use arkret_identifiers::DidCoreId;
+    use arkret_models_identity::{
+        CanonicalSessionPublicJwk, SESSION_GRANT_CREDENTIAL_KIND, SESSION_GRANT_ISSUANCE_SCHEMA,
+        SessionGrantCnf, SessionGrantCredentialClass, SessionGrantHolderBinding,
+        SessionGrantIssuanceNonce, SessionGrantIssuancePreimage, SessionGrantProofKind,
+        SignedSessionGrantClaims,
+    };
     use chrono::Duration;
     use coauth_data::clock::MockClock;
     use coauth_data::oauth::{
@@ -36,17 +43,56 @@ mod tests {
 
     use crate::PgRepositoryFactory;
 
+    const TEST_SESSION_GRANT_ISSUER: &str = "ak:did_core:web:issuer.example";
+    const TEST_SESSION_GRANT_SUBJECT: &str = "ak:did_core:web:subject.example";
+    const TEST_SESSION_GRANT_AUDIENCE: &str = "ak:did_core:web:audience.example";
+    const TEST_SESSION_GRANT_SIGNING_KEY_ID: &str = "test-signing-key";
+
     /// Closed inputs a test needs to land one committed session grant.
+    ///
+    /// Everything the issuer ledger derives — grant id, issuance digest,
+    /// canonical preimage and credential JWT — is computed by
+    /// [`commit_test_session_grant`], because `commit_issuance` rejects any
+    /// grant whose material is not the exact projection of its preimage.
     struct TestSessionGrantSeed<'a> {
         request_identity: &'a str,
-        grant_id: &'a str,
         browser_session_id: Option<Ulid>,
         device_id: &'a str,
         session_id: &'a str,
-        grant_jwt: &'a str,
-        session_public_key: &'a str,
-        issuance_digest: [u8; 32],
+        issuance_nonce: [u8; 32],
         scope: Scope,
+    }
+
+    /// Ed25519 public JWK used as the holder-bound session key.
+    fn test_session_public_key(seed: u8) -> CanonicalSessionPublicJwk {
+        CanonicalSessionPublicJwk::new(
+            serde_json::json!({
+                "kty": "OKP",
+                "crv": "Ed25519",
+                "x": arkret_canonical::base64url_encode([seed; 32]),
+            })
+            .to_string(),
+        )
+        .unwrap()
+    }
+
+    /// Serialize the credential the way the issuer publishes it.
+    ///
+    /// The storage layer never verifies the JWS signature — that is the
+    /// issuer's and the verifier's job — but it does re-parse the header and
+    /// claims, so the two encoded segments must be exact.
+    fn test_session_grant_jwt(claims: &SignedSessionGrantClaims) -> String {
+        let header = serde_json::json!({
+            "alg": "EdDSA",
+            "kid": TEST_SESSION_GRANT_SIGNING_KEY_ID,
+            "typ": "JWT",
+        });
+        format!(
+            "{}.{}.{}",
+            arkret_canonical::base64url_encode(serde_json::to_vec(&header).unwrap()),
+            arkret_canonical::base64url_encode(serde_json::to_vec(claims).unwrap()),
+            arkret_canonical::base64url_encode(b"test-session-grant-signature"),
+        )
     }
 
     /// Reserve then commit one grant through the issuer-ledger saga.
@@ -64,10 +110,61 @@ mod tests {
         R: RepositoryAccess + ?Sized,
         R::Error: std::fmt::Debug,
     {
-        let issuer = "did:web:issuer.example";
         let not_before = clock.now();
         let expires_at = clock.now() + Duration::try_hours(1).unwrap();
-        let canonical_intent = b"{\"schema\":\"ak.session_grant.issuance.v1\"}";
+        let issuance_nonce = SessionGrantIssuanceNonce::from_bytes(seed.issuance_nonce);
+        let mut scopes = seed
+            .scope
+            .iter()
+            .map(|scope| scope.as_str().to_owned())
+            .collect::<Vec<_>>();
+        scopes.sort_unstable();
+        scopes.dedup();
+        let preimage = SessionGrantIssuancePreimage {
+            schema: SESSION_GRANT_ISSUANCE_SCHEMA.to_owned(),
+            issuer: DidCoreId::new(TEST_SESSION_GRANT_ISSUER).unwrap(),
+            issuance_nonce: issuance_nonce.clone(),
+            subject: DidCoreId::new(TEST_SESSION_GRANT_SUBJECT).unwrap(),
+            session_public_key: test_session_public_key(seed.issuance_nonce[0]),
+            audience: DidCoreId::new(TEST_SESSION_GRANT_AUDIENCE).unwrap(),
+            scopes,
+            not_before,
+            expires_at,
+            session_id: seed.session_id.to_owned(),
+            cnf: SessionGrantCnf {
+                jkt: arkret_canonical::base64url_encode([0x5a; 32]),
+            },
+            credential_class: SessionGrantCredentialClass::Standard,
+            holder_binding: SessionGrantHolderBinding::HumanDevice {
+                device_binding: seed.device_id.to_owned(),
+            },
+            device_binding: None,
+            proof_kind: Some(SessionGrantProofKind::OidcCodeExchange),
+            scope_details: None,
+        };
+        let issuance_preimage = preimage.canonical_bytes().unwrap();
+        let issuance_digest = preimage.issuance_digest().unwrap();
+        let grant_id = preimage.grant_id().unwrap();
+        let claims = SignedSessionGrantClaims {
+            kind: SESSION_GRANT_CREDENTIAL_KIND.to_owned(),
+            grant_id: grant_id.clone(),
+            issuer: preimage.issuer.clone(),
+            issuance_nonce: preimage.issuance_nonce.clone(),
+            subject: preimage.subject.clone(),
+            session_public_key: preimage.session_public_key.clone(),
+            audience: preimage.audience.clone(),
+            scopes: preimage.scopes.clone(),
+            not_before: preimage.not_before,
+            expires_at: preimage.expires_at,
+            session_id: preimage.session_id.clone(),
+            cnf: preimage.cnf.clone(),
+            credential_class: preimage.credential_class,
+            holder_binding: preimage.holder_binding.clone(),
+            device_binding: preimage.device_binding.clone(),
+            proof_kind: preimage.proof_kind,
+            scope_details: preimage.scope_details.clone(),
+        };
+        let grant_jwt = test_session_grant_jwt(&claims);
 
         let reserved = repo
             .oauth_session_grant()
@@ -75,18 +172,20 @@ mod tests {
                 rng,
                 clock,
                 coauth_data::NewSessionGrantOperation {
-                    issuer,
+                    issuer: TEST_SESSION_GRANT_ISSUER,
                     operation: coauth_data::SessionGrantOperationDescriptor::Issue,
-                    proof_kind: None,
+                    // An `issue` reservation is only valid with a proof kind,
+                    // and it must be the one signed into the preimage.
+                    proof_kind: preimage.proof_kind,
                     request_identity: seed.request_identity,
-                    canonical_intent_digest: seed.issuance_digest,
-                    canonical_intent,
+                    canonical_intent_digest: issuance_digest,
+                    canonical_intent: &issuance_preimage,
                     target_grant_id: None,
-                    issuance_nonce: Some("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"),
+                    issuance_nonce: Some(issuance_nonce.as_str()),
                     session_id: Some(seed.session_id),
                     grant_not_before: Some(not_before),
                     grant_expires_at: Some(expires_at),
-                    signing_key_id: Some("test-signing-key"),
+                    signing_key_id: Some(TEST_SESSION_GRANT_SIGNING_KEY_ID),
                     retained_until: clock.now() + Duration::try_days(7).unwrap(),
                 },
             )
@@ -110,30 +209,29 @@ mod tests {
                     proof_expires_at: clock.now() + Duration::try_minutes(5).unwrap(),
                 },
                 coauth_data::SessionGrantExactOutcome {
-                    canonical_response: canonical_intent,
-                    response_digest: seed.issuance_digest,
+                    canonical_response: &issuance_preimage,
+                    response_digest: issuance_digest,
                 },
                 NewSessionGrant {
-                    grant_id: arkret_identifiers::SessionGrantId::new(seed.grant_id.to_owned())
-                        .unwrap(),
+                    grant_id,
                     browser_session_id: seed.browser_session_id,
-                    issuer,
-                    subject: "did:web:subject.example",
+                    issuer: TEST_SESSION_GRANT_ISSUER,
+                    subject: TEST_SESSION_GRANT_SUBJECT,
                     device_id: Some(seed.device_id),
                     applet_id: None,
                     effective_scope: None,
                     registration_epoch: None,
                     service_id: None,
                     capability_grant_refs: Vec::new(),
-                    audience: "did:web:audience.example",
+                    audience: TEST_SESSION_GRANT_AUDIENCE,
                     scope: seed.scope,
-                    grant_jwt: seed.grant_jwt,
+                    grant_jwt: &grant_jwt,
                     session_id: seed.session_id,
-                    issuance_nonce: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
-                    issuance_preimage: canonical_intent,
-                    issuance_digest: seed.issuance_digest,
-                    signing_key_id: "test-signing-key",
-                    session_public_key: seed.session_public_key,
+                    issuance_nonce: issuance_nonce.as_str(),
+                    issuance_preimage: &issuance_preimage,
+                    issuance_digest,
+                    signing_key_id: TEST_SESSION_GRANT_SIGNING_KEY_ID,
+                    session_public_key: preimage.session_public_key.as_str(),
                     credential_class: "standard",
                     not_before,
                     expires_at,
@@ -542,13 +640,10 @@ mod tests {
             &clock,
             TestSessionGrantSeed {
                 request_identity: "refresh-chain-issue",
-                grant_id: "ak:session_grant:AVBgYTmzSkzTSd1dlFH4ZADaQRkVcx_iTAvXdxlTfxrg",
                 browser_session_id: Some(user_session.id),
                 device_id: "device-1",
                 session_id: "session-chain-1",
-                grant_jwt: "session-grant-jwt",
-                session_public_key: "session-public-key",
-                issuance_digest: [0x11; 32],
+                issuance_nonce: [0x11; 32],
                 scope: scope.clone(),
             },
         )
@@ -731,13 +826,10 @@ mod tests {
             &clock,
             TestSessionGrantSeed {
                 request_identity: "revoke-if-active-issue",
-                grant_id: "ak:session_grant:AUiTFJVo328Rc7lc2Le2mjzL_ELZ-uQUn1Fq-C1QNAbh",
                 browser_session_id: Some(browser_session.id),
                 device_id: "device-cas",
                 session_id: "session-chain-cas",
-                grant_jwt: "cas-grant-jwt",
-                session_public_key: "cas-public-key",
-                issuance_digest: [0x22; 32],
+                issuance_nonce: [0x22; 32],
                 scope,
             },
         )

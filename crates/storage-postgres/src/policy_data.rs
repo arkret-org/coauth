@@ -185,6 +185,10 @@ mod tests {
         assert_eq!(data_fetched3, policy_data2);
         assert_eq!(affected, 1);
 
+        // Commit first: the raw check below runs on a second pooled
+        // connection, which cannot observe the repository's open transaction.
+        repo.save().await.unwrap();
+
         // Do a raw query to check the other rows were pruned
         #[derive(diesel::QueryableByName)]
         struct CountResult {

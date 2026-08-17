@@ -567,14 +567,14 @@ mod tests {
 
     use std::net::{IpAddr, Ipv4Addr};
 
+    use coauth_account_types::PostAuthAction;
     use coauth_data::clock::MockClock;
     use coauth_data::upstream_oauth::UpstreamOAuthProviderParams;
-    use coauth_account_types::PostAuthAction;
     use coauth_data::{
-        Clock, RepositoryAccess as _, RepositoryFactory as _,
-        UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,
-        UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderPkceMode,
-        UpstreamOAuthProviderTokenAuthMethod, UserRegistration, UserRegistrationPassword,
+        Clock, RepositoryAccess as _, RepositoryFactory as _, UpstreamOAuthProviderClaimsImports,
+        UpstreamOAuthProviderDiscoveryMode, UpstreamOAuthProviderOnBackchannelLogout,
+        UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderTokenAuthMethod, UserRegistration,
+        UserRegistrationPassword,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_oauth_types::scope::Scope;

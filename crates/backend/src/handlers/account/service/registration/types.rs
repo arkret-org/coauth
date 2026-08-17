@@ -4,9 +4,8 @@ use anyhow::Error as AnyhowError;
 use chrono::{DateTime, Utc};
 use coauth_account_types::PostAuthAction;
 use coauth_data::{
-    BrowserSession, RepositoryError, UpstreamOAuthAuthorizationSession,
-    UpstreamOAuthLink, UserEmailAuthentication, UserPhoneAuthentication, UserRegistration,
-    UserRegistrationToken,
+    BrowserSession, RepositoryError, UpstreamOAuthAuthorizationSession, UpstreamOAuthLink,
+    UserEmailAuthentication, UserPhoneAuthentication, UserRegistration, UserRegistrationToken,
 };
 use thiserror::Error;
 use url::Url;

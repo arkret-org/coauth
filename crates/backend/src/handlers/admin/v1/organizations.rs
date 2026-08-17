@@ -20,7 +20,9 @@
 //! explicitly from storage-neutral domain records.
 
 use arkret_canonical::{canonical_json_bytes, sha256_digest};
-use arkret_identifiers::{DidFullId, EventId, Hash, RealmId, new_prefixed_uuid7};
+use arkret_identifiers::{
+    DidFullId, EventDigestSuiteCode, EventId, Hash, RealmId, new_prefixed_uuid7,
+};
 use arkret_models_collaboration::{RealmOrganizationPayload, RealmOrganizationStatus};
 use coauth_admin_types::organization_admin::{
     BootstrapAuthorizationInput, BootstrapOrganizationRequest, IssueOrganizationStatementRequest,
@@ -30,7 +32,7 @@ use coauth_admin_types::organization_admin::{
 };
 use coauth_data::organization_control::{
     NewOrganizationDelegation, NewOrganizationPrincipalControl,
-    OrganizationPrincipalControl as DomainOrganizationPrincipalControl,
+    OrganizationPrincipalControl as DomainOrganizationPrincipalControl, RotatedOrganizationControl,
 };
 use coauth_data::{BoxRepository, RepositoryAccess};
 use salvo::oapi::extract::PathParam;
@@ -53,6 +55,32 @@ use crate::services::organization_statement::{
 fn parse_did(raw: &str) -> Result<DidFullId, AppError> {
     DidFullId::new(raw.to_owned())
         .map_err(|e| AppError::bad_request(format!("invalid organization DID: {e}")))
+}
+
+/// Parse a reference that has to name an Event on a Principal Control Realm's
+/// control stream.
+///
+/// Being a canonical `ak:event:` token is necessary but not sufficient. v1 PCR
+/// identity is fixed to SHA-256, so an Event under any other digest suite
+/// cannot belong to one — and `RealmId::from_event_id` *asserts* that suite,
+/// which means an unchecked ref would turn request input into a panic instead
+/// of a 400.
+fn parse_control_stream_ref(raw: &str) -> Result<EventId, AppError> {
+    let event_id = EventId::new(raw.to_owned()).map_err(|error| {
+        AppError::bad_request(format!("invalid PCR control stream Event ref: {error}"))
+    })?;
+    if event_id.digest_suite_code() != EventDigestSuiteCode::Sha256 {
+        return Err(AppError::bad_request(
+            "PCR control stream Event ref must use the SHA-256 digest suite",
+        ));
+    }
+    Ok(event_id)
+}
+
+fn parse_frontier_digest(raw: Option<&str>) -> Result<Option<Hash>, AppError> {
+    raw.map(|value| Hash::new(value.to_owned()))
+        .transpose()
+        .map_err(|error| AppError::bad_request(format!("invalid pcr_frontier_digest: {error}")))
 }
 
 #[derive(Serialize)]
@@ -162,8 +190,8 @@ pub async fn bootstrap_handler(
         .map_err(|e| AppError::bad_request(format!("invalid bootstrap body: {e}")))?;
     // Validate the organization DID shape up front.
     parse_did(&body.organization_did)?;
-    let create_event_id = EventId::new(body.control_stream_ref.clone())
-        .map_err(|error| AppError::bad_request(format!("invalid PCR create Event ref: {error}")))?;
+    let create_event_id = parse_control_stream_ref(&body.control_stream_ref)?;
+    parse_frontier_digest(body.pcr_frontier_digest.as_deref())?;
     let supplied_realm_id = RealmId::new(body.principal_control_realm_id.clone())
         .map_err(|error| AppError::bad_request(format!("invalid PCR Realm id: {error}")))?;
     if supplied_realm_id != RealmId::from_event_id(&create_event_id) {
@@ -250,7 +278,7 @@ pub async fn bootstrap_handler(
             NewOrganizationPrincipalControl {
                 organization_did: body.organization_did,
                 principal_control_realm_id: body.principal_control_realm_id,
-                control_stream_ref: Some(body.control_stream_ref),
+                control_stream_ref: body.control_stream_ref,
                 pcr_frontier_digest: body.pcr_frontier_digest,
                 bootstrap_authorization,
                 bootstrap_delegation_ref,
@@ -433,16 +461,17 @@ pub async fn rotate_controller_handler(
         .parse_json()
         .await
         .map_err(|e| AppError::bad_request(format!("invalid rotate body: {e}")))?;
+    // The rotated-to state is fully validated before a repository is opened, so
+    // a malformed ref can never reach the database layer.
+    let rotated = RotatedOrganizationControl {
+        control_stream_ref: parse_control_stream_ref(&body.control_stream_ref)?,
+        pcr_frontier_digest: parse_frontier_digest(body.pcr_frontier_digest.as_deref())?,
+    };
     let mut repo = extract_call_context(req, depot).await?.repo;
     let clock = make_clock();
     let updated = repo
         .organization_control()
-        .update_control(
-            &*clock,
-            &organization_did,
-            body.control_stream_ref,
-            body.pcr_frontier_digest,
-        )
+        .replace_control_state(&*clock, &organization_did, rotated)
         .await?;
     match updated {
         Some(control) => {
@@ -629,5 +658,99 @@ mod tests {
             error.to_string().contains("control_stream_ref"),
             "unexpected decode error: {error}"
         );
+    }
+
+    #[test]
+    fn rotation_body_without_a_control_stream_ref_fails_to_decode() {
+        // An absent field is named in serde's error; an explicit null is a type
+        // error on the field's own value and carries no field name. Both are
+        // decode failures, which is the property under test: an empty or
+        // nulled-out body can never reach the handler as a rotation.
+        for (body, expected_fragment) in [
+            (serde_json::json!({}), "control_stream_ref"),
+            (
+                serde_json::json!({ "pcr_frontier_digest": format!("sha256:{}", "ab".repeat(32)) }),
+                "control_stream_ref",
+            ),
+            (
+                serde_json::json!({ "control_stream_ref": serde_json::Value::Null }),
+                "invalid type: null",
+            ),
+        ] {
+            let error = serde_json::from_value::<RotateOrganizationControllerRequest>(body.clone())
+                .expect_err("a rotation must state the complete post-rotation control state");
+            assert!(
+                error.to_string().contains(expected_fragment),
+                "unexpected decode error for {body}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn rotation_body_treats_an_absent_frontier_as_the_rotated_to_value() {
+        let decoded =
+            serde_json::from_value::<RotateOrganizationControllerRequest>(serde_json::json!({
+                "control_stream_ref":
+                    "ak:event:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG",
+            }))
+            .expect("a rotation without a frontier is a rotation onto a frontier-less state");
+        assert_eq!(decoded.pcr_frontier_digest, None);
+
+        let explicit_null =
+            serde_json::from_value::<RotateOrganizationControllerRequest>(serde_json::json!({
+                "control_stream_ref":
+                    "ak:event:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG",
+                "pcr_frontier_digest": serde_json::Value::Null,
+            }))
+            .expect("an explicit null frontier decodes to the same rotated-to state");
+        assert_eq!(explicit_null.pcr_frontier_digest, None);
+    }
+
+    #[test]
+    fn control_stream_ref_must_be_a_sha256_event_reference() {
+        parse_control_stream_ref("ak:event:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG")
+            .expect("a canonical SHA-256 Event ref is a valid control stream ref");
+
+        for rejected in [
+            "",
+            "   ",
+            "ak:realm:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG",
+            "ak:event:not-canonical",
+            "ak:event:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG=",
+        ] {
+            assert!(
+                parse_control_stream_ref(rejected).is_err(),
+                "{rejected} must not be accepted as a PCR control stream ref"
+            );
+        }
+
+        // Canonical Event token, wrong digest suite: a BLAKE3 Event can never
+        // sit on a v1 PCR control stream, and reaching `RealmId::from_event_id`
+        // with it would abort instead of returning 400.
+        let blake3_event = arkret_identifiers::EventId::from_identity(
+            arkret_identifiers::EventIdentityKey::new(EventDigestSuiteCode::Blake3, [6_u8; 32]),
+        );
+        assert!(
+            arkret_identifiers::EventId::new(blake3_event.to_string()).is_ok(),
+            "the rejection under test must be the suite, not the token shape"
+        );
+        assert!(parse_control_stream_ref(blake3_event.as_str()).is_err());
+    }
+
+    #[test]
+    fn frontier_digest_must_be_a_canonical_hash() {
+        assert_eq!(parse_frontier_digest(None).unwrap(), None);
+        assert!(
+            parse_frontier_digest(Some(&format!("sha256:{}", "ab".repeat(32))))
+                .unwrap()
+                .is_some()
+        );
+        let truncated = format!("sha256:{}", "ab".repeat(31));
+        for rejected in ["", "sha256:", "deadbeef", truncated.as_str()] {
+            assert!(
+                parse_frontier_digest(Some(rejected)).is_err(),
+                "{rejected} must not be accepted as a control frontier digest"
+            );
+        }
     }
 }
