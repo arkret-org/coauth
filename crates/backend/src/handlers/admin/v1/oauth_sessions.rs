@@ -225,7 +225,9 @@ pub async fn list_sessions(
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let (pagination, include_count) = extract_pagination(req)?;
-    let params: FilterParams = req.parse_queries().unwrap_or_default();
+    let params: FilterParams = req
+        .parse_queries()
+        .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
 
     let base = format!("{path}{params}", path = OAuthSession::PATH);
     let base = include_count.add_to_base(&base);
@@ -343,11 +345,13 @@ pub async fn list_sessions(
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use coauth_data::{AccessToken, Clock as _};
+    use coauth_data::RepositoryAccess as _;
     use hyper::{Request, StatusCode};
     use ulid::Ulid;
 
-    use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
+    use crate::handlers::test_utils::{
+        RequestBuilderExt, ResponseExt, TestState, assert_stamped_since, setup, stable_json,
+    };
 
     #[tokio::test]
     async fn test_finish_session() {
@@ -356,29 +360,21 @@ mod tests {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
-        let token = state.token_with_scope("urn:coauth:admin").await;
-
-        // Get the session ID from the token we just created
-        let mut repo = state.repository().await.unwrap();
-        let AccessToken { session_id, .. } = repo
-            .oauth_access_token()
-            .find_by_token(&token)
-            .await
-            .unwrap()
-            .unwrap();
-        repo.save().await.unwrap();
+        let (token, session_id) = state.oauth_token_with_scope("urn:coauth:admin").await;
 
         let request = Request::post(format!("/_coauth/admin/oauth-sessions/{session_id}/finish"))
             .bearer(&token)
             .empty();
+        let before = chrono::Utc::now();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
 
-        // The finished_at timestamp should be the same as the current time
-        assert_eq!(
-            body["data"]["attributes"]["finished_at"],
-            serde_json::json!(state.clock.now())
+        // `finished_at` is stamped from the request-time wall clock.
+        assert_stamped_since(
+            &body["data"]["attributes"]["finished_at"],
+            before,
+            "finished_at",
         );
     }
 
@@ -391,20 +387,13 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
 
         // Create first admin token for the API call
-        let admin_token = state.token_with_scope("urn:coauth:admin").await;
+        let (admin_token, _) = state.oauth_token_with_scope("urn:coauth:admin").await;
 
         // Create a second admin session that we'll finish
-        let second_admin_token = state.token_with_scope("urn:coauth:admin").await;
+        let (_second_admin_token, session_id) =
+            state.oauth_token_with_scope("urn:coauth:admin").await;
 
-        // Get the second session and finish it first
         let mut repo = state.repository().await.unwrap();
-        let AccessToken { session_id, .. } = repo
-            .oauth_access_token()
-            .find_by_token(&second_admin_token)
-            .await
-            .unwrap()
-            .unwrap();
-
         let session = repo
             .oauth_session()
             .lookup(session_id)
@@ -468,17 +457,7 @@ mod tests {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
-        let token = state.token_with_scope("urn:coauth:admin").await;
-
-        // state.token_with_scope did create a session, so we can get it here
-        let mut repo = state.repository().await.unwrap();
-        let AccessToken { session_id, .. } = repo
-            .oauth_access_token()
-            .find_by_token(&token)
-            .await
-            .unwrap()
-            .unwrap();
-        repo.save().await.unwrap();
+        let (token, session_id) = state.oauth_token_with_scope("urn:coauth:admin").await;
 
         let request = Request::get(format!("/_coauth/admin/oauth-sessions/{session_id}"))
             .bearer(&token)
@@ -487,17 +466,17 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
         assert_eq!(body["data"]["type"], "oauth-session");
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": {
             "type": "oauth-session",
-            "id": "01FSHN9AG0MKGTBNZ16RDR3PVY",
+            "id": "[id-1]",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00.000Z",
+              "created_at": "[timestamp-1]",
               "finished_at": null,
-              "user_id": null,
-              "user_session_id": null,
-              "client_id": "01FSHN9AG0FAQ50MT1E9FFRPZR",
+              "user_id": "[id-2]",
+              "user_session_id": "[id-3]",
+              "client_id": "[id-4]",
               "scope": "urn:coauth:admin",
               "user_agent": null,
               "last_active_at": null,
@@ -505,11 +484,11 @@ mod tests {
               "human_name": null
             },
             "links": {
-              "self": "/_coauth/admin/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
+              "self": "/_coauth/admin/oauth-sessions/[id-1]"
             }
           },
           "links": {
-            "self": "/_coauth/admin/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
+            "self": "/_coauth/admin/oauth-sessions/[id-1]"
           }
         }
         "#);
@@ -539,7 +518,7 @@ mod tests {
             return;
         };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
-        let token = state.token_with_scope("urn:coauth:admin").await;
+        let (token, _session_id) = state.oauth_token_with_scope("urn:coauth:admin").await;
 
         // We already have a session because of the token above
         let request = Request::get("/_coauth/admin/oauth-sessions")
@@ -548,7 +527,7 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 1
@@ -556,13 +535,13 @@ mod tests {
           "data": [
             {
               "type": "oauth-session",
-              "id": "01FSHN9AG0MKGTBNZ16RDR3PVY",
+              "id": "[id-1]",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00.000Z",
+                "created_at": "[timestamp-1]",
                 "finished_at": null,
-                "user_id": null,
-                "user_session_id": null,
-                "client_id": "01FSHN9AG0FAQ50MT1E9FFRPZR",
+                "user_id": "[id-2]",
+                "user_session_id": "[id-3]",
+                "client_id": "[id-4]",
                 "scope": "urn:coauth:admin",
                 "user_agent": null,
                 "last_active_at": null,
@@ -570,11 +549,11 @@ mod tests {
                 "human_name": null
               },
               "links": {
-                "self": "/_coauth/admin/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
+                "self": "/_coauth/admin/oauth-sessions/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG0MKGTBNZ16RDR3PVY"
+                  "cursor": "[id-1]"
                 }
               }
             }
@@ -594,18 +573,18 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": [
             {
               "type": "oauth-session",
-              "id": "01FSHN9AG0MKGTBNZ16RDR3PVY",
+              "id": "[id-1]",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00.000Z",
+                "created_at": "[timestamp-1]",
                 "finished_at": null,
-                "user_id": null,
-                "user_session_id": null,
-                "client_id": "01FSHN9AG0FAQ50MT1E9FFRPZR",
+                "user_id": "[id-2]",
+                "user_session_id": "[id-3]",
+                "client_id": "[id-4]",
                 "scope": "urn:coauth:admin",
                 "user_agent": null,
                 "last_active_at": null,
@@ -613,11 +592,11 @@ mod tests {
                 "human_name": null
               },
               "links": {
-                "self": "/_coauth/admin/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
+                "self": "/_coauth/admin/oauth-sessions/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG0MKGTBNZ16RDR3PVY"
+                  "cursor": "[id-1]"
                 }
               }
             }
@@ -637,7 +616,7 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 1

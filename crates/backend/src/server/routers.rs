@@ -5,7 +5,7 @@ use salvo::prelude::*;
 use super::middleware::{OpenApiYaml, oidc_preflight_handler, public_oidc_browser_cors};
 use crate::listener::ConnectionInfo;
 
-pub(super) fn build_human_router(router: Router, _templates: Templates) -> Router {
+pub(crate) fn build_human_router(router: Router, _templates: Templates) -> Router {
     use crate::handlers::oauth::authorization;
     use crate::handlers::{email_webhooks, spa, upstream_oauth};
 
@@ -60,7 +60,7 @@ pub(super) fn build_human_router(router: Router, _templates: Templates) -> Route
         .push(Router::with_path("/devices/{**rest}").get(spa::get))
 }
 
-pub(super) fn build_oauth_router(router: Router) -> Router {
+pub(crate) fn build_oauth_router(router: Router) -> Router {
     use crate::handlers::oauth::{
         device, introspection, keys, registration, revoke, token, userinfo,
     };
@@ -111,11 +111,42 @@ pub(super) fn build_oauth_router(router: Router) -> Router {
                 .post(device::authorize::post),
         )
 }
+/// Mount the account/protocol API routes without the generated OpenAPI
+/// documents. `build_account_api_router` layers the documents on top; the
+/// in-process test harness mounts the same routes through this entry point so
+/// the route table can never drift from production.
+pub(crate) fn build_account_api_routes(router: Router) -> Router {
+    let (arkret_router, coauth_router) = account_api_subrouters();
+    router.push(arkret_router).push(coauth_router)
+}
+
 pub(super) fn build_account_api_router(router: Router) -> Router {
+    use crate::handlers::account::openapi;
+
+    let (arkret_router, coauth_router) = account_api_subrouters();
+
+    let docs_router = openapi::build_openapi_router(&coauth_router);
+
+    // The `/.well-known/arkret/openapi.yaml` path is a *protocol-surface*
+    // contract: it MUST publish the Arkret protocol API (`/_arkret/*`), not the
+    // product-private admin API. Generate the protocol-face OpenAPI document
+    // from `arkret_router` and serve it from the well-known path here, keeping
+    // the admin document (`/_coauth/admin/openapi.yaml`) strictly separate.
+    let arkret_doc = build_arkret_protocol_openapi_doc(&arkret_router);
+    let arkret_doc_yaml = OpenApiYaml::from_doc(&arkret_doc);
+
+    router
+        .push(arkret_router)
+        .push(coauth_router)
+        .push(docs_router)
+        .push(Router::with_path("/.well-known/arkret/openapi.yaml").get(arkret_doc_yaml))
+}
+
+fn account_api_subrouters() -> (Router, Router) {
     use crate::handlers::account::{
         agents, approval, auth, avatar, bootstrap_admin_status, emails, invite_relay,
-        linked_accounts, notification_prefs, oauth_clients, openapi, password, recovery, register,
-        sessions, site_config, strand, upstream_oauth, users, viewer,
+        linked_accounts, notification_prefs, oauth_clients, password, recovery, register, sessions,
+        site_config, strand, upstream_oauth, users, viewer,
     };
     use crate::handlers::{arkret, policy_check};
 
@@ -450,21 +481,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         );
     }
 
-    let docs_router = openapi::build_openapi_router(&coauth_router);
-
-    // The `/.well-known/arkret/openapi.yaml` path is a *protocol-surface*
-    // contract: it MUST publish the Arkret protocol API (`/_arkret/*`), not the
-    // product-private admin API. Generate the protocol-face OpenAPI document
-    // from `arkret_router` and serve it from the well-known path here, keeping
-    // the admin document (`/_coauth/admin/openapi.yaml`) strictly separate.
-    let arkret_doc = build_arkret_protocol_openapi_doc(&arkret_router);
-    let arkret_doc_yaml = OpenApiYaml::from_doc(&arkret_doc);
-
-    router
-        .push(arkret_router)
-        .push(coauth_router)
-        .push(docs_router)
-        .push(Router::with_path("/.well-known/arkret/openapi.yaml").get(arkret_doc_yaml))
+    (arkret_router, coauth_router)
 }
 
 #[handler]
@@ -530,7 +547,32 @@ pub(super) fn build_arkret_protocol_openapi_doc(arkret_router: &Router) -> salvo
         .merge_router(arkret_router)
 }
 
+/// Mount the admin API routes without the generated OpenAPI document and the
+/// Swagger UI. `build_admin_router` layers those on top; the in-process test
+/// harness mounts the same routes through this entry point so the route table
+/// can never drift from production.
+pub(crate) fn build_admin_routes(router: Router) -> Router {
+    router.push(admin_subrouter())
+}
+
 pub(super) fn build_admin_router(router: Router) -> Router {
+    let admin_router = admin_subrouter();
+
+    // Generate OpenAPI spec and Swagger UI for the admin API
+    let admin_doc = build_admin_openapi_doc(&admin_router);
+    let admin_doc_yaml = OpenApiYaml::from_doc(&admin_doc);
+
+    router
+        .push(admin_router)
+        .push(admin_doc.clone().into_router("/api-doc/admin/openapi.json"))
+        .push(Router::with_path("/_coauth/admin/openapi.yaml").get(admin_doc_yaml))
+        .push(
+            salvo::oapi::swagger_ui::SwaggerUi::new("/api-doc/admin/openapi.json")
+                .into_router("admin-swagger-ui"),
+        )
+}
+
+fn admin_subrouter() -> Router {
     use crate::handlers::admin::v1::{
         account_dids, accounts, audit_feed, circle_capabilities, claims,
         collaboration_capabilities, connector_health, devices, invite_quarantine,
@@ -540,7 +582,7 @@ pub(super) fn build_admin_router(router: Router) -> Router {
         user_registration_tokens, user_sessions, version,
     };
 
-    let admin_router = Router::with_path("/_coauth/admin")
+    Router::with_path("/_coauth/admin")
         // Version
         .push(Router::with_path("version").get(version::handler))
         // Site config
@@ -824,19 +866,6 @@ pub(super) fn build_admin_router(router: Router) -> Router {
         .push(
             Router::with_path("policy-decision-audits")
                 .push(Router::with_path("{id}").get(policy_checks::get_signed_decision_audit)),
-        );
-
-    // Generate OpenAPI spec and Swagger UI for the admin API
-    let admin_doc = build_admin_openapi_doc(&admin_router);
-    let admin_doc_yaml = OpenApiYaml::from_doc(&admin_doc);
-
-    router
-        .push(admin_router)
-        .push(admin_doc.clone().into_router("/api-doc/admin/openapi.json"))
-        .push(Router::with_path("/_coauth/admin/openapi.yaml").get(admin_doc_yaml))
-        .push(
-            salvo::oapi::swagger_ui::SwaggerUi::new("/api-doc/admin/openapi.json")
-                .into_router("admin-swagger-ui"),
         )
 }
 

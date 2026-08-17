@@ -50,27 +50,28 @@ async fn test_get() {
     let response = state.request(request).await;
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
-    assert_json_snapshot!(body, @r###"
-        {
-          "data": {
-            "type": "upstream-oauth-link",
-            "id": "01FSHN9AG09NMZYX8MFYH578R9",
-            "attributes": {
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "provider_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-              "subject": "subject1",
-              "user_id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",
-              "human_account_name": null
-            },
-            "links": {
-              "self": "/_coauth/admin/upstream-oauth-links/01FSHN9AG09NMZYX8MFYH578R9"
-            }
-          },
-          "links": {
-            "self": "/_coauth/admin/upstream-oauth-links/01FSHN9AG09NMZYX8MFYH578R9"
-          }
+    assert_json_snapshot!(stable_json(&body), @r#"
+    {
+      "data": {
+        "type": "upstream-oauth-link",
+        "id": "[id-1]",
+        "attributes": {
+          "created_at": "[timestamp-1]",
+          "updated_at": "[timestamp-2]",
+          "provider_id": "[id-2]",
+          "subject": "subject1",
+          "user_id": "[id-3]",
+          "human_account_name": null
+        },
+        "links": {
+          "self": "/_coauth/admin/upstream-oauth-links/[id-1]"
         }
-        "###);
+      },
+      "links": {
+        "self": "/_coauth/admin/upstream-oauth-links/[id-1]"
+      }
+    }
+    "#);
 }
 
 #[tokio::test]

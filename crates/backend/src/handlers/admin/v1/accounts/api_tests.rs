@@ -292,7 +292,12 @@ mod tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut state = TestState::from_pool(pool.clone()).await.unwrap();
+        // Patching `locked` is an account-status transition: it needs a single
+        // configured Principal Server as the publication destination and an
+        // accepted principal binding for the account.
+        let mut state = TestState::from_pool_with_principal_server(pool.clone())
+            .await
+            .unwrap();
         let unique = unique_test_nonce();
         state.clock.advance(Duration::seconds(unique as i64));
         let token = state.token_with_scope("urn:coauth:admin").await;
@@ -311,6 +316,7 @@ mod tests {
             .await
             .unwrap();
         repo.save().await.unwrap();
+        state.seed_principal_binding(&user, "patchprofile").await;
 
         let request = Request::patch(format!("/_coauth/admin/accounts/{}", user.id))
             .bearer(&token)
@@ -326,7 +332,9 @@ mod tests {
         let body: serde_json::Value = response.json();
 
         assert_eq!(body["data"]["attributes"]["display_name"], "Alice Admin");
-        assert_eq!(body["data"]["attributes"]["preferred_locale"], "zh-CN");
+        // The locale is stored as a supported language tag, so a regional
+        // request tag is narrowed to the language it resolves to.
+        assert_eq!(body["data"]["attributes"]["preferred_locale"], "zh");
         assert_eq!(body["data"]["attributes"]["admin"], true);
         assert!(body["data"]["attributes"]["locked_at"].is_string());
 
@@ -363,11 +371,6 @@ mod tests {
         state
             .principal_server_admin
             .provision_user(&ConnectorProvisionRequest::new(&user.localpart, &user.sub))
-            .await
-            .unwrap();
-        state
-            .principal_server_admin
-            .delete_user(&user.localpart, true)
             .await
             .unwrap();
 

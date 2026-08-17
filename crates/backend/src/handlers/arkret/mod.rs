@@ -830,9 +830,8 @@ pub(crate) fn password_login_session_grant_target(
             });
         }
 
-        // The local admin audience is allowed for OIDC bridge strands, but
-        // not for password login session grants — there is no principal
-        // server to bind the grant to.
+        // The local admin audience never becomes a session-grant audience:
+        // there is no principal server to bind the grant to.
         if audience == required_audience_for(url_builder, arkret_config) {
             return Err(SessionGrantTargetError::LocalAudienceNotAllowed);
         }
@@ -1076,7 +1075,7 @@ pub async fn debug_issue_dpop_grant(
                 request_identity: &request_identity,
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
-                target_grant_id: None,
+                target_session_grant_id: None,
                 issuance_nonce: None,
                 session_id: None,
                 grant_not_before: Some(not_before),

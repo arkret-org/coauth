@@ -118,7 +118,7 @@ pub(crate) fn introspection_status(
     SessionGrantIntrospectStatus::Active
 }
 
-pub(crate) fn session_grant_jwt_hash(grant_jwt: &str) -> String {
+pub(crate) fn session_grant_jwt_digest(grant_jwt: &str) -> String {
     format!(
         "sha256:{}",
         hex::encode(sha2::Sha256::digest(grant_jwt.as_bytes()))
@@ -149,8 +149,8 @@ fn verify_session_grant_introspection_proof(
     let claims = jwt.payload();
     let max_future_skew = Duration::try_seconds(30).unwrap();
     if claims.kind != SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND
-        || claims.grant_id != grant.grant_id.to_string()
-        || claims.grant_jwt_hash != session_grant_jwt_hash(&grant.grant_jwt)
+        || claims.session_grant_id != grant.grant_id.to_string()
+        || claims.grant_jwt_digest != session_grant_jwt_digest(&grant.grant_jwt)
         || claims.audience.as_str() != grant.audience
         || claims.challenge != proof.challenge
         || claims.expires_at <= now
@@ -167,10 +167,22 @@ pub async fn introspect_session_grant(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<SessionGrantIntrospectOutcome>, ArkretRouteError> {
-    let body: SessionGrantIntrospectRequestBody = req
+    // `json_invalid` (400) means the bytes are not JSON; a body that parses but
+    // breaks the request contract — such as carrying both selectors, or
+    // neither — is `schema_violation` (422). Deserializing straight into the
+    // typed body would collapse both onto `json_invalid`.
+    let raw_body: serde_json::Value = req
         .parse_json()
         .await
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
+    let body: SessionGrantIntrospectRequestBody =
+        serde_json::from_value(raw_body).map_err(|error| {
+            ArkretRouteError::coded(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                arkret_wire::ErrorCode::SCHEMA_VIOLATION,
+                error.to_string(),
+            )
+        })?;
 
     let caller = require_session_grant_caller(req, depot).await?;
     let clock = crate::handlers::make_clock();

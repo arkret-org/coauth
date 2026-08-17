@@ -63,13 +63,16 @@ pub async fn add_account(
     let principal_server = depot.principal_server()?;
     let params: AddRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
-    if repo.user().exists(&params.handle).await? {
-        return Err(AppError::conflict("User already exists"));
-    }
-
-    // Do some basic check on the username
+    // Validate the handle before any repository lookup: the existence query
+    // normalizes the localpart through the SDK PRECIS profile, so an invalid
+    // handle reaches it as a repository error and escapes as a 500 instead of
+    // the 400 this endpoint owes the caller.
     if !handle_valid(&params.handle) {
         return Err(AppError::bad_request("Username is not valid"));
+    }
+
+    if repo.user().exists(&params.handle).await? {
+        return Err(AppError::conflict("User already exists"));
     }
 
     // Ask the PrincipalServer if the username is available

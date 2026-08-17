@@ -177,6 +177,128 @@ pub fn test_site_config() -> SiteConfig {
     }
 }
 
+/// Assert that `value` is an RFC 3339 instant stamped no earlier than `since`.
+///
+/// Handlers stamp lifecycle instants from the process wall clock, so a test can
+/// only bracket them: sample the clock before the request and require the
+/// response instant to be at or after that sample.
+///
+/// # Panics
+///
+/// Panics when `value` is not an RFC 3339 string or predates `since`.
+pub(crate) fn assert_stamped_since(
+    value: &serde_json::Value,
+    since: chrono::DateTime<chrono::Utc>,
+    field: &str,
+) {
+    let text = value
+        .as_str()
+        .unwrap_or_else(|| panic!("{field} must carry an instant, got {value}"));
+    let stamped = chrono::DateTime::parse_from_rfc3339(text)
+        .unwrap_or_else(|error| panic!("{field} must be RFC 3339: {error}"))
+        .with_timezone(&chrono::Utc);
+    assert!(
+        stamped >= since,
+        "{field} must be stamped at request time, got {stamped} before {since}"
+    );
+}
+
+/// Return a copy of `value` with every server-minted identifier and timestamp
+/// replaced by a stable placeholder.
+///
+/// Handlers mint ULIDs from the process RNG and read `created_at` from the
+/// wall clock, so those bytes are not reproducible and are not part of any
+/// response contract. Mapping each distinct value to `[id-N]` / `[timestamp-N]`
+/// in first-seen order keeps a snapshot asserting the document shape *and*
+/// which fields share a value, without pinning bytes the server is free to
+/// choose. Identifiers embedded in `links` are rewritten too, so a self link
+/// still has to agree with the resource id.
+pub(crate) fn stable_json(value: &serde_json::Value) -> serde_json::Value {
+    let mut placeholders = std::collections::HashMap::new();
+    stabilize_value(value, &mut placeholders)
+}
+
+fn stabilize_value(
+    value: &serde_json::Value,
+    placeholders: &mut std::collections::HashMap<String, String>,
+) -> serde_json::Value {
+    match value {
+        serde_json::Value::String(text) => {
+            serde_json::Value::String(stabilize_text(text, placeholders))
+        }
+        serde_json::Value::Array(items) => serde_json::Value::Array(
+            items
+                .iter()
+                .map(|item| stabilize_value(item, placeholders))
+                .collect(),
+        ),
+        serde_json::Value::Object(fields) => serde_json::Value::Object(
+            fields
+                .iter()
+                .map(|(key, field)| (key.clone(), stabilize_value(field, placeholders)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+fn placeholder_for(
+    original: &str,
+    prefix: &str,
+    placeholders: &mut std::collections::HashMap<String, String>,
+) -> String {
+    if let Some(existing) = placeholders.get(original) {
+        return existing.clone();
+    }
+    let next = placeholders
+        .values()
+        .filter(|value| value.starts_with(&format!("[{prefix}-")))
+        .count()
+        + 1;
+    let placeholder = format!("[{prefix}-{next}]");
+    placeholders.insert(original.to_owned(), placeholder.clone());
+    placeholder
+}
+
+fn stabilize_text(
+    text: &str,
+    placeholders: &mut std::collections::HashMap<String, String>,
+) -> String {
+    if chrono::DateTime::parse_from_rfc3339(text).is_ok() {
+        return placeholder_for(text, "timestamp", placeholders);
+    }
+
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut index = 0;
+    while index < chars.len() {
+        if !is_crockford_char(chars[index]) {
+            out.push(chars[index]);
+            index += 1;
+            continue;
+        }
+        let mut end = index;
+        while end < chars.len() && chars[end].is_ascii_alphanumeric() {
+            end += 1;
+        }
+        let run: String = chars[index..end].iter().collect();
+        if run.len() == 26 && run.chars().all(is_crockford_char) {
+            out.push_str(&placeholder_for(&run, "id", placeholders));
+        } else {
+            out.push_str(&run);
+        }
+        index = end;
+    }
+    out
+}
+
+/// Crockford base32 alphabet used by ULID string form (`I`, `L`, `O` and `U`
+/// are excluded).
+fn is_crockford_char(value: char) -> bool {
+    value.is_ascii_digit()
+        || (value.is_ascii_uppercase() && !matches!(value, 'I' | 'L' | 'O' | 'U'))
+}
+
 /// Salvo handler that injects `TestState` components into the Depot.
 #[derive(Clone)]
 struct InjectTestState(TestState);
@@ -235,7 +357,40 @@ impl Handler for InjectTestState {
         );
         depot.insert("upstream_oidc_service", default_upstream_oidc_service());
         depot.insert("did_resolver_service", default_did_resolver_service());
+        depot.insert("frontend_script_src", String::new());
+        depot.insert("development_mode", false);
+        depot.insert(
+            "dpop_verifier",
+            crate::services::dpop::DpopVerifier::with_store(Arc::new(
+                crate::services::dpop::RepositoryJtiStore::new(state.repository_factory.clone()),
+            )),
+        );
+        depot.insert(
+            crate::services::did_binding::DEPOT_KEY,
+            crate::services::did_binding::shared_verified_did_binding_store(),
+        );
         ctrl.call_next(req, depot, res).await;
+    }
+}
+
+/// Principal Server core DID used by [`TestState::from_pool_with_principal_server`].
+///
+/// Account-status publication and principal-DID resolution both require a
+/// single configured Principal Server whose audience is a `did_core_id`, so
+/// the tests that exercise those paths must configure one.
+pub(crate) const TEST_PRINCIPAL_SERVER_AUDIENCE: &str = "ak:did_core:webvh:zTestPrincipalServer";
+
+fn test_arkret_config(
+    principal_servers: Vec<coauth_config::PrincipalServerConfig>,
+) -> ArkretConfig {
+    // Seed the runtime identity fixture so DID-shaped assertions stay
+    // stable without introducing a configuration-level service DID.
+    ArkretConfig {
+        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+            "did:web:example.com",
+        ),
+        principal_servers,
+        ..ArkretConfig::default()
     }
 }
 
@@ -245,10 +400,40 @@ impl TestState {
         Self::from_pool_with_site_config(pool, test_site_config()).await
     }
 
+    /// Create a new test state whose Arkret config carries exactly one
+    /// Principal Server, the destination required by account-status
+    /// publication and principal-DID resolution.
+    pub async fn from_pool_with_principal_server(
+        pool: DieselPool<AsyncPgConnection>,
+    ) -> Result<Self, anyhow::Error> {
+        Self::build(
+            pool,
+            test_site_config(),
+            test_arkret_config(vec![coauth_config::PrincipalServerConfig {
+                name: "principal-test".to_owned(),
+                endpoint: "https://principal.example/".parse()?,
+                service_id: Some(arkret_identifiers::DidCoreId::new(
+                    TEST_PRINCIPAL_SERVER_AUDIENCE,
+                )?),
+                session_grant_introspection_bearer: None,
+                embedded_webvh_registration_bearer: None,
+            }]),
+        )
+        .await
+    }
+
     /// Create a new test state from the given database pool and site config
     pub async fn from_pool_with_site_config(
         pool: DieselPool<AsyncPgConnection>,
         site_config: SiteConfig,
+    ) -> Result<Self, anyhow::Error> {
+        Self::build(pool, site_config, test_arkret_config(Vec::new())).await
+    }
+
+    async fn build(
+        pool: DieselPool<AsyncPgConnection>,
+        site_config: SiteConfig,
+        arkret_config: ArkretConfig,
     ) -> Result<Self, anyhow::Error> {
         let workspace_root = workspace_root();
 
@@ -256,15 +441,6 @@ impl TestState {
         let shutdown_token = CancellationToken::new();
 
         let url_builder = UrlBuilder::new("https://example.com/".parse()?, None, None);
-
-        // Seed the runtime identity fixture so DID-shaped assertions stay
-        // stable without introducing a configuration-level service DID.
-        let arkret_config = ArkretConfig {
-            runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
-                "did:web:example.com",
-            ),
-            ..ArkretConfig::default()
-        };
 
         let templates = Templates::load(
             workspace_root.join("templates"),
@@ -285,7 +461,16 @@ impl TestState {
         let ed25519 = JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(43)))
             .with_kid("test-ed25519")
             .with_alg(JsonWebSignatureAlg::Ed25519);
-        let jwks = JsonWebKeySet::new(vec![rsa, ed25519]);
+        // Server-to-server payloads (account-status records, peer requests) are
+        // signed with the explicitly designated service-identity key, so a
+        // deployment without one cannot publish at all.
+        // Deliberately carries no `alg`: the service identity is selected by
+        // its `kid`, and advertising a second Ed25519 signing key would make
+        // the algorithm-only selector ambiguous.
+        let service_identity =
+            JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(44)))
+                .with_kid(coauth_keystore::SERVICE_IDENTITY_KEY_ID);
+        let jwks = JsonWebKeySet::new(vec![rsa, ed25519, service_identity]);
         let key_store = Keystore::new(jwks);
 
         let encrypter = Encrypter::new(&[0x42; 32]);
@@ -373,28 +558,24 @@ impl TestState {
         })
     }
 
-    /// Build a Salvo router with all test routes and state injection.
+    /// Build a Salvo router for the in-process test client.
+    ///
+    /// The route table is **not** duplicated here: it is mounted from the same
+    /// `server::routers` builders production uses, so a route added or moved in
+    /// production can never silently 404/405 in these tests. Only the state
+    /// injection hoop and the two `.well-known` OIDC documents (which
+    /// `server::mod` mounts outside the resource builders) are test-local.
     fn build_test_router(&self) -> Router {
-        use crate::handlers::admin::v1::{
-            account_dids, accounts, audit_feed, claims, connector_health, devices,
-            notification_channels, notification_templates, oauth_sessions, personal_sessions,
-            policy_checks, policy_data, site_config, upstream_oauth_links,
-            upstream_oauth_providers, user_emails, user_registration_tokens, user_sessions,
-            version,
+        use crate::server::routers::{
+            build_account_api_routes, build_admin_routes, build_human_router, build_oauth_router,
         };
 
-        Router::new()
+        let router = Router::new()
             .hoop(InjectTestState(self.clone()))
-            // Health
             .push(Router::with_path("/health").get(crate::handlers::health::get))
             .push(Router::with_path("/livez").get(crate::handlers::health::livez))
             .push(Router::with_path("/healthz").get(crate::handlers::health::get))
             .push(Router::with_path("/readyz").get(crate::handlers::health::readyz))
-            .push(
-                Router::with_path("/webhooks/email/{provider}")
-                    .post(crate::handlers::email_webhooks::post),
-            )
-            // OAuth discovery
             .push(
                 Router::with_path("/.well-known/openid-configuration")
                     .get(crate::handlers::oauth::discovery::get),
@@ -402,368 +583,15 @@ impl TestState {
             .push(
                 Router::with_path("/.well-known/webfinger")
                     .get(crate::handlers::oauth::webfinger::get),
-            )
-            // coauth hosts no DID documents — see the matching note in
-            // `server.rs` (DID hosting belongs to the principal server).
-            // OAuth endpoints
-            .push(
-                Router::with_path("/oauth/keys.json").get(crate::handlers::oauth::keys::get),
-            )
-            .push(
-                Router::with_path("/oauth/userinfo")
-                    .get(crate::handlers::oauth::userinfo::get)
-                    .post(crate::handlers::oauth::userinfo::get),
-            )
-            .push(
-                Router::with_path("/oauth/introspect")
-                    .post(crate::handlers::oauth::introspection::post),
-            )
-            .push(
-                Router::with_path("/oauth/revoke")
-                    .post(crate::handlers::oauth::revoke::post),
-            )
-            .push(
-                Router::with_path("/oauth/token")
-                    .post(crate::handlers::oauth::token::post),
-            )
-            .push(
-                Router::with_path("/oauth/registration")
-                    .post(crate::handlers::oauth::registration::post),
-            )
-            .push(
-                Router::with_path("/oauth/device")
-                    .post(crate::handlers::oauth::device::authorize::post),
-            )
-            // REST API
-            .push(
-                Router::with_path("/_coauth/account/integration/describe")
-                    .get(crate::handlers::account::auth::integration_describe),
-            )
-            // Canonical Account Authority/Auth Server surface (mirrors
-            // production server.rs): session-grant issuance (OIDC code
-            // exchange) plus the Auth-side S2S logout sub-operation. The
-            // deleted `/_coauth/.../auth/oidc/*` bridge routes are gone.
-            .push(
-                Router::with_path("/_arkret/gate/account/session-grants")
-                    .post(crate::handlers::arkret::issue_session_grant_endpoint),
-            )
-            .push(
-                Router::with_path("/_arkret/gate/account/session-grants/revoke")
-                    .post(crate::handlers::arkret::revoke_session_grant_endpoint),
-            )
-            .push(
-                Router::with_path("/_arkret/gate/account/auth-sessions/logout")
-                    .post(crate::handlers::arkret::logout_auth_session),
-            )
-            .push(Router::with_path("/_arkret/describe").get(crate::handlers::arkret::server_describe))
-            .push(Router::with_path("/_arkret/root/identity/describe").get(crate::handlers::arkret::identity_describe))
-            .push(Router::with_path("/_arkret/root/identity/resolve").post(crate::handlers::arkret::identity_resolve))
-            .push(Router::with_path("/_arkret/root/identity/document").get(crate::handlers::arkret::identity_document))
-            .push(Router::with_path("/_coauth/account/identity/primary-handle").patch(crate::handlers::account::primary_handle::patch_primary_handle_preference))
-            .push(Router::with_path("/_arkret/find/directory/resolve-handle").post(crate::handlers::arkret::directory_resolve_handle))
-            // Canonical spec surface (mirrors production server.rs): the
-            // Principal Server calls introspection at the `/_arkret` path.
-            .push(
-                Router::with_path("/_arkret/gate/account/session-grants/introspect")
-                    .post(crate::handlers::arkret::introspect_session_grant),
-            )
-            .push(
-                // Product-private account-management UI: list + {id}/revoke.
-                Router::with_path("/_coauth/account/session-grants")
-                    .get(crate::handlers::account::session_grants::list_session_grants)
-                    .push(
-                        Router::with_path("{id}/revoke")
-                            .post(crate::handlers::account::session_grants::revoke_session_grant),
-                    ),
-            )
-            .push(Router::with_path("/_coauth/self/viewer").get(crate::handlers::account::viewer::get_viewer))
-            .push(Router::with_path("/_coauth/self/site-config").get(crate::handlers::account::site_config::get))
-            .push(
-                Router::with_path("/_coauth/self/sessions/{id}").get(crate::handlers::account::sessions::get_session),
-            )
-            .push(
-                Router::with_path("/_coauth/self/browser-sessions/{id}")
-                    .delete(crate::handlers::account::sessions::end_browser_session),
-            )
-            .push(
-                Router::with_path("/_coauth/self/oauth-sessions/{id}")
-                    .delete(crate::handlers::account::sessions::end_oauth_session),
-            )
-            .push(
-                Router::with_path("/_coauth/self/oauth-sessions/{id}/name")
-                    .put(crate::handlers::account::sessions::set_oauth_session_name),
-            )
-            .push(
-                Router::with_path("/_coauth/self/oauth-clients/{id}")
-                    .get(crate::handlers::account::oauth_clients::get_client),
-            )
-            .push(
-                Router::with_path("/_coauth/self/viewer/password")
-                    .post(crate::handlers::account::password::set_password),
-            )
-            .push(
-                Router::with_path("/_coauth/account/password-recovery/{ticket}")
-                    .get(crate::handlers::account::password::get_recovery_ticket_status),
-            )
-            .push(
-                Router::with_path("/_coauth/account/password-recovery/set")
-                    .post(crate::handlers::account::password::set_password_by_recovery),
-            )
-            .push(
-                Router::with_path("/_coauth/account/password-recovery/resend")
-                    .post(crate::handlers::account::password::resend_recovery_email),
-            )
-            .push(
-                Router::with_path("/_coauth/self/viewer/profile")
-                    .patch(crate::handlers::account::users::patch_profile),
-            )
-            .push(
-                Router::with_path("/_coauth/self/viewer/deactivate")
-                    .post(crate::handlers::account::users::deactivate_user),
-            )
-            .push(
-                Router::with_path("/_coauth/self/viewer/preferences")
-                    .get(crate::handlers::account::notification_prefs::get_notification_preferences)
-                    .patch(crate::handlers::account::notification_prefs::patch_notification_preferences),
-            )
-            .push(
-                Router::with_path("/_coauth/account/email-auth/start")
-                    .post(crate::handlers::account::emails::start_email_auth),
-            )
-            .push(
-                Router::with_path("/_coauth/account/email-auth/{id}")
-                    .get(crate::handlers::account::emails::get_email_auth),
-            )
-            .push(
-                Router::with_path("/_coauth/account/email-auth/{id}/complete")
-                    .post(crate::handlers::account::emails::complete_email_auth),
-            )
-            .push(
-                Router::with_path("/_coauth/account/email-auth/{id}/resend")
-                    .post(crate::handlers::account::emails::resend_email_auth_code),
-            )
-            .push(
-                Router::with_path("/_coauth/self/user-emails/{id}")
-                    .delete(crate::handlers::account::emails::remove_email),
-            )
-            // OAuth authorization
-            .push(
-                Router::with_path("/authorize")
-                    .get(crate::handlers::oauth::authorization::get),
-            )
-            // Upstream OAuth
-            .push(
-                Router::with_path("/upstream/authorize/{provider_id}")
-                    .get(crate::handlers::upstream_oauth::authorize::get),
-            )
-            .push(
-                Router::with_path("/upstream/callback/{provider_id}")
-                    .get(crate::handlers::upstream_oauth::callback::handler)
-                    .post(crate::handlers::upstream_oauth::callback::handler),
-            )
-            .push(
-                Router::with_path("/upstream/backchannel-logout/{provider_id}")
-                    .post(crate::handlers::upstream_oauth::backchannel_logout::post),
-            )
-            // Admin API
-            .push(
-                Router::with_path("/_coauth/admin")
-                    .push(Router::with_path("version").get(version::handler))
-                    .push(Router::with_path("site-config").get(site_config::handler))
-                    .push(Router::with_path("connector-health").get(connector_health::handler))
-                    .push(Router::with_path("notification-channels").get(notification_channels::handler))
-                    .push(
-                        Router::with_path("notification-templates")
-                            .get(notification_templates::list_handler)
-                            .push(
-                                Router::with_path("publish")
-                                    .post(notification_templates::publish_handler),
-                            ),
-                    )
-                    .push(Router::with_path("audit-feed").get(audit_feed::handler))
-                    .push(
-                        Router::with_path("accounts")
-                            .get(accounts::list_accounts)
-                            .post(accounts::create::add_account)
-                            .push(
-                                Router::with_path("by-username/{username}")
-                                    .get(accounts::get_account_by_username),
-                            )
-                            .push(
-                                Router::with_path("batch-invite")
-                                    .post(accounts::create::batch_invite),
-                            )
-                            .push(
-                                Router::with_path("{id}")
-                                    .get(accounts::get_account)
-                                    .patch(accounts::update::update_account)
-                                    .push(
-                                        Router::with_path("set-password")
-                                            .post(accounts::security::set_password),
-                                    )
-                                    .push(
-                                        Router::with_path("lock")
-                                            .post(accounts::lock_account),
-                                    )
-                                    .push(
-                                        Router::with_path("disable")
-                                            .post(accounts::disable_account),
-                                    )
-                                    .push(
-                                        Router::with_path("erase")
-                                            .post(accounts::erase_account),
-                                    )
-                                    .push(
-                                        Router::with_path("reset-recovery")
-                                            .post(accounts::reset_recovery),
-                                    )
-                                    .push(
-                                        Router::with_path("risk-action/history")
-                                            .get(accounts::risk_action::list_history),
-                                    )
-                                    .push(
-                                        Router::with_path("risk-action/current")
-                                            .get(accounts::risk_action::get_current),
-                                    )
-                                    .push(
-                                        Router::with_path("risk-action")
-                                            .post(accounts::risk_action::propose),
-                                    )
-                                    .push(
-                                        Router::with_path("risk-action/{proposal_id}/approve")
-                                            .post(accounts::risk_action::approve),
-                                    )
-                                    .push(
-                                        Router::with_path("risk-action/{proposal_id}/execute")
-                                            .post(accounts::risk_action::execute),
-                                    )
-                                    .push(
-                                        Router::with_path("dids")
-                                            .get(account_dids::list_account_dids)
-                                            .post(account_dids::add_account_did)
-                                            .push(
-                                                Router::with_path("{did_id}")
-                                                    .delete(account_dids::remove_account_did),
-                                            ),
-                                    ),
-                            ),
-                    )
-                    .push(
-                        Router::with_path("user-emails")
-                            .get(user_emails::list_emails)
-                            .post(user_emails::add_email)
-                            .push(
-                                Router::with_path("{id}")
-                                    .get(user_emails::get_email)
-                                    .patch(user_emails::update_email)
-                                    .delete(user_emails::delete_email),
-                            ),
-                    )
-                    .push(
-                        Router::with_path("user-sessions")
-                            .get(user_sessions::list_sessions)
-                            .push(
-                                Router::with_path("{id}")
-                                    .get(user_sessions::get_session)
-                                    .push(Router::with_path("finish").post(user_sessions::finish_session)),
-                            ),
-                    )
-                    .push(
-                        Router::with_path("oauth-sessions")
-                            .get(oauth_sessions::list_sessions)
-                            .push(
-                                Router::with_path("{id}")
-                                    .get(oauth_sessions::get_session)
-                                    .push(
-                                        Router::with_path("finish").post(oauth_sessions::finish_session),
-                                    ),
-                            ),
-                    )
-                    .push(
-                        Router::with_path("personal-sessions")
-                            .get(personal_sessions::list_sessions)
-                            .post(personal_sessions::add_session)
-                            .push(
-                                Router::with_path("{id}")
-                                    .get(personal_sessions::get_session)
-                                    .push(
-                                        Router::with_path("regenerate")
-                                            .post(personal_sessions::regenerate_session),
-                                    )
-                                    .push(
-                                        Router::with_path("revoke")
-                                            .post(personal_sessions::revoke_session),
-                                    ),
-                            ),
-                    )
-                    .push(
-                        Router::with_path("devices")
-                            .get(devices::list_devices)
-                            .push(
-                                Router::with_path("{id}/revoke")
-                                    .post(devices::revoke_device),
-                            ),
-                    )
-                    .push(
-                        Router::with_path("user-registration-tokens")
-                            .get(user_registration_tokens::list_tokens)
-                            .post(user_registration_tokens::add_token)
-                            .push(
-                                Router::with_path("{id}")
-                                    .get(user_registration_tokens::get_token)
-                                    .put(user_registration_tokens::update_token)
-                                    .push(
-                                        Router::with_path("revoke")
-                                            .post(user_registration_tokens::revoke_token),
-                                    )
-                                    .push(
-                                        Router::with_path("unrevoke")
-                                            .post(user_registration_tokens::unrevoke_token),
-                                    ),
-                            ),
-                    )
-                    .push(
-                        Router::with_path("upstream-oauth-providers")
-                            .get(upstream_oauth_providers::list_providers)
-                            .push(Router::with_path("{id}").get(upstream_oauth_providers::get_provider)),
-                    )
-                    .push(
-                        Router::with_path("upstream-oauth-links")
-                            .get(upstream_oauth_links::list_links)
-                            .post(upstream_oauth_links::add_link)
-                            .push(
-                                Router::with_path("{id}")
-                                    .get(upstream_oauth_links::get_link)
-                                    .patch(upstream_oauth_links::update_link)
-                                    .delete(upstream_oauth_links::delete_link),
-                            ),
-                    )
-                    .push(
-                        Router::with_path("policy-data")
-                            .push(Router::with_path("latest").get(policy_data::get_latest))
-                            .push(Router::with_path("{id}").get(policy_data::get_by_id))
-                            .put(policy_data::set_data),
-                    )
-                    .push(
-                        Router::with_path("claims")
-                            .post(claims::issue_claim)
-                            .push(Router::with_path("status").get(claims::list_claim_status))
-                            .push(
-                                Router::with_path("{id}/revoke")
-                                    .post(claims::revoke_claim),
-                            ),
-                    )
-                    .push(
-                        Router::with_path("policy-checks")
-                            .push(Router::with_path("dry-run").post(policy_checks::dry_run)),
-                    )
-                    .push(
-                        Router::with_path("policy-decision-audits").push(
-                            Router::with_path("{id}")
-                                .get(policy_checks::get_signed_decision_audit),
-                        ),
-                    ),
-            )
+            );
+
+        // `/_coauth/admin` first so it is matched before the broader
+        // `/_coauth` account router, mirroring the production deployment where
+        // each resource owns its own listener.
+        let router = build_admin_routes(router);
+        let router = build_account_api_routes(router);
+        let router = build_oauth_router(router);
+        build_human_router(router, self.templates.clone())
     }
 
     pub async fn request(&self, request: Request<String>) -> Response<String> {
@@ -860,8 +688,152 @@ impl TestState {
         access_token
     }
 
+    /// Mint an OAuth client-credentials session plus its access token and
+    /// return `(bearer, session_id)`.
+    ///
+    /// [`Self::token_with_scope`] issues a *personal* access token, which the
+    /// `oauth_sessions` admin endpoints do not operate on. Tests covering
+    /// those endpoints need a real OAuth session to authenticate with and to
+    /// act on.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the session or token cannot be persisted.
+    pub async fn oauth_token_with_scope(&mut self, scope: &str) -> (String, Ulid) {
+        use coauth_data::oauth::{
+            OAuthAccessTokenRepository as _, OAuthClientRepository as _,
+            OAuthSessionRepository as _,
+        };
+
+        let parsed_scope: Scope = if scope.is_empty() {
+            std::iter::empty().collect()
+        } else {
+            scope.parse().expect("test scope must parse")
+        };
+
+        let mut repo = self.repository().await.unwrap();
+        let clock = SystemClock::default();
+        let mut rng = ChaChaRng::seed_from_u64(unique_test_nonce());
+        let client = repo
+            .oauth_client()
+            .add(
+                &mut rng,
+                &clock,
+                vec!["https://client.example/callback".parse().unwrap()],
+                None,
+                None,
+                None,
+                vec![coauth_oauth_types::requests::GrantType::AuthorizationCode],
+                Some("admin test client".to_owned()),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        // `oauth_sessions.user_id` is NOT NULL, so the session has to come
+        // from a browser session rather than client credentials.
+        let user = repo
+            .user()
+            .add(
+                &mut rng,
+                &clock,
+                format!("oauth{}", Ulid::new().to_string().to_lowercase()),
+            )
+            .await
+            .unwrap();
+        let browser_session = repo
+            .browser_session()
+            .add(&mut rng, &clock, &user, None)
+            .await
+            .unwrap();
+        let session = repo
+            .oauth_session()
+            .add_from_browser_session(&mut rng, &clock, &client, &browser_session, parsed_scope)
+            .await
+            .unwrap();
+        let access_token = TokenType::AccessToken.generate(&mut rng);
+        repo.oauth_access_token()
+            .add(
+                &mut rng,
+                &clock,
+                &session,
+                access_token.clone(),
+                Some(self.site_config.access_token_ttl),
+            )
+            .await
+            .unwrap();
+        repo.save().await.unwrap();
+
+        (access_token, session.id)
+    }
+
     pub async fn repository(&self) -> Result<BoxRepository, RepositoryError> {
         self.repository_factory.create().await
+    }
+
+    /// Persist an accepted principal-DID binding for `user` against
+    /// [`TEST_PRINCIPAL_SERVER_AUDIENCE`] and return the bound principal core
+    /// DID.
+    ///
+    /// Every admin path that touches account status, risk actions, or the DID
+    /// inventory resolves the account's principal DID through this binding, so
+    /// tests for those paths have to seed it.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the binding cannot be persisted.
+    pub async fn seed_principal_binding(&self, user: &coauth_data::User, label: &str) -> String {
+        use coauth_data::user::PrincipalDidRepository as _;
+
+        let (principal_id, key_log_head) =
+            coauth_storage_postgres::test_utils::principal_binding_test_material(label);
+        // Account-status publication requires the binding to have been accepted
+        // by this deployment's own runtime service identity.
+        let account_authority_full_id =
+            crate::handlers::arkret::issuer_did_for(&self.arkret_config).to_string();
+        let input = coauth_storage_postgres::test_utils::verified_principal_binding_input(
+            &account_authority_full_id,
+            TEST_PRINCIPAL_SERVER_AUDIENCE,
+            principal_id.clone(),
+            key_log_head,
+        );
+
+        let mut rng = self.rng();
+        let mut repo = self.repository().await.unwrap();
+        let binding = repo
+            .principal_did()
+            .add_verified(&mut rng, self.clock.as_ref(), user, input)
+            .await
+            .unwrap();
+
+        // A registered account's issuer ledger opens with an active genesis
+        // record; without it every later transition is rejected as a ledger
+        // that does not begin at `active`.
+        crate::services::account_status_publication::author_transition_plan(
+            &mut repo,
+            self.principal_server_admin.as_ref(),
+            &self.key_store,
+            crate::handlers::arkret::service_id_for(&self.arkret_config).as_str(),
+            user,
+            &binding,
+            arkret_models_collaboration::objects::account_status::AccountStatus::Active,
+            chrono::Utc::now(),
+            &mut rng,
+        )
+        .await
+        .unwrap();
+        repo.save().await.unwrap();
+
+        principal_id
     }
 
     /// Returns a new random number generator.

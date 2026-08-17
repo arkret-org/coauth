@@ -23,30 +23,30 @@ async fn test_create() {
     response.assert_status(StatusCode::CREATED);
     let body: serde_json::Value = response.json();
 
-    assert_json_snapshot!(body, @r#"
-        {
-          "data": {
-            "type": "user-registration_token",
-            "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-            "attributes": {
-              "token": "test_token_123",
-              "valid": true,
-              "usage_limit": 5,
-              "times_used": 0,
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "last_used_at": null,
-              "expires_at": null,
-              "revoked_at": null
-            },
-            "links": {
-              "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-            }
-          },
-          "links": {
-            "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-          }
+    assert_json_snapshot!(stable_json(&body), @r#"
+    {
+      "data": {
+        "type": "user-registration_token",
+        "id": "[id-1]",
+        "attributes": {
+          "token": "test_token_123",
+          "valid": true,
+          "usage_limit": 5,
+          "times_used": 0,
+          "created_at": "[timestamp-1]",
+          "last_used_at": null,
+          "expires_at": null,
+          "revoked_at": null
+        },
+        "links": {
+          "self": "/_coauth/admin/user-registration-tokens/[id-1]"
         }
-        "#);
+      },
+      "links": {
+        "self": "/_coauth/admin/user-registration-tokens/[id-1]"
+      }
+    }
+    "#);
 }
 
 #[tokio::test]
@@ -66,32 +66,44 @@ async fn test_create_auto_token() {
     let response = state.request(request).await;
     response.assert_status(StatusCode::CREATED);
 
-    let body: serde_json::Value = response.json();
+    let mut body: serde_json::Value = response.json();
+    // The auto-generated token string comes from the process RNG: assert its
+    // shape here and keep the snapshot free of it.
+    let generated = body["data"]["attributes"]["token"]
+        .as_str()
+        .expect("auto-generated registration token")
+        .to_owned();
+    assert_eq!(generated.len(), 12, "{generated}");
+    assert!(
+        generated.chars().all(|c| c.is_ascii_alphanumeric()),
+        "{generated}"
+    );
+    body["data"]["attributes"]["token"] = serde_json::Value::String("[token]".to_owned());
 
-    assert_json_snapshot!(body, @r#"
-        {
-          "data": {
-            "type": "user-registration_token",
-            "id": "01FSHN9AG0QMGC989M0XSFVF2X",
-            "attributes": {
-              "token": "42oTpLoieH5I",
-              "valid": true,
-              "usage_limit": 1,
-              "times_used": 0,
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "last_used_at": null,
-              "expires_at": null,
-              "revoked_at": null
-            },
-            "links": {
-              "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0QMGC989M0XSFVF2X"
-            }
-          },
-          "links": {
-            "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0QMGC989M0XSFVF2X"
-          }
+    assert_json_snapshot!(stable_json(&body), @r#"
+    {
+      "data": {
+        "type": "user-registration_token",
+        "id": "[id-1]",
+        "attributes": {
+          "token": "[token]",
+          "valid": true,
+          "usage_limit": 1,
+          "times_used": 0,
+          "created_at": "[timestamp-1]",
+          "last_used_at": null,
+          "expires_at": null,
+          "revoked_at": null
+        },
+        "links": {
+          "self": "/_coauth/admin/user-registration-tokens/[id-1]"
         }
-        "#);
+      },
+      "links": {
+        "self": "/_coauth/admin/user-registration-tokens/[id-1]"
+      }
+    }
+    "#);
 }
 
 #[tokio::test]
@@ -114,30 +126,30 @@ async fn test_create_conflict() {
 
     let body: serde_json::Value = response.json();
 
-    assert_json_snapshot!(body, @r#"
-        {
-          "data": {
-            "type": "user-registration_token",
-            "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-            "attributes": {
-              "token": "test_token_123",
-              "valid": true,
-              "usage_limit": 5,
-              "times_used": 0,
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "last_used_at": null,
-              "expires_at": null,
-              "revoked_at": null
-            },
-            "links": {
-              "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-            }
-          },
-          "links": {
-            "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-          }
+    assert_json_snapshot!(stable_json(&body), @r#"
+    {
+      "data": {
+        "type": "user-registration_token",
+        "id": "[id-1]",
+        "attributes": {
+          "token": "test_token_123",
+          "valid": true,
+          "usage_limit": 5,
+          "times_used": 0,
+          "created_at": "[timestamp-1]",
+          "last_used_at": null,
+          "expires_at": null,
+          "revoked_at": null
+        },
+        "links": {
+          "self": "/_coauth/admin/user-registration-tokens/[id-1]"
         }
-        "#);
+      },
+      "links": {
+        "self": "/_coauth/admin/user-registration-tokens/[id-1]"
+      }
+    }
+    "#);
 
     let request = Request::post("/_coauth/admin/user-registration-tokens")
         .bearer(&token)
@@ -182,30 +194,30 @@ async fn test_get_token() {
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
 
-    assert_json_snapshot!(body, @r#"
-        {
-          "data": {
-            "type": "user-registration_token",
-            "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-            "attributes": {
-              "token": "test_token_123",
-              "valid": true,
-              "usage_limit": 5,
-              "times_used": 0,
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "last_used_at": null,
-              "expires_at": null,
-              "revoked_at": null
-            },
-            "links": {
-              "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-            }
-          },
-          "links": {
-            "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-          }
+    assert_json_snapshot!(stable_json(&body), @r#"
+    {
+      "data": {
+        "type": "user-registration_token",
+        "id": "[id-1]",
+        "attributes": {
+          "token": "test_token_123",
+          "valid": true,
+          "usage_limit": 5,
+          "times_used": 0,
+          "created_at": "[timestamp-1]",
+          "last_used_at": null,
+          "expires_at": null,
+          "revoked_at": null
+        },
+        "links": {
+          "self": "/_coauth/admin/user-registration-tokens/[id-1]"
         }
-        "#);
+      },
+      "links": {
+        "self": "/_coauth/admin/user-registration-tokens/[id-1]"
+      }
+    }
+    "#);
 }
 
 #[tokio::test]
@@ -227,13 +239,13 @@ async fn test_get_nonexistent_token() {
     response.assert_status(StatusCode::NOT_FOUND);
     let body: serde_json::Value = response.json();
 
-    assert_json_snapshot!(body, @r###"
+    assert_json_snapshot!(body, @r#"
+    {
+      "errors": [
         {
-          "errors": [
-            {
-              "title": "Registration token with ID 00000000000000000000000000 not found"
-            }
-          ]
+          "title": "Registration token with ID 00000000000000000000000000 not found"
         }
-        "###);
+      ]
+    }
+    "#);
 }

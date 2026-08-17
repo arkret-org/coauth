@@ -180,7 +180,9 @@ pub async fn list_invite_quarantine(
 ) -> JsonResult<InviteQuarantineListOutcome> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { repo, .. } = ctx;
-    let query: InviteQuarantineListQuery = req.parse_queries().unwrap_or_default();
+    let query: InviteQuarantineListQuery = req
+        .parse_queries()
+        .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
     let queue = depot.invite_quarantine_service()?;
     // REL-10: clamp the caller-supplied limit so an unbounded / negative
     // value cannot drive an oversized scan. Mirrors the 1-1000 range

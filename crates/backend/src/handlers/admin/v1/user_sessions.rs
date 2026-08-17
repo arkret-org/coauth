@@ -161,7 +161,9 @@ pub async fn list_sessions(
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let (pagination, include_count) = extract_pagination(req)?;
-    let params: FilterParams = req.parse_queries().unwrap_or_default();
+    let params: FilterParams = req
+        .parse_queries()
+        .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
 
     let base_url = format!("{path}{params}", path = UserSession::PATH);
     let base_url = include_count.add_to_base(&base_url);
@@ -223,11 +225,12 @@ pub async fn list_sessions(
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use coauth_data::Clock as _;
     use hyper::{Request, StatusCode};
     use insta::assert_json_snapshot;
 
-    use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
+    use crate::handlers::test_utils::{
+        RequestBuilderExt, ResponseExt, TestState, assert_stamped_since, setup, stable_json,
+    };
 
     #[tokio::test]
     async fn test_finish_session() {
@@ -259,14 +262,16 @@ mod tests {
         ))
         .bearer(&token)
         .empty();
+        let before = chrono::Utc::now();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
 
-        // The finished_at timestamp should be the same as the current time
-        assert_eq!(
-            body["data"]["attributes"]["finished_at"],
-            serde_json::json!(state.clock.now())
+        // `finished_at` is stamped from the request-time wall clock.
+        assert_stamped_since(
+            &body["data"]["attributes"]["finished_at"],
+            before,
+            "finished_at",
         );
     }
 
@@ -373,28 +378,28 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r###"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": {
             "type": "user-session",
-            "id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",
+            "id": "[id-1]",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00.000Z",
+              "created_at": "[timestamp-1]",
               "finished_at": null,
-              "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+              "user_id": "[id-2]",
               "user_agent": null,
               "last_active_at": null,
               "last_active_ip": null
             },
             "links": {
-              "self": "/_coauth/admin/user-sessions/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
+              "self": "/_coauth/admin/user-sessions/[id-1]"
             }
           },
           "links": {
-            "self": "/_coauth/admin/user-sessions/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
+            "self": "/_coauth/admin/user-sessions/[id-1]"
           }
         }
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -446,7 +451,7 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r#"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 2
@@ -454,41 +459,41 @@ mod tests {
           "data": [
             {
               "type": "user-session",
-              "id": "01FSHNB5309NMZYX8MFYH578R9",
+              "id": "[id-1]",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00.000Z",
-                "finished_at": null,
-                "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+                "created_at": "[timestamp-1]",
+                "finished_at": "[timestamp-2]",
+                "user_id": "[id-2]",
                 "user_agent": null,
                 "last_active_at": null,
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_coauth/admin/user-sessions/01FSHNB5309NMZYX8MFYH578R9"
+                "self": "/_coauth/admin/user-sessions/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG0MZAA6S4AF7CTV32E"
+                  "cursor": "[id-1]"
                 }
               }
             },
             {
               "type": "user-session",
-              "id": "01FSHNB530KEPHYQQXW9XPTX6Z",
+              "id": "[id-3]",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00.000Z",
-                "finished_at": "2022-01-16T14:42:00.000Z",
-                "user_id": "01FSHNB530AJ6AC5HQ9X6H4RP4",
+                "created_at": "[timestamp-1]",
+                "finished_at": null,
+                "user_id": "[id-4]",
                 "user_agent": null,
                 "last_active_at": null,
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_coauth/admin/user-sessions/01FSHNB530KEPHYQQXW9XPTX6Z"
+                "self": "/_coauth/admin/user-sessions/[id-3]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHNB530AJ6AC5HQ9X6H4RP4"
+                  "cursor": "[id-3]"
                 }
               }
             }
@@ -511,7 +516,7 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r#"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 1
@@ -519,29 +524,29 @@ mod tests {
           "data": [
             {
               "type": "user-session",
-              "id": "01FSHNB5309NMZYX8MFYH578R9",
+              "id": "[id-1]",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00.000Z",
+                "created_at": "[timestamp-1]",
                 "finished_at": null,
-                "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+                "user_id": "[id-2]",
                 "user_agent": null,
                 "last_active_at": null,
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_coauth/admin/user-sessions/01FSHNB5309NMZYX8MFYH578R9"
+                "self": "/_coauth/admin/user-sessions/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG0MZAA6S4AF7CTV32E"
+                  "cursor": "[id-1]"
                 }
               }
             }
           ],
           "links": {
-            "self": "/_coauth/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
-            "first": "/_coauth/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
-            "last": "/_coauth/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[last]=10"
+            "self": "/_coauth/admin/user-sessions?filter[user]=[id-2]&page[first]=10",
+            "first": "/_coauth/admin/user-sessions?filter[user]=[id-2]&page[first]=10",
+            "last": "/_coauth/admin/user-sessions?filter[user]=[id-2]&page[last]=10"
           }
         }
         "#);
@@ -553,7 +558,7 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r#"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 1
@@ -561,21 +566,21 @@ mod tests {
           "data": [
             {
               "type": "user-session",
-              "id": "01FSHNB5309NMZYX8MFYH578R9",
+              "id": "[id-1]",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00.000Z",
+                "created_at": "[timestamp-1]",
                 "finished_at": null,
-                "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+                "user_id": "[id-2]",
                 "user_agent": null,
                 "last_active_at": null,
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_coauth/admin/user-sessions/01FSHNB5309NMZYX8MFYH578R9"
+                "self": "/_coauth/admin/user-sessions/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG0MZAA6S4AF7CTV32E"
+                  "cursor": "[id-1]"
                 }
               }
             }
@@ -595,7 +600,7 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r#"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 1
@@ -603,21 +608,21 @@ mod tests {
           "data": [
             {
               "type": "user-session",
-              "id": "01FSHNB530KEPHYQQXW9XPTX6Z",
+              "id": "[id-1]",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00.000Z",
-                "finished_at": "2022-01-16T14:42:00.000Z",
-                "user_id": "01FSHNB530AJ6AC5HQ9X6H4RP4",
+                "created_at": "[timestamp-1]",
+                "finished_at": "[timestamp-2]",
+                "user_id": "[id-2]",
                 "user_agent": null,
                 "last_active_at": null,
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_coauth/admin/user-sessions/01FSHNB530KEPHYQQXW9XPTX6Z"
+                "self": "/_coauth/admin/user-sessions/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHNB530AJ6AC5HQ9X6H4RP4"
+                  "cursor": "[id-1]"
                 }
               }
             }
@@ -637,46 +642,46 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r#"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": [
             {
               "type": "user-session",
-              "id": "01FSHNB5309NMZYX8MFYH578R9",
+              "id": "[id-1]",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00.000Z",
-                "finished_at": null,
-                "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+                "created_at": "[timestamp-1]",
+                "finished_at": "[timestamp-2]",
+                "user_id": "[id-2]",
                 "user_agent": null,
                 "last_active_at": null,
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_coauth/admin/user-sessions/01FSHNB5309NMZYX8MFYH578R9"
+                "self": "/_coauth/admin/user-sessions/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG0MZAA6S4AF7CTV32E"
+                  "cursor": "[id-1]"
                 }
               }
             },
             {
               "type": "user-session",
-              "id": "01FSHNB530KEPHYQQXW9XPTX6Z",
+              "id": "[id-3]",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00.000Z",
-                "finished_at": "2022-01-16T14:42:00.000Z",
-                "user_id": "01FSHNB530AJ6AC5HQ9X6H4RP4",
+                "created_at": "[timestamp-1]",
+                "finished_at": null,
+                "user_id": "[id-4]",
                 "user_agent": null,
                 "last_active_at": null,
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_coauth/admin/user-sessions/01FSHNB530KEPHYQQXW9XPTX6Z"
+                "self": "/_coauth/admin/user-sessions/[id-3]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHNB530AJ6AC5HQ9X6H4RP4"
+                  "cursor": "[id-3]"
                 }
               }
             }
@@ -696,7 +701,7 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r###"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 2
@@ -705,7 +710,7 @@ mod tests {
             "self": "/_coauth/admin/user-sessions?count=only"
           }
         }
-        "###);
+        "#);
 
         // Test count=false with filtering
         let request = Request::get(format!(
@@ -717,34 +722,34 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r#"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": [
             {
               "type": "user-session",
-              "id": "01FSHNB5309NMZYX8MFYH578R9",
+              "id": "[id-1]",
               "attributes": {
-                "created_at": "2022-01-16T14:41:00.000Z",
+                "created_at": "[timestamp-1]",
                 "finished_at": null,
-                "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+                "user_id": "[id-2]",
                 "user_agent": null,
                 "last_active_at": null,
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_coauth/admin/user-sessions/01FSHNB5309NMZYX8MFYH578R9"
+                "self": "/_coauth/admin/user-sessions/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG0MZAA6S4AF7CTV32E"
+                  "cursor": "[id-1]"
                 }
               }
             }
           ],
           "links": {
-            "self": "/_coauth/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
-            "first": "/_coauth/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
-            "last": "/_coauth/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[last]=10"
+            "self": "/_coauth/admin/user-sessions?filter[user]=[id-2]&count=false&page[first]=10",
+            "first": "/_coauth/admin/user-sessions?filter[user]=[id-2]&count=false&page[first]=10",
+            "last": "/_coauth/admin/user-sessions?filter[user]=[id-2]&count=false&page[last]=10"
           }
         }
         "#);
@@ -756,7 +761,7 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r#"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 1

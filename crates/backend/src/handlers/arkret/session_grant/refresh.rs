@@ -380,7 +380,7 @@ pub async fn refresh_session_grant(
                 request_identity: &request_identity,
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
-                target_grant_id: Some(&prior_grant.grant_id),
+                target_session_grant_id: Some(&prior_grant.grant_id),
                 issuance_nonce: None,
                 session_id: Some(&prior_payload.session_id),
                 grant_not_before: Some(grant_not_before),
@@ -653,7 +653,7 @@ pub async fn refresh_session_grant(
             )))
         })?;
         let outcome = SessionGrantRefreshOutcome {
-            grant_id: new_material.grant_id.clone(),
+            session_grant_id: new_material.grant_id.clone(),
             grant_jwt: new_material.grant_jwt.clone(),
             session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
                 &new_material.session_public_key,
@@ -663,7 +663,7 @@ pub async fn refresh_session_grant(
             audience,
             scopes: new_material.scopes.clone(),
             dpop_jkt: verification.jkt.clone(),
-            previous_grant_id: prior_grant.grant_id.clone(),
+            previous_session_grant_id: prior_grant.grant_id.clone(),
         };
         let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
@@ -909,7 +909,7 @@ pub async fn refresh_session_grant(
     })?;
 
     let outcome = SessionGrantRefreshOutcome {
-        grant_id: new_material.grant_id.clone(),
+        session_grant_id: new_material.grant_id.clone(),
         grant_jwt: new_material.grant_jwt.clone(),
         session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
             &new_material.session_public_key,
@@ -919,7 +919,7 @@ pub async fn refresh_session_grant(
         audience: response_audience,
         scopes: new_material.scopes.clone(),
         dpop_jkt: verification.jkt.clone(),
-        previous_grant_id: prior_grant.grant_id.clone(),
+        previous_session_grant_id: prior_grant.grant_id.clone(),
     };
     let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;

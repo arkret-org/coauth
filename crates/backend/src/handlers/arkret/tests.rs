@@ -158,6 +158,10 @@ fn assert_subject_did_occurs_once(raw_payload: &serde_json::Value, subject: &str
     );
 }
 
+/// Static server-to-server bearer the configured Principal Server presents on
+/// the session-grant introspection endpoint.
+const SESSION_GRANT_INTROSPECTION_BEARER: &str = "principal-example-introspection";
+
 fn personal_node_did_web_config() -> ArkretConfig {
     ArkretConfig {
         // Personal-node no-history profile legitimately advertises a did:web
@@ -167,6 +171,18 @@ fn personal_node_did_web_config() -> ArkretConfig {
         ),
         // Session-grant audiences are Principal Server core DIDs.
         admin_audience: Some("ak:did_core:web:principal.example.com".to_owned()),
+        // Introspection is a server-to-server surface: the caller must be the
+        // Principal Server that owns the grant's audience.
+        principal_servers: vec![PrincipalServerConfig {
+            name: "principal-example".to_owned(),
+            endpoint: "https://principal.example.com/".parse().unwrap(),
+            service_id: Some(
+                arkret_identifiers::DidCoreId::new("ak:did_core:web:principal.example.com")
+                    .unwrap(),
+            ),
+            session_grant_introspection_bearer: Some(SESSION_GRANT_INTROSPECTION_BEARER.to_owned()),
+            embedded_webvh_registration_bearer: None,
+        }],
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
         ..ArkretConfig::default()
@@ -360,20 +376,20 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     // to be, so service-describe.schema.json requires kind
     // `delegated_resolver`. `external_interop` is reserved for non-Arkret
     // interop surfaces and MUST NOT be used for Arkret operation ids.
-    let compat: Vec<(&str, &str)> = body["compat_surfaces"]
+    let interop: Vec<(&str, &str)> = body["interop_surfaces"]
         .as_array()
-        .expect("compat_surfaces array present")
+        .expect("interop_surfaces array present")
         .iter()
         .filter(|entry| entry["kind"].as_str() == Some("delegated_resolver"))
         .filter_map(|entry| Some((entry["name"].as_str()?, entry["notes"].as_str()?)))
         .collect();
-    assert!(compat.iter().any(|(name, notes)| {
+    assert!(interop.iter().any(|(name, notes)| {
         *name == "ak.root.identity.read.resolve" && notes.contains("delegated-resolver")
     }));
-    assert!(compat.iter().any(|(name, notes)| {
+    assert!(interop.iter().any(|(name, notes)| {
         *name == "ak.root.identity.document.resource.get" && notes.contains("delegated-resolver")
     }));
-    assert!(compat.iter().any(|(name, notes)| {
+    assert!(interop.iter().any(|(name, notes)| {
         *name == "ak.root.identity.registry.read.describe" && notes.contains("delegated-resolver")
     }));
     // verified_profiles MUST NOT include ak.profile.identity_registry.v1
@@ -599,16 +615,16 @@ fn describe_separates_claim_levels() {
         .collect();
     assert!(experimental.is_disjoint(&verified_ids));
 
-    // compat_surfaces entries must declare a kind from the closed
-    // `service-describe.schema.json#/properties/compat_surfaces/items/properties/kind`
+    // interop_surfaces entries must declare a kind from the closed
+    // `service-describe.schema.json#/properties/interop_surfaces/items/properties/kind`
     // enum. T6.3 — coauth's `ak.identity.*` proxy operations are NOT a
     // canonical identity registry; the delegated-resolver semantics
     // are carried in notes.
-    for surface in body["compat_surfaces"]
+    for surface in body["interop_surfaces"]
         .as_array()
-        .expect("compat_surfaces array present")
+        .expect("interop_surfaces array present")
     {
-        let kind = surface["kind"].as_str().expect("compat surface kind");
+        let kind = surface["kind"].as_str().expect("interop surface kind");
         assert!(
             matches!(
                 kind,
@@ -617,13 +633,13 @@ fn describe_separates_claim_levels() {
                     | "delegated_resolver"
                     | "external_interop"
             ),
-            "unknown compat_surface kind {kind}"
+            "unknown interop_surface kind {kind}"
         );
         assert!(
             surface["notes"]
                 .as_str()
                 .is_some_and(|notes| notes.contains("delegated-resolver")),
-            "delegated-resolver semantics must remain in compat_surface notes"
+            "delegated-resolver semantics must remain in interop_surface notes"
         );
     }
 
@@ -1015,7 +1031,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
 }
 
 async fn seed_persisted_session_grant(
-    state: &TestState,
+    state: &mut TestState,
 ) -> (
     BrowserSession,
     SessionGrant,
@@ -1041,6 +1057,12 @@ async fn seed_persisted_session_grant(
         .unwrap();
     let session_key = PrivateKey::generate_ed25519(&mut rng);
     let grant_config = personal_node_did_web_config();
+    // The HTTP layer authorizes introspection against `state.arkret_config`,
+    // so it has to carry the same Principal Server the grant is issued for.
+    state.arkret_config = grant_config.clone();
+    // Grant liveness is evaluated against the wall clock the handlers read; a
+    // grant minted at the mock epoch is already expired.
+    let grant_clock = coauth_data::SystemClock::default();
     let principal_did = format!("ak:did_core:web:auth.example.com:users:{}", user.id);
     let principal_authority = test_principal_authority(
         &principal_did,
@@ -1048,7 +1070,7 @@ async fn seed_persisted_session_grant(
     );
     let material = issue_session_grant(
         &mut rng,
-        &*state.clock,
+        &grant_clock,
         &state.url_builder,
         &grant_config,
         &state.key_store,
@@ -1064,11 +1086,19 @@ async fn seed_persisted_session_grant(
     let raw_payload = jwt_payload_value(&material.grant_jwt);
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
     assert!(raw_payload.get("session_public_key").is_some());
-    assert!(raw_payload.get("cnf").is_none());
+    // The grant JWT carries its DPoP holder binding: refresh and introspection
+    // both prove possession of the key bound into `cnf.jkt`
+    // (spec zh/sync/service-http-binding.md, session-grants surface).
+    assert!(
+        raw_payload["cnf"]["jkt"]
+            .as_str()
+            .is_some_and(|jkt| !jkt.is_empty()),
+        "session grant JWT must carry its cnf.jkt holder binding"
+    );
     let grant = persist_session_grant(
         &mut repo,
         &mut rng,
-        &*state.clock,
+        &grant_clock,
         &browser_session,
         &material,
     )
@@ -1092,8 +1122,8 @@ fn session_grant_introspection_proof(
     let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::Ed25519);
     let claims = SessionGrantIntrospectionProofClaims {
         kind: SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND.to_owned(),
-        grant_id: grant.grant_id.to_string(),
-        grant_jwt_hash: session_grant_jwt_hash(&material.grant_jwt),
+        session_grant_id: grant.grant_id.to_string(),
+        grant_jwt_digest: session_grant_jwt_digest(&material.grant_jwt),
         audience: arkret_identifiers::DidCoreId::new(grant.audience.clone()).unwrap(),
         challenge: challenge.to_owned(),
         issued_at: now,
@@ -1108,12 +1138,18 @@ async fn session_grant_http_list_and_filter_work() {
     let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
-    let state = TestState::from_pool(pool.clone()).await.unwrap();
+    let mut state = TestState::from_pool(pool.clone()).await.unwrap();
     let (browser_session, grant, _material, _session_key) =
-        seed_persisted_session_grant(&state).await;
+        seed_persisted_session_grant(&mut state).await;
 
+    // Session-grant listing is a server-to-server read pinned to the calling
+    // Principal Server's own audience.
     let response = state
-        .request(Request::get("/api/v1/session-grants").empty())
+        .request(
+            Request::get("/_coauth/account/session-grants")
+                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .empty(),
+        )
         .await;
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
@@ -1131,9 +1167,10 @@ async fn session_grant_http_list_and_filter_work() {
     let response = state
         .request(
             Request::get(format!(
-                "/api/v1/session-grants?browser_session_id={}&active_only=true",
+                "/_coauth/account/session-grants?browser_session_id={}&active_only=true",
                 browser_session.id
             ))
+            .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
             .empty(),
         )
         .await;
@@ -1142,7 +1179,11 @@ async fn session_grant_http_list_and_filter_work() {
     assert_eq!(body["grants"].as_array().unwrap().len(), 1);
 
     let response = state
-        .request(Request::get("/api/v1/session-grants?browser_session_id=not-a-ulid").empty())
+        .request(
+            Request::get("/_coauth/account/session-grants?browser_session_id=not-a-ulid")
+                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .empty(),
+        )
         .await;
     response.assert_status(StatusCode::BAD_REQUEST);
     let body: serde_json::Value = response.json();
@@ -1156,21 +1197,23 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
-    let state = TestState::from_pool(pool.clone()).await.unwrap();
+    let mut state = TestState::from_pool(pool.clone()).await.unwrap();
     let (_browser_session, grant, material, session_key) =
-        seed_persisted_session_grant(&state).await;
+        seed_persisted_session_grant(&mut state).await;
 
     let response = state
         .request(
-            Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
-                "grant_jwt": material.grant_jwt,
-                "audience": grant.audience,
-            })),
+            Request::post("/_arkret/gate/account/session-grants/introspect")
+                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .json(serde_json::json!({
+                    "grant_jwt": material.grant_jwt,
+                    "audience": grant.audience,
+                })),
         )
         .await;
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
-    assert_eq!(body["active"], true);
+    assert_eq!(body["active"], true, "{body}");
     assert_eq!(body["status"], "active");
     assert_eq!(body["proof_required"], true);
     // Introspection is READ-ONLY: it MUST NOT consume the grant (consumption /
@@ -1198,15 +1241,17 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     // first call did not revoke it).
     let response = state
         .request(
-            Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
-                "id": grant.grant_id.to_string(),
-                "audience": grant.audience,
-            })),
+            Request::post("/_arkret/gate/account/session-grants/introspect")
+                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .json(serde_json::json!({
+                    "id": grant.grant_id.to_string(),
+                    "audience": grant.audience,
+                })),
         )
         .await;
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
-    assert_eq!(body["active"], true);
+    assert_eq!(body["active"], true, "{body}");
     assert_eq!(body["status"], "active");
     assert_eq!(body["proof_required"], true);
     assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
@@ -1215,28 +1260,32 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let proof_jwt = session_grant_introspection_proof(&grant, &material, &session_key, &challenge);
     let response = state
         .request(
-            Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
-                "id": grant.grant_id.to_string(),
-                "audience": grant.audience,
-                "proof": {
-                    "challenge": challenge,
-                    "proof_jwt": proof_jwt,
-                }
-            })),
+            Request::post("/_arkret/gate/account/session-grants/introspect")
+                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .json(serde_json::json!({
+                    "id": grant.grant_id.to_string(),
+                    "audience": grant.audience,
+                    "proof": {
+                        "challenge": challenge,
+                        "proof_jwt": proof_jwt,
+                    }
+                })),
         )
         .await;
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
-    assert_eq!(body["active"], true);
+    assert_eq!(body["active"], true, "{body}");
     assert_eq!(body["status"], "active");
     assert_eq!(body["proof_required"], false);
 
     let response = state
         .request(
-            Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
-                "id": grant.grant_id.to_string(),
-                "audience": "https://other.example.com/api",
-            })),
+            Request::post("/_arkret/gate/account/session-grants/introspect")
+                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .json(serde_json::json!({
+                    "id": grant.grant_id.to_string(),
+                    "audience": "ak:did_core:web:other.example.com",
+                })),
         )
         .await;
     response.assert_status(StatusCode::OK);
@@ -1256,7 +1305,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
-    let state = TestState::from_pool(pool.clone()).await.unwrap();
+    let mut state = TestState::from_pool(pool.clone()).await.unwrap();
 
     let mut rng = state.rng();
     let mut repo = state.repository().await.unwrap();
@@ -1278,11 +1327,16 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     let session_key = PrivateKey::generate_ed25519(&mut rng);
     let bound_jkt = "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD".to_owned();
     let grant_config = personal_node_did_web_config();
+    // The HTTP layer authorizes introspection against `state.arkret_config`.
+    state.arkret_config = grant_config.clone();
+    // Grant liveness is evaluated against the wall clock the handlers read.
+    let grant_clock = coauth_data::SystemClock::default();
+    let issued_at = coauth_data::Clock::now(&grant_clock);
     let issuance_seed = SessionGrantIssuanceSeed::new(
         arkret_models_identity::SessionGrantIssuanceNonce::from_bytes([0x31; 32]).to_string(),
         browser_session.id.to_string(),
-        state.clock.now(),
-        state.clock.now() + grant_config.session_grant_ttl,
+        issued_at,
+        issued_at + grant_config.session_grant_ttl,
         "test-ed25519",
     )
     .unwrap();
@@ -1291,7 +1345,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     let principal_authority = test_principal_authority(&principal_did, &audience);
     let material = issue_session_grant_for_audience(
         &issuance_seed,
-        &*state.clock,
+        &grant_clock,
         &grant_config,
         &state.key_store,
         &browser_session,
@@ -1324,7 +1378,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     let grant = persist_session_grant(
         &mut repo,
         &mut rng,
-        &*state.clock,
+        &grant_clock,
         &browser_session,
         &material,
     )
@@ -1339,15 +1393,17 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     // advisory flag only — the default grant+DPoP path ignores it.
     let response = state
         .request(
-            Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
-                "grant_jwt": material.grant_jwt,
-                "audience": grant.audience,
-            })),
+            Request::post("/_arkret/gate/account/session-grants/introspect")
+                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .json(serde_json::json!({
+                    "grant_jwt": material.grant_jwt,
+                    "audience": grant.audience,
+                })),
         )
         .await;
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
-    assert_eq!(body["active"], true);
+    assert_eq!(body["active"], true, "{body}");
     assert_eq!(body["status"], "active");
     assert_eq!(body["proof_required"], true);
     assert_eq!(body["grant"]["cnf_jkt"], bound_jkt);
@@ -1358,14 +1414,16 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     let proof_jwt = session_grant_introspection_proof(&grant, &material, &session_key, &challenge);
     let response = state
         .request(
-            Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
-                "grant_jwt": material.grant_jwt,
-                "audience": grant.audience,
-                "proof": {
-                    "challenge": challenge,
-                    "proof_jwt": proof_jwt,
-                }
-            })),
+            Request::post("/_arkret/gate/account/session-grants/introspect")
+                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .json(serde_json::json!({
+                    "grant_jwt": material.grant_jwt,
+                    "audience": grant.audience,
+                    "proof": {
+                        "challenge": challenge,
+                        "proof_jwt": proof_jwt,
+                    }
+                })),
         )
         .await;
     response.assert_status(StatusCode::OK);
@@ -1393,10 +1451,12 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     let session_key = PrivateKey::generate_ed25519(&mut rng);
     let session_public_key =
         serde_json::to_string(&test_session_public_jwk(&session_key, "agent-session-key")).unwrap();
-    let audience =
-        "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service"
-            .to_owned();
-    let now = state.clock.now();
+    // Both the agent subject and the audience are core DIDs on the wire (the
+    // grant claims are typed `DidCoreId`), and the audience must be the
+    // Principal Server whose static introspection bearer is configured above.
+    let audience = "ak:did_core:web:session-grant-static.test".to_owned();
+    // Grant liveness is evaluated against the wall clock the handlers read.
+    let now = chrono::Utc::now();
     let scope_details = serde_json::Map::from_iter([
         (
             "controller_id".to_owned(),
@@ -1421,7 +1481,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         &issuance_seed,
         &state.arkret_config,
         &state.key_store,
-        "did:web:agent.example",
+        "ak:did_core:web:agent.example",
         &arkret_identifiers::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000005")
             .unwrap(),
         audience.clone(),
@@ -1438,16 +1498,31 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     .unwrap();
     let raw_payload = jwt_payload_value(&material.grant_jwt);
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
-    assert_subject_did_occurs_once(&raw_payload, "did:web:agent.example");
+    // Unlike a human grant, an agent grant names the agent twice by contract:
+    // once as the credential `subject` and once inside the agent-runtime
+    // holder binding, which is what binds the runtime key to it.
+    assert_eq!(
+        raw_payload["subject"].as_str(),
+        Some("ak:did_core:web:agent.example")
+    );
+    assert_eq!(
+        raw_payload["holder_binding"]["agent_id"].as_str(),
+        Some("ak:did_core:web:agent.example")
+    );
     assert!(raw_payload.get("session_public_key").is_some());
     assert_eq!(
         raw_payload["cnf"]["jkt"].as_str(),
         Some("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC")
     );
     let mut repo = state.repository().await.unwrap();
-    let persisted = persist_unbound_session_grant(&mut repo, &mut rng, &*state.clock, &material)
-        .await
-        .unwrap();
+    let persisted = persist_unbound_session_grant(
+        &mut repo,
+        &mut rng,
+        &coauth_data::SystemClock::default(),
+        &material,
+    )
+    .await
+    .unwrap();
     repo.save().await.unwrap();
 
     // The agent grant is `cnf`-bound, so a proofless introspection reports
@@ -1472,10 +1547,10 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
 
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
-    assert_eq!(body["active"], true);
+    assert_eq!(body["active"], true, "{body}");
     assert_eq!(body["status"], "active");
     assert_eq!(body["proof_required"], false);
-    assert_eq!(body["grant"]["subject"], "did:web:agent.example");
+    assert_eq!(body["grant"]["subject"], "ak:did_core:web:agent.example");
     assert_eq!(
         body["grant"]["device_id"],
         "ak:device:0196419b-0000-7000-8000-000000000005"
@@ -1502,39 +1577,40 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
     let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
-    let state = TestState::from_pool(pool.clone()).await.unwrap();
+    let mut state = TestState::from_pool(pool.clone()).await.unwrap();
     let (_browser_session, grant, material, _session_key) =
-        seed_persisted_session_grant(&state).await;
+        seed_persisted_session_grant(&mut state).await;
 
     // Hits the canonical spec path `/_arkret/gate/account/session-grants/introspect`
     // (the surface soland calls). The selector check runs before auth, so an
-    // ambiguous selector is a 400 schema_violation regardless of bearer.
+    // ambiguous selector is rejected regardless of bearer.
 
-    // Both present → 400 schema_violation (the body parsed; it fails the
-    // oneOf selector constraint, which is not json_invalid).
-    let response = state
-        .request(
-            Request::post("/_arkret/gate/account/session-grants/introspect").json(
-                serde_json::json!({
-                    "id": grant.grant_id.to_string(),
-                    "grant_jwt": material.grant_jwt,
-                    "audience": grant.audience,
-                }),
-            ),
-        )
-        .await;
-    response.assert_status(StatusCode::BAD_REQUEST);
-    let body: serde_json::Value = response.json();
-    assert_eq!(body["error"]["code"], "schema_violation");
-
-    // Neither present → 400 schema_violation.
+    // Both present → 422 schema_violation: the body parsed, and it fails the
+    // oneOf selector constraint, which is not json_invalid (400).
     let response = state
         .request(
             Request::post("/_arkret/gate/account/session-grants/introspect")
+                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .json(serde_json::json!({
+                    "id": grant.grant_id.to_string(),
+                    "grant_jwt": material.grant_jwt,
+                    "audience": grant.audience,
+                })),
+        )
+        .await;
+    response.assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+    let body: serde_json::Value = response.json();
+    assert_eq!(body["error"]["code"], "schema_violation");
+
+    // Neither present → 422 schema_violation.
+    let response = state
+        .request(
+            Request::post("/_arkret/gate/account/session-grants/introspect")
+                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
                 .json(serde_json::json!({ "audience": grant.audience })),
         )
         .await;
-    response.assert_status(StatusCode::BAD_REQUEST);
+    response.assert_status(StatusCode::UNPROCESSABLE_ENTITY);
     let body: serde_json::Value = response.json();
     assert_eq!(body["error"]["code"], "schema_violation");
 }
@@ -1545,12 +1621,22 @@ async fn session_grant_http_revoke_updates_followup_introspection() {
     let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };
-    let state = TestState::from_pool(pool.clone()).await.unwrap();
+    let mut state = TestState::from_pool(pool.clone()).await.unwrap();
     let (_browser_session, grant, _material, _session_key) =
-        seed_persisted_session_grant(&state).await;
+        seed_persisted_session_grant(&mut state).await;
+    // Revocation is destructive, so the read-only Principal Server bearer is
+    // not enough: it requires admin scope.
+    let admin_token = state.token_with_scope("urn:coauth:admin").await;
 
     let response = state
-        .request(Request::post(format!("/api/v1/session-grants/{}/revoke", grant.id)).empty())
+        .request(
+            Request::post(format!(
+                "/_coauth/account/session-grants/{}/revoke",
+                grant.id
+            ))
+            .bearer(&admin_token)
+            .empty(),
+        )
         .await;
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
@@ -1559,10 +1645,12 @@ async fn session_grant_http_revoke_updates_followup_introspection() {
 
     let response = state
         .request(
-            Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
-                "id": grant.grant_id.to_string(),
-                "audience": grant.audience,
-            })),
+            Request::post("/_arkret/gate/account/session-grants/introspect")
+                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .json(serde_json::json!({
+                    "id": grant.grant_id.to_string(),
+                    "audience": grant.audience,
+                })),
         )
         .await;
     response.assert_status(StatusCode::OK);
@@ -1639,7 +1727,7 @@ async fn primary_handle_patch_validates_claims() {
     alice_cookies.import(state.cookie_jar().set_session(&alice_session));
     let response = state
         .request(alice_cookies.with_cookies(
-            Request::patch("/api/v1/identity/primary-handle").json(serde_json::json!({
+            Request::patch("/_coauth/account/identity/primary-handle").json(serde_json::json!({
                 "primary_handle": handle,
             })),
         ))
@@ -1651,7 +1739,7 @@ async fn primary_handle_patch_validates_claims() {
 
     let response = state
         .request(alice_cookies.with_cookies(
-            Request::patch("/api/v1/identity/primary-handle").json(serde_json::json!({
+            Request::patch("/_coauth/account/identity/primary-handle").json(serde_json::json!({
                 "primary_handle": "unknown:example.com",
             })),
         ))
@@ -1665,19 +1753,18 @@ async fn primary_handle_patch_validates_claims() {
 
     let bob_cookies = CookieHelper::new();
     bob_cookies.import(state.cookie_jar().set_session(&bob_session));
-    let response =
-        state
-            .request(bob_cookies.with_cookies(
-                Request::patch("/api/v1/identity/primary-handle").json(serde_json::json!({
-                    "primary_handle": handle,
-                })),
-            ))
-            .await;
+    let response = state
+        .request(bob_cookies.with_cookies(
+            Request::patch("/_coauth/account/identity/primary-handle").json(serde_json::json!({
+                "primary_handle": handle,
+            })),
+        ))
+        .await;
     response.assert_status(StatusCode::BAD_REQUEST);
 
     let response = state
         .request(alice_cookies.with_cookies(
-            Request::patch("/api/v1/identity/primary-handle").json(serde_json::json!({
+            Request::patch("/_coauth/account/identity/primary-handle").json(serde_json::json!({
                 "primary_handle": null,
             })),
         ))

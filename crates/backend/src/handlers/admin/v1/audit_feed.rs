@@ -11,13 +11,13 @@ use salvo::prelude::*;
 use serde::Deserialize;
 use ulid::Ulid;
 
-use crate::JsonResult;
 use crate::handlers::admin::audit_helper::{
     AuditSignatureStatus, verify_admin_operation_signature,
 };
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::arkret::service_id_for;
 use crate::handlers::common::DepotExt;
+use crate::{AppError, JsonResult};
 
 /// Convert an [`AdminOperation`] enum variant into a human-readable
 /// dot-separated operation string for the API response.
@@ -90,7 +90,9 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<AuditFeedOu
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
 
-    let query: AuditFeedQuery = req.parse_queries().unwrap_or_default();
+    let query: AuditFeedQuery = req
+        .parse_queries()
+        .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
     let key_store = depot.key_store()?;
     let arkret_config = depot.arkret_config()?;
     let service_id = service_id_for(&arkret_config);

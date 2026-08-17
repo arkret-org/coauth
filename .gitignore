@@ -26,3 +26,8 @@ conformance/test-config.yaml
 conformance/test-config.yaml.raw
 /_circle_rollout_baseline.md
 /_*_todos.md
+
+# insta writes these next to the test file when an inline snapshot fails;
+# they are review scratch, never source.
+*.pending-snap
+*.snap.new

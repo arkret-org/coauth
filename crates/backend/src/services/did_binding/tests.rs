@@ -148,8 +148,8 @@ fn resolution_fields_map_onto_the_shared_binding() {
     assert_eq!(
         binding.limited_trust(),
         Some(arkret_identity::LimitedTrust {
-            history_head: arkret_identity::PinState::Pinned,
-            version_id: arkret_identity::PinState::MethodUnsupported,
+            history_head_status: arkret_identity::PinState::Pinned,
+            version_id_status: arkret_identity::PinState::MethodUnsupported,
         })
     );
     assert_eq!(binding.status(), DidBindingStatus::Active);
@@ -199,8 +199,8 @@ fn missing_history_head_records_the_wider_limited_trust_reason() {
     assert_eq!(
         accepted.binding().limited_trust(),
         Some(arkret_identity::LimitedTrust {
-            history_head: arkret_identity::PinState::MethodUnsupported,
-            version_id: arkret_identity::PinState::MethodUnsupported,
+            history_head_status: arkret_identity::PinState::MethodUnsupported,
+            version_id_status: arkret_identity::PinState::MethodUnsupported,
         })
     );
 }

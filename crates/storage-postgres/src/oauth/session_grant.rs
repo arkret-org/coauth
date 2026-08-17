@@ -101,7 +101,7 @@ struct SessionGrantOperationRow {
     proof_expires_at: Option<DateTime<Utc>>,
     outcome_digest: Option<Vec<u8>>,
     canonical_outcome: Option<Vec<u8>>,
-    target_grant_id: Option<Vec<u8>>,
+    target_session_grant_id: Option<Vec<u8>>,
     result_grant_id: Option<Vec<u8>>,
     affected_grant_ids: Vec<Option<Vec<u8>>>,
     retained_until: DateTime<Utc>,
@@ -188,12 +188,12 @@ impl TryFrom<SessionGrantOperationRow> for SessionGrantOperation {
             .map(|digest| fixed_digest(digest, "outcome_digest"))
             .transpose()
             .map_err(|error| inconsistent("outcome_digest", Box::new(error)))?;
-        let target_grant_id = value
-            .target_grant_id
+        let target_session_grant_id = value
+            .target_session_grant_id
             .as_deref()
             .map(session_grant_id_from_bytes)
             .transpose()
-            .map_err(|error| inconsistent("target_grant_id", Box::new(error)))?;
+            .map_err(|error| inconsistent("target_session_grant_id", Box::new(error)))?;
         let result_grant_id = value
             .result_grant_id
             .as_deref()
@@ -242,7 +242,7 @@ impl TryFrom<SessionGrantOperationRow> for SessionGrantOperation {
             proof_expires_at: value.proof_expires_at,
             outcome_digest,
             canonical_outcome: value.canonical_outcome,
-            target_grant_id,
+            target_session_grant_id,
             result_grant_id,
             affected_grant_ids,
             retained_until: value.retained_until,
@@ -269,7 +269,7 @@ struct NewSessionGrantOperationRow<'a> {
     grant_expires_at: Option<DateTime<Utc>>,
     signing_key_id: Option<&'a str>,
     state: &'static str,
-    target_grant_id: Option<Vec<u8>>,
+    target_session_grant_id: Option<Vec<u8>>,
     retained_until: DateTime<Utc>,
     created_at: DateTime<Utc>,
 }
@@ -814,7 +814,7 @@ mod authorization_checkpoint_tests {
             outcome_digest: None,
             canonical_outcome: None,
             state,
-            target_grant_id: None,
+            target_session_grant_id: None,
             result_grant_id: None,
             affected_grant_ids: Vec::new(),
             retained_until: now + chrono::Duration::try_days(7).unwrap(),
@@ -921,7 +921,7 @@ async fn commit_operation_outcome(
     operation_id: Ulid,
     authorization: SessionGrantProofAuthorization<'_>,
     outcome: SessionGrantExactOutcome<'_>,
-    target_grant_id: Option<&SessionGrantId>,
+    target_session_grant_id: Option<&SessionGrantId>,
     result_grant_id: Option<&SessionGrantId>,
     affected_grant_ids: &[SessionGrantId],
     retained_until: DateTime<Utc>,
@@ -946,8 +946,8 @@ async fn commit_operation_outcome(
         oauth_session_grant_operations::outcome_digest.eq(Some(outcome.response_digest.to_vec())),
         oauth_session_grant_operations::canonical_outcome
             .eq(Some(outcome.canonical_response.to_vec())),
-        oauth_session_grant_operations::target_grant_id
-            .eq(target_grant_id.map(|id| id.token_bytes().to_vec())),
+        oauth_session_grant_operations::target_session_grant_id
+            .eq(target_session_grant_id.map(|id| id.token_bytes().to_vec())),
         oauth_session_grant_operations::result_grant_id
             .eq(result_grant_id.map(|id| id.token_bytes().to_vec())),
         oauth_session_grant_operations::affected_grant_ids.eq(affected_grant_ids),
@@ -1067,7 +1067,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         }
         let inherited_session_id = match operation_kind {
             SessionGrantOperationKind::Issue => {
-                if operation.target_grant_id.is_some()
+                if operation.target_session_grant_id.is_some()
                     || operation.issuance_nonce.is_some() != operation.session_id.is_some()
                     || operation
                         .issuance_nonce
@@ -1085,7 +1085,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                     return Err(DatabaseError::invalid_operation());
                 }
                 let target = operation
-                    .target_grant_id
+                    .target_session_grant_id
                     .ok_or_else(DatabaseError::invalid_operation)?;
                 let predecessor = load_grant_by_protocol_id(self.conn, target)
                     .await?
@@ -1139,8 +1139,8 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
             grant_expires_at: operation.grant_expires_at,
             signing_key_id: operation.signing_key_id,
             state: "reserved",
-            target_grant_id: operation
-                .target_grant_id
+            target_session_grant_id: operation
+                .target_session_grant_id
                 .map(|id| id.token_bytes().to_vec()),
             retained_until,
             created_at: now,
@@ -1184,7 +1184,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         if stored.canonical_intent_digest != operation.canonical_intent_digest
             || stored.canonical_intent.as_deref() != Some(operation.canonical_intent)
             || stored.operation != operation.operation
-            || stored.target_grant_id.as_ref() != operation.target_grant_id
+            || stored.target_session_grant_id.as_ref() != operation.target_session_grant_id
         {
             return Ok(SessionGrantReserveOutcome::Conflict(stored));
         }
@@ -1352,7 +1352,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                     return Ok(SessionGrantRefreshOutcome::Indeterminate(operation));
                 }
                 if operation.operation.kind() != SessionGrantOperationKind::Refresh
-                    || operation.target_grant_id.as_ref() != Some(predecessor_grant_id)
+                    || operation.target_session_grant_id.as_ref() != Some(predecessor_grant_id)
                 {
                     return Err(DatabaseError::invalid_operation());
                 }
@@ -1550,7 +1550,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 let wire_outcome = WireSessionRevokeOutcome {
                     revoked_count: u64::try_from(active_ids.len())
                         .map_err(|_| DatabaseError::invalid_operation())?,
-                    revoked_grant_ids: active_ids.clone(),
+                    revoked_session_grant_ids: active_ids.clone(),
                 };
                 let canonical_response = arkret_canonical::canonical_json_bytes(&wire_outcome)
                     .map_err(|_| DatabaseError::invalid_operation())?;
@@ -1764,7 +1764,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                           WHERE replay.retained_until >= $2
                             AND replay.state <> 'evicted'
                             AND (
-                                replay.target_grant_id = oauth_session_grants.grant_id
+                                replay.target_session_grant_id = oauth_session_grants.grant_id
                                 OR replay.result_grant_id = oauth_session_grants.grant_id
                               OR oauth_session_grants.grant_id = ANY(replay.affected_grant_ids)
                             )

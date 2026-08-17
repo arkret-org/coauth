@@ -144,6 +144,21 @@ test:
 test-crate crate:
     cargo test -p {{crate}}
 
+# Run the backend lib tests against a live PostgreSQL with the policy engine on.
+#
+# Every `setup_test_pool()` test silently early-returns when DATABASE_URL is
+# unset, and the policy-backed handlers are compiled out without `cedar`, so
+# this face only runs when BOTH are supplied. It is a separate recipe rather
+# than part of `test` because it needs a migrated database it is allowed to
+# TRUNCATE between tests.
+#
+# Point DATABASE_URL at a scratch database, not at your dev database:
+#   just db-migrate                          # against the scratch database
+#   $env:DATABASE_URL = "postgresql://postgres:postgres@localhost/coauth_test"
+#   just test-postgres
+test-postgres:
+    cargo test -p coauth-backend --lib --features cedar --no-fail-fast
+
 # ── Documentation ────────────────────────────────────────────
 
 # Build the English documentation (mdBook)

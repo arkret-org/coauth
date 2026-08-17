@@ -84,7 +84,9 @@ pub async fn list_providers(
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let (pagination, include_count) = extract_pagination(req)?;
-    let params: FilterParams = req.parse_queries().unwrap_or_default();
+    let params: FilterParams = req
+        .parse_queries()
+        .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
 
     let base_url = format!("{path}{params}", path = UpstreamOAuthProvider::PATH);
     let base_url = include_count.add_to_base(&base_url);
@@ -537,7 +539,9 @@ mod tests {
     use hyper::{Request, StatusCode};
     use ulid::Ulid;
 
-    use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
+    use crate::handlers::test_utils::{
+        RequestBuilderExt, ResponseExt, TestState, setup, stable_json,
+    };
 
     async fn create_test_provider(state: &mut TestState) -> UpstreamOAuthProvider {
         let mut repo = state.repository().await.unwrap();
@@ -605,27 +609,28 @@ mod tests {
         assert_eq!(body["data"]["id"], provider.id.to_string());
         assert_eq!(body["data"]["attributes"]["human_name"], "Google");
 
-        insta::assert_json_snapshot!(body, @r###"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": {
             "type": "upstream-oauth-provider",
-            "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+            "id": "[id-1]",
             "attributes": {
               "issuer": "https://accounts.google.com",
               "human_name": "Google",
               "brand_name": "google",
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "disabled_at": null
+              "created_at": "[timestamp-1]",
+              "disabled_at": null,
+              "source": "config"
             },
             "links": {
-              "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_coauth/admin/upstream-oauth-providers/[id-1]"
             }
           },
           "links": {
-            "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_coauth/admin/upstream-oauth-providers/[id-1]"
           }
         }
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -781,7 +786,7 @@ mod tests {
         // Should return all providers
         assert_eq!(body["data"].as_array().unwrap().len(), 3);
 
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 3
@@ -789,58 +794,61 @@ mod tests {
           "data": [
             {
               "type": "upstream-oauth-provider",
-              "id": "01FSHN9AG07HNEZXNQM2KNBNF6",
+              "id": "[id-1]",
               "attributes": {
                 "issuer": "https://appleid.apple.com",
                 "human_name": "Apple ID",
                 "brand_name": "apple",
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "disabled_at": "2022-01-16T14:40:00.000Z"
+                "created_at": "[timestamp-1]",
+                "disabled_at": "[timestamp-1]",
+                "source": "config"
               },
               "links": {
-                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_coauth/admin/upstream-oauth-providers/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG07HNEZXNQM2KNBNF6"
+                  "cursor": "[id-1]"
                 }
               }
             },
             {
               "type": "upstream-oauth-provider",
-              "id": "01FSHN9AG09AVTNSQFMSR34AJC",
+              "id": "[id-2]",
               "attributes": {
                 "issuer": "https://login.microsoftonline.com/common/v2.0",
                 "human_name": "Microsoft",
                 "brand_name": "microsoft",
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "disabled_at": null
+                "created_at": "[timestamp-1]",
+                "disabled_at": null,
+                "source": "config"
               },
               "links": {
-                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_coauth/admin/upstream-oauth-providers/[id-2]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG09AVTNSQFMSR34AJC"
+                  "cursor": "[id-2]"
                 }
               }
             },
             {
               "type": "upstream-oauth-provider",
-              "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+              "id": "[id-3]",
               "attributes": {
                 "issuer": "https://accounts.google.com",
                 "human_name": "Google",
                 "brand_name": "google",
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "disabled_at": null
+                "created_at": "[timestamp-1]",
+                "disabled_at": null,
+                "source": "config"
               },
               "links": {
-                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_coauth/admin/upstream-oauth-providers/[id-3]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG0MZAA6S4AF7CTV32E"
+                  "cursor": "[id-3]"
                 }
               }
             }
@@ -872,7 +880,7 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json::<serde_json::Value>();
 
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 2
@@ -880,39 +888,41 @@ mod tests {
           "data": [
             {
               "type": "upstream-oauth-provider",
-              "id": "01FSHN9AG09AVTNSQFMSR34AJC",
+              "id": "[id-1]",
               "attributes": {
                 "issuer": "https://login.microsoftonline.com/common/v2.0",
                 "human_name": "Microsoft",
                 "brand_name": "microsoft",
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "disabled_at": null
+                "created_at": "[timestamp-1]",
+                "disabled_at": null,
+                "source": "config"
               },
               "links": {
-                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_coauth/admin/upstream-oauth-providers/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG09AVTNSQFMSR34AJC"
+                  "cursor": "[id-1]"
                 }
               }
             },
             {
               "type": "upstream-oauth-provider",
-              "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+              "id": "[id-2]",
               "attributes": {
                 "issuer": "https://accounts.google.com",
                 "human_name": "Google",
                 "brand_name": "google",
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "disabled_at": null
+                "created_at": "[timestamp-1]",
+                "disabled_at": null,
+                "source": "config"
               },
               "links": {
-                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_coauth/admin/upstream-oauth-providers/[id-2]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG0MZAA6S4AF7CTV32E"
+                  "cursor": "[id-2]"
                 }
               }
             }
@@ -944,7 +954,7 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json::<serde_json::Value>();
 
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 1
@@ -952,20 +962,21 @@ mod tests {
           "data": [
             {
               "type": "upstream-oauth-provider",
-              "id": "01FSHN9AG07HNEZXNQM2KNBNF6",
+              "id": "[id-1]",
               "attributes": {
                 "issuer": "https://appleid.apple.com",
                 "human_name": "Apple ID",
                 "brand_name": "apple",
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "disabled_at": "2022-01-16T14:40:00.000Z"
+                "created_at": "[timestamp-1]",
+                "disabled_at": "[timestamp-1]",
+                "source": "config"
               },
               "links": {
-                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_coauth/admin/upstream-oauth-providers/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG07HNEZXNQM2KNBNF6"
+                  "cursor": "[id-1]"
                 }
               }
             }
@@ -998,7 +1009,7 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json::<serde_json::Value>();
 
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 3
@@ -1006,39 +1017,41 @@ mod tests {
           "data": [
             {
               "type": "upstream-oauth-provider",
-              "id": "01FSHN9AG07HNEZXNQM2KNBNF6",
+              "id": "[id-1]",
               "attributes": {
                 "issuer": "https://appleid.apple.com",
                 "human_name": "Apple ID",
                 "brand_name": "apple",
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "disabled_at": "2022-01-16T14:40:00.000Z"
+                "created_at": "[timestamp-1]",
+                "disabled_at": "[timestamp-1]",
+                "source": "config"
               },
               "links": {
-                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_coauth/admin/upstream-oauth-providers/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG07HNEZXNQM2KNBNF6"
+                  "cursor": "[id-1]"
                 }
               }
             },
             {
               "type": "upstream-oauth-provider",
-              "id": "01FSHN9AG09AVTNSQFMSR34AJC",
+              "id": "[id-2]",
               "attributes": {
                 "issuer": "https://login.microsoftonline.com/common/v2.0",
                 "human_name": "Microsoft",
                 "brand_name": "microsoft",
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "disabled_at": null
+                "created_at": "[timestamp-1]",
+                "disabled_at": null,
+                "source": "config"
               },
               "links": {
-                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_coauth/admin/upstream-oauth-providers/[id-2]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG09AVTNSQFMSR34AJC"
+                  "cursor": "[id-2]"
                 }
               }
             }
@@ -1047,7 +1060,7 @@ mod tests {
             "self": "/_coauth/admin/upstream-oauth-providers?page[first]=2",
             "first": "/_coauth/admin/upstream-oauth-providers?page[first]=2",
             "last": "/_coauth/admin/upstream-oauth-providers?page[last]=2",
-            "next": "/_coauth/admin/upstream-oauth-providers?page[after]=01FSHN9AG09AVTNSQFMSR34AJC&page[first]=2"
+            "next": "/_coauth/admin/upstream-oauth-providers?page[after]=[id-2]&page[first]=2"
           }
         }
         "#);
@@ -1064,7 +1077,7 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json::<serde_json::Value>();
 
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 3
@@ -1072,26 +1085,27 @@ mod tests {
           "data": [
             {
               "type": "upstream-oauth-provider",
-              "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+              "id": "[id-1]",
               "attributes": {
                 "issuer": "https://accounts.google.com",
                 "human_name": "Google",
                 "brand_name": "google",
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "disabled_at": null
+                "created_at": "[timestamp-1]",
+                "disabled_at": null,
+                "source": "config"
               },
               "links": {
-                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_coauth/admin/upstream-oauth-providers/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG0MZAA6S4AF7CTV32E"
+                  "cursor": "[id-1]"
                 }
               }
             }
           ],
           "links": {
-            "self": "/_coauth/admin/upstream-oauth-providers?page[after]=01FSHN9AG09AVTNSQFMSR34AJC&page[first]=2",
+            "self": "/_coauth/admin/upstream-oauth-providers?page[after]=[id-2]&page[first]=2",
             "first": "/_coauth/admin/upstream-oauth-providers?page[first]=2",
             "last": "/_coauth/admin/upstream-oauth-providers?page[last]=2"
           }
@@ -1135,63 +1149,66 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json::<serde_json::Value>();
 
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": [
             {
               "type": "upstream-oauth-provider",
-              "id": "01FSHN9AG07HNEZXNQM2KNBNF6",
+              "id": "[id-1]",
               "attributes": {
                 "issuer": "https://appleid.apple.com",
                 "human_name": "Apple ID",
                 "brand_name": "apple",
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "disabled_at": "2022-01-16T14:40:00.000Z"
+                "created_at": "[timestamp-1]",
+                "disabled_at": "[timestamp-1]",
+                "source": "config"
               },
               "links": {
-                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_coauth/admin/upstream-oauth-providers/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG07HNEZXNQM2KNBNF6"
+                  "cursor": "[id-1]"
                 }
               }
             },
             {
               "type": "upstream-oauth-provider",
-              "id": "01FSHN9AG09AVTNSQFMSR34AJC",
+              "id": "[id-2]",
               "attributes": {
                 "issuer": "https://login.microsoftonline.com/common/v2.0",
                 "human_name": "Microsoft",
                 "brand_name": "microsoft",
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "disabled_at": null
+                "created_at": "[timestamp-1]",
+                "disabled_at": null,
+                "source": "config"
               },
               "links": {
-                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_coauth/admin/upstream-oauth-providers/[id-2]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG09AVTNSQFMSR34AJC"
+                  "cursor": "[id-2]"
                 }
               }
             },
             {
               "type": "upstream-oauth-provider",
-              "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+              "id": "[id-3]",
               "attributes": {
                 "issuer": "https://accounts.google.com",
                 "human_name": "Google",
                 "brand_name": "google",
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "disabled_at": null
+                "created_at": "[timestamp-1]",
+                "disabled_at": null,
+                "source": "config"
               },
               "links": {
-                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_coauth/admin/upstream-oauth-providers/[id-3]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG0MZAA6S4AF7CTV32E"
+                  "cursor": "[id-3]"
                 }
               }
             }
@@ -1212,7 +1229,7 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json::<serde_json::Value>();
 
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 3
@@ -1233,44 +1250,46 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json::<serde_json::Value>();
 
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": [
             {
               "type": "upstream-oauth-provider",
-              "id": "01FSHN9AG09AVTNSQFMSR34AJC",
+              "id": "[id-1]",
               "attributes": {
                 "issuer": "https://login.microsoftonline.com/common/v2.0",
                 "human_name": "Microsoft",
                 "brand_name": "microsoft",
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "disabled_at": null
+                "created_at": "[timestamp-1]",
+                "disabled_at": null,
+                "source": "config"
               },
               "links": {
-                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_coauth/admin/upstream-oauth-providers/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG09AVTNSQFMSR34AJC"
+                  "cursor": "[id-1]"
                 }
               }
             },
             {
               "type": "upstream-oauth-provider",
-              "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+              "id": "[id-2]",
               "attributes": {
                 "issuer": "https://accounts.google.com",
                 "human_name": "Google",
                 "brand_name": "google",
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "disabled_at": null
+                "created_at": "[timestamp-1]",
+                "disabled_at": null,
+                "source": "config"
               },
               "links": {
-                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_coauth/admin/upstream-oauth-providers/[id-2]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG0MZAA6S4AF7CTV32E"
+                  "cursor": "[id-2]"
                 }
               }
             }
@@ -1293,7 +1312,7 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json::<serde_json::Value>();
 
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 1

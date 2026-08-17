@@ -11,7 +11,7 @@ pub(crate) use arkret_models_identity::SignedSessionGrantClaims;
 pub(crate) use device_revocation_gate::{acquire_human_device_binding, operation_intent_digest};
 pub use introspection::introspect_session_grant;
 #[cfg(test)]
-pub(crate) use introspection::{introspection_status, session_grant_jwt_hash};
+pub(crate) use introspection::{introspection_status, session_grant_jwt_digest};
 pub(crate) use issuance::{
     commit_session_grant_issuance, issue_session_grant_for_audience,
     issue_test_session_grant_for_audience, mint_agent_session_grant, new_session_grant_record,

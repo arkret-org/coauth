@@ -225,7 +225,9 @@ pub async fn issue_claim(req: &mut Request, depot: &Depot) -> CreatedJsonResult<
 pub async fn list_claim_status(req: &mut Request, depot: &Depot) -> JsonResult<ClaimListOutcome> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { repo, clock, .. } = ctx;
-    let query: ClaimStatusQuery = req.parse_queries().unwrap_or_default();
+    let query: ClaimStatusQuery = req
+        .parse_queries()
+        .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
     let claim_service = depot.account_claims_service()?;
     let now = clock.now();
     repo.cancel().await?;

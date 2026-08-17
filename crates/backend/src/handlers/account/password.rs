@@ -416,21 +416,22 @@ mod tests {
         let mut repo = state.repository().await.unwrap();
         let username = format!("recover-{}", Ulid::new().to_string().to_lowercase());
 
-        let user = repo
-            .user()
-            .add(&mut rng, &state.clock, username)
-            .await
-            .unwrap();
+        // The recovery-status handler reads the wall clock, so the ticket
+        // validity window has to be anchored to the same clock; a ticket
+        // minted against the mock clock is already years expired.
+        let clock = coauth_data::SystemClock::default();
+
+        let user = repo.user().add(&mut rng, &clock, username).await.unwrap();
         let user_email = repo
             .user_email()
-            .add(&mut rng, &state.clock, &user, email)
+            .add(&mut rng, &clock, &user, email)
             .await
             .unwrap();
         let session = repo
             .user_recovery()
             .add_session(
                 &mut rng,
-                &state.clock,
+                &clock,
                 user_email.email.clone(),
                 "test-agent".to_owned(),
                 None,
@@ -442,7 +443,7 @@ mod tests {
             .user_recovery()
             .add_ticket(
                 &mut rng,
-                &state.clock,
+                &clock,
                 &session,
                 &user_email,
                 format!("ticket-{}", Ulid::new().to_string().to_lowercase()),

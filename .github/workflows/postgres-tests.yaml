@@ -2,30 +2,28 @@
 
 name: Postgres lib-test gate
 
-# a dedicated job that runs `coauth-data`'s `--lib` test
-# suite against a real, migrated Postgres instance.
+# a dedicated job that runs the `--lib` test suites against a real, migrated
+# Postgres instance.
 #
 # Why a separate job from the existing `test` matrix in `ci.yaml`?
 #
 # * The `test` matrix runs `cargo nextest` against an *unmigrated*
 #   Postgres (no `coauth database migrate` step), which means every
-#   test that goes through `coauth_data::test_utils::setup_test_pool()`
-#   builds a pool successfully but every SQL query 500s on the missing
-#   tables. Those tests effectively only exercise their `Some(pool) =
-#   ... else { return; }` early-return arm in CI.
+#   test that goes through `setup_test_pool()` builds a pool
+#   successfully but every SQL query fails on the missing tables. Those
+#   tests effectively only exercise their `Some(pool) = ... else
+#   { return; }` early-return arm in CI.
 #
-# * This job migrates the database first, then runs
-#   `cargo test --locked --lib -p coauth-data` with `DATABASE_URL` set,
-#   so the gate actually exercises the live PG path on every PR.
+# * This job migrates the database first, then runs the lib tests with
+#   `DATABASE_URL` set, so the gate actually exercises the live PG path
+#   on every PR.
 #
-# Scope is intentionally narrowed to `coauth-data`. The 168
-# `setup_test_pool()` callsites in `coauth-backend` are integration-
-# style tests that need per-test schema isolation (which their
-# `TestState::from_pool` helper does not yet provide), so running the
-# full workspace would fail on cross-test row collisions. The data
-# crate's PG tests use seeded fresh ULIDs / fresh usernames per test
-# and pass cleanly against a single migrated database — that's the
-# "true PG path" we're locking in here.
+# `coauth-backend`'s handler tests are covered here too: they are gated on
+# BOTH `DATABASE_URL` and the `cedar` feature, so without this job that whole
+# face is skipped silently. Cross-test isolation is provided by the
+# `TestDatabase` guard (session-level `pg_advisory_lock` plus
+# `TRUNCATE ... RESTART IDENTITY CASCADE`), so they run against one shared
+# migrated database.
 
 on:
   pull_request:
@@ -139,16 +137,10 @@ jobs:
             exit 1
           fi
 
-      - name: Run round 37.4 starid + passkey-derive lib tests
-        # These don't touch PG themselves but they share the workspace
-        # build with code that does, so running them under the same
-        # `DATABASE_URL` env confirms there's no environmental
-        # surprise (e.g., a config helper that panics when DATABASE_URL
-        # is set but a constructor is in the wrong shape). One
-        # invocation per module — `cargo test` only accepts a single
-        # TESTNAME positional, so we serialise three calls.
-        run: |
-          set -euo pipefail
-          cargo test --locked --lib -p coauth-backend --no-fail-fast services::passkey_derive::tests
-          cargo test --locked --lib -p coauth-backend --no-fail-fast services::starid_adapter::tests::rotate_update_key
-          cargo test --locked --lib -p coauth-backend --no-fail-fast services::onboarding_starid::tests
+      - name: Run the backend lib tests against migrated Postgres with cedar
+        # The load-bearing gate. These tests need `DATABASE_URL` *and*
+        # `--features cedar` at the same time; missing either makes them
+        # early-return, which is how this whole face rotted unnoticed.
+        # `--no-fail-fast` so a failing target still reports a count instead of
+        # aborting the run at the first failure.
+        run: cargo test --locked --lib -p coauth-backend --features cedar --no-fail-fast

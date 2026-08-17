@@ -39,27 +39,28 @@ async fn test_create() {
     let response = state.request(request).await;
     response.assert_status(StatusCode::CREATED);
     let body: serde_json::Value = response.json();
-    assert_json_snapshot!(body, @r###"
-        {
-          "data": {
-            "type": "upstream-oauth-link",
-            "id": "01FSHN9AG07HNEZXNQM2KNBNF6",
-            "attributes": {
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "provider_id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",
-              "subject": "subject1",
-              "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-              "human_account_name": null
-            },
-            "links": {
-              "self": "/_coauth/admin/upstream-oauth-links/01FSHN9AG07HNEZXNQM2KNBNF6"
-            }
-          },
-          "links": {
-            "self": "/_coauth/admin/upstream-oauth-links/01FSHN9AG07HNEZXNQM2KNBNF6"
-          }
+    assert_json_snapshot!(stable_json(&body), @r#"
+    {
+      "data": {
+        "type": "upstream-oauth-link",
+        "id": "[id-1]",
+        "attributes": {
+          "created_at": "[timestamp-1]",
+          "updated_at": "[timestamp-1]",
+          "provider_id": "[id-2]",
+          "subject": "subject1",
+          "user_id": "[id-3]",
+          "human_account_name": null
+        },
+        "links": {
+          "self": "/_coauth/admin/upstream-oauth-links/[id-1]"
         }
-        "###);
+      },
+      "links": {
+        "self": "/_coauth/admin/upstream-oauth-links/[id-1]"
+      }
+    }
+    "#);
 }
 
 #[tokio::test]
@@ -113,27 +114,28 @@ async fn test_association() {
     let response = state.request(request).await;
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
-    assert_json_snapshot!(body, @r###"
-        {
-          "data": {
-            "type": "upstream-oauth-link",
-            "id": "01FSHN9AG09NMZYX8MFYH578R9",
-            "attributes": {
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "provider_id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",
-              "subject": "subject1",
-              "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-              "human_account_name": null
-            },
-            "links": {
-              "self": "/_coauth/admin/upstream-oauth-links/01FSHN9AG09NMZYX8MFYH578R9"
-            }
-          },
-          "links": {
-            "self": "/_coauth/admin/upstream-oauth-links/01FSHN9AG09NMZYX8MFYH578R9"
-          }
+    assert_json_snapshot!(body, @r#"
+    {
+      "data": {
+        "type": "upstream-oauth-link",
+        "id": "01FSHN9AG0E669W4K48J05MWG5",
+        "attributes": {
+          "created_at": "2022-01-16T14:40:00Z",
+          "updated_at": "2022-01-16T14:40:00Z",
+          "provider_id": "01FSHN9AG0FKTSFY9K4CCVASWV",
+          "subject": "subject1",
+          "user_id": "01FSHN9AG0FH5TJ4F8G4T9XCET",
+          "human_account_name": null
+        },
+        "links": {
+          "self": "/_coauth/admin/upstream-oauth-links/01FSHN9AG0E669W4K48J05MWG5"
         }
-        "###);
+      },
+      "links": {
+        "self": "/_coauth/admin/upstream-oauth-links/01FSHN9AG0E669W4K48J05MWG5"
+      }
+    }
+    "#);
 }
 
 #[tokio::test]
@@ -198,15 +200,15 @@ async fn test_link_already_exists() {
     let response = state.request(request).await;
     response.assert_status(StatusCode::CONFLICT);
     let body: serde_json::Value = response.json();
-    assert_json_snapshot!(body, @r###"
+    assert_json_snapshot!(stable_json(&body), @r#"
+    {
+      "errors": [
         {
-          "errors": [
-            {
-              "title": "Upstream OAuth 2.0 Provider ID 01FSHN9AG09NMZYX8MFYH578R9 with subject subject1 is already linked to a user"
-            }
-          ]
+          "title": "Upstream OAuth 2.0 Provider ID [id-1] with subject subject1 is already linked to a user"
         }
-        "###);
+      ]
+    }
+    "#);
 }
 
 #[tokio::test]
@@ -242,15 +244,15 @@ async fn test_user_not_found() {
     let response = state.request(request).await;
     response.assert_status(StatusCode::NOT_FOUND);
     let body: serde_json::Value = response.json();
-    assert_json_snapshot!(body, @r###"
+    assert_json_snapshot!(body, @r#"
+    {
+      "errors": [
         {
-          "errors": [
-            {
-              "title": "User ID 00000000000000000000000000 not found"
-            }
-          ]
+          "title": "User ID 00000000000000000000000000 not found"
         }
-        "###);
+      ]
+    }
+    "#);
 }
 
 #[tokio::test]
@@ -282,13 +284,13 @@ async fn test_provider_not_found() {
     let response = state.request(request).await;
     response.assert_status(StatusCode::NOT_FOUND);
     let body: serde_json::Value = response.json();
-    assert_json_snapshot!(body, @r###"
+    assert_json_snapshot!(body, @r#"
+    {
+      "errors": [
         {
-          "errors": [
-            {
-              "title": "Upstream OAuth Provider ID 00000000000000000000000000 not found"
-            }
-          ]
+          "title": "Upstream OAuth Provider ID 00000000000000000000000000 not found"
         }
-        "###);
+      ]
+    }
+    "#);
 }

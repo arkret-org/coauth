@@ -185,7 +185,9 @@ pub async fn list_tokens(
         mut repo, clock, ..
     } = ctx;
     let (pagination, include_count) = extract_pagination(req)?;
-    let params: FilterParams = req.parse_queries().unwrap_or_default();
+    let params: FilterParams = req
+        .parse_queries()
+        .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
 
     let base_url = format!("{path}{params}", path = UserRegistrationToken::PATH);
     let base_url = include_count.add_to_base(&base_url);

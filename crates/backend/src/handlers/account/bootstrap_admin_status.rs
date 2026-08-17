@@ -108,7 +108,9 @@ mod tests {
             .await
             .unwrap();
         repo.user().set_can_request_admin(user, true).await.unwrap();
-        repo.cancel().await.unwrap();
+        // Commit: the assertion below reads the admin count back through a
+        // fresh repository, so a rollback would hide the row it is about.
+        repo.save().await.unwrap();
 
         let mut repo = state.repository().await.unwrap();
         let payload = load_bootstrap_admin_status_from(&state.site_config, &mut repo)

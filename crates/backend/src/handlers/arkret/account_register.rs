@@ -586,7 +586,7 @@ pub async fn account_register_endpoint(
         device_id: Some(initial.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
-        grant_id: material.grant_id.clone(),
+        session_grant_id: material.grant_id.clone(),
         session_public_key: initial.session_public_key.clone(),
         audience: initial.audience.clone(),
         granted_scope: material.scopes.clone(),

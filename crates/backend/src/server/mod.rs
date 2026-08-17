@@ -14,7 +14,7 @@ use crate::app_state::{AppState, inject_app_state};
 use crate::listener::unix_or_tcp::UnixOrTcpListener;
 
 mod middleware;
-mod routers;
+pub(crate) mod routers;
 
 use middleware::{InjectAppState, RequestTimeout, favicon_handler, public_oidc_browser_cors};
 pub use middleware::{

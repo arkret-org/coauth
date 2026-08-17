@@ -697,7 +697,7 @@ diesel::table! {
         proof_expires_at -> Nullable<Timestamptz>,
         outcome_digest -> Nullable<Binary>,
         canonical_outcome -> Nullable<Binary>,
-        target_grant_id -> Nullable<Binary>,
+        target_session_grant_id -> Nullable<Binary>,
         result_grant_id -> Nullable<Binary>,
         affected_grant_ids -> Array<Nullable<Binary>>,
         retained_until -> Timestamptz,

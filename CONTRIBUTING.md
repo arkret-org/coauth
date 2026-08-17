@@ -26,6 +26,21 @@ cargo check --workspace
 cargo test  --workspace
 ```
 
+`cargo test --workspace` does **not** cover the database-backed handler tests.
+Every one of them early-returns unless `DATABASE_URL` is set, and the
+policy-backed handlers are compiled out without the `cedar` feature, so that
+face is silently skipped by the command above. Run it explicitly against a
+scratch database that the suite may truncate:
+
+```sh
+DATABASE_URL=postgresql://postgres:postgres@localhost/coauth_test \
+  cargo run -p coauth -- database migrate
+DATABASE_URL=postgresql://postgres:postgres@localhost/coauth_test \
+  just test-postgres
+```
+
+CI runs the same command in the `Postgres lib-test gate` workflow.
+
 Conformance and integration helpers live under `conformance/` and `scripts/`;
 use the CI workflow definitions as the source of truth for the exact command
 line.

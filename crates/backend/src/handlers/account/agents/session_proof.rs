@@ -1749,7 +1749,7 @@ mod tests {
             audience: vec!["https://arkret.example/_arkret".to_owned()],
             issued_at: now,
             expires_at: Some(now + chrono::Duration::minutes(15)),
-            pairing_request_id: "ak:pairing:01970000-0000-7000-8000-000000000020".to_owned(),
+            pairing_request_id: "pairing_request:01970000-0000-7000-8000-000000000020".to_owned(),
             request_canonical_digest: format!("sha256:{}", "1".repeat(64)),
             revoked_at: None,
             revoked_reason: None,

@@ -86,4 +86,51 @@ impl<T: Serialize + Send + salvo::oapi::ToSchema + 'static> salvo::oapi::Endpoin
     }
 }
 
+/// Response for a write endpoint that either mints a resource or updates one
+/// that already existed.
+///
+/// `201 Created` may only describe a resource the request brought into
+/// existence, so an endpoint whose request can resolve to an existing row has
+/// to be able to answer `200 OK` for that branch.
+pub enum WriteOutcomeJson<T: Serialize + Send> {
+    Created(T),
+    Updated(T),
+}
+
+impl<T: Serialize + Send> Scribe for WriteOutcomeJson<T> {
+    fn render(self, res: &mut Response) {
+        match self {
+            Self::Created(body) => {
+                res.status_code(StatusCode::CREATED);
+                res.render(Json(body));
+            }
+            Self::Updated(body) => {
+                res.status_code(StatusCode::OK);
+                res.render(Json(body));
+            }
+        }
+    }
+}
+
+impl<T: Serialize + Send + salvo::oapi::ToSchema + 'static> salvo::oapi::EndpointOutRegister
+    for WriteOutcomeJson<T>
+{
+    fn register(components: &mut salvo::oapi::Components, operation: &mut salvo::oapi::Operation) {
+        let created = salvo::oapi::Response::new("Created").add_content(
+            "application/json",
+            salvo::oapi::Content::new(T::to_schema(components)),
+        );
+        let updated = salvo::oapi::Response::new("Updated").add_content(
+            "application/json",
+            salvo::oapi::Content::new(T::to_schema(components)),
+        );
+        operation
+            .responses
+            .insert("201", salvo::oapi::RefOr::Type(created));
+        operation
+            .responses
+            .insert("200", salvo::oapi::RefOr::Type(updated));
+    }
+}
+
 pub(crate) mod audit_helper;

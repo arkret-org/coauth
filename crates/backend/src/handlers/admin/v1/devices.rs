@@ -571,6 +571,8 @@ mod tests {
             runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
                 "did:web:auth.example",
             ),
+            // Session-grant audiences are Principal Server core DIDs.
+            admin_audience: Some("ak:did_core:web:principal.example.com".to_owned()),
             ..coauth_config::ArkretConfig::default()
         };
         let session_private = coauth_keystore::PrivateKey::generate_ed25519(&mut rng);
@@ -584,9 +586,13 @@ mod tests {
             arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
             arkret_identifiers::DidCoreId::new(principal_server_id).unwrap(),
         );
+        // The revoke cascade selects grants active at the wall clock, so the
+        // seeded grant has to be minted against the same clock; one minted at
+        // the mock epoch is already years expired.
+        let grant_clock = coauth_data::SystemClock::default();
         let material = crate::handlers::arkret::issue_session_grant(
             &mut rng,
-            &*state.clock,
+            &grant_clock,
             &state.url_builder,
             &grant_config,
             &state.key_store,
@@ -604,7 +610,7 @@ mod tests {
         let grant = crate::handlers::arkret::persist_session_grant(
             &mut repo,
             &mut rng,
-            &*state.clock,
+            &grant_clock,
             &browser_session,
             &material,
         )

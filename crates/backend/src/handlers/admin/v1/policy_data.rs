@@ -123,7 +123,9 @@ mod tests {
     use insta::assert_json_snapshot;
     use ulid::Ulid;
 
-    use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
+    use crate::handlers::test_utils::{
+        RequestBuilderExt, ResponseExt, TestState, setup, stable_json,
+    };
 
     #[tokio::test]
     async fn test_get() {
@@ -155,26 +157,26 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r###"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": {
             "type": "policy-data",
-            "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+            "id": "[id-1]",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00.000Z",
+              "created_at": "[timestamp-1]",
               "data": {
                 "hello": "world"
               }
             },
             "links": {
-              "self": "/_coauth/admin/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_coauth/admin/policy-data/[id-1]"
             }
           },
           "links": {
-            "self": "/_coauth/admin/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_coauth/admin/policy-data/[id-1]"
           }
         }
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -192,15 +194,15 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::NOT_FOUND);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r###"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "errors": [
             {
-              "title": "Policy data with ID 00000000000000000000000000 not found"
+              "title": "Policy data with ID [id-1] not found"
             }
           ]
         }
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -232,26 +234,26 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r###"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": {
             "type": "policy-data",
-            "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+            "id": "[id-1]",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00.000Z",
+              "created_at": "[timestamp-1]",
               "data": {
                 "hello": "world"
               }
             },
             "links": {
-              "self": "/_coauth/admin/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_coauth/admin/policy-data/[id-1]"
             }
           },
           "links": {
-            "self": "/_coauth/admin/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_coauth/admin/policy-data/[id-1]"
           }
         }
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -269,7 +271,7 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::NOT_FOUND);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r###"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "errors": [
             {
@@ -277,7 +279,7 @@ mod tests {
             }
           ]
         }
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -289,7 +291,9 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::post("/_coauth/admin/policy-data")
+        // Policy data is written with PUT: the endpoint replaces the current
+        // document and returns the newly stored version.
+        let request = Request::put("/_coauth/admin/policy-data")
             .bearer(&token)
             .json(serde_json::json!({
                 "data": {
@@ -299,25 +303,25 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::CREATED);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r###"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": {
             "type": "policy-data",
-            "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+            "id": "[id-1]",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00.000Z",
+              "created_at": "[timestamp-1]",
               "data": {
                 "hello": "world"
               }
             },
             "links": {
-              "self": "/_coauth/admin/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_coauth/admin/policy-data/[id-1]"
             }
           },
           "links": {
-            "self": "/_coauth/admin/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_coauth/admin/policy-data/[id-1]"
           }
         }
-        "###);
+        "#);
     }
 }

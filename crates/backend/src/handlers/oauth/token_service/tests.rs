@@ -274,6 +274,9 @@ struct RefreshFixture {
     session_grant_id: Ulid,
     cancellation_token: CancellationToken,
     _task_tracker: TaskTracker,
+    /// Exclusive hold on the shared test database. Dropping it releases the
+    /// advisory lock, so it has to outlive the fixture it seeded.
+    _database: coauth_storage_postgres::test_utils::TestDatabase,
 }
 
 impl RefreshFixture {
@@ -347,6 +350,8 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
         runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
             "did:web:issuer.example",
         ),
+        // Session-grant audiences are Principal Server core DIDs.
+        admin_audience: Some("ak:did_core:web:principal.example.com".to_owned()),
         ..ArkretConfig::default()
     };
     let grant_keystore = ed25519_keystore();
@@ -426,6 +431,7 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
         session_grant_id: session_grant.id,
         cancellation_token,
         _task_tracker: task_tracker,
+        _database: pool,
     })
 }
 
@@ -764,7 +770,15 @@ async fn concurrent_refresh_only_one_exchange_succeeds() {
         .await
         .unwrap()
         .expect("original refresh token should exist");
-    assert!(matches!(original.state, RefreshTokenState::Consumed { .. }));
+    // The loser of the race is a reuse of an already-consumed token, which
+    // revokes the chain. Whether the original ends up `Consumed` or `Revoked`
+    // therefore depends on the interleaving; what the exchange guarantees is
+    // that it is no longer redeemable.
+    assert!(
+        !matches!(original.state, RefreshTokenState::Valid),
+        "the redeemed refresh token must not stay valid, got {:?}",
+        original.state
+    );
     repo.cancel().await.unwrap();
     fixture.shutdown();
 }

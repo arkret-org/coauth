@@ -270,7 +270,7 @@ where
                 request_identity: &request_identity,
                 canonical_intent_digest: material.issuance_digest,
                 canonical_intent: &material.issuance_preimage,
-                target_grant_id: None,
+                target_session_grant_id: None,
                 issuance_nonce: Some(&material.issuance_nonce),
                 session_id: Some(&material.session_id),
                 grant_not_before: Some(material.not_before_timestamp),

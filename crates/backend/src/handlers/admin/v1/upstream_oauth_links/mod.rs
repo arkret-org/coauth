@@ -11,13 +11,14 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use ulid::Ulid;
 
+use crate::handlers::admin::WriteOutcomeJson;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::model::{Resource, UpstreamOAuthLink, to_upstream_oauth_link};
 use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
-use crate::{AppError, AppResult, CreatedJsonResult, JsonResult};
+use crate::{AppError, AppResult, JsonResult};
 
 /// JSON body accepted by `POST /_coauth/admin/upstream-oauth-links`.
 #[derive(Deserialize, JsonSchema)]
@@ -44,7 +45,7 @@ pub struct AddRequestBody {
 pub async fn add_link(
     req: &mut Request,
     depot: &Depot,
-) -> CreatedJsonResult<SingleOutcome<UpstreamOAuthLink>> {
+) -> Result<WriteOutcomeJson<SingleOutcome<UpstreamOAuthLink>>, AppError> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -113,9 +114,11 @@ pub async fn add_link(
 
         repo.save().await?;
 
-        return Ok(crate::handlers::admin::CreatedJson(
-            SingleOutcome::new_canonical(to_upstream_oauth_link(entry)),
-        ));
+        // The link row already existed; this request only attached an owner to
+        // it, so it is an update, not a creation.
+        return Ok(WriteOutcomeJson::Updated(SingleOutcome::new_canonical(
+            to_upstream_oauth_link(entry),
+        )));
     }
 
     // No existing link -- create a brand-new one
@@ -153,9 +156,9 @@ pub async fn add_link(
 
     repo.save().await?;
 
-    Ok(crate::handlers::admin::CreatedJson(
-        SingleOutcome::new_canonical(to_upstream_oauth_link(entry)),
-    ))
+    Ok(WriteOutcomeJson::Created(SingleOutcome::new_canonical(
+        to_upstream_oauth_link(entry),
+    )))
 }
 
 /// Remove an upstream OAuth link by its identifier.
@@ -282,7 +285,9 @@ pub async fn list_links(
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let (pagination, include_count) = extract_pagination(req)?;
-    let params: FilterParams = req.parse_queries().unwrap_or_default();
+    let params: FilterParams = req
+        .parse_queries()
+        .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
 
     let base_url = format!("{path}{params}", path = UpstreamOAuthLink::PATH);
     let base_url = include_count.add_to_base(&base_url);

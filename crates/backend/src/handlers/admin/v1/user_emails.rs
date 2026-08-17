@@ -219,7 +219,9 @@ pub async fn list_emails(
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let (pagination, include_count) = extract_pagination(req)?;
-    let params: FilterParams = req.parse_queries().unwrap_or_default();
+    let params: FilterParams = req
+        .parse_queries()
+        .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
 
     let base_url = format!("{path}{params}", path = UserEmail::PATH);
     let base_url = include_count.add_to_base(&base_url);
@@ -393,7 +395,7 @@ mod tests {
     use ulid::Ulid;
 
     use crate::handlers::test_utils::{
-        RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce,
+        RequestBuilderExt, ResponseExt, TestState, setup, stable_json, unique_test_nonce,
     };
 
     #[tokio::test]
@@ -424,25 +426,28 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::CREATED);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r###"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": {
             "type": "user-email",
-            "id": "01FSHN9AG07HNEZXNQM2KNBNF6",
+            "id": "[id-1]",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-              "email": "alice@example.com"
+              "created_at": "[timestamp-1]",
+              "updated_at": "[timestamp-1]",
+              "user_id": "[id-2]",
+              "email": "alice@example.com",
+              "confirmed_at": "[timestamp-1]",
+              "is_primary": true
             },
             "links": {
-              "self": "/_coauth/admin/user-emails/01FSHN9AG07HNEZXNQM2KNBNF6"
+              "self": "/_coauth/admin/user-emails/[id-1]"
             }
           },
           "links": {
-            "self": "/_coauth/admin/user-emails/01FSHN9AG07HNEZXNQM2KNBNF6"
+            "self": "/_coauth/admin/user-emails/[id-1]"
           }
         }
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -463,7 +468,7 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::NOT_FOUND);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r###"
+        assert_json_snapshot!(body, @r#"
         {
           "errors": [
             {
@@ -471,7 +476,7 @@ mod tests {
             }
           ]
         }
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -510,7 +515,7 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::CONFLICT);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r###"
+        assert_json_snapshot!(body, @r#"
         {
           "errors": [
             {
@@ -518,7 +523,7 @@ mod tests {
             }
           ]
         }
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -548,18 +553,15 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::BAD_REQUEST);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r###"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "errors": [
             {
               "title": "Email \"invalid-email\" is not valid"
-            },
-            {
-              "title": "Missing domain or user"
             }
           ]
         }
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -660,25 +662,28 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
         assert_eq!(body["data"]["type"], "user-email");
-        insta::assert_json_snapshot!(body, @r###"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": {
             "type": "user-email",
-            "id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",
+            "id": "[id-1]",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-              "email": "alice@example.com"
+              "created_at": "[timestamp-1]",
+              "updated_at": "[timestamp-1]",
+              "user_id": "[id-2]",
+              "email": "alice@example.com",
+              "confirmed_at": "[timestamp-1]",
+              "is_primary": true
             },
             "links": {
-              "self": "/_coauth/admin/user-emails/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
+              "self": "/_coauth/admin/user-emails/[id-1]"
             }
           },
           "links": {
-            "self": "/_coauth/admin/user-emails/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
+            "self": "/_coauth/admin/user-emails/[id-1]"
           }
         }
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -742,7 +747,7 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 2
@@ -750,35 +755,41 @@ mod tests {
           "data": [
             {
               "type": "user-email",
-              "id": "01FSHN9AG09NMZYX8MFYH578R9",
+              "id": "[id-1]",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-                "email": "alice@example.com"
+                "created_at": "[timestamp-1]",
+                "updated_at": "[timestamp-1]",
+                "user_id": "[id-2]",
+                "email": "bob@example.com",
+                "confirmed_at": "[timestamp-1]",
+                "is_primary": true
               },
               "links": {
-                "self": "/_coauth/admin/user-emails/01FSHN9AG09NMZYX8MFYH578R9"
+                "self": "/_coauth/admin/user-emails/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG09NMZYX8MFYH578R9"
+                  "cursor": "[id-1]"
                 }
               }
             },
             {
               "type": "user-email",
-              "id": "01FSHN9AG0KEPHYQQXW9XPTX6Z",
+              "id": "[id-3]",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "user_id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",
-                "email": "bob@example.com"
+                "created_at": "[timestamp-1]",
+                "updated_at": "[timestamp-1]",
+                "user_id": "[id-4]",
+                "email": "alice@example.com",
+                "confirmed_at": "[timestamp-1]",
+                "is_primary": true
               },
               "links": {
-                "self": "/_coauth/admin/user-emails/01FSHN9AG0KEPHYQQXW9XPTX6Z"
+                "self": "/_coauth/admin/user-emails/[id-3]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG0KEPHYQQXW9XPTX6Z"
+                  "cursor": "[id-3]"
                 }
               }
             }
@@ -801,7 +812,7 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 1
@@ -809,26 +820,29 @@ mod tests {
           "data": [
             {
               "type": "user-email",
-              "id": "01FSHN9AG09NMZYX8MFYH578R9",
+              "id": "[id-1]",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-                "email": "alice@example.com"
+                "created_at": "[timestamp-1]",
+                "updated_at": "[timestamp-1]",
+                "user_id": "[id-2]",
+                "email": "alice@example.com",
+                "confirmed_at": "[timestamp-1]",
+                "is_primary": true
               },
               "links": {
-                "self": "/_coauth/admin/user-emails/01FSHN9AG09NMZYX8MFYH578R9"
+                "self": "/_coauth/admin/user-emails/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG09NMZYX8MFYH578R9"
+                  "cursor": "[id-1]"
                 }
               }
             }
           ],
           "links": {
-            "self": "/_coauth/admin/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
-            "first": "/_coauth/admin/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
-            "last": "/_coauth/admin/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[last]=10"
+            "self": "/_coauth/admin/user-emails?filter[user]=[id-2]&page[first]=10",
+            "first": "/_coauth/admin/user-emails?filter[user]=[id-2]&page[first]=10",
+            "last": "/_coauth/admin/user-emails?filter[user]=[id-2]&page[last]=10"
           }
         }
         "#);
@@ -840,7 +854,7 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 1
@@ -848,18 +862,21 @@ mod tests {
           "data": [
             {
               "type": "user-email",
-              "id": "01FSHN9AG09NMZYX8MFYH578R9",
+              "id": "[id-1]",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-                "email": "alice@example.com"
+                "created_at": "[timestamp-1]",
+                "updated_at": "[timestamp-1]",
+                "user_id": "[id-2]",
+                "email": "alice@example.com",
+                "confirmed_at": "[timestamp-1]",
+                "is_primary": true
               },
               "links": {
-                "self": "/_coauth/admin/user-emails/01FSHN9AG09NMZYX8MFYH578R9"
+                "self": "/_coauth/admin/user-emails/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG09NMZYX8MFYH578R9"
+                  "cursor": "[id-1]"
                 }
               }
             }
@@ -879,40 +896,46 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": [
             {
               "type": "user-email",
-              "id": "01FSHN9AG09NMZYX8MFYH578R9",
+              "id": "[id-1]",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-                "email": "alice@example.com"
+                "created_at": "[timestamp-1]",
+                "updated_at": "[timestamp-1]",
+                "user_id": "[id-2]",
+                "email": "bob@example.com",
+                "confirmed_at": "[timestamp-1]",
+                "is_primary": true
               },
               "links": {
-                "self": "/_coauth/admin/user-emails/01FSHN9AG09NMZYX8MFYH578R9"
+                "self": "/_coauth/admin/user-emails/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG09NMZYX8MFYH578R9"
+                  "cursor": "[id-1]"
                 }
               }
             },
             {
               "type": "user-email",
-              "id": "01FSHN9AG0KEPHYQQXW9XPTX6Z",
+              "id": "[id-3]",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "user_id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",
-                "email": "bob@example.com"
+                "created_at": "[timestamp-1]",
+                "updated_at": "[timestamp-1]",
+                "user_id": "[id-4]",
+                "email": "alice@example.com",
+                "confirmed_at": "[timestamp-1]",
+                "is_primary": true
               },
               "links": {
-                "self": "/_coauth/admin/user-emails/01FSHN9AG0KEPHYQQXW9XPTX6Z"
+                "self": "/_coauth/admin/user-emails/[id-3]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG0KEPHYQQXW9XPTX6Z"
+                  "cursor": "[id-3]"
                 }
               }
             }
@@ -932,7 +955,7 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        insta::assert_json_snapshot!(body, @r###"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 2
@@ -941,7 +964,7 @@ mod tests {
             "self": "/_coauth/admin/user-emails?count=only"
           }
         }
-        "###);
+        "#);
 
         // Test count=false with filtering
         let request = Request::get(format!(
@@ -953,31 +976,34 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": [
             {
               "type": "user-email",
-              "id": "01FSHN9AG09NMZYX8MFYH578R9",
+              "id": "[id-1]",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00.000Z",
-                "user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-                "email": "alice@example.com"
+                "created_at": "[timestamp-1]",
+                "updated_at": "[timestamp-1]",
+                "user_id": "[id-2]",
+                "email": "alice@example.com",
+                "confirmed_at": "[timestamp-1]",
+                "is_primary": true
               },
               "links": {
-                "self": "/_coauth/admin/user-emails/01FSHN9AG09NMZYX8MFYH578R9"
+                "self": "/_coauth/admin/user-emails/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG09NMZYX8MFYH578R9"
+                  "cursor": "[id-1]"
                 }
               }
             }
           ],
           "links": {
-            "self": "/_coauth/admin/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
-            "first": "/_coauth/admin/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
-            "last": "/_coauth/admin/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[last]=10"
+            "self": "/_coauth/admin/user-emails?filter[user]=[id-2]&count=false&page[first]=10",
+            "first": "/_coauth/admin/user-emails?filter[user]=[id-2]&count=false&page[first]=10",
+            "last": "/_coauth/admin/user-emails?filter[user]=[id-2]&count=false&page[last]=10"
           }
         }
         "#);
@@ -992,13 +1018,13 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        insta::assert_json_snapshot!(body, @r#"
+        insta::assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
             "count": 1
           },
           "links": {
-            "self": "/_coauth/admin/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=only"
+            "self": "/_coauth/admin/user-emails?filter[user]=[id-1]&count=only"
           }
         }
         "#);

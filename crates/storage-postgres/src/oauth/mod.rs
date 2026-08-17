@@ -180,7 +180,7 @@ mod tests {
                     request_identity: seed.request_identity,
                     canonical_intent_digest: issuance_digest,
                     canonical_intent: &issuance_preimage,
-                    target_grant_id: None,
+                    target_session_grant_id: None,
                     issuance_nonce: Some(issuance_nonce.as_str()),
                     session_id: Some(seed.session_id),
                     grant_not_before: Some(not_before),

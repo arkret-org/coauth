@@ -183,7 +183,9 @@ pub async fn list_accounts(
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let (pagination, include_count) = extract_pagination(req)?;
-    let params: AccountFilterParams = req.parse_queries().unwrap_or_default();
+    let params: AccountFilterParams = req
+        .parse_queries()
+        .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
 
     let base = format!("{path}{params}", path = AccountRecord::PATH);
     let base = include_count.add_to_base(&base);
@@ -674,10 +676,20 @@ mod tests {
             .await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_eq!(body["meta"]["count"], 1);
+        // The admin token owns an account of its own, so the listing carries
+        // both it and `alice`.
+        assert_eq!(body["meta"]["count"], 2);
+        let entry = body["data"]
+            .as_array()
+            .expect("account listing")
+            .iter()
+            .find(|entry| entry["id"] == user.id.to_string())
+            .expect("the created account is listed")
+            .clone();
+        let body = serde_json::json!({ "data": [entry] });
         assert_eq!(body["data"][0]["type"], "account");
         assert_eq!(body["data"][0]["id"], user.id.to_string());
-        assert_eq!(body["data"][0]["attributes"]["username"], "alice");
+        assert_eq!(body["data"][0]["attributes"]["handle"], "alice");
         assert_eq!(body["data"][0]["attributes"]["status"], "active");
         assert_eq!(
             body["data"][0]["attributes"]["primary_principal_id"],
@@ -699,17 +711,22 @@ mod tests {
         let body: serde_json::Value = response.json();
         assert_eq!(body["data"]["type"], "account");
         assert_eq!(body["data"]["id"], user.id.to_string());
-        assert_eq!(body["data"]["attributes"]["username"], "alice");
+        assert_eq!(body["data"]["attributes"]["handle"], "alice");
         assert_eq!(body["data"]["attributes"]["status"], "active");
     }
 
     #[tokio::test]
-    async fn test_lock_and_disable_account() {
+    async fn test_lock_account_and_refuse_unapproved_disable() {
         setup();
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut state = TestState::from_pool(pool.clone()).await.unwrap();
+        // Locking and disabling are account-status transitions, so they need a
+        // configured publication destination and an accepted principal binding
+        // for the target account.
+        let mut state = TestState::from_pool_with_principal_server(pool.clone())
+            .await
+            .unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let mut rng = state.rng();
@@ -720,6 +737,7 @@ mod tests {
             .await
             .unwrap();
         repo.save().await.unwrap();
+        state.seed_principal_binding(&user, "lockdisable").await;
 
         let response = state
             .request(
@@ -737,6 +755,9 @@ mod tests {
             serde_json::Value::Null
         );
 
+        // `disable` is a high-risk action: unlike `lock` it is only reachable
+        // through an approved risk-action proposal, so the direct endpoint
+        // refuses a bare call.
         let response = state
             .request(
                 Request::post(format!("/_coauth/admin/accounts/{}/disable", user.id))
@@ -744,11 +765,15 @@ mod tests {
                     .empty(),
             )
             .await;
-        response.assert_status(StatusCode::OK);
+        response.assert_status(StatusCode::BAD_REQUEST);
         let body: serde_json::Value = response.json();
-        assert_eq!(body["data"]["attributes"]["status"], "deactivated");
-        assert!(body["data"]["attributes"]["locked_at"].is_string());
-        assert!(body["data"]["attributes"]["deactivated_at"].is_string());
+        assert!(
+            body["errors"][0]["title"]
+                .as_str()
+                .unwrap()
+                .contains("requires an approved risk_action_proposal_id"),
+            "{body}"
+        );
     }
 
     #[tokio::test]
@@ -757,7 +782,12 @@ mod tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut state = TestState::from_pool(pool.clone()).await.unwrap();
+        // Executing a risk action resolves the acting admin's principal DID and
+        // publishes the resulting account-status transition, so both need a
+        // configured Principal Server and an accepted binding.
+        let mut state = TestState::from_pool_with_principal_server(pool.clone())
+            .await
+            .unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let mut rng = state.rng();
@@ -768,6 +798,10 @@ mod tests {
             .await
             .unwrap();
         repo.save().await.unwrap();
+        state.seed_principal_binding(&user, "riskexectarget").await;
+        // The proposal endpoint already resolves the acting admin's principal
+        // DID, so the admin binding has to exist before the first request.
+        let admin_did = admin_did_for_token(&state, &token, "riskexec").await;
 
         let response = state
             .request(
@@ -784,7 +818,6 @@ mod tests {
         let body: serde_json::Value = response.json();
         let proposal_id = body["proposal_id"].as_str().unwrap().to_owned();
         assert_eq!(body["approval_mode"], "durable_proposal_required");
-        let admin_did = admin_did_for_token(&state, &token).await;
         let approval_note = "approved for controlled executor";
         let approval_proof_jws = sign_risk_action_approval_proof(
             &state,
@@ -912,7 +945,11 @@ mod tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut state = TestState::from_pool(pool.clone()).await.unwrap();
+        // The proposal workflow resolves the acting admin's principal DID
+        // through the accepted-binding projection.
+        let mut state = TestState::from_pool_with_principal_server(pool.clone())
+            .await
+            .unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let mut rng = state.rng();
@@ -923,6 +960,10 @@ mod tests {
             .await
             .unwrap();
         repo.save().await.unwrap();
+        state
+            .seed_principal_binding(&user, "riskapprovetarget")
+            .await;
+        let admin_did = admin_did_for_token(&state, &token, "riskapprove").await;
 
         let response = state
             .request(
@@ -941,7 +982,6 @@ mod tests {
         let proposal_ulid = proposal_id.parse::<ulid::Ulid>().unwrap();
         let proposals =
             crate::services::risk_action_proposals::risk_action_proposals_service(pool.clone());
-        let admin_did = admin_did_for_token(&state, &token).await;
         let approval_note = "first real admin approval";
         let approval_proof_jws = sign_risk_action_approval_proof(
             &state,
@@ -1036,7 +1076,11 @@ mod tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut state = TestState::from_pool(pool.clone()).await.unwrap();
+        // The inventory projects accepted principal bindings only, so the
+        // account needs one against a configured Principal Server audience.
+        let mut state = TestState::from_pool_with_principal_server(pool.clone())
+            .await
+            .unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let mut rng = state.rng();
@@ -1047,6 +1091,7 @@ mod tests {
             .await
             .unwrap();
         repo.save().await.unwrap();
+        let bound_did = state.seed_principal_binding(&user, "didinventory").await;
 
         let response = state
             .request(
@@ -1058,13 +1103,20 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
         let did = body["data"][0]["did"].as_str().unwrap().to_owned();
+        assert_eq!(did, bound_did);
         assert_eq!(body["data"][0]["state"], "active");
         assert_eq!(body["data"][0]["active"], true);
         assert_eq!(body["meta"]["supports_write_operations"], true);
         assert_eq!(body["data"][0]["did"], did);
     }
 
-    async fn admin_did_for_token(state: &TestState, token: &str) -> String {
+    /// Bind an accepted principal DID to the admin behind `token` and return
+    /// it.
+    ///
+    /// The risk-action workflow resolves the acting admin through the same
+    /// accepted-binding projection as every other principal lookup, so a
+    /// fabricated DID is never the admin's actor id.
+    async fn admin_did_for_token(state: &TestState, token: &str, label: &str) -> String {
         let mut repo = state.repository().await.unwrap();
         let access = repo
             .personal_access_token()
@@ -1088,10 +1140,7 @@ mod tests {
             .unwrap()
             .expect("admin token user should resolve");
         repo.cancel().await.unwrap();
-        format!(
-            "did:web:coauth.invalid:accounts:{}",
-            user.id.to_string().to_ascii_lowercase()
-        )
+        state.seed_principal_binding(&user, label).await
     }
 
     fn sign_risk_action_approval_proof(

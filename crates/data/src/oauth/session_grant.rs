@@ -126,7 +126,7 @@ pub struct SessionGrantOperation {
     pub outcome_digest: Option<[u8; 32]>,
     pub canonical_outcome: Option<Vec<u8>>,
     pub state: SessionGrantOperationState,
-    pub target_grant_id: Option<SessionGrantId>,
+    pub target_session_grant_id: Option<SessionGrantId>,
     pub result_grant_id: Option<SessionGrantId>,
     pub affected_grant_ids: Vec<SessionGrantId>,
     pub retained_until: DateTime<Utc>,

@@ -33,13 +33,15 @@ async fn test_revoke_token() {
     ))
     .bearer(&token)
     .empty();
+    let before = chrono::Utc::now();
     let response = state.request(request).await;
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
 
-    assert_eq!(
-        body["data"]["attributes"]["revoked_at"],
-        serde_json::json!(state.clock.now())
+    assert_stamped_since(
+        &body["data"]["attributes"]["revoked_at"],
+        before,
+        "revoked_at",
     );
 }
 
@@ -156,30 +158,30 @@ async fn test_unrevoke_token() {
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
 
-    insta::assert_json_snapshot!(body, @r#"
-        {
-          "data": {
-            "type": "user-registration_token",
-            "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-            "attributes": {
-              "token": "test_token_456",
-              "valid": true,
-              "usage_limit": 5,
-              "times_used": 0,
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "last_used_at": null,
-              "expires_at": null,
-              "revoked_at": null
-            },
-            "links": {
-              "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-            }
-          },
-          "links": {
-            "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E/unrevoke"
-          }
+    insta::assert_json_snapshot!(stable_json(&body), @r#"
+    {
+      "data": {
+        "type": "user-registration_token",
+        "id": "[id-1]",
+        "attributes": {
+          "token": "test_token_456",
+          "valid": true,
+          "usage_limit": 5,
+          "times_used": 0,
+          "created_at": "[timestamp-1]",
+          "last_used_at": null,
+          "expires_at": null,
+          "revoked_at": null
+        },
+        "links": {
+          "self": "/_coauth/admin/user-registration-tokens/[id-1]"
         }
-        "#);
+      },
+      "links": {
+        "self": "/_coauth/admin/user-registration-tokens/[id-1]/unrevoke"
+      }
+    }
+    "#);
 }
 
 #[tokio::test]
@@ -284,30 +286,30 @@ async fn test_update_expiry() {
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
 
-    insta::assert_json_snapshot!(body, @r#"
-        {
-          "data": {
-            "type": "user-registration_token",
-            "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-            "attributes": {
-              "token": "test_update_expiry",
-              "valid": true,
-              "usage_limit": null,
-              "times_used": 0,
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "last_used_at": null,
-              "expires_at": "2022-02-15T14:40:00.000Z",
-              "revoked_at": null
-            },
-            "links": {
-              "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-            }
-          },
-          "links": {
-            "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-          }
+    insta::assert_json_snapshot!(stable_json(&body), @r#"
+    {
+      "data": {
+        "type": "user-registration_token",
+        "id": "[id-1]",
+        "attributes": {
+          "token": "test_update_expiry",
+          "valid": false,
+          "usage_limit": null,
+          "times_used": 0,
+          "created_at": "[timestamp-1]",
+          "last_used_at": null,
+          "expires_at": "[timestamp-2]",
+          "revoked_at": null
+        },
+        "links": {
+          "self": "/_coauth/admin/user-registration-tokens/[id-1]"
         }
-        "#);
+      },
+      "links": {
+        "self": "/_coauth/admin/user-registration-tokens/[id-1]"
+      }
+    }
+    "#);
 
     // Clear the expiry
     let request = Request::put(format!(
@@ -323,30 +325,30 @@ async fn test_update_expiry() {
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
 
-    insta::assert_json_snapshot!(body, @r#"
-        {
-          "data": {
-            "type": "user-registration_token",
-            "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-            "attributes": {
-              "token": "test_update_expiry",
-              "valid": true,
-              "usage_limit": null,
-              "times_used": 0,
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "last_used_at": null,
-              "expires_at": null,
-              "revoked_at": null
-            },
-            "links": {
-              "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-            }
-          },
-          "links": {
-            "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-          }
+    insta::assert_json_snapshot!(stable_json(&body), @r#"
+    {
+      "data": {
+        "type": "user-registration_token",
+        "id": "[id-1]",
+        "attributes": {
+          "token": "test_update_expiry",
+          "valid": true,
+          "usage_limit": null,
+          "times_used": 0,
+          "created_at": "[timestamp-1]",
+          "last_used_at": null,
+          "expires_at": null,
+          "revoked_at": null
+        },
+        "links": {
+          "self": "/_coauth/admin/user-registration-tokens/[id-1]"
         }
-        "#);
+      },
+      "links": {
+        "self": "/_coauth/admin/user-registration-tokens/[id-1]"
+      }
+    }
+    "#);
 }
 
 #[tokio::test]
@@ -388,30 +390,30 @@ async fn test_update_usage_limit() {
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
 
-    insta::assert_json_snapshot!(body, @r#"
-        {
-          "data": {
-            "type": "user-registration_token",
-            "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-            "attributes": {
-              "token": "test_update_limit",
-              "valid": true,
-              "usage_limit": 10,
-              "times_used": 0,
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "last_used_at": null,
-              "expires_at": null,
-              "revoked_at": null
-            },
-            "links": {
-              "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-            }
-          },
-          "links": {
-            "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-          }
+    insta::assert_json_snapshot!(stable_json(&body), @r#"
+    {
+      "data": {
+        "type": "user-registration_token",
+        "id": "[id-1]",
+        "attributes": {
+          "token": "test_update_limit",
+          "valid": true,
+          "usage_limit": 10,
+          "times_used": 0,
+          "created_at": "[timestamp-1]",
+          "last_used_at": null,
+          "expires_at": null,
+          "revoked_at": null
+        },
+        "links": {
+          "self": "/_coauth/admin/user-registration-tokens/[id-1]"
         }
-        "#);
+      },
+      "links": {
+        "self": "/_coauth/admin/user-registration-tokens/[id-1]"
+      }
+    }
+    "#);
 
     // Remove the limit entirely
     let request = Request::put(format!(
@@ -427,30 +429,30 @@ async fn test_update_usage_limit() {
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
 
-    insta::assert_json_snapshot!(body, @r#"
-        {
-          "data": {
-            "type": "user-registration_token",
-            "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-            "attributes": {
-              "token": "test_update_limit",
-              "valid": true,
-              "usage_limit": null,
-              "times_used": 0,
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "last_used_at": null,
-              "expires_at": null,
-              "revoked_at": null
-            },
-            "links": {
-              "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-            }
-          },
-          "links": {
-            "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-          }
+    insta::assert_json_snapshot!(stable_json(&body), @r#"
+    {
+      "data": {
+        "type": "user-registration_token",
+        "id": "[id-1]",
+        "attributes": {
+          "token": "test_update_limit",
+          "valid": true,
+          "usage_limit": null,
+          "times_used": 0,
+          "created_at": "[timestamp-1]",
+          "last_used_at": null,
+          "expires_at": null,
+          "revoked_at": null
+        },
+        "links": {
+          "self": "/_coauth/admin/user-registration-tokens/[id-1]"
         }
-        "#);
+      },
+      "links": {
+        "self": "/_coauth/admin/user-registration-tokens/[id-1]"
+      }
+    }
+    "#);
 }
 
 #[tokio::test]
@@ -493,30 +495,30 @@ async fn test_update_multiple_fields() {
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
 
-    insta::assert_json_snapshot!(body, @r#"
-        {
-          "data": {
-            "type": "user-registration_token",
-            "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-            "attributes": {
-              "token": "test_update_multiple",
-              "valid": true,
-              "usage_limit": 20,
-              "times_used": 0,
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "last_used_at": null,
-              "expires_at": "2022-02-15T14:40:00.000Z",
-              "revoked_at": null
-            },
-            "links": {
-              "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-            }
-          },
-          "links": {
-            "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-          }
+    insta::assert_json_snapshot!(stable_json(&body), @r#"
+    {
+      "data": {
+        "type": "user-registration_token",
+        "id": "[id-1]",
+        "attributes": {
+          "token": "test_update_multiple",
+          "valid": false,
+          "usage_limit": 20,
+          "times_used": 0,
+          "created_at": "[timestamp-1]",
+          "last_used_at": null,
+          "expires_at": "[timestamp-2]",
+          "revoked_at": null
+        },
+        "links": {
+          "self": "/_coauth/admin/user-registration-tokens/[id-1]"
         }
-        "#);
+      },
+      "links": {
+        "self": "/_coauth/admin/user-registration-tokens/[id-1]"
+      }
+    }
+    "#);
 }
 
 #[tokio::test]
@@ -556,30 +558,30 @@ async fn test_update_no_fields() {
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
 
-    insta::assert_json_snapshot!(body, @r#"
-        {
-          "data": {
-            "type": "user-registration_token",
-            "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-            "attributes": {
-              "token": "test_update_none",
-              "valid": true,
-              "usage_limit": 5,
-              "times_used": 0,
-              "created_at": "2022-01-16T14:40:00.000Z",
-              "last_used_at": null,
-              "expires_at": "2022-02-15T14:40:00.000Z",
-              "revoked_at": null
-            },
-            "links": {
-              "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-            }
-          },
-          "links": {
-            "self": "/_coauth/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
-          }
+    insta::assert_json_snapshot!(stable_json(&body), @r#"
+    {
+      "data": {
+        "type": "user-registration_token",
+        "id": "[id-1]",
+        "attributes": {
+          "token": "test_update_none",
+          "valid": false,
+          "usage_limit": 5,
+          "times_used": 0,
+          "created_at": "[timestamp-1]",
+          "last_used_at": null,
+          "expires_at": "[timestamp-2]",
+          "revoked_at": null
+        },
+        "links": {
+          "self": "/_coauth/admin/user-registration-tokens/[id-1]"
         }
-        "#);
+      },
+      "links": {
+        "self": "/_coauth/admin/user-registration-tokens/[id-1]"
+      }
+    }
+    "#);
 }
 
 #[tokio::test]

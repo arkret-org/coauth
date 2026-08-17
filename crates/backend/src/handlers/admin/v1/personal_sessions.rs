@@ -297,7 +297,9 @@ pub async fn list_sessions(
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let (pagination, include_count) = extract_pagination(req)?;
-    let params: FilterParams = req.parse_queries().unwrap_or_default();
+    let params: FilterParams = req
+        .parse_queries()
+        .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
 
     let base_url = format!("{path}{params}", path = PersonalSession::PATH);
     let base_url = include_count.add_to_base(&base_url);
@@ -564,7 +566,6 @@ mod tests {
     use std::collections::BTreeSet;
 
     use chrono::Duration;
-    use coauth_data::Clock;
     use coauth_data::personal::session::PersonalSessionOwner;
     use coauth_oauth_types::scope::{OPENID, Scope};
     use hyper::{Request, StatusCode};
@@ -572,7 +573,9 @@ mod tests {
     use serde_json::{Value, json};
     use ulid::Ulid;
 
-    use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
+    use crate::handlers::test_utils::{
+        RequestBuilderExt, ResponseExt, TestState, assert_stamped_since, setup, stable_json,
+    };
 
     #[tokio::test]
     async fn test_create_personal_session_with_token() {
@@ -608,32 +611,40 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::CREATED);
 
-        let body: Value = response.json();
+        let mut body: Value = response.json();
+        // The raw access token is minted from the process RNG: assert its
+        // shape here and keep the snapshot free of it.
+        let access_token = body["data"]["attributes"]["access_token"]
+            .as_str()
+            .expect("creation returns the raw access token")
+            .to_owned();
+        assert!(access_token.starts_with("mpt_"), "{access_token}");
+        body["data"]["attributes"]["access_token"] = Value::String("[access-token]".to_owned());
 
-        assert_json_snapshot!(body, @r#"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": {
             "type": "personal-session",
-            "id": "01FSHN9AG07HNEZXNQM2KNBNF6",
+            "id": "[id-1]",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00.000Z",
+              "created_at": "[timestamp-1]",
               "revoked_at": null,
-              "owner_user_id": null,
-              "owner_client_id": "01FSHN9AG0FAQ50MT1E9FFRPZR",
-              "actor_user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+              "owner_user_id": "[id-2]",
+              "owner_client_id": null,
+              "actor_user_id": "[id-3]",
               "human_name": "Test Session",
               "scope": "openid urn:coauth:admin",
               "last_active_at": null,
               "last_active_ip": null,
-              "expires_at": "2022-01-16T15:40:00.000Z",
-              "access_token": "mpt_FM44zJN5qePGMLvvMXC4Ds1A3lCWc6_bJ9Wj1"
+              "expires_at": "[timestamp-2]",
+              "access_token": "[access-token]"
             },
             "links": {
-              "self": "/_coauth/admin/personal-sessions/01FSHN9AG07HNEZXNQM2KNBNF6"
+              "self": "/_coauth/admin/personal-sessions/[id-1]"
             }
           },
           "links": {
-            "self": "/_coauth/admin/personal-sessions/01FSHN9AG07HNEZXNQM2KNBNF6"
+            "self": "/_coauth/admin/personal-sessions/[id-1]"
           }
         }
         "#);
@@ -745,17 +756,17 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
         assert_eq!(body["data"]["id"], personal_session.id.to_string());
-        assert_json_snapshot!(body, @r#"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": {
             "type": "personal-session",
-            "id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",
+            "id": "[id-1]",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00.000Z",
+              "created_at": "[timestamp-1]",
               "revoked_at": null,
-              "owner_user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+              "owner_user_id": "[id-2]",
               "owner_client_id": null,
-              "actor_user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+              "actor_user_id": "[id-2]",
               "human_name": "Test session",
               "scope": "openid",
               "last_active_at": null,
@@ -763,11 +774,11 @@ mod tests {
               "expires_at": null
             },
             "links": {
-              "self": "/_coauth/admin/personal-sessions/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
+              "self": "/_coauth/admin/personal-sessions/[id-1]"
             }
           },
           "links": {
-            "self": "/_coauth/admin/personal-sessions/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
+            "self": "/_coauth/admin/personal-sessions/[id-1]"
           }
         }
         "#);
@@ -854,6 +865,7 @@ mod tests {
             )
             .await
             .unwrap();
+        let sess_b_id = sess_b.id;
         repo.personal_session()
             .revoke(&state.clock, sess_b)
             .await
@@ -884,54 +896,67 @@ mod tests {
             .await
             .unwrap();
 
+        let sess_a_id = sess_a.id;
+        let sess_c_id = sess_c.id;
         repo.save().await.unwrap();
 
         let token = state.token_with_scope("urn:coauth:admin").await;
+        let admin_session_id = {
+            let mut repo = state.repository().await.unwrap();
+            let access = repo
+                .personal_access_token()
+                .find_by_token(&token)
+                .await
+                .unwrap()
+                .expect("admin token resolves");
+            repo.cancel().await.unwrap();
+            access.session_id
+        };
         let request = Request::get("/_coauth/admin/personal-sessions")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_json_snapshot!(body, @r#"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "meta": {
-            "count": 3
+            "count": 4
           },
           "data": [
             {
               "type": "personal-session",
-              "id": "01FSHN9AG0YQYAR04VCYTHJ8SK",
+              "id": "[id-1]",
               "attributes": {
-                "created_at": "2022-01-16T14:40:00.000Z",
+                "created_at": "[timestamp-1]",
                 "revoked_at": null,
-                "owner_user_id": "01FSHN9AG09FE39KETP6F390F8",
+                "owner_user_id": "[id-2]",
                 "owner_client_id": null,
-                "actor_user_id": "01FSHN9AG09FE39KETP6F390F8",
+                "actor_user_id": "[id-2]",
                 "human_name": "Test session",
                 "scope": "openid",
                 "last_active_at": null,
                 "last_active_ip": null,
-                "expires_at": "2022-02-27T14:40:00.000Z"
+                "expires_at": "[timestamp-2]"
               },
               "links": {
-                "self": "/_coauth/admin/personal-sessions/01FSHN9AG0YQYAR04VCYTHJ8SK"
+                "self": "/_coauth/admin/personal-sessions/[id-1]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSHN9AG0YQYAR04VCYTHJ8SK"
+                  "cursor": "[id-1]"
                 }
               }
             },
             {
               "type": "personal-session",
-              "id": "01FSM7P1G0VBGAMK9D9QMGQ5MY",
+              "id": "[id-3]",
               "attributes": {
-                "created_at": "2022-01-17T14:40:00.000Z",
-                "revoked_at": "2022-01-17T14:40:00.000Z",
-                "owner_user_id": "01FSHN9AG09FE39KETP6F390F8",
+                "created_at": "[timestamp-3]",
+                "revoked_at": "[timestamp-3]",
+                "owner_user_id": "[id-2]",
                 "owner_client_id": null,
-                "actor_user_id": "01FSHN9AG09FE39KETP6F390F8",
+                "actor_user_id": "[id-2]",
                 "human_name": "Another test session",
                 "scope": "openid",
                 "last_active_at": null,
@@ -939,35 +964,59 @@ mod tests {
                 "expires_at": null
               },
               "links": {
-                "self": "/_coauth/admin/personal-sessions/01FSM7P1G0VBGAMK9D9QMGQ5MY"
+                "self": "/_coauth/admin/personal-sessions/[id-3]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSM7P1G0VBGAMK9D9QMGQ5MY"
+                  "cursor": "[id-3]"
                 }
               }
             },
             {
               "type": "personal-session",
-              "id": "01FSPT2RG08Y11Y5BM4VZ4CN8K",
+              "id": "[id-4]",
               "attributes": {
-                "created_at": "2022-01-18T14:40:00.000Z",
+                "created_at": "[timestamp-4]",
                 "revoked_at": null,
-                "owner_user_id": "01FSHN9AG09FE39KETP6F390F8",
+                "owner_user_id": "[id-2]",
                 "owner_client_id": null,
-                "actor_user_id": "01FSHN9AG09FE39KETP6F390F8",
+                "actor_user_id": "[id-2]",
                 "human_name": "Another test session",
                 "scope": "openid urn:coauth:admin",
                 "last_active_at": null,
                 "last_active_ip": null,
-                "expires_at": "2022-02-01T14:40:00.000Z"
+                "expires_at": "[timestamp-5]"
               },
               "links": {
-                "self": "/_coauth/admin/personal-sessions/01FSPT2RG08Y11Y5BM4VZ4CN8K"
+                "self": "/_coauth/admin/personal-sessions/[id-4]"
               },
               "meta": {
                 "page": {
-                  "cursor": "01FSPT2RG08Y11Y5BM4VZ4CN8K"
+                  "cursor": "[id-4]"
+                }
+              }
+            },
+            {
+              "type": "personal-session",
+              "id": "[id-5]",
+              "attributes": {
+                "created_at": "[timestamp-6]",
+                "revoked_at": null,
+                "owner_user_id": "[id-6]",
+                "owner_client_id": null,
+                "actor_user_id": "[id-6]",
+                "human_name": "Admin test token",
+                "scope": "urn:coauth:admin",
+                "last_active_at": null,
+                "last_active_ip": null,
+                "expires_at": "[timestamp-7]"
+              },
+              "links": {
+                "self": "/_coauth/admin/personal-sessions/[id-5]"
+              },
+              "meta": {
+                "page": {
+                  "cursor": "[id-5]"
                 }
               }
             }
@@ -980,33 +1029,44 @@ mod tests {
         }
         "#);
 
-        // Validate individual filters against expected ID sets
-        let cases: &[(&str, &[&str])] = &[
+        // Validate individual filters against the seeded sessions. The ids are
+        // minted per run, so the expectations name the seeded rows rather than
+        // literal ULIDs:
+        //   a — active,  expires in 42 days
+        //   b — revoked, expired token
+        //   c — active,  expires in 14 days, carries `urn:coauth:admin`
+        // The admin token itself owns a fourth session, which the two
+        // scope-independent status filters also see.
+        let id_a = sess_a_id.to_string();
+        let id_c = sess_c_id.to_string();
+        let id_b = sess_b_id.to_string();
+        let admin_session = admin_session_id.to_string();
+        let cases: Vec<(String, Vec<&str>)> = vec![
             (
-                "filter[expires_before]=2022-02-15T00:00:00.000Z",
-                &["01FSPT2RG08Y11Y5BM4VZ4CN8K"],
+                "filter[expires_before]=2022-02-15T00:00:00.000Z".to_owned(),
+                vec![id_c.as_str()],
             ),
             (
-                "filter[expires_after]=2022-02-15T00:00:00.000Z",
-                &["01FSHN9AG0YQYAR04VCYTHJ8SK"],
+                "filter[expires_after]=2022-02-15T00:00:00.000Z".to_owned(),
+                vec![id_a.as_str(), admin_session.as_str()],
             ),
             (
-                "filter[status]=active",
-                &["01FSHN9AG0YQYAR04VCYTHJ8SK", "01FSPT2RG08Y11Y5BM4VZ4CN8K"],
+                "filter[status]=active".to_owned(),
+                vec![id_a.as_str(), id_c.as_str(), admin_session.as_str()],
             ),
-            ("filter[status]=revoked", &["01FSM7P1G0VBGAMK9D9QMGQ5MY"]),
+            ("filter[status]=revoked".to_owned(), vec![id_b.as_str()]),
             (
-                "filter[expires]=true",
-                &["01FSHN9AG0YQYAR04VCYTHJ8SK", "01FSPT2RG08Y11Y5BM4VZ4CN8K"],
+                "filter[expires]=true".to_owned(),
+                vec![id_a.as_str(), id_c.as_str(), admin_session.as_str()],
             ),
-            ("filter[expires]=false", &["01FSM7P1G0VBGAMK9D9QMGQ5MY"]),
+            ("filter[expires]=false".to_owned(), vec![id_b.as_str()]),
             (
-                "filter[scope]=urn:coauth:admin",
-                &["01FSPT2RG08Y11Y5BM4VZ4CN8K"],
+                "filter[scope]=urn:coauth:admin".to_owned(),
+                vec![id_c.as_str(), admin_session.as_str()],
             ),
         ];
 
-        for (qs, want_ids) in cases {
+        for (qs, want_ids) in &cases {
             let request = Request::get(format!("/_coauth/admin/personal-sessions?{qs}"))
                 .bearer(&token)
                 .empty();
@@ -1073,32 +1133,40 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::CREATED);
 
-        let body: Value = response.json();
+        let mut body: Value = response.json();
+        // The raw access token is minted from the process RNG: assert its
+        // shape here and keep the snapshot free of it.
+        let access_token = body["data"]["attributes"]["access_token"]
+            .as_str()
+            .expect("creation returns the raw access token")
+            .to_owned();
+        assert!(access_token.starts_with("mpt_"), "{access_token}");
+        body["data"]["attributes"]["access_token"] = Value::String("[access-token]".to_owned());
 
-        assert_json_snapshot!(body, @r#"
+        assert_json_snapshot!(stable_json(&body), @r#"
         {
           "data": {
             "type": "personal-session",
-            "id": "01FSHN9AG07HNEZXNQM2KNBNF6",
+            "id": "[id-1]",
             "attributes": {
-              "created_at": "2022-01-16T14:40:00.000Z",
+              "created_at": "[timestamp-1]",
               "revoked_at": null,
-              "owner_user_id": null,
-              "owner_client_id": "01FSHN9AG0FAQ50MT1E9FFRPZR",
-              "actor_user_id": "01FSHN9AG0MZAA6S4AF7CTV32E",
+              "owner_user_id": "[id-2]",
+              "owner_client_id": null,
+              "actor_user_id": "[id-3]",
               "human_name": "SuperDuperAdminCLITool Token",
               "scope": "openid urn:coauth:admin",
               "last_active_at": null,
               "last_active_ip": null,
-              "expires_at": "2022-01-17T14:43:00.000Z",
-              "access_token": "mpt_6cq7FqNSYoosbXl3bbpfh9yNy9NzuR_0vOV2O"
+              "expires_at": "[timestamp-2]",
+              "access_token": "[access-token]"
             },
             "links": {
-              "self": "/_coauth/admin/personal-sessions/01FSHN9AG07HNEZXNQM2KNBNF6"
+              "self": "/_coauth/admin/personal-sessions/[id-1]"
             }
           },
           "links": {
-            "self": "/_coauth/admin/personal-sessions/01FSHN9AG07HNEZXNQM2KNBNF6"
+            "self": "/_coauth/admin/personal-sessions/[id-1]"
           }
         }
         "#);
@@ -1143,13 +1211,15 @@ mod tests {
         ))
         .bearer(&token)
         .empty();
+        let before = chrono::Utc::now();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
 
-        assert_eq!(
-            body["data"]["attributes"]["revoked_at"],
-            serde_json::json!(Clock::now(&state.clock))
+        assert_stamped_since(
+            &body["data"]["attributes"]["revoked_at"],
+            before,
+            "revoked_at",
         );
     }
 

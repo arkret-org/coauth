@@ -31,21 +31,28 @@ fn sample_registration(created_at: DateTime<Utc>) -> UserRegistration {
     }
 }
 
-/// Returns `Some(repo)` when `DATABASE_URL` is configured; `None`
+/// Returns `Some((database, repo))` when `DATABASE_URL` is configured; `None`
 /// otherwise. Test bodies should early-return on `None`.
-async fn test_repo() -> Option<BoxRepository> {
+///
+/// The [`TestDatabase`](coauth_storage_postgres::test_utils::TestDatabase)
+/// guard is handed back rather than dropped here: dropping it releases the
+/// advisory lock that keeps the shared test database exclusive, which would let
+/// another test truncate the rows under this one.
+async fn test_repo() -> Option<(
+    coauth_storage_postgres::test_utils::TestDatabase,
+    BoxRepository,
+)> {
     let pool = coauth_storage_postgres::test_utils::setup_test_pool().await?;
-    Some(
-        coauth_storage_postgres::PgRepositoryFactory::new(pool.clone())
-            .create()
-            .await
-            .unwrap(),
-    )
+    let repo = coauth_storage_postgres::PgRepositoryFactory::new(pool.clone())
+        .create()
+        .await
+        .unwrap();
+    Some((pool, repo))
 }
 
 #[tokio::test]
 async fn prepare_admin_bootstrap_requires_exact_token_to_grant_admin() {
-    let Some(mut repo) = test_repo().await else {
+    let Some((_database, mut repo)) = test_repo().await else {
         return;
     };
 
@@ -69,7 +76,7 @@ async fn prepare_admin_bootstrap_requires_exact_token_to_grant_admin() {
 
 #[tokio::test]
 async fn prepare_admin_bootstrap_rejects_invalid_token_while_no_admin_exists() {
-    let Some(mut repo) = test_repo().await else {
+    let Some((_database, mut repo)) = test_repo().await else {
         return;
     };
 
@@ -84,7 +91,7 @@ async fn prepare_admin_bootstrap_rejects_invalid_token_while_no_admin_exists() {
 
 #[tokio::test]
 async fn prepare_admin_bootstrap_stops_granting_after_first_admin_exists() {
-    let Some(mut repo) = test_repo().await else {
+    let Some((_database, mut repo)) = test_repo().await else {
         return;
     };
     let mut rng = ChaChaRng::seed_from_u64(42);

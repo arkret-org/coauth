@@ -19,7 +19,7 @@ const SESSION_REVOKE_PROOF_MAX_WINDOW_SECS: i64 = 300;
 
 fn empty_session_revoke_body() -> SessionRevokeRequestBody {
     SessionRevokeRequestBody {
-        target_grant_id: None,
+        target_session_grant_id: None,
         target_device_id: None,
         all_sessions: None,
         applet_id: None,
@@ -124,7 +124,7 @@ fn revoke_selector(body: &SessionRevokeRequestBody) -> Result<RevokeSelector, Ar
     }
 
     let mut selector_count = 0;
-    if body.target_grant_id.is_some() {
+    if body.target_session_grant_id.is_some() {
         selector_count += 1;
     }
     if body.target_device_id.is_some() {
@@ -138,7 +138,7 @@ fn revoke_selector(body: &SessionRevokeRequestBody) -> Result<RevokeSelector, Ar
     }
     if selector_count > 1 {
         return Err(selector_conflict(
-            "target_grant_id, target_device_id, all_sessions and applet selector are mutually exclusive",
+            "target_session_grant_id, target_device_id, all_sessions and applet selector are mutually exclusive",
         ));
     }
     if session_revoke_has_applet_selector(body) {
@@ -147,8 +147,8 @@ fn revoke_selector(body: &SessionRevokeRequestBody) -> Result<RevokeSelector, Ar
         ));
     }
 
-    if let Some(target_grant_id) = body.target_grant_id.clone() {
-        Ok(RevokeSelector::Grant(target_grant_id))
+    if let Some(target_session_grant_id) = body.target_session_grant_id.clone() {
+        Ok(RevokeSelector::Grant(target_session_grant_id))
     } else if let Some(target_device_id) = body.target_device_id.clone() {
         Ok(RevokeSelector::Device(target_device_id))
     } else if body.all_sessions == Some(true) {
@@ -271,7 +271,7 @@ async fn verify_cross_session_lifecycle_proof(
         &actor_id,
         service_id,
         current_device_id,
-        body.target_grant_id.as_ref(),
+        body.target_session_grant_id.as_ref(),
         body.target_device_id.as_ref(),
         body.all_sessions.unwrap_or(false),
         None,
@@ -444,7 +444,9 @@ pub async fn revoke_session_grant_endpoint(
 
     let proof_required = match &selector {
         RevokeSelector::Current => false,
-        RevokeSelector::Grant(target_grant_id) => target_grant_id != &current_grant.grant_id,
+        RevokeSelector::Grant(target_session_grant_id) => {
+            target_session_grant_id != &current_grant.grant_id
+        }
         RevokeSelector::Device(_) | RevokeSelector::All => true,
     };
     if proof_required {
@@ -472,12 +474,12 @@ pub async fn revoke_session_grant_endpoint(
     }
 
     let current_principal_did = current_grant.subject.clone();
-    let target_grant_id = match &selector {
+    let target_session_grant_id = match &selector {
         RevokeSelector::Current => Some(current_grant.grant_id.clone()),
-        RevokeSelector::Grant(target_grant_id) => {
+        RevokeSelector::Grant(target_session_grant_id) => {
             let target = repo
                 .oauth_session_grant()
-                .lookup_by_grant_id(target_grant_id)
+                .lookup_by_grant_id(target_session_grant_id)
                 .await
                 .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
                 .filter(|grant| grant_is_owned_by_current_principal(grant, &current_principal_did))
@@ -489,7 +491,7 @@ pub async fn revoke_session_grant_endpoint(
     let operation_selector = match &selector {
         RevokeSelector::Current | RevokeSelector::Grant(_) => {
             coauth_data::SessionGrantRevokeTarget::Grant {
-                grant_id: target_grant_id
+                grant_id: target_session_grant_id
                     .as_ref()
                     .expect("grant selector has an id")
                     .clone(),
@@ -558,7 +560,7 @@ pub async fn revoke_session_grant_endpoint(
                 request_identity: &request_identity,
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
-                target_grant_id: None,
+                target_session_grant_id: None,
                 issuance_nonce: None,
                 session_id: None,
                 grant_not_before: None,
@@ -660,7 +662,9 @@ pub async fn revoke_session_grant_endpoint(
     });
     let durable_selector = match &selector {
         RevokeSelector::Current | RevokeSelector::Grant(_) => SessionGrantRevokeSelector::Grant(
-            target_grant_id.as_ref().expect("grant selector has an id"),
+            target_session_grant_id
+                .as_ref()
+                .expect("grant selector has an id"),
         ),
         RevokeSelector::Device(device_id) => SessionGrantRevokeSelector::Device {
             subject: &current_principal_did,

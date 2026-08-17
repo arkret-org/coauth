@@ -18,110 +18,13 @@ use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 
 use crate::PgRepositoryFactory;
+use crate::test_utils::{
+    account_binding_receipt, principal_authority, principal_binding_test_material,
+    principal_control_realm_id, verified_principal_binding_input,
+};
 
-fn principal_binding_test_material(label: &str) -> (String, arkret_identifiers::Hash) {
-    let principal_id = format!("ak:did_core:webvh:z{label}");
-    let key_log_head = arkret_identifiers::Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();
-    (principal_id, key_log_head)
-}
-
-fn principal_authority(
-    principal_id: &str,
-    principal_server_id: &str,
-) -> arkret_wire::PrincipalAuthorityKey {
-    arkret_wire::PrincipalAuthorityKey::new(
-        arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
-        arkret_identifiers::DidCoreId::new(principal_server_id).unwrap(),
-    )
-}
-
-fn principal_control_realm_id() -> arkret_identifiers::RealmId {
-    arkret_identifiers::RealmId::from_event_id(&arkret_identifiers::EventId::from_digest(
-        arkret_canonical::DigestSuite::Sha256,
-        [0x42; 32],
-    ))
-}
-
-fn account_binding_receipt(
-    principal_id: arkret_identifiers::DidCoreId,
-    full_id: arkret_identifiers::DidFullId,
-    version_id: &str,
-    head_event_digest: arkret_identifiers::Hash,
-) -> arkret_models_identity::AccountBindingReceipt {
-    let issued_at = chrono::Utc::now();
-    let mut receipt = arkret_models_identity::AccountBindingReceipt {
-        binding_state: arkret_models_identity::AccountBindingState::Bound,
-        binding_kind: arkret_models_identity::AccountBindingKind::IdentityCreation,
-        account_authority_id: arkret_identifiers::DidCoreId::new(
-            "ak:did_core:webvh:zaccountauthority",
-        )
-        .unwrap(),
-        account_subject: arkret_identifiers::Hash::new(format!("sha256:{}", "1".repeat(64)))
-            .unwrap(),
-        principal_id,
-        full_id,
-        did_version_id: version_id.to_owned(),
-        control_key_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "2".repeat(64)))
-            .unwrap(),
-        identity_creation_lease_id: Some("test-identity-creation-lease".to_owned()),
-        lease_fence: Some(1),
-        operation_status: arkret_models_identity::IdentityCreationOperationStatus::Accepted,
-        operation_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "3".repeat(64)))
-            .unwrap(),
-        head_event_digest,
-        issued_at,
-        proof: arkret_wire::PayloadProof {
-            kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-            verification_method: arkret_wire::DidUrl::new(
-                "did:webvh:zaccountauthority:account.example#service-key",
-            )
-            .unwrap(),
-            payload_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
-                .unwrap(),
-            created_at: issued_at,
-            domain: None,
-            audience: None,
-            proof_purpose: None,
-            jws: "test-detached-jws".to_owned(),
-        },
-    };
-    receipt.proof.payload_digest = receipt.canonical_payload_digest().unwrap();
-    receipt.validate_shape().unwrap();
-    receipt
-}
-
-fn verified_principal_binding_input(
-    audience: impl Into<String>,
-    principal_id: String,
-    key_log_head: arkret_identifiers::Hash,
-) -> VerifiedPrincipalDidBindingInput {
-    let audience = audience.into();
-    let method_specific_id = principal_id
-        .strip_prefix("ak:did_core:webvh:")
-        .expect("webvh test principal core");
-    let full_id = format!("did:webvh:{method_specific_id}:fixture.example");
-    let principal_authority = principal_authority(&principal_id, &audience);
-    let audience = arkret_identifiers::DidCoreId::new(audience).unwrap();
-    let principal_id = arkret_identifiers::DidCoreId::new(principal_id).unwrap();
-    let full_id = arkret_identifiers::DidFullId::new(full_id).unwrap();
-    VerifiedPrincipalDidBindingInput {
-        audience: audience.clone(),
-        principal_id: principal_id.clone(),
-        key_log_head: key_log_head.clone(),
-        verified_full_id: full_id.clone(),
-        verified_version_id: "1-fixture".to_owned(),
-        binding_receipt: account_binding_receipt(principal_id, full_id, "1-fixture", key_log_head),
-        accepted_service_id: audience,
-        binding_version: 1,
-        binding_frontier_digest: arkret_identifiers::Hash::new(format!(
-            "sha256:{}",
-            "b".repeat(64)
-        ))
-        .unwrap(),
-        principal_authority,
-        principal_control_realm_id: principal_control_realm_id(),
-    }
-}
+/// Complete Account Authority DID these repository fixtures were bound under.
+const TEST_ACCOUNT_AUTHORITY_ID: &str = "did:webvh:zaccountauthority:account.example";
 
 fn registration_binding_input(
     audience: impl Into<String>,
@@ -141,7 +44,13 @@ fn registration_binding_input(
         key_log_head: key_log_head.clone(),
         verified_full_id: full_id.clone(),
         verified_version_id: version_id.to_owned(),
-        binding_receipt: account_binding_receipt(principal_id, full_id, version_id, key_log_head),
+        binding_receipt: account_binding_receipt(
+            TEST_ACCOUNT_AUTHORITY_ID,
+            principal_id,
+            full_id,
+            version_id,
+            key_log_head,
+        ),
         accepted_service_id: audience,
         binding_version: 1,
         binding_frontier_digest: arkret_identifiers::Hash::new(format!(
@@ -1472,6 +1381,7 @@ async fn principal_did_has_one_global_owner_under_concurrent_binding() {
                 &MockClock::default(),
                 &alice,
                 verified_principal_binding_input(
+                    TEST_ACCOUNT_AUTHORITY_ID,
                     "ak:did_core:web:ps-a.example",
                     first_principal_id,
                     first_head,
@@ -1499,6 +1409,7 @@ async fn principal_did_has_one_global_owner_under_concurrent_binding() {
                 &MockClock::default(),
                 &bob,
                 verified_principal_binding_input(
+                    TEST_ACCOUNT_AUTHORITY_ID,
                     "ak:did_core:web:ps-b.example",
                     second_principal_id,
                     key_log_head,
@@ -1562,7 +1473,12 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
             &mut rng,
             &clock,
             &alice,
-            verified_principal_binding_input(audience, first_did.clone(), first_head),
+            verified_principal_binding_input(
+                TEST_ACCOUNT_AUTHORITY_ID,
+                audience,
+                first_did.clone(),
+                first_head,
+            ),
         )
         .await
         .unwrap();
@@ -1576,7 +1492,12 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
             &mut rng,
             &clock,
             &alice,
-            verified_principal_binding_input(audience, second_did.clone(), second_head),
+            verified_principal_binding_input(
+                TEST_ACCOUNT_AUTHORITY_ID,
+                audience,
+                second_did.clone(),
+                second_head,
+            ),
         )
         .await;
     assert!(conflict.is_err());

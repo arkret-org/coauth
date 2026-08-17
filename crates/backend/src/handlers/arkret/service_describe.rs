@@ -1,6 +1,6 @@
 use arkret_models_discovery::{
     AccountAuthority, AuthGrantExchange, AuthMetadata, AuthMethod, AuthMethodKind,
-    ClaimedProfileEntry, CompatSurfaceEntry, PlaintextVisibility, ServerLimits, ServiceDescribe,
+    ClaimedProfileEntry, InteropSurfaceEntry, PlaintextVisibility, ServerLimits, ServiceDescribe,
     SupportedBinding,
 };
 use arkret_models_identity::SessionGrantProofKind;
@@ -414,10 +414,10 @@ pub(crate) fn service_describe_response(
     claimed_profile.notes = Some(
         "Auth-server-shaped profile: issues short-lived audience-bound ak.session.grant, exposes \
          ak.server.read.describe, MAY expose ak.policy.check. NOT an identity registry (DID \
-         resolution is delegated; see compat_surfaces)."
+         resolution is delegated; see interop_surfaces)."
             .to_owned(),
     );
-    let compat_surfaces = [
+    let interop_surfaces = [
         (
             arkret_wire::ServiceOperationId::ROOT_IDENTITY_REGISTRY_READ_DESCRIBE,
             "delegated-resolver interop: reports the upstream registry coauth proxies to; does not assert canonical ownership.",
@@ -433,7 +433,7 @@ pub(crate) fn service_describe_response(
     ]
     .into_iter()
     .map(|(name, notes)| {
-        let mut entry = CompatSurfaceEntry::delegated_resolver(name);
+        let mut entry = InteropSurfaceEntry::delegated_resolver(name);
         entry.notes = Some(notes.to_owned());
         entry
     })
@@ -533,7 +533,7 @@ pub(crate) fn service_describe_response(
         ]
         .map(str::to_owned)
         .to_vec(),
-        compat_surfaces,
+        interop_surfaces,
         development_mode,
         rate_limit_policy: Some(arkret_models_discovery::RateLimitPolicy::unspecified()),
         rate_limit_policy_id: None,

@@ -157,7 +157,7 @@ async fn reserve_issue_operation(
                 request_identity: &request_identity,
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
-                target_grant_id: None,
+                target_session_grant_id: None,
                 issuance_nonce: None,
                 session_id: None,
                 grant_not_before: Some(now),
@@ -496,7 +496,7 @@ pub async fn issue_session_grant_endpoint(
                     device_id: Some(device_id),
                     session_grant: success.session_grant.grant_jwt.clone(),
                     expires_at: success.session_grant.expires_at_timestamp,
-                    grant_id,
+                    session_grant_id: grant_id,
                     session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
                         &success.session_grant.session_public_key,
                     )
@@ -767,7 +767,7 @@ async fn issue_agent_key_proof_session_grant(
         device_id: body.device_id.clone(),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
-        grant_id,
+        session_grant_id: grant_id,
         session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
             &material.session_public_key,
         )

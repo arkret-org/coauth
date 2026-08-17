@@ -106,7 +106,7 @@ async fn commit_oidc_session_grant(
         device_id: Some(device_id_typed),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
-        grant_id: material.grant_id.clone(),
+        session_grant_id: material.grant_id.clone(),
         session_public_key,
         audience,
         granted_scope: material.scopes.clone(),
@@ -1941,13 +1941,13 @@ mod tests {
         let response = state
             .request(Request::post("/_arkret/gate/account/session-grants").json(
                 serde_json::json!({
-                    "principal_id": "did:webvh:scid:offline.invalid:webvh:01k",
+                    "principal_id": "ak:did_core:webvh:zoffline01k",
                     "device_id": "ak:device:01964137-0000-7000-8000-000000000001",
                     "proof": {
                         "proof_kind": "oidc_code_exchange",
                         "challenge": "0123456789abcdef0123",
                         "request_canonical_digest": format!("sha256:{}", "0".repeat(64)),
-                        "audience": "https://soland.example.com/api",
+                        "audience": "ak:did_core:web:soland.example.com",
                         "signature": "unused-for-oidc",
                         "issuer": "https://offline.invalid",
                         "client_id": "inkson",
@@ -1961,9 +1961,12 @@ mod tests {
             ))
             .await;
 
-        // No DPoP header -> proof_invalid (device binding cannot be established).
-        response.assert_status(StatusCode::BAD_REQUEST);
+        // No DPoP header: the holder proof this operation requires is absent,
+        // which the error-code registry spells `did_proof_required` (401). The
+        // request never reaches proof verification, so it is not
+        // `proof_invalid`.
+        response.assert_status(StatusCode::UNAUTHORIZED);
         let body: serde_json::Value = response.json();
-        assert_eq!(body["error"]["code"], "proof_invalid");
+        assert_eq!(body["error"]["code"], "did_proof_required");
     }
 }
