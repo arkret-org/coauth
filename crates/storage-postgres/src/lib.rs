@@ -19,6 +19,8 @@ diesel::define_sql_function! {
 /// PostgreSQL account aggregate repositories.
 pub mod account;
 pub mod account_handoff;
+/// PostgreSQL Account Authority issuer ledger.
+pub mod account_status;
 /// PostgreSQL accountability grant repositories.
 pub mod accountability;
 /// Shared helpers for PostgreSQL advisory locks.

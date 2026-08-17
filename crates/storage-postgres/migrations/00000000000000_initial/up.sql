@@ -166,6 +166,29 @@ CREATE TABLE public.verified_did_bindings (
     updated_at timestamp with time zone NOT NULL
 );
 
+CREATE TABLE public.account_status_ledger_heads (
+    account_authority_id text NOT NULL,
+    account_id text NOT NULL,
+    current_status_seq bigint,
+    current_record_id text,
+    PRIMARY KEY (account_authority_id, account_id),
+    CHECK ((current_status_seq IS NULL) = (current_record_id IS NULL))
+);
+
+CREATE TABLE public.account_status_records (
+    account_authority_id text NOT NULL,
+    account_id text NOT NULL,
+    status_seq bigint NOT NULL CHECK (status_seq >= 1),
+    record_id text NOT NULL,
+    record jsonb NOT NULL,
+    issued_at timestamp with time zone NOT NULL,
+    PRIMARY KEY (account_authority_id, account_id, status_seq),
+    UNIQUE (record_id)
+);
+
+CREATE INDEX account_status_records_range_idx
+    ON public.account_status_records (account_authority_id, account_id, status_seq);
+
 -- RFC 9449 DPoP proof replay cache. `jti_digest` is a SHA-256 digest of
 -- the caller-supplied `jti`, bounded for storage and safe for audit logs.
 CREATE TABLE public.dpop_jti_replay (
@@ -1627,7 +1650,7 @@ CREATE INDEX invite_quarantine_queue_status_created_idx ON public.invite_quarant
 CREATE UNIQUE INDEX queue_jobs_account_status_pending_target_event_idx
     ON public.queue_jobs USING btree (
         (payload ->> 'destination_name'::text),
-        (payload ->> 'event_id'::text)
+        (payload #>> '{body,publication,record,record_id}')
     )
     WHERE queue_name = 'account-status-publication'::text
       AND status = ANY (ARRAY['available'::text, 'running'::text, 'scheduled'::text]);

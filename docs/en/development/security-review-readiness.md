@@ -30,7 +30,7 @@ The intended external review scope is the v1.0 coauth service:
 | --- | --- |
 | Architecture | `docs/en/development/architecture.md`, `docs/en/observability.md` |
 | Account lifecycle | `docs/en/account-lifecycle.md` |
-| R4 wire changes | `docs/en/upgrade-to-r4.md` |
+| Arkret surface rules | `docs/en/reference/arkret-surfaces.md` |
 | Admin API | `docs/en/topics/admin-api.md`, `crates/admin-types/` |
 | Shared admin DTOs | `crates/admin-types/`, `docs/architecture/contracts-ownership.md` |
 | Frontend accessibility | `crates/frontend/A11Y.md` |

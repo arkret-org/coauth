@@ -6,13 +6,9 @@
 //! present, the single principal connection is probed directly and
 //! returned as a one-element list.
 //!
-//! Round-32 (C32.7): lifted out of the inline definition in
-//! `coauth/crates/backend/src/handlers/admin/v1/connector_health.rs`
-//! and out of the divergent inline `CoauthConnectorHealth` shim that
-//! lived in `sodmin/src/api/coauth.rs` (the shim used `name`/`ok`/
-//! `reason` whereas the wire actually carries `provider`/`principal_authority`/
-//! `status`/`error`). Sharing the wire shape via this crate makes the
-//! drift a compile-error rather than a runtime serde-default surprise.
+//! The wire shape is shared through this crate so any drift between the
+//! backend and the admin SPA is a compile error rather than a runtime
+//! serde-default surprise.
 
 use serde::{Deserialize, Serialize};
 

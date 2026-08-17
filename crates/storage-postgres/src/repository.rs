@@ -30,8 +30,8 @@ use coauth_data::user::{
     UserTermsRepository,
 };
 use coauth_data::{
-    BoxRepository, BoxRepositoryFactory, MapErr, Repository, RepositoryAccess, RepositoryError,
-    RepositoryFactory, RepositoryTransaction,
+    AccountStatusLedgerRepository, BoxRepository, BoxRepositoryFactory, MapErr, Repository,
+    RepositoryAccess, RepositoryError, RepositoryFactory, RepositoryTransaction,
 };
 use diesel_async::pooled_connection::deadpool::{Object as PooledConnection, Pool};
 use diesel_async::{AsyncPgConnection, RunQueryDsl as _};
@@ -42,6 +42,7 @@ use tracing::Instrument;
 use crate::DatabaseError;
 use crate::account::PgAccountRepository;
 use crate::account_handoff::PgAccountHandoffRepository;
+use crate::account_status::PgAccountStatusLedgerRepository;
 use crate::accountability::PgAccountabilityGrantRepository;
 use crate::agent_key::PgAgentKeyAuthorizationRepository;
 use crate::app_session::PgAppSessionRepository;
@@ -213,6 +214,12 @@ impl RepositoryAccess for PgRepository {
         &'c mut self,
     ) -> Box<dyn AccountHandoffRepository<Error = Self::Error> + 'c> {
         Box::new(PgAccountHandoffRepository::new(&mut self.conn))
+    }
+
+    fn account_status_ledger<'c>(
+        &'c mut self,
+    ) -> Box<dyn AccountStatusLedgerRepository<Error = Self::Error> + 'c> {
+        Box::new(PgAccountStatusLedgerRepository::new(&mut self.conn))
     }
 
     fn accountability_grant<'c>(

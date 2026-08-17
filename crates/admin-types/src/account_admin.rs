@@ -7,19 +7,13 @@
 //! - `POST /_coauth/admin/accounts/{account_id}/ {lock|disable|erase|reset-recovery}` — mutation
 //!   endpoints that return the same `AccountRecord` envelope.
 //!
-//! Round-33 (C33.3): lifted out of the inline `AccountRecord`/`AccountStatus`
-//! definitions in
-//! `coauth/crates/backend/src/handlers/admin/v1/accounts.rs` and the
-//! divergent inline `CoauthAdminAccountRecord` decoder shim in
-//! `sodmin/src/api/coauth.rs`. The sodmin shim hard-coded `String`
-//! comparisons against `"locked"` / `"disabled"` to recover the typed
-//! status — the wire enum now decodes directly to a typed bucket so the
-//! comparison is a `match` on a Rust enum and any new server-side
-//! lifecycle state surfaces as a compile error rather than a silent
-//! `is_locked = false` UI fallback.
+//! The status axis is a typed enum on the wire, so any new server-side
+//! lifecycle state surfaces as a compile error in every consumer instead of
+//! collapsing into a stringly-typed comparison.
 //!
-//! The sodmin shim was also missing `locked_at` and `deactivated_at`, which
-//! the backend emits as part of the current account lifecycle projection.
+//! `locked_at` and `deactivated_at` are part of the account lifecycle
+//! projection the backend emits and must be carried by every consumer of
+//! this shape.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

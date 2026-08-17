@@ -8,7 +8,6 @@ use std::time::Duration;
 
 use arkret_canonical::canonical_json_bytes;
 use arkret_models_collaboration::account_lifecycle::{
-    AccountStatusAuthoringFrontiersOutcome, AccountStatusAuthoringFrontiersRequestBody,
     AccountStatusPublicationOutcome, AccountStatusPublicationRequestBody,
 };
 use arkret_models_collaboration::event_query::PeerEventsFrontierRequestBody;
@@ -69,8 +68,8 @@ pub struct PeerProtocolClient<'a> {
     keystore: &'a Keystore,
     source_full_id: DidFullId,
     identity: KeyPackagesClaimServiceBinding,
-    source_trust_domain: arkret_identifiers::TypedTrustDomainId,
-    destination_trust_domain: arkret_identifiers::TypedTrustDomainId,
+    source_trust_domain: arkret_identifiers::TrustDomainId,
+    destination_trust_domain: arkret_identifiers::TrustDomainId,
 }
 
 impl<'a> PeerProtocolClient<'a> {
@@ -80,8 +79,8 @@ impl<'a> PeerProtocolClient<'a> {
         keystore: &'a Keystore,
         source_full_id: DidFullId,
         identity: KeyPackagesClaimServiceBinding,
-        source_trust_domain: arkret_identifiers::TypedTrustDomainId,
-        destination_trust_domain: arkret_identifiers::TypedTrustDomainId,
+        source_trust_domain: arkret_identifiers::TrustDomainId,
+        destination_trust_domain: arkret_identifiers::TrustDomainId,
     ) -> Result<Self, PeerProtocolClientError> {
         let Some(base_url) = base_url else {
             return Err(PeerProtocolClientError::BaseUrlNotConfigured);
@@ -142,30 +141,6 @@ impl<'a> PeerProtocolClient<'a> {
     ) -> Result<ErasureReceiptResource, PeerProtocolClientError> {
         let url = self.join_absolute(&format!("/_arkret/peer/erasure-receipts/{receipt_id}"))?;
         self.get_json("peer_erasure_receipt_get", url).await
-    }
-
-    /// Resolve the exact actor and Seal frontiers for one authority-bound
-    /// account-status Event. This read is intentionally not replay-keyed.
-    pub async fn post_account_status_authoring_frontiers(
-        &self,
-        request: &AccountStatusAuthoringFrontiersRequestBody,
-    ) -> Result<AccountStatusAuthoringFrontiersOutcome, PeerProtocolClientError> {
-        request
-            .validate()
-            .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
-        let url = self.join_absolute(arkret_wire::PATH_PEER_ACCOUNT_STATUS_AUTHORING_FRONTIERS)?;
-        let outcome: AccountStatusAuthoringFrontiersOutcome = self
-            .post_json(
-                "peer_account_status_authoring_frontiers",
-                url,
-                request,
-                None,
-            )
-            .await?;
-        outcome
-            .validate_for_request(request)
-            .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
-        Ok(outcome)
     }
 
     /// Relay the exact client-signed PCR genesis unit. The Account Authority
@@ -499,8 +474,8 @@ mod tests {
         arkret_identifiers::DidFullId::new("did:web:auth.example".to_owned()).unwrap()
     }
 
-    fn trust_domain() -> arkret_identifiers::TypedTrustDomainId {
-        arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:auth.example".to_owned())
+    fn trust_domain() -> arkret_identifiers::TrustDomainId {
+        arkret_identifiers::TrustDomainId::new("ak:trust_domain:auth.example".to_owned())
             .unwrap()
     }
 

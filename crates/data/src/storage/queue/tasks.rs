@@ -1,6 +1,6 @@
 use arkret_models_collaboration::account_lifecycle::AccountStatusPublicationRequestBody;
 use arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody;
-use arkret_wire::{EventId, Hash};
+use arkret_wire::Hash;
 use chrono::{DateTime, Utc};
 use coauth_data::{
     BrowserSession, Session, User, UserEmailAuthentication, UserPhoneAuthentication,
@@ -186,7 +186,7 @@ impl InsertableJob for ProcessNotificationDeliveriesJob {
 pub struct AccountStatusPublicationJob {
     destination_name: String,
     idempotency_key: String,
-    event_id: EventId,
+    record_id: arkret_wire::AccountStatusRecordId,
     body_digest: Hash,
     body: AccountStatusPublicationRequestBody,
 }
@@ -200,11 +200,15 @@ impl AccountStatusPublicationJob {
         body_digest: Hash,
         body: AccountStatusPublicationRequestBody,
     ) -> Self {
-        let event_id = body.publication.event().event_id.clone();
+        let record_id = body
+            .publication
+            .record()
+            .account_status_record_id
+            .clone();
         Self {
             destination_name,
             idempotency_key,
-            event_id,
+            record_id,
             body_digest,
             body,
         }
@@ -222,10 +226,10 @@ impl AccountStatusPublicationJob {
         &self.idempotency_key
     }
 
-    /// Event identifier duplicated from the immutable body for queue indexing.
+    /// Record identifier duplicated from the immutable body for queue indexing.
     #[must_use]
-    pub fn event_id(&self) -> &EventId {
-        &self.event_id
+    pub fn record_id(&self) -> &arkret_wire::AccountStatusRecordId {
+        &self.record_id
     }
 
     /// Canonical digest of the exact request body.

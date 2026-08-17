@@ -326,7 +326,7 @@ pub async fn account_register_endpoint(
         IdentityCreationSagaState::Reserved | IdentityCreationSagaState::DidPublished
     ) {
         let config = depot.arkret_config()?;
-        let trust_domain = arkret_identifiers::TypedTrustDomainId::new(trust_domain_for(
+        let trust_domain = arkret_identifiers::TrustDomainId::new(trust_domain_for(
             &depot.url_builder()?,
             &config,
         ))
@@ -506,6 +506,7 @@ pub async fn account_register_endpoint(
         let account_status_connector = depot.principal_server()?;
         let account_authority_id = service_id_for(&depot.arkret_config()?);
         let initial_status_publication = author_transition_plan(
+            &mut repo,
             account_status_connector.as_ref(),
             &key_store,
             account_authority_id.as_str(),

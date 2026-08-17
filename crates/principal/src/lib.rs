@@ -217,7 +217,7 @@ pub struct PrincipalAccountStatusPublicationRequest {
 #[derive(Debug, Clone)]
 pub struct PrincipalErasureReceiptRequest {
     destination_name: String,
-    triggering_status_event_id: arkret_wire::EventId,
+    triggering_status_record_id: arkret_wire::AccountStatusRecordId,
     account_id: String,
     principal_id: arkret_wire::DidCoreId,
 }
@@ -226,13 +226,13 @@ impl PrincipalErasureReceiptRequest {
     #[must_use]
     pub fn new(
         destination_name: String,
-        triggering_status_event_id: arkret_wire::EventId,
+        triggering_status_record_id: arkret_wire::AccountStatusRecordId,
         account_id: String,
         principal_id: arkret_wire::DidCoreId,
     ) -> Self {
         Self {
             destination_name,
-            triggering_status_event_id,
+            triggering_status_record_id,
             account_id,
             principal_id,
         }
@@ -244,8 +244,8 @@ impl PrincipalErasureReceiptRequest {
     }
 
     #[must_use]
-    pub fn triggering_status_event_id(&self) -> &arkret_wire::EventId {
-        &self.triggering_status_event_id
+    pub fn triggering_status_record_id(&self) -> &arkret_wire::AccountStatusRecordId {
+        &self.triggering_status_record_id
     }
 
     #[must_use]
@@ -506,31 +506,20 @@ pub trait ConnectorAdmin: Send + Sync {
     /// downstream principal system.
 
     /// Submit an exact authority-signed account-status publication.
-    async fn account_status_authoring_frontiers(
-        &self,
-        _destination_name: &str,
-        _request: &arkret_models_collaboration::account_lifecycle::AccountStatusAuthoringFrontiersRequestBody,
-    ) -> Result<
-        arkret_models_collaboration::account_lifecycle::AccountStatusAuthoringFrontiersOutcome,
-        anyhow::Error,
-    > {
-        Err(anyhow::anyhow!(
-            "account-status authoring frontiers are not implemented by this principal connector"
-        ))
-    }
-
-    /// Submit an exact authority-signed account-status publication.
     async fn submit_account_status_publication(
         &self,
         _request: &PrincipalAccountStatusPublicationRequest,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<
+        arkret_models_collaboration::account_lifecycle::AccountStatusPublicationOutcome,
+        anyhow::Error,
+    > {
         Err(anyhow::anyhow!(
             "account-status publication is not implemented by this principal connector"
         ))
     }
 
     /// Fetch and validate the terminal physical-erasure receipt created by an
-    /// accepted erasure_pending status Event. `None` means execution is still
+    /// accepted erasure_pending status record. `None` means execution is still
     /// pending and must be retried; it never means completed.
     async fn erasure_receipt(
         &self,
@@ -683,7 +672,10 @@ where
     async fn submit_account_status_publication(
         &self,
         request: &PrincipalAccountStatusPublicationRequest,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<
+        arkret_models_collaboration::account_lifecycle::AccountStatusPublicationOutcome,
+        anyhow::Error,
+    > {
         self.as_admin()
             .submit_account_status_publication(request)
             .await

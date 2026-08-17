@@ -124,6 +124,7 @@ pub async fn patch_user(
                 .ok_or(UserAdminServiceError::MissingAccountStatusPublication)?;
             account_status_publication = Some(
                 author_transition_plan(
+                    repo,
                     principal_server,
                     signing.keystore,
                     signing.service_id,
@@ -436,11 +437,7 @@ fn validate_admin_status_transition(
     current: AccountStatus,
     next: AccountStatus,
 ) -> Result<(), UserAdminServiceError> {
-    if current == next
-        || current
-            .validate_transition_to(next, next.is_less_strict_than(current))
-            .is_ok()
-    {
+    if current == next || current.validate_transition_to(next).is_ok() {
         return Ok(());
     }
     Err(UserAdminServiceError::InvalidStatusTransition {

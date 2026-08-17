@@ -141,10 +141,9 @@ pub struct BootstrapOrganizationRequest {
     /// Event-derived Principal Control Realm id. It must equal a retype of
     /// `control_stream_ref` at bootstrap.
     pub principal_control_realm_id: String,
-    /// Accepted PCR create Event ref. Kept optional in the admin carrier for
-    /// decoding compatibility, but the bootstrap handler rejects omission.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub control_stream_ref: Option<String>,
+    /// Accepted PCR create Event ref. `principal_control_realm_id` must be a
+    /// retype of this Event ref.
+    pub control_stream_ref: String,
     /// Optional control-frontier digest.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pcr_frontier_digest: Option<String>,

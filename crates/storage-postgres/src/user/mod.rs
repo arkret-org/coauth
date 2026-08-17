@@ -100,9 +100,8 @@ impl<'c> PgUserRepository<'c> {
         current: UserStatus,
         next: UserStatus,
     ) -> Result<(), DatabaseError> {
-        let supersedes_current_projection = next.is_less_strict_than(current);
         current
-            .validate_transition_to(next, supersedes_current_projection)
+            .validate_transition_to(next)
             .map_err(|_| DatabaseError::invalid_operation())
     }
 }

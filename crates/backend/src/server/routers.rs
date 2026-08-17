@@ -232,17 +232,18 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                 .options(oidc_preflight_handler)
                 .post(arkret::issue_recovery_completion_grant_endpoint),
         )
+        .push(
+            Router::with_path("peer/account-status/resolve")
+                .post(arkret::resolve_account_status),
+        )
         .push(Router::with_path("self/policy/check").post(policy_check::post_policy_check))
         .push(Router::with_path("{**rest}").goal(arkret_not_found));
 
     let mut coauth_router = Router::with_path("/_coauth")
         .hoop(public_oidc_browser_cors())
         // Product-private surface only. Protocol-standard Arkret endpoints
-        // are served solely under `/_arkret` above; the former `/_coauth`
-        // protocol mirror (describe, root/identity/{describe,resolve,
-        // document}, find/directory/{describe,resolve-handle},
-        // self/policy/check) was a backward-compatibility shim and has been
-        // removed — clients must use `/_arkret`.
+        // are served solely under `/_arkret` above — clients speaking the
+        // protocol must use `/_arkret`, never a `/_coauth` path.
         .push(
             // `account/identity/primary-handle` is a coauth product-private
             // path (not a spec operation). It deliberately avoids the protocol

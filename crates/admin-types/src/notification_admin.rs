@@ -7,16 +7,9 @@
 //! - `POST /_coauth/admin/notification-templates/publish` — publish a new template version (request
 //!   + response body).
 //!
-//! Round-32 (C32.7): lifted out of the inline definitions in
-//! `coauth/crates/backend/src/handlers/admin/v1/notification_channels.rs`
-//! and `…/notification_templates.rs`, plus the divergent inline
-//! `CoauthNotificationChannel` / `CoauthNotificationTemplate` shims
-//! that lived in `sodmin/src/api/coauth.rs`. The sodmin shims used
-//! invented field names (`id` / `channel_type` / `is_healthy` /
-//! `last_error` / `name` / `updated_at`) that did not match what the
-//! backend actually serialized — sharing the wire shape via this
-//! crate turns that drift into a compile error rather than a
-//! silent serde-default empty UI.
+//! Sharing the wire shape via this crate turns any drift between the
+//! backend and the admin SPA into a compile error rather than a silent
+//! serde-default empty UI.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

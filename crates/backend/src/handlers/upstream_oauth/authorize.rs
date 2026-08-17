@@ -1,7 +1,8 @@
 use coauth_data::upstream_oauth::{
     UpstreamOAuthProviderRepository, UpstreamOAuthSessionRepository,
 };
-use coauth_data::{PostAuthAction, UpstreamOAuthProvider};
+use coauth_account_types::PostAuthAction;
+use coauth_data::UpstreamOAuthProvider;
 use salvo::prelude::*;
 use thiserror::Error;
 use ulid::Ulid;

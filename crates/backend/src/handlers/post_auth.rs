@@ -1,4 +1,5 @@
-use coauth_data::{PostAuthAction, UrlBuilder};
+use coauth_account_types::PostAuthAction;
+use coauth_data::UrlBuilder;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]

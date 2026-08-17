@@ -807,10 +807,6 @@ pub struct IntrospectionResponse {
     /// String identifier for the token.
     pub jti: Option<String>,
 
-    /// coauth extension: explicit device ID
-    /// Only used for compatibility access and refresh tokens.
-    pub device_id: Option<String>,
-
     /// Arkret extension: principal DID associated with the token subject.
     #[serde(rename = "org.arkret.principal_did")]
     pub arkret_principal_did: Option<String>,

@@ -24,7 +24,7 @@
 //! on the very redirect that needs to read it.
 
 use chrono::{DateTime, Duration, Utc};
-use coauth_data::PostAuthAction;
+use coauth_account_types::PostAuthAction;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ulid::Ulid;

@@ -20,9 +20,9 @@ for operator action, audit views, and UI gating.
 
 ## Third-party invite claim strand
 
-Round R4 invite claims use the `ak.schema.invite.v1`
-`third_party_invite` shape. Plaintext 3PID values, such as email
-addresses and phone numbers, are not carried on the wire.
+Invite claims use the `ak.schema.invite.v1` `third_party_invite`
+shape. Plaintext 3PID values, such as email addresses and phone
+numbers, are not carried on the wire.
 
 The invite starts in `pending` and then moves to exactly one of five
 terminal outcomes:
@@ -82,6 +82,3 @@ Invite claim failures map to stable machine-readable codes:
 | `subject_proof_invalid` | 401 | Subject proof is malformed, unverifiable, or not linked to the verification proof. |
 | `proof_expired` | 410 | One of the proofs has expired. |
 | `subject_did_mismatch` | 403 | The inviter DID in the subject proof differs from the actor presenting the claim. |
-
-See [Upgrade to Round R4](./upgrade-to-r4.md) for the operator-facing
-migration checklist.

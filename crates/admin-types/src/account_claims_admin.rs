@@ -15,20 +15,9 @@
 //! because that's what the account-detail page consumes; the issuance
 //! path is sodmin-server-only and can lift in a later round.
 //!
-//! Round-33 (C33.3): lifted out of the inline `AccountClaimRecord` /
-//! `AccountClaimsOutcome` definitions on the backend and the
-//! divergent `CoauthAccountClaim` / `CoauthAccountClaimsEnvelope`
-//! decoder shims in `sodmin/src/api/coauth.rs`. The sodmin shim was
-//! decoding only `claim_kind` / `value` / `state` / `source` and
-//! silently dropping every other field — including the `id` the UI
-//! needs to address a claim by record ULID, the `subject`/`issuer`
-//! pair the audit panel renders, the `verifier_did` and
-//! `represented_org` that gate progressive-disclosure verification,
-//! and the `expires_at`/`revoked_at`/`revoked_reason` lifecycle
-//! triplet. The shared shape now carries every field the backend
-//! emits, with chrono-typed timestamps so a malformed / missing
-//! datetime fails to decode rather than silently rendering as an
-//! empty cell.
+//! The shared shape carries every field the backend emits, with
+//! chrono-typed timestamps so a malformed or missing datetime fails to
+//! decode rather than silently rendering as an empty cell.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

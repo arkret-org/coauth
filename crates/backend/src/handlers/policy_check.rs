@@ -125,7 +125,7 @@ pub async fn post_policy_check(
         .and_then(crate::services::resolved_principal_audiences::effective_audience_shared)
         .and_then(|destination_service_id| {
             let trust_domain =
-                arkret_identifiers::TypedTrustDomainId::new(arkret_config.trust_domain.clone()?)
+                arkret_identifiers::TrustDomainId::new(arkret_config.trust_domain.clone()?)
                     .ok()?;
             Some((
                 key_store.clone(),

@@ -154,6 +154,11 @@ pub trait RepositoryAccess: Send {
         &'c mut self,
     ) -> Box<dyn AccountHandoffRepository<Error = Self::Error> + 'c>;
 
+    /// Get the Account Authority issuer ledger.
+    fn account_status_ledger<'c>(
+        &'c mut self,
+    ) -> Box<dyn crate::AccountStatusLedgerRepository<Error = Self::Error> + 'c>;
+
     /// Get an [`AccountabilityGrantRepository`]
     fn accountability_grant<'c>(
         &'c mut self,
@@ -366,7 +371,7 @@ mod impls {
         UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
         UserTermsRepository,
     };
-    use crate::{MapErr, Repository, RepositoryTransaction};
+    use crate::{AccountStatusLedgerRepository, MapErr, Repository, RepositoryTransaction};
 
     // --- Repository ---
     impl<R, F, E1, E2> Repository<E2> for MapErr<R, F>
@@ -415,6 +420,15 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn AccountHandoffRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(self.inner.account_handoff(), &mut self.mapper))
+        }
+
+        fn account_status_ledger<'c>(
+            &'c mut self,
+        ) -> Box<dyn AccountStatusLedgerRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(
+                self.inner.account_status_ledger(),
+                &mut self.mapper,
+            ))
         }
 
         fn accountability_grant<'c>(
@@ -717,6 +731,12 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn AccountHandoffRepository<Error = Self::Error> + 'c> {
             (**self).account_handoff()
+        }
+
+        fn account_status_ledger<'c>(
+            &'c mut self,
+        ) -> Box<dyn AccountStatusLedgerRepository<Error = Self::Error> + 'c> {
+            (**self).account_status_ledger()
         }
 
         fn accountability_grant<'c>(

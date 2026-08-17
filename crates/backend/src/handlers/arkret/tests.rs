@@ -600,10 +600,11 @@ fn describe_separates_claim_levels() {
         .collect();
     assert!(experimental.is_disjoint(&verified_ids));
 
-    // compat_surfaces entries must declare a schema-known kind.
-    // T6.3 — coauth's `ak.identity.*` proxy operations are NOT a
+    // compat_surfaces entries must declare a kind from the closed
+    // `service-describe.schema.json#/properties/compat_surfaces/items/properties/kind`
+    // enum. T6.3 — coauth's `ak.identity.*` proxy operations are NOT a
     // canonical identity registry; the delegated-resolver semantics
-    // are carried in notes while kind stays schema-valid.
+    // are carried in notes.
     for surface in body["compat_surfaces"]
         .as_array()
         .expect("compat_surfaces array present")
@@ -612,13 +613,12 @@ fn describe_separates_claim_levels() {
         assert!(
             matches!(
                 kind,
-                "matrix_passthrough" | "mimi_passthrough" | "external_interop" | "deprecated_alias"
+                "matrix_passthrough"
+                    | "mimi_passthrough"
+                    | "delegated_resolver"
+                    | "external_interop"
             ),
             "unknown compat_surface kind {kind}"
-        );
-        assert_ne!(
-            kind, "delegated_resolver",
-            "service-describe schema does not allow delegated_resolver as compat_surface kind"
         );
         assert!(
             surface["notes"]

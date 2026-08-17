@@ -44,7 +44,7 @@ pub struct DbConnectorAdmin {
 #[derive(Clone)]
 struct PeerSigningContext {
     keystore: coauth_keystore::Keystore,
-    source_trust_domain: arkret_identifiers::TypedTrustDomainId,
+    source_trust_domain: arkret_identifiers::TrustDomainId,
     url_builder: coauth_data::UrlBuilder,
 }
 
@@ -72,7 +72,7 @@ impl DbConnectorAdmin {
     pub fn with_peer_signing(
         mut self,
         keystore: coauth_keystore::Keystore,
-        source_trust_domain: arkret_identifiers::TypedTrustDomainId,
+        source_trust_domain: arkret_identifiers::TrustDomainId,
         url_builder: coauth_data::UrlBuilder,
     ) -> Self {
         self.peer_signing = Some(PeerSigningContext {
@@ -313,54 +313,13 @@ impl ConnectorAdmin for DbConnectorAdmin {
         Ok(())
     }
 
-    async fn account_status_authoring_frontiers(
-        &self,
-        destination_name: &str,
-        request: &arkret_models_collaboration::account_lifecycle::AccountStatusAuthoringFrontiersRequestBody,
-    ) -> Result<
-        arkret_models_collaboration::account_lifecycle::AccountStatusAuthoringFrontiersOutcome,
-        anyhow::Error,
-    > {
-        let target = self
-            .arkret_config
-            .principal_servers
-            .iter()
-            .find(|server| server.name == destination_name)
-            .context("account-status destination Principal Server is no longer configured")?;
-        let signing = self
-            .peer_signing
-            .as_ref()
-            .context("account-status peer signing configuration is unavailable")?;
-        let (source_service_id, source_full_id) = runtime_peer_identity(&self.arkret_config)?;
-        anyhow::ensure!(
-            source_service_id == request.authority_evidence.issuer_service_id,
-            "runtime source service does not match account-status authority evidence issuer"
-        );
-        let destination_service_id =
-            crate::services::resolved_principal_audiences::effective_audience_shared(target)
-                .context("account-status destination service identity is unavailable or stale")?;
-        let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
-            source_service_id: source_service_id.into(),
-            destination_service_id: destination_service_id.into(),
-        };
-        let client = crate::services::peer_protocol_client::PeerProtocolClient::new(
-            Some(&target.endpoint),
-            &self.http_client,
-            &signing.keystore,
-            source_full_id,
-            identity,
-            signing.source_trust_domain.clone(),
-            signing.source_trust_domain.clone(),
-        )?;
-        Ok(client
-            .post_account_status_authoring_frontiers(request)
-            .await?)
-    }
-
     async fn submit_account_status_publication(
         &self,
         request: &PrincipalAccountStatusPublicationRequest,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<
+        arkret_models_collaboration::account_lifecycle::AccountStatusPublicationOutcome,
+        anyhow::Error,
+    > {
         let target = self
             .arkret_config
             .principal_servers
@@ -391,26 +350,20 @@ impl ConnectorAdmin for DbConnectorAdmin {
         let outcome = client
             .post_account_status_publication(request.body(), request.idempotency_key())
             .await?;
-        let event = request.body().publication.event();
+        let record = request.body().publication.record();
         anyhow::ensure!(
-            outcome.event_id == event.event_id,
-            "response event_id mismatch"
+            outcome.account_status_record_id == record.account_status_record_id,
+            "response record_id mismatch"
         );
         anyhow::ensure!(
-            outcome.account_id == request.body().authority_evidence.account_id,
+            outcome.account_id == record.account_id,
             "response account_id mismatch"
         );
         anyhow::ensure!(
-            outcome.principal_id == request.body().authority_evidence.principal_id,
-            "response principal_id mismatch"
+            outcome.status_seq == record.status_seq,
+            "response status_seq mismatch"
         );
-        match outcome.status {
-            arkret_models_collaboration::account_lifecycle::AccountStatusPublicationStatus::Accepted
-            | arkret_models_collaboration::account_lifecycle::AccountStatusPublicationStatus::Duplicate => Ok(()),
-            arkret_models_collaboration::account_lifecycle::AccountStatusPublicationStatus::PendingSeal => {
-                anyhow::bail!("account-status publication is pending Seal acceptance")
-            }
-        }
+        Ok(outcome)
     }
 
     async fn erasure_receipt(
@@ -454,7 +407,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
             signing.source_trust_domain.clone(),
         )?;
         let receipt_id = account_erasure_receipt_id(
-            request.triggering_status_event_id(),
+            request.triggering_status_record_id(),
             ErasureStorageBoundary::AccountPrivateStore,
         );
         let resource = match client.get_erasure_receipt(&receipt_id).await {
@@ -469,8 +422,11 @@ impl ConnectorAdmin for DbConnectorAdmin {
             "receipt id mismatch"
         );
         anyhow::ensure!(
-            &package.receipt.triggering_event_id == request.triggering_status_event_id(),
-            "receipt triggering status Event mismatch"
+            package.receipt.trigger
+                == arkret_models_collaboration::events_payloads::event_wire::ErasureTrigger::AccountStatusRecord {
+                    account_status_record_id: request.triggering_status_record_id().clone(),
+                },
+            "receipt triggering status record mismatch"
         );
         anyhow::ensure!(
             package.receipt.subject.kind == ErasureSubjectKind::Principal

@@ -94,6 +94,7 @@ pub async fn deactivate_current_account(
             )
         })?;
     let publication = crate::services::account_status_publication::author_transition_plan(
+        &mut repo,
         principal_server,
         key_store,
         service_id,

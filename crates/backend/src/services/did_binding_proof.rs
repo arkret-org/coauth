@@ -50,7 +50,7 @@ pub fn validate_account_registration_control_proof(
     expected_account_subject: &arkret_identifiers::Hash,
     expected_audience: &arkret_identifiers::DidCoreId,
     expected_origin: &str,
-    expected_trust_domain: &arkret_identifiers::TypedTrustDomainId,
+    expected_trust_domain: &arkret_identifiers::TrustDomainId,
     expected_dpop_jkt: &str,
     now: DateTime<Utc>,
 ) -> Result<(), DidBindingProofError> {
@@ -245,7 +245,7 @@ mod tests {
         coauth_data::Ulid,
         arkret_identifiers::Hash,
         arkret_identifiers::DidCoreId,
-        arkret_identifiers::TypedTrustDomainId,
+        arkret_identifiers::TrustDomainId,
     ) {
         let account_id = coauth_data::Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap();
         let grant_id = coauth_data::Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap();
@@ -256,7 +256,7 @@ mod tests {
         let audience =
             arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap();
         let trust_domain =
-            arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:auth.example".to_owned())
+            arkret_identifiers::TrustDomainId::new("ak:trust_domain:auth.example".to_owned())
                 .unwrap();
         let account_subject =
             arkret_identifiers::Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();

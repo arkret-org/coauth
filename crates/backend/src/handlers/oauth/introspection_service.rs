@@ -65,8 +65,8 @@ pub enum IntrospectionError {
 /// device/principal/session association fields.
 ///
 /// RFC 7662 introspection defaults to `sub`/`scope`/`exp`-style claims.
-/// The arkret extension fields (`arkret_principal_did`, `device_id`,
-/// `arkret_device_id`, `arkret_session_id`) link a token to a concrete
+/// The arkret extension fields (`arkret_principal_did`, `arkret_device_id`,
+/// `arkret_session_id`) link a token to a concrete
 /// device + principal + local session and materially widen the
 /// de-anonymisation surface. They are S2S material for the trusted
 /// Principal Server (which enforces the `/_arkret/self/*` surface), not
@@ -185,7 +185,6 @@ pub async fn introspect_token(
                 aud: None,
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: Some(access_token.jti()),
-                device_id: disclosure.is_full().then(|| device_id.clone()).flatten(),
                 arkret_principal_did: disclosure.is_full().then_some(principal_did).flatten(),
                 arkret_device_id: disclosure.is_full().then_some(device_id).flatten(),
                 arkret_session_id: disclosure.is_full().then(|| session.id.to_string()),
@@ -257,7 +256,6 @@ pub async fn introspect_token(
                 aud: None,
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: Some(refresh_token.jti()),
-                device_id: disclosure.is_full().then(|| device_id.clone()).flatten(),
                 arkret_principal_did: disclosure.is_full().then_some(principal_did).flatten(),
                 arkret_device_id: disclosure.is_full().then_some(device_id).flatten(),
                 arkret_session_id: disclosure.is_full().then(|| session.id.to_string()),
@@ -348,7 +346,6 @@ pub async fn introspect_token(
                 aud: None,
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: None,
-                device_id: disclosure.is_full().then(|| device_id.clone()).flatten(),
                 arkret_principal_did: disclosure
                     .is_full()
                     .then_some(actor_principal_did)

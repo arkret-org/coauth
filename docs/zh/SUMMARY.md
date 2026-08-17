@@ -32,12 +32,13 @@
 - [可观测性](./observability.md)
 - [备份与恢复](./operations/backup-restore.md)
 - [升级](./operations/upgrades.md)
-- [升级到 Round R4](./upgrade-to-r4.md)
+- [Trust domain 轮换](./operations/trust-domain-rotation.md)
 
 # 参考
 
 - [配置文件参考](./reference/configuration.md)
 - [OAuth 作用域](./reference/scopes.md)
+- [Arkret 接口规则](./reference/arkret-surfaces.md)
 - [命令行工具](./reference/cli/README.md)
     - [`config`](./reference/cli/config.md)
     - [`database`](./reference/cli/database.md)

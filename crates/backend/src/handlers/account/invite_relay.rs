@@ -319,7 +319,7 @@ pub async fn post_invite_relay(
     }
 
     let service_id = arkret::service_id_for(&arkret_config);
-    let trust_domain = arkret_identifiers::TypedTrustDomainId::new(arkret::trust_domain_for(
+    let trust_domain = arkret_identifiers::TrustDomainId::new(arkret::trust_domain_for(
         &url_builder,
         &arkret_config,
     ))
@@ -397,8 +397,8 @@ mod tests {
         arkret_identifiers::DidFullId::new("did:web:auth.example".to_owned()).unwrap()
     }
 
-    fn trust_domain() -> arkret_identifiers::TypedTrustDomainId {
-        arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:auth.example".to_owned())
+    fn trust_domain() -> arkret_identifiers::TrustDomainId {
+        arkret_identifiers::TrustDomainId::new("ak:trust_domain:auth.example".to_owned())
             .unwrap()
     }
 

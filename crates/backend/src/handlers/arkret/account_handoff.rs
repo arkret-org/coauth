@@ -126,7 +126,7 @@ pub async fn issue_did_binding_challenge(
     let audience = arkret_identifiers::DidCoreId::new(grant.audience.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
     let trust_domain =
-        arkret_identifiers::TypedTrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
+        arkret_identifiers::TrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
             .map_err(|error| failed_precondition(error.to_string()))?;
     let origin = url_builder.http_base().origin().ascii_serialization();
     let now = make_clock().now();
@@ -643,7 +643,7 @@ pub async fn issue_identity_binding_challenge(
     )?;
     let url_builder = depot.url_builder()?;
     let trust_domain = trust_domain_for(&url_builder, &arkret_config);
-    let trust_domain = arkret_identifiers::TypedTrustDomainId::new(trust_domain)
+    let trust_domain = arkret_identifiers::TrustDomainId::new(trust_domain)
         .map_err(|error| failed_precondition(error.to_string()))?;
     let audience = arkret_identifiers::DidCoreId::new(grant.audience.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
@@ -755,7 +755,7 @@ pub async fn issue_identity_abandonment_challenge(
     )?;
     let url_builder = depot.url_builder()?;
     let trust_domain =
-        arkret_identifiers::TypedTrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
+        arkret_identifiers::TrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
             .map_err(|error| failed_precondition(error.to_string()))?;
     let audience = arkret_identifiers::DidCoreId::new(grant.audience.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;

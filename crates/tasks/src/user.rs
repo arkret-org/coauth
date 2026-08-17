@@ -211,7 +211,7 @@ impl RunnableJob for DeactivateUserJob {
         repo.save().await.map_err(JobError::retry)?;
 
         // Hard erasure is driven exclusively by the signed erasure_pending
-        // account-status Event and its publication job. Never issue a second
+        // AccountStatusRecord and its publication job. Never issue a second
         // connector command for the same physical operation.
         if !self.principal_erase() {
             info!(handle = %target.localpart, "requesting principal deactivation");

@@ -18,7 +18,7 @@ use super::ConfigurationSection;
 ///
 /// A `trust_domain` value MUST match `ak:trust_domain:<scope>` where
 /// `<scope>` is `[a-z0-9._:-]{1,128}`. This mirrors the SDK validator
-/// `arkret_identifiers::TypedTrustDomainId` so coauth and the Realm policy
+/// `arkret_identifiers::TrustDomainId` so coauth and the Realm policy
 /// engine agree on the exact byte-form. Validate via
 /// [`validate_trust_domain`].
 const TRUST_DOMAIN_PREFIX: &str = "ak:trust_domain:";
@@ -443,7 +443,7 @@ impl ArkretConfig {
     /// Validate the configured `trust_domain` (if any) against the SDK
     /// `ak:trust_domain:<scope>` wire format. Returns the borrowed
     /// scope half on success so call-sites can build the
-    /// `TypedTrustDomainId` directly. Delegates the acceptance check to
+    /// `TrustDomainId` directly. Delegates the acceptance check to
     /// the SDK validator `arkret_identifiers::is_trust_domain` so the
     /// config side and the SDK never drift; the prefix strip below only
     /// recovers the `<scope>` slice for the success return.

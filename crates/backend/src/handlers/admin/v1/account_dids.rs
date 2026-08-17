@@ -180,7 +180,7 @@ pub async fn add_account_did(
     }
 
     let expected_audience = crate::handlers::arkret::service_id_for(&arkret_config);
-    let expected_trust_domain = arkret_identifiers::TypedTrustDomainId::new(
+    let expected_trust_domain = arkret_identifiers::TrustDomainId::new(
         crate::handlers::arkret::trust_domain_for(&url_builder, &arkret_config),
     )
     .map_err(|error| AppError::bad_request(format!("control_proof_invalid: {error}")))?;

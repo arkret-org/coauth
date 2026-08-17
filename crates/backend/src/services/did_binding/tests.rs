@@ -29,8 +29,8 @@ fn other_did() -> DidFullId {
     DidFullId::new("did:web:mallory.example").unwrap()
 }
 
-fn trust_domain(scope: &str) -> TypedTrustDomainId {
-    TypedTrustDomainId::new(format!("ak:trust_domain:{scope}")).unwrap()
+fn trust_domain(scope: &str) -> TrustDomainId {
+    TrustDomainId::new(format!("ak:trust_domain:{scope}")).unwrap()
 }
 
 /// What a §5.4 `low` accepted-only read path demands: any binding that is not
@@ -96,7 +96,7 @@ fn accept(
     store: &dyn VerifiedDidBindingStore,
     resolution: &DidResolution,
     purpose: DidBindingPurpose,
-    domain: &TypedTrustDomainId,
+    domain: &TrustDomainId,
     policy: &Hash,
     now: DateTime<Utc>,
 ) -> AcceptedDidBinding {

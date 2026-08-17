@@ -42,15 +42,12 @@ use crate::services::account_claims::{
 };
 use crate::{AppError, JsonResult};
 
-// `AdminBridgeDescribeResponse` (and the nested `AdminBridgeRiskAction*Example`
-// triple) used to live inline here and in `risk_action.rs`. They moved
-// to `coauth_admin_types::bridge_admin` in C34.2 so the sodmin admin SPA
-// decodes them through the same typed shape — the prior client-side
-// shim collapsed the three example payloads down to opaque
-// `serde_json::Value`, silently dropping the structured `action`/
-// `reason`/`ticket`/`approved_by`/`approval_note`/`execution_note`
-// fields the SPA wants to render. The endpoint below now returns the
-// shared `AdminBridgeDescribe` directly.
+// `AdminBridgeDescribeResponse` and the nested `AdminBridgeRiskAction*Example`
+// triple live in `coauth_admin_types::bridge_admin`. The describe endpoint
+// below returns the shared `AdminBridgeDescribe` directly so the sodmin admin
+// SPA decodes the same typed shape, keeping the structured
+// `action` / `reason` / `ticket` / `approved_by` / `approval_note` /
+// `execution_note` fields it renders.
 
 /// Backend wrapper that owns the resource ID + JSON:API attributes. The
 /// attributes block is the shared `AdminAccountAttributes` from

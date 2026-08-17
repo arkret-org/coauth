@@ -1,9 +1,10 @@
 use std::net::IpAddr;
 
 use async_trait::async_trait;
+use coauth_account_types::PostAuthAction;
 use coauth_data::{
-    Clock, PostAuthAction, UpstreamOAuthAuthorizationSession, UserEmailAuthentication,
-    UserPhoneAuthentication, UserRegistration, UserRegistrationToken,
+    Clock, UpstreamOAuthAuthorizationSession, UserEmailAuthentication, UserPhoneAuthentication,
+    UserRegistration, UserRegistrationToken,
 };
 use rand_core::RngCore;
 use ulid::Ulid;

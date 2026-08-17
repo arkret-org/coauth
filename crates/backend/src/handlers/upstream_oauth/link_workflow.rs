@@ -9,8 +9,9 @@ use coauth_data::upstream_oauth::{
 use coauth_data::user::{
     BrowserSessionRepository, UserEmailRepository, UserRegistrationRepository, UserRepository,
 };
+use coauth_account_types::PostAuthAction;
 use coauth_data::{
-    BoxRepository, BrowserSession, Clock, Pagination, PostAuthAction, RepositoryAccess,
+    BoxRepository, BrowserSession, Clock, Pagination, RepositoryAccess,
     RepositoryError, SiteConfig, UpstreamOAuthAuthorizationSession, UpstreamOAuthLink,
     UpstreamOAuthProvider, UpstreamOAuthProviderOnConflict, UrlBuilder, User, UserRegistration,
 };

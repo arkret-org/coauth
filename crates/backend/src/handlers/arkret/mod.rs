@@ -1,5 +1,6 @@
 mod account_handoff;
 mod account_register;
+mod account_status;
 mod controller_gate;
 mod did_document;
 mod handle_claim;
@@ -11,6 +12,7 @@ mod test_chaos;
 
 pub use account_handoff::*;
 pub use account_register::*;
+pub use account_status::*;
 pub use controller_gate::*;
 pub use did_document::*;
 pub use handle_claim::*;
@@ -314,9 +316,8 @@ impl SessionGrantCaller {
 ///
 /// In addition to the scope check, this validates the credential's liveness:
 /// expired or revoked access tokens / sessions are rejected with `401`
-/// (SEC-SG-EXPIRY / REL-04). The legacy behaviour only inspected
-/// `session.scope` and would happily authorize a long-expired or revoked
-/// token.
+/// (SEC-SG-EXPIRY / REL-04). A scope check alone is not enough: it would
+/// happily authorize a long-expired or revoked token.
 pub(crate) async fn require_session_grant_caller(
     req: &Request,
     depot: &Depot,

@@ -105,6 +105,8 @@ mod utils;
 /// and security summary).
 pub mod account;
 pub mod account_handoff;
+/// Durable Account Authority issuer-ledger repository.
+pub mod account_status;
 /// Accountability grant repositories.
 pub mod accountability;
 /// Agent key authorization + agent-key-proof replay repositories (AKP-0008).

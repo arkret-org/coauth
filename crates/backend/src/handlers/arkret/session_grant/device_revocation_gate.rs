@@ -62,7 +62,7 @@ pub(crate) async fn acquire_human_device_binding(
     request.validate().map_err(gate_protocol_error)?;
 
     let source_service_id = service_id_for(&config);
-    let trust_domain = arkret_identifiers::TypedTrustDomainId::new(trust_domain_for(
+    let trust_domain = arkret_identifiers::TrustDomainId::new(trust_domain_for(
         &depot.url_builder()?,
         &config,
     ))

@@ -32,6 +32,8 @@ use thiserror::Error;
 pub mod account;
 /// Durable canonical account handoff and identity-creation state.
 pub mod account_handoff;
+/// Durable Account Authority issuer-ledger types.
+pub use storage::account_status::{AccountStatusAppendOutcome, AccountStatusLedgerRepository};
 /// Durable accountability grants for Personal Agent capability approval.
 pub mod accountability;
 /// Durable agent key authorizations + agent-key-proof replay table (AKP-0008).
@@ -60,8 +62,6 @@ pub mod organization_control;
 /// Personal access token types.
 pub mod personal;
 pub mod policy_data;
-/// Post-authentication action types.
-pub mod post_auth_action;
 /// Queue models and repository ports.
 pub mod queue;
 /// Durable recovery-completion grant issuance outcomes.
@@ -185,7 +185,6 @@ pub use self::organization_control::{
     OrganizationPrincipalControl, PRINCIPAL_CONTROL_REALM_BOOTSTRAP_PURPOSE,
 };
 pub use self::policy_data::{PolicyData, PolicyDataDocument};
-pub use self::post_auth_action::{AccountAction, PostAuthAction};
 pub use self::recovery_authority::{
     NewRecoveryCompletionGrantIssuance, RecoveryCompletionGrantIssuance,
 };

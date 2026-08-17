@@ -36,7 +36,7 @@ pub struct RateLimitingConfig {
     pub directory_lookup: DirectoryLookupRateLimitingConfig,
 
     /// Public identity-resolution read limits. Applies to the DID resolve and
-    /// pinned-document compatibility surfaces.
+    /// pinned-document read surfaces.
     #[serde(default)]
     pub identity_resolution: IdentityResolutionRateLimitingConfig,
 

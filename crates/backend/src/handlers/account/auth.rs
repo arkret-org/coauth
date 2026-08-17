@@ -13,7 +13,8 @@ use coauth_account_types::{
     ViewerInfo,
 };
 use coauth_data::oauth::{LoginHint, OAuthAuthorizationGrantRepository};
-use coauth_data::{AuthorizationGrant, PostAuthAction, SiteConfig, UrlBuilder};
+use coauth_account_types::PostAuthAction;
+use coauth_data::{AuthorizationGrant, SiteConfig, UrlBuilder};
 use coauth_jose::jwk::PublicJsonWebKey;
 pub use oidc_bridge::integration_describe;
 use opentelemetry::metrics::Counter;

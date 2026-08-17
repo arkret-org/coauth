@@ -1090,7 +1090,7 @@ fn did_binding_challenge_from_row(
             audience: arkret_identifiers::DidCoreId::new(row.audience)
                 .map_err(|_| DatabaseError::invalid_operation())?,
             origin: row.origin,
-            trust_domain: arkret_identifiers::TypedTrustDomainId::new(row.trust_domain)
+            trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)
                 .map_err(|_| DatabaseError::invalid_operation())?,
             issued_at: row.issued_at,
             expires_at: row.expires_at,
@@ -1180,7 +1180,7 @@ fn abandonment_challenge_from_row(
         challenge_id: row.challenge_id,
         challenge: row.challenge,
         origin: row.origin,
-        trust_domain: arkret_identifiers::TypedTrustDomainId::new(row.trust_domain)
+        trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)
             .map_err(|_| DatabaseError::invalid_operation())?,
         issued_at: row.issued_at,
         expires_at: row.expires_at,
@@ -1248,7 +1248,7 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
         audience: arkret_identifiers::DidCoreId::new(row.audience)
             .map_err(|_| DatabaseError::invalid_operation())?,
         origin: row.origin,
-        trust_domain: arkret_identifiers::TypedTrustDomainId::new(row.trust_domain)
+        trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)
             .map_err(|_| DatabaseError::invalid_operation())?,
         issued_at: row.issued_at,
         expires_at: row.expires_at,

@@ -2,8 +2,9 @@ use coauth_data::oauth::{
     OAuthAuthorizationGrantRepository, OAuthClientRepository, OAuthSessionFilter,
     OAuthSessionRepository,
 };
+use coauth_account_types::PostAuthAction;
 use coauth_data::{
-    AuthorizationCode, BoxClock, BoxRepository, BoxRng, Pkce, PostAuthAction, RepositoryAccess,
+    AuthorizationCode, BoxClock, BoxRepository, BoxRng, Pkce, RepositoryAccess,
     SystemClock,
 };
 use coauth_oauth_types::errors::{ClientError, ClientErrorCode};

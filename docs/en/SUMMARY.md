@@ -36,13 +36,14 @@
 - [Kubernetes deployment](./kubernetes.md)
 - [Backup and restore](./operations/backup-restore.md)
 - [Upgrades](./operations/upgrades.md)
-- [Upgrade to Round R4](./upgrade-to-r4.md)
+- [Trust domain rotation](./operations/trust-domain-rotation.md)
 
 # Reference
 
 - [Configuration file reference](./reference/configuration.md)
 - [Admin API](../api/index.html)
 - [OAuth scopes](./reference/scopes.md)
+- [Arkret surface rules](./reference/arkret-surfaces.md)
 - [Command line tool](./reference/cli/README.md)
     - [`config`](./reference/cli/config.md)
     - [`database`](./reference/cli/database.md)

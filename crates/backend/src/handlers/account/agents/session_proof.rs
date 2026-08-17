@@ -2051,7 +2051,7 @@ mod tests {
     fn realm_agent_key_scope_rejects_account_surface() {
         let err = intersect_requested_scope_with_agent_key_scope(
             AGENT_KEY_SCOPE_REALM,
-            &["ak.account.status".to_owned()],
+            &["ak.self.account.read.describe".to_owned()],
         )
         .expect_err("realm key must not mint account-surface scope");
 

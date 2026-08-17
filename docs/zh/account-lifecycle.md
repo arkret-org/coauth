@@ -18,9 +18,8 @@ UI 门禁使用。
 
 ## 第三方邀请领取流程
 
-Round R4 邀请领取使用 `ak.schema.invite.v1` 的
-`third_party_invite` 形态。邮箱、手机号等明文 3PID 值不再在
-网络中传输。
+邀请领取使用 `ak.schema.invite.v1` 的 `third_party_invite`
+形态。邮箱、手机号等明文 3PID 值不在网络中传输。
 
 邀请从 `pending` 开始，然后会进入以下五种终态之一：
 
@@ -76,6 +75,3 @@ pending
 | `subject_proof_invalid` | 401 | 主体证明格式错误、不可验证，或与验证证明未关联。 |
 | `proof_expired` | 410 | 任一证明已过期。 |
 | `subject_did_mismatch` | 403 | 主体证明中的邀请人 DID 与提交领取的 actor 不一致。 |
-
-操作者侧的迁移清单请参见
-[升级到 Round R4](./upgrade-to-r4.md)。

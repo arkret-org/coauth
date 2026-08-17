@@ -141,8 +141,8 @@ pub struct SolandFrontierSource {
         coauth_keystore::Keystore,
         arkret_identifiers::DidFullId,
         KeyPackagesClaimServiceBinding,
-        arkret_identifiers::TypedTrustDomainId,
-        arkret_identifiers::TypedTrustDomainId,
+        arkret_identifiers::TrustDomainId,
+        arkret_identifiers::TrustDomainId,
     )>,
 }
 
@@ -159,8 +159,8 @@ impl SolandFrontierSource {
             coauth_keystore::Keystore,
             arkret_identifiers::DidFullId,
             KeyPackagesClaimServiceBinding,
-            arkret_identifiers::TypedTrustDomainId,
-            arkret_identifiers::TypedTrustDomainId,
+            arkret_identifiers::TrustDomainId,
+            arkret_identifiers::TrustDomainId,
         )>,
     ) -> Self {
         Self {

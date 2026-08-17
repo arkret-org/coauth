@@ -34,7 +34,7 @@ pub use refresh_token::handle_refresh_token;
 /// Bearer access tokens are not revocation-checked on each request, so their
 /// lifetime is the window an attacker retains access after a leak. The
 /// configuration schema already caps the value, but we clamp again at issuance
-/// as defence in depth so a tampered or legacy config can never mint a
+/// as defence in depth so a tampered config can never mint a
 /// long-lived bearer token. This matches the soland-side
 /// `capped_bearer_expiry <= 15min` rule.
 #[must_use]
@@ -59,8 +59,9 @@ pub(crate) fn authorization_code_pkce_required(client: &Client) -> bool {
 /// SECURITY: `plain` is rejected universally — for both public *and*
 /// confidential clients — because it offers no protection against an
 /// authorization-code interception attack. RFC 7636 §4.2 marks `plain`
-/// as deprecated and OAuth 2.1 (§7.5) outright bans it. Since this
-/// project has no released clients, there is no compatibility cost.
+/// as deprecated and OAuth 2.1 (§7.5) outright bans it. This project has
+/// no clients to accommodate, so `plain` is rejected outright rather than
+/// negotiated.
 #[must_use]
 pub(crate) fn required_pkce_method_is_allowed(method: &PkceCodeChallengeMethod) -> bool {
     *method == PkceCodeChallengeMethod::S256

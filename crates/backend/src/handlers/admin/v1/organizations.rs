@@ -61,8 +61,7 @@ struct OrganizationControllerBootstrapTranscript<'a> {
     kind: &'static str,
     organization_did: &'a str,
     principal_control_realm_id: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    control_stream_ref: Option<&'a str>,
+    control_stream_ref: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pcr_frontier_digest: Option<&'a str>,
     purpose: &'static str,
@@ -76,7 +75,7 @@ fn organization_controller_bootstrap_transcript_bytes(
         kind: "org.arkret.coauth.organization_pcr.bootstrap.v1",
         organization_did: &body.organization_did,
         principal_control_realm_id: &body.principal_control_realm_id,
-        control_stream_ref: body.control_stream_ref.as_deref(),
+        control_stream_ref: &body.control_stream_ref,
         pcr_frontier_digest: body.pcr_frontier_digest.as_deref(),
         purpose: "principal_control",
         profile: arkret_wire::ProfileId::PRINCIPAL_CONTROL_REALM_V1,
@@ -163,19 +162,8 @@ pub async fn bootstrap_handler(
         .map_err(|e| AppError::bad_request(format!("invalid bootstrap body: {e}")))?;
     // Validate the organization DID shape up front.
     parse_did(&body.organization_did)?;
-    let create_event_id = body
-        .control_stream_ref
-        .as_deref()
-        .ok_or_else(|| {
-            AppError::bad_request(
-                "organization bootstrap requires the accepted PCR create Event reference",
-            )
-        })
-        .and_then(|reference| {
-            EventId::new(reference.to_owned()).map_err(|error| {
-                AppError::bad_request(format!("invalid PCR create Event ref: {error}"))
-            })
-        })?;
+    let create_event_id = EventId::new(body.control_stream_ref.clone())
+        .map_err(|error| AppError::bad_request(format!("invalid PCR create Event ref: {error}")))?;
     let supplied_realm_id = RealmId::new(body.principal_control_realm_id.clone())
         .map_err(|error| AppError::bad_request(format!("invalid PCR Realm id: {error}")))?;
     if supplied_realm_id != RealmId::from_event_id(&create_event_id) {
@@ -262,7 +250,7 @@ pub async fn bootstrap_handler(
             NewOrganizationPrincipalControl {
                 organization_did: body.organization_did,
                 principal_control_realm_id: body.principal_control_realm_id,
-                control_stream_ref: body.control_stream_ref,
+                control_stream_ref: Some(body.control_stream_ref),
                 pcr_frontier_digest: body.pcr_frontier_digest,
                 bootstrap_authorization,
                 bootstrap_delegation_ref,
@@ -598,9 +586,7 @@ mod tests {
             organization_did: organization_did.to_owned(),
             principal_control_realm_id: "ak:realm:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG"
                 .to_owned(),
-            control_stream_ref: Some(
-                "ak:event:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG".to_owned(),
-            ),
+            control_stream_ref: "ak:event:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG".to_owned(),
             pcr_frontier_digest: Some(format!("sha256:{}", "ab".repeat(32))),
             authorization: BootstrapAuthorizationInput::DidControllerProof {
                 proof_jws: "header..signature".to_owned(),
@@ -626,6 +612,22 @@ mod tests {
         assert_eq!(
             transcript["profile"],
             "ak.profile.principal_control_realm.v1"
+        );
+    }
+
+    #[test]
+    fn bootstrap_body_without_control_stream_ref_fails_to_decode() {
+        let body = serde_json::json!({
+            "organization_did": "did:web:org-a.example",
+            "principal_control_realm_id":
+                "ak:realm:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG",
+            "authorization": { "kind": "did_controller_proof", "proof_jws": "header..signature" },
+        });
+        let error = serde_json::from_value::<BootstrapOrganizationRequest>(body)
+            .expect_err("control_stream_ref must be rejected at decode time");
+        assert!(
+            error.to_string().contains("control_stream_ref"),
+            "unexpected decode error: {error}"
         );
     }
 }

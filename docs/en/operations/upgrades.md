@@ -1,9 +1,8 @@
 # Upgrades
 
 `coauth` follows [Semantic Versioning](https://semver.org/) for the HTTP
-contracts. Patch and minor releases never break compatibility with the
-existing OIDC / OAuth / Arkret surfaces. Major releases may remove
-deprecated paths after at least one minor release of warning.
+contracts. Patch and minor releases never change the OIDC / OAuth / Arkret
+surfaces; contract changes ship in a major release.
 
 ## Routine upgrades
 
@@ -33,9 +32,9 @@ line.
 `coauth` is designed to be **horizontally scaled** — a rolling restart
 through your orchestrator is supported on every minor release.
 
-## Backwards-compatibility surface
+## Stable surfaces
 
-The following surfaces are tracked compatibility contracts:
+The following surfaces are tracked contracts:
 
 - `/.well-known/openid-configuration`
 - `/.well-known/arkret/openapi.yaml`

@@ -11,17 +11,9 @@
 //! - `DELETE /_coauth/admin/accounts/{account_id}/dids/{did}` — request body for revoke
 //!   (`RemoveAccountDidBindingRequestBody`).
 //!
-//! Round-33 (C33.3): lifted out of the inline definitions in the
-//! backend handler and the divergent `CoauthAdminDidBindingRecord`
-//! / `CoauthAdminDidBindingsEnvelope` decoders in
-//! `sodmin/src/api/coauth.rs`. The sodmin shim was only inspecting
-//! `did`, `kind`, `state`, `verification_status`, `primary`, `active`,
-//! and `last_verified_at` — silently dropping `id`, `account_id`,
-//! `resolver`, `created_at`, `last_resolver_receipt_id`, and
-//! `revoked_at`. The shared shape now carries every field the backend
-//! emits, and the typed enums make any drift in the lifecycle vocab a
-//! compile error rather than a stringly-typed `format!` collapse on
-//! the UI side.
+//! The shared shape carries every field the backend emits, and the typed
+//! enums make any drift in the lifecycle vocab a compile error rather than
+//! a stringly-typed `format!` collapse on the UI side.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -389,8 +381,7 @@ mod tests {
     #[test]
     fn unknown_enum_wires_are_rejected_at_decode() {
         // Catching new server-side variants at decode time is exactly
-        // why these are typed enums — the previous `String` shim
-        // collapsed unknown values into "garbage" UI text.
+        // why these are typed enums.
         assert!(serde_json::from_str::<DidBindingKind>("\"alien\"").is_err());
         assert!(serde_json::from_str::<DidBindingState>("\"unknown\"").is_err());
         assert!(serde_json::from_str::<DidBindingVerificationStatus>("\"???\"").is_err());

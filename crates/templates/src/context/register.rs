@@ -3,7 +3,8 @@
 
 use std::collections::BTreeMap;
 
-use coauth_data::{PostAuthAction, UpstreamOAuthProvider, UserEmailAuthentication};
+use coauth_account_types::PostAuthAction;
+use coauth_data::{UpstreamOAuthProvider, UserEmailAuthentication};
 use rand_core::RngCore as Rng;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;

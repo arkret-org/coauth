@@ -2,8 +2,9 @@ use std::net::IpAddr;
 
 use anyhow::Error as AnyhowError;
 use chrono::{DateTime, Utc};
+use coauth_account_types::PostAuthAction;
 use coauth_data::{
-    BrowserSession, PostAuthAction, RepositoryError, UpstreamOAuthAuthorizationSession,
+    BrowserSession, RepositoryError, UpstreamOAuthAuthorizationSession,
     UpstreamOAuthLink, UserEmailAuthentication, UserPhoneAuthentication, UserRegistration,
     UserRegistrationToken,
 };

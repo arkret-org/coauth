@@ -2,11 +2,11 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_account_types::PostAuthAction;
 use coauth_data::user::UserRegistrationRepository;
 use coauth_data::{
-    Clock, PostAuthAction, UpstreamOAuthAuthorizationSession, UserEmailAuthentication,
-    UserPhoneAuthentication, UserRegistration, UserRegistrationPassword, UserRegistrationToken,
-    new_id,
+    Clock, UpstreamOAuthAuthorizationSession, UserEmailAuthentication, UserPhoneAuthentication,
+    UserRegistration, UserRegistrationPassword, UserRegistrationToken, new_id,
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -569,8 +569,9 @@ mod tests {
 
     use coauth_data::clock::MockClock;
     use coauth_data::upstream_oauth::UpstreamOAuthProviderParams;
+    use coauth_account_types::PostAuthAction;
     use coauth_data::{
-        Clock, PostAuthAction, RepositoryAccess as _, RepositoryFactory as _,
+        Clock, RepositoryAccess as _, RepositoryFactory as _,
         UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,
         UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderPkceMode,
         UpstreamOAuthProviderTokenAuthMethod, UserRegistration, UserRegistrationPassword,

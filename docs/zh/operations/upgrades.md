@@ -1,8 +1,7 @@
 # 升级
 
 `coauth` 在 HTTP 契约上遵循 [SemVer](https://semver.org/)。Patch / minor
-升级永远不会破坏 OIDC / OAuth / Arkret 已有 surface；major 升级会在至少
-一个 minor 版本之前预先标记 deprecation。
+升级不会改动 OIDC / OAuth / Arkret 的 surface；契约变更只在 major 升级中发布。
 
 ## 常规升级流程
 
@@ -24,9 +23,9 @@
 
 `coauth` 设计为水平扩展，所有 minor 升级都支持滚动重启。
 
-## 兼容性范围
+## 稳定接口范围
 
-跟踪的兼容契约：
+跟踪的契约：
 
 - `/.well-known/openid-configuration`
 - `/.well-known/arkret/openapi.yaml`

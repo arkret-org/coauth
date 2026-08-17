@@ -4,6 +4,26 @@
 #![allow(missing_docs)]
 
 diesel::table! {
+    account_status_records (account_authority_id, account_id, status_seq) {
+        account_authority_id -> Text,
+        account_id -> Text,
+        status_seq -> Int8,
+        record_id -> Text,
+        record -> Jsonb,
+        issued_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    account_status_ledger_heads (account_authority_id, account_id) {
+        account_authority_id -> Text,
+        account_id -> Text,
+        current_status_seq -> Nullable<Int8>,
+        current_record_id -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
     account_handoff_creation_attempts (request_id) {
         request_id -> Uuid,
         request_digest -> Text,

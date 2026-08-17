@@ -57,7 +57,7 @@
 
 use std::sync::Arc;
 
-use arkret_identifiers::{DidFullId, Hash, TypedTrustDomainId};
+use arkret_identifiers::{DidFullId, Hash, TrustDomainId};
 use arkret_identity::{
     AcceptedDidBinding, BindingInvalidation, DidBindingPurpose, DidBindingStatus, EvidenceReceipt,
     FreshnessProfile, FreshnessRequirement, LimitedTrust, MethodEvidence, ResolverFailMode,
@@ -200,9 +200,9 @@ pub fn shared_verified_did_binding_store() -> VerifiedDidBindingStoreHandle {
 pub fn trust_domain_id(
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
-) -> Result<TypedTrustDomainId, DidBindingError> {
+) -> Result<TrustDomainId, DidBindingError> {
     let raw = crate::handlers::arkret::trust_domain_for(url_builder, arkret_config);
-    TypedTrustDomainId::new(raw).map_err(|error| DidBindingError::TrustDomain(error.to_string()))
+    TrustDomainId::new(raw).map_err(|error| DidBindingError::TrustDomain(error.to_string()))
 }
 
 /// The [`ResolverPolicy`] this deployment's DID resolver enforces.
@@ -481,7 +481,7 @@ pub fn from_shared_document(
 #[allow(clippy::too_many_arguments)]
 pub fn binding_from_resolution(
     resolution: &DidResolution,
-    trust_domain: TypedTrustDomainId,
+    trust_domain: TrustDomainId,
     purpose: DidBindingPurpose,
     policy_digest: Hash,
     verification_method: Option<arkret_wire::DidUrl>,
@@ -545,7 +545,7 @@ pub fn binding_from_resolution(
 /// One authority-verification request against coauth's async resolver.
 pub struct CoauthBindingRequest<'a> {
     pub did: &'a str,
-    pub trust_domain: TypedTrustDomainId,
+    pub trust_domain: TrustDomainId,
     pub purpose: DidBindingPurpose,
     pub policy_digest: Hash,
     pub verification_method: Option<arkret_wire::DidUrl>,

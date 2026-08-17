@@ -2,8 +2,9 @@
 
 use std::collections::BTreeMap;
 
+use coauth_account_types::PostAuthAction;
 use coauth_data::{
-    PostAuthAction, UpstreamOAuthLink, UpstreamOAuthProvider, UpstreamOAuthProviderClaimsImports,
+    UpstreamOAuthLink, UpstreamOAuthProvider, UpstreamOAuthProviderClaimsImports,
     UpstreamOAuthProviderDiscoveryMode, UpstreamOAuthProviderOnBackchannelLogout,
     UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderTokenAuthMethod, User,
 };

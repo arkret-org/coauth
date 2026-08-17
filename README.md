@@ -54,7 +54,7 @@ arkret:
 The value MUST match `ak:trust_domain:<scope>` where `<scope>` is
 `[a-z0-9._:-]{1,128}` and starts with `[a-z0-9]`. coauth validates it
 on load via `ArkretConfig::validate_trust_domain` (mirrors the SDK's
-`TypedTrustDomainId` acceptance rules) and injects it into the Realm
+`TrustDomainId` acceptance rules) and injects it into the Realm
 policy + `/_arkret/describe` document via soland's config API.
 
 The `trust_domain` value binds peer and recovery authorization

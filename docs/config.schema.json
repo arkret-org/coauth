@@ -2997,7 +2997,7 @@
           ]
         },
         "identity_resolution": {
-          "description": "Public identity-resolution read limits. Applies to the DID resolve and\npinned-document compatibility surfaces.",
+          "description": "Public identity-resolution read limits. Applies to the DID resolve and\npinned-document read surfaces.",
           "default": {
             "per_ip": {
               "burst": 60,

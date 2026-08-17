@@ -498,7 +498,7 @@ pub(crate) fn service_describe_response(
             method_history_head: service_version_id.clone(),
             version_id: service_version_id,
         },
-        trust_domain: arkret_wire::TypedTrustDomainId::new(trust_domain_for(
+        trust_domain: arkret_wire::TrustDomainId::new(trust_domain_for(
             url_builder,
             arkret_config,
         ))

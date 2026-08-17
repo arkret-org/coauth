@@ -676,7 +676,7 @@ pub fn principal_server_connection_from_config(
 ) -> Result<(Arc<dyn ConnectorAdmin>, ConnectorRegistry), anyhow::Error> {
     let registry = ConnectorRegistry::new();
 
-    let source_trust_domain = arkret_identifiers::TypedTrustDomainId::new(
+    let source_trust_domain = arkret_identifiers::TrustDomainId::new(
         crate::handlers::arkret::trust_domain_for(url_builder, &arkret_config),
     )
     .map_err(|error| anyhow::anyhow!("configured Arkret trust domain is invalid: {error}"))?;
