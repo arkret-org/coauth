@@ -36,6 +36,9 @@ use super::{
     ArkretRouteError, DepotExt, SessionGrantError, issuer_did_for, preferred_signing_key,
     service_id_for, trust_domain_for,
 };
+use crate::handlers::account::auth::oidc_bridge::{
+    VerifiedPrincipalIdentity, ensure_soland_account_registered,
+};
 use crate::handlers::{make_clock, make_rng};
 use crate::services::account_status_publication::{
     author_transition_plan, enqueue_exact_publication, validate_transition_plan,
@@ -538,6 +541,37 @@ pub async fn account_register_endpoint(
         repo.save().await?;
         repo = depot.repo().await?;
     }
+
+    // The account-first flow mints its initial grant directly instead of
+    // passing through the OIDC exchange path. Keep the same fail-closed
+    // invariant here: the Principal Server account and primary localpart must
+    // be durably projected before a usable grant can escape this saga.
+    //
+    // Account projection is idempotent, so a retry after a later Coauth
+    // failure safely replays this step. Do not hold a Coauth transaction open
+    // across the Principal Server request.
+    repo.cancel().await.ok();
+    let verified_principal = VerifiedPrincipalIdentity {
+        principal_id: body.principal_id.clone(),
+        full_id: body.full_id.clone(),
+        principal_authority: principal_authority.clone(),
+    };
+    ensure_soland_account_registered(
+        &depot.http_client()?,
+        Some(principal_server.endpoint.as_str()),
+        &verified_principal,
+        principal_server.bearer.as_deref(),
+        browser_session.user.display_name.as_deref(),
+        Some(identity_creation.initial_session.device_id.as_str()),
+        browser_session.user.localpart.as_str(),
+    )
+    .await
+    .map_err(|error| {
+        failed_precondition(format!(
+            "principal account projection must complete before initial grant issuance: {error}"
+        ))
+    })?;
+    repo = depot.repo().await?;
 
     let mut nonce = [0_u8; 32];
     rand_core::RngCore::fill_bytes(&mut *rng, &mut nonce);
