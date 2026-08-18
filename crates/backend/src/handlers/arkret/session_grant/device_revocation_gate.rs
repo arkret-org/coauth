@@ -10,7 +10,7 @@ use salvo::prelude::{Depot, StatusCode};
 
 use crate::handlers::arkret::{ArkretRouteError, issuer_did_for, service_id_for, trust_domain_for};
 use crate::handlers::common::DepotExt as _;
-use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
+use crate::services::did_binding_proof::verify_detached_jws_against_method;
 use crate::services::peer_protocol_client::PeerProtocolClient;
 
 pub(crate) fn operation_intent_digest(
@@ -164,15 +164,13 @@ async fn verify_gate_receipt(
     };
     receipt
         .verify_proof_with(|proof, binding| {
-            let verified_method =
-                verify_detached_jws_with_sdk(&proof.jws, binding, &document.verification_method)
-                    .map_err(|error| arkret_wire::Error::Protocol(error.to_string()))?;
-            if verified_method != proof.verification_method.as_str() {
-                return Err(arkret_wire::Error::Protocol(
-                    "gate receipt proof verified under a different method".to_owned(),
-                ));
-            }
-            Ok(())
+            verify_detached_jws_against_method(
+                &proof.jws,
+                binding,
+                &document.verification_method,
+                proof.verification_method.as_str(),
+            )
+            .map_err(|error| arkret_wire::Error::Protocol(error.to_string()))
         })
         .map_err(gate_protocol_error)
 }
