@@ -100,6 +100,20 @@ pub trait UpstreamOidcService: Send + Sync {
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String>;
 
+    /// Resolve the session-grant target purely from configuration and the
+    /// already-resolved audience cache, without any network refresh.
+    ///
+    /// Callers inside a database transaction must use this fail-closed
+    /// variant: an audience that is not yet configured/resolved is rejected
+    /// instead of triggering outbound I/O in the middle of the transaction.
+    fn session_grant_target_for_configured_audience(
+        &self,
+        url_builder: &UrlBuilder,
+        arkret_config: &ArkretConfig,
+        resolved: &ResolvedPrincipalAudiences,
+        requested_audience: Option<&str>,
+    ) -> Result<UpstreamOidcSessionGrantTarget, String>;
+
     #[allow(clippy::too_many_arguments, clippy::ptr_arg)]
     async fn fetch_local_oidc_userinfo(
         &self,
@@ -268,6 +282,21 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
             .refresh_unresolved(http_client, arkret_config)
             .await;
 
+        self.session_grant_target_for_configured_audience(
+            url_builder,
+            arkret_config,
+            resolved,
+            requested_audience,
+        )
+    }
+
+    fn session_grant_target_for_configured_audience(
+        &self,
+        url_builder: &UrlBuilder,
+        arkret_config: &ArkretConfig,
+        resolved: &ResolvedPrincipalAudiences,
+        requested_audience: Option<&str>,
+    ) -> Result<UpstreamOidcSessionGrantTarget, String> {
         if let Some(requested_audience) = requested_audience
             .map(str::trim)
             .filter(|value| !value.is_empty())

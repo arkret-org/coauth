@@ -228,6 +228,9 @@ impl From<AuthorizationCodeExchangeError> for RouteError {
             AuthorizationCodeExchangeError::UnauthorizedClient(id) => Self::UnauthorizedClient(id),
             AuthorizationCodeExchangeError::GrantNotFound => Self::GrantNotFound,
             AuthorizationCodeExchangeError::InvalidGrant(id) => Self::InvalidGrant(id),
+            AuthorizationCodeExchangeError::AlreadyExchanged { grant_id, .. } => {
+                Self::InvalidGrant(grant_id)
+            }
             AuthorizationCodeExchangeError::PkceVerification(err) => Self::PkceVerification(err),
             AuthorizationCodeExchangeError::BadRequest => Self::BadRequest,
             AuthorizationCodeExchangeError::UnexpectedClient { was, expected } => {

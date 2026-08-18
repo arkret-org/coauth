@@ -19,9 +19,9 @@ use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
 };
 use coauth_data::{
-    BoxRepository, RepositoryAccess, SessionGrantCommitOutcome, SessionGrantExactOutcome,
-    SessionGrantOperation, SessionGrantProofAuthorization, UpstreamOAuthProviderDiscoveryMode,
-    User,
+    AuthorizationGrant, BoxRepository, RepositoryAccess, Session, SessionGrantCommitOutcome,
+    SessionGrantExactOutcome, SessionGrantOperation, SessionGrantProofAuthorization,
+    UpstreamOAuthProviderDiscoveryMode, User,
 };
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
@@ -37,6 +37,10 @@ use ulid::Ulid;
 
 use super::{DepotExt, DpopSessionBinding, RouteError, make_clock, make_rng};
 use crate::handlers::arkret::{self, SessionGrantMaterial};
+use crate::handlers::oauth::token_service::{
+    AuthorizationCodeExchangeError, ValidatedAuthorizationCode, end_session_on_code_reuse,
+    validate_authorization_code,
+};
 use crate::oidc_client::requests::discovery;
 use crate::oidc_client::types::client_credentials::ClientCredentials;
 use crate::outbound_http::{self, RequestBuilderExt as _};
@@ -606,6 +610,324 @@ pub(crate) async fn exchange_oidc_code_for_account_handoff(
     {
         OidcExchangeResult::AccountHandoff(success) => Ok(*success),
         OidcExchangeResult::SessionGrant(_) => unreachable!("account-handoff exchange intent"),
+    }
+}
+
+/// Successful in-process local-issuer authentication for account-handoff
+/// creation. Carries the authoritative rows the caller needs to finish the
+/// handoff in its own transaction: the user, the bound sessions, and the
+/// still-unconsumed authorization grant (row-locked `FOR UPDATE`).
+pub(crate) struct LocalHandoffAuthentication {
+    pub user: User,
+    pub browser_session_id: Ulid,
+    pub oauth_session: Session,
+    pub authorization_grant: AuthorizationGrant,
+    pub audience: String,
+}
+
+/// Authenticate a local-issuer OIDC authorization-code proof for account
+/// handoff creation without any issuer self-call.
+///
+/// This replaces the old discovery/token/introspection/userinfo HTTP loop for
+/// the `LocalCoauth` handoff path. It performs the same binding checks the
+/// bridge always applied locally (PKCE, state, nonce, exact redirect URI,
+/// client id, public-client authentication method), delegates the grant
+/// stage/session/client/PKCE validation to the shared
+/// [`validate_authorization_code`] core (which row-locks the grant
+/// `FOR UPDATE`), and keeps the safety gates the skipped HTTP handlers used
+/// to enforce: an active OAuth session, an active account, and the `openid`
+/// scope.
+///
+/// The grant is NOT consumed here: the caller consumes it with `exchange` in
+/// its own transaction so code consumption and the handoff outcome commit
+/// atomically. The repository is never saved or cancelled by this function,
+/// and no outbound HTTP is performed.
+pub(crate) async fn authenticate_local_handoff_code(
+    depot: &Depot,
+    repo: &mut BoxRepository,
+    clock: &impl coauth_data::Clock,
+    input: &OidcCodeExchangeInput,
+) -> Result<LocalHandoffAuthentication, OidcExchangeError> {
+    let url_builder = depot
+        .url_builder()
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+    let arkret_config = depot
+        .arkret_config()
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+    let upstream_oidc = depot
+        .upstream_oidc_service()
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+
+    // This helper only serves the local issuer; the caller routes federated
+    // issuers to `exchange_oidc_code_for_account_handoff`.
+    let issuer = url::Url::parse(input.issuer.trim())
+        .map_err(|_| OidcExchangeError::proof_invalid("issuer must be a valid absolute URI"))?;
+    if issuer != url_builder.oidc_issuer() {
+        return Err(OidcExchangeError::new(
+            "internal_error",
+            "local handoff authentication called for a non-local issuer",
+        ));
+    }
+
+    // --- structural validation of the proof fields ------------------------
+    if input.code_verifier.trim().is_empty() {
+        return Err(OidcExchangeError::proof_invalid(
+            "code_verifier is required and the authorization_code must have been issued with PKCE",
+        ));
+    }
+    if input.authorization_code.trim().is_empty()
+        || input.redirect_uri.trim().is_empty()
+        || input.issuer.trim().is_empty()
+        || input.client_id.trim().is_empty()
+        || input.state.trim().is_empty()
+        || input.nonce.trim().is_empty()
+    {
+        return Err(OidcExchangeError::proof_invalid(
+            "authorization_code, redirect_uri, issuer, client_id, state, and nonce are required for oidc_code_exchange",
+        ));
+    }
+    let redirect_uri = url::Url::parse(input.redirect_uri.trim()).map_err(|_| {
+        OidcExchangeError::proof_invalid("redirect_uri must be a valid absolute URI")
+    })?;
+
+    // --- handoff-specific binding checks (unchanged from the self-call) ---
+    let authz_grant = repo
+        .oauth_authorization_grant()
+        .find_by_code(input.authorization_code.trim())
+        .await
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+        .ok_or_else(|| {
+            OidcExchangeError::new(
+                "invalid_authorization_code",
+                "authorization_code was not issued by this coauth OAuth authorization server",
+            )
+        })?;
+    let authz_code = authz_grant.code.as_ref().ok_or_else(|| {
+        OidcExchangeError::new(
+            "invalid_authorization_code",
+            "authorization_code grant does not contain an authorization_code payload",
+        )
+    })?;
+    let pkce = authz_code.pkce.as_ref().ok_or_else(|| {
+        OidcExchangeError::proof_invalid(
+            "authorization_code was not issued with PKCE; OIDC exchange requires S256 PKCE",
+        )
+    })?;
+    pkce.verify(input.code_verifier.trim()).map_err(|error| {
+        OidcExchangeError::proof_invalid(format!(
+            "PKCE verifier did not match authorization_code challenge: {error}"
+        ))
+    })?;
+
+    // State binding: the proof's `state` MUST equal the state coauth recorded
+    // on the authorization grant when the authorize request was issued.
+    // Constant-time compare (COA-SEC-04): avoid a matching-prefix timing side
+    // channel on the recorded grant state.
+    if let Some(expected_state) = authz_grant.state.as_deref()
+        && !crate::util::constant_time_token_eq(input.state.trim(), expected_state)
+    {
+        // The expected state is an internal value bound to the grant; never
+        // reflect it (or the supplied state) in the client-facing envelope.
+        tracing::debug!(
+            target: "coauth.oidc_exchange",
+            expected_state = %expected_state,
+            supplied_state = %input.state.trim(),
+            "callback state mismatch",
+        );
+        return Err(OidcExchangeError::proof_invalid(
+            "callback state mismatch: the proof state does not match the authorization_code",
+        ));
+    }
+    // Nonce binding (id_token nonce equivalent for the local issuer).
+    validate_returned_nonce(authz_grant.nonce.as_deref(), input.nonce.trim())
+        .map_err(OidcExchangeError::proof_invalid)?;
+
+    if authz_grant.redirect_uri != redirect_uri {
+        return Err(OidcExchangeError::proof_invalid(format!(
+            "authorization_code was issued for redirect_uri={} rather than {}",
+            authz_grant.redirect_uri, redirect_uri
+        )));
+    }
+
+    let oauth_client = repo
+        .oauth_client()
+        .lookup(authz_grant.client_id)
+        .await
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+        .ok_or_else(|| {
+            OidcExchangeError::new(
+                "invalid_authorization_code",
+                format!(
+                    "authorization_code references missing oauth_client={}",
+                    authz_grant.client_id
+                ),
+            )
+        })?;
+    if oauth_client
+        .resolve_redirect_uri(&Some(redirect_uri.clone()))
+        .is_err()
+    {
+        return Err(OidcExchangeError::proof_invalid(format!(
+            "authorization_code client={} no longer allows redirect_uri={}",
+            oauth_client.client_id, redirect_uri
+        )));
+    }
+    if oauth_client.client_id != input.client_id.trim() {
+        return Err(OidcExchangeError::new(
+            "invalid_client",
+            format!(
+                "authorization_code was issued for client_id={} rather than {}",
+                oauth_client.client_id,
+                input.client_id.trim()
+            ),
+        ));
+    }
+    if oauth_client.token_endpoint_auth_method.as_ref()
+        != Some(&OAuthClientAuthenticationMethod::None)
+    {
+        return Err(OidcExchangeError::new(
+            "invalid_client",
+            format!(
+                "authorization_code client_id={} requires token_endpoint_auth_method={}; the OIDC bridge only supports public clients with token_endpoint_auth_method=none",
+                oauth_client.client_id,
+                oauth_client
+                    .token_endpoint_auth_method
+                    .as_ref()
+                    .map_or_else(|| "missing".to_owned(), ToString::to_string)
+            ),
+        ));
+    }
+
+    // --- shared grant/session validation core (locks the grant row) -------
+    let oauth_code_grant = OAuthAuthorizationCodeGrant {
+        code: input.authorization_code.trim().to_owned(),
+        redirect_uri: Some(redirect_uri),
+        code_verifier: Some(input.code_verifier.trim().to_owned()),
+    };
+    let validated = match validate_authorization_code(repo, clock, &oauth_code_grant, &oauth_client)
+        .await
+    {
+        Ok(validated) => validated,
+        Err(AuthorizationCodeExchangeError::AlreadyExchanged {
+            session_id,
+            beyond_reuse_window,
+            ..
+        }) => {
+            // Preserve the token endpoint's replay defence: a code replayed
+            // beyond the reuse window ends the potentially compromised
+            // session. This transaction holds the grant row lock and must
+            // stay rollback-clean, so the session termination commits through
+            // a separate repository (it only touches the session row, so the
+            // lock order cannot cycle).
+            if beyond_reuse_window {
+                let kill_repo = depot
+                    .repo()
+                    .await
+                    .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+                end_session_on_code_reuse(kill_repo, clock, session_id)
+                    .await
+                    .map_err(|error| {
+                        OidcExchangeError::new(
+                            "internal_error",
+                            format!(
+                                "failed to end the session bound to a replayed authorization_code: {error}"
+                            ),
+                        )
+                    })?;
+            }
+            return Err(OidcExchangeError::new(
+                "invalid_authorization_code",
+                "authorization_code was already exchanged",
+            ));
+        }
+        Err(error) => return Err(map_local_authorization_code_error(error)),
+    };
+    let ValidatedAuthorizationCode {
+        authorization_grant,
+        session: oauth_session,
+        browser_session,
+    } = validated;
+
+    // --- gates previously enforced by the self-introspection / userinfo ---
+    // The skipped HTTP handlers rejected an inactive OAuth session, an
+    // inactive account, and a session without the `openid` scope; apply the
+    // same gates directly to the authoritative rows.
+    if !oauth_session.is_valid() {
+        return Err(OidcExchangeError::new(
+            "invalid_authorization_code",
+            "authorization_code is bound to an inactive OAuth session",
+        ));
+    }
+    let user = browser_session.user.clone();
+    if !user.is_valid() {
+        return Err(OidcExchangeError::new(
+            "invalid_authorization_code",
+            "authorization_code is bound to an inactive account",
+        ));
+    }
+    if !oauth_session
+        .scope
+        .contains(&coauth_oauth_types::scope::OPENID)
+    {
+        return Err(OidcExchangeError::new(
+            "invalid_authorization_code",
+            "authorization_code OAuth session does not carry the openid scope",
+        ));
+    }
+
+    // Purely local, fail-closed audience resolution: no network refresh may
+    // happen while the caller's transaction is open.
+    let grant_target = upstream_oidc
+        .session_grant_target_for_configured_audience(
+            &url_builder,
+            &arkret_config,
+            crate::services::resolved_principal_audiences::shared(),
+            input.requested_audience.as_deref(),
+        )
+        .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
+
+    Ok(LocalHandoffAuthentication {
+        user,
+        browser_session_id: browser_session.id,
+        oauth_session,
+        authorization_grant,
+        audience: grant_target.audience,
+    })
+}
+
+/// Map the shared authorization-code validation failures onto the exchange
+/// error codes the removed self-call path produced from the token endpoint's
+/// HTTP responses, so the client-visible envelope stays unchanged. The
+/// mapping is exhaustive over the typed error instead of matching on the
+/// token endpoint's error description strings.
+fn map_local_authorization_code_error(error: AuthorizationCodeExchangeError) -> OidcExchangeError {
+    match error {
+        AuthorizationCodeExchangeError::UnauthorizedClient(_)
+        | AuthorizationCodeExchangeError::UnexpectedClient { .. } => OidcExchangeError::new(
+            "invalid_client",
+            format!("local authorization_code validation rejected the client: {error}"),
+        ),
+        AuthorizationCodeExchangeError::GrantNotFound
+        | AuthorizationCodeExchangeError::InvalidGrant(_)
+        | AuthorizationCodeExchangeError::AlreadyExchanged { .. } => OidcExchangeError::new(
+            "invalid_authorization_code",
+            format!("local authorization_code validation rejected the grant: {error}"),
+        ),
+        AuthorizationCodeExchangeError::PkceVerification(_) => OidcExchangeError::proof_invalid(
+            format!("PKCE verifier did not match authorization_code challenge: {error}"),
+        ),
+        AuthorizationCodeExchangeError::BadRequest => OidcExchangeError::new(
+            "invalid_request",
+            "local authorization_code validation rejected the request: missing or mismatched PKCE parameters",
+        ),
+        AuthorizationCodeExchangeError::NoSuchBrowserSession(_)
+        | AuthorizationCodeExchangeError::NoSuchOAuthSession(_)
+        | AuthorizationCodeExchangeError::ProvisionDeviceFailed(_)
+        | AuthorizationCodeExchangeError::Repository(_)
+        | AuthorizationCodeExchangeError::Internal(_) => OidcExchangeError::new(
+            "internal_error",
+            format!("local authorization_code validation failed: {error}"),
+        ),
     }
 }
 
@@ -1460,15 +1782,14 @@ async fn exchange_oidc_code(
         .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
     let user = &browser_session.user;
     if intent == OidcExchangeIntent::AccountHandoff {
-        let success = OidcHandoffExchangeSuccess {
-            user: user.clone(),
-            browser_session_id: Some(browser_session.id),
-            audience: grant_target.audience,
-        };
-        repo.cancel()
-            .await
-            .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
-        return Ok(OidcExchangeResult::AccountHandoff(Box::new(success)));
+        // Account-handoff creation no longer reaches this branch: the local
+        // issuer path is authenticated in-process by
+        // `authenticate_local_handoff_code`, so reaching the self-call branch
+        // with the handoff intent is a programming error.
+        return Err(OidcExchangeError::new(
+            "internal_error",
+            "account handoff intent must not reach the local OIDC self-call branch",
+        ));
     }
     let principal = load_verified_principal_did_committed(depot, user, &grant_target.audience)
         .await
@@ -1968,5 +2289,72 @@ mod tests {
         response.assert_status(StatusCode::UNAUTHORIZED);
         let body: serde_json::Value = response.json();
         assert_eq!(body["error"]["code"], "did_proof_required");
+    }
+
+    /// The typed mapping of shared validation-core failures must reproduce
+    /// the exchange error codes the removed self-call derived from the token
+    /// endpoint's HTTP status + error-description strings.
+    #[test]
+    fn local_code_error_mapping_matches_self_call_baseline() {
+        let pkce_failure = coauth_data::Pkce {
+            challenge_method: coauth_iana::oauth::PkceCodeChallengeMethod::S256,
+            challenge: "A".repeat(43),
+        }
+        .verify(&"B".repeat(43))
+        .expect_err("a mismatched verifier must fail PKCE verification");
+
+        let cases: [(AuthorizationCodeExchangeError, &str); 10] = [
+            (
+                AuthorizationCodeExchangeError::GrantNotFound,
+                "invalid_authorization_code",
+            ),
+            (
+                AuthorizationCodeExchangeError::InvalidGrant(Ulid::new()),
+                "invalid_authorization_code",
+            ),
+            (
+                AuthorizationCodeExchangeError::AlreadyExchanged {
+                    grant_id: Ulid::new(),
+                    session_id: Ulid::new(),
+                    beyond_reuse_window: false,
+                },
+                "invalid_authorization_code",
+            ),
+            (
+                AuthorizationCodeExchangeError::PkceVerification(pkce_failure),
+                arkret_wire::ReasonCode::PROOF_INVALID,
+            ),
+            (
+                AuthorizationCodeExchangeError::BadRequest,
+                "invalid_request",
+            ),
+            (
+                AuthorizationCodeExchangeError::UnauthorizedClient(Ulid::new()),
+                "invalid_client",
+            ),
+            (
+                AuthorizationCodeExchangeError::UnexpectedClient {
+                    was: Ulid::new(),
+                    expected: Ulid::new(),
+                },
+                "invalid_client",
+            ),
+            (
+                AuthorizationCodeExchangeError::NoSuchOAuthSession(Ulid::new()),
+                "internal_error",
+            ),
+            (
+                AuthorizationCodeExchangeError::NoSuchBrowserSession(Ulid::new()),
+                "internal_error",
+            ),
+            (
+                AuthorizationCodeExchangeError::Internal("boom".into()),
+                "internal_error",
+            ),
+        ];
+        for (error, expected_code) in cases {
+            let mapped = map_local_authorization_code_error(error);
+            assert_eq!(mapped.code, expected_code);
+        }
     }
 }

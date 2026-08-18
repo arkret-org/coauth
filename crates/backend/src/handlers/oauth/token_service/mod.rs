@@ -24,6 +24,9 @@ mod refresh_token;
 mod tests;
 
 pub use authorization_code::exchange_authorization_code;
+pub(crate) use authorization_code::{
+    ValidatedAuthorizationCode, end_session_on_code_reuse, validate_authorization_code,
+};
 pub use client_credentials::handle_client_credentials;
 pub use device_code::exchange_device_code;
 pub use refresh_token::handle_refresh_token;
@@ -82,6 +85,15 @@ pub enum AuthorizationCodeExchangeError {
 
     #[error("invalid grant {0}")]
     InvalidGrant(Ulid),
+
+    #[error("authorization grant {grant_id} was already exchanged")]
+    AlreadyExchanged {
+        grant_id: Ulid,
+        session_id: Ulid,
+        /// Whether the first exchange happened beyond the short reuse window,
+        /// meaning the bound session must be treated as compromised.
+        beyond_reuse_window: bool,
+    },
 
     #[error("pkce verification failed")]
     PkceVerification(#[from] CodeChallengeError),

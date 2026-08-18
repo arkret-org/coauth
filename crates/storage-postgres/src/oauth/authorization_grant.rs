@@ -304,6 +304,28 @@ impl OAuthAuthorizationGrantRepository for PgOAuthAuthorizationGrantRepository<'
     }
 
     #[tracing::instrument(
+        name = "db.oauth_authorization_grant.find_by_code_for_update",
+        skip_all,
+        err
+    )]
+    async fn find_by_code_for_update(
+        &mut self,
+        code: &str,
+    ) -> Result<Option<AuthorizationGrant>, Self::Error> {
+        let res = oauth_authorization_grants::table
+            .filter(oauth_authorization_grants::authorization_code.eq(code))
+            .for_update()
+            .select(GrantLookup::as_select())
+            .first::<GrantLookup>(self.conn)
+            .await
+            .optional()?;
+
+        let Some(res) = res else { return Ok(None) };
+
+        Ok(Some(res.try_into()?))
+    }
+
+    #[tracing::instrument(
         name = "db.oauth_authorization_grant.fulfill",
         skip_all,
         fields(

@@ -82,6 +82,28 @@ pub trait OAuthAuthorizationGrantRepository: Send + Sync {
     async fn find_by_code(&mut self, code: &str)
     -> Result<Option<AuthorizationGrant>, Self::Error>;
 
+    /// Find an authorization grant by its code, locking the row `FOR UPDATE`
+    ///
+    /// The row lock serializes concurrent consumption of the same
+    /// authorization code: a contender blocks until the holder of the lock
+    /// commits or rolls back, and then observes the final grant stage. Callers
+    /// consuming the code (token exchange, local handoff authentication) must
+    /// use this variant so a code can be consumed exactly once.
+    ///
+    /// Returns the authorization grant if found, `None` otherwise
+    ///
+    /// # Parameters
+    ///
+    /// * `code`: The code of the authorization grant to lookup
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] if the underlying repository fails
+    async fn find_by_code_for_update(
+        &mut self,
+        code: &str,
+    ) -> Result<Option<AuthorizationGrant>, Self::Error>;
+
     /// Fulfill an authorization grant, by giving the [`Session`] that it
     /// created
     ///
@@ -166,6 +188,11 @@ repository_impl!(OAuthAuthorizationGrantRepository:
 
     async fn find_by_code(&mut self, code: &str)
         -> Result<Option<AuthorizationGrant>, Self::Error>;
+
+    async fn find_by_code_for_update(
+        &mut self,
+        code: &str,
+    ) -> Result<Option<AuthorizationGrant>, Self::Error>;
 
     async fn fulfill(
         &mut self,

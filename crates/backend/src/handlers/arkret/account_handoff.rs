@@ -12,11 +12,11 @@ use coauth_data::{
     AccountHandoffAuthorizationCheckpoint, AccountHandoffCreation, AccountHandoffCreationAttempt,
     AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve,
     AccountHandoffCreationAttemptState, AccountHandoffGrant, AccountHandoffGrantInput,
-    DidBindingChallengeInput, DidBindingChallengeIssue, IdentityAbandonmentChallengeInput,
-    IdentityAbandonmentChallengeIssue, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
-    IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
-    IdentityCreationLeaseRiskDecision, NewAccountHandoffCreationAttempt, RepositoryAccess as _,
-    Ulid, new_id,
+    BoxRepository, DidBindingChallengeInput, DidBindingChallengeIssue,
+    IdentityAbandonmentChallengeInput, IdentityAbandonmentChallengeIssue,
+    IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
+    IdentityBindingChallengeIssue, IdentityCreationLeaseRiskDecision,
+    NewAccountHandoffCreationAttempt, RepositoryAccess as _, Ulid, new_id,
 };
 use rand_core::RngCore;
 use salvo::prelude::*;
@@ -25,7 +25,7 @@ use sha2::Digest as _;
 use super::session_grant::map_oidc_exchange_error;
 use super::{ArkretRouteError, DepotExt, trust_domain_for};
 use crate::handlers::account::auth::oidc_bridge::{
-    OidcCodeExchangeInput, exchange_oidc_code_for_account_handoff,
+    OidcCodeExchangeInput, authenticate_local_handoff_code, exchange_oidc_code_for_account_handoff,
 };
 use crate::handlers::account::auth::{
     DpopSessionBinding, extract_dpop_binding_for_kickoff_without_replay,
@@ -221,6 +221,30 @@ pub async fn create_account_handoff(
     let dpop_jti_digest = sha256_hash(dpop_binding.jti.as_bytes())?;
     let clock = make_clock();
     let now = clock.now();
+
+    // The local-issuer path owns every piece of state the proof touches, so
+    // it authenticates in-process and commits once; the federated path keeps
+    // its durable fence around the external OIDC exchange. This is exactly
+    // the `UpstreamOidcExchangeMode::LocalCoauth` condition of
+    // `exchange_mode_for_issuer`; an unparseable issuer falls through to the
+    // federated path, which rejects it as `proof_invalid` like before.
+    if url::Url::parse(body.proof.issuer.trim())
+        .is_ok_and(|issuer| issuer == url_builder.oidc_issuer())
+    {
+        return create_local_account_handoff(
+            req,
+            depot,
+            &dpop_binding,
+            &body,
+            canonical_intent,
+            canonical_intent_digest,
+            authorization_code_digest,
+            dpop_jti_digest,
+            request_digest,
+        )
+        .await;
+    }
+
     let mut reserve_repo = depot.repo().await?;
     let reservation = reserve_repo
         .account_handoff()
@@ -354,6 +378,200 @@ pub async fn create_account_handoff(
         }
     };
     commit_authorized_handoff(depot, authorized_attempt, checkpoint).await
+}
+
+/// Local-issuer account-handoff creation as a single database transaction.
+///
+/// Unlike the federated path — which needs the durable `Reserved` fence
+/// around the external OIDC token exchange — every effect of the local path
+/// lives in this coauth's own persistence domain, so the attempt reservation,
+/// authorization-code consumption, DPoP JTI consumption, handoff/lease
+/// creation, and the exact canonical outcome all commit — or roll back —
+/// together. No outbound HTTP happens between the first write and the single
+/// `save()` at the end.
+#[allow(clippy::too_many_arguments)]
+async fn create_local_account_handoff(
+    req: &Request,
+    depot: &Depot,
+    dpop_binding: &DpopSessionBinding,
+    body: &AccountHandoffRequestBody,
+    canonical_intent: Vec<u8>,
+    canonical_intent_digest: arkret_identifiers::Hash,
+    authorization_code_digest: arkret_identifiers::Hash,
+    dpop_jti_digest: arkret_identifiers::Hash,
+    request_digest: arkret_identifiers::Hash,
+) -> Result<AccountHandoffCanonicalJson, ArkretRouteError> {
+    let url_builder = depot.url_builder()?;
+    let arkret_config = depot.arkret_config()?;
+    let clock = make_clock();
+    let now = clock.now();
+    let mut repo = depot.repo().await?;
+    let reservation = repo
+        .account_handoff()
+        .reserve_creation_attempt(NewAccountHandoffCreationAttempt {
+            request_id: body.request_id.clone(),
+            request_digest,
+            canonical_intent_digest: canonical_intent_digest.clone(),
+            canonical_intent,
+            holder_jkt: dpop_binding.jkt.clone(),
+            issuer: body.proof.issuer.clone(),
+            client_id: body.proof.client_id.clone(),
+            authorization_code_digest,
+            dpop_jti_digest,
+            retained_until: now + HANDOFF_ATTEMPT_RETENTION,
+            now,
+        })
+        .await?;
+    match reservation {
+        AccountHandoffCreationAttemptReserve::Reserved(_) => {}
+        // A durable `Authorized` attempt can only be a leftover from the
+        // previous multi-transaction orchestration; resume it without
+        // re-authenticating, exactly like the federated path does.
+        AccountHandoffCreationAttemptReserve::Pending(attempt)
+            if attempt.state == AccountHandoffCreationAttemptState::Authorized =>
+        {
+            repo.cancel().await.ok();
+            return commit_authorized_handoff(
+                depot,
+                attempt.clone(),
+                authorized_checkpoint(&attempt)?,
+            )
+            .await;
+        }
+        AccountHandoffCreationAttemptReserve::Replay(attempt) => {
+            repo.cancel().await.ok();
+            return replay_handoff_outcome(attempt);
+        }
+        AccountHandoffCreationAttemptReserve::Conflict(_) => {
+            repo.cancel().await.ok();
+            return Err(duplicate_handoff_conflict());
+        }
+        AccountHandoffCreationAttemptReserve::Pending(_)
+        | AccountHandoffCreationAttemptReserve::Indeterminate(_) => {
+            repo.cancel().await.ok();
+            return Err(indeterminate_handoff_replay());
+        }
+    }
+
+    let proof = &body.proof;
+    let input = OidcCodeExchangeInput {
+        authorization_code: proof.authorization_code.clone(),
+        code_verifier: proof.code_verifier.clone(),
+        redirect_uri: proof.redirect_uri.clone(),
+        issuer: proof.issuer.clone(),
+        client_id: proof.client_id.clone(),
+        state: proof.state.clone(),
+        nonce: proof.nonce.clone(),
+        device_id: String::new(),
+        expected_principal_id: String::new(),
+        requested_audience: Some(proof.audience.to_string()),
+    };
+    let authenticated =
+        match authenticate_local_handoff_code(depot, &mut repo, &clock, &input).await {
+            Ok(authenticated) => authenticated,
+            Err(error) => {
+                repo.cancel().await.ok();
+                tracing::error!(
+                    error_code = error.code,
+                    error_message = %error.message,
+                    "local OIDC authentication failed while creating an account handoff",
+                );
+                return Err(map_oidc_exchange_error(error));
+            }
+        };
+    if authenticated.audience != proof.audience.as_str() {
+        repo.cancel().await.ok();
+        return Err(ArkretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
+            "authenticated handoff audience does not match the request proof",
+        ));
+    }
+
+    // Consume the authorization code in the same transaction. A concurrent
+    // consumer of the same code serialized on the grant row lock taken during
+    // validation and has already lost.
+    repo.oauth_authorization_grant()
+        .exchange(&clock, authenticated.authorization_grant)
+        .await?;
+
+    let consumed = repo
+        .dpop_replay()
+        .consume_jti(dpop_replay_record(&dpop_binding.jti, now))
+        .await?;
+    if !consumed {
+        repo.cancel().await.ok();
+        return Err(indeterminate_handoff_replay());
+    }
+
+    let account_handle = canonical_account_handle(
+        &authenticated.user.localpart,
+        url_builder.public_hostname(),
+        arkret_config.trust_domain.as_deref(),
+    )?;
+    let checkpoint = AccountHandoffAuthorizationCheckpoint {
+        service_account_id: authenticated.user.id.to_string(),
+        browser_session_id: Some(authenticated.browser_session_id.to_string()),
+        audience: arkret_identifiers::DidCoreId::new(authenticated.audience)
+            .map_err(|error| failed_precondition(error.to_string()))?,
+        account_handle: account_handle.to_string(),
+        preferred_locale: authenticated
+            .user
+            .preferred_locale
+            .map(|locale| locale.code().to_owned()),
+    };
+    let checkpoint_result = repo
+        .account_handoff()
+        .checkpoint_creation_authorization(
+            &body.request_id,
+            &canonical_intent_digest,
+            &checkpoint,
+            now,
+        )
+        .await?;
+    let authorized_attempt = match checkpoint_result {
+        AccountHandoffCreationAttemptCommit::Committed(attempt)
+            if attempt.state == AccountHandoffCreationAttemptState::Authorized =>
+        {
+            attempt
+        }
+        AccountHandoffCreationAttemptCommit::Replay(attempt) => {
+            repo.cancel().await.ok();
+            return replay_handoff_outcome(attempt);
+        }
+        AccountHandoffCreationAttemptCommit::Conflict(_) => {
+            repo.cancel().await.ok();
+            return Err(duplicate_handoff_conflict());
+        }
+        AccountHandoffCreationAttemptCommit::Committed(_)
+        | AccountHandoffCreationAttemptCommit::Indeterminate(_) => {
+            repo.cancel().await.ok();
+            return Err(indeterminate_handoff_replay());
+        }
+    };
+
+    let bytes = match finalize_handoff_creation(
+        &mut repo,
+        &arkret_config,
+        &authorized_attempt,
+        &checkpoint,
+    )
+    .await
+    {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            repo.cancel().await.ok();
+            return Err(error);
+        }
+    };
+    repo.save().await?;
+
+    // Replace the activity side effect the removed self-call produced on the
+    // token/introspection/userinfo handlers; recorded once, after the commit.
+    crate::handlers::account::extract_bound_activity_tracker(req, depot)
+        .record_oauth_session(&clock, &authenticated.oauth_session)
+        .await;
+    Ok(AccountHandoffCanonicalJson(bytes))
 }
 
 /// Read-only reconciliation surface for an unexpired account handoff. The
@@ -500,6 +718,32 @@ async fn commit_authorized_handoff(
     attempt: AccountHandoffCreationAttempt,
     checkpoint: AccountHandoffAuthorizationCheckpoint,
 ) -> Result<AccountHandoffCanonicalJson, ArkretRouteError> {
+    let mut repo = depot.repo().await?;
+    match finalize_handoff_creation(&mut repo, &depot.arkret_config()?, &attempt, &checkpoint).await
+    {
+        Ok(bytes) => {
+            repo.save().await?;
+            Ok(AccountHandoffCanonicalJson(bytes))
+        }
+        Err(error) => {
+            repo.cancel().await.ok();
+            Err(error)
+        }
+    }
+}
+
+/// Create the handoff grant and identity-creation lease and record the exact
+/// canonical outcome on the attempt, inside the caller's transaction.
+///
+/// Shared by the single-transaction local-issuer path (which saves once at
+/// the end) and the federated resume path ([`commit_authorized_handoff`],
+/// which opens and saves its own transaction).
+async fn finalize_handoff_creation(
+    repo: &mut BoxRepository,
+    arkret_config: &coauth_config::ArkretConfig,
+    attempt: &AccountHandoffCreationAttempt,
+    checkpoint: &AccountHandoffAuthorizationCheckpoint,
+) -> Result<Vec<u8>, ArkretRouteError> {
     let service_account_id = Ulid::from_string(&checkpoint.service_account_id)
         .map_err(|_| indeterminate_handoff_replay())?;
     let browser_session_id = checkpoint
@@ -518,11 +762,8 @@ async fn commit_authorized_handoff(
     };
     let now = make_clock().now();
     let mut rng = make_rng();
-    let account_subject = account_subject(
-        &super::service_id_for(&depot.arkret_config()?),
-        service_account_id,
-    )?;
-    let mut repo = depot.repo().await?;
+    let account_subject =
+        account_subject(&super::service_id_for(arkret_config), service_account_id)?;
     let creation = repo
         .account_handoff()
         .create_with_lease(AccountHandoffGrantInput {
@@ -562,19 +803,11 @@ async fn commit_authorized_handoff(
         .await?;
     match committed {
         AccountHandoffCreationAttemptCommit::Committed(committed)
-        | AccountHandoffCreationAttemptCommit::Replay(committed) => {
-            let bytes = committed
-                .canonical_outcome
-                .ok_or_else(indeterminate_handoff_replay)?;
-            repo.save().await?;
-            Ok(AccountHandoffCanonicalJson(bytes))
-        }
-        AccountHandoffCreationAttemptCommit::Conflict(_) => {
-            repo.cancel().await.ok();
-            Err(duplicate_handoff_conflict())
-        }
+        | AccountHandoffCreationAttemptCommit::Replay(committed) => committed
+            .canonical_outcome
+            .ok_or_else(indeterminate_handoff_replay),
+        AccountHandoffCreationAttemptCommit::Conflict(_) => Err(duplicate_handoff_conflict()),
         AccountHandoffCreationAttemptCommit::Indeterminate(_) => {
-            repo.cancel().await.ok();
             Err(indeterminate_handoff_replay())
         }
     }
@@ -1278,7 +1511,242 @@ fn identity_abandonment_error(
 
 #[cfg(test)]
 mod tests {
+    use coauth_data::{AuthorizationCode, Pkce, SystemClock};
+    use coauth_iana::jose::JsonWebSignatureAlg;
+    use coauth_iana::oauth::{OAuthClientAuthenticationMethod, PkceCodeChallengeMethod};
+    use coauth_jose::jwa::AsymmetricSigningKey;
+    use coauth_jose::jwk::{JsonWebKeyPublicParameters, PublicJsonWebKey};
+    use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
+    use coauth_oauth_types::pkce::CodeChallengeMethodExt as _;
+    use coauth_oauth_types::requests::{GrantType, ResponseMode};
+    use coauth_oauth_types::scope::{OPENID, Scope};
+    use diesel_async::RunQueryDsl as _;
+    use ed25519_dalek::{Signer as _, SigningKey};
+    use rand_core::OsRng;
+
     use super::*;
+    use crate::handlers::test_utils::{
+        RequestBuilderExt as _, ResponseExt as _, TEST_PRINCIPAL_SERVER_AUDIENCE, TestState, setup,
+        unique_test_nonce,
+    };
+    use crate::services::dpop::DpopClaims;
+
+    const HANDOFF_PATH: &str = "/_arkret/gate/account/authentication-handoffs";
+
+    /// Seeded local-issuer state for one account-handoff exchange: a public
+    /// OIDC client, a user with a browser session, an `openid` OAuth session,
+    /// and a fulfilled authorization grant ready to be consumed.
+    struct LocalHandoffSeed {
+        client_id: String,
+        authorization_code: String,
+        code_verifier: String,
+        redirect_uri: String,
+        state: String,
+        nonce: String,
+        authorization_grant_id: Ulid,
+    }
+
+    async fn seed_local_handoff(state: &TestState, label: &str) -> LocalHandoffSeed {
+        let mut repo = state.repository().await.unwrap();
+        let mut rng = state.rng();
+        let clock = SystemClock::default();
+        let redirect_uri: url::Url = "https://client.example/callback".parse().unwrap();
+        let client = repo
+            .oauth_client()
+            .add(
+                &mut rng,
+                &clock,
+                vec![redirect_uri.clone()],
+                None,
+                None,
+                None,
+                vec![GrantType::AuthorizationCode],
+                Some(format!("{label} client")),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(OAuthClientAuthenticationMethod::None),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        let user = repo
+            .user()
+            .add(&mut rng, &clock, label.to_owned())
+            .await
+            .unwrap();
+        let browser_session = repo
+            .browser_session()
+            .add(&mut rng, &clock, &user, None)
+            .await
+            .unwrap();
+        let scope = Scope::from_iter([OPENID]);
+        let session = repo
+            .oauth_session()
+            .add_from_browser_session(&mut rng, &clock, &client, &browser_session, scope.clone())
+            .await
+            .unwrap();
+        // PKCE verifiers must be 43–128 unreserved characters.
+        let code_verifier = format!("{label}-verifier-{:0<24}", "");
+        let code_challenge = PkceCodeChallengeMethod::S256
+            .compute_challenge(&code_verifier)
+            .unwrap()
+            .into_owned();
+        let authorization_code = format!("{label}-authorization-code");
+        let grant = repo
+            .oauth_authorization_grant()
+            .add(
+                &mut rng,
+                &clock,
+                &client,
+                redirect_uri,
+                scope,
+                Some(AuthorizationCode {
+                    code: authorization_code.clone(),
+                    pkce: Some(Pkce {
+                        challenge_method: PkceCodeChallengeMethod::S256,
+                        challenge: code_challenge,
+                    }),
+                }),
+                Some(format!("{label}-state")),
+                Some(format!("{label}-nonce")),
+                ResponseMode::Query,
+                false,
+                None,
+                Some("en".to_owned()),
+            )
+            .await
+            .unwrap();
+        let grant = repo
+            .oauth_authorization_grant()
+            .fulfill(&clock, &session, grant)
+            .await
+            .unwrap();
+        repo.save().await.unwrap();
+
+        LocalHandoffSeed {
+            client_id: client.client_id,
+            authorization_code,
+            code_verifier,
+            redirect_uri: "https://client.example/callback".to_owned(),
+            state: format!("{label}-state"),
+            nonce: format!("{label}-nonce"),
+            authorization_grant_id: grant.id,
+        }
+    }
+
+    fn dpop_proof(signing: &SigningKey, jti: String) -> String {
+        let verifying = signing.verifying_key();
+        let public = PublicJsonWebKey::new(JsonWebKeyPublicParameters::from(&verifying))
+            .with_alg(JsonWebSignatureAlg::Ed25519);
+        let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::Ed25519)
+            .with_typ("dpop+jwt".to_owned())
+            .with_jwk(public);
+        let signer = AsymmetricSigningKey::ed25519(signing.clone());
+        let claims = DpopClaims {
+            jti,
+            htm: "POST".to_owned(),
+            htu: format!("https://example.com{HANDOFF_PATH}"),
+            iat: chrono::Utc::now().timestamp(),
+            ath: None,
+            nonce: None,
+        };
+        Jwt::sign(header, claims, &signer)
+            .expect("DPoP sign")
+            .into_string()
+    }
+
+    fn test_request_id(tag: u64) -> arkret_identifiers::RequestId {
+        arkret_identifiers::RequestId::new(format!("ak:request:00000000-0000-7000-8000-{tag:012x}"))
+            .unwrap()
+    }
+
+    fn local_handoff_request(
+        state: &TestState,
+        seed: &LocalHandoffSeed,
+        signing: &SigningKey,
+        request_id: arkret_identifiers::RequestId,
+        jti: String,
+        audience: &str,
+        code_verifier: Option<&str>,
+        state_value: Option<&str>,
+    ) -> hyper::Request<String> {
+        let proof = arkret_models_identity::UnsignedAccountHandoffAuthenticationProof {
+            challenge: seed.nonce.clone(),
+            audience: arkret_identifiers::DidCoreId::new(audience).unwrap(),
+            issuer: state.url_builder.oidc_issuer().to_string(),
+            client_id: seed.client_id.clone(),
+            redirect_uri: seed.redirect_uri.clone(),
+            state: state_value.unwrap_or(&seed.state).to_owned(),
+            nonce: seed.nonce.clone(),
+            authorization_code: seed.authorization_code.clone(),
+            code_verifier: code_verifier.unwrap_or(&seed.code_verifier).to_owned(),
+        };
+        let unsigned =
+            arkret_models_identity::UnsignedAccountHandoffRequestBody::new(request_id, proof)
+                .unwrap();
+        let signature = signing.sign(&unsigned.canonical_signing_bytes().unwrap());
+        let body = unsigned
+            .attach_signature(
+                arkret_wire::Base64UrlString::new(Base64UrlUnpadded::encode_string(
+                    &signature.to_bytes(),
+                ))
+                .unwrap(),
+            )
+            .unwrap();
+        hyper::Request::post(HANDOFF_PATH)
+            .header("dpop", dpop_proof(signing, jti))
+            .json(body)
+    }
+
+    /// A `TestState` wired with the single configured principal server the
+    /// audience resolution requires, or `None` when no test database is
+    /// available.
+    async fn local_handoff_state()
+    -> Option<(TestState, coauth_storage_postgres::test_utils::TestDatabase)> {
+        let database = coauth_storage_postgres::test_utils::setup_test_pool().await?;
+        let state = TestState::from_pool_with_principal_server(database.clone())
+            .await
+            .unwrap();
+        Some((state, database))
+    }
+
+    async fn grant_stage_label(state: &TestState, grant_id: Ulid) -> String {
+        let mut repo = state.repository().await.unwrap();
+        let grant = repo
+            .oauth_authorization_grant()
+            .lookup(grant_id)
+            .await
+            .unwrap()
+            .expect("authorization grant should exist");
+        repo.cancel().await.unwrap();
+        match grant.stage {
+            coauth_data::AuthorizationGrantStage::Pending => "pending".to_owned(),
+            coauth_data::AuthorizationGrantStage::Fulfilled { .. } => "fulfilled".to_owned(),
+            coauth_data::AuthorizationGrantStage::Exchanged { .. } => "exchanged".to_owned(),
+            coauth_data::AuthorizationGrantStage::Cancelled { .. } => "cancelled".to_owned(),
+        }
+    }
+
+    async fn table_count(state: &TestState, table: &str) -> i64 {
+        #[derive(diesel::QueryableByName)]
+        struct CountRow {
+            #[diesel(sql_type = diesel::sql_types::BigInt)]
+            count: i64,
+        }
+        let mut conn = state.repository_factory.pool().get().await.unwrap();
+        diesel::sql_query(format!("SELECT COUNT(*) AS count FROM {table}"))
+            .get_result::<CountRow>(&mut conn)
+            .await
+            .unwrap()
+            .count
+    }
 
     fn handoff_request() -> AccountHandoffRequestBody {
         let mut body = AccountHandoffRequestBody {
@@ -1368,5 +1836,339 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    /// Local-issuer handoff creation succeeds with an HTTP client that
+    /// rejects every request, proving the flow performs zero issuer
+    /// self-calls (discovery / token / userinfo) and mints no intermediate
+    /// OAuth tokens.
+    #[tokio::test]
+    async fn local_handoff_succeeds_without_any_outbound_http() {
+        setup();
+        let Some((mut state, _database)) = local_handoff_state().await else {
+            return;
+        };
+        state.http_client = reqwest::Client::builder()
+            .proxy(reqwest::Proxy::all("http://127.0.0.1:9").unwrap())
+            .build()
+            .unwrap();
+        let seed = seed_local_handoff(&state, "localok").await;
+        let signing = SigningKey::generate(&mut OsRng);
+        let request_id = test_request_id(unique_test_nonce());
+
+        let response = state
+            .request(local_handoff_request(
+                &state,
+                &seed,
+                &signing,
+                request_id.clone(),
+                format!("local-ok-jti-{}", unique_test_nonce()),
+                TEST_PRINCIPAL_SERVER_AUDIENCE,
+                None,
+                None,
+            ))
+            .await;
+
+        response.assert_status(StatusCode::OK);
+        let outcome: serde_json::Value = response.json();
+        assert_eq!(
+            outcome["request_id"].as_str(),
+            Some(request_id.as_str()),
+            "outcome should echo the request id: {outcome}"
+        );
+        assert!(
+            outcome["account_handoff_grant"].as_str().is_some(),
+            "outcome should carry the handoff grant: {outcome}"
+        );
+
+        // The authorization code was consumed, but no intermediate OAuth
+        // tokens were generated, and the attempt was committed exactly once.
+        assert_eq!(
+            grant_stage_label(&state, seed.authorization_grant_id).await,
+            "exchanged"
+        );
+        assert_eq!(table_count(&state, "oauth_access_tokens").await, 0);
+        assert_eq!(table_count(&state, "oauth_refresh_tokens").await, 0);
+        assert_eq!(
+            table_count(&state, "account_handoff_creation_attempts").await,
+            1
+        );
+        assert_eq!(table_count(&state, "account_handoff_grants").await, 1);
+        assert_eq!(table_count(&state, "identity_creation_leases").await, 1);
+    }
+
+    /// An exact retry of a committed request replays the stored canonical
+    /// outcome byte for byte, without re-consuming anything.
+    #[tokio::test]
+    async fn local_handoff_exact_replay_returns_identical_outcome() {
+        setup();
+        let Some((state, _database)) = local_handoff_state().await else {
+            return;
+        };
+        let seed = seed_local_handoff(&state, "localreplay").await;
+        let signing = SigningKey::generate(&mut OsRng);
+        let request_id = test_request_id(unique_test_nonce());
+        let jti = format!("local-replay-jti-{}", unique_test_nonce());
+
+        let first = state
+            .request(local_handoff_request(
+                &state,
+                &seed,
+                &signing,
+                request_id.clone(),
+                jti.clone(),
+                TEST_PRINCIPAL_SERVER_AUDIENCE,
+                None,
+                None,
+            ))
+            .await;
+        first.assert_status(StatusCode::OK);
+
+        let second = state
+            .request(local_handoff_request(
+                &state,
+                &seed,
+                &signing,
+                request_id,
+                jti,
+                TEST_PRINCIPAL_SERVER_AUDIENCE,
+                None,
+                None,
+            ))
+            .await;
+        second.assert_status(StatusCode::OK);
+
+        assert_eq!(
+            first.body(),
+            second.body(),
+            "exact replay must return the byte-identical canonical outcome"
+        );
+        assert_eq!(
+            table_count(&state, "account_handoff_creation_attempts").await,
+            1
+        );
+        assert_eq!(table_count(&state, "account_handoff_grants").await, 1);
+    }
+
+    /// A failure after the attempt reservation (here: PKCE verifier
+    /// mismatch) rolls the whole transaction back: the authorization code
+    /// stays consumable, no attempt/handoff/lease row is left behind, and the
+    /// same request id can be retried successfully.
+    #[tokio::test]
+    async fn local_handoff_mid_failure_leaves_no_durable_trace() {
+        setup();
+        let Some((state, _database)) = local_handoff_state().await else {
+            return;
+        };
+        let seed = seed_local_handoff(&state, "localfail").await;
+        let signing = SigningKey::generate(&mut OsRng);
+        let request_id = test_request_id(unique_test_nonce());
+        let jti = format!("local-fail-jti-{}", unique_test_nonce());
+
+        let failed = state
+            .request(local_handoff_request(
+                &state,
+                &seed,
+                &signing,
+                request_id.clone(),
+                jti.clone(),
+                TEST_PRINCIPAL_SERVER_AUDIENCE,
+                Some("wrong-verifier-wrong-verifier-wrong-verifie"),
+                None,
+            ))
+            .await;
+        failed.assert_status(StatusCode::UNAUTHORIZED);
+        let envelope: serde_json::Value = failed.json();
+        assert_eq!(
+            envelope["error"]["code"].as_str(),
+            Some(arkret_wire::ReasonCode::PROOF_INVALID)
+        );
+
+        assert_eq!(
+            grant_stage_label(&state, seed.authorization_grant_id).await,
+            "fulfilled",
+            "the authorization code must stay unconsumed after a failed attempt"
+        );
+        assert_eq!(
+            table_count(&state, "account_handoff_creation_attempts").await,
+            0
+        );
+        assert_eq!(table_count(&state, "account_handoff_grants").await, 0);
+        assert_eq!(table_count(&state, "identity_creation_leases").await, 0);
+
+        // The same request id is not fenced: a corrected retry succeeds.
+        let retried = state
+            .request(local_handoff_request(
+                &state,
+                &seed,
+                &signing,
+                request_id,
+                jti,
+                TEST_PRINCIPAL_SERVER_AUDIENCE,
+                None,
+                None,
+            ))
+            .await;
+        retried.assert_status(StatusCode::OK);
+        assert_eq!(
+            grant_stage_label(&state, seed.authorization_grant_id).await,
+            "exchanged"
+        );
+    }
+
+    /// Two concurrent handoffs over the same authorization code (different
+    /// request ids and DPoP JTIs) serialize on the grant row lock: exactly
+    /// one wins, and the loser gets the same `proof_invalid` envelope the old
+    /// self-call path produced for an already-exchanged code.
+    #[tokio::test]
+    async fn local_handoff_concurrent_code_consumption_has_single_winner() {
+        setup();
+        let Some((state, _database)) = local_handoff_state().await else {
+            return;
+        };
+        let seed = seed_local_handoff(&state, "localrace").await;
+        let signing = SigningKey::generate(&mut OsRng);
+
+        let first = state.request(local_handoff_request(
+            &state,
+            &seed,
+            &signing,
+            test_request_id(unique_test_nonce()),
+            format!("local-race-jti-a-{}", unique_test_nonce()),
+            TEST_PRINCIPAL_SERVER_AUDIENCE,
+            None,
+            None,
+        ));
+        let second = state.request(local_handoff_request(
+            &state,
+            &seed,
+            &signing,
+            test_request_id(unique_test_nonce()),
+            format!("local-race-jti-b-{}", unique_test_nonce()),
+            TEST_PRINCIPAL_SERVER_AUDIENCE,
+            None,
+            None,
+        ));
+        let (first, second) = tokio::join!(first, second);
+
+        let statuses = [first.status(), second.status()];
+        let ok_count = statuses
+            .iter()
+            .filter(|status| **status == StatusCode::OK)
+            .count();
+        let rejected = [first, second]
+            .into_iter()
+            .filter(|response| response.status() == StatusCode::UNAUTHORIZED)
+            .count();
+        assert_eq!(ok_count, 1, "exactly one handoff must win: {statuses:?}");
+        assert_eq!(
+            rejected, 1,
+            "the loser must be rejected with the proof_invalid envelope: {statuses:?}"
+        );
+        assert_eq!(
+            grant_stage_label(&state, seed.authorization_grant_id).await,
+            "exchanged"
+        );
+        assert_eq!(table_count(&state, "account_handoff_grants").await, 1);
+        assert_eq!(table_count(&state, "identity_creation_leases").await, 1);
+    }
+
+    /// Error parity with the removed self-call path: binding failures surface
+    /// as 401 `proof_invalid`, and an unconfigured audience as 400
+    /// `audience_mismatch`.
+    #[tokio::test]
+    async fn local_handoff_binding_failures_match_self_call_baseline() {
+        setup();
+        let Some((state, _database)) = local_handoff_state().await else {
+            return;
+        };
+        let seed = seed_local_handoff(&state, "localbind").await;
+        let signing = SigningKey::generate(&mut OsRng);
+
+        // Unknown authorization code.
+        let unknown_code_seed = LocalHandoffSeed {
+            authorization_code: "never-issued-code".to_owned(),
+            ..seed_clone(&seed)
+        };
+        let response = state
+            .request(local_handoff_request(
+                &state,
+                &unknown_code_seed,
+                &signing,
+                test_request_id(unique_test_nonce()),
+                format!("local-bind-jti-a-{}", unique_test_nonce()),
+                TEST_PRINCIPAL_SERVER_AUDIENCE,
+                None,
+                None,
+            ))
+            .await;
+        response.assert_status(StatusCode::UNAUTHORIZED);
+        let envelope: serde_json::Value = response.json();
+        assert_eq!(
+            envelope["error"]["code"].as_str(),
+            Some(arkret_wire::ReasonCode::PROOF_INVALID)
+        );
+
+        // Callback state mismatch.
+        let response = state
+            .request(local_handoff_request(
+                &state,
+                &seed,
+                &signing,
+                test_request_id(unique_test_nonce()),
+                format!("local-bind-jti-b-{}", unique_test_nonce()),
+                TEST_PRINCIPAL_SERVER_AUDIENCE,
+                None,
+                Some("attacker-supplied-state"),
+            ))
+            .await;
+        response.assert_status(StatusCode::UNAUTHORIZED);
+        let envelope: serde_json::Value = response.json();
+        assert_eq!(
+            envelope["error"]["code"].as_str(),
+            Some(arkret_wire::ReasonCode::PROOF_INVALID)
+        );
+
+        // Unconfigured audience.
+        let response = state
+            .request(local_handoff_request(
+                &state,
+                &seed,
+                &signing,
+                test_request_id(unique_test_nonce()),
+                format!("local-bind-jti-c-{}", unique_test_nonce()),
+                "ak:did_core:webvh:zUnconfiguredAudience",
+                None,
+                None,
+            ))
+            .await;
+        response.assert_status(StatusCode::BAD_REQUEST);
+        let envelope: serde_json::Value = response.json();
+        assert_eq!(
+            envelope["error"]["code"].as_str(),
+            Some(arkret_wire::ErrorCode::AUDIENCE_MISMATCH)
+        );
+
+        // Every rejection rolled back: the code is still consumable.
+        assert_eq!(
+            grant_stage_label(&state, seed.authorization_grant_id).await,
+            "fulfilled"
+        );
+        assert_eq!(
+            table_count(&state, "account_handoff_creation_attempts").await,
+            0
+        );
+    }
+
+    fn seed_clone(seed: &LocalHandoffSeed) -> LocalHandoffSeed {
+        LocalHandoffSeed {
+            client_id: seed.client_id.clone(),
+            authorization_code: seed.authorization_code.clone(),
+            code_verifier: seed.code_verifier.clone(),
+            redirect_uri: seed.redirect_uri.clone(),
+            state: seed.state.clone(),
+            nonce: seed.nonce.clone(),
+            authorization_grant_id: seed.authorization_grant_id,
+        }
     }
 }
