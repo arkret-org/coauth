@@ -96,7 +96,9 @@ pub trait AccountHandoffRepository: Send + Sync {
         input: AccountHandoffGrantInput,
     ) -> Result<AccountHandoffCreation, Self::Error>;
 
-    /// Resolve the current lease or binding outcome for an existing handoff.
+    /// Resolve the current lease or binding outcome for an existing unexpired,
+    /// unrevoked handoff. Read-only reconciliation may present a handoff that
+    /// its completed register command already consumed.
     async fn resolve_creation(
         &mut self,
         grant: &AccountHandoffGrant,

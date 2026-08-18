@@ -1803,7 +1803,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         grant: &AccountHandoffGrant,
         now: DateTime<Utc>,
     ) -> Result<AccountHandoffCreation, Self::Error> {
-        if grant.expires_at <= now || grant.revoked_at.is_some() || grant.consumed_at.is_some() {
+        if grant.expires_at <= now || grant.revoked_at.is_some() {
             return Ok(AccountHandoffCreation::ExpiredReplay);
         }
         let lease = self

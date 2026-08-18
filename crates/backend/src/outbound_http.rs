@@ -155,7 +155,8 @@ fn egress_guard(
     trusted_loopback_https_hosts: &[String],
 ) -> EgressGuard {
     if allow_insecure_loopback_http {
-        EgressGuard::local_development().loopback_only()
+        EgressGuard::local_development()
+            .loopback_only_with_trusted_hosts(trusted_loopback_https_hosts)
     } else {
         EgressGuard::public_https().with_trusted_loopback_https_hosts(trusted_loopback_https_hosts)
     }
@@ -256,10 +257,22 @@ fn reqwest_client_builder(
 }
 
 fn base_client_builder() -> reqwest::ClientBuilder {
-    let tls_config: rustls::ClientConfig =
-        rustls::ClientConfig::with_platform_verifier().expect("failed to create TLS config");
-    reqwest::Client::builder()
-        .use_preconfigured_tls(tls_config)
+    let builder = if let Some(path) = coauth_config::runtime_var_os("SSL_CERT_FILE") {
+        let pem = std::fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read SSL_CERT_FILE {}: {error}",
+                std::path::Path::new(&path).display()
+            )
+        });
+        let certificates = reqwest::Certificate::from_pem_bundle(&pem)
+            .expect("SSL_CERT_FILE must contain at least one valid PEM certificate");
+        reqwest::Client::builder().tls_certs_merge(certificates)
+    } else {
+        let tls_config: rustls::ClientConfig =
+            rustls::ClientConfig::with_platform_verifier().expect("failed to create TLS config");
+        reqwest::Client::builder().use_preconfigured_tls(tls_config)
+    };
+    builder
         .redirect(reqwest::redirect::Policy::none())
         .no_proxy()
         .user_agent(USER_AGENT)
@@ -661,6 +674,28 @@ mod tests {
         assert!(
             guard
                 .validate_addresses("local.host", &mixed, "test")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn insecure_dev_client_allows_only_configured_named_loopback_hosts() {
+        let guard = egress_guard(
+            true,
+            &["auth.local.host".to_owned(), "local.host".to_owned()],
+        );
+        let loopback = [addr("127.0.0.1:7080")];
+
+        assert!(guard.validate_host("auth.local.host", "test").is_ok());
+        assert!(
+            guard
+                .validate_addresses("auth.local.host", &loopback, "test")
+                .is_ok()
+        );
+        assert!(guard.validate_host("attacker.local.host", "test").is_err());
+        assert!(
+            guard
+                .validate_addresses("auth.local.host", &[addr("8.8.8.8:7080")], "test")
                 .is_err()
         );
     }

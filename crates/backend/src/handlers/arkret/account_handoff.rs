@@ -356,9 +356,11 @@ pub async fn create_account_handoff(
     commit_authorized_handoff(depot, authorized_attempt, checkpoint).await
 }
 
-/// Read-only reconciliation surface for a live account handoff. The Account
-/// Authority reloads the durable lease/binding state on every call; no client
-/// checkpoint participates in the projection.
+/// Read-only reconciliation surface for an unexpired account handoff. The
+/// Account Authority reloads the durable lease/binding state on every call;
+/// no client checkpoint participates in the projection. A handoff consumed by
+/// its completed register command remains valid for this read-only projection
+/// until its original expiry so response-loss recovery can observe `bound`.
 #[handler]
 pub async fn account_onboarding_snapshot(
     req: &Request,
@@ -1011,7 +1013,42 @@ async fn authenticate_account_handoff_snapshot(
     req: &Request,
     depot: &Depot,
 ) -> Result<(AccountHandoffGrant, DpopVerification), ArkretRouteError> {
-    authenticate_account_handoff_inner(req, depot, None).await
+    let token = account_handoff_authorization(req)?;
+    let now = chrono::Utc::now();
+    let mut repo = depot.repo().await?;
+    let grant = repo
+        .account_handoff()
+        .get_by_token(token, now)
+        .await?
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                arkret_wire::ErrorCode::UNAUTHENTICATED,
+                "account handoff is expired, revoked, or unknown",
+            )
+        })?;
+    if grant.allowed_operations != ACCOUNT_HANDOFF_ALLOWED_OPERATIONS {
+        repo.cancel().await.ok();
+        return Err(ArkretRouteError::Forbidden(
+            "account handoff has a non-canonical operation set".to_owned(),
+        ));
+    }
+    repo.cancel().await.ok();
+
+    let dpop = dpop_header_from_request(req)
+        .ok_or_else(|| proof_invalid("account handoff request requires a DPoP proof"))?;
+    let htu = dpop_htu(&depot.url_builder()?.http_base(), req);
+    let verification = depot
+        .dpop_verifier()?
+        .verify(&dpop, req.method().as_str(), &htu, now, Some(token))
+        .await
+        .map_err(|error| proof_invalid(format!("account handoff DPoP proof failed: {error}")))?;
+    if verification.jkt != grant.cnf_jkt {
+        return Err(proof_invalid(
+            "account handoff DPoP key does not match the credential cnf.jkt",
+        ));
+    }
+    Ok((grant, verification))
 }
 
 pub(crate) fn enforce_handoff_operation(
