@@ -155,17 +155,3 @@ jobs:
             echo "::error::Expected pg::user::tests::test_user_repo to pass with PG present (gate did not fire)" >&2
             exit 1
           fi
-
-      - name: Run round 37.4 starid + passkey-derive lib tests
-        # These don't touch PG themselves but they share the workspace
-        # build with code that does, so running them under the same
-        # `DATABASE_URL` env confirms there's no environmental
-        # surprise (e.g., a config helper that panics when DATABASE_URL
-        # is set but a constructor is in the wrong shape). One
-        # invocation per module — `cargo test` only accepts a single
-        # TESTNAME positional, so we serialise three calls.
-        run: |
-          set -euo pipefail
-          cargo test --locked --lib -p coauth-backend --no-fail-fast services::passkey_derive::tests
-          cargo test --locked --lib -p coauth-backend --no-fail-fast services::starid_adapter::tests::rotate_update_key
-          cargo test --locked --lib -p coauth-backend --no-fail-fast services::onboarding_starid::tests

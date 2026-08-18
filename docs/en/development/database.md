@@ -15,10 +15,10 @@ Defining a new data type and associated repository looks like this:
  - Implement the new repository trait in [`coauth-storage-postgres`][coauth-storage-postgres] crate
  - Write tests for the PostgreSQL implementation in [`coauth-storage-postgres`][coauth-storage-postgres] crate
 
-Some of those steps are documented in more details in the [`coauth-storage`][coauth-storage] and [`coauth-storage-postgres`][coauth-storage-postgres] crates.
+Some of those steps are documented in more details in the [`coauth-data`][coauth-data] and [`coauth-storage-postgres`][coauth-storage-postgres] crates.
 
 [coauth-data-model]: ../rustdoc/coauth_data_model/index.html
-[coauth-storage]: ../rustdoc/coauth_storage/index.html
+[coauth-data]: ../rustdoc/coauth_data/index.html
 [coauth-storage-postgres]: ../rustdoc/coauth_storage_postgres/index.html
 
 ## Migrations

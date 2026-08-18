@@ -36,8 +36,6 @@ coauth-policy = {workspace = true}
 coauth-principal = {workspace = true}
 coauth-tasks = {workspace = true}
 coauth-templates = {workspace = true}
-arkret-hlc = {workspace = true}
-arkret-event-draft = {workspace = true}
 arkret-auth = {workspace = true}
 arkret-locale = {workspace = true}
 arkret-canonical = {workspace = true}
@@ -51,7 +49,6 @@ arkret-policy = {workspace = true}
 arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
 arkret-wire = {workspace = true}
 arkret-http-client = {workspace = true}
-arkret-egress-policy = {workspace = true}
 arkret-egress-reqwest = {workspace = true}
 arkret-retry = {workspace = true}
 arkret-signatures = {workspace = true,features = ["signer", "service-identity"]}

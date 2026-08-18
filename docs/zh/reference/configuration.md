@@ -105,12 +105,11 @@ arkret:
 
 ## `templates`
 
-可选的 HTML 模板、翻译文件、前端资源 manifest 覆盖。
+可选的 HTML 模板与翻译文件路径覆盖。
 
 ```yaml
 templates:
   path: ./templates
-  assets_manifest: ./dist/manifest.json
   translations_path: ./translations
 ```
 
@@ -202,7 +201,7 @@ captcha:
 ```yaml
 policy:
   engine: cedar
-  cedar_policy_file: ./policies/policies.cedar
+  cedar_policy_file: ./policies/cedar/default.cedar
 ```
 
 当前项目原生支持 Cedar，也可以在编译相应 feature 后把决策委托给远端策略服务。

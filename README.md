@@ -126,7 +126,7 @@ The primary Arkret paths include:
 
 coauth hosts **no** DID documents (`/.well-known/did.json`, `/did.json`, and
 `/users/{id}/did.json` were removed): DID hosting is the principal server's
-job — soland's embedded webvh provider (or an external starid) serves
+job — soland's embedded webvh provider serves
 `did:webvh` documents under its own authority, and coauth only mints/registers
 against it. coauth-issued artefacts (session grants, handle claims) are
 verified via the introspection endpoints and the OAuth JWKS.

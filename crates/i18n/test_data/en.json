@@ -1,8 +1,0 @@
-{
-  "hello": "Hello!",
-  "goodbye": "Goodbye!",
-  "active_sessions": {
-    "one": "%(count)d active session.",
-    "other": "%(count)d active sessions."
-  }
-}

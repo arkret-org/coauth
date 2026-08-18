@@ -34,7 +34,7 @@ service (teabay), not coauth.
 
 coauth retains an **issuer-internal ledger** of the handle claims it has
 minted. The signed `ak.schema.handle_claim.v1` artefacts coauth produces
-(see [`issue_handle_claim`][src] in `crates/backend/src/handlers/arkret.rs`)
+(see [`issue_handle_claim`][src] in `crates/backend/src/handlers/arkret/handle_claim.rs`)
 are the only authoritative wire form for a handle; everything else
 (roster hints, mention `handle_at_time`, etc.) is a derived projection or
 audit metadata.
@@ -65,4 +65,4 @@ Per the R3.2 issuer hardening:
 > concrete operator workflow requires it.
 
 [op]: https://github.com/arkret-org/arkret-spec
-[src]: ../../../crates/backend/src/handlers/arkret.rs
+[src]: ../../../crates/backend/src/handlers/arkret/handle_claim.rs

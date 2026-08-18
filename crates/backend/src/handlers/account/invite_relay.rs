@@ -293,8 +293,8 @@ pub async fn post_invite_relay(
 
     // Deny-by-default for the federation hop: the relay forwards a request
     // signed under coauth's service DID, so the destination MUST resolve to
-    // a configured trust anchor (a `principal_servers` endpoint, the identity
-    // registry resolver, or starid).
+    // a configured trust anchor (a `principal_servers` endpoint, an
+    // `identity_services` endpoint, or the `identity_registry` resolver).
     // This blocks the SSRF / signing-oracle vector where a caller supplies
     // an arbitrary `target_principal_url`.
     if let Some(target) = principal_url.as_ref()

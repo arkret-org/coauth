@@ -209,11 +209,6 @@ pub fn admin_bridge_describe() -> AdminBridgeDescribe {
 }
 
 #[must_use]
-pub fn admin_bridge_describe_example() -> AdminBridgeDescribe {
-    admin_bridge_describe()
-}
-
-#[must_use]
 pub fn admin_bridge_risk_action_examples() -> AdminBridgeRiskActionExamples {
     AdminBridgeRiskActionExamples {
         proposal_request: admin_bridge_risk_action_proposal_example(),
@@ -267,7 +262,7 @@ mod tests {
     #[test]
     fn describe_decodes_backend_wire_payload() {
         // Mirrors what `accounts::admin_bridge_describe` actually emits.
-        let wire = serde_json::to_string(&admin_bridge_describe_example()).unwrap();
+        let wire = serde_json::to_string(&admin_bridge_describe()).unwrap();
         let d: AdminBridgeDescribe = serde_json::from_str(&wire).unwrap();
         assert_eq!(d.contract, ADMIN_BRIDGE_CONTRACT);
         assert_eq!(d.risk_action_examples.proposal_request.action, "lock");

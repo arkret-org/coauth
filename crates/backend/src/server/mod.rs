@@ -126,7 +126,7 @@ pub fn build_router(
             // NOTE: coauth deliberately hosts NO DID documents
             // (`/.well-known/did.json`, `/did.json`, `/users/{id}/did.json`
             // were removed). DID hosting is the principal server's job —
-            // soland's embedded webvh provider (or an external starid) serves
+            // soland's embedded webvh provider serves
             // `did:webvh` documents under its own authority; coauth only
             // mints/registers against it. coauth-issued artefacts (session
             // grants, handle claims) are verified via the introspection
@@ -398,7 +398,6 @@ mod tests {
         assert!(json["paths"]["/_coauth/admin/claims"].is_object());
         assert!(json["paths"]["/_coauth/admin/claims/status"].is_object());
         assert!(json["paths"]["/_coauth/admin/policy-checks/dry-run"].is_object());
-        assert!(!body.contains("Pasion Admin API"));
     }
 
     #[tokio::test]
@@ -421,7 +420,6 @@ mod tests {
         let body = response.take_string().await.unwrap();
         assert!(body.contains("title: coauth Admin API"), "{body}");
         assert!(body.contains("/_coauth/admin/user-sessions:"), "{body}");
-        assert!(!body.contains("Pasion Admin API"), "{body}");
 
         // The protocol-surface well-known path must NOT be served by the admin
         // router — it is published by the account/protocol router instead.

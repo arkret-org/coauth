@@ -34,29 +34,41 @@ This includes:
  - [`coauth-data-model`][coauth-data-model]: Models of objects that live in the database, regardless of the storage backend
  - [`coauth-data`][coauth-data]: Storage-neutral domain types and repository ports; depends on `coauth-data-model`
  - [`coauth-storage-postgres`][coauth-storage-postgres]: PostgreSQL adapters, Diesel schema, and migrations; depends on `coauth-data`
- - [`coauth-email`][coauth-email]: High-level email sending abstraction
- - [`coauth-handlers`][coauth-handlers]: Main HTTP application logic
+ - [`coauth-backend`][coauth-backend]: Main HTTP application logic, handlers, services, and router wiring
+ - [`coauth-email-types`][coauth-email-types]: Email wire types shared by the sender and the templates
+ - [`coauth-messaging`][coauth-messaging]: Email/SMS transport implementations
+ - [`coauth-templates`][coauth-templates]: Server-rendered template registry and render context
+ - [`coauth-i18n`][coauth-i18n] / [`coauth-i18n-scan`][coauth-i18n-scan]: Fluent translation loading, and the translation-key scanner used at build time
  - [`coauth-policy`][coauth-policy]: Policy engine abstraction layer; the shipped backend is Cedar
- - [`coauth-iana`][coauth-iana]: Auto-generated enums from IANA registries
- - [`coauth-iana-codegen`][coauth-iana-codegen]: Code generator for the `coauth-iana` crate
+ - [`coauth-principal`][coauth-principal]: Principal-server client types and helpers
+ - [`coauth-keystore`][coauth-keystore]: Key material storage and encryption
+ - [`coauth-iana`][coauth-iana]: Hand-maintained enums for the IANA JOSE and OAuth registries, declared through the crate's `open_enum!` / `closed_enum!` macros
  - [`coauth-jose`][coauth-jose]: JWT/JWS/JWE/JWK abstraction
+ - [`coauth-oauth-types`][coauth-oauth-types]: Structures and types for OAuth/OpenID Connect endpoints
+ - [`coauth-account-types`][coauth-account-types] / [`coauth-admin-types`][coauth-admin-types]: Product-surface contract crates consumed by sibling products (see `docs/architecture/contracts-ownership.md`)
  - [`coauth-frontend`][coauth-frontend]: Frontend application (Dioxus-based Rust SPA)
  - [`coauth-tasks`][coauth-tasks]: Asynchronous task runner and scheduler
- - [`oauth-types`][oauth-types]: Useful structures and types to deal with OAuth/OpenID Connect endpoints. This might end up published as a standalone library as it can be useful in other contexts.
 
 [coauth-config]: ../rustdoc/coauth_config/index.html
 [coauth-data-model]: ../rustdoc/coauth_data_model/index.html
 [coauth-data]: ../rustdoc/coauth_data/index.html
 [coauth-storage-postgres]: ../rustdoc/coauth_storage_postgres/index.html
-[coauth-email]: ../rustdoc/coauth_email/index.html
-[coauth-handlers]: ../rustdoc/coauth_handlers/index.html
+[coauth-backend]: ../rustdoc/coauth_backend/index.html
+[coauth-email-types]: ../rustdoc/coauth_email_types/index.html
+[coauth-messaging]: ../rustdoc/coauth_messaging/index.html
+[coauth-templates]: ../rustdoc/coauth_templates/index.html
+[coauth-i18n]: ../rustdoc/coauth_i18n/index.html
+[coauth-i18n-scan]: ../rustdoc/coauth_i18n_scan/index.html
 [coauth-policy]: ../rustdoc/coauth_policy/index.html
+[coauth-principal]: ../rustdoc/coauth_principal/index.html
+[coauth-keystore]: ../rustdoc/coauth_keystore/index.html
 [coauth-iana]: ../rustdoc/coauth_iana/index.html
-[coauth-iana-codegen]: ../rustdoc/coauth_iana_codegen/index.html
 [coauth-jose]: ../rustdoc/coauth_jose/index.html
+[coauth-oauth-types]: ../rustdoc/coauth_oauth_types/index.html
+[coauth-account-types]: ../rustdoc/coauth_account_types/index.html
+[coauth-admin-types]: ../rustdoc/coauth_admin_types/index.html
 [coauth-frontend]: ../rustdoc/coauth_frontend/index.html
 [coauth-tasks]: ../rustdoc/coauth_tasks/index.html
-[oauth-types]: ../rustdoc/oauth_types/index.html
 
 ## Important crates
 

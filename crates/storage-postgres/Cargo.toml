@@ -50,6 +50,5 @@ url = {workspace = true}
 uuid = {workspace = true}
 
 [dev-dependencies]
-arkret-schema = {workspace = true}
 arkret-signatures = {workspace = true}
 ed25519-dalek = {workspace = true}

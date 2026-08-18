@@ -26,7 +26,7 @@ Cedar is a good choice when:
 ```yaml
 policy:
   engine: cedar
-  cedar_policy_file: ./policies/policies.cedar
+  cedar_policy_file: ./policies/cedar/default.cedar
 ```
 
 ### Writing Cedar policies
@@ -140,7 +140,3 @@ This is especially important as in the future it will make it possible to implem
 To understand the authorization process and how sessions are created, refer to the [authorization and sessions](./authorization.md) section.
 
 
-[`register.rego`]: https://github.com/arkret-org/coauth/blob/main/policies/register/register.rego
-[`email.rego`]: https://github.com/arkret-org/coauth/blob/main/policies/email/email.rego
-[`client_registration.rego`]: https://github.com/arkret-org/coauth/blob/main/policies/client_registration/client_registration.rego
-[`authorization_grant.rego`]: https://github.com/arkret-org/coauth/blob/main/policies/authorization_grant/authorization_grant.rego

@@ -1075,15 +1075,15 @@ mod tests {
         )
         .expect("SDK Agent runtime public_key profile accepts");
 
-        let legacy = json!({
+        let multibase_only = json!({
             "key_type": "Ed25519",
             "public_key_multibase": "z6Mki6bBq1N3X3G3sT2xLwSPrm5Tg7EwjZwJ4oXb9qQ7z1Uu",
         });
         let err = arkret_signatures::agent::validate_agent_runtime_public_key(
-            &legacy,
+            &multibase_only,
             &verification_method,
         )
-        .expect_err("legacy multibase pairing key shape must reject");
+        .expect_err("a multibase-only pairing key shape must reject");
         assert!(err.to_string().contains("public_key"));
     }
 

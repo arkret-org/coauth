@@ -32,7 +32,7 @@ pub(super) fn verify_proof_signature_bytes(
 
 /// Convert the spec `PublicKey` object accepted at pairing into the Ed25519
 /// material the detached-signature verifier consumes. This is intentionally
-/// not a legacy wire parser: only `{kty:"OKP", algorithm:"Ed25519",
+/// not a permissive wire parser: only `{kty:"OKP", algorithm:"Ed25519",
 /// kid:<verification_method>, key:<base64url raw Ed25519>}` is accepted.
 pub(super) fn runtime_public_key_material_from_spec(
     public_key: &Value,

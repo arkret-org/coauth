@@ -50,7 +50,7 @@ draft releases, PR comments, and unstable release updates.
 
 Changelogs are automatically generated from PR titles and labels.
 
-The configuration for those can be found in the `.github/release.yml`, but the main labels to be aware of are:
+The main labels to be aware of are:
 
  - `T-Defect`: Bug fixes
  - `T-Enhancement`: New features

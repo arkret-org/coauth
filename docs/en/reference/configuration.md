@@ -112,13 +112,11 @@ arkret:
 
 ## `templates`
 
-Optional overrides for HTML templates, translation files, and frontend asset
-manifests.
+Optional overrides for the HTML template and translation file paths.
 
 ```yaml
 templates:
   path: ./templates
-  assets_manifest: ./dist/manifest.json
   translations_path: ./translations
 ```
 
@@ -215,7 +213,7 @@ Authorization policy engine configuration.
 ```yaml
 policy:
   engine: cedar
-  cedar_policy_file: ./policies/policies.cedar
+  cedar_policy_file: ./policies/cedar/default.cedar
 ```
 
 The project currently supports Cedar natively and can optionally delegate to a

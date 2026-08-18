@@ -1,4 +1,4 @@
-# Integration stack: Postgres + coauth (+ optional soland/sodmin/starid).
+# Integration stack: Postgres + coauth (+ optional soland/sodmin).
 #
 # This compose is intended for local bring-up smoke / e2e harness work; it
 # deliberately keeps secrets, ports, and images close to defaults so that
@@ -12,7 +12,7 @@
 #              `coauth healthcheck` subcommand directly via CMD (not
 #              CMD-SHELL) — the binary issues an HTTP probe to the
 #              configured /health listener and exits 0 on 200.
-#   - soland / sodmin / starid : pulled by tag. No `:dev` tags are published
+#   - soland / sodmin : pulled by tag. No `:dev` tags are published
 #              yet, so these services are gated behind profiles. Override
 #              with the matching `*_IMAGE` env var when iterating against
 #              locally-built images, e.g.
@@ -23,7 +23,6 @@
 # Profiles:
 #   - default       : postgres + coauth                  (always-runnable)
 #   - downstream    : adds soland + sodmin               (requires :dev images)
-#   - did-webvh     : adds starid                        (requires :dev image)
 #
 # Config strategy:
 #   The coauth container expects a config at /etc/coauth/config.yaml. The
@@ -106,12 +105,13 @@ services:
       coauth:
         condition: service_healthy
     environment:
-      SERVERX_DATABASE_URL: postgresql://arkret:arkret@postgres:5432/arkret
-      SERVERX_BIND: 0.0.0.0:8008
-      SERVERX_COAUTH_ISSUER: http://coauth:7080/
+      # soland reads `DATABASE_URL` (or `SOLAND_DATABASE_URL`) and
+      # `SOLAND_BIND`; it has no coauth-issuer environment setting.
+      DATABASE_URL: postgresql://arkret:arkret@postgres:5432/arkret
+      SOLAND_BIND: 0.0.0.0:8698
       RUST_LOG: info
     ports:
-      - "58008:8008"
+      - "58008:8698"
     # Same distroless reasoning as coauth — assume soland ships its own
     # `healthcheck` subcommand. If a deployment uses a different image
     # without one, override via `SOLAND_HEALTHCHECK_CMD`.
@@ -140,29 +140,6 @@ services:
       - "59090:9090"
     healthcheck:
       test: ["CMD", "/usr/local/bin/sodmin", "healthcheck"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-      start_period: 15s
-
-  # Optional did:webvh resolver. Enable with `--profile did-webvh`.
-  starid:
-    image: ${STARID_IMAGE:-starid:dev}
-    container_name: arkret-starid
-    profiles: ["did-webvh"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      STARID_BIND: 0.0.0.0:7180
-      RUST_LOG: info
-    ports:
-      - "57180:7180"
-    # Same distroless reasoning as coauth — assume starid ships its own
-    # `healthcheck` subcommand. Override via STARID_HEALTHCHECK_CMD if
-    # the deployment uses a non-distroless image with shell + wget.
-    healthcheck:
-      test: ["CMD", "/usr/local/bin/starid", "healthcheck"]
       interval: 5s
       timeout: 5s
       retries: 30

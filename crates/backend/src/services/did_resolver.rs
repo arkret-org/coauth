@@ -444,7 +444,7 @@ impl DidResolverService for DefaultDidResolverService {
             // RULING (2026-07 review, CAU-SPEC-02 closed): coauth deliberately
             // does NOT resolve/verify `did:webvh` natively. identity-did.md
             // §3.5 places webvh hosting and log/history verification authority
-            // on the principal server (soland / starid); every other method —
+            // on the principal server (soland); every other method —
             // including `did:webvh` — is delegated to the configured
             // `identity_registry.resolver`, and deployments without one
             // fail closed with `UnsupportedMethod`. Do not add a local webvh

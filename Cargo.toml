@@ -1,9 +1,6 @@
 [workspace]
 default-members = ["crates/cli"]
 members = ["crates/*"]
-exclude = [
-    "crates/iana-codegen",
-]
 resolver = "3"
 
 [workspace.package]
@@ -106,7 +103,6 @@ coauth-frontend = {version = "=0.3.0",path = "crates/frontend"}
 coauth-i18n = {version = "=0.3.0",path = "crates/i18n"}
 coauth-i18n-scan = {version = "=0.3.0",path = "crates/i18n-scan"}
 coauth-iana = {version = "=0.3.0",path = "crates/iana"}
-coauth-iana-codegen = {version = "=0.3.0",path = "crates/iana-codegen"}
 coauth-jose = {version = "=0.3.0",path = "crates/jose"}
 coauth-keystore = {version = "=0.3.0",path = "crates/keystore"}
 coauth-messaging = {version = "=0.3.0",path = "crates/messaging"}
@@ -116,9 +112,7 @@ coauth-tasks = {version = "=0.3.0",path = "crates/tasks"}
 coauth-templates = {version = "=0.3.0",path = "crates/templates"}
 # Arkret v1 protocol SDK pieces are consumed from their direct owner crates.
 # `arkret-signatures` (with the `signer` feature) provides the production
-# Ed25519 backend used by `anchor_pending_move`.
-arkret-hlc = {version = "0.3.0",path = "../arkret-rust-sdk/crates/hlc",default-features = false}
-arkret-event-draft = {version = "0.3.0",path = "../arkret-rust-sdk/crates/event-draft",default-features = false}
+# Ed25519 backend used by the service-identity and policy signers.
 arkret-auth = {version = "0.3.0",path = "../arkret-rust-sdk/crates/auth",default-features = false}
 arkret-canonical = {version = "0.3.0",path = "../arkret-rust-sdk/crates/canonical",default-features = false}
 arkret-locale = {version = "0.3.0",path = "../arkret-rust-sdk/crates/locale",default-features = false,features = ["serde"]}
@@ -134,21 +128,18 @@ arkret-http-client = {version = "0.3.0",path = "../arkret-rust-sdk/crates/http-c
 # `ak:trust_domain:<scope>` wire-form check so config and SDK never drift.
 arkret-identifiers = {version = "0.3.0",path = "../arkret-rust-sdk/crates/identifiers",default-features = false}
 arkret-identity = {version = "0.3.0",path = "../arkret-rust-sdk/crates/identity",default-features = false}
-arkret-egress-policy = {version = "0.3.0",path = "../arkret-rust-sdk/crates/egress-policy",default-features = false}
 arkret-egress-reqwest = {version = "0.3.0",path = "../arkret-rust-sdk/crates/egress-reqwest",default-features = false}
 arkret-retry = {version = "0.3.0",path = "../arkret-rust-sdk/crates/retry",default-features = false}
 arkret-signatures = {version = "0.3.0",path = "../arkret-rust-sdk/crates/signatures",default-features = false,features = ["collaboration", "signer", "webvh"]}
 arkret-state = {version = "0.3.0",path = "../arkret-rust-sdk/crates/state",default-features = false}
 console = "0.16.3"
 const-oid = {version = "0.9.6",features = ["std"]}
-convert_case = "0.11.0"
 cookie = {version = "0.18",features = ["private", "key-expansion"]}
 cookie_store = {version = "0.22.1",default-features = false,features = [
     "serde_json",
 ]}
 crc = "3.4.0"
 cron = "0.16"
-csv = "1.4.0"
 deadpool = {version = "0.13",features = ["rt_tokio_1"]}
 der = {version = "0.7.10",features = ["std", "pem"]}
 dialoguer = {version = "0.12.0",default-features = false,features = [

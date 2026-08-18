@@ -45,6 +45,7 @@ OIDC discovery 与 JWKS 拉取走同一共享客户端，并拒绝超过 1 MiB �
 所有构建一律拒绝私有网络出站。共享客户端刻意不提供进程级私网逃生舱——仅凭主机名
 的允许列表无法表达受控网络例外所需的用途、服务身份、CIDR、端口、有效期与审计要求。
 
-上游 OIDC、starid、soland webvh 注册与 policy frontier 调用应优先使用公网可路由的
+上游 OIDC、已配置的 `identity_registry` resolver、soland webvh 注册与 policy
+frontier 调用应优先使用公网可路由的
 服务端点。若部署确实需要私有服务 URL，请通过专用出站代理路由，由代理策略绑定目标
 服务身份、信任域、CIDR、端口、有效期与审计记录。

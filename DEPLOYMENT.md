@@ -52,7 +52,7 @@ diesel setup --database-url "$DATABASE_URL"
 diesel migration run --database-url "$DATABASE_URL"
 ```
 
-Migrations are idempotent and located under `crates/data/migrations/`.
+Migrations are idempotent and located under `crates/storage-postgres/migrations/`.
 
 ### Backup / restore
 

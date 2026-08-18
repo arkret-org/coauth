@@ -17,61 +17,66 @@ coauth 是 Arkret 的 Auth Server，负责账号认证、OAuth/OIDC、会话授�
 
 ## Crate 结构
 
-整个项目是一个 [Cargo Workspace](https://doc.rust-lang.org/book/ch14-03-cargo-workspaces.html)，包含约 28 个 crate，按职责划分为以下几层。
+整个项目是一个 [Cargo Workspace](https://doc.rust-lang.org/book/ch14-03-cargo-workspaces.html)，包含 21 个 crate（`crates/*`），按职责划分为以下几层。
 
 ### 核心平台层
 
 | Crate | 说明 |
 |-------|------|
-| `coauth` | CLI 主入口 |
+| `coauth` | CLI 主入口（`crates/cli`） |
 | `coauth-config` | 配置管理 |
 | `coauth-data-model` | 领域数据模型 |
-| `coauth-storage` | 存储抽象层 |
-| `coauth-storage-postgres` | PostgreSQL 实现 |
-| `coauth-handlers` | HTTP 适配层（REST/OAuth/Admin） |
-| `coauth-policy` | 策略引擎（OPA + Cedar） |
+| `coauth-data` | 存储中立的领域类型与仓储端口 |
+| `coauth-storage-postgres` | PostgreSQL 实现（Diesel schema 与迁移） |
+| `coauth-backend` | HTTP 适配层（REST/OAuth/Admin/`_arkret`）与服务实现 |
+| `coauth-policy` | 策略引擎（Cedar） |
 | `coauth-tasks` | 后台任务与工作流调度 |
 
 ### 通知与消息
 
 | Crate | 说明 |
 |-------|------|
-| `coauth-messaging` | 统一通知中心（NotificationCenter） |
-| `coauth-email` | 邮件发送（SMTP/Sendmail） |
-| `coauth-sms` | 短信发送（Twilio/阿里云/腾讯云） |
+| `coauth-messaging` | 邮件 / 短信发送实现 |
+| `coauth-email-types` | 邮件 wire 类型 |
 | `coauth-templates` | 模板渲染 |
 
 ### 外部接入
 
 | Crate | 说明 |
 |-------|------|
-| `coauth-principal` | Principal Server 账号/设备同步抽象与测试 stub |
-| `coauth-oidc-client` | 上游 OIDC/OAuth 客户端 |
+| `coauth-principal` | Principal Server 客户端类型与辅助 |
 
 ### 协议与加密
 
 | Crate | 说明 |
 |-------|------|
-| `oauth-types` | OAuth / OIDC 类型 |
+| `coauth-oauth-types` | OAuth / OIDC 类型 |
 | `coauth-jose` | JWT/JWS/JWK |
 | `coauth-keystore` | 密钥管理 |
+| `coauth-iana` | IANA JOSE / OAuth 注册表枚举（本仓手工维护，由 `open_enum!` / `closed_enum!` 宏声明） |
+
+### 产品面契约
+
+| Crate | 说明 |
+|-------|------|
+| `coauth-account-types` | 账号产品面 wire 类型（sibling 产品消费） |
+| `coauth-admin-types` | 管理面 wire 类型（sibling 产品消费） |
+
+登记见 `docs/architecture/contracts-ownership.md`。
 
 ### 前端与框架
 
 | Crate | 说明 |
 |-------|------|
 | `coauth-frontend` | Dioxus 前端（Rust SPA） |
-| `coauth-salvo-utils` | Salvo 框架工具 |
 | `coauth-i18n` | 国际化 |
+| `coauth-i18n-scan` | 构建期翻译 key 扫描 |
 
 ### 基础设施
 
-| Crate | 说明 |
+| 模块 | 说明 |
 |-------|------|
-| `coauth-backend::outbound_http` | HTTP 工具 |
-| `coauth-listener` | 网络监听 |
-| `coauth-context` | 上下文工具 |
-| `iana` / `iana-codegen` | IANA 注册表 |
+| `coauth-backend::outbound_http` | 出站 HTTP 工具（含私网出站拒绝） |
 
 ## 关键依赖
 

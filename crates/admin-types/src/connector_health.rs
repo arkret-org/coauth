@@ -90,11 +90,11 @@ mod tests {
             serde_json::from_str::<ConnectorHealthStatus>("\"unhealthy\"").unwrap(),
             ConnectorHealthStatus::Unhealthy
         );
-        for legacy_or_unknown in ["ok", "down", "error", "garbage"] {
+        for unregistered in ["ok", "down", "error", "garbage"] {
             assert!(
-                serde_json::from_str::<ConnectorHealthStatus>(&format!("\"{legacy_or_unknown}\""))
+                serde_json::from_str::<ConnectorHealthStatus>(&format!("\"{unregistered}\""))
                     .is_err(),
-                "{legacy_or_unknown} must not be accepted"
+                "{unregistered} must not be accepted"
             );
         }
 

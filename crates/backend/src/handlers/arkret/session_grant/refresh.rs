@@ -1080,7 +1080,7 @@ mod tests {
     #[test]
     fn soft_logout_device_binding_requires_persisted_session_grant_device() {
         let err = require_soft_logout_bound_device_id(Some(DEVICE_ID), None)
-            .expect_err("legacy unbound grant must not be recoverable");
+            .expect_err("a grant with no persisted device binding must not be recoverable");
 
         assert_coded(err, arkret_wire::ErrorCode::DID_PROOF_REQUIRED);
     }

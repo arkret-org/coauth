@@ -70,9 +70,9 @@ hand. There is no machine translation step:
 - Translated chapters live alongside the English ones with the same
   filename, e.g. `docs/zh/development/i18n-workflow.md` for this file's
   Chinese counterpart.
-- The lint check in CI flags chapters that exist in English but are
-  missing in `zh` (or vice versa) so structural drift surfaces in PR
-  review rather than at release time.
+- There is no CI check for locale parity: keeping `docs/en/SUMMARY.md`
+  and `docs/zh/SUMMARY.md` structurally aligned is a review obligation,
+  so call out any chapter you add on one side but not the other.
 
 For untranslated chapters, prefer leaving the English file
 un-mirrored and adding a `TODO(i18n)` comment in

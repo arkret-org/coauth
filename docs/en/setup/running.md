@@ -17,7 +17,6 @@ Other than the binary, the service needs a few files to run:
  - The templates, referenced by the [`templates.path`](../reference/configuration.md#templates) configuration option
  - The compiled policy, referenced by the [`policy.path`](../reference/configuration.md#policy) configuration option
  - The frontend assets, referenced by the `path` option of the `assets` resource in the [`http.listeners`](../reference/configuration.md#http) configuration section
- - The frontend manifest file, referenced by the [`templates.assets_manifest`](../reference/configuration.md#templates) configuration option
 
 Be sure to check the [installation instructions](./installation.md) for more information on how to get these files, and make sure the configuration file is updated accordingly.
 

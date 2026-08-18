@@ -9,7 +9,6 @@ Optional variables and secrets:
 - `DOCKERHUB_USER` / `DOCKERHUB_TOKEN`: enables pushes to Docker Hub
 - `DOCKERHUB_NAMESPACE`: optional Docker Hub namespace override
 - `CODECOV_TOKEN`: enables coverage upload
-- `LOCALAZY_WRITE_KEY`: enables Localazy upload/download workflows
 
 Notes:
 
@@ -36,5 +35,3 @@ Notes:
   works with standard Gitea Actions runners
 - The Gitea docs workflow validates and uploads the generated site artifact,
   but does not try to deploy GitHub Pages
-- The Gitea translation download workflow commits changes back to the current
-  branch instead of opening a GitHub pull request

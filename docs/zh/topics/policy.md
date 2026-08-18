@@ -30,7 +30,7 @@ Cedar 适用于以下场景：
 ```yaml
 policy:
   engine: cedar
-  cedar_policy_file: ./policies/policies.cedar
+  cedar_policy_file: ./policies/cedar/default.cedar
 ```
 
 ### 编写 Cedar 策略

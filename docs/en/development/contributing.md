@@ -66,11 +66,17 @@ Most of them can be updated from the repository root by running:
 - `sh ./misc/update.sh` on macOS/Linux
 - `pwsh -File ./misc/update.ps1` on Windows
 
-Make sure your code adheres to our Rust and TypeScript code style by running:
+Translations are hand-maintained Fluent files under `translations/`. To list the
+translation keys the templates actually reference, run the scanner and compare
+its output against `translations/en.ftl`:
+
+```bash
+cargo run -p coauth-i18n-scan -- ./templates/
+```
+
+Make sure your code adheres to our Rust code style by running:
 
  - `cargo +nightly fmt` (with the nightly toolchain installed)
- - `npm run format` in the `frontend` directory
- - `make fmt` in the `policies` directory (if changed)
 
 ## 7. Test, test, test!
 

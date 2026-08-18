@@ -3,15 +3,15 @@
 #
 # Intentionally tiny: this is a bring-up smoke, not an e2e harness. The
 # scope is "the docker-compose.integration.yaml stack actually came up and
-# the four (or five) services are reachable on their published ports".
+# the probed services are reachable on their published ports".
 #
 # Exit codes:
 #   0 — every probed endpoint returned HTTP 200
 #   3 — at least one endpoint failed or never responded within the budget
 #
 # Usage:
-#   ./scripts/integration-smoke.sh                 # core stack
-#   ./scripts/integration-smoke.sh --with-starid   # core stack + starid
+#   ./scripts/integration-smoke.sh                     # core stack
+#   ./scripts/integration-smoke.sh --with-downstream   # + soland + sodmin
 
 set -euo pipefail
 
@@ -39,13 +39,12 @@ probe() {
 COAUTH_BASE="${COAUTH_BASE:-http://127.0.0.1:57080}"
 SOLAND_BASE="${SOLAND_BASE:-http://127.0.0.1:58008}"
 SODMIN_BASE="${SODMIN_BASE:-http://127.0.0.1:59090}"
-STARID_BASE="${STARID_BASE:-http://127.0.0.1:57180}"
 
 probes=(
     "coauth ${COAUTH_BASE}/health"
 )
 
-# Add downstream / starid probes based on flags. The default profile
+# Add downstream probes based on flags. The default profile
 # only brings up postgres + coauth, so probing soland/sodmin would fail
 # even on a healthy stack — they're gated behind --with-downstream now
 # to match the integration-up.sh profile semantics.
@@ -56,9 +55,6 @@ for arg in "$@"; do
                 "soland ${SOLAND_BASE}/health"
                 "sodmin ${SODMIN_BASE}/health"
             )
-            ;;
-        --with-starid)
-            probes+=("starid ${STARID_BASE}/health")
             ;;
     esac
 done

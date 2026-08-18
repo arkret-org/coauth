@@ -55,8 +55,9 @@ has no process-wide private-network escape hatch because a hostname-only allow
 list cannot express the purpose, service identity, CIDR, port, expiry, and audit
 requirements of a controlled-network exception.
 
-Prefer public, routable service endpoints for upstream OIDC, starid, soland
-webvh registration, and policy frontier calls. If a deployment truly needs
+Prefer public, routable service endpoints for upstream OIDC, the configured
+`identity_registry` resolver, soland webvh registration, and policy frontier
+calls. If a deployment truly needs
 private service URLs, route them through a dedicated egress proxy whose policy
 binds the target service identity, trust domain, CIDR, port, expiry, and audit
 record.

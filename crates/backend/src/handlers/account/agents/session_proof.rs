@@ -2076,21 +2076,25 @@ mod tests {
     }
 
     #[test]
-    fn legacy_events_subscribe_scope_rejects_fail_closed() {
-        let legacy_scope = format!("ak.self.events.{}", "subscribe");
+    fn unregistered_events_subscribe_scope_rejects_fail_closed() {
+        // The registered stream action is `ak.self.events.stream.subscribe`
+        // (capabilities.md §5.5). `ak.self.events.subscribe` is not in the
+        // closed set, and §5.0 requires verbatim `actions[]` matching with no
+        // subsumption, so both key tiers must fail closed on it.
+        let unregistered_scope = format!("ak.self.events.{}", "subscribe");
         let err = intersect_requested_scope_with_agent_key_scope(
             AGENT_KEY_SCOPE_LIMITED,
-            std::slice::from_ref(&legacy_scope),
+            std::slice::from_ref(&unregistered_scope),
         )
-        .expect_err("legacy unregistered service token must fail closed");
+        .expect_err("an unregistered service token must fail closed");
 
         assert_eq!(err, AgentAuthRejection::ProofInvalid);
 
         let err = intersect_requested_scope_with_agent_key_scope(
             AGENT_KEY_SCOPE_ACCOUNT,
-            std::slice::from_ref(&legacy_scope),
+            std::slice::from_ref(&unregistered_scope),
         )
-        .expect_err("account-tier keys must also reject the legacy service token");
+        .expect_err("account-tier keys must also reject the unregistered service token");
 
         assert_eq!(err, AgentAuthRejection::ProofInvalid);
     }
