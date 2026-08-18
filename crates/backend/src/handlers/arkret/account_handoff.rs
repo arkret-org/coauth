@@ -1592,8 +1592,11 @@ mod tests {
             .add_from_browser_session(&mut rng, &clock, &client, &browser_session, scope.clone())
             .await
             .unwrap();
-        // PKCE verifiers must be 43–128 unreserved characters.
-        let code_verifier = format!("{label}-verifier-{:0<24}", "");
+        // PKCE verifiers must be 43-128 unreserved characters. Pad to a fixed
+        // width that clears the lower bound for every label this helper is
+        // called with: letting the label length decide made the shortest one
+        // ("localok", 41 characters) fail `TooShort` while the others passed.
+        let code_verifier = format!("{label}-verifier-{:0<64}", "");
         let code_challenge = PkceCodeChallengeMethod::S256
             .compute_challenge(&code_verifier)
             .unwrap()
