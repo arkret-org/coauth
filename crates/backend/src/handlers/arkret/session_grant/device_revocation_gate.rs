@@ -128,7 +128,7 @@ async fn verify_gate_receipt(
 
     let http_client = depot.http_client()?;
     let document = if controller.as_str().starts_with("did:webvh:") {
-        crate::services::did_resolver::resolve_verified_webvh_document_at(
+        crate::services::did_resolver::resolve_verified_webvh_service_document_at(
             &http_client,
             &controller,
             receipt.proof.created_at,

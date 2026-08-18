@@ -191,11 +191,11 @@ pub async fn verify_unpublished_webvh_candidate(
     )
 }
 
-/// Resolve the last cryptographically verified `did:webvh` document whose
-/// version time is not later than an immutable receipt timestamp. Receipt
-/// verification must use the key that controlled the service DID when the
-/// receipt was signed, not merely the current post-rotation document.
-pub async fn resolve_verified_webvh_document_at(
+/// Resolve the last cryptographically verified `did:webvh` service document
+/// whose version time is not later than an immutable receipt timestamp.
+/// Receipt verification must use the key that controlled the service DID when
+/// the receipt was signed, not merely the current post-rotation document.
+pub async fn resolve_verified_webvh_service_document_at(
     _http_client: &reqwest::Client,
     did: &arkret_identifiers::DidFullId,
     decided_at: chrono::DateTime<chrono::Utc>,
@@ -232,13 +232,23 @@ pub async fn resolve_verified_webvh_document_at(
         }
         history.extend_from_slice(&chunk);
     }
-    let verified =
-        arkret_identity::verify_did_webvh_v1_log_bytes(did, &history).map_err(|error| {
-            DidResolveError::BadResolverResponse(format!(
-                "historical did:webvh log failed verification: {error}"
-            ))
-        })?;
+    let verified = verify_historical_webvh_service_chain(did, &history)?;
     verified_webvh_document_at(did, &verified, decided_at)
+}
+
+fn verify_historical_webvh_service_chain(
+    did: &arkret_identifiers::DidFullId,
+    history: &[u8],
+) -> Result<arkret_identity::VerifiedDidWebvhLog, DidResolveError> {
+    // Gate receipts are signed by the Principal Server's service DID. Service
+    // documents intentionally publish verification methods, so they require
+    // generic WebVH chain verification rather than the human-principal
+    // profile, which forbids device and business authority keys.
+    arkret_identity::verify_did_webvh_v1_chain_bytes(did, history).map_err(|error| {
+        DidResolveError::BadResolverResponse(format!(
+            "historical did:webvh service log failed verification: {error}"
+        ))
+    })
 }
 
 fn verified_webvh_document_at(
@@ -908,6 +918,8 @@ fn did_plc_document_url(did: &str) -> Result<Url, DidResolveError> {
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone as _, Utc};
+    use rand::SeedableRng as _;
+    use rand_chacha::ChaCha20Rng;
 
     use super::*;
 
@@ -1166,6 +1178,50 @@ mod tests {
                 old_time - chrono::Duration::milliseconds(1)
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn historical_service_history_accepts_service_authority_keys() {
+        let endpoint = Url::parse("https://principal.example/").unwrap();
+        let mut rng = ChaCha20Rng::from_seed([7; 32]);
+        let prepared = arkret_signatures::webvh::prepare_service_inception(
+            &mut rng,
+            &arkret_signatures::webvh::ServiceInceptionInput {
+                principal_endpoint: &endpoint,
+                local_id: "service",
+                also_known_as: &[],
+                version_time: Utc.with_ymd_and_hms(2026, 8, 18, 0, 0, 0).unwrap(),
+                did_key_fragment: Some("account-authority"),
+            },
+        )
+        .unwrap();
+        let did = arkret_identifiers::DidFullId::new(prepared.did.clone()).unwrap();
+        let history = serde_json::to_vec(&prepared.log_entry).unwrap();
+
+        assert!(
+            arkret_identity::verify_did_webvh_v1_log_bytes(&did, &history).is_err(),
+            "the human-principal profile must reject service authority keys"
+        );
+        let verified = verify_historical_webvh_service_chain(&did, &history).unwrap();
+        let document = verified_webvh_document_at(
+            &did,
+            &verified,
+            Utc.with_ymd_and_hms(2026, 8, 18, 0, 0, 1).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(document.id, did.as_str());
+        assert!(
+            document
+                .verification_method
+                .iter()
+                .any(|method| { method.id == format!("{}#account-authority", did.as_str()) })
+        );
+        assert!(
+            document
+                .assertion_method
+                .contains(&format!("{}#account-authority", did.as_str()))
         );
     }
 }
