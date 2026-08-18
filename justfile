@@ -44,7 +44,7 @@ dev: frontend-assets
 
 # Stop dev services (PostgreSQL)
 dev-down:
-    docker compose -f .devcontainer/docker-compose.yml down
+    docker compose -f .devcontainer/compose.yml down
 
 # Generate a dev config pointing to the local Docker PostgreSQL
 config-dev-generate:
