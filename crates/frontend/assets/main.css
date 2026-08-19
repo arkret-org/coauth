@@ -1361,18 +1361,6 @@ html[data-theme="dark"] .filter-toggle {
     font-size: var(--font-size-sm);
 }
 
-.overview-workflow-banner {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4x);
-    padding: var(--space-5x);
-    border-radius: var(--radius-lg);
-    border: 1.5px solid var(--color-primary-border);
-    background:
-        radial-gradient(circle at right top, var(--color-primary-glow), transparent 34%),
-        linear-gradient(135deg, var(--color-primary-soft), var(--color-secondary-soft));
-}
-
 .overview-section-title {
     font-size: var(--font-size-lg);
     font-weight: 700;
@@ -1830,11 +1818,5 @@ body:has(.dialog-overlay) .display-preferences {
     .overview-stat-grid,
     .overview-action-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .overview-workflow-banner {
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
     }
 }

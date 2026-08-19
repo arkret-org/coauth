@@ -1362,7 +1362,7 @@
           "maximum": 86400
         },
         "admin_audience": {
-          "description": "Audience string expected by Arkret admin integrations.\n\nSession-grant audiences are `did_core_id` values (the target service's stable authorization identity). When omitted, the backend falls back to this deployment's own runtime service core id.",
+          "description": "Audience string expected by Arkret admin integrations.\n\nSession-grant audiences are `did_core_id` values (the target service's\nstable authorization identity). When omitted, the backend falls back to\nthis deployment's own runtime service core id.",
           "type": [
             "string",
             "null"
@@ -1382,15 +1382,6 @@
             "null"
           ]
         },
-        "oob_code_kind": {
-          "description": "Round R2/R3 (2026-05-20) — selects the OOB code mint form for\n3PID invites. Default `OfflineVerifiable` mints a ≥128-bit\nopaque token; `Lookup` mints a short human-typeable code with\nserver-side pepper + 3-strike invalidation. See\n`backend::services::oob_code` for the implementation.",
-          "default": "offline_verifiable",
-          "allOf": [
-            {
-              "$ref": "#/definitions/OobCodeKindConfig"
-            }
-          ]
-        },
         "password_login_session_grants_enabled": {
           "description": "Fail-closed gate for the temporary password-login bridge that returns a\nArkret principal-server session grant directly from\n`POST /_coauth/gate/account/auth/login`.\n\nDefaults to `false`: production callers must use the OIDC/passkey bridge\nand proof-bound grant exchange. When enabled for development, the login\nhandler still requires a valid DPoP proof before minting the grant.",
           "type": "boolean"
@@ -1405,6 +1396,13 @@
         "audit_signature_fail_closed": {
           "description": "Require signed admin-audit writes to succeed before committing\nsecurity-sensitive admin mutations. Defaults to `false` so existing\ndeployments tolerate missing service signing keys during rollout; set\nto `true` in production once JWKS publication and key rotation are\noperational.",
           "type": "boolean"
+        },
+        "development_auto_enrollment_hosts": {
+          "description": "Exact local HTTPS host names eligible for development-mode automatic\nprincipal-server trust enrollment.\n\nEvery entry must be a bare lowercase host name (no scheme, port, path\nor wildcard). Auto-enrollment only runs when ALL of these hold: the\nprocess runs in explicit development mode, the configured endpoint is\nan HTTPS URL whose host exactly matches one entry, and neither a\nconfig pin nor a persisted enrollment exists. It never overwrites an\nexisting pin and must stay empty in production.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false
@@ -1423,7 +1421,7 @@
           "format": "uri"
         },
         "service_id": {
-          "description": "Stable service identity core for authenticated S2S authorization.\nThis is required for every configured Principal Server. Describe\nmetadata may confirm it but can never discover or replace it; an\nendpoint URL or bearer token is never converted into an identity core.",
+          "description": "Stable service identity core for authenticated S2S authorization.\n\nOptional explicit authorization pin, highest priority. When omitted,\nthe effective pin comes from the persisted trust enrollment written by\n`coauth principal-server trust bootstrap` (or, under the strict\ndevelopment-mode gate, the automatic first enrollment). Describe\nmetadata may confirm a pin but can never discover or replace it; an\nendpoint URL or bearer token is never converted into an identity core.\nA configured value that conflicts with the persisted enrollment fails\nstartup closed.",
           "type": [
             "string",
             "null"
@@ -1538,21 +1536,6 @@
       "additionalProperties": false,
       "required": [
         "resolver"
-      ]
-    },
-    "OobCodeKindConfig": {
-      "description": "Round R2/R3 — wire-config mirror of\n`backend::services::oob_code::OobCodeKind`. Lives in `config` so\nschema export can reach it without pulling the backend crate.",
-      "oneOf": [
-        {
-          "description": "Form 1 — offline-verifiable, ≥128-bit token.",
-          "type": "string",
-          "const": "offline_verifiable"
-        },
-        {
-          "description": "Form 2 — short lookup-style code; requires a server-side pepper\nand 3-strike invalidation.",
-          "type": "string",
-          "const": "lookup"
-        }
       ]
     },
     "TelemetryConfig": {

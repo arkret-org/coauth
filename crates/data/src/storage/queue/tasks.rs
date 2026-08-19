@@ -2,83 +2,12 @@ use arkret_models_collaboration::account_lifecycle::AccountStatusPublicationRequ
 use arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody;
 use arkret_wire::Hash;
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    BrowserSession, Session, User, UserEmailAuthentication, UserPhoneAuthentication,
-    UserRecoverySession,
-};
+use coauth_data::{BrowserSession, Session, User, UserRecoverySession};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use super::InsertableJob;
 use crate::{Page, Pagination};
-
-/// A job to send an email authentication code to a user.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SendEmailAuthenticationCodeJob {
-    user_email_authentication_id: Ulid,
-    language: String,
-}
-
-impl SendEmailAuthenticationCodeJob {
-    /// Create a new job to send an email authentication code to a user.
-    #[must_use]
-    pub fn new(user_email_authentication: &UserEmailAuthentication, language: String) -> Self {
-        Self {
-            user_email_authentication_id: user_email_authentication.id,
-            language,
-        }
-    }
-
-    /// The language to use for the email.
-    #[must_use]
-    pub fn language(&self) -> &str {
-        &self.language
-    }
-
-    /// The ID of the email authentication to send the code for.
-    #[must_use]
-    pub fn user_email_authentication_id(&self) -> Ulid {
-        self.user_email_authentication_id
-    }
-}
-
-impl InsertableJob for SendEmailAuthenticationCodeJob {
-    const QUEUE_NAME: &'static str = "send-email-authentication-code";
-}
-
-/// A job to send a phone authentication code via SMS.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SendSmsAuthenticationCodeJob {
-    user_phone_authentication_id: Ulid,
-    language: String,
-}
-
-impl SendSmsAuthenticationCodeJob {
-    /// Create a new job to send a phone authentication code via SMS.
-    #[must_use]
-    pub fn new(user_phone_authentication: &UserPhoneAuthentication, language: String) -> Self {
-        Self {
-            user_phone_authentication_id: user_phone_authentication.id,
-            language,
-        }
-    }
-
-    /// The language to use for the SMS.
-    #[must_use]
-    pub fn language(&self) -> &str {
-        &self.language
-    }
-
-    /// The ID of the phone authentication to send the code for.
-    #[must_use]
-    pub fn user_phone_authentication_id(&self) -> Ulid {
-        self.user_phone_authentication_id
-    }
-}
-
-impl InsertableJob for SendSmsAuthenticationCodeJob {
-    const QUEUE_NAME: &'static str = "send-sms-authentication-code";
-}
 
 /// A generic job to dispatch user-facing notifications.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -501,37 +430,6 @@ impl AccountProjectionRewriteJob {
 
 impl InsertableJob for AccountProjectionRewriteJob {
     const QUEUE_NAME: &'static str = "account-projection-rewrite";
-}
-
-/// Send account recovery emails
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SendAccountRecoveryEmailsJob {
-    user_recovery_session_id: Ulid,
-}
-
-impl SendAccountRecoveryEmailsJob {
-    /// Create a new job to send account recovery emails
-    ///
-    /// # Parameters
-    ///
-    /// * `user_recovery_session` - The user recovery session to send the email for
-    /// * `language` - The locale to send the email in
-    #[must_use]
-    pub fn new(user_recovery_session: &UserRecoverySession) -> Self {
-        Self {
-            user_recovery_session_id: user_recovery_session.id,
-        }
-    }
-
-    /// The ID of the user recovery session to send the email for
-    #[must_use]
-    pub fn user_recovery_session_id(&self) -> Ulid {
-        self.user_recovery_session_id
-    }
-}
-
-impl InsertableJob for SendAccountRecoveryEmailsJob {
-    const QUEUE_NAME: &'static str = "send-account-recovery-email";
 }
 
 /// Cleanup revoked OAuth access tokens

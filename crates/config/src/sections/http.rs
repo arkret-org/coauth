@@ -20,7 +20,7 @@ fn wellknown_public_base() -> Url {
     "http://[::]:7080".parse().unwrap()
 }
 
-#[cfg(not(any(feature = "docker", feature = "dist")))]
+#[cfg(not(feature = "docker"))]
 fn http_listener_assets_path_default() -> Utf8PathBuf {
     "./dist/".into()
 }
@@ -28,11 +28,6 @@ fn http_listener_assets_path_default() -> Utf8PathBuf {
 #[cfg(feature = "docker")]
 fn http_listener_assets_path_default() -> Utf8PathBuf {
     "/usr/local/share/coauth/assets/".into()
-}
-
-#[cfg(feature = "dist")]
-fn http_listener_assets_path_default() -> Utf8PathBuf {
-    "./share/assets/".into()
 }
 
 fn is_default_http_listener_assets_path(value: &Utf8PathBuf) -> bool {

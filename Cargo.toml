@@ -90,7 +90,6 @@ chrono = {version = "0.4.45",default-features = false,features = [
     "clock",
 ]}
 clap = {version = "4.6.1",features = ["derive"]}
-coauth = {version = "=0.3.0",path = "crates/cli"}
 coauth-account-types = {version = "=0.3.0",path = "crates/account-types"}
 coauth-admin-types = {version = "=0.3.0",path = "crates/admin-types"}
 coauth-backend = {version = "=0.3.0",path = "crates/backend"}
@@ -99,9 +98,7 @@ coauth-data = {version = "=0.3.0",path = "crates/data"}
 coauth-data-model = {version = "=0.3.0",path = "crates/data-model"}
 coauth-storage-postgres = {version = "=0.3.0",path = "crates/storage-postgres"}
 coauth-email-types = {version = "=0.3.0",path = "crates/email-types"}
-coauth-frontend = {version = "=0.3.0",path = "crates/frontend"}
 coauth-i18n = {version = "=0.3.0",path = "crates/i18n"}
-coauth-i18n-scan = {version = "=0.3.0",path = "crates/i18n-scan"}
 coauth-iana = {version = "=0.3.0",path = "crates/iana"}
 coauth-jose = {version = "=0.3.0",path = "crates/jose"}
 coauth-keystore = {version = "=0.3.0",path = "crates/keystore"}

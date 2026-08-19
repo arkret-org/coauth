@@ -127,7 +127,6 @@ pub fn AccountPage() -> Element {
                             div { class: "sidebar-nav-group",
                                 span { class: "sidebar-group-label", "Preferences" }
                                 SidebarItem { to: Route::NotificationPreferences {}, "Notifications" }
-                                SidebarItem { to: Route::WorkflowInbox {}, "Workflows" }
                                 if has_plan {
                                     SidebarItem { to: Route::Plan {}, "Plan" }
                                 }

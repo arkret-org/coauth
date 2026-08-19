@@ -26,15 +26,11 @@ anyhow = {workspace = true}
 arc-swap = {workspace = true}
 camino = {workspace = true}
 chrono = {workspace = true}
-coauth-account-types = {workspace = true}
 coauth-data = {workspace = true}
 coauth-i18n = {workspace = true}
-coauth-iana = {workspace = true}
 fluent-bundle = {workspace = true}
-http = {workspace = true}
 minijinja = {workspace = true}
 minijinja-contrib = {workspace = true}
-coauth-oauth-types = {workspace = true}
 rand_chacha = {workspace = true}
 rand_core = {workspace = true}
 serde = {workspace = true}
@@ -43,7 +39,6 @@ serde_urlencoded = {workspace = true}
 thiserror = {workspace = true}
 tokio = {workspace = true}
 tracing = {workspace = true}
-ulid = {workspace = true}
 url = {workspace = true}
 walkdir = {workspace = true}
 

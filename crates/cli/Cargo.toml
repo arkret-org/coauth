@@ -54,9 +54,6 @@ zeroize = {workspace = true}
 [features]
 default = ["cedar"]
 
-# Features used for the prebuilt binaries
-dist = ["coauth-config/dist"]
-
 # Features used in the Docker image
 docker = ["coauth-config/docker"]
 

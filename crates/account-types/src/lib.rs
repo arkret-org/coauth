@@ -370,23 +370,6 @@ pub struct DeviceLinkOutcome {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
-pub struct WorkflowInboxItem {
-    pub session_id: String,
-    pub strand_slug: String,
-    pub strand_title: String,
-    pub current_stage: String,
-    pub started_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
-pub struct WorkflowInboxOutcome {
-    pub pending: Vec<WorkflowInboxItem>,
-    pub total: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 pub struct PageInfo {
     pub has_next_page: bool,
     pub has_previous_page: bool,

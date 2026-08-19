@@ -61,24 +61,6 @@ The `trust_domain` value binds peer and recovery authorization
 transcripts to this deployment. Rotate it only with coordinated expiry
 of in-flight proofs and sessions issued under the prior value.
 
-## OOB invite code form
-
-`coauth` mints third-party invite OOB codes in one of two configurable
-forms. Deployments choose per `auth.oob_code_kind`:
-
-- **`offline_verifiable`** (default) — 27-char restricted-base32 token
-  (excludes `I`, `L`, `0`, `1`, `O`), ≥128-bit entropy, no server
-  lookup needed for entropy proof.
-- **`lookup`** — 6-char human-typeable code paired with a server-side
-  HMAC-SHA256 pepper, `oob_code_kind="lookup"` advertised on the wire,
-  3-strike invalidation per code.
-
-Both forms run the same 7-trigger non-enumerable failure state machine
-(byte-identical `{"error":"not_found"}` body, ≤50 ms constant-time
-padding) so external observers cannot distinguish "expired" from
-"never existed". The normative source is the v1 spec under
-[`../arkret-spec/spec/v1/`](../arkret-spec/spec/v1/).
-
 ## Current protocol behavior
 
 The canonical wire behavior lives in the v1 spec artifacts and prose under

@@ -60,7 +60,6 @@ url = {workspace = true}
 
 [features]
 docker = []
-dist = []
 
 [[bin]]
 name = "schema"

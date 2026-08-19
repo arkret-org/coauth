@@ -268,7 +268,6 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         high_risk_threshold: 2,
         trust_domain: None,
         development_auto_enrollment_hosts: Vec::new(),
-        oob_code_kind: ArkretConfig::default().oob_code_kind,
         password_login_session_grants_enabled: false,
         admin_org_id: None,
         audit_signature_fail_closed: false,

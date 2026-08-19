@@ -25,7 +25,6 @@ pub mod security_center;
 pub mod session_detail;
 pub mod sessions;
 pub mod upstream_link;
-pub mod workflow_inbox;
 
 // Re-export page components for the router
 use account_overview::AccountOverview;
@@ -56,7 +55,6 @@ use security_center::SecurityCenter;
 use session_detail::SessionDetail;
 use sessions::Sessions;
 use upstream_link::UpstreamLink;
-use workflow_inbox::WorkflowInbox;
 
 use crate::components::error::NotFound;
 use crate::components::layout::Layout;
@@ -109,8 +107,6 @@ pub enum Route {
         NotificationPreferences {},
         #[route("/identities")]
         IdentityBindings {},
-        #[route("/workflows")]
-        WorkflowInbox {},
     #[end_layout]
 
     // Standalone pages

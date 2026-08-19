@@ -35,13 +35,10 @@ pub use crate::new_queue::QueueWorker;
 mod account_status_publication;
 mod agent_key_pair_commit;
 mod cleanup;
-mod email;
 mod new_queue;
 mod notifications;
 mod principal;
-mod recovery;
 mod sessions;
-mod sms;
 mod user;
 
 // ── Telemetry ───────────────────────────────────────────────────────────
@@ -187,9 +184,6 @@ fn register_all_handlers(w: &mut QueueWorker) {
     // Notifications & messaging
     w.register_handler::<queue::ProcessNotificationDeliveriesJob>();
     w.register_handler::<queue::DispatchNotificationJob>();
-    w.register_handler::<queue::SendAccountRecoveryEmailsJob>();
-    w.register_handler::<queue::SendEmailAuthenticationCodeJob>();
-    w.register_handler::<queue::SendSmsAuthenticationCodeJob>();
 
     // Session expiry
     w.register_handler::<queue::ExpireInactiveSessionsJob>();

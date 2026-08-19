@@ -287,14 +287,6 @@ pub struct ArkretConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trust_domain: Option<String>,
 
-    /// Round R2/R3 (2026-05-20) — selects the OOB code mint form for
-    /// 3PID invites. Default `OfflineVerifiable` mints a ≥128-bit
-    /// opaque token; `Lookup` mints a short human-typeable code with
-    /// server-side pepper + 3-strike invalidation. See
-    /// `backend::services::oob_code` for the implementation.
-    #[serde(default)]
-    pub oob_code_kind: OobCodeKindConfig,
-
     /// Fail-closed gate for the temporary password-login bridge that returns a
     /// Arkret principal-server session grant directly from
     /// `POST /_coauth/gate/account/auth/login`.
@@ -357,7 +349,6 @@ impl Default for ArkretConfig {
             admin_audience: None,
             high_risk_threshold: default_high_risk_threshold(),
             trust_domain: None,
-            oob_code_kind: OobCodeKindConfig::default(),
             password_login_session_grants_enabled: false,
             admin_org_id: None,
             audit_signature_fail_closed: false,
@@ -380,7 +371,6 @@ impl ArkretConfig {
             && self.admin_audience.is_none()
             && self.high_risk_threshold == default_high_risk_threshold()
             && self.trust_domain.is_none()
-            && matches!(self.oob_code_kind, OobCodeKindConfig::OfflineVerifiable)
             && !self.password_login_session_grants_enabled
             && self.admin_org_id.is_none()
             && !self.audit_signature_fail_closed
@@ -490,20 +480,6 @@ impl ArkretConfig {
     }
 }
 
-/// Round R2/R3 — wire-config mirror of
-/// `backend::services::oob_code::OobCodeKind`. Lives in `config` so
-/// schema export can reach it without pulling the backend crate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum OobCodeKindConfig {
-    /// Form 1 — offline-verifiable, ≥128-bit token.
-    #[default]
-    OfflineVerifiable,
-    /// Form 2 — short lookup-style code; requires a server-side pepper
-    /// and 3-strike invalidation.
-    Lookup,
-}
-
 impl ConfigurationSection for ArkretConfig {
     const PATH: &'static str = "arkret";
 
@@ -534,13 +510,6 @@ impl ConfigurationSection for ArkretConfig {
 
         if let Some(trust_domain) = self.trust_domain.as_deref() {
             Self::validate_trust_domain(trust_domain).map_err(std::io::Error::other)?;
-        }
-
-        if matches!(self.oob_code_kind, OobCodeKindConfig::Lookup) {
-            return Err(std::io::Error::other(
-                "arkret.oob_code_kind=lookup is disabled until lookup-mode strike counters are durable",
-            )
-            .into());
         }
 
         if let Some(org_id) = self.admin_org_id.as_deref()
@@ -712,10 +681,6 @@ pub struct IdentityRegistryConfig {
 mod tests {
     use super::*;
 
-    fn valid_service_config() -> ArkretConfig {
-        ArkretConfig::default()
-    }
-
     #[test]
     fn trust_domain_accepts_well_formed_scope() {
         assert!(ArkretConfig::validate_trust_domain("ak:trust_domain:example.net").is_ok());
@@ -744,16 +709,6 @@ mod tests {
         assert!(ArkretConfig::validate_trust_domain("ak:trust_domain:bad/slash").is_err());
         // Scope MUST start with [a-z0-9], not a separator.
         assert!(ArkretConfig::validate_trust_domain("ak:trust_domain:.dotleader").is_err());
-    }
-
-    #[test]
-    fn lookup_oob_kind_is_fail_closed_until_strikes_are_durable() {
-        let config = ArkretConfig {
-            oob_code_kind: OobCodeKindConfig::Lookup,
-            ..valid_service_config()
-        };
-        let figment = figment::Figment::new();
-        assert!(config.validate(&figment).is_err());
     }
 
     #[test]

@@ -317,8 +317,7 @@ fn account_api_subrouters() -> (Router, Router) {
                     Router::with_path("preferences")
                         .get(notification_prefs::get_notification_preferences)
                         .patch(notification_prefs::patch_notification_preferences),
-                )
-                .push(Router::with_path("workflow-inbox").get(viewer::get_workflow_inbox)),
+                ),
         )
         .push(Router::with_path("self/bootstrap-admin-status").get(bootstrap_admin_status::get))
         .push(

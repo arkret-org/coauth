@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::api::types::{SecuritySummaryOutcome, WorkflowInboxOutcome};
+use crate::api::types::SecuritySummaryOutcome;
 use crate::components::loading::LoadingScreen;
 use crate::components::status_badge::StatusBadge;
 use crate::pages::Route;
@@ -12,18 +12,13 @@ use crate::pages::Route;
 /// - Security status summary (password, sessions, verified emails, providers)
 /// - Contact points summary (email/phone counts)
 /// - Identity bindings summary (linked providers count)
-/// - Pending workflow count
 #[component]
 pub fn AccountOverview() -> Element {
     let security = use_resource(|| async {
         crate::api::api_get::<SecuritySummaryOutcome>("/self/viewer/security").await
     });
-    let workflows = use_resource(|| async {
-        crate::api::api_get::<WorkflowInboxOutcome>("/self/viewer/workflow-inbox").await
-    });
 
     let sec_binding = security.read();
-    let wf_binding = workflows.read();
 
     // Wait for at least the security data before rendering.
     let summary = match &*sec_binding {
@@ -38,15 +33,6 @@ pub fn AccountOverview() -> Element {
         }
     };
 
-    // Workflow data loads independently and degrades gracefully: while it is
-    // still in flight we show a "loading" state instead of an "unavailable"
-    // one, so the security-driven view renders immediately without flicker.
-    let workflow_loading = wf_binding.is_none();
-    let pending_count = match &*wf_binding {
-        Some(Ok(wf)) => Some(wf.total),
-        Some(Err(_)) | None => None, // silently degrade / still loading
-    };
-
     let password_label = if summary.has_password {
         "Password is set"
     } else {
@@ -56,29 +42,6 @@ pub fn AccountOverview() -> Element {
         "tone-success"
     } else {
         "tone-warning"
-    };
-    let workflow_badge_class = match pending_count {
-        Some(0) => "badge badge-success",
-        Some(_) => "badge badge-warning",
-        None => "badge badge-neutral",
-    };
-    let workflow_badge_label = match pending_count {
-        Some(0) => "No pending workflows".to_owned(),
-        Some(count) => format!("{count} workflow(s) pending"),
-        None if workflow_loading => "Checking workflows…".to_owned(),
-        None => "Workflow status unavailable".to_owned(),
-    };
-    let workflow_title = match pending_count {
-        Some(0) => "No workflows waiting",
-        Some(_) => "Pending workflow actions",
-        None if workflow_loading => "Checking your workflow inbox",
-        None => "Workflow visibility degraded",
-    };
-    let workflow_message = match pending_count {
-        Some(0) => "Everything looks clear right now. You can stay focused on profile and security hygiene.".to_owned(),
-        Some(count) => format!("{count} workflow(s) still need attention. Review them before they expire or block follow-up actions."),
-        None if workflow_loading => "Loading your pending workflows…".to_owned(),
-        None => "The workflow inbox could not be loaded. You can still open it directly and retry from there.".to_owned(),
     };
     rsx! {
         div { class: "overview-shell",
@@ -91,7 +54,6 @@ pub fn AccountOverview() -> Element {
                     }
                     div { class: "flex flex-wrap items-center gap-2",
                         StatusBadge { ok: summary.has_password, label: password_label.to_owned() }
-                        span { class: "{workflow_badge_class}", "{workflow_badge_label}" }
                     }
                 }
                 div { class: "overview-hero-actions",
@@ -139,18 +101,6 @@ pub fn AccountOverview() -> Element {
                 }
             }
 
-            div { class: "overview-workflow-banner",
-                div { class: "flex flex-col gap-2",
-                    p { class: "overview-section-title", "{workflow_title}" }
-                    p { class: "text-md text-secondary", "{workflow_message}" }
-                }
-                Link {
-                    class: "btn btn-secondary btn-sm",
-                    to: Route::WorkflowInbox {},
-                    "View workflows"
-                }
-            }
-
             div { class: "flex flex-col gap-2",
                 p { class: "overview-section-title", "Quick actions" }
                 p { class: "text-sm text-secondary",
@@ -178,11 +128,6 @@ pub fn AccountOverview() -> Element {
                     title: "Devices",
                     description: "Rename or revoke browser and OAuth sessions.",
                     to: Route::Sessions {},
-                }
-                OverviewActionCard {
-                    title: "Workflows",
-                    description: "Resume pending approvals, recovery, or enrollment steps.",
-                    to: Route::WorkflowInbox {},
                 }
             }
         }

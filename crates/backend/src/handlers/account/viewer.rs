@@ -1,4 +1,4 @@
-use coauth_account_types::{LinkedAccount, WorkflowInboxItem, WorkflowInboxOutcome};
+use coauth_account_types::LinkedAccount;
 use coauth_data::RepositoryAccess;
 use coauth_data::account::AccountSecuritySummary;
 use salvo::oapi::ToSchema;
@@ -294,45 +294,6 @@ pub async fn get_security_summary(
     repo.cancel().await?;
 
     Ok(Json(SecuritySummaryData::from(&summary)))
-}
-
-// ── Response types for workflow inbox ────────────────────────
-
-// ── GET /_coauth/self/viewer/workflow-inbox ────────────────────────
-
-/// Returns the list of pending strand sessions for the current user.
-///
-/// Strand sessions are currently in-memory and do not have a user-id
-/// association, so this endpoint always returns an empty list. Once
-/// persistent strand sessions with user ownership are implemented, this
-/// will return actual pending items.
-#[endpoint]
-pub async fn get_workflow_inbox(
-    req: &mut Request,
-    depot: &Depot,
-) -> Result<Json<WorkflowInboxOutcome>, RouteError> {
-    let repo_factory = depot.repo_factory()?;
-    let clock = make_clock();
-
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
-    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
-
-    // Require an authenticated user.
-    match &requester.entity {
-        super::RequestingEntity::BrowserSession(_) => {}
-        _ => return Err(RouteError::Unauthorized),
-    }
-
-    repo.cancel().await?;
-
-    // Placeholder: strand sessions are in-memory and not user-associated yet.
-    let pending: Vec<WorkflowInboxItem> = Vec::new();
-    let total = pending.len();
-
-    Ok(Json(WorkflowInboxOutcome { pending, total }))
 }
 
 // ── Response types for viewer overview ─────────────────────

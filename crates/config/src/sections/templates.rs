@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::ConfigurationSection;
 
-#[cfg(not(any(feature = "docker", feature = "dist")))]
+#[cfg(not(feature = "docker"))]
 fn default_path() -> Utf8PathBuf {
     "./templates/".into()
 }
@@ -14,16 +14,11 @@ fn default_path() -> Utf8PathBuf {
     "/usr/local/share/coauth/templates/".into()
 }
 
-#[cfg(feature = "dist")]
-fn default_path() -> Utf8PathBuf {
-    "./share/templates/".into()
-}
-
 fn is_default_path(value: &Utf8PathBuf) -> bool {
     *value == default_path()
 }
 
-#[cfg(not(any(feature = "docker", feature = "dist")))]
+#[cfg(not(feature = "docker"))]
 fn default_translations_path() -> Utf8PathBuf {
     "./translations/".into()
 }
@@ -31,11 +26,6 @@ fn default_translations_path() -> Utf8PathBuf {
 #[cfg(feature = "docker")]
 fn default_translations_path() -> Utf8PathBuf {
     "/usr/local/share/coauth/translations/".into()
-}
-
-#[cfg(feature = "dist")]
-fn default_translations_path() -> Utf8PathBuf {
-    "./share/translations/".into()
 }
 
 fn is_default_translations_path(value: &Utf8PathBuf) -> bool {

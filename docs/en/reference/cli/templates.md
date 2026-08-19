@@ -12,9 +12,8 @@ It compiles the templates and then renders them with different contexts.
 ```console
 $ coauth templates check
 INFO coauth_templates: Loading templates from filesystem path=./templates/**/*.{html,txt}
-INFO coauth_templates::check: Rendering template name="login.html" context={"csrf_token":"fake_csrf_token","form":{"fields_errors":{},"form_errors":[],"has_errors":false}}
-INFO coauth_templates::check: Rendering template name="register.html" context={"__UNUSED":null,"csrf_token":"fake_csrf_token"}
-INFO coauth_templates::check: Rendering template name="index.html" context={"csrf_token":"fake_csrf_token","current_session":{"active":true,"created_at":"2021-09-24T13:26:52.962135085Z","id":1,"last_authd_at":"2021-09-24T13:26:52.962135316Z","user_id":2,"username":"john"},"discovery_url":"https://example.com/.well-known/openid-configuration"}
+INFO coauth_templates::check: Rendering template name="app.html" context={"app_config":{"root":"/account/","api_endpoint":"/_coauth","script_src":"/assets/coauth-frontend.js"},"lang":"en"}
+INFO coauth_templates::check: Rendering template name="emails/verification.subject" context={"authentication_code":{"code":"654321"},"lang":"en"}
 ...
 ```
 

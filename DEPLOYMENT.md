@@ -137,26 +137,5 @@ See [SECURITY.md](SECURITY.md). Highlights:
 - Gitleaks CI job catches accidental secret commits (`.github/workflows/secret-scan.yaml`).
 - `unsafe_code = deny` lint enforced workspace-wide (zero unsafe blocks).
 - OTLP + Prometheus exporters always-on (no opt-in feature flag to forget).
-
-### Replay protection is single-replica (deployment constraint)
-
-The single-use / replay-rejection store for DID-binding control proofs and
-3PID invite-claim proofs (`services::third_party_invite::NonceStore`) is an
-**in-process** `Mutex<HashMap<jti, expires_at>>`. A consumed proof `jti` is
-only remembered by the replica that handled it, and the table is lost on
-restart. Within the proof freshness window (≤300s) the same proof can
-therefore be replayed against a *different* replica.
-
-The reference Helm chart defaults to `replicaCount: 3`, so this constraint is
-**not satisfied by the default deployment**. Until the dedup store is backed
-by a shared table (`invite_proof_seen_jti(jti, expires_at)` with a partial
-unique index on `jti`), operators MUST either:
-
-- run a single coauth replica for the proof-verifying surfaces, or
-- front the proof-verifying routes
-  (`/_coauth/self/invites/3pid/verify`, the admin DID-binding verify, and the
-  session-grant refresh/revoke DID-proof paths) with a load balancer that
-  pins a given `jti`/client to one replica for the freshness window,
-
-otherwise cross-replica proof replay is possible. This is tracked as a known
-limitation; the migration path is documented inline on `NonceStore`.
+- Proof replay rejection (DPoP and DID-binding `jti` dedup) is backed by
+  shared Postgres tables, so it holds across replicas and restarts.

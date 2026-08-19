@@ -1,45 +1,13 @@
-//! Context types for simple page templates: landing, app shell, API docs,
-//! error pages and account-state pages.
+//! Context types for the app shell and error pages.
 
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
 
 use coauth_data::UrlBuilder;
-use http::{Method, Uri, Version};
 use rand_core::RngCore as Rng;
 use serde::Serialize;
 
 use super::wrappers::{SampleIdentifier, TemplateContext, sample_list};
-
-// -- Landing page -----------------------------------------------------------
-
-/// Data passed to the `index.html` landing page.
-#[derive(Serialize)]
-pub struct IndexContext {
-    discovery_url: url::Url,
-}
-
-impl IndexContext {
-    /// Build the context from the OIDC discovery document URL.
-    #[must_use]
-    pub fn new(discovery_url: url::Url) -> Self {
-        Self { discovery_url }
-    }
-}
-
-impl TemplateContext for IndexContext {
-    fn sample<R: Rng>(
-        _now: chrono::DateTime<chrono::Utc>,
-        _rng: &mut R,
-        _locales: &[coauth_i18n::Locale],
-    ) -> BTreeMap<SampleIdentifier, Self> {
-        sample_list(vec![Self {
-            discovery_url: "https://example.com/.well-known/openid-configuration"
-                .parse()
-                .unwrap(),
-        }])
-    }
-}
 
 // -- Frontend application shell ---------------------------------------------
 
@@ -207,43 +175,3 @@ impl TemplateContext for ErrorContext {
         ])
     }
 }
-
-/// Data for the `404.html` not-found template.
-#[derive(Serialize)]
-pub struct NotFoundContext {
-    method: String,
-    version: String,
-    uri: String,
-}
-
-impl NotFoundContext {
-    /// Build the context from the incoming request metadata.
-    #[must_use]
-    pub fn new(method: &Method, version: Version, uri: &Uri) -> Self {
-        Self {
-            method: method.to_string(),
-            version: format!("{version:?}"),
-            uri: uri.to_string(),
-        }
-    }
-}
-
-impl TemplateContext for NotFoundContext {
-    fn sample<R: Rng>(
-        _now: chrono::DateTime<chrono::Utc>,
-        _rng: &mut R,
-        _locales: &[coauth_i18n::Locale],
-    ) -> BTreeMap<SampleIdentifier, Self> {
-        sample_list(vec![
-            Self::new(&Method::GET, Version::HTTP_11, &"/".parse().unwrap()),
-            Self::new(&Method::POST, Version::HTTP_2, &"/foo/bar".parse().unwrap()),
-            Self::new(
-                &Method::PUT,
-                Version::HTTP_10,
-                &"/foo?bar=baz".parse().unwrap(),
-            ),
-        ])
-    }
-}
-
-// -- Account state pages ----------------------------------------------------

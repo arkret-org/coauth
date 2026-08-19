@@ -2,7 +2,7 @@ pub use coauth_account_types::{
     ChangeRegistrationEmailOutcome, ChannelAvailability, ChannelPreference, DeviceLinkOutcome,
     LinkedAccount, LinkedAccountsOutcome, NotificationPreferencesOutcome, PageInfo,
     RecoveryStatusOutcome, RecoveryTicketStatusOutcome, RegisterInput, RegisterOutcome,
-    UnlinkOutcome, UpdateNotificationPreferencesOutcome, WorkflowInboxOutcome,
+    UnlinkOutcome, UpdateNotificationPreferencesOutcome,
 };
 use serde::{Deserialize, Serialize};
 
