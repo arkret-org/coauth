@@ -169,7 +169,7 @@ arkret:
   identity_registry:
     resolver: https://resolver.example.com/
     proof_required_for_pairwise: true
-  admin_audience: https://auth.example.com/_arkret
+  admin_audience: ak:did_core:web:auth.example.com
 
 secrets:
   encryption: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef

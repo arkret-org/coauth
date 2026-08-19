@@ -504,7 +504,7 @@ pub trait ConnectorAdmin: Send + Sync {
 
     /// Submit a collaboration capability grant/revoke fan-out payload to the
     /// downstream principal system.
-
+    ///
     /// Submit an exact authority-signed account-status publication.
     async fn submit_account_status_publication(
         &self,

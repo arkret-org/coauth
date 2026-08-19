@@ -23,6 +23,7 @@ use crate::organization_control::OrganizationControlRepository;
 use crate::personal::{PersonalAccessTokenRepository, PersonalSessionRepository};
 use crate::policy_data::PolicyDataRepository;
 use crate::queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository};
+use crate::storage::principal_server_trust::PrincipalServerTrustRepository;
 use crate::storage::recovery_authority::RecoveryAuthorityRepository;
 use crate::upstream_oauth::{
     UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository, UpstreamOAuthSessionRepository,
@@ -326,6 +327,11 @@ pub trait RepositoryAccess: Send {
     /// Get a [`PolicyDataRepository`]
     fn policy_data<'c>(&'c mut self) -> Box<dyn PolicyDataRepository<Error = Self::Error> + 'c>;
 
+    /// Get a [`PrincipalServerTrustRepository`]
+    fn principal_server_trust<'c>(
+        &'c mut self,
+    ) -> Box<dyn PrincipalServerTrustRepository<Error = Self::Error> + 'c>;
+
     /// Get a [`NotificationTemplateRepository`]
     fn notification_template<'c>(
         &'c mut self,
@@ -360,6 +366,7 @@ mod impls {
     use crate::policy_data::PolicyDataRepository;
     use crate::queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository};
     use crate::storage::notification_template::NotificationTemplateRepository;
+    use crate::storage::principal_server_trust::PrincipalServerTrustRepository;
     use crate::storage::recovery_authority::RecoveryAuthorityRepository;
     use crate::upstream_oauth::{
         UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
@@ -710,6 +717,15 @@ mod impls {
             Box::new(MapErr::new(self.inner.policy_data(), &mut self.mapper))
         }
 
+        fn principal_server_trust<'c>(
+            &'c mut self,
+        ) -> Box<dyn PrincipalServerTrustRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(
+                self.inner.principal_server_trust(),
+                &mut self.mapper,
+            ))
+        }
+
         fn notification_template<'c>(
             &'c mut self,
         ) -> Box<dyn NotificationTemplateRepository<Error = Self::Error> + 'c> {
@@ -959,6 +975,12 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn PolicyDataRepository<Error = Self::Error> + 'c> {
             (**self).policy_data()
+        }
+
+        fn principal_server_trust<'c>(
+            &'c mut self,
+        ) -> Box<dyn PrincipalServerTrustRepository<Error = Self::Error> + 'c> {
+            (**self).principal_server_trust()
         }
 
         fn notification_template<'c>(

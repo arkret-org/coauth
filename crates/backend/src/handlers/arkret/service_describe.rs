@@ -381,7 +381,7 @@ pub(crate) fn service_describe_response(
         .iter()
         .map(|server| {
             let service_id =
-                crate::services::resolved_principal_audiences::effective_audience_shared(server);
+                crate::services::principal_server_trust::effective_audience_shared(server);
             PrincipalServerDescriptor {
                 name: server.name.clone(),
                 audience: service_id.clone(),

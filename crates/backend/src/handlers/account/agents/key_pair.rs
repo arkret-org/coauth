@@ -250,7 +250,7 @@ pub async fn post_agent_key_pair(
     if !is_allowed_session_grant_audience(
         &url_builder,
         &arkret_config,
-        crate::services::resolved_principal_audiences::shared(),
+        crate::services::principal_server_trust::shared(),
         pop.audience.as_str(),
     ) {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());

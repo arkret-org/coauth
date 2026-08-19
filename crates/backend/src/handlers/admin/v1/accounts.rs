@@ -642,6 +642,7 @@ mod tests {
     use coauth_data::RepositoryAccess;
     use coauth_data::personal::session::PersonalSessionOwner;
     use coauth_iana::jose::JsonWebSignatureAlg;
+    use coauth_jose::constraints::Constrainable as _;
     use coauth_jose::jwt::JsonWebSignatureHeader;
     use hyper::{Request, StatusCode};
     use signature::RandomizedSigner as _;
@@ -802,6 +803,7 @@ mod tests {
         // The proposal endpoint already resolves the acting admin's principal
         // DID, so the admin binding has to exist before the first request.
         let admin_did = admin_did_for_token(&state, &token, "riskexec").await;
+        seed_admin_authority_acceptance(&state, &admin_did).await;
 
         let response = state
             .request(
@@ -964,6 +966,7 @@ mod tests {
             .seed_principal_binding(&user, "riskapprovetarget")
             .await;
         let admin_did = admin_did_for_token(&state, &token, "riskapprove").await;
+        seed_admin_authority_acceptance(&state, &admin_did).await;
 
         let response = state
             .request(
@@ -1141,6 +1144,82 @@ mod tests {
             .expect("admin token user should resolve");
         repo.cancel().await.unwrap();
         state.seed_principal_binding(&user, label).await
+    }
+
+    /// File an `AdminAction` authority acceptance for the admin's accepted
+    /// principal binding into the durable verified-DID-binding store.
+    ///
+    /// The approve step resolves the admin's authority document through the
+    /// `verified_full_id` retained on that binding. Tests configure no
+    /// delegated resolver, so the acceptance must already be durable — the §4
+    /// "binding hit, zero resolver calls" path — or the high-risk freshness
+    /// gate fails closed.
+    async fn seed_admin_authority_acceptance(state: &TestState, admin_did: &str) {
+        use coauth_data::user::PrincipalDidRepository as _;
+
+        let mut repo = state.repository().await.unwrap();
+        let binding = repo
+            .principal_did()
+            .get_by_did(admin_did)
+            .await
+            .unwrap()
+            .expect("admin principal binding should be seeded");
+        let full_id = binding.verified_full_id.to_string();
+
+        // The approval proof is signed by the test keystore's Ed25519 key
+        // under `kid = {admin core id}#key-1`, so the pinned document must
+        // advertise that method with the same public key.
+        let public_jwk = state
+            .key_store
+            .public_jwks()
+            .iter()
+            .find(|jwk| jwk.kid() == Some("test-ed25519"))
+            .expect("test keystore should expose its Ed25519 public key")
+            .clone();
+        let resolution = crate::services::did_resolver::DidResolution {
+            document: crate::handlers::arkret::DidDocument {
+                id: full_id.clone(),
+                also_known_as: Vec::new(),
+                verification_method: vec![crate::handlers::arkret::VerificationMethod {
+                    id: format!("{admin_did}#key-1"),
+                    kind: "JsonWebKey2020".to_owned(),
+                    controller: full_id.clone(),
+                    public_key_jwk: Some(public_jwk),
+                    public_key_multibase: None,
+                }],
+                authentication: Vec::new(),
+                assertion_method: Vec::new(),
+                service: Vec::new(),
+                metadata: None,
+            },
+            source: crate::services::did_resolver::DidResolutionSource::DelegatedResolver,
+            verified_local_binding: false,
+            key_log_head: Some(binding.key_log_head.clone()),
+            method_evidence: serde_json::json!({
+                "method": "did:webvh",
+                "history_evidence_kind": "webvh_key_log",
+                "controller_proof_verified": true,
+            }),
+            closed_method_evidence: None,
+            identity_fact_rejection: None,
+        };
+        let now = chrono::Utc::now();
+        let accepted = crate::services::did_binding::binding_from_resolution(
+            &resolution,
+            crate::services::did_binding::trust_domain_id(&state.url_builder, &state.arkret_config)
+                .unwrap(),
+            arkret_identity::DidBindingPurpose::AdminAction,
+            crate::services::did_binding::policy_digest(&state.arkret_config).unwrap(),
+            None,
+            &crate::services::did_binding::high_risk_freshness(),
+            now,
+        )
+        .expect("fixture resolution should build an authority-grade binding");
+        crate::services::did_binding::shared_verified_did_binding_store()
+            .persist(&mut repo, &accepted, now)
+            .await
+            .expect("authority acceptance should persist");
+        repo.save().await.unwrap();
     }
 
     fn sign_risk_action_approval_proof(

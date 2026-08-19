@@ -112,6 +112,10 @@ arkret:
   # keys and JWKS publication are operational.
   audit_signature_fail_closed: false
   principal_servers:
+    # service_id is the optional explicit identity pin. When omitted, run
+    # `coauth principal-server trust bootstrap --name <name>` once to verify
+    # the identity chain online and persist the pin before the server will
+    # accept this Principal Server's audiences.
   - name: soland-example
     endpoint: https://local.host/
     session_grant_introspection_bearer: ${SOLAND_SESSION_GRANT_INTROSPECTION_BEARER}

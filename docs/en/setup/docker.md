@@ -73,7 +73,7 @@ database:
   uri: postgresql://coauth:change-me@postgres/coauth
 
 arkret:
-  admin_audience: http://localhost:7080/_arkret
+  admin_audience: ak:did_core:web:localhost
   principal_servers:
     - name: soland
       endpoint: https://soland.example.com/

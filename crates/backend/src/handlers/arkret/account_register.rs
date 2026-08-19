@@ -342,8 +342,8 @@ pub async fn account_register_endpoint(
             &key_store,
             issuer_did_for(&config),
             arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
-                source_service_id: service_id_for(&config).into(),
-                destination_service_id: principal_server.service_id.clone().into(),
+                source_service_id: service_id_for(&config),
+                destination_service_id: principal_server.service_id.clone(),
             },
             trust_domain.clone(),
             trust_domain,
@@ -815,18 +815,15 @@ fn principal_server_target(
         .principal_servers
         .iter()
         .find(|server| {
-            crate::services::resolved_principal_audiences::effective_audience_shared(server)
+            crate::services::principal_server_trust::effective_audience_shared(server)
                 .as_ref()
                 .is_some_and(|candidate| candidate.as_str() == audience)
         })
         .ok_or_else(|| {
             failed_precondition("handoff audience has no configured principal server")
         })?;
-    let service_id =
-        crate::services::resolved_principal_audiences::effective_audience_shared(server)
-            .ok_or_else(|| {
-                failed_precondition("principal server identity is unavailable or stale")
-            })?;
+    let service_id = crate::services::principal_server_trust::effective_audience_shared(server)
+        .ok_or_else(|| failed_precondition("principal server identity is unavailable or stale"))?;
     Ok(PrincipalServerTarget {
         endpoint: server.endpoint.clone(),
         service_id,

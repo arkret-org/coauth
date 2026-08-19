@@ -252,7 +252,10 @@ pub async fn inject_app_state(
         "upstream_oidc_trusted_issuers",
         TrustedIssuerPolicySet::default(),
     );
-    depot.insert("did_resolver_service", default_did_resolver_service());
+    depot.insert(
+        "did_resolver_service",
+        default_did_resolver_service(&state.arkret_config),
+    );
     // Purpose-aware accepted DID bindings (DID-P2-A). The handle is an `Arc`
     // clone of a process-wide store, so a binding accepted by one request is
     // reused by the next instead of being re-resolved.

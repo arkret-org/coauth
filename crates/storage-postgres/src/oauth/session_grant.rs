@@ -1736,6 +1736,32 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
     }
 
     #[tracing::instrument(
+        name = "db.oauth_session_grant.revoke_active_for_audience",
+        skip_all,
+        err
+    )]
+    async fn revoke_active_for_audience(
+        &mut self,
+        clock: &dyn Clock,
+        audience: &str,
+    ) -> Result<usize, Self::Error> {
+        let revoked_at = clock.now();
+        let rows_affected = diesel::update(
+            oauth_session_grants::table
+                .filter(oauth_session_grants::audience.eq(audience))
+                .filter(oauth_session_grants::lifecycle_state.eq("active")),
+        )
+        .set((
+            oauth_session_grants::lifecycle_state.eq("revoked"),
+            oauth_session_grants::revoked_at.eq(Some(revoked_at)),
+        ))
+        .execute(self.conn)
+        .await?;
+
+        Ok(rows_affected)
+    }
+
+    #[tracing::instrument(
         name = "db.oauth_session_grant.cleanup_expired",
         skip_all,
         fields(

@@ -498,11 +498,11 @@ pub async fn revoke_session_grant_endpoint(
             }
         }
         RevokeSelector::Device(target_device_id) => coauth_data::SessionGrantRevokeTarget::Device {
-            subject: current_principal_did.to_string(),
+            subject: current_principal_did.clone(),
             device_id: target_device_id.to_string(),
         },
         RevokeSelector::All => coauth_data::SessionGrantRevokeTarget::AllForSubject {
-            subject: current_principal_did.to_string(),
+            subject: current_principal_did.clone(),
         },
     };
     let mut redacted_body =
@@ -536,8 +536,7 @@ pub async fn revoke_session_grant_endpoint(
     let proof_identity = body
         .proof
         .as_ref()
-        .map(|proof| proof.challenge.as_str())
-        .unwrap_or(dpop.claims.jti.as_str());
+        .map_or(dpop.claims.jti.as_str(), |proof| proof.challenge.as_str());
     let request_identity = format!(
         "revoke:{}",
         hex::encode(sha2::Sha256::digest(proof_identity.as_bytes()))

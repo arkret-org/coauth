@@ -896,6 +896,34 @@ diesel::table! {
 }
 
 diesel::table! {
+    principal_server_trust_audits (id) {
+        id -> Uuid,
+        enrollment_name -> Text,
+        action -> Text,
+        service_id -> Nullable<Text>,
+        previous_service_id -> Nullable<Text>,
+        detail -> Text,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    principal_server_trust_enrollments (name) {
+        name -> Text,
+        canonical_endpoint -> Text,
+        service_id -> Text,
+        service_kind -> Text,
+        full_id -> Text,
+        method_history_head -> Text,
+        version_id -> Text,
+        resolution_record_digest -> Text,
+        source -> Text,
+        enrolled_at -> Timestamptz,
+        last_verified_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     notification_requests (id) {
         id -> Uuid,
         template_key -> Text,
@@ -1059,6 +1087,8 @@ diesel::allow_tables_to_appear_in_same_query!(
     user_passwords,
     principal_did_bindings,
     principal_did_owners,
+    principal_server_trust_enrollments,
+    principal_server_trust_audits,
     user_emails,
     user_email_authentications,
     user_email_authentication_codes,

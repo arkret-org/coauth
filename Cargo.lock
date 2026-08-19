@@ -1413,6 +1413,7 @@ name = "coauth"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "arkret-identifiers",
  "camino",
  "chrono",
  "clap",

@@ -35,7 +35,7 @@ pub async fn resolve_account_status(
     let destination_service_id = required_header(req, "destination-service-id")?;
     if destination_service_id != request.account_authority_id.as_str()
         || !config.principal_servers.iter().any(|server| {
-            crate::services::resolved_principal_audiences::effective_audience_shared(server)
+            crate::services::principal_server_trust::effective_audience_shared(server)
                 .is_some_and(|audience| audience.as_str() == source_service_id)
         })
     {

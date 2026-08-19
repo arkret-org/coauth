@@ -23,11 +23,6 @@ export COAUTH_ALLOW_INSECURE_DEV_EMAIL_BYPASS := "1"
 # stays on for every other target. NEVER set in production.
 export COAUTH_OUTBOUND_HTTP_PRIVATE_ALLOWLIST := "auth.local.host,local.host"
 
-# The DID resolver has a stricter DNS-rebinding guard than general outbound
-# HTTP. Local development deliberately delegates did:webvh verification to
-# soland through the loopback-fronted local.host endpoint.
-export COAUTH_DID_RESOLVER_ALLOW_LOOPBACK := "1"
-
 # Default recipe: show available commands
 default:
     @just --list

@@ -89,13 +89,15 @@ arkret:
     resolver: https://resolver.example.com/
     proof_required_for_pairwise: true
 
-  admin_audience: https://auth.example.com/_arkret
+  admin_audience: ak:did_core:web:auth.example.com
   session_grant_ttl: 300
 ```
 
 - `principal_servers`: trusted Principal Server configuration; operations
-  authenticating that service require an explicit `service_id` pin and fail
-  closed without it; Describe cannot act as identity discovery or an authorization root
+  authenticating that service require an authorization pin — an explicit
+  `service_id` or a trust enrollment persisted by
+  `coauth principal-server trust bootstrap` — and fail closed without one;
+  Describe cannot act as identity discovery or an authorization root
 - `deployment_profile`: identity deployment profile. `did:web` principal DIDs
   are accepted only for `personal_node`.
 - `principal_method`: principal DID method. Defaults to `did:webvh`; `did:web`
@@ -103,9 +105,11 @@ arkret:
 - `identity_registry`: delegated DID / identity resolver, typically a public DID resolver service
 - Coauth resolves, registers, and persists its service DID through the configured Provider;
   configuration never accepts a DID.
-- Principal Server audiences and DIDs are resolved from `/_arkret/describe`.
-- `admin_audience`: audience expected by Arkret admin integrations, defaults
-  to the local `/_arkret` endpoint
+- Principal Server audiences and DIDs are pinned by configuration or by the
+  persisted trust enrollment; `/_arkret/describe` is only used for online
+  identity-chain verification during bootstrap and revalidation.
+- `admin_audience`: audience expected by Arkret admin integrations, as a
+  `did_core_id`; defaults to this deployment's own runtime service core id
 - `session_grant_ttl`: lifetime in seconds for Arkret session-grant JWTs
   returned by the REST auth bridge login/exchange paths and refresh endpoint.
   Default: `300` (5 minutes).

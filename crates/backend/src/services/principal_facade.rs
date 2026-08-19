@@ -219,9 +219,8 @@ impl ConnectorAdmin for DbConnectorAdmin {
         &self,
     ) -> Result<(String, arkret_identifiers::DidCoreId), anyhow::Error> {
         let target = default_principal_server(&self.arkret_config)?;
-        let audience =
-            crate::services::resolved_principal_audiences::effective_audience_shared(target)
-                .context("configured Principal Server identity is unavailable or stale")?;
+        let audience = crate::services::principal_server_trust::effective_audience_shared(target)
+            .context("configured Principal Server identity is unavailable or stale")?;
         Ok((target.name.clone(), audience))
     }
 
@@ -332,11 +331,11 @@ impl ConnectorAdmin for DbConnectorAdmin {
             .context("account-status peer signing configuration is unavailable")?;
         let (source_service_id, source_full_id) = runtime_peer_identity(&self.arkret_config)?;
         let destination_service_id =
-            crate::services::resolved_principal_audiences::effective_audience_shared(target)
+            crate::services::principal_server_trust::effective_audience_shared(target)
                 .context("account-status destination service identity is unavailable or stale")?;
         let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
-            source_service_id: source_service_id.into(),
-            destination_service_id: destination_service_id.into(),
+            source_service_id,
+            destination_service_id,
         };
         let client = crate::services::peer_protocol_client::PeerProtocolClient::new(
             Some(&target.endpoint),
@@ -391,11 +390,11 @@ impl ConnectorAdmin for DbConnectorAdmin {
             .context("erasure-receipt peer signing configuration is unavailable")?;
         let (source_service_id, source_full_id) = runtime_peer_identity(&self.arkret_config)?;
         let destination_service_id =
-            crate::services::resolved_principal_audiences::effective_audience_shared(target)
+            crate::services::principal_server_trust::effective_audience_shared(target)
                 .context("erasure-receipt destination service identity is unavailable or stale")?;
         let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
-            source_service_id: source_service_id.into(),
-            destination_service_id: destination_service_id.into(),
+            source_service_id,
+            destination_service_id,
         };
         let client = crate::services::peer_protocol_client::PeerProtocolClient::new(
             Some(&target.endpoint),
@@ -456,7 +455,8 @@ impl ConnectorAdmin for DbConnectorAdmin {
             "account id is empty"
         );
         let mut repo = self.repository_factory.create().await?;
-        let resolver = crate::services::did_resolver::default_did_resolver_service();
+        let resolver =
+            crate::services::did_resolver::default_did_resolver_service(&self.arkret_config);
         let binding_store = crate::services::did_binding::shared_verified_did_binding_store();
         crate::services::erasure_receipt::verify_erasure_receipt_package(
             &self.http_client,

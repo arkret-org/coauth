@@ -223,19 +223,47 @@ fn map_risk_action_proposals_error(error: RiskActionProposalsError) -> AppError 
     }
 }
 
-async fn admin_actor_id(
+/// The acting admin's identity as recorded by the same accepted principal
+/// binding: the stable core id carried by approval transcripts and persisted
+/// proposals, plus the binding's `verified_full_id` used as the authority
+/// resolution input.
+struct AdminActorIdentity {
+    /// Stable principal core id (`approved_by` on the wire and in storage).
+    principal_id: String,
+    /// Complete DID from the same accepted binding row; authority resolution
+    /// MUST resolve this, never the bare core id (`authority_document` keys on
+    /// `DidFullId`).
+    verified_full_id: String,
+}
+
+async fn admin_actor_identity(
     repo: &mut coauth_data::BoxRepository,
     admin_user: Option<&coauth_data::User>,
     arkret_config: &coauth_config::ArkretConfig,
-    did_resolver: &dyn DidResolverService,
-) -> Result<String, AppError> {
+) -> Result<AdminActorIdentity, AppError> {
     let admin_user = admin_user.ok_or_else(|| {
         AppError::forbidden("risk action workflow requires a user-bound admin token")
     })?;
-    did_resolver
-        .primary_did_for_user(repo, arkret_config, admin_user)
-        .await
-        .map_err(|error| AppError::bad_request(format!("principal_did_policy: {error}")))
+    let binding =
+        crate::handlers::arkret::principal_did_binding_for_user(repo, arkret_config, admin_user)
+            .await
+            .map_err(|error| AppError::bad_request(format!("principal_did_policy: {error}")))?
+            .ok_or_else(|| {
+                AppError::bad_request("principal_did_policy: principal unknown".to_owned())
+            })?;
+    // Fail closed when the accepted binding's retained full id no longer
+    // projects to the core id the approval transcript will carry.
+    let projected = arkret_identifiers::project_full_id_to_core_id(&binding.full_id)
+        .map_err(|error| AppError::bad_request(format!("principal_did_policy: {error}")))?;
+    if projected != binding.principal_id {
+        return Err(AppError::bad_request(
+            "principal_did_policy: accepted binding full id does not project to its principal core id",
+        ));
+    }
+    Ok(AdminActorIdentity {
+        principal_id: binding.principal_id.to_string(),
+        verified_full_id: binding.full_id.to_string(),
+    })
 }
 
 fn bind_approval_admin_did(
@@ -344,6 +372,7 @@ async fn verify_approval_proof_jws(
     did_resolver: &dyn DidResolverService,
     binding_store: &crate::services::did_binding::DurableVerifiedDidBindingStore,
     proof_jws: &str,
+    authority_did: &str,
     proposal_id: &str,
     account_id: Ulid,
     action: &str,
@@ -369,6 +398,11 @@ async fn verify_approval_proof_jws(
     // satisfy `fresh_within(HIGH_RISK_MAX_AGE)` under the closed `AdminAction`
     // purpose. Same purpose as `revocation_approval`, so two approvals inside
     // the window share one acceptance and one network fetch.
+    //
+    // The transcript and the persisted approval carry the principal core id
+    // (`approved_by`), but authority resolution keys on a complete DID: it
+    // resolves `authority_did` — the `verified_full_id` retained on the same
+    // accepted binding, already projection-checked against `approved_by`.
     let resolution = crate::services::did_binding::authority_document(
         http_client,
         url_builder,
@@ -377,7 +411,7 @@ async fn verify_approval_proof_jws(
         repo,
         did_resolver,
         binding_store,
-        approved_by,
+        authority_did,
         arkret_identity::DidBindingPurpose::AdminAction,
         crate::services::did_binding::high_risk_freshness(),
         crate::handlers::make_clock().now(),
@@ -438,7 +472,6 @@ pub async fn propose(
     let risk_action_state = depot.risk_action_state_service()?;
     let risk_action_proposals = depot.risk_action_proposals_service()?;
     let arkret_config = depot.arkret_config()?;
-    let did_resolver = depot.did_resolver_service()?;
     let key_store = depot.key_store()?;
     let service_id = service_id_for(&arkret_config);
     let crate::handlers::admin::call_context::CallContext {
@@ -456,13 +489,9 @@ pub async fn propose(
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
-    let proposer_did = admin_actor_id(
-        &mut repo,
-        admin_user.as_ref(),
-        &arkret_config,
-        did_resolver.as_ref(),
-    )
-    .await?;
+    let proposer_did = admin_actor_identity(&mut repo, admin_user.as_ref(), &arkret_config)
+        .await?
+        .principal_id;
     let proposal = risk_action_proposals
         .create(CreateProposal {
             account_id: account.id,
@@ -599,14 +628,12 @@ pub async fn approve(
         &params.action,
         params.ticket.as_deref(),
     )?;
-    let caller_admin_did = admin_actor_id(
-        &mut repo,
-        admin_user.as_ref(),
-        &arkret_config,
-        did_resolver.as_ref(),
-    )
-    .await?;
-    let approved_by = bind_approval_admin_did(caller_admin_did, params.approved_by.as_deref())?;
+    let caller_identity =
+        admin_actor_identity(&mut repo, admin_user.as_ref(), &arkret_config).await?;
+    let approved_by = bind_approval_admin_did(
+        caller_identity.principal_id.clone(),
+        params.approved_by.as_deref(),
+    )?;
     let approval_note = params.approval_note.as_deref().unwrap_or_default();
     let verification_method = verify_approval_proof_jws(
         &http_client,
@@ -617,6 +644,7 @@ pub async fn approve(
         did_resolver.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),
         &params.approval_proof_jws,
+        &caller_identity.verified_full_id,
         &proposal_id,
         account.id,
         &params.action,

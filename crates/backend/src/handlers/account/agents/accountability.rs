@@ -354,7 +354,7 @@ fn build_soland_fanout_payload(
         .iter()
         .map(|server| {
             let service_id =
-                crate::services::resolved_principal_audiences::effective_audience_shared(server);
+                crate::services::principal_server_trust::effective_audience_shared(server);
             serde_json::json!({
                 "name": server.name.as_str(),
                 "audience": service_id.clone(),

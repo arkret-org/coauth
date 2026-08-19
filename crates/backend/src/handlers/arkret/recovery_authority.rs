@@ -29,7 +29,7 @@ use super::session_grant::{
 };
 use super::{ArkretRouteError, preferred_signing_key};
 use crate::handlers::common::DepotExt;
-use crate::services::resolved_principal_audiences::{effective_audience, shared};
+use crate::services::principal_server_trust::{effective_audience, shared};
 
 pub struct RecoveryCompletionCanonicalJson(Vec<u8>);
 
@@ -309,7 +309,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         "transaction_id": request.transaction_id.to_string(),
         "terminal_receipt_id": receipt.receipt_id.to_string(),
         "device_authorization_event_id": request.device_authorization_event_id.to_string(),
-        "result_model_generation_ref": serde_json::to_value(&request.result_model_generation_ref)
+        "result_model_generation_ref": serde_json::to_value(request.result_model_generation_ref)
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
     });
     let authorization_ref = format!("account-handoff:{}", handoff.id);
@@ -353,7 +353,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         }
     }
 
-    let generation = serde_json::to_value(&request.result_model_generation_ref)
+    let generation = serde_json::to_value(request.result_model_generation_ref)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let inserted = repo
         .recovery_authority()
@@ -406,9 +406,9 @@ fn validate_completion_evidence(
     let receipt_digest =
         arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(&receipt_bytes))
             .map_err(|error| failed_precondition(error.to_string()))?;
-    let receipt_generation = serde_json::to_value(&receipt.result_model_generation_ref)
+    let receipt_generation = serde_json::to_value(receipt.result_model_generation_ref)
         .map_err(|error| failed_precondition(error.to_string()))?;
-    let request_generation = serde_json::to_value(&request.result_model_generation_ref)
+    let request_generation = serde_json::to_value(request.result_model_generation_ref)
         .map_err(|error| failed_precondition(error.to_string()))?;
     if receipt.outcome != RecoveryReceiptOutcome::Completed
         || receipt.transaction_id != request.transaction_id

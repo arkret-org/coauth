@@ -273,8 +273,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
         principal_authority
             .validate()
             .map_err(|_| DatabaseError::invalid_operation())?;
-        let projected = arkret_identifiers::project_full_id_to_core_id(&verified_full_id)
-            .map(arkret_identifiers::DidCoreId::from);
+        let projected = arkret_identifiers::project_full_id_to_core_id(&verified_full_id);
         let resolution_snapshot_is_valid = projected
             .is_ok_and(|projected| projected == principal_id)
             && !verified_version_id.trim().is_empty()

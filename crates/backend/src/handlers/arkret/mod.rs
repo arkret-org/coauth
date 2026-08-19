@@ -39,8 +39,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::handlers::common::{DepotExt, RouteError};
-use crate::services::resolved_principal_audiences::{
-    self, ResolvedPrincipalAudiences, effective_audience,
+use crate::services::principal_server_trust::{
+    self, PrincipalServerTrustResolver, effective_audience,
 };
 
 const ARKRET_PROTOCOL_VERSION: &str = "1.0";
@@ -443,7 +443,7 @@ pub(crate) async fn require_session_grant_caller(
         let allowed_audiences = arkret_config
             .principal_servers
             .iter()
-            .filter_map(|server| effective_audience(server, resolved_principal_audiences::shared()))
+            .filter_map(|server| effective_audience(server, principal_server_trust::shared()))
             .map(|audience| audience.to_string())
             .collect();
         Ok(SessionGrantCaller::principal_server(allowed_audiences))
@@ -482,7 +482,7 @@ fn principal_server_static_session_grant_bearer_audiences(
                 .as_deref()
                 .is_some_and(|configured| crate::util::constant_time_token_eq(configured, token))
         })
-        .filter_map(|server| effective_audience(server, resolved_principal_audiences::shared()))
+        .filter_map(|server| effective_audience(server, principal_server_trust::shared()))
         .map(|audience| audience.to_string())
         .collect()
 }
@@ -632,8 +632,7 @@ where
     R: RepositoryAccess,
 {
     for server in &arkret_config.principal_servers {
-        let Some(audience) = effective_audience(server, resolved_principal_audiences::shared())
-        else {
+        let Some(audience) = effective_audience(server, principal_server_trust::shared()) else {
             continue;
         };
         if let Some(row) = repo
@@ -716,8 +715,18 @@ pub(crate) fn require_canonical_handle(input: &str) -> Result<&str, ArkretRouteE
     })
 }
 
-pub(crate) fn required_audience(url_builder: &UrlBuilder) -> String {
-    url_builder.absolute_url("/_arkret").to_string()
+pub(crate) fn required_audience_for(
+    _url_builder: &UrlBuilder,
+    arkret_config: &ArkretConfig,
+) -> String {
+    // Session-grant `audience` is a `did_core_id` on the wire (the target
+    // service's stable authorization identity, account-operations schema), so
+    // the default local-admin audience is this deployment's own runtime
+    // service core id — never a URL.
+    arkret_config
+        .admin_audience
+        .clone()
+        .unwrap_or_else(|| service_id_for(arkret_config).to_string())
 }
 
 pub(crate) fn trust_domain_for(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -> String {
@@ -755,20 +764,10 @@ fn derived_trust_domain_scope(host: &str) -> String {
     scope
 }
 
-pub(crate) fn required_audience_for(
-    url_builder: &UrlBuilder,
-    arkret_config: &ArkretConfig,
-) -> String {
-    arkret_config
-        .admin_audience
-        .clone()
-        .unwrap_or_else(|| required_audience(url_builder))
-}
-
 pub(crate) fn is_allowed_session_grant_audience(
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
-    resolved: &ResolvedPrincipalAudiences,
+    resolved: &PrincipalServerTrustResolver,
     audience: &str,
 ) -> bool {
     let audience = audience.trim();
@@ -812,7 +811,7 @@ pub(crate) enum SessionGrantTargetError {
 pub(crate) fn password_login_session_grant_target(
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
-    resolved: &ResolvedPrincipalAudiences,
+    resolved: &PrincipalServerTrustResolver,
     requested_audience: Option<&str>,
 ) -> Result<SessionGrantTarget, SessionGrantTargetError> {
     if let Some(audience) = requested_audience.map(str::trim).filter(|a| !a.is_empty()) {
@@ -844,7 +843,7 @@ pub(crate) fn password_login_session_grant_target(
         // probe has not yet landed fails closed (UnknownAudience) rather than
         // minting a grant with no bindable audience.
         // This deliberate fail-closed behavior is documented in
-        // `services::resolved_principal_audiences`: startup may reject briefly
+        // `services::principal_server_trust`: startup may reject briefly
         // rather than minting a grant with an audience that cannot be bound.
         [server] => Ok(SessionGrantTarget {
             audience: effective_audience(server, resolved)

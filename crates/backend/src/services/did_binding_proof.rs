@@ -116,7 +116,7 @@ pub fn validate_account_registration_control_proof(
         .ok_or(DidBindingProofError::VerificationMethodNotFound)?;
     let material = method
         .public_key_material()
-        .map_err(|error| DidBindingProofError::InvalidShape(error.to_string()))?;
+        .map_err(DidBindingProofError::InvalidShape)?;
     let raw_verification_key = material
         .ed25519_bytes()
         .map_err(|error| DidBindingProofError::InvalidShape(error.to_string()))?;

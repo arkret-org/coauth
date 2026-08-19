@@ -356,7 +356,10 @@ impl Handler for InjectTestState {
             invite_quarantine_service(state.repository_factory.pool().clone()),
         );
         depot.insert("upstream_oidc_service", default_upstream_oidc_service());
-        depot.insert("did_resolver_service", default_did_resolver_service());
+        depot.insert(
+            "did_resolver_service",
+            default_did_resolver_service(&state.arkret_config),
+        );
         depot.insert("frontend_script_src", String::new());
         depot.insert("development_mode", false);
         depot.insert(
@@ -453,7 +456,7 @@ impl TestState {
         )
         .await?;
 
-        let http_client = crate::reqwest_client();
+        let http_client = crate::outbound_http::reqwest_client_for_tests();
 
         let rsa = PrivateKey::load_pem(include_str!("../../../keystore/tests/keys/rsa.pkcs1.pem"))
             .unwrap();

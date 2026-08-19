@@ -19,9 +19,7 @@ use crate::oidc_client::requests::jose::{
 };
 use crate::oidc_client::requests::token::request_access_token;
 use crate::outbound_http::RequestBuilderExt as _;
-use crate::services::resolved_principal_audiences::{
-    ResolvedPrincipalAudiences, effective_audience,
-};
+use crate::services::principal_server_trust::{PrincipalServerTrustResolver, effective_audience};
 
 pub type UpstreamOidcServiceHandle = Arc<dyn UpstreamOidcService>;
 
@@ -91,12 +89,11 @@ pub trait UpstreamOidcService: Send + Sync {
         userinfo_endpoint: &Url,
     ) -> Result<(), String>;
 
-    async fn session_grant_target_for_requested_audience(
+    fn session_grant_target_for_requested_audience(
         &self,
-        http_client: &reqwest::Client,
         url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
-        resolved: &ResolvedPrincipalAudiences,
+        resolved: &PrincipalServerTrustResolver,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String>;
 
@@ -110,7 +107,7 @@ pub trait UpstreamOidcService: Send + Sync {
         &self,
         url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
-        resolved: &ResolvedPrincipalAudiences,
+        resolved: &PrincipalServerTrustResolver,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String>;
 
@@ -267,21 +264,17 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
         Ok(())
     }
 
-    async fn session_grant_target_for_requested_audience(
+    fn session_grant_target_for_requested_audience(
         &self,
-        http_client: &reqwest::Client,
         url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
-        resolved: &ResolvedPrincipalAudiences,
+        resolved: &PrincipalServerTrustResolver,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String> {
-        // The startup warm-up may run before a configured Principal Server is
-        // ready. Retry only missing/expired entries on demand so a valid OIDC
-        // callback does not wait for the background refresh interval.
-        resolved
-            .refresh_unresolved(http_client, arkret_config)
-            .await;
-
+        // Startup preflight guarantees every enrolled Principal Server is
+        // verified and cached before the business listener binds. A cache
+        // miss here means not enrolled or expired — fail closed rather than
+        // probing describe from the request path.
         self.session_grant_target_for_configured_audience(
             url_builder,
             arkret_config,
@@ -294,7 +287,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
         &self,
         url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
-        resolved: &ResolvedPrincipalAudiences,
+        resolved: &PrincipalServerTrustResolver,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String> {
         if let Some(requested_audience) = requested_audience
@@ -610,18 +603,15 @@ mod tests {
         let config = principal_server_config_for(endpoint);
         let service_id = arkret_identifiers::DidCoreId::new("ak:did_core:webvh:current").unwrap();
 
-        let resolved = ResolvedPrincipalAudiences::new();
+        let resolved = PrincipalServerTrustResolver::new();
         let url_builder = UrlBuilder::new("https://auth.example/".parse().unwrap(), None, None);
-        let http_client = reqwest::Client::new();
         let target = DefaultUpstreamOidcService
             .session_grant_target_for_requested_audience(
-                &http_client,
                 &url_builder,
                 &config,
                 &resolved,
                 Some(service_id.as_str()),
             )
-            .await
             .unwrap();
 
         assert_eq!(target.audience, service_id.as_str());

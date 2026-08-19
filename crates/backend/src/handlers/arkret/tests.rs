@@ -267,6 +267,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         session_grant_ttl: Duration::try_minutes(5).unwrap(),
         high_risk_threshold: 2,
         trust_domain: None,
+        development_auto_enrollment_hosts: Vec::new(),
         oob_code_kind: ArkretConfig::default().oob_code_kind,
         password_login_session_grants_enabled: false,
         admin_org_id: None,
@@ -436,7 +437,7 @@ fn service_describe_marks_personal_node_did_web_service_as_no_history() {
 }
 
 fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
-    let config = ArkretConfig {
+    ArkretConfig {
         runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
             "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:coauth",
         ),
@@ -451,8 +452,7 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
             embedded_webvh_registration_bearer: None,
         }],
         ..ArkretConfig::default()
-    };
-    config
+    }
 }
 
 #[test]
@@ -1447,6 +1447,65 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         ..config_with_static_session_grant_bearer(bearer)
     };
 
+    // The agent use-time gate (key-management §3.6.1) resolves the
+    // authoritative AgentView from the configured Principal Server; stub it
+    // with wiremock so the lifecycle reads `active` (loopback egress is
+    // permitted by the test HTTP client).
+    use wiremock::matchers::{header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let principal_server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/_arkret/self/agents/ak:did_core:web:agent.example",
+        ))
+        .and(header("authorization", format!("Bearer {bearer}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "agent": {
+                "agent_id": "ak:did_core:web:agent.example",
+                "slug": "agent",
+                "lifecycle": "active",
+                "readiness": {
+                    "state": "not_ready",
+                    "blockers": ["runtime_key_missing", "pairing_open"]
+                },
+                "presence": {
+                    "state": "unknown",
+                    "expires_at": "2099-01-01T00:00:00.000Z",
+                    "refresh_after": "2098-12-31T23:59:00.000Z"
+                }
+            },
+            "key_state": {
+                "agent_id": "ak:did_core:web:agent.example",
+                "controller_id": "ak:did_core:web:controller.example",
+                "principal_control_realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG",
+                "controller_authorization_ref": "did:web:agent.example#managed-controller",
+                "pcr_recovery": {
+                    "status": "ready",
+                    "backup_id": "ak:backup:01999999-0000-7000-8000-000000000020",
+                    "series_id": "ak:backup_series:01999999-0000-7000-8000-000000000021",
+                    "series_seq": 1,
+                    "managed_frontier_ref": {
+                        "frontier_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "seal_ref": "ak:seal:01999999-0000-7000-8000-000000000022",
+                        "mls_epoch": 0
+                    }
+                },
+                "requested_scope": {
+                    "actions": ["ak.message.create"],
+                    "resources": []
+                },
+                "requested_scope_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "pairing_request_id": "agent-pairing-request",
+                "pairing_mode": "bootstrap",
+                "pairing_expires_at": "2099-01-01T00:00:00.000Z",
+                "active_authorizations": []
+            }
+        })))
+        .mount(&principal_server)
+        .await;
+    state.arkret_config.principal_servers[0].endpoint = principal_server.uri().parse().unwrap();
+
     let mut rng = ChaChaRng::seed_from_u64(0xa9e17);
     let session_key = PrivateKey::generate_ed25519(&mut rng);
     let session_public_key =
@@ -1457,10 +1516,17 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     let audience = "ak:did_core:web:session-grant-static.test".to_owned();
     // Grant liveness is evaluated against the wall clock the handlers read.
     let now = chrono::Utc::now();
+    // The issuing authorization ref rides the signed payload's
+    // `scope_details`; introspection's use-time gate re-reads the row by it.
+    let authorization_event_id = "ak:event:AQilOsNi6WF7kBMfOVLw4LjFp75pXSq5WJ0WMmJw3kgK";
     let scope_details = serde_json::Map::from_iter([
         (
             "controller_id".to_owned(),
             serde_json::json!("did:web:alice.example"),
+        ),
+        (
+            "agent_key_authorization_ref".to_owned(),
+            serde_json::json!(authorization_event_id),
         ),
         (
             "resources".to_owned(),
@@ -1489,8 +1555,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC".to_owned(),
         session_public_key.clone(),
         scope_details.clone(),
-        arkret_identifiers::EventId::new("ak:event:AQilOsNi6WF7kBMfOVLw4LjFp75pXSq5WJ0WMmJw3kgK")
-            .unwrap(),
+        arkret_identifiers::EventId::new(authorization_event_id).unwrap(),
         arkret_wire::DidUrl::new("did:web:agent.example#runtime-key").unwrap(),
         now,
         now + Duration::try_minutes(15).unwrap(),
@@ -1514,7 +1579,55 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         raw_payload["cnf"]["jkt"].as_str(),
         Some("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC")
     );
+    // `proof_kind` and `scope_details` ride the signed grant payload; the
+    // wire introspection grant record omits them (spec
+    // SessionGrantIntrospectGrant is additionalProperties:false without
+    // these members), so they are asserted here rather than on the response.
+    assert_eq!(raw_payload["proof_kind"], "agent_key_proof");
+    assert_eq!(
+        raw_payload["scope_details"],
+        serde_json::Value::Object(scope_details.clone())
+    );
     let mut repo = state.repository().await.unwrap();
+    // Seed the key authorization the use-time gate re-reads by event id; the
+    // gate only requires the row to exist, unrevoked and unexpired.
+    repo.agent_key_authorization()
+        .add(
+            &mut rng,
+            &coauth_data::SystemClock::default(),
+            coauth_data::agent_key::NewAgentKeyAuthorization {
+                authorized_event_id: authorization_event_id.to_owned(),
+                agent_id: "ak:did_core:web:agent.example".to_owned(),
+                key_id: "runtime-key".to_owned(),
+                verification_method: "did:web:agent.example#runtime-key".to_owned(),
+                public_key: serde_json::json!({
+                    "kty": "OKP",
+                    "crv": "Ed25519",
+                    "x": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                }),
+                accountable_principal_id: "did:web:alice.example".to_owned(),
+                agent_key_scope: serde_json::json!({
+                    "actions": ["ak.agent.action:message.send"],
+                    "resources": [],
+                })
+                .to_string(),
+                audience: vec![audience.clone()],
+                issued_at: now,
+                expires_at: None,
+                pairing_request_id: "agent-pairing-request".to_owned(),
+                request_canonical_digest: format!("sha256:{}", "a".repeat(64)),
+                raw_payload_digest: format!("sha256:{}", "b".repeat(64)),
+                soland_fanout_state:
+                    coauth_data::accountability::AccountabilityGrantFanoutState::Queued,
+                soland_fanout_idempotency_key: authorization_event_id.to_owned(),
+                soland_fanout_payload: serde_json::json!({}),
+                soland_fanout_attempt: 0,
+                soland_fanout_next_retry_at: None,
+                soland_fanout_dead_letter_reason: None,
+            },
+        )
+        .await
+        .unwrap();
     let persisted = persist_unbound_session_grant(
         &mut repo,
         &mut rng,
@@ -1555,17 +1668,23 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         body["grant"]["device_id"],
         "ak:device:0196419b-0000-7000-8000-000000000005"
     );
-    assert_eq!(body["grant"]["proof_kind"], "agent_key_proof");
-    assert_eq!(
-        body["grant"]["scope_details"],
-        serde_json::Value::Object(scope_details)
-    );
+    // `proof_kind`/`scope_details` were asserted on the signed payload above:
+    // the spec introspection grant record (additionalProperties:false) omits
+    // them, and `freshness_state` is likewise absent from the wire record.
     assert_eq!(body["grant"]["freshness_state"], serde_json::Value::Null);
     assert_eq!(
         body["grant"]["cnf_jkt"],
         "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
     );
-    assert_eq!(body["grant"]["session_public_key"], session_public_key);
+    // The wire record re-serializes the embedded JWK canonically, so compare
+    // the parsed key material rather than byte-level JSON member order.
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(
+            body["grant"]["session_public_key"].as_str().unwrap()
+        )
+        .unwrap(),
+        serde_json::from_str::<serde_json::Value>(&session_public_key).unwrap()
+    );
     assert_eq!(body["grant"]["id"], persisted.grant_id.to_string());
 }
 

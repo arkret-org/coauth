@@ -1362,7 +1362,7 @@
           "maximum": 86400
         },
         "admin_audience": {
-          "description": "Audience string expected by Arkret admin integrations.\n\nWhen omitted, the backend falls back to the local `/_arkret` endpoint.",
+          "description": "Audience string expected by Arkret admin integrations.\n\nSession-grant audiences are `did_core_id` values (the target service's stable authorization identity). When omitted, the backend falls back to this deployment's own runtime service core id.",
           "type": [
             "string",
             "null"

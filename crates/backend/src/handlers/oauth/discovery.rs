@@ -278,15 +278,17 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
     let arkret_principal_servers = arkret_config
         .principal_servers
         .iter()
-        .map(|server| {
+        .filter_map(|server| {
+            // Only publish Principal Servers with an accepted, verified
+            // audience pin; unenrolled endpoints never appear in discovery.
             let service_id =
-                crate::services::resolved_principal_audiences::effective_audience_shared(server);
-            PrincipalServerMetadata {
+                crate::services::principal_server_trust::effective_audience_shared(server)?;
+            Some(PrincipalServerMetadata {
                 name: server.name.clone(),
-                audience: service_id.clone(),
+                audience: Some(service_id.clone()),
                 endpoint: server.endpoint.to_string(),
-                did: service_id,
-            }
+                did: Some(service_id),
+            })
         })
         .collect();
     let arkret_identity_registry =

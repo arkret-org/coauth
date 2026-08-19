@@ -40,6 +40,13 @@ pub(super) struct Options {
     /// Do not sync the configuration with the database
     #[arg(long)]
     no_sync: bool,
+
+    /// Authorize one-time trust bootstrap of unenrolled Principal Servers at
+    /// startup (same as `COAUTH_FIRST_PROVISIONING=1`). After a successful
+    /// bootstrap the flag only idempotently re-verifies the enrolled pin; it
+    /// can never replace an identity.
+    #[arg(long)]
+    first_provisioning: bool,
 }
 
 impl Options {
@@ -277,7 +284,7 @@ impl Options {
 
         let state = {
             let mut s = AppState {
-                repository_factory: PgRepositoryFactory::new(pool),
+                repository_factory: PgRepositoryFactory::new(pool.clone()),
                 templates,
                 arkret_config,
                 key_store,
@@ -309,15 +316,27 @@ impl Options {
             };
             s.init_metrics();
             s.init_metadata_cache();
-            // Resolve every Principal Server service DID from its standard
-            // describe endpoint and refresh it in the background. Operator-
-            // supplied audience/DID pins are deliberately unsupported.
-            coauth_backend::services::resolved_principal_audiences::shared().warm_up_and_spawn(
-                s.http_client.clone(),
+            // Mandatory Principal Server trust preflight: resolve the
+            // effective audience pin (explicit config pin, else persisted
+            // trust enrollment), verify every Principal Server's identity
+            // chain online, and only then allow the business listeners below
+            // to bind. Any missing pin, unreachable server, invalid evidence,
+            // rollback or identity mismatch aborts startup with a non-zero
+            // exit code; the spawned background revalidation fatally shuts
+            // the process down on a runtime identity conflict.
+            coauth_backend::services::principal_server_trust::preflight_and_spawn(
+                PgRepositoryFactory::new(pool.clone()),
                 s.arkret_config.clone(),
-                coauth_backend::services::resolved_principal_audiences::DEFAULT_REFRESH_INTERVAL,
+                s.http_client.clone(),
+                s.development_mode,
+                self.first_provisioning
+                    || coauth_config::runtime_var("COAUTH_FIRST_PROVISIONING")
+                        .is_ok_and(|value| value.trim() == "1"),
+                shutdown.soft_shutdown_token(),
+                coauth_backend::services::principal_server_trust::DEFAULT_REFRESH_INTERVAL,
             )
-            .await;
+            .await
+            .context("principal-server trust preflight failed")?;
             s
         };
 

@@ -349,7 +349,7 @@ pub async fn validate_agent_session_proof(
     if !is_allowed_session_grant_audience(
         url_builder,
         arkret_config,
-        crate::services::resolved_principal_audiences::shared(),
+        crate::services::principal_server_trust::shared(),
         proof.audience.as_str(),
     ) {
         tracing::warn!(agent_id, verification_method, audience = %proof.audience, "agent_key_proof rejected: audience is not configured");
@@ -1639,7 +1639,7 @@ mod tests {
                 session_grant_introspection_bearer: Some("lifecycle-secret".to_owned()),
                 embedded_webvh_registration_bearer: None,
             });
-        crate::services::resolved_principal_audiences::shared().insert_for_test(
+        crate::services::principal_server_trust::shared().insert_for_test(
             &config.principal_servers[0].endpoint,
             "ak:did_core:web:soland.test",
         );

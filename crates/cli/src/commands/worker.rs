@@ -79,13 +79,18 @@ impl Options {
         )
         .await
         .context("could not initialize Provider-backed service identity")?;
-        coauth_backend::services::resolved_principal_audiences::shared()
-            .warm_up_and_spawn(
-                arkret_http_client.clone(),
-                app_cfg.arkret.clone(),
-                coauth_backend::services::resolved_principal_audiences::DEFAULT_REFRESH_INTERVAL,
-            )
-            .await;
+        coauth_backend::services::principal_server_trust::preflight_and_spawn(
+            PgRepositoryFactory::new(db_pool.clone()),
+            app_cfg.arkret.clone(),
+            arkret_http_client.clone(),
+            coauth_backend::error::development_mode_from_env(),
+            coauth_config::runtime_var("COAUTH_FIRST_PROVISIONING")
+                .is_ok_and(|value| value.trim() == "1"),
+            lifecycle.soft_shutdown_token(),
+            coauth_backend::services::principal_server_trust::DEFAULT_REFRESH_INTERVAL,
+        )
+        .await
+        .context("principal-server trust preflight failed")?;
         let (principal_conn, _registry) = principal_server_connection_from_config(
             &site_cfg,
             PgRepositoryFactory::new(db_pool.clone()).boxed(),

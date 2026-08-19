@@ -447,6 +447,16 @@ pub trait SessionGrantRepository: Send + Sync {
     /// second active child of one parent.
     async fn revoke_if_active(&mut self, clock: &dyn Clock, id: Ulid) -> Result<bool, Self::Error>;
 
+    /// Revoke every still-active grant minted for `audience`, returning the
+    /// number of grants revoked. Used when a Principal Server trust pin is
+    /// explicitly replaced: grants bound to the old audience must not
+    /// outlive the pin they were issued under.
+    async fn revoke_active_for_audience(
+        &mut self,
+        clock: &dyn Clock,
+        audience: &str,
+    ) -> Result<usize, Self::Error>;
+
     /// Delete session grants whose `expires_at` is strictly before `until`.
     ///
     /// Mirrors the time-cursor cleanup contract used elsewhere
@@ -542,6 +552,12 @@ repository_impl!(SessionGrantRepository:
         clock: &dyn Clock,
         id: Ulid,
     ) -> Result<bool, Self::Error>;
+
+    async fn revoke_active_for_audience(
+        &mut self,
+        clock: &dyn Clock,
+        audience: &str,
+    ) -> Result<usize, Self::Error>;
 
     async fn cleanup_expired(
         &mut self,

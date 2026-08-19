@@ -161,9 +161,7 @@ impl RuntimeServiceIdentity {
     #[must_use]
     pub fn fixture(service_id: &str) -> Self {
         let full_id = DidFullId::new(service_id.to_owned()).expect("fixture service DID");
-        let service_id = DidCoreId::from(
-            project_full_id_to_core_id(&full_id).expect("fixture service DID adapter"),
-        );
+        let service_id = project_full_id_to_core_id(&full_id).expect("fixture service DID adapter");
         let signing_key_ref =
             DidCoreIdentityKeyRef::new("fixture:coauth:signing").expect("fixture key ref");
         let handle = Self::default();
@@ -255,7 +253,9 @@ pub struct ArkretConfig {
 
     /// Audience string expected by Arkret admin integrations.
     ///
-    /// When omitted, the backend falls back to the local `/_arkret` endpoint.
+    /// Session-grant audiences are `did_core_id` values (the target service's
+    /// stable authorization identity). When omitted, the backend falls back to
+    /// this deployment's own runtime service core id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admin_audience: Option<String>,
 
@@ -321,6 +321,18 @@ pub struct ArkretConfig {
     /// operational.
     #[serde(default, skip_serializing_if = "is_false")]
     pub audit_signature_fail_closed: bool,
+
+    /// Exact local HTTPS host names eligible for development-mode automatic
+    /// principal-server trust enrollment.
+    ///
+    /// Every entry must be a bare lowercase host name (no scheme, port, path
+    /// or wildcard). Auto-enrollment only runs when ALL of these hold: the
+    /// process runs in explicit development mode, the configured endpoint is
+    /// an HTTPS URL whose host exactly matches one entry, and neither a
+    /// config pin nor a persisted enrollment exists. It never overwrites an
+    /// existing pin and must stay empty in production.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub development_auto_enrollment_hosts: Vec<String>,
 }
 
 fn default_high_risk_threshold() -> u32 {
@@ -349,6 +361,7 @@ impl Default for ArkretConfig {
             password_login_session_grants_enabled: false,
             admin_org_id: None,
             audit_signature_fail_closed: false,
+            development_auto_enrollment_hosts: Vec::new(),
         }
     }
 }
@@ -371,6 +384,7 @@ impl ArkretConfig {
             && !self.password_login_session_grants_enabled
             && self.admin_org_id.is_none()
             && !self.audit_signature_fail_closed
+            && self.development_auto_enrollment_hosts.is_empty()
     }
 
     /// Set of host names this deployment trusts as outbound
@@ -417,6 +431,16 @@ impl ArkretConfig {
         self.trusted_outbound_hosts()
             .iter()
             .any(|trusted| trusted == &host)
+    }
+
+    /// Returns `true` when `host` is an exact entry of the development-mode
+    /// automatic trust-enrollment allowlist. Comparison is exact — no
+    /// wildcard or suffix matching.
+    #[must_use]
+    pub fn is_development_auto_enrollment_host(&self, host: &str) -> bool {
+        self.development_auto_enrollment_hosts
+            .iter()
+            .any(|allowed| allowed == host)
     }
 
     /// Primary Principal Server endpoint for call sites that operate on a
@@ -525,19 +549,26 @@ impl ConfigurationSection for ArkretConfig {
             return Err(std::io::Error::other("arkret.admin_org_id must not be empty").into());
         }
 
+        for host in &self.development_auto_enrollment_hosts {
+            let valid = !host.is_empty()
+                && host.len() <= 253
+                && host.bytes().all(|b| {
+                    b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'-')
+                });
+            if !valid {
+                return Err(std::io::Error::other(format!(
+                    "arkret.development_auto_enrollment_hosts entry {host:?} must be a bare lowercase host name (no scheme, port, path or wildcard)"
+                ))
+                .into());
+            }
+        }
+
         let mut provider_names = std::collections::BTreeSet::new();
         for server in &self.principal_servers {
             if server.name.trim().is_empty() {
                 return Err(std::io::Error::other(
                     "arkret.principal_servers[].name must not be empty",
                 )
-                .into());
-            }
-            if server.service_id.is_none() {
-                return Err(std::io::Error::other(format!(
-                    "arkret principal server {:?} must configure service_id as an explicit authorization pin",
-                    server.name,
-                ))
                 .into());
             }
             if server
@@ -624,9 +655,15 @@ pub struct PrincipalServerConfig {
     pub endpoint: Url,
 
     /// Stable service identity core for authenticated S2S authorization.
-    /// This is required for every configured Principal Server. Describe
-    /// metadata may confirm it but can never discover or replace it; an
+    ///
+    /// Optional explicit authorization pin, highest priority. When omitted,
+    /// the effective pin comes from the persisted trust enrollment written by
+    /// `coauth principal-server trust bootstrap` (or, under the strict
+    /// development-mode gate, the automatic first enrollment). Describe
+    /// metadata may confirm a pin but can never discover or replace it; an
     /// endpoint URL or bearer token is never converted into an identity core.
+    /// A configured value that conflicts with the persisted enrollment fails
+    /// startup closed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<String>")]
     pub service_id: Option<arkret_identifiers::DidCoreId>,
@@ -839,7 +876,7 @@ mod tests {
     }
 
     #[test]
-    fn principal_server_config_rejects_missing_service_identity_pin() {
+    fn principal_server_config_allows_missing_service_identity_pin() {
         let config: ArkretConfig = serde_json::from_value(serde_json::json!({
             "principal_servers": [{
                 "name": "principal-a",
@@ -848,10 +885,44 @@ mod tests {
         }))
         .unwrap();
 
-        let error = config
-            .validate(&figment::Figment::new())
-            .expect_err("missing service_id must fail closed");
-        assert!(error.to_string().contains("must configure service_id"));
+        assert_eq!(config.principal_servers[0].service_id, None);
+        // An omitted pin is valid configuration: the effective pin then comes
+        // from the persisted trust enrollment (bootstrap), never from
+        // implicit describe TOFU at startup.
+        assert!(config.validate(&figment::Figment::new()).is_ok());
+
+        let serialized = serde_json::to_value(&config.principal_servers[0]).unwrap();
+        assert!(serialized.get("service_id").is_none());
+    }
+
+    #[test]
+    fn development_auto_enrollment_hosts_validate_shape() {
+        let figment = figment::Figment::new();
+        let config = ArkretConfig {
+            development_auto_enrollment_hosts: vec!["localhost".to_owned()],
+            ..ArkretConfig::default()
+        };
+        assert!(config.validate(&figment).is_ok());
+        assert!(config.is_development_auto_enrollment_host("localhost"));
+        assert!(!config.is_development_auto_enrollment_host("localhost.evil"));
+        assert!(!config.is_development_auto_enrollment_host(""));
+
+        for bad in [
+            "Localhost",
+            "https://localhost",
+            "localhost:8448",
+            "*.local",
+            "",
+        ] {
+            let config = ArkretConfig {
+                development_auto_enrollment_hosts: vec![bad.to_owned()],
+                ..ArkretConfig::default()
+            };
+            assert!(
+                config.validate(&figment).is_err(),
+                "entry {bad:?} must be rejected"
+            );
+        }
     }
 
     #[test]

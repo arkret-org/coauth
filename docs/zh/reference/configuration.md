@@ -86,20 +86,22 @@ arkret:
     resolver: https://resolver.example.com/
     proof_required_for_pairwise: true
 
-  admin_audience: https://auth.example.com/_arkret
+  admin_audience: ak:did_core:web:auth.example.com
   session_grant_ttl: 300
 ```
 
-- `principal_servers`：受信任 Principal Server 配置；涉及该服务身份认证的操作必须显式固定
-  `service_id`，否则 fail closed；Describe 不能作为身份发现或授权根
+- `principal_servers`：受信任 Principal Server 配置；涉及该服务身份认证的操作必须存在
+  授权 pin——显式配置的 `service_id` 或 `coauth principal-server trust bootstrap`
+  持久化的 trust enrollment——否则 fail closed；Describe 不能作为身份发现或授权根
 - `deployment_profile`：身份部署 profile。只有 `personal_node` 可接受
   `did:web` principal DID。
 - `principal_method`：principal DID 方法。默认 `did:webvh`；`did:web`
   必须显式搭配 `deployment_profile: personal_node`。
 - `identity_registry`：委托的 DID / identity resolver，通常是 public DID resolver 服务
 - Coauth 的 service DID 由配置的 Provider 自动查询/注册并持久化；配置文件不接受 DID。
-- Principal Server audience/DID 由其 `/_arkret/describe` 动态解析。
-- `admin_audience`：Arkret admin 集成期望的 audience；默认回退到本地 `/_arkret`
+- Principal Server 的 audience/DID 由配置 pin 或持久化的 trust enrollment 固定；
+  `/_arkret/describe` 仅用于 bootstrap/验证时的在线身份链核验。
+- `admin_audience`：Arkret admin 集成期望的 audience，取 `did_core_id`；默认回退到本部署自身的运行时 service core id
 - `session_grant_ttl`：REST auth bridge 登录/交换路径以及 refresh endpoint
   返回的 Arkret session-grant JWT 生命周期，单位秒；默认 `300`（5 分钟）。
 

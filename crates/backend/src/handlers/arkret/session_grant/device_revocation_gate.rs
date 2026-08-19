@@ -37,7 +37,7 @@ pub(crate) async fn acquire_human_device_binding(
         .principal_servers
         .iter()
         .find(|server| {
-            crate::services::resolved_principal_audiences::effective_audience_shared(server)
+            crate::services::principal_server_trust::effective_audience_shared(server)
                 .is_some_and(|audience| audience == principal_authority.principal_server_id)
         })
         .ok_or_else(|| {
@@ -48,8 +48,10 @@ pub(crate) async fn acquire_human_device_binding(
             )
         })?;
     let (expected_device_authorize_event_id, expected_device_generation_ref) = expected_binding
-        .map(SessionGrantDeviceBinding::as_expected_gate_binding)
-        .unwrap_or((None, None));
+        .map_or(
+            (None, None),
+            SessionGrantDeviceBinding::as_expected_gate_binding,
+        );
     let request = DeviceRevocationGateCheckRequestBody {
         principal_authority: principal_authority.clone(),
         device_id,
@@ -66,8 +68,8 @@ pub(crate) async fn acquire_human_device_binding(
         arkret_identifiers::TrustDomainId::new(trust_domain_for(&depot.url_builder()?, &config))
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let identity = KeyPackagesClaimServiceBinding {
-        source_service_id: source_service_id.into(),
-        destination_service_id: principal_authority.principal_server_id.clone().into(),
+        source_service_id,
+        destination_service_id: principal_authority.principal_server_id.clone(),
     };
     let http_client = depot.http_client()?;
     let key_store = depot.key_store()?;
@@ -128,8 +130,10 @@ async fn verify_gate_receipt(
 
     let http_client = depot.http_client()?;
     let document = if controller.as_str().starts_with("did:webvh:") {
+        let resolver = depot.did_resolver_service()?;
         crate::services::did_resolver::resolve_verified_webvh_service_document_at(
             &http_client,
+            resolver.resolver_egress_policy(),
             &controller,
             receipt.proof.created_at,
         )

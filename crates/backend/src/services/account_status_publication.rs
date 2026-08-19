@@ -59,7 +59,7 @@ pub async fn author_transition_plan(
         ));
     }
     let account_id = NonEmptyString::new(user.id.to_string())
-        .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
+        .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_owned()))?;
     let current = repo
         .account_status_ledger()
         .current(account_authority_id.as_str(), account_id.as_str())

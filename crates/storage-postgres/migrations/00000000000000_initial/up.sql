@@ -976,6 +976,44 @@ CREATE TABLE public.service_identity (
     CONSTRAINT service_identity_singleton CHECK ((id = 1))
 );
 
+CREATE TABLE public.principal_server_trust_enrollments (
+    name text NOT NULL,
+    canonical_endpoint text NOT NULL,
+    service_id text NOT NULL,
+    service_kind text NOT NULL,
+    full_id text NOT NULL,
+    method_history_head text NOT NULL,
+    version_id text NOT NULL,
+    resolution_record_digest text NOT NULL,
+    source text NOT NULL,
+    enrolled_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_verified_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT principal_server_trust_enrollments_name_non_empty CHECK ((btrim(name) <> ''::text)),
+    CONSTRAINT principal_server_trust_enrollments_canonical_endpoint_non_empty CHECK ((btrim(canonical_endpoint) <> ''::text)),
+    CONSTRAINT principal_server_trust_enrollments_service_id_non_empty CHECK ((btrim(service_id) <> ''::text)),
+    CONSTRAINT principal_server_trust_enrollments_service_kind_valid CHECK ((service_kind = 'principal_server'::text)),
+    CONSTRAINT principal_server_trust_enrollments_full_id_non_empty CHECK ((btrim(full_id) <> ''::text)),
+    CONSTRAINT principal_server_trust_enrollments_method_history_head_non_empty CHECK ((btrim(method_history_head) <> ''::text)),
+    CONSTRAINT principal_server_trust_enrollments_version_id_non_empty CHECK ((btrim(version_id) <> ''::text)),
+    CONSTRAINT principal_server_trust_enrollments_resolution_record_digest_non_empty CHECK ((btrim(resolution_record_digest) <> ''::text)),
+    CONSTRAINT principal_server_trust_enrollments_source_valid CHECK ((source = ANY (ARRAY['operator_cli'::text, 'deployment_artifact'::text, 'development_auto'::text])))
+);
+
+COMMENT ON TABLE public.principal_server_trust_enrollments IS 'Deployment-local principal-server trust enrollment: the accepted authorization pin per canonical endpoint, written only by explicit bootstrap/replace or the narrowly-scoped development auto-enrollment.';
+
+CREATE TABLE public.principal_server_trust_audits (
+    id uuid NOT NULL,
+    enrollment_name text NOT NULL,
+    action text NOT NULL,
+    service_id text,
+    previous_service_id text,
+    detail text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT principal_server_trust_audits_action_valid CHECK ((action = ANY (ARRAY['enrolled'::text, 'verification_failed'::text, 'replaced'::text, 'revoked'::text])))
+);
+
+COMMENT ON TABLE public.principal_server_trust_audits IS 'Append-only audit log covering principal-server trust enrollment creation, verification failures, explicit replacement and revocation.';
+
 CREATE TABLE public.upstream_oauth_authorization_sessions (
     id uuid NOT NULL,
     upstream_oauth_provider_id uuid CONSTRAINT upstream_oauth_authorizatio_upstream_oauth_provider_id_not_null NOT NULL,
@@ -1455,6 +1493,15 @@ ALTER TABLE ONLY public.queue_workers
 
 ALTER TABLE ONLY public.risk_action_proposals
     ADD CONSTRAINT risk_action_proposals_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.principal_server_trust_enrollments
+    ADD CONSTRAINT principal_server_trust_enrollments_pkey PRIMARY KEY (name);
+
+ALTER TABLE ONLY public.principal_server_trust_enrollments
+    ADD CONSTRAINT principal_server_trust_enrollments_canonical_endpoint_key UNIQUE (canonical_endpoint);
+
+ALTER TABLE ONLY public.principal_server_trust_audits
+    ADD CONSTRAINT principal_server_trust_audits_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.upstream_oauth_authorization_sessions
     ADD CONSTRAINT upstream_oauth_authorization_sessions_pkey PRIMARY KEY (id);

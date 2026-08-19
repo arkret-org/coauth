@@ -342,7 +342,7 @@ pub(crate) fn principal_server_operation_bearer<'a>(
         .principal_servers
         .iter()
         .find(|server| {
-            crate::services::resolved_principal_audiences::effective_audience_shared(server)
+            crate::services::principal_server_trust::effective_audience_shared(server)
                 .as_ref()
                 .is_some_and(|effective| effective.as_str() == audience)
         })
@@ -881,7 +881,7 @@ pub(crate) async fn authenticate_local_handoff_code(
         .session_grant_target_for_configured_audience(
             &url_builder,
             &arkret_config,
-            crate::services::resolved_principal_audiences::shared(),
+            crate::services::principal_server_trust::shared(),
             input.requested_audience.as_deref(),
         )
         .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
@@ -1251,13 +1251,11 @@ async fn exchange_oidc_code(
             .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
         let grant_target = upstream_oidc
             .session_grant_target_for_requested_audience(
-                &http_client,
                 &url_builder,
                 &arkret_config,
-                crate::services::resolved_principal_audiences::shared(),
+                crate::services::principal_server_trust::shared(),
                 input.requested_audience.as_deref(),
             )
-            .await
             .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
         if intent == OidcExchangeIntent::AccountHandoff {
             let success = OidcHandoffExchangeSuccess {
@@ -1772,13 +1770,11 @@ async fn exchange_oidc_code(
 
     let grant_target = upstream_oidc
         .session_grant_target_for_requested_audience(
-            &http_client,
             &url_builder,
             &arkret_config,
-            crate::services::resolved_principal_audiences::shared(),
+            crate::services::principal_server_trust::shared(),
             input.requested_audience.as_deref(),
         )
-        .await
         .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
     let user = &browser_session.user;
     if intent == OidcExchangeIntent::AccountHandoff {

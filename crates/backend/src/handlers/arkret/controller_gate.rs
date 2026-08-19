@@ -162,7 +162,7 @@ pub async fn issue_controller_gate_attestation(
         basis,
         basis_digest,
         authority_service_id,
-        verification_method: DidUrl::new(format!("{}#{signing_key_id}", authority_full_id))
+        verification_method: DidUrl::new(format!("{authority_full_id}#{signing_key_id}"))
             .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?,
         issued_at: now,
         expires_at,
@@ -253,7 +253,7 @@ async fn authenticate_agent_authority_request(
     .map_err(|_| not_found())?;
     let resolved_evidence = resolved.accepted.evidence_receipt();
     let carried_evidence = serde_json::to_value(
-        &request
+        request
             .agent_authority_service_resolution
             .method_history_evidence
             .evidence(),

@@ -465,8 +465,8 @@ mod tests {
         let service_id =
             arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap();
         KeyPackagesClaimServiceBinding {
-            source_service_id: service_id.clone().into(),
-            destination_service_id: service_id.into(),
+            source_service_id: service_id.clone(),
+            destination_service_id: service_id,
         }
     }
 

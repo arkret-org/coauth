@@ -138,6 +138,8 @@ pub mod organization_control;
 pub mod personal;
 /// Policy data repositories.
 pub mod policy_data;
+/// Principal Server trust enrollment repositories.
+pub mod principal_server_trust;
 /// Queue repositories.
 pub mod queue;
 /// Recovery authority ticket-consumption repositories.

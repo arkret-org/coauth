@@ -62,6 +62,7 @@ use crate::oauth::{
 use crate::organization_control::PgOrganizationControlRepository;
 use crate::personal::{PgPersonalAccessTokenRepository, PgPersonalSessionRepository};
 use crate::policy_data::PgPolicyDataRepository;
+use crate::principal_server_trust::PgPrincipalServerTrustRepository;
 use crate::queue::job::PgQueueJobRepository;
 use crate::queue::schedule::PgQueueScheduleRepository;
 use crate::queue::worker::PgQueueWorkerRepository;
@@ -431,6 +432,16 @@ impl RepositoryAccess for PgRepository {
 
     fn policy_data<'c>(&'c mut self) -> Box<dyn PolicyDataRepository<Error = Self::Error> + 'c> {
         Box::new(PgPolicyDataRepository::new(&mut self.conn))
+    }
+
+    fn principal_server_trust<'c>(
+        &'c mut self,
+    ) -> Box<
+        dyn coauth_data::storage::principal_server_trust::PrincipalServerTrustRepository<
+                Error = Self::Error,
+            > + 'c,
+    > {
+        Box::new(PgPrincipalServerTrustRepository::new(&mut self.conn))
     }
 
     fn notification_template<'c>(

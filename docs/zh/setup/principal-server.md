@@ -19,9 +19,37 @@ arkret:
 
 - `name`：面向运维的 Principal Server 标识。
 - `endpoint`：通过 Arkret/OIDC discovery 发布的基础 URL。
-- `embedded_webvh_registration_bearer`：Coauth 向该 Provider 查询或幂等注册自身
-  service identity 的部署级凭据。Principal Server 的 DID/audience 始终从
-  `/_arkret/describe` 动态解析，不能手工配置。
+- `service_id`：可选的显式身份 pin(`ak:did_core:webvh:<scid>`)。配置后优先级
+  最高；省略时 pin 来自一次性 bootstrap 持久化的 trust enrollment(见下文)。
+- `embedded_webvh_registration_bearer`:Coauth 向该 Provider 查询或幂等注册自身
+  service identity 的部署级凭据。
+
+## 一次性 trust bootstrap
+
+Principal Server 的 DID/audience 绝不直接信任裸的 `/_arkret/describe` 响应。
+coauth 在为某 Principal Server audience 接受 token 或 session grant 之前，该
+audience 必须由配置的 `service_id` 或持久化的 trust enrollment 固定。每个部署
+执行一次：
+
+```console
+$ coauth principal-server trust bootstrap --name soland
+```
+
+bootstrap 在线完整验证 Principal Server 身份链（WebVH 历史、service-identity
+绑定、resolution record 与 endpoint binding)，随后持久化验证后的 pin 并写入
+审计。它是幂等的：身份未变时重复执行不会改动 pin。
+
+发生合法的身份 genesis（新 SCID）后，显式替换 pin:
+
+```console
+$ coauth principal-server trust replace --name soland \
+    --expect-old ak:did_core:webvh:<old-scid> \
+    --accept-new ak:did_core:webvh:<new-scid>
+```
+
+替换会在同一事务中吊销绑定旧 audience 的 session grant。
+`coauth principal-server trust revoke --name soland` 则整体移除 pin；此后服务在
+重新存在 pin 之前拒绝提供服务。
 
 ## 服务间信任边界（部署内 S2S）
 
@@ -37,7 +65,11 @@ coauth 以 Auth Server 角色对 Principal Server 发起两类**无 principal se
 
 两条边都用对应 `principal_servers` 条目上配置的共享 bearer 鉴权：
 
-`service_id` 是本地配置的授权 pin；任何需要认证该 Principal Server 的操作都必须显式提供它，否则运行时 fail closed。`/_arkret/describe` 只用于能力与元数据校验，不能从远端自报的 Describe 动态建立或替换该身份。
+`service_id` 是显式配置 pin，配置后优先级最高；省略时以
+`coauth principal-server trust bootstrap` 持久化的 trust enrollment 作为授权
+pin。任何需要认证该 Principal Server 的操作都必须存在二者之一，否则运行时
+fail closed。`/_arkret/describe` 只用于能力与元数据校验，远端自报的 Describe
+响应不能建立或替换 pin。
 
 ```yaml
 arkret:

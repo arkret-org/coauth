@@ -187,7 +187,7 @@ fn verify_soft_logout_did_proof(
     let verification_method = proof
         .verification_method
         .as_ref()
-        .map(|value| value.as_str())
+        .map(arkret_wire::DidUrl::as_str)
         .ok_or_else(|| did_proof_required("DID proof verification_method is required"))?;
     required_proof_str(&proof.signature, "signature")?;
     if proof.audience.as_str() != prior_grant.audience {
@@ -938,7 +938,7 @@ pub async fn refresh_session_grant(
     let proof = &body.proof;
     let proof_expires_at = proof.expires_at;
     let challenge = proof.challenge.as_str();
-    let authorization_ref = format!("device-refresh:{}", challenge);
+    let authorization_ref = format!("device-refresh:{challenge}");
     let checkpoint = serde_json::json!({
         "kind": "human_device_refresh",
         "verification_method": proof.verification_method,
