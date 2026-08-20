@@ -240,12 +240,10 @@ fn account_api_subrouters() -> (Router, Router) {
             Router::with_path("gate/account/session-grants/introspect")
                 .post(arkret::introspect_session_grant),
         )
-        // Canonical Account Authority session-grant issuance
-        // (service-surface.md §2.5.1): the single client-visible bridge from a
-        // standard auth result (OIDC code exchange) into a device-bound
-        // `ak.session.grant`. Body = SDK `SessionGrantRequestBody`,
-        // `proof.proof_kind=oidc_code_exchange`. Replaces the deleted
-        // `/_coauth/.../auth/oidc/exchange` bridge.
+        // Canonical Account Authority session-grant issuance. Human issuance
+        // consumes a holder-bound AccountHandoff plus accepted-device PoP;
+        // Agent issuance uses its separate scoped proof variant. OIDC codes
+        // are consumed only while creating the AccountHandoff.
         .push(
             Router::with_path("gate/account/session-grants")
                 .options(oidc_preflight_handler)
@@ -368,9 +366,8 @@ fn account_api_subrouters() -> (Router, Router) {
         // `oidc/browser-bridge/session`, `oidc/exchange/describe`,
         // `oidc/exchange`) were removed (account-lifecycle §4.1,
         // service-surface.md §2.5.1). Clients now run standard OIDC discovery
-        // + authorize against the issuer and submit the code to the canonical
-        // `POST /_arkret/gate/account/session-grants`
-        // (`proof.proof_kind=oidc_code_exchange`). Passkey + standard OIDC
+        // + authorize against the issuer and exchange the code only through
+        // `POST /_arkret/gate/account/authentication-handoffs`. Passkey + standard OIDC
         // (`/authorize`, `/oauth/token`, `/.well-known/openid-configuration`)
         // are unchanged.
         .push(

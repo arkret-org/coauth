@@ -3,7 +3,8 @@
 use arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
 use arkret_models_crypto::{RecoveryReceipt, RecoveryReceiptOutcome};
 use arkret_models_identity::{
-    AccountHandoffAllowedOperation, InitialSessionGrantIntent, SessionGrantProofKind,
+    AccountHandoffAllowedOperation, InitialSessionGrantIntent,
+    STANDARD_INITIAL_SESSION_GRANT_OPERATIONS, SessionGrantProofKind,
 };
 use arkret_signatures::proof::verify_detached_ed25519_signature;
 use arkret_wire::{IssueRecoveryCompletionGrantOutcome, IssueRecoveryCompletionGrantRequest};
@@ -193,7 +194,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             NewSessionGrantOperation {
                 issuer: &issuer,
                 operation: coauth_data::SessionGrantOperationDescriptor::Issue,
-                proof_kind: Some(SessionGrantProofKind::DidBoundSignature),
+                proof_kind: Some(SessionGrantProofKind::AccountHandoff),
                 request_identity: &request_identity,
                 canonical_intent_digest: intent_digest,
                 canonical_intent: &canonical_request,
@@ -256,11 +257,12 @@ pub async fn issue_recovery_completion_grant_endpoint(
         initial.device_id.clone(),
         arkret_wire::DeviceRevocationGateActionClass::SessionGrantIssue,
         Some(&expected_device_binding),
+        None,
         request.canonical_request_digest.clone(),
         clock.now(),
     )
     .await?;
-    if device_binding.as_ref() != Some(&expected_device_binding) {
+    if device_binding != expected_device_binding {
         return Err(ArkretRouteError::coded(
             StatusCode::CONFLICT,
             arkret_wire::ErrorCode::DEVICE_REVOKED,
@@ -276,12 +278,15 @@ pub async fn issue_recovery_completion_grant_endpoint(
         session_public_key,
         initial.audience.to_string(),
         initial.device_id.clone(),
-        initial.requested_scope_strings(),
+        STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
+            .iter()
+            .map(|operation| operation.as_str().to_owned())
+            .collect(),
         Some(receipt.principal_id.as_str()),
         &principal_authority,
         handoff.cnf_jkt.clone(),
         device_binding,
-        SessionGrantProofKind::DidBoundSignature,
+        SessionGrantProofKind::AccountHandoff,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let wire_grant = SessionGrantOutcome {
@@ -663,42 +668,4 @@ fn indeterminate_replay() -> ArkretRouteError {
         arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
         "recovery completion issuance is fenced without an exact replayable outcome",
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use arkret_models_identity::{
-        InitialSessionGrantOperation, STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,
-    };
-
-    use crate::handlers::arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE;
-
-    /// The recovery-completion issuer ceiling is carried by the typed
-    /// `requested_scope` domain: anything outside the standard closed pair
-    /// fails to decode before `InitialSessionGrantIntent::validate` runs.
-    fn decode_requested_scope(scope: &[&str]) -> Result<Vec<InitialSessionGrantOperation>, String> {
-        serde_json::from_value::<Vec<InitialSessionGrantOperation>>(serde_json::json!(scope))
-            .map_err(|error| error.to_string())
-    }
-
-    #[test]
-    fn recovery_completion_scope_rejects_internal_binding_scope() {
-        assert!(decode_requested_scope(&[PRINCIPAL_SERVER_SESSION_BIND_SCOPE]).is_err());
-    }
-
-    #[test]
-    fn recovery_completion_scope_rejects_privilege_expansion() {
-        assert!(
-            decode_requested_scope(&["ak.self.account.read.describe", "urn:arkret:admin"]).is_err()
-        );
-    }
-
-    #[test]
-    fn recovery_completion_scope_accepts_the_closed_standard_pair() {
-        assert_eq!(
-            decode_requested_scope(&["ak.self.account.read.describe", "ak.self.events.read.scan",])
-                .expect("the standard closed pair stays within the issuer ceiling"),
-            STANDARD_INITIAL_SESSION_GRANT_OPERATIONS.to_vec()
-        );
-    }
 }

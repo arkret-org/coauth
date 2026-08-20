@@ -139,7 +139,7 @@ mod tests {
                 device_binding: seed.device_id.to_owned(),
             },
             device_binding: None,
-            proof_kind: Some(SessionGrantProofKind::OidcCodeExchange),
+            proof_kind: Some(SessionGrantProofKind::AccountHandoff),
             scope_details: None,
         };
         let issuance_preimage = preimage.canonical_bytes().unwrap();

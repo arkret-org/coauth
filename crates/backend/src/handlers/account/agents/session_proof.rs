@@ -30,16 +30,22 @@ fn agent_session_refresh_request_digest(
     audience: &str,
     verification_method: &str,
 ) -> Result<String, AgentAuthRejection> {
+    let principal_id =
+        DidCoreId::new(principal_id.to_owned()).map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let device_id = arkret_identifiers::DeviceId::new(device_id.to_owned())
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
     let audience =
         DidCoreId::new(audience.to_owned()).map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    arkret_models_collaboration::session_grant_bodies::session_grant_refresh_request_digest(
+    let verification_method = arkret_wire::DidUrl::new(verification_method.to_owned())
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    arkret_models_collaboration::session_grant_bodies::agent_session_refresh_request_digest(
         prior_grant_jwt,
-        principal_id,
-        device_id,
+        &principal_id,
+        &device_id,
         &audience,
-        verification_method,
+        &verification_method,
     )
-    .map(|digest| digest.as_str().to_owned())
+    .map(|digest| digest.to_string())
     .map_err(|_| AgentAuthRejection::ProofInvalid)
 }
 
@@ -132,21 +138,13 @@ pub async fn validate_agent_session_refresh_proof<R>(
     prior_claims: &arkret_models_identity::SignedSessionGrantClaims,
     prior_grant_jwt: &str,
     device_id: &arkret_identifiers::DeviceId,
-    proof: &arkret_models_collaboration::session_grant_bodies::SessionGrantRefreshProof,
+    proof: &arkret_models_collaboration::session_grant_bodies::AgentSessionRefreshProof,
 ) -> Result<coauth_data::agent_key::AgentKeyAuthorization, AgentSessionProofError>
 where
     R: RepositoryAccess + ?Sized,
 {
     use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
 
-    if proof.proof_kind != arkret_models_identity::SessionGrantProofKind::AgentKeyProof {
-        return Err(AgentAuthRejection::ProofInvalid.into());
-    }
-    // The closed DTO makes every field below required, so the only remaining
-    // rejection is a present-but-blank string.
-    let challenge = Some(proof.challenge.trim())
-        .filter(|value| !value.is_empty())
-        .ok_or(AgentAuthRejection::ProofInvalid)?;
     let request_digest = &proof.request_canonical_digest;
     let proof_audience = &proof.audience;
     let issued_at = proof.issued_at;
@@ -154,10 +152,7 @@ where
     let signature = Some(proof.signature.trim())
         .filter(|value| !value.is_empty())
         .ok_or(AgentAuthRejection::ProofInvalid)?;
-    let verification_method = proof
-        .verification_method
-        .as_ref()
-        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    let verification_method = &proof.verification_method;
     if !agent_runtime_method_matches_endpoint(
         prior_claims.subject.as_str(),
         device_id,
@@ -213,16 +208,8 @@ where
     if request_digest.as_str() != expected_digest {
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
-    let message = arkret_models_collaboration::session_grant_bodies::
-        session_grant_refresh_proof_signing_bytes(
-            prior_claims.subject.as_str(),
-            device_id.as_str(),
-            proof_audience,
-            challenge,
-            request_digest.as_str(),
-            issued_at,
-            expires_at,
-        )
+    let message = proof
+        .canonical_signing_bytes()
         .map_err(|_| AgentAuthRejection::ProofInvalid)?;
     let public_key = runtime_public_key_material_from_spec(
         &authorization.public_key,
@@ -244,8 +231,8 @@ where
             NewAgentSessionProofReplay {
                 agent_id: prior_claims.subject.to_string(),
                 verification_method: verification_method.to_string(),
-                challenge: challenge.to_owned(),
-                nonce: challenge.to_owned(),
+                challenge: request_digest.to_string(),
+                nonce: request_digest.to_string(),
                 request_canonical_digest: request_digest.to_string(),
                 audience: proof_audience.to_string(),
                 proof_expires_at: expires_at,
@@ -305,7 +292,7 @@ pub async fn validate_agent_session_proof(
     url_builder: &coauth_data::UrlBuilder,
     arkret_config: &ArkretConfig,
     authoritative_agent: &arkret_models_collaboration::agent_operations::AgentView,
-    body: &arkret_models_collaboration::session_grant_bodies::SessionGrantRequestBody,
+    body: &arkret_models_collaboration::session_grant_bodies::AgentSessionGrantRequest,
 ) -> Result<AgentSessionAuthorization, AgentSessionProofError> {
     let now = clock.now();
     let proof = &body.proof;
@@ -314,10 +301,7 @@ pub async fn validate_agent_session_proof(
 
     // `proof.verification_method` MUST be present and its DID part MUST equal
     // the agent principal (AUTH-1, fail closed before crypto).
-    let verification_method = proof
-        .verification_method
-        .as_deref()
-        .ok_or(AgentAuthRejection::VerificationMethodPrincipalMismatch)?;
+    let verification_method = proof.verification_method.as_str();
     if let Err(error) = enforce_verification_method_binding(verification_method, &agent_id) {
         tracing::warn!(
             agent_id,
@@ -326,10 +310,7 @@ pub async fn validate_agent_session_proof(
         );
         return Err(error.into());
     }
-    let device_id = body
-        .device_id
-        .as_ref()
-        .ok_or(AgentAuthRejection::VerificationMethodPrincipalMismatch)?;
+    let device_id = &body.device_id;
     if !agent_runtime_method_matches_endpoint(&agent_id, device_id, verification_method) {
         tracing::warn!(
             agent_id,
@@ -341,7 +322,7 @@ pub async fn validate_agent_session_proof(
     }
 
     // expiry / audience.
-    let expires_at = proof.expires_at.ok_or(AgentAuthRejection::ProofInvalid)?;
+    let expires_at = proof.expires_at;
     if expires_at <= now {
         tracing::warn!(agent_id, verification_method, %expires_at, %now, "agent_key_proof rejected: proof expired");
         return Err(AgentAuthRejection::ProofInvalid.into());
@@ -374,20 +355,16 @@ pub async fn validate_agent_session_proof(
         );
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
-    let nonce = proof
-        .nonce
-        .as_deref()
-        .filter(|nonce| !nonce.trim().is_empty())
-        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    let nonce = proof.nonce.trim();
+    if nonce.is_empty() {
+        return Err(AgentAuthRejection::ProofInvalid.into());
+    }
 
     // The key MUST be authorized by an accepted, unrevoked (and unexpired,
     // when it declares an `expires_at`)
     // `ak.agent.key.authorize`. Resolve it by the request's
     // `agent_key_authorization_ref` (the content-bound authorize Event id).
-    let authorization_ref = body
-        .agent_key_authorization_ref
-        .as_deref()
-        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    let authorization_ref = body.agent_key_authorization_ref.as_str();
     let authorization = repo
         .agent_key_authorization()
         .lookup_by_event_id(authorization_ref)
@@ -420,7 +397,7 @@ pub async fn validate_agent_session_proof(
     let signed_fields = arkret_auth::session_grant::AgentKeyProofSigningInput {
         audience: proof.audience.clone(),
         challenge: proof.challenge.clone(),
-        nonce: Some(nonce.to_owned()),
+        nonce: nonce.to_owned(),
         expires_at,
         request_canonical_digest: proof.request_canonical_digest.clone(),
         verification_method: arkret_wire::DidUrl::new(verification_method.to_owned())
@@ -477,16 +454,27 @@ pub async fn validate_agent_session_proof(
 
     // Parse the `agent_scope_request` overlay. An `act_on_behalf` participation
     // selection routes to the human-approval path (§4.10).
-    let scope_request = body
-        .agent_scope_request
-        .as_ref()
-        .map(|scope| AgentScopeRequestInput {
-            realm_ids: scope.realm_ids.iter().map(ToString::to_string).collect(),
-            strand_ids: scope.strand_ids.iter().map(ToString::to_string).collect(),
-            track_names: scope.track_names.iter().map(ToString::to_string).collect(),
-            participation: Vec::new(),
-        })
-        .unwrap_or_default();
+    let scope_request = AgentScopeRequestInput {
+        realm_ids: body
+            .agent_scope_request
+            .realm_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+        strand_ids: body
+            .agent_scope_request
+            .strand_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+        track_names: body
+            .agent_scope_request
+            .track_names
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+        participation: Vec::new(),
+    };
 
     let requests_act_on_behalf = scope_request
         .participation
@@ -643,7 +631,7 @@ pub async fn validate_agent_session_proof(
 }
 
 fn canonical_session_grant_request_digest_without_signature(
-    body: &arkret_models_collaboration::session_grant_bodies::SessionGrantRequestBody,
+    body: &arkret_models_collaboration::session_grant_bodies::AgentSessionGrantRequest,
 ) -> Result<String, AgentAuthRejection> {
     body.canonical_request_digest()
         .map(|digest| digest.to_string())
@@ -2423,16 +2411,18 @@ mod tests {
 
     #[test]
     fn session_request_digest_ignores_signature_but_binds_scope() {
-        let mut body = arkret_models_collaboration::session_grant_bodies::SessionGrantRequestBody {
+        let mut body = arkret_models_collaboration::session_grant_bodies::AgentSessionGrantRequest {
             principal_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:agent.example")
                 .unwrap(),
-            device_id: None,
+            device_id: arkret_identifiers::DeviceId::new(
+                "ak:device:01964137-0000-7000-8000-000000000001",
+            )
+            .unwrap(),
             requested_scope: vec!["ak.message.create".to_owned()],
             requested_scope_disclosure: None,
-            agent_key_authorization_ref: Some(
+            agent_key_authorization_ref:
                 "ak:event:AQoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoK".to_owned(),
-            ),
-            agent_scope_request: Some(
+            agent_scope_request:
                 arkret_models_collaboration::session_grant_bodies::SessionGrantAgentScopeRequest {
                     realm_ids: vec![
                         arkret_identifiers::RealmId::new(
@@ -2443,11 +2433,13 @@ mod tests {
                     strand_ids: Vec::new(),
                     track_names: Vec::new(),
                 },
-            ),
-            dpop_binding_proof: None,
+            dpop_binding_proof:
+                arkret_models_collaboration::session_grant_bodies::SessionGrantDpopBindingProof {
+                    proof_jwt: "dpop.jwt".to_owned(),
+                },
             applet_authority: None,
-            proof: arkret_models_collaboration::session_grant_bodies::SessionGrantRequestProof {
-                proof_kind: arkret_models_identity::SessionGrantProofKind::AgentKeyProof,
+            proof: arkret_models_collaboration::session_grant_bodies::AgentSessionGrantProof {
+                proof_kind: arkret_models_collaboration::session_grant_bodies::AgentSessionGrantProofKind::AgentKeyProof,
                 challenge: "challenge-abc".to_owned(),
                 request_canonical_digest: arkret_identifiers::Hash::new(format!(
                     "sha256:{}",
@@ -2456,18 +2448,11 @@ mod tests {
                 .unwrap(),
                 audience: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example")
                     .unwrap(),
-                expires_at: Some(chrono::Utc::now() + chrono::Duration::minutes(5)),
+                expires_at: chrono::Utc::now() + chrono::Duration::minutes(5),
                 signature: "sig-a".to_owned(),
-                verification_method: Some(
+                verification_method:
                     arkret_wire::DidUrl::new("did:web:agent.example#runtime-key-1").unwrap(),
-                ),
-                issuer: None,
-                client_id: None,
-                redirect_uri: None,
-                state: None,
-                nonce: Some("nonce-abc".to_owned()),
-                authorization_code: None,
-                code_verifier: None,
+                nonce: "nonce-abc".to_owned(),
             },
         };
         let digest = canonical_session_grant_request_digest_without_signature(&body)

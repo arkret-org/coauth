@@ -53,38 +53,6 @@ pub const CLAIM_SESSION_ID: &str = "org.arkret.session_id";
 
 pub const PRINCIPAL_SERVER_SESSION_BIND_SCOPE: &str = "urn:arkret:principal-server:session.bind";
 
-/// Resolve the service-operation scopes for a Standard human/device session.
-///
-/// An omitted `requested_scope` selects the current-v1 closed Standard
-/// bootstrap profile. An explicit request may only narrow that profile. The
-/// durable device association belongs in the grant's typed `holder_binding`
-/// and `device_binding`; legacy `session.bind` and device URN scopes are never
-/// emitted as operation authority.
-pub(crate) fn resolve_standard_human_session_grant_scopes(
-    requested_scope: &[String],
-) -> Result<Vec<String>, ArkretRouteError> {
-    let ceiling = arkret_models_identity::STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
-        .map(|operation| operation.as_str());
-    let mut granted = if requested_scope.is_empty() {
-        ceiling.iter().map(|scope| (*scope).to_owned()).collect()
-    } else {
-        requested_scope.to_vec()
-    };
-    if granted
-        .iter()
-        .any(|scope| scope.trim().is_empty() || !ceiling.contains(&scope.as_str()))
-    {
-        return Err(ArkretRouteError::coded(
-            StatusCode::FORBIDDEN,
-            arkret_wire::ErrorCode::CAPABILITY_DENIED,
-            "requested human session scope exceeds the current-v1 Standard scope ceiling",
-        ));
-    }
-    granted.sort_unstable();
-    granted.dedup();
-    Ok(granted)
-}
-
 #[derive(Debug, Error)]
 pub enum SessionGrantError {
     #[error("no signing key is configured for Arkret session grants")]
@@ -115,9 +83,6 @@ pub enum SessionGrantError {
 
     #[error("principal_unknown")]
     PrincipalUnknown,
-
-    #[error("standard session grant requires an explicit device scope binding")]
-    MissingDeviceBinding,
 
     /// Typed identifier parse failure surfaced by the identifiers owner crate.
     #[error(transparent)]
@@ -1128,7 +1093,7 @@ pub async fn debug_issue_dpop_grant(
             coauth_data::NewSessionGrantOperation {
                 issuer: &issuer,
                 operation: coauth_data::SessionGrantOperationDescriptor::Issue,
-                proof_kind: Some(arkret_models_identity::SessionGrantProofKind::PairedDeviceProof),
+                proof_kind: Some(arkret_models_identity::SessionGrantProofKind::AccountHandoff),
                 request_identity: &request_identity,
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
@@ -1210,7 +1175,7 @@ pub async fn debug_issue_dpop_grant(
         Some(principal_did.as_str()),
         &principal_authority,
         jkt.clone(),
-        Some(arkret_models_identity::SessionGrantDeviceBinding {
+        arkret_models_identity::SessionGrantDeviceBinding {
             device_id: arkret_identifiers::DeviceId::new(body.device_id.clone())
                 .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
             authorization_event_id: arkret_identifiers::EventId::new(
@@ -1218,8 +1183,8 @@ pub async fn debug_issue_dpop_grant(
             )
             .expect("cotest fixture authorization Event id"),
             model_generation_ref: 1,
-        }),
-        arkret_models_identity::SessionGrantProofKind::PairedDeviceProof,
+        },
+        arkret_models_identity::SessionGrantProofKind::AccountHandoff,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let outcome = DebugIssueDpopGrantOutcome {

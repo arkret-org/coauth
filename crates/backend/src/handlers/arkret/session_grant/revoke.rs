@@ -63,20 +63,10 @@ fn lifecycle_proof_invalid(message: impl Into<String>) -> ArkretRouteError {
     )
 }
 
-fn bearer_session_grant(req: &Request) -> Result<&str, ArkretRouteError> {
-    let auth_header = req
-        .headers()
-        .get(http::header::AUTHORIZATION)
-        .ok_or_else(|| ArkretRouteError::Unauthorized("missing authorization header".to_owned()))?;
-    let auth_str = auth_header
-        .to_str()
-        .map_err(|_| ArkretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
-    auth_str
-        .strip_prefix("Bearer ")
-        .or_else(|| auth_str.strip_prefix("bearer "))
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| ArkretRouteError::Unauthorized("invalid authorization header".to_owned()))
+fn dpop_session_grant(req: &Request) -> Result<&str, ArkretRouteError> {
+    crate::services::dpop::dpop_authorization_token(req).ok_or_else(|| {
+        ArkretRouteError::Unauthorized("Authorization: DPoP <session_grant> is required".to_owned())
+    })
 }
 
 async fn parse_session_revoke_body(
@@ -384,7 +374,7 @@ pub async fn revoke_session_grant_endpoint(
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
 
-    let presented_grant_jwt = bearer_session_grant(req)?.to_owned();
+    let presented_grant_jwt = dpop_session_grant(req)?.to_owned();
     let body = parse_session_revoke_body(req).await?;
     let selector = revoke_selector(&body)?;
     let dpop_header = dpop_header_from_request(req)

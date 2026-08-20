@@ -1,9 +1,8 @@
 use arkret_models_discovery::{
-    AccountAuthority, AuthGrantExchange, AuthMetadata, AuthMethod, AuthMethodKind,
-    ClaimedProfileEntry, InteropSurfaceEntry, PlaintextVisibility, ServerLimits, ServiceDescribe,
-    SupportedBinding,
+    AccountAuthority, AuthGrantExchange, AuthGrantExchangeKind, AuthMetadata, AuthMethod,
+    AuthMethodKind, ClaimedProfileEntry, InteropSurfaceEntry, PlaintextVisibility, ServerLimits,
+    ServiceDescribe, SupportedBinding,
 };
-use arkret_models_identity::SessionGrantProofKind;
 use arkret_wire::generated::profile_requirements::{
     requirements_for, validate_profile_requirements,
 };
@@ -248,8 +247,7 @@ fn build_verified_profile_descriptors(
 ///
 /// coauth is the deployment's Auth Server / Account Authority. It advertises
 /// one `oidc` auth method (its own issuer + discovery) whose `grant_exchange`
-/// is `oidc_code_exchange` — the canonical
-/// `POST /_arkret/gate/account/session-grants` proof branch. When the
+/// creates the AccountHandoff that later authenticates session issuance. When the
 /// deployment fronts principal servers, it also publishes the
 /// `account_authority` block so clients derive every `/_arkret/gate/account/*`
 /// request from `gate_account_base`.
@@ -320,7 +318,7 @@ fn build_auth_metadata(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -
             client_id: None,
             scopes: vec!["openid".to_owned(), "profile".to_owned()],
             grant_exchange: AuthGrantExchange {
-                proof_kind: SessionGrantProofKind::OidcCodeExchange,
+                kind: AuthGrantExchangeKind::AccountHandoff,
             },
         }],
         did_binding_methods: vec![

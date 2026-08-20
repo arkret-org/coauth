@@ -454,17 +454,22 @@ pub fn dpop_header_from_request(req: &salvo::Request) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Read the Bearer access token off a salvo request's `Authorization`
-/// header. Returns `None` if the header is missing, malformed, or not a
-/// Bearer scheme.
+/// Read a DPoP-bound credential from the request's `Authorization` header.
+/// The current-v1 profile has one presentation form only:
+/// `Authorization: DPoP <credential>`. Bearer and whitespace-bearing token
+/// values fail closed instead of selecting a compatibility parser.
 #[must_use]
-pub fn bearer_token_from_request(req: &salvo::Request) -> Option<String> {
+pub fn dpop_authorization_token(req: &salvo::Request) -> Option<&str> {
     let header = req.headers().get(http::header::AUTHORIZATION)?;
     let value = header.to_str().ok()?;
-    value
-        .strip_prefix("Bearer ")
-        .or_else(|| value.strip_prefix("bearer "))
-        .map(str::to_owned)
+    let (scheme, token) = value.split_once(' ')?;
+    if !scheme.eq_ignore_ascii_case("DPoP")
+        || token.is_empty()
+        || token.contains(char::is_whitespace)
+    {
+        return None;
+    }
+    Some(token)
 }
 
 /// Compute the canonical `htu` (HTTP target URI) for the current

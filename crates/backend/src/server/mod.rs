@@ -579,27 +579,7 @@ mod tests {
                 .add_header("Origin", "http://127.0.0.1:8080", true)
                 .add_header("Content-Type", "application/json", true)
                 .add_header("DPoP", "malformed-proof", true)
-                .body(
-                    serde_json::json!({
-                        "principal_id": "did:webvh:scid:offline.invalid:webvh:01k",
-                        "device_id": "ak:device:01964137-0000-7000-8000-000000000001",
-                        "proof": {
-                            "proof_kind": "oidc_code_exchange",
-                            "challenge": "0123456789abcdef0123",
-                            "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                            "audience": "https://soland.example.com/api",
-                            "signature": "unused-for-oidc",
-                            "issuer": "https://offline.invalid",
-                            "client_id": "inkson",
-                            "redirect_uri": "http://127.0.0.1:8080/auth/callback",
-                            "state": "ak.state-0123456789abcdef",
-                            "nonce": "ak.nonce-0123456789abcdef",
-                            "authorization_code": "stale-code",
-                            "code_verifier": "0123456789012345678901234567890123456789012"
-                        }
-                    })
-                    .to_string(),
-                )
+                .body("{}")
                 .send(&service)
                 .await;
 

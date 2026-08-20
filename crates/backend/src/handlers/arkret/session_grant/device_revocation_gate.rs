@@ -13,25 +13,16 @@ use crate::handlers::common::DepotExt as _;
 use crate::services::did_binding_proof::verify_detached_jws_against_method;
 use crate::services::peer_protocol_client::PeerProtocolClient;
 
-pub(crate) fn operation_intent_digest(
-    operation: &coauth_data::SessionGrantOperation,
-) -> Result<Hash, ArkretRouteError> {
-    Hash::new(format!(
-        "sha256:{}",
-        hex::encode(operation.canonical_intent_digest)
-    ))
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
-}
-
 pub(crate) async fn acquire_human_device_binding(
     depot: &Depot,
     principal_authority: &PrincipalAuthorityKey,
     device_id: DeviceId,
     action_class: DeviceRevocationGateActionClass,
     expected_binding: Option<&SessionGrantDeviceBinding>,
+    accepted_device_possession_proof: Option<arkret_wire::AcceptedDevicePossessionProof>,
     intent_digest: Hash,
     now: DateTime<Utc>,
-) -> Result<Option<SessionGrantDeviceBinding>, ArkretRouteError> {
+) -> Result<SessionGrantDeviceBinding, ArkretRouteError> {
     let config = depot.arkret_config()?;
     let destination = config
         .principal_servers
@@ -59,6 +50,7 @@ pub(crate) async fn acquire_human_device_binding(
         expected_device_generation_ref,
         action_class,
         intent_digest,
+        accepted_device_possession_proof,
         requested_at: arkret_canonical::normalize_timestamp_canonical(now),
     };
     request.validate().map_err(gate_protocol_error)?;
@@ -90,10 +82,15 @@ pub(crate) async fn acquire_human_device_binding(
     verify_gate_receipt(depot, &outcome).await?;
 
     match outcome.decision_receipt.decision {
-        DeviceRevocationGateDecision::Allow | DeviceRevocationGateDecision::AuthorityMismatch => {
+        DeviceRevocationGateDecision::Allow => {
             SessionGrantDeviceBinding::from_gate_outcome(&outcome, &request, now)
                 .map_err(gate_protocol_error)
         }
+        DeviceRevocationGateDecision::AuthorityMismatch => Err(ArkretRouteError::coded(
+            StatusCode::FORBIDDEN,
+            arkret_wire::ErrorCode::DEVICE_UNAUTHORIZED,
+            "device is not currently authorized for this principal",
+        )),
         DeviceRevocationGateDecision::RevocationPending => Err(ArkretRouteError::coded(
             StatusCode::CONFLICT,
             arkret_wire::ErrorCode::DEVICE_REVOCATION_PENDING,

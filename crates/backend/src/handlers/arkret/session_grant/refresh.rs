@@ -1,6 +1,6 @@
 use arkret_identifiers::{DeviceId, DidCoreId};
 use arkret_models_collaboration::session_grant_bodies::{
-    SessionGrantRefreshOutcome, SessionGrantRefreshProof, SessionGrantRefreshRequestBody,
+    HumanSessionGrantRefreshRequest, SessionGrantRefreshOutcome, SessionGrantRefreshRequestBody,
     session_grant_refresh_request_digest,
 };
 use arkret_models_identity::SessionGrantProofKind;
@@ -16,9 +16,6 @@ use sha2::Digest as _;
 use super::*;
 use crate::handlers::arkret::*;
 
-const SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS: i64 = 300;
-const SOFT_LOGOUT_DID_PROOF_REPLAY_REASON: &str = "did_proof_replay_window_exceeded";
-
 pub struct RefreshCanonicalJson(Vec<u8>);
 
 impl Scribe for RefreshCanonicalJson {
@@ -33,15 +30,7 @@ impl Scribe for RefreshCanonicalJson {
     }
 }
 
-fn did_proof_required(message: impl Into<String>) -> ArkretRouteError {
-    ArkretRouteError::coded(
-        StatusCode::UNAUTHORIZED,
-        arkret_wire::ErrorCode::DID_PROOF_REQUIRED,
-        message,
-    )
-}
-
-fn did_proof_invalid(message: impl Into<String>) -> ArkretRouteError {
+fn refresh_proof_invalid(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::UNAUTHORIZED,
         arkret_wire::ReasonCode::PROOF_INVALID,
@@ -49,54 +38,14 @@ fn did_proof_invalid(message: impl Into<String>) -> ArkretRouteError {
     )
 }
 
-fn did_proof_replay_window_exceeded(message: impl Into<String>) -> ArkretRouteError {
-    ArkretRouteError::coded(
-        StatusCode::UNAUTHORIZED,
-        arkret_wire::ReasonCode::PROOF_INVALID,
-        format!(
-            "reason_code={}; {}",
-            SOFT_LOGOUT_DID_PROOF_REPLAY_REASON,
-            message.into()
-        ),
-    )
-}
-
-/// The closed refresh DTO always carries the proof; presence is a parse-time
-/// guarantee, so only its field contents still need validating.
-fn required_soft_logout_proof(body: &SessionGrantRefreshRequestBody) -> &SessionGrantRefreshProof {
-    &body.proof
-}
-
-/// A required proof string may still arrive present-but-blank.
-fn required_proof_str<'a>(value: &'a str, field: &str) -> Result<&'a str, ArkretRouteError> {
-    Some(value.trim())
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| did_proof_required(format!("soft logout DID proof requires {field}")))
-}
-
-fn validate_soft_logout_proof_kind(
-    proof_kind: SessionGrantProofKind,
-) -> Result<(), ArkretRouteError> {
-    match proof_kind {
-        SessionGrantProofKind::DidBoundSignature | SessionGrantProofKind::PairedDeviceProof => {
-            Ok(())
-        }
-        other => Err(did_proof_invalid(format!(
-            "unsupported soft logout DID proof_kind {other:?}"
-        ))),
-    }
-}
-
-fn require_soft_logout_bound_device_id<'a>(
+fn require_bound_device_id<'a>(
     presented_device_id: Option<&'a str>,
     persisted_device_id: Option<&'a str>,
 ) -> Result<&'a str, ArkretRouteError> {
     let presented = presented_device_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            did_proof_required("soft logout recovery requires the presented device_id")
-        })?;
+        .ok_or_else(|| refresh_proof_invalid("human refresh requires the presented device_id"))?;
     DeviceId::new(presented.to_owned()).map_err(|error| {
         ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
@@ -109,10 +58,10 @@ fn require_soft_logout_bound_device_id<'a>(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
-            did_proof_required("session grant has no device_id binding for soft logout recovery")
+            refresh_proof_invalid("session grant has no device_id binding for human refresh")
         })?;
     if presented != persisted {
-        return Err(did_proof_invalid(
+        return Err(refresh_proof_invalid(
             "presented device_id does not match the persisted session grant binding",
         ));
     }
@@ -120,99 +69,52 @@ fn require_soft_logout_bound_device_id<'a>(
     Ok(persisted)
 }
 
-fn validate_soft_logout_did_proof_window(
-    issued_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
+fn validate_human_refresh_before_reservation(
+    body: &HumanSessionGrantRefreshRequest,
+    prior_grant: &coauth_data::SessionGrant,
+    prior_payload: &SignedSessionGrantClaims,
+    holder_jkt: &str,
     now: DateTime<Utc>,
 ) -> Result<(), ArkretRouteError> {
-    let freshness_secs = (expires_at - issued_at).num_seconds();
-    if freshness_secs <= 0 || freshness_secs > SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS {
-        return Err(did_proof_replay_window_exceeded(format!(
-            "DID proof expires_at - issued_at must be within 1..={SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS} seconds"
-        )));
-    }
-
-    let skew_secs = (issued_at - now).num_seconds().abs();
-    if skew_secs > SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS {
-        return Err(did_proof_replay_window_exceeded(format!(
-            "DID proof issued_at is outside the {SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS} second receiver skew window"
-        )));
-    }
-
-    if now >= expires_at {
-        return Err(did_proof_replay_window_exceeded(
-            "DID proof has expired and cannot restore a soft-logged-out session",
+    let proof = &body.accepted_device_possession_proof;
+    if proof.predecessor_session_grant_id != prior_grant.grant_id
+        || proof.principal_id != prior_payload.subject
+        || proof.device_id != body.device_id
+        || proof.holder_jkt != holder_jkt
+    {
+        return Err(refresh_proof_invalid(
+            "accepted-device refresh proof does not bind the predecessor, principal, device and holder key",
         ));
     }
-
-    Ok(())
-}
-
-fn soft_logout_restore_request_canonical_digest(
-    grant_jwt: &str,
-    principal_id: &str,
-    device_id: &str,
-    audience: &str,
-    grant_binding_key_id: &str,
-) -> Result<String, ArkretRouteError> {
-    let audience = DidCoreId::new(audience.to_owned()).map_err(|error| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "session grant audience is not a service core_id: {error}"
-        )))
-    })?;
-    session_grant_refresh_request_digest(
-        grant_jwt,
-        principal_id,
-        device_id,
-        &audience,
-        grant_binding_key_id,
-    )
-    .map(|digest| digest.as_str().to_owned())
-    .map_err(|error| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "soft logout restore request canonicalization failed: {error}"
-        )))
-    })
-}
-
-fn verify_soft_logout_did_proof(
-    body: &SessionGrantRefreshRequestBody,
-    prior_grant: &coauth_data::SessionGrant,
-    device_id: &str,
-    now: DateTime<Utc>,
-) -> Result<(), ArkretRouteError> {
-    let proof = required_soft_logout_proof(body);
-    validate_soft_logout_proof_kind(proof.proof_kind)?;
-    let _challenge = required_proof_str(&proof.challenge, "challenge")?;
-    let verification_method = proof
-        .verification_method
-        .as_ref()
-        .map(arkret_wire::DidUrl::as_str)
-        .ok_or_else(|| did_proof_required("DID proof verification_method is required"))?;
-    required_proof_str(&proof.signature, "signature")?;
     if proof.audience.as_str() != prior_grant.audience {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
-            "soft logout DID proof audience must match the session grant audience",
+            "accepted-device refresh proof audience must match the session grant audience",
         ));
     }
-    validate_soft_logout_did_proof_window(proof.issued_at, proof.expires_at, now)?;
-    let expected_digest = soft_logout_restore_request_canonical_digest(
+    if proof.issued_at > now + chrono::Duration::seconds(30) || now >= proof.expires_at {
+        return Err(refresh_proof_invalid(
+            "accepted-device refresh proof is outside its validity window",
+        ));
+    }
+    let audience = DidCoreId::new(prior_grant.audience.clone())
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let expected_digest = session_grant_refresh_request_digest(
         &body.grant_jwt,
-        &prior_grant.subject,
-        device_id,
-        proof.audience.as_str(),
-        verification_method,
-    )?;
-    if proof.request_canonical_digest.as_str() != expected_digest {
-        return Err(did_proof_invalid(
-            "DID proof request_canonical_digest does not match the presented restore request",
+        &prior_grant.grant_id,
+        &prior_payload.subject,
+        &body.device_id,
+        &audience,
+        holder_jkt,
+    )
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    if proof.session_intent_digest != expected_digest {
+        return Err(refresh_proof_invalid(
+            "accepted-device refresh proof session intent digest mismatch",
         ));
     }
-    Err(did_proof_invalid(
-        "soft logout restore requires host-local validation of the current account authority and device authorization state",
-    ))
+    Ok(())
 }
 
 // ── DPoP-bound session-grant refresh + debug seed ──────────────
@@ -265,15 +167,45 @@ pub async fn refresh_session_grant(
         .parse_json()
         .await
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
-
-    if body.grant_jwt.trim().is_empty() {
-        return Err(ArkretRouteError::BadRequest("missing grant_jwt".to_owned()));
+    body.validate().map_err(|error| {
+        ArkretRouteError::coded(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            arkret_wire::ErrorCode::SCHEMA_VIOLATION,
+            error.to_string(),
+        )
+    })?;
+    let (grant_jwt, requested_audience, presented_device_id, request_digest) = match &body {
+        SessionGrantRefreshRequestBody::Human(request) => (
+            request.grant_jwt.as_str(),
+            request.audience.as_ref(),
+            &request.device_id,
+            &request
+                .accepted_device_possession_proof
+                .session_intent_digest,
+        ),
+        SessionGrantRefreshRequestBody::Agent(request) => (
+            request.grant_jwt.as_str(),
+            request.audience.as_ref(),
+            &request.device_id,
+            &request.agent_session_refresh_proof.request_canonical_digest,
+        ),
+    };
+    let presented_grant =
+        crate::services::dpop::dpop_authorization_token(req).ok_or_else(|| {
+            ArkretRouteError::Unauthorized(
+                "Authorization: DPoP <session_grant> is required".to_owned(),
+            )
+        })?;
+    if presented_grant != grant_jwt {
+        return Err(ArkretRouteError::Unauthorized(
+            "DPoP authorization credential does not match grant_jwt".to_owned(),
+        ));
     }
 
     // 2. Parse + load the existing grant. We never verify the JWT signature here — the persisted
     //    row IS the source of truth — but we DO read the `cnf.jkt` claim out of the JWT payload to
     //    bind the proof.
-    let jwt: Jwt<'_, SignedSessionGrantClaims> = Jwt::try_from(body.grant_jwt.as_str())
+    let jwt: Jwt<'_, SignedSessionGrantClaims> = Jwt::try_from(grant_jwt)
         .map_err(|_| ArkretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
     let prior_payload = jwt.payload().clone();
     prior_payload
@@ -284,7 +216,7 @@ pub async fn refresh_session_grant(
     let mut repo = depot.repo().await?;
     let prior_grant = repo
         .oauth_session_grant()
-        .lookup_by_grant_jwt(&body.grant_jwt)
+        .lookup_by_grant_jwt(grant_jwt)
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .ok_or_else(|| {
@@ -302,14 +234,14 @@ pub async fn refresh_session_grant(
     let public_base = url_builder.http_base();
     let htu = dpop_htu(&public_base, req);
     let verification =
-        DpopVerifier::verify_without_replay(&dpop_header, &htm, &htu, now, Some(&body.grant_jwt))
+        DpopVerifier::verify_without_replay(&dpop_header, &htm, &htu, now, Some(grant_jwt))
             .map_err(|error| {
-            ArkretRouteError::coded(
-                StatusCode::UNAUTHORIZED,
-                arkret_wire::ErrorCode::SIGNATURE_INVALID,
-                error.to_string(),
-            )
-        })?;
+                ArkretRouteError::coded(
+                    StatusCode::UNAUTHORIZED,
+                    arkret_wire::ErrorCode::SIGNATURE_INVALID,
+                    error.to_string(),
+                )
+            })?;
 
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
         ArkretRouteError::coded(
@@ -319,8 +251,47 @@ pub async fn refresh_session_grant(
         )
     })?;
 
-    let proof = &body.proof;
-    let request_digest = &proof.request_canonical_digest;
+    match (&body, prior_payload.proof_kind) {
+        (
+            SessionGrantRefreshRequestBody::Human(request),
+            Some(SessionGrantProofKind::AccountHandoff),
+        ) => {
+            validate_human_refresh_before_reservation(
+                request,
+                &prior_grant,
+                &prior_payload,
+                &verification.jkt,
+                now,
+            )?;
+        }
+        (SessionGrantRefreshRequestBody::Agent(_), Some(SessionGrantProofKind::AgentKeyProof)) => {}
+        _ => {
+            return Err(ArkretRouteError::coded(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                arkret_wire::ErrorCode::SCHEMA_VIOLATION,
+                "refresh request variant does not match predecessor credential class",
+            ));
+        }
+    }
+
+    // Reject request-shape mismatches before creating a durable reservation.
+    // Predecessor lifecycle is intentionally checked after reservation because
+    // an exact retry is allowed to replay the already-minted successor after
+    // the predecessor has become superseded.
+    if let Some(requested) = requested_audience
+        && requested.as_str() != prior_grant.audience
+    {
+        return Err(ArkretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
+            "session-grant rotation MUST NOT change the bound audience",
+        ));
+    }
+    let device_id = require_bound_device_id(
+        Some(presented_device_id.as_str()),
+        prior_grant.device_id.as_deref(),
+    )?;
+
     let request_identity = format!(
         "refresh:{}:{}",
         prior_grant.grant_id,
@@ -328,22 +299,17 @@ pub async fn refresh_session_grant(
     );
     let mut redacted =
         serde_json::to_value(&body).map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    if let Some(proof) = redacted
-        .get_mut("proof")
-        .and_then(serde_json::Value::as_object_mut)
-    {
-        for field in ["challenge", "signature"] {
-            if let Some(secret) = proof.get(field) {
-                let bytes = arkret_canonical::canonical_json_bytes(secret)
-                    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-                proof.insert(
-                    field.to_owned(),
-                    serde_json::Value::String(format!(
-                        "sha256:{}",
-                        hex::encode(sha2::Sha256::digest(bytes))
-                    )),
-                );
-            }
+    for proof_field in [
+        "accepted_device_possession_proof",
+        "agent_session_refresh_proof",
+    ] {
+        if let Some(proof) = redacted
+            .get_mut(proof_field)
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            proof.remove("signature");
+            proof.remove("issued_at");
+            proof.remove("expires_at");
         }
     }
     let canonical_intent = arkret_canonical::canonical_json_bytes(&serde_json::json!({
@@ -499,23 +465,6 @@ pub async fn refresh_session_grant(
         ));
     }
 
-    // Audience and stable device binding are common to both human and Agent
-    // grant chains. Check them before dispatching to the credential-specific
-    // fresh-proof validator.
-    if let Some(requested) = body.audience.as_ref()
-        && requested.as_str() != prior_grant.audience
-    {
-        return Err(ArkretRouteError::coded(
-            StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
-            "session-grant rotation MUST NOT change the bound audience",
-        ));
-    }
-    let device_id = require_soft_logout_bound_device_id(
-        Some(body.device_id.as_str()),
-        prior_grant.device_id.as_deref(),
-    )?;
-
     if prior_payload.proof_kind == Some(SessionGrantProofKind::AgentKeyProof) {
         use crate::handlers::account::agents::{
             AgentSessionProofError, enforce_authoritative_agent_lifecycle,
@@ -543,7 +492,13 @@ pub async fn refresh_session_grant(
                 ));
             }
         };
-        let proof = &body.proof;
+        let agent_request = match &body {
+            SessionGrantRefreshRequestBody::Agent(request) => request,
+            SessionGrantRefreshRequestBody::Human(_) => {
+                unreachable!("variant checked before reservation")
+            }
+        };
+        let proof = &agent_request.agent_session_refresh_proof;
         let device_id = DeviceId::new(device_id.to_owned()).map_err(|error| {
             ArkretRouteError::coded(
                 StatusCode::BAD_REQUEST,
@@ -557,7 +512,7 @@ pub async fn refresh_session_grant(
             &*clock,
             &authoritative_agent,
             &prior_payload,
-            &body.grant_jwt,
+            &agent_request.grant_jwt,
             &device_id,
             proof,
         )
@@ -578,7 +533,7 @@ pub async fn refresh_session_grant(
             }
             Err(AgentSessionProofError::HumanApprovalRequired(_)) => {
                 repo.cancel().await.ok();
-                return Err(did_proof_invalid(
+                return Err(refresh_proof_invalid(
                     "Agent session refresh cannot request expanded human-approved scope",
                 ));
             }
@@ -617,7 +572,7 @@ pub async fn refresh_session_grant(
             .map(|scope| scope.as_str().to_owned())
             .collect();
         let scope_details = prior_payload.scope_details.clone().ok_or_else(|| {
-            did_proof_invalid("Agent session grant is missing its authorization scope binding")
+            refresh_proof_invalid("Agent session grant is missing its authorization scope binding")
         })?;
         let session_public_key = serde_json::to_string(&verification.jwk)
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
@@ -677,7 +632,9 @@ pub async fn refresh_session_grant(
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
         if !inserted {
             repo.cancel().await.ok();
-            return Err(did_proof_invalid("refresh DPoP JTI was already consumed"));
+            return Err(refresh_proof_invalid(
+                "refresh DPoP JTI was already consumed",
+            ));
         }
         let proof_expires_at = proof.expires_at;
         let checkpoint = serde_json::json!({
@@ -809,9 +766,14 @@ pub async fn refresh_session_grant(
         arkret_models_collaboration::objects::account_status::AccountStatus::ErasurePending => {
             Some(arkret_wire::ErrorCode::AccountErased)
         }
-        arkret_models_collaboration::objects::account_status::AccountStatus::Active
-        | arkret_models_collaboration::objects::account_status::AccountStatus::SoftLoggedOut => {
-            None
+        arkret_models_collaboration::objects::account_status::AccountStatus::Active => None,
+        arkret_models_collaboration::objects::account_status::AccountStatus::SoftLoggedOut => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::BAD_REQUEST,
+                arkret_wire::ErrorCode::SESSION_LOGGED_OUT,
+                "soft-logged-out account must re-authenticate through AccountHandoff issuance",
+            ));
         }
     };
     if let Some(code) = lifecycle_code {
@@ -837,12 +799,18 @@ pub async fn refresh_session_grant(
         .principal_did()
         .get_by_did_and_audience(&prior_grant.subject, &prior_grant.audience)
         .await?
-        .ok_or_else(|| did_proof_invalid("session grant principal authority is unavailable"))?;
+        .ok_or_else(|| refresh_proof_invalid("session grant principal authority is unavailable"))?;
     principal_binding
         .principal_authority
         .validate()
-        .map_err(|error| did_proof_invalid(error.to_string()))?;
-    verify_soft_logout_did_proof(&body, &prior_grant, device_id, now)?;
+        .map_err(|error| refresh_proof_invalid(error.to_string()))?;
+    let human_request = match &body {
+        SessionGrantRefreshRequestBody::Human(request) => request,
+        SessionGrantRefreshRequestBody::Agent(_) => {
+            unreachable!("variant checked before reservation")
+        }
+    };
+    let proof = &human_request.accepted_device_possession_proof;
 
     // 6. Rebuild the successor solely from the durable reservation seed. The
     // signing window, nonce, chain id and signing key therefore remain byte
@@ -856,13 +824,13 @@ pub async fn refresh_session_grant(
     let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let proof_kind = prior_payload.proof_kind.ok_or_else(|| {
-        did_proof_required("session-grant refresh predecessor is missing proof_kind")
+        refresh_proof_invalid("session-grant refresh predecessor is missing proof_kind")
     })?;
     let expected_device_binding = prior_payload.device_binding.as_ref().ok_or_else(|| {
         ArkretRouteError::coded(
             StatusCode::CONFLICT,
             arkret_wire::ErrorCode::DEVICE_REVOKED,
-            "fresh-device restricted grant cannot be refreshed before device authorization",
+            "human session-grant predecessor has no accepted-device binding",
         )
     })?;
     let device_binding = acquire_human_device_binding(
@@ -872,11 +840,14 @@ pub async fn refresh_session_grant(
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         arkret_wire::DeviceRevocationGateActionClass::SessionGrantRefresh,
         Some(expected_device_binding),
-        operation_intent_digest(&operation)?,
+        Some(arkret_wire::AcceptedDevicePossessionProof::Refresh(
+            proof.clone(),
+        )),
+        proof.session_intent_digest.clone(),
         now,
     )
     .await?;
-    if device_binding.as_ref() != Some(expected_device_binding) {
+    if &device_binding != expected_device_binding {
         return Err(ArkretRouteError::coded(
             StatusCode::CONFLICT,
             arkret_wire::ErrorCode::DEVICE_REVOKED,
@@ -933,12 +904,15 @@ pub async fn refresh_session_grant(
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     if !inserted {
         repo.cancel().await.ok();
-        return Err(did_proof_invalid("refresh DPoP JTI was already consumed"));
+        return Err(refresh_proof_invalid(
+            "refresh DPoP JTI was already consumed",
+        ));
     }
-    let proof = &body.proof;
     let proof_expires_at = proof.expires_at;
-    let challenge = proof.challenge.as_str();
-    let authorization_ref = format!("device-refresh:{challenge}");
+    let proof_digest = arkret_wire::AcceptedDevicePossessionProof::Refresh(proof.clone())
+        .proof_digest()
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let authorization_ref = format!("device-refresh:{proof_digest}");
     let checkpoint = serde_json::json!({
         "kind": "human_device_refresh",
         "verification_method": proof.verification_method,
@@ -1015,16 +989,10 @@ pub async fn refresh_session_grant(
 
 #[cfg(test)]
 mod tests {
-    use chrono::Duration;
-
     use super::*;
 
     const DEVICE_ID: &str = "ak:device:0196419b-0000-7000-8000-000000000001";
     const OTHER_DEVICE_ID: &str = "ak:device:0196419b-0000-7000-8000-000000000002";
-
-    fn ts(seconds: i64) -> DateTime<Utc> {
-        DateTime::<Utc>::from_timestamp(seconds, 0).expect("test timestamp must be valid")
-    }
 
     fn assert_coded(error: ArkretRouteError, expected_code: &'static str) -> String {
         match error {
@@ -1037,100 +1005,34 @@ mod tests {
     }
 
     #[test]
-    fn soft_logout_proof_window_rejects_more_than_300_seconds() {
-        let issued_at = ts(1_700_000_000);
-        let err = validate_soft_logout_did_proof_window(
-            issued_at,
-            issued_at + Duration::seconds(SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS + 1),
-            issued_at,
-        )
-        .expect_err("oversized DID proof replay window must fail closed");
-
-        let message = assert_coded(err, arkret_wire::ReasonCode::PROOF_INVALID);
-        assert!(message.contains(SOFT_LOGOUT_DID_PROOF_REPLAY_REASON));
-    }
-
-    #[test]
-    fn soft_logout_proof_window_rejects_expired_proof() {
-        let issued_at = ts(1_700_000_000);
-        let expires_at = issued_at + Duration::seconds(SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS);
-        let err = validate_soft_logout_did_proof_window(issued_at, expires_at, expires_at)
-            .expect_err("expired DID proof must fail closed");
-
-        let message = assert_coded(err, arkret_wire::ReasonCode::PROOF_INVALID);
-        assert!(message.contains(SOFT_LOGOUT_DID_PROOF_REPLAY_REASON));
-    }
-
-    #[test]
-    fn soft_logout_proof_kind_rejects_unrelated_branches() {
-        let err = validate_soft_logout_proof_kind(SessionGrantProofKind::AgentKeyProof)
-            .expect_err("agent_key_proof must not restore a human soft-logged-out session");
+    fn human_refresh_requires_presented_device_id() {
+        let err = require_bound_device_id(None, Some(DEVICE_ID))
+            .expect_err("missing presented device_id must fail accepted-device proof validation");
 
         assert_coded(err, arkret_wire::ReasonCode::PROOF_INVALID);
     }
 
     #[test]
-    fn soft_logout_device_binding_requires_presented_device_id() {
-        let err = require_soft_logout_bound_device_id(None, Some(DEVICE_ID))
-            .expect_err("missing presented device_id must require DID proof context");
-
-        assert_coded(err, arkret_wire::ErrorCode::DID_PROOF_REQUIRED);
-    }
-
-    #[test]
-    fn soft_logout_device_binding_requires_persisted_session_grant_device() {
-        let err = require_soft_logout_bound_device_id(Some(DEVICE_ID), None)
+    fn human_refresh_requires_persisted_session_grant_device() {
+        let err = require_bound_device_id(Some(DEVICE_ID), None)
             .expect_err("a grant with no persisted device binding must not be recoverable");
 
-        assert_coded(err, arkret_wire::ErrorCode::DID_PROOF_REQUIRED);
+        assert_coded(err, arkret_wire::ReasonCode::PROOF_INVALID);
     }
 
     #[test]
-    fn soft_logout_device_binding_rejects_device_mismatch() {
-        let err = require_soft_logout_bound_device_id(Some(OTHER_DEVICE_ID), Some(DEVICE_ID))
+    fn human_refresh_rejects_device_binding_mismatch() {
+        let err = require_bound_device_id(Some(OTHER_DEVICE_ID), Some(DEVICE_ID))
             .expect_err("presented device_id must match the grant binding");
 
         assert_coded(err, arkret_wire::ReasonCode::PROOF_INVALID);
     }
 
     #[test]
-    fn soft_logout_device_binding_accepts_persisted_match() {
-        let device_id = require_soft_logout_bound_device_id(Some(DEVICE_ID), Some(DEVICE_ID))
+    fn human_refresh_accepts_persisted_device_binding_match() {
+        let device_id = require_bound_device_id(Some(DEVICE_ID), Some(DEVICE_ID))
             .expect("matching device bindings should pass");
 
         assert_eq!(device_id, DEVICE_ID);
-    }
-
-    #[test]
-    fn soft_logout_restore_request_digest_binds_device_and_grant_binding_key() {
-        let base = soft_logout_restore_request_canonical_digest(
-            "grant.jwt.value",
-            "did:web:alice.example",
-            DEVICE_ID,
-            "ak:did_core:web:auth.example",
-            "did:web:alice.example#device-key-1",
-        )
-        .expect("request digest should compute");
-        assert!(base.starts_with("sha256:"));
-
-        let other_device = soft_logout_restore_request_canonical_digest(
-            "grant.jwt.value",
-            "did:web:alice.example",
-            OTHER_DEVICE_ID,
-            "ak:did_core:web:auth.example",
-            "did:web:alice.example#device-key-1",
-        )
-        .expect("request digest should compute");
-        let other_grant_binding_key = soft_logout_restore_request_canonical_digest(
-            "grant.jwt.value",
-            "did:web:alice.example",
-            DEVICE_ID,
-            "ak:did_core:web:auth.example",
-            "did:web:alice.example#other-device-key",
-        )
-        .expect("request digest should compute");
-
-        assert_ne!(base, other_device);
-        assert_ne!(base, other_grant_binding_key);
     }
 }

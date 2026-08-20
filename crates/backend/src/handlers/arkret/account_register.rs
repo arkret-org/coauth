@@ -8,6 +8,7 @@ use arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
 use arkret_models_identity::{
     AccountBindingKind, AccountBindingReceipt, AccountBindingState, AccountHandoffAllowedOperation,
     DidOperationSubmitOutcome, DidOperationSubmitStatus, IdentityCreationOperationStatus,
+    STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,
 };
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::RepositoryAccess as _;
@@ -554,7 +555,6 @@ pub async fn account_register_endpoint(
     let verified_principal = VerifiedPrincipalIdentity {
         principal_id: body.principal_id.clone(),
         full_id: body.full_id.clone(),
-        principal_authority: principal_authority.clone(),
     };
     ensure_soland_account_registered(
         &depot.http_client()?,
@@ -593,6 +593,7 @@ pub async fn account_register_endpoint(
         initial.device_id.clone(),
         arkret_wire::DeviceRevocationGateActionClass::SessionGrantIssue,
         None,
+        None,
         request_digest.clone(),
         now,
     )
@@ -606,12 +607,15 @@ pub async fn account_register_endpoint(
         session_public_key,
         initial.audience.to_string(),
         initial.device_id.clone(),
-        initial.requested_scope_strings(),
+        STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
+            .iter()
+            .map(|operation| operation.as_str().to_owned())
+            .collect(),
         Some(body.principal_id.as_str()),
         &principal_authority,
         grant.cnf_jkt.clone(),
         device_binding,
-        arkret_models_identity::SessionGrantProofKind::DidBoundSignature,
+        arkret_models_identity::SessionGrantProofKind::AccountHandoff,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     persist_session_grant(&mut repo, &mut *rng, &*clock, &browser_session, &material).await?;

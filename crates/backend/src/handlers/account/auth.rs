@@ -148,7 +148,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         .and_then(|h| h.to_str().ok())
         .map(std::borrow::ToOwned::to_owned);
 
-    // Same DPoP extraction as `oidc_code_exchange`: a present-but-broken
+    // Same DPoP extraction as AccountHandoff creation: a present-but-broken
     // proof rejects the login outright, and session-grant issuance below
     // requires a verified proof-bound public key.
     let dpop_binding = match extract_dpop_binding_for_kickoff(req, depot, &url_builder).await {

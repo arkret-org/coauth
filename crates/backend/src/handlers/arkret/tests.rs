@@ -152,35 +152,6 @@ fn test_principal_authority(
     )
 }
 
-#[test]
-fn omitted_human_session_scope_resolves_to_the_standard_operation_pair() {
-    assert_eq!(
-        resolve_standard_human_session_grant_scopes(&[]).unwrap(),
-        vec!["ak.self.account.read.describe", "ak.self.events.read.scan",]
-    );
-}
-
-#[test]
-fn human_session_scope_may_narrow_but_cannot_restore_legacy_binding_scopes() {
-    assert_eq!(
-        resolve_standard_human_session_grant_scopes(&["ak.self.events.read.scan".to_owned()])
-            .unwrap(),
-        vec!["ak.self.events.read.scan"]
-    );
-    assert!(
-        resolve_standard_human_session_grant_scopes(&[
-            PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()
-        ])
-        .is_err()
-    );
-    assert!(
-        resolve_standard_human_session_grant_scopes(&[
-            "urn:arkret:client:device:ak:device:01964137-0000-7000-8000-000000000001".to_owned()
-        ])
-        .is_err()
-    );
-}
-
 fn test_session_public_jwk(session_key: &PrivateKey, kid: impl Into<String>) -> PublicJsonWebKey {
     JsonWebKey::new(JsonWebKeyPublicParameters::from(session_key))
         .with_use(JsonWebKeyUse::Sig)
@@ -1426,7 +1397,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         Some(principal_did.as_str()),
         &principal_authority,
         bound_jkt.clone(),
-        Some(arkret_models_identity::SessionGrantDeviceBinding {
+        arkret_models_identity::SessionGrantDeviceBinding {
             device_id: arkret_identifiers::DeviceId::new(
                 "ak:device:01964137-0000-7000-8000-000000000001",
             )
@@ -1436,8 +1407,8 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
             )
             .unwrap(),
             model_generation_ref: 1,
-        }),
-        arkret_models_identity::SessionGrantProofKind::DidBoundSignature,
+        },
+        arkret_models_identity::SessionGrantProofKind::AccountHandoff,
     )
     .unwrap();
     let raw_payload = jwt_payload_value(&material.grant_jwt);

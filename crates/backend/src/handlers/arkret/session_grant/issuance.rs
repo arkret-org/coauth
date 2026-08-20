@@ -75,8 +75,8 @@ pub(crate) fn issue_session_grant(
         Some(subject),
         principal_authority,
         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
-        Some(device_binding),
-        SessionGrantProofKind::DidBoundSignature,
+        device_binding,
+        SessionGrantProofKind::AccountHandoff,
     )
 }
 
@@ -96,7 +96,7 @@ pub(crate) fn issue_session_grant_for_audience(
     subject_override: Option<&str>,
     principal_authority: &arkret_wire::PrincipalAuthorityKey,
     dpop_jkt: String,
-    device_binding: Option<SessionGrantDeviceBinding>,
+    device_binding: SessionGrantDeviceBinding,
     proof_kind: SessionGrantProofKind,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     let _ = (clock, browser_session);
@@ -142,7 +142,7 @@ pub(crate) fn issue_session_grant_for_audience(
         holder_binding: SessionGrantHolderBinding::HumanDevice {
             device_binding: device_id.to_string(),
         },
-        device_binding,
+        device_binding: Some(device_binding),
         proof_kind: Some(proof_kind),
         scope_details: None,
     };
@@ -213,7 +213,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
     subject_override: Option<&str>,
     principal_authority: &arkret_wire::PrincipalAuthorityKey,
     dpop_jkt: String,
-    device_binding: Option<SessionGrantDeviceBinding>,
+    device_binding: SessionGrantDeviceBinding,
     proof_kind: SessionGrantProofKind,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     issue_session_grant_for_audience(

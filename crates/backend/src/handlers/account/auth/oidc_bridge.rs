@@ -1,13 +1,12 @@
-//! OIDC authorization-code → `ak.session.grant` exchange core.
+//! OIDC authorization-code → AccountHandoff authentication core.
 //!
 //! This module is the Account Authority's OIDC proof validator. It used to
 //! also serve the product-private `/_coauth/.../auth/oidc/{browser-bridge,
 //! exchange}` bridge endpoints; those are removed (account-lifecycle §4.1,
 //! service-surface.md §2.5.1). The canonical entry point is now the spec
-//! operation `POST /_arkret/gate/account/session-grants` with
-//! `proof.proof_kind = "oidc_code_exchange"` — see
-//! [`crate::handlers::arkret::session_grant::issue_session_grant`], which
-//! calls [`exchange_oidc_code_for_session_grant`] here.
+//! operation `POST /_arkret/gate/account/authentication-handoffs`. SessionGrant
+//! issuance consumes only the resulting AccountHandoff and never exchanges an
+//! OIDC authorization code directly.
 
 // `IntegrationManifest` (and the nested `IntegrationManifestDependency`
 // / `IntegrationManifestSurface`) live in
@@ -19,8 +18,7 @@ use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
 };
 use coauth_data::{
-    AuthorizationGrant, BoxRepository, RepositoryAccess, Session, SessionGrantCommitOutcome,
-    SessionGrantExactOutcome, SessionGrantOperation, SessionGrantProofAuthorization,
+    AuthorizationGrant, BoxRepository, RepositoryAccess, Session,
     UpstreamOAuthProviderDiscoveryMode, User,
 };
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
@@ -31,12 +29,11 @@ use coauth_oauth_types::requests::{
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
 use salvo::prelude::*;
-use sha2::Digest as _;
 use soland_contracts::admin::AccountLocalpartAddRequestBody;
 use ulid::Ulid;
 
 use super::{DepotExt, DpopSessionBinding, RouteError, make_clock, make_rng};
-use crate::handlers::arkret::{self, SessionGrantMaterial};
+use crate::handlers::arkret;
 use crate::handlers::oauth::token_service::{
     AuthorizationCodeExchangeError, ValidatedAuthorizationCode, end_session_on_code_reuse,
     validate_authorization_code,
@@ -47,9 +44,7 @@ use crate::outbound_http::{self, RequestBuilderExt as _};
 use crate::services::upstream_oidc::UpstreamOidcExchangeMode;
 use crate::services::upstream_oidc_mapping::{TrustedIssuerPolicySet, map_upstream_id_token};
 
-/// Typed input for the canonical OIDC authorization-code exchange. Mirrors the
-/// `oidc_code_exchange` branch of
-/// `service-operation-dtos.schema.json#/$defs/SessionGrantRequestBody` — the
+/// Typed input for the AccountHandoff OIDC authorization-code exchange. The
 /// `token_endpoint` / `userinfo_endpoint` are NOT supplied by the client;
 /// the Account Authority derives them from the issuer's OIDC discovery
 /// document.
@@ -68,160 +63,8 @@ pub(crate) struct OidcCodeExchangeInput {
     pub state: String,
     /// `proof.nonce` — bound to the authorization request and id_token.
     pub nonce: String,
-    /// `body.device_id` — the protocol device id (`ak:device:<uuidv7>`) the
-    /// grant is bound to via `cnf.jkt`.
-    pub device_id: String,
-    /// Existing principal DID the grant request is bound to.
-    pub expected_principal_id: String,
     /// `proof.audience` — the requested principal-server audience.
     pub requested_audience: Option<String>,
-    /// Resolved current-v1 Standard human service-operation scope. Account
-    /// handoff-only exchanges leave this empty because they mint no session.
-    pub requested_scope: Vec<String>,
-}
-
-/// Successful OIDC exchange result. The caller (the canonical session-grant
-/// handler) turns this into a `SessionGrantOutcome`.
-pub(crate) struct OidcExchangeSuccess {
-    pub principal_id: DidCoreId,
-    pub device_id: String,
-    pub session_grant: SessionGrantMaterial,
-    pub persisted_grant_id: String,
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn commit_oidc_session_grant(
-    depot: &Depot,
-    mut repo: BoxRepository,
-    clock: &dyn coauth_data::Clock,
-    operation: &SessionGrantOperation,
-    dpop_binding: &DpopSessionBinding,
-    browser_session_id: Ulid,
-    principal_id: &DidCoreId,
-    device_id: &str,
-    material: &SessionGrantMaterial,
-) -> Result<coauth_data::SessionGrant, OidcExchangeError> {
-    let device_id_typed = arkret_identifiers::DeviceId::new(device_id.to_owned())
-        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-    let audience = arkret_identifiers::DidCoreId::new(material.audience.clone())
-        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-    let session_public_key =
-        arkret_models_identity::CanonicalSessionPublicJwk::new(&material.session_public_key)
-            .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-    let wire_outcome = arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome {
-        principal_id: principal_id.clone(),
-        device_id: Some(device_id_typed),
-        session_grant: material.grant_jwt.clone(),
-        expires_at: material.expires_at_timestamp,
-        session_grant_id: material.grant_id.clone(),
-        session_public_key,
-        audience,
-        granted_scope: material.scopes.clone(),
-        scope_details: None,
-    };
-    let canonical_outcome = arkret_canonical::canonical_json_bytes(&wire_outcome)
-        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-    let outcome_digest: [u8; 32] = sha2::Sha256::digest(&canonical_outcome).into();
-    let checkpoint = serde_json::json!({
-        "kind": "oidc_code_exchange",
-        "principal_id": principal_id,
-        "device_id": device_id,
-        "browser_session_id": browser_session_id.to_string(),
-        "grant_id": material.grant_id,
-        "issuance_digest": hex::encode(material.issuance_digest),
-        "material": material,
-        "wire_outcome": wire_outcome,
-    });
-    let authorization_ref = format!("oidc:{}", operation.request_identity);
-    let proof_expires_at = clock.now() + chrono::Duration::minutes(5);
-    let authorization = SessionGrantProofAuthorization {
-        authorization_ref: &authorization_ref,
-        checkpoint: &checkpoint,
-        proof_expires_at,
-    };
-
-    let inserted = repo
-        .dpop_replay()
-        .consume_jti(crate::services::dpop::dpop_replay_record(
-            &dpop_binding.jti,
-            clock.now(),
-        ))
-        .await
-        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-    if !inserted {
-        return Err(OidcExchangeError::proof_invalid(
-            "grant-binding DPoP proof JTI was already consumed",
-        ));
-    }
-    repo.oauth_session_grant()
-        .checkpoint_authorization(clock, operation.id, authorization)
-        .await
-        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-    // Once durable, this checkpoint lets Authorized retries finish from the
-    // exact prepared material without calling the token endpoint again. The
-    // unavoidable crash window between an external provider consuming the
-    // code and this save remains fail-closed as indeterminate.
-    repo.save()
-        .await
-        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-
-    let mut repo = depot
-        .repo()
-        .await
-        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-    let authorization = SessionGrantProofAuthorization {
-        authorization_ref: &authorization_ref,
-        checkpoint: &checkpoint,
-        proof_expires_at,
-    };
-    let exact_outcome = SessionGrantExactOutcome {
-        canonical_response: &canonical_outcome,
-        response_digest: outcome_digest,
-    };
-    let mut rng = crate::handlers::make_rng();
-    let committed = repo
-        .oauth_session_grant()
-        .commit_issuance(
-            &mut rng,
-            clock,
-            operation.id,
-            authorization,
-            exact_outcome,
-            arkret::new_session_grant_record(Some(browser_session_id), material),
-        )
-        .await
-        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-    let grant = match committed {
-        SessionGrantCommitOutcome::Committed(grant) => grant,
-        SessionGrantCommitOutcome::Replay(operation) => {
-            let grant_id = operation.result_grant_id.as_ref().ok_or_else(|| {
-                OidcExchangeError::new(
-                    "session_grant_replay_indeterminate",
-                    "committed operation has no result grant identity",
-                )
-            })?;
-            repo.oauth_session_grant()
-                .lookup_by_grant_id(grant_id)
-                .await
-                .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?
-                .ok_or_else(|| {
-                    OidcExchangeError::new(
-                        "session_grant_replay_indeterminate",
-                        "committed result grant is unavailable",
-                    )
-                })?
-        }
-        SessionGrantCommitOutcome::Indeterminate(_) => {
-            return Err(OidcExchangeError::new(
-                "session_grant_replay_indeterminate",
-                "session-grant commit outcome is indeterminate",
-            ));
-        }
-    };
-    repo.save()
-        .await
-        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-    Ok(grant)
 }
 
 /// Successful OIDC authentication used to create a short-lived account
@@ -230,19 +73,6 @@ pub(crate) struct OidcHandoffExchangeSuccess {
     pub user: User,
     pub browser_session_id: Option<Ulid>,
     pub audience: String,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum OidcExchangeIntent {
-    SessionGrant,
-    AccountHandoff,
-}
-
-enum OidcExchangeResult {
-    // Both payloads are boxed: each is several hundred bytes, so an inline
-    // variant would size every exchange result by the larger of the two.
-    SessionGrant(Box<OidcExchangeSuccess>),
-    AccountHandoff(Box<OidcHandoffExchangeSuccess>),
 }
 
 /// Typed failure of the OIDC exchange, carrying the registry error code the
@@ -266,18 +96,6 @@ impl OidcExchangeError {
     }
 }
 
-fn map_device_revocation_gate_oidc_error(error: arkret::ArkretRouteError) -> OidcExchangeError {
-    match error {
-        arkret::ArkretRouteError::Coded { code, message, .. }
-            if code == arkret_wire::ErrorCode::DEVICE_REVOCATION_PENDING
-                || code == arkret_wire::ErrorCode::DEVICE_REVOKED =>
-        {
-            OidcExchangeError::new(code, message)
-        }
-        other => OidcExchangeError::new("internal_error", other.to_string()),
-    }
-}
-
 fn validate_returned_nonce(grant_nonce: Option<&str>, expected_nonce: &str) -> Result<(), String> {
     let returned_nonce = grant_nonce.unwrap_or_default();
     // Constant-time compare (COA-SEC-04): the nonce binds the proof to the
@@ -298,10 +116,6 @@ fn validate_returned_nonce(grant_nonce: Option<&str>, expected_nonce: &str) -> R
         "authorization_code nonce mismatch: the proof nonce does not match the authorization_code"
             .to_owned(),
     )
-}
-
-pub(crate) fn is_protocol_device_id(value: &str) -> bool {
-    DeviceId::new(value.to_owned()).is_ok()
 }
 
 fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url, String> {
@@ -328,23 +142,6 @@ fn soland_account_localparts_endpoint(
         .push(principal_did)
         .push("localparts");
     Ok(endpoint)
-}
-
-pub(crate) fn principal_server_operation_bearer<'a>(
-    arkret_config: &'a coauth_config::ArkretConfig,
-    audience: &str,
-) -> Option<&'a str> {
-    arkret_config
-        .principal_servers
-        .iter()
-        .find(|server| {
-            crate::services::principal_server_trust::effective_audience_shared(server)
-                .as_ref()
-                .is_some_and(|effective| effective.as_str() == audience)
-        })
-        .and_then(|server| server.embedded_webvh_registration_bearer.as_deref())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
 }
 
 /// Deployment-private projection command. This deliberately does not reuse
@@ -452,61 +249,6 @@ fn soland_account_localpart_failure(status: reqwest::StatusCode, body: &str) -> 
 pub(crate) struct VerifiedPrincipalIdentity {
     pub principal_id: DidCoreId,
     pub full_id: DidFullId,
-    pub principal_authority: arkret_wire::PrincipalAuthorityKey,
-}
-
-/// Load the stable principal id and its registration-time full DID snapshot.
-pub(super) async fn load_verified_principal_did(
-    repo: &mut coauth_data::BoxRepository,
-    user: &User,
-    audience: &str,
-) -> Result<VerifiedPrincipalIdentity, String> {
-    repo.principal_did()
-        .get_for_user_and_audience(user, audience)
-        .await
-        .map_err(|error| format!("principal binding lookup failed: {error}"))?
-        .map(|binding| {
-            let principal_id = binding.principal_id;
-            binding
-                .principal_authority
-                .validate()
-                .map_err(|error| format!("stored principal authority is invalid: {error}"))?;
-            if binding.principal_authority.principal_id != principal_id
-                || binding.principal_authority.principal_server_id.as_str() != audience
-            {
-                return Err(
-                    "stored principal authority does not match principal binding".to_owned(),
-                );
-            }
-            Ok(VerifiedPrincipalIdentity {
-                principal_id,
-                full_id: binding.verified_full_id,
-                principal_authority: binding.principal_authority,
-            })
-        })
-        .transpose()?
-        .ok_or_else(|| "principal binding is missing".to_owned())
-}
-
-/// Load a verified principal DID in an isolated read transaction.
-pub(crate) async fn load_verified_principal_did_committed(
-    depot: &Depot,
-    user: &User,
-    audience: &str,
-) -> Result<VerifiedPrincipalIdentity, String> {
-    let mut did_repo = depot
-        .repo()
-        .await
-        .map_err(|error| format!("principal DID repository unavailable: {error}"))?;
-    let principal_did = match load_verified_principal_did(&mut did_repo, user, audience).await {
-        Ok(principal_did) => principal_did,
-        Err(error) => {
-            did_repo.cancel().await.ok();
-            return Err(error);
-        }
-    };
-    did_repo.cancel().await.ok();
-    Ok(principal_did)
 }
 
 pub(crate) async fn ensure_soland_account_registered(
@@ -549,64 +291,15 @@ pub(crate) async fn ensure_soland_account_registered(
     Err(soland_account_localpart_failure(status, &response_body))
 }
 
-/// Account Authority OIDC authorization-code → `ak.session.grant` exchange.
-///
-/// This is the core that the canonical
-/// `POST /_arkret/gate/account/session-grants`
-/// (`proof.proof_kind = "oidc_code_exchange"`) handler calls. It:
-///
-/// 1. resolves the issuer's live OIDC discovery metadata (local coauth issuer or a configured
-///    federated upstream) and derives `token_endpoint` / `userinfo_endpoint` from it,
-/// 2. exchanges `authorization_code` + `code_verifier` at the `token_endpoint`,
-/// 3. validates issuer / state / nonce / redirect_uri / id_token nonce / principal binding / device
-///    binding (`cnf.jkt` from the grant-binding DPoP key) / audience, and
-/// 4. mints + persists a device-bound `ak.session.grant`.
-///
-/// Binding failures surface as `proof_invalid`; transport / discovery failures
-/// surface as their own registry codes.
-pub(crate) async fn exchange_oidc_code_for_session_grant(
-    req: &mut Request,
-    depot: &Depot,
-    dpop_binding: Option<DpopSessionBinding>,
-    input: OidcCodeExchangeInput,
-    operation: coauth_data::SessionGrantOperation,
-) -> Result<OidcExchangeSuccess, OidcExchangeError> {
-    match exchange_oidc_code(
-        req,
-        depot,
-        dpop_binding,
-        input,
-        OidcExchangeIntent::SessionGrant,
-        Some(operation),
-    )
-    .await?
-    {
-        OidcExchangeResult::SessionGrant(success) => Ok(*success),
-        OidcExchangeResult::AccountHandoff(_) => unreachable!("session-grant exchange intent"),
-    }
-}
-
-/// Validate the same OIDC authorization-code proof for account-first
-/// registration without requiring a pre-existing principal or device.
+/// Validate an OIDC authorization code to create an AccountHandoff. This is
+/// the only current-v1 OIDC code consumer.
 pub(crate) async fn exchange_oidc_code_for_account_handoff(
     req: &mut Request,
     depot: &Depot,
     dpop_binding: DpopSessionBinding,
     input: OidcCodeExchangeInput,
 ) -> Result<OidcHandoffExchangeSuccess, OidcExchangeError> {
-    match exchange_oidc_code(
-        req,
-        depot,
-        Some(dpop_binding),
-        input,
-        OidcExchangeIntent::AccountHandoff,
-        None,
-    )
-    .await?
-    {
-        OidcExchangeResult::AccountHandoff(success) => Ok(*success),
-        OidcExchangeResult::SessionGrant(_) => unreachable!("account-handoff exchange intent"),
-    }
+    exchange_oidc_code(req, depot, dpop_binding, input).await
 }
 
 /// Successful in-process local-issuer authentication for account-handoff
@@ -930,11 +623,9 @@ fn map_local_authorization_code_error(error: AuthorizationCodeExchangeError) -> 
 async fn exchange_oidc_code(
     req: &mut Request,
     depot: &Depot,
-    dpop_binding: Option<DpopSessionBinding>,
+    _dpop_binding: DpopSessionBinding,
     input: OidcCodeExchangeInput,
-    intent: OidcExchangeIntent,
-    session_grant_operation: Option<coauth_data::SessionGrantOperation>,
-) -> Result<OidcExchangeResult, OidcExchangeError> {
+) -> Result<OidcHandoffExchangeSuccess, OidcExchangeError> {
     let mut rng = make_rng();
     let clock = make_clock();
     let url_builder = depot
@@ -967,14 +658,6 @@ async fn exchange_oidc_code(
         .await
         .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
 
-    // The DPoP proof binds either the issued session grant or the handoff to
-    // `cnf.jkt`; both exchanges fail closed without it.
-    let Some(dpop_binding) = dpop_binding else {
-        return Err(OidcExchangeError::proof_invalid(
-            "OIDC exchange requires a valid grant-binding DPoP proof",
-        ));
-    };
-
     // --- structural validation of the proof / body fields ---------------
     if input.code_verifier.trim().is_empty() {
         return Err(OidcExchangeError::proof_invalid(
@@ -992,19 +675,6 @@ async fn exchange_oidc_code(
             "authorization_code, redirect_uri, issuer, client_id, state, and nonce are required for oidc_code_exchange",
         ));
     }
-    let device_id = match intent {
-        OidcExchangeIntent::SessionGrant => {
-            let device_id = input.device_id.trim().to_owned();
-            if !is_protocol_device_id(&device_id) {
-                return Err(OidcExchangeError::proof_invalid(
-                    "device_id must be a ak:device:<uuidv7> protocol identifier",
-                ));
-            }
-            device_id
-        }
-        OidcExchangeIntent::AccountHandoff => String::new(),
-    };
-
     let redirect_uri = url::Url::parse(input.redirect_uri.trim()).map_err(|_| {
         OidcExchangeError::proof_invalid("redirect_uri must be a valid absolute URI")
     })?;
@@ -1253,100 +923,16 @@ async fn exchange_oidc_code(
                 input.requested_audience.as_deref(),
             )
             .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
-        if intent == OidcExchangeIntent::AccountHandoff {
-            let success = OidcHandoffExchangeSuccess {
-                user,
-                browser_session_id: Some(browser_session.id),
-                audience: grant_target.audience,
-            };
-            repo.save()
-                .await
-                .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
-            return Ok(OidcExchangeResult::AccountHandoff(Box::new(success)));
-        }
-        let principal = load_verified_principal_did_committed(depot, &user, &grant_target.audience)
+        let success = OidcHandoffExchangeSuccess {
+            user,
+            browser_session_id: Some(browser_session.id),
+            audience: grant_target.audience,
+        };
+        repo.save()
             .await
-            .map_err(|message| OidcExchangeError::new("principal_unknown", message))?;
-
-        validate_expected_principal(&principal.principal_id, &input.expected_principal_id)?;
-
-        let operation_bearer =
-            principal_server_operation_bearer(&arkret_config, &grant_target.audience);
-        ensure_soland_account_registered(
-            &http_client,
-            grant_target.principal_server_endpoint.as_deref(),
-            &principal,
-            operation_bearer,
-            user.display_name.as_deref(),
-            Some(device_id.as_str()),
-            user.localpart.as_str(),
-        )
-        .await
-        .map_err(|message| {
-            OidcExchangeError::new("principal_account_registration_failed", message)
-        })?;
-
-        let operation = session_grant_operation
-            .as_ref()
-            .expect("session grant exchange must carry a reserved operation");
-        let issuance_seed = arkret::SessionGrantIssuanceSeed::from_operation(operation)
-            .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-        let typed_device_id = DeviceId::new(device_id.clone())
-            .map_err(|error| OidcExchangeError::new("device_binding_invalid", error.to_string()))?;
-        let device_binding = arkret::acquire_human_device_binding(
-            depot,
-            &principal.principal_authority,
-            typed_device_id.clone(),
-            arkret_wire::DeviceRevocationGateActionClass::SessionGrantIssue,
-            None,
-            arkret::operation_intent_digest(operation)
-                .map_err(map_device_revocation_gate_oidc_error)?,
-            clock.now(),
-        )
-        .await
-        .map_err(map_device_revocation_gate_oidc_error)?;
-        let session_grant = arkret::issue_session_grant_for_audience(
-            &issuance_seed,
-            &*clock,
-            &arkret_config,
-            &key_store,
-            &browser_session,
-            dpop_binding.public_jwk.clone(),
-            grant_target.audience.clone(),
-            typed_device_id.clone(),
-            input.requested_scope.clone(),
-            Some(principal.principal_id.as_str()),
-            &principal.principal_authority,
-            dpop_binding.jkt.clone(),
-            device_binding,
-            arkret_models_identity::SessionGrantProofKind::OidcCodeExchange,
-        )
-        .map_err(|error| OidcExchangeError::new("session_grant_denied", error.to_string()))?;
-        let persisted = commit_oidc_session_grant(
-            depot,
-            repo,
-            &*clock,
-            session_grant_operation
-                .as_ref()
-                .expect("session grant exchange must carry a reserved operation"),
-            &dpop_binding,
-            browser_session.id,
-            &principal.principal_id,
-            device_id.as_str(),
-            &session_grant,
-        )
-        .await?;
-
+            .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
         let _ = &service_activity_tracker;
-        let _ = &grant_target;
-        return Ok(OidcExchangeResult::SessionGrant(Box::new(
-            OidcExchangeSuccess {
-                principal_id: principal.principal_id,
-                device_id,
-                session_grant,
-                persisted_grant_id: persisted.grant_id.to_string(),
-            },
-        )));
+        return Ok(success);
     }
 
     // ─── Local coauth issuer branch ─────────────────────────────────────
@@ -1739,10 +1325,6 @@ async fn exchange_oidc_code(
                 format!("fresh OAuth access token failed local userinfo validation: {error}"),
             )
         })?;
-    let repo = depot
-        .repo()
-        .await
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
     if oauth_userinfo.sub != expected_subject {
         return Err(OidcExchangeError::proof_invalid(format!(
             "fresh OAuth userinfo subject mismatch: expected {} but userinfo returned {}",
@@ -1764,133 +1346,11 @@ async fn exchange_oidc_code(
         ));
     }
 
-    let grant_target = upstream_oidc
-        .session_grant_target_for_requested_audience(
-            &url_builder,
-            &arkret_config,
-            crate::services::principal_server_trust::shared(),
-            input.requested_audience.as_deref(),
-        )
-        .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
-    let user = &browser_session.user;
-    if intent == OidcExchangeIntent::AccountHandoff {
-        // Account-handoff creation no longer reaches this branch: the local
-        // issuer path is authenticated in-process by
-        // `authenticate_local_handoff_code`, so reaching the self-call branch
-        // with the handoff intent is a programming error.
-        return Err(OidcExchangeError::new(
-            "internal_error",
-            "account handoff intent must not reach the local OIDC self-call branch",
-        ));
-    }
-    let principal = load_verified_principal_did_committed(depot, user, &grant_target.audience)
-        .await
-        .map_err(|message| OidcExchangeError::new("principal_unknown", message))?;
-
-    validate_expected_principal(&principal.principal_id, &input.expected_principal_id)?;
-
-    let operation_bearer =
-        principal_server_operation_bearer(&arkret_config, &grant_target.audience);
-    ensure_soland_account_registered(
-        &http_client,
-        grant_target.principal_server_endpoint.as_deref(),
-        &principal,
-        operation_bearer,
-        user.display_name.as_deref(),
-        Some(device_id.as_str()),
-        user.localpart.as_str(),
-    )
-    .await
-    .map_err(|message| OidcExchangeError::new("principal_account_registration_failed", message))?;
-
-    let operation = session_grant_operation
-        .as_ref()
-        .expect("session grant exchange must carry a reserved operation");
-    let issuance_seed = arkret::SessionGrantIssuanceSeed::from_operation(operation)
-        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-    let typed_device_id = DeviceId::new(device_id.clone())
-        .map_err(|error| OidcExchangeError::new("device_binding_invalid", error.to_string()))?;
-    let device_binding = arkret::acquire_human_device_binding(
-        depot,
-        &principal.principal_authority,
-        typed_device_id.clone(),
-        arkret_wire::DeviceRevocationGateActionClass::SessionGrantIssue,
-        None,
-        arkret::operation_intent_digest(operation)
-            .map_err(map_device_revocation_gate_oidc_error)?,
-        clock.now(),
-    )
-    .await
-    .map_err(map_device_revocation_gate_oidc_error)?;
-    let session_grant = arkret::issue_session_grant_for_audience(
-        &issuance_seed,
-        &clock,
-        &arkret_config,
-        &key_store,
-        &browser_session,
-        dpop_binding.public_jwk.clone(),
-        grant_target.audience.clone(),
-        typed_device_id.clone(),
-        input.requested_scope.clone(),
-        Some(principal.principal_id.as_str()),
-        &principal.principal_authority,
-        dpop_binding.jkt.clone(),
-        device_binding,
-        arkret_models_identity::SessionGrantProofKind::OidcCodeExchange,
-    )
-    .map_err(|error| OidcExchangeError::new("session_grant_denied", error.to_string()))?;
-    let persisted = commit_oidc_session_grant(
-        depot,
-        repo,
-        &clock,
-        session_grant_operation
-            .as_ref()
-            .expect("session grant exchange must carry a reserved operation"),
-        &dpop_binding,
-        browser_session.id,
-        &principal.principal_id,
-        device_id.as_str(),
-        &session_grant,
-    )
-    .await?;
-
-    let _ = &grant_target;
-    Ok(OidcExchangeResult::SessionGrant(Box::new(
-        OidcExchangeSuccess {
-            principal_id: principal.principal_id,
-            device_id,
-            session_grant,
-            persisted_grant_id: persisted.grant_id.to_string(),
-        },
-    )))
-}
-
-/// The request principal DID must equal the verified service-account binding.
-fn validate_expected_principal(
-    resolved_principal_id: &DidCoreId,
-    expected_principal_id: &str,
-) -> Result<(), OidcExchangeError> {
-    let expected = expected_principal_id.trim();
-    if expected.is_empty() {
-        return Err(OidcExchangeError::new(
-            "principal_unknown",
-            "principal_id must name an existing verified principal binding",
-        ));
-    }
-    if expected != resolved_principal_id.as_str() {
-        // Do not echo the resolved principal DID back to the client: it is an
-        // internal binding value the caller does not necessarily own.
-        tracing::debug!(
-            target: "coauth.oidc_exchange",
-            request_principal_id = %expected,
-            resolved_principal_id = %resolved_principal_id,
-            "principal binding mismatch",
-        );
-        return Err(OidcExchangeError::proof_invalid(
-            "principal binding mismatch: the request principal_id does not match the authenticated user",
-        ));
-    }
-    Ok(())
+    let _ = (&browser_session, &upstream_oidc, &service_activity_tracker);
+    Err(OidcExchangeError::new(
+        "internal_error",
+        "local AccountHandoff OIDC must use the in-process authorization-code validator",
+    ))
 }
 
 #[endpoint]
@@ -1949,12 +1409,10 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
 
 #[cfg(test)]
 mod tests {
-    use hyper::{Request, StatusCode};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, Request as WiremockRequest, ResponseTemplate};
 
     use super::*;
-    use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
 
     const TEST_PRINCIPAL_ID: &str = "ak:did_core:webvh:scid:local.host";
     const TEST_PRINCIPAL_FULL_ID: &str = "did:webvh:scid:local.host:webvh:01k";
@@ -1965,10 +1423,6 @@ mod tests {
     fn test_principal() -> VerifiedPrincipalIdentity {
         let principal_id = DidCoreId::new(TEST_PRINCIPAL_ID).unwrap();
         VerifiedPrincipalIdentity {
-            principal_authority: arkret_wire::PrincipalAuthorityKey::new(
-                principal_id.clone(),
-                DidCoreId::new("ak:did_core:web:principal-server.test").unwrap(),
-            ),
             principal_id,
             full_id: DidFullId::new(TEST_PRINCIPAL_FULL_ID).unwrap(),
         }
@@ -2000,17 +1454,6 @@ mod tests {
     }
 
     #[test]
-    fn protocol_device_id_validation_matches_soland_boundary() {
-        assert!(is_protocol_device_id(
-            "ak:device:01964137-0000-7000-8000-000000000001"
-        ));
-        assert!(!is_protocol_device_id("dev_inkson"));
-        assert!(!is_protocol_device_id(
-            "ak:device:01964137-0000-6000-8000-000000000001"
-        ));
-    }
-
-    #[test]
     fn returned_nonce_validation_is_exact() {
         assert!(validate_returned_nonce(Some("nonce"), "nonce").is_ok());
         // Mismatch and missing both reject with a generic message; the recorded
@@ -2021,21 +1464,6 @@ mod tests {
         assert!(!error.contains("other"));
         let error = validate_returned_nonce(None, "nonce").unwrap_err();
         assert!(error.contains("nonce mismatch"));
-    }
-
-    #[test]
-    fn expected_principal_binding_is_exact() {
-        let principal = DidCoreId::new("ak:did_core:webvh:scid:host").unwrap();
-        // Matching client assertion → ok.
-        assert!(validate_expected_principal(&principal, principal.as_str()).is_ok());
-        let error = validate_expected_principal(&principal, "").unwrap_err();
-        assert_eq!(error.code, "principal_unknown");
-        let error = validate_expected_principal(&principal, "   ").unwrap_err();
-        assert_eq!(error.code, "principal_unknown");
-        // A present-but-mismatched assertion is still a hard binding failure.
-        let error = validate_expected_principal(&principal, "ak:did_core:webvh:other").unwrap_err();
-        assert_eq!(error.code, "proof_invalid");
-        assert!(error.message.contains("principal binding mismatch"));
     }
 
     #[test]
@@ -2226,50 +1654,6 @@ mod tests {
         .expect_err("missing deployment bearer must fail closed");
 
         assert!(error.contains("embedded_webvh_registration_bearer"));
-    }
-
-    /// The canonical Account Authority grant endpoint rejects an
-    /// `oidc_code_exchange` proof that arrives without a grant-binding DPoP proof:
-    /// the grant has no device key to bind to (`proof_invalid`). Exercised
-    /// against the real router so the route wiring is covered too.
-    #[tokio::test]
-    async fn session_grant_oidc_exchange_requires_dpop_holder_proof() {
-        setup();
-        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
-            return;
-        };
-        let state = TestState::from_pool(pool.clone()).await.unwrap();
-
-        let response = state
-            .request(Request::post("/_arkret/gate/account/session-grants").json(
-                serde_json::json!({
-                    "principal_id": "ak:did_core:webvh:zoffline01k",
-                    "device_id": "ak:device:01964137-0000-7000-8000-000000000001",
-                    "proof": {
-                        "proof_kind": "oidc_code_exchange",
-                        "challenge": "0123456789abcdef0123",
-                        "request_canonical_digest": format!("sha256:{}", "0".repeat(64)),
-                        "audience": "ak:did_core:web:soland.example.com",
-                        "signature": "unused-for-oidc",
-                        "issuer": "https://offline.invalid",
-                        "client_id": "inkson",
-                        "redirect_uri": "http://localhost:8080/auth/callback",
-                        "state": "ak.state-0123456789abcdef",
-                        "nonce": "ak.nonce-0123456789abcdef",
-                        "authorization_code": "stale-code",
-                        "code_verifier": "0123456789012345678901234567890123456789012"
-                    }
-                }),
-            ))
-            .await;
-
-        // No DPoP header: the holder proof this operation requires is absent,
-        // which the error-code registry spells `did_proof_required` (401). The
-        // request never reaches proof verification, so it is not
-        // `proof_invalid`.
-        response.assert_status(StatusCode::UNAUTHORIZED);
-        let body: serde_json::Value = response.json();
-        assert_eq!(body["error"]["code"], "did_proof_required");
     }
 
     /// The typed mapping of shared validation-core failures must reproduce

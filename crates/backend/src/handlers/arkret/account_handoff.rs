@@ -299,10 +299,7 @@ pub async fn create_account_handoff(
         client_id: proof.client_id.clone(),
         state: proof.state.clone(),
         nonce: proof.nonce.clone(),
-        device_id: String::new(),
-        expected_principal_id: String::new(),
         requested_audience: Some(proof.audience.to_string()),
-        requested_scope: Vec::new(),
     };
     let authenticated =
         exchange_oidc_code_for_account_handoff(req, depot, dpop_binding.clone(), input)
@@ -463,10 +460,7 @@ async fn create_local_account_handoff(
         client_id: proof.client_id.clone(),
         state: proof.state.clone(),
         nonce: proof.nonce.clone(),
-        device_id: String::new(),
-        expected_principal_id: String::new(),
         requested_audience: Some(proof.audience.to_string()),
-        requested_scope: Vec::new(),
     };
     let authenticated =
         match authenticate_local_handoff_code(depot, &mut repo, &clock, &input).await {
@@ -1301,35 +1295,13 @@ pub(crate) fn enforce_handoff_operation(
 }
 
 fn account_handoff_authorization(req: &Request) -> Result<&str, ArkretRouteError> {
-    let value = req
-        .headers()
-        .get(http::header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .ok_or_else(|| {
-            ArkretRouteError::coded(
-                StatusCode::UNAUTHORIZED,
-                arkret_wire::ErrorCode::UNAUTHENTICATED,
-                "Authorization: DPoP <account_handoff_grant> is required",
-            )
-        })?;
-    let (scheme, token) = value.split_once(' ').ok_or_else(|| {
+    crate::services::dpop::dpop_authorization_token(req).ok_or_else(|| {
         ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
             arkret_wire::ErrorCode::UNAUTHENTICATED,
-            "account handoff Authorization header is malformed",
+            "Authorization: DPoP <account_handoff_grant> is required",
         )
-    })?;
-    if !scheme.eq_ignore_ascii_case("DPoP")
-        || token.is_empty()
-        || token.contains(char::is_whitespace)
-    {
-        return Err(ArkretRouteError::coded(
-            StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::UNAUTHENTICATED,
-            "account handoff requires the DPoP authorization scheme",
-        ));
-    }
-    Ok(token)
+    })
 }
 
 fn verify_handoff_holder_signature(

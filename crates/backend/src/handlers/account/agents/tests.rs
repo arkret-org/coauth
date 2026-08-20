@@ -250,7 +250,7 @@ mod agent_auth_error_matrix_tests {
         let fields = AgentKeyProofSigningInput {
             audience: arkret_wire::DidCoreId::new("ak:did_core:web:arkret.example").unwrap(),
             challenge: "challenge-abc".to_owned(),
-            nonce: Some("nonce-abc".to_owned()),
+            nonce: "nonce-abc".to_owned(),
             expires_at,
             request_canonical_digest: arkret_wire::Hash::new(format!("sha256:{}", "a".repeat(64)))
                 .unwrap(),
@@ -278,7 +278,7 @@ mod agent_auth_error_matrix_tests {
         let signed = AgentKeyProofSigningInput {
             audience: arkret_wire::DidCoreId::new("ak:did_core:web:arkret.example").unwrap(),
             challenge: "challenge-abc".to_owned(),
-            nonce: Some("nonce-abc".to_owned()),
+            nonce: "nonce-abc".to_owned(),
             expires_at,
             request_canonical_digest: arkret_wire::Hash::new(format!("sha256:{}", "a".repeat(64)))
                 .unwrap(),
@@ -313,7 +313,7 @@ mod agent_auth_error_matrix_tests {
         let signed = AgentKeyProofSigningInput {
             audience: arkret_wire::DidCoreId::new("ak:did_core:web:arkret.example").unwrap(),
             challenge: "challenge-abc".to_owned(),
-            nonce: Some("nonce-abc".to_owned()),
+            nonce: "nonce-abc".to_owned(),
             expires_at,
             request_canonical_digest: arkret_wire::Hash::new(format!("sha256:{}", "a".repeat(64)))
                 .unwrap(),
@@ -327,7 +327,7 @@ mod agent_auth_error_matrix_tests {
         let sig_b64 = base64ct::Base64UrlUnpadded::encode_string(&signature.to_bytes());
 
         let tampered = AgentKeyProofSigningInput {
-            nonce: Some("nonce-def".to_owned()),
+            nonce: "nonce-def".to_owned(),
             ..signed
         };
         let tampered_message = tampered.canonical_bytes().expect("canonical bytes");
