@@ -16,6 +16,38 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use crate::app_state::AppState;
 use crate::listener::ConnectionInfo;
 
+pub(crate) const ARKRET_REQUEST_ID_HEADER: &str = "x-arkret-request-id";
+
+fn arkret_request_id(req: &Request) -> String {
+    req.headers()
+        .get(ARKRET_REQUEST_ID_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| arkret_identifiers::RequestId::new((*value).to_owned()).is_ok())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| format!("ak:request:{}", uuid::Uuid::now_v7()))
+}
+
+/// Establish one correlation id before any Arkret handler or error renderer
+/// runs. A caller-provided id is preserved; otherwise the server allocates a
+/// protocol-shaped UUIDv7 id. Setting the response header before `call_next`
+/// lets [`ArkretRouteError`](crate::handlers::arkret::ArkretRouteError) copy the
+/// same id into the standard error envelope.
+#[handler]
+pub(crate) async fn arkret_request_id_middleware(
+    req: &mut Request,
+    depot: &mut Depot,
+    res: &mut Response,
+    ctrl: &mut FlowCtrl,
+) {
+    let request_id = arkret_request_id(req);
+    depot.insert("arkret_request_id", request_id.clone());
+    res.headers_mut().insert(
+        ARKRET_REQUEST_ID_HEADER,
+        HeaderValue::from_str(&request_id).expect("generated request id is a valid header value"),
+    );
+    ctrl.call_next(req, depot, res).await;
+}
+
 #[inline]
 fn otel_http_method(method: &Method) -> &'static str {
     match method {

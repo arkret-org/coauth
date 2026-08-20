@@ -75,6 +75,9 @@ pub(crate) struct OidcCodeExchangeInput {
     pub expected_principal_id: String,
     /// `proof.audience` — the requested principal-server audience.
     pub requested_audience: Option<String>,
+    /// Resolved current-v1 Standard human service-operation scope. Account
+    /// handoff-only exchanges leave this empty because they mint no session.
+    pub requested_scope: Vec<String>,
 }
 
 /// Successful OIDC exchange result. The caller (the canonical session-grant
@@ -299,13 +302,6 @@ fn validate_returned_nonce(grant_nonce: Option<&str>, expected_nonce: &str) -> R
 
 pub(crate) fn is_protocol_device_id(value: &str) -> bool {
     DeviceId::new(value.to_owned()).is_ok()
-}
-
-pub(super) fn principal_session_grant_scopes(device_id: &str) -> Vec<String> {
-    vec![
-        arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
-        format!("urn:arkret:client:device:{device_id}"),
-    ]
 }
 
 fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url, String> {
@@ -1317,8 +1313,8 @@ async fn exchange_oidc_code(
             &browser_session,
             dpop_binding.public_jwk.clone(),
             grant_target.audience.clone(),
-            typed_device_id,
-            principal_session_grant_scopes(&device_id),
+            typed_device_id.clone(),
+            input.requested_scope.clone(),
             Some(principal.principal_id.as_str()),
             &principal.principal_authority,
             dpop_binding.jkt.clone(),
@@ -1834,8 +1830,8 @@ async fn exchange_oidc_code(
         &browser_session,
         dpop_binding.public_jwk.clone(),
         grant_target.audience.clone(),
-        typed_device_id,
-        principal_session_grant_scopes(&device_id),
+        typed_device_id.clone(),
+        input.requested_scope.clone(),
         Some(principal.principal_id.as_str()),
         &principal.principal_authority,
         dpop_binding.jkt.clone(),
@@ -2011,17 +2007,6 @@ mod tests {
         assert!(!is_protocol_device_id("dev_inkson"));
         assert!(!is_protocol_device_id(
             "ak:device:01964137-0000-6000-8000-000000000001"
-        ));
-    }
-
-    #[test]
-    fn principal_session_grant_scopes_include_device_binding() {
-        let scopes =
-            principal_session_grant_scopes("ak:device:01964137-0000-7000-8000-000000000001");
-
-        assert!(scopes.contains(&arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()));
-        assert!(scopes.contains(
-            &"urn:arkret:client:device:ak:device:01964137-0000-7000-8000-000000000001".to_owned()
         ));
     }
 

@@ -302,6 +302,7 @@ pub async fn create_account_handoff(
         device_id: String::new(),
         expected_principal_id: String::new(),
         requested_audience: Some(proof.audience.to_string()),
+        requested_scope: Vec::new(),
     };
     let authenticated =
         exchange_oidc_code_for_account_handoff(req, depot, dpop_binding.clone(), input)
@@ -465,6 +466,7 @@ async fn create_local_account_handoff(
         device_id: String::new(),
         expected_principal_id: String::new(),
         requested_audience: Some(proof.audience.to_string()),
+        requested_scope: Vec::new(),
     };
     let authenticated =
         match authenticate_local_handoff_code(depot, &mut repo, &clock, &input).await {

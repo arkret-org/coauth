@@ -37,6 +37,47 @@ async fn rate_limited_error_fixture() -> Result<(), ArkretRouteError> {
     Err(ArkretRouteError::rate_limited("slow down", 59_728))
 }
 
+#[test]
+fn internal_error_details_are_development_only() {
+    let error = std::io::Error::other("database exploded");
+    let production = internal_error_envelope(&error, false);
+    assert_eq!(production.error.message, "internal server error");
+    assert!(production.error.details.is_empty());
+
+    let development = internal_error_envelope(&error, true);
+    assert_eq!(
+        development.error.message,
+        "internal server error: database exploded"
+    );
+    assert_eq!(
+        development.error.details.get("cause"),
+        Some(&serde_json::json!("database exploded"))
+    );
+}
+
+#[tokio::test]
+async fn arkret_errors_receive_a_server_generated_request_id() {
+    let service = salvo::Service::new(
+        Router::with_path("rate-limited-error")
+            .hoop(crate::server::arkret_request_id_middleware)
+            .get(rate_limited_error_fixture),
+    );
+    let mut response = TestClient::get("http://127.0.0.1:8698/rate-limited-error")
+        .send(&service)
+        .await;
+
+    let response_request_id = response
+        .headers()
+        .get(crate::server::ARKRET_REQUEST_ID_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .unwrap()
+        .to_owned();
+    let body: serde_json::Value =
+        serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
+    assert!(response_request_id.starts_with("ak:request:"));
+    assert_eq!(body["request_id"], response_request_id);
+}
+
 #[tokio::test]
 async fn rate_limited_endpoint_renders_canonical_retry_hints() {
     let service = salvo::Service::new(
@@ -109,6 +150,35 @@ fn test_principal_authority(
         arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
         arkret_identifiers::DidCoreId::new(principal_server_id).unwrap(),
     )
+}
+
+#[test]
+fn omitted_human_session_scope_resolves_to_the_standard_operation_pair() {
+    assert_eq!(
+        resolve_standard_human_session_grant_scopes(&[]).unwrap(),
+        vec!["ak.self.account.read.describe", "ak.self.events.read.scan",]
+    );
+}
+
+#[test]
+fn human_session_scope_may_narrow_but_cannot_restore_legacy_binding_scopes() {
+    assert_eq!(
+        resolve_standard_human_session_grant_scopes(&["ak.self.events.read.scan".to_owned()])
+            .unwrap(),
+        vec!["ak.self.events.read.scan"]
+    );
+    assert!(
+        resolve_standard_human_session_grant_scopes(&[
+            PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()
+        ])
+        .is_err()
+    );
+    assert!(
+        resolve_standard_human_session_grant_scopes(&[
+            "urn:arkret:client:device:ak:device:01964137-0000-7000-8000-000000000001".to_owned()
+        ])
+        .is_err()
+    );
 }
 
 fn test_session_public_jwk(session_key: &PrivateKey, kid: impl Into<String>) -> PublicJsonWebKey {

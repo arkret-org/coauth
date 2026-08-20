@@ -52,6 +52,39 @@ pub const CLAIM_DEVICE_ID: &str = "org.arkret.device_id";
 pub const CLAIM_SESSION_ID: &str = "org.arkret.session_id";
 
 pub const PRINCIPAL_SERVER_SESSION_BIND_SCOPE: &str = "urn:arkret:principal-server:session.bind";
+
+/// Resolve the service-operation scopes for a Standard human/device session.
+///
+/// An omitted `requested_scope` selects the current-v1 closed Standard
+/// bootstrap profile. An explicit request may only narrow that profile. The
+/// durable device association belongs in the grant's typed `holder_binding`
+/// and `device_binding`; legacy `session.bind` and device URN scopes are never
+/// emitted as operation authority.
+pub(crate) fn resolve_standard_human_session_grant_scopes(
+    requested_scope: &[String],
+) -> Result<Vec<String>, ArkretRouteError> {
+    let ceiling = arkret_models_identity::STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
+        .map(|operation| operation.as_str());
+    let mut granted = if requested_scope.is_empty() {
+        ceiling.iter().map(|scope| (*scope).to_owned()).collect()
+    } else {
+        requested_scope.to_vec()
+    };
+    if granted
+        .iter()
+        .any(|scope| scope.trim().is_empty() || !ceiling.contains(&scope.as_str()))
+    {
+        return Err(ArkretRouteError::coded(
+            StatusCode::FORBIDDEN,
+            arkret_wire::ErrorCode::CAPABILITY_DENIED,
+            "requested human session scope exceeds the current-v1 Standard scope ceiling",
+        ));
+    }
+    granted.sort_unstable();
+    granted.dedup();
+    Ok(granted)
+}
+
 #[derive(Debug, Error)]
 pub enum SessionGrantError {
     #[error("no signing key is configured for Arkret session grants")]
@@ -487,21 +520,42 @@ fn principal_server_static_session_grant_bearer_audiences(
         .collect()
 }
 
+fn internal_error_envelope(
+    error: &(dyn std::error::Error + Send + Sync + 'static),
+    development_mode: bool,
+) -> ErrorEnvelope {
+    let message = if development_mode {
+        format!("internal server error: {error}")
+    } else {
+        "internal server error".to_owned()
+    };
+    let envelope = ErrorEnvelope::new(arkret_wire::ErrorCode::INTERNAL_ERROR, message);
+    if development_mode {
+        envelope.with_detail("cause", serde_json::json!(error.to_string()))
+    } else {
+        envelope
+    }
+}
+
 impl Scribe for ArkretRouteError {
     fn render(self, res: &mut Response) {
+        let request_id = res
+            .headers()
+            .get(crate::server::ARKRET_REQUEST_ID_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .filter(|value| arkret_identifiers::RequestId::new((*value).to_owned()).is_ok())
+            .map(ToOwned::to_owned);
         let retry_after_ms = match &self {
             Self::RateLimited { retry_after_ms, .. } => Some(*retry_after_ms),
             _ => None,
         };
         let (status, envelope) = match self {
             Self::Internal(error) => {
-                tracing::error!(error = %error, "Arkret route failed internally");
+                tracing::error!(request_id = request_id.as_deref().unwrap_or("unavailable"), error = %error, "Arkret route failed internally");
+                let development_mode = crate::error::development_mode_from_env();
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    ErrorEnvelope::new(
-                        arkret_wire::ErrorCode::INTERNAL_ERROR,
-                        "internal server error",
-                    ),
+                    internal_error_envelope(error.as_ref(), development_mode),
                 )
             }
             Self::NotFound => (
@@ -586,6 +640,10 @@ impl Scribe for ArkretRouteError {
             }
         }
 
+        let envelope = match request_id {
+            Some(request_id) => envelope.with_request_id(request_id),
+            None => envelope,
+        };
         res.status_code(status);
         res.render(Json(envelope));
     }

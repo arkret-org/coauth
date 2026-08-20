@@ -419,6 +419,7 @@ pub async fn issue_session_grant_endpoint(
     })?;
     match body.proof.proof_kind {
         arkret_models_identity::SessionGrantProofKind::OidcCodeExchange => {
+            let granted_scope = resolve_standard_human_session_grant_scopes(&body.requested_scope)?;
             let dpop_binding = extract_kickoff_dpop(req, depot).await?;
             let holder_jkt = dpop_binding
                 .as_ref()
@@ -453,6 +454,7 @@ pub async fn issue_session_grant_endpoint(
                 // The proof carries the requested audience; the grant target
                 // resolver intersects it with the configured principal servers.
                 requested_audience: Some(proof.audience.to_string()),
+                requested_scope: granted_scope,
             };
 
             let success =
@@ -529,6 +531,7 @@ pub async fn issue_session_grant_endpoint(
             issue_agent_key_proof_session_grant(req, depot, binding, &body, operation).await
         }
         arkret_models_identity::SessionGrantProofKind::PreRegistrationHandoff => {
+            resolve_standard_human_session_grant_scopes(&body.requested_scope)?;
             if body.device_id.is_none() {
                 return Err(ArkretRouteError::coded(
                     StatusCode::UNPROCESSABLE_ENTITY,
@@ -590,8 +593,7 @@ async fn issue_pre_registration_handoff_session_grant(
         )
     };
     let proof = &body.proof;
-    if !body.requested_scope.is_empty()
-        || body.agent_key_authorization_ref.is_some()
+    if body.agent_key_authorization_ref.is_some()
         || body.agent_scope_request.is_some()
         || body.requested_scope_disclosure.is_some()
         || body.dpop_binding_proof.is_some()
@@ -728,6 +730,7 @@ async fn issue_pre_registration_handoff_session_grant(
     .await?;
     let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let granted_scope = resolve_standard_human_session_grant_scopes(&body.requested_scope)?;
     let material = issue_session_grant_for_audience(
         &issuance_seed,
         &*clock,
@@ -737,7 +740,7 @@ async fn issue_pre_registration_handoff_session_grant(
         dpop.jwk.clone(),
         handoff_audience.clone(),
         device_id.clone(),
-        Vec::new(),
+        granted_scope,
         Some(binding.principal_id.as_str()),
         &binding.principal_authority,
         dpop.jkt.to_string(),
@@ -1207,11 +1210,12 @@ fn map_session_grant_material_error(error: SessionGrantError) -> ArkretRouteErro
 pub(crate) fn map_oidc_exchange_error(
     error: crate::handlers::account::auth::oidc_bridge::OidcExchangeError,
 ) -> ArkretRouteError {
+    if error.code == arkret_wire::ErrorCode::INTERNAL_ERROR {
+        return ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+            error.message,
+        ));
+    }
     let (status, code) = match error.code {
-        "internal_error" => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            arkret_wire::ErrorCode::INTERNAL_ERROR,
-        ),
         arkret_wire::ReasonCode::PROOF_INVALID
         | "invalid_authorization_code"
         | "invalid_client" => (
@@ -1334,6 +1338,21 @@ mod tests {
                 assert!(message.contains("reason_code=invalid_authorization_code"));
             }
             other => panic!("expected coded error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn oidc_internal_errors_use_the_environment_aware_internal_renderer() {
+        let error = map_oidc_exchange_error(OidcExchangeError {
+            code: arkret_wire::ErrorCode::INTERNAL_ERROR,
+            message: "upstream database detail".to_owned(),
+        });
+
+        match error {
+            ArkretRouteError::Internal(source) => {
+                assert_eq!(source.to_string(), "upstream database detail");
+            }
+            other => panic!("expected internal error, got {other:?}"),
         }
     }
 

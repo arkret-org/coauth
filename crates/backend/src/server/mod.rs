@@ -16,6 +16,7 @@ use crate::listener::unix_or_tcp::UnixOrTcpListener;
 mod middleware;
 pub(crate) mod routers;
 
+pub(crate) use middleware::{ARKRET_REQUEST_ID_HEADER, arkret_request_id_middleware};
 use middleware::{InjectAppState, RequestTimeout, favicon_handler, public_oidc_browser_cors};
 pub use middleware::{
     cache_control_middleware, log_response_middleware, override_response_csp,
@@ -176,6 +177,7 @@ pub fn build_router(
 
     // Add middleware layers
     router
+        .hoop(arkret_request_id_middleware)
         .hoop(inject_app_state)
         .hoop(security_headers_middleware)
         .hoop(log_response_middleware)

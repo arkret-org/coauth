@@ -488,11 +488,12 @@ fn account_api_subrouters() -> (Router, Router) {
 
 #[handler]
 async fn arkret_not_found(req: &Request, res: &mut Response) {
-    let request_id = req
+    let request_id = res
         .headers()
-        .get("x-arkret-request-id")
+        .get(crate::server::ARKRET_REQUEST_ID_HEADER)
         .and_then(|value| value.to_str().ok())
-        .unwrap_or("unknown");
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| format!("ak:request:{}", uuid::Uuid::now_v7()));
     if let Some(allowed) = arkret_allowed_methods(req.uri().path()) {
         res.status_code(StatusCode::METHOD_NOT_ALLOWED);
         if let Ok(value) = http::HeaderValue::from_str(allowed) {
@@ -503,7 +504,7 @@ async fn arkret_not_found(req: &Request, res: &mut Response) {
                 arkret_wire::ErrorCode::METHOD_NOT_ALLOWED,
                 "method not allowed",
             )
-            .with_request_id(request_id),
+            .with_request_id(&request_id),
         ));
     } else {
         res.status_code(StatusCode::NOT_FOUND);
@@ -512,7 +513,7 @@ async fn arkret_not_found(req: &Request, res: &mut Response) {
                 arkret_wire::ErrorCode::UNRECOGNIZED_ENDPOINT,
                 "unrecognized Arkret endpoint",
             )
-            .with_request_id(request_id),
+            .with_request_id(&request_id),
         ));
     }
 }
