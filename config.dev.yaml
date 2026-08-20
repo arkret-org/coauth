@@ -29,7 +29,7 @@ clients:
   - http://127.0.0.1/auth/callback
   - http://localhost/auth/callback
 database:
-  uri: postgresql://postgres:root@localhost/coauth_dev
+  uri: postgresql://postgres:root@localhost/coauth_dev_0831
   max_connections: 10
   min_connections: 0
   connect_timeout: 30
@@ -149,10 +149,15 @@ rate_limiting:
       per_second: 100000
 arkret:
   trust_domain: ak:trust_domain:local.host
+  # Dev auto-enrollment: exact local HTTPS hosts eligible for one-time
+  # principal-server trust enrollment in development mode (0831). The pin is
+  # persisted in the database after the first verified enrollment; no static
+  # service_id is kept here because local identity re-genesis makes it drift.
+  development_auto_enrollment_hosts:
+  - local.host
   principal_servers:
   - name: soland-dev
     endpoint: https://local.host/
-    service_id: ak:did_core:webvh:Qmf4KHxwKtMakTBUG9xkgST3FZTbmJHJFPgXkbPvkq1V5E
     session_grant_introspection_bearer: local-coauth-session-grant-introspection
     embedded_webvh_registration_bearer: local-soland-webvh-registration
   identity_registry:

@@ -550,7 +550,6 @@ pub(crate) fn service_describe_response(
         takedown_contact: None,
         rate_limits: None,
         supported_reducer_profiles: Vec::new(),
-        supported_schema_profiles: vec![arkret_wire::SchemaId::SERVICE_DESCRIBE_V1.to_owned()],
         frontier: Vec::new(),
         snapshot_frontier: Vec::new(),
         last_materialized_at: None,
