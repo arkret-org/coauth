@@ -829,6 +829,7 @@ impl TestState {
             user,
             &binding,
             arkret_models_collaboration::objects::account_status::AccountStatus::Active,
+            None,
             chrono::Utc::now(),
             &mut rng,
         )

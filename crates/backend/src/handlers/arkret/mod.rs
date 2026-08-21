@@ -3,6 +3,7 @@ mod account_register;
 mod account_status;
 mod controller_gate;
 mod did_document;
+mod erasure_request;
 mod handle_claim;
 mod identity;
 mod recovery_authority;
@@ -15,6 +16,7 @@ pub use account_register::*;
 pub use account_status::*;
 pub use controller_gate::*;
 pub use did_document::*;
+pub use erasure_request::*;
 pub use handle_claim::*;
 pub use identity::*;
 pub use recovery_authority::*;
@@ -114,6 +116,18 @@ pub enum ArkretRouteError {
         status: StatusCode,
         code: &'static str,
         message: String,
+    },
+
+    /// A [`Self::Coded`] failure that additionally carries structured
+    /// `details` entries (e.g. the registry sub-`reason_code` of a
+    /// `failed_precondition`), so conformant clients can discriminate the
+    /// failure without string-matching the message.
+    #[error("{message}")]
+    CodedDetailed {
+        status: StatusCode,
+        code: &'static str,
+        message: String,
+        details: Vec<(&'static str, serde_json::Value)>,
     },
 
     /// A protocol rate limit with the mandatory structured retry hint.
@@ -536,6 +550,18 @@ impl Scribe for ArkretRouteError {
                 code,
                 message,
             } => (status, ErrorEnvelope::new(code, message)),
+            Self::CodedDetailed {
+                status,
+                code,
+                message,
+                details,
+            } => {
+                let mut envelope = ErrorEnvelope::new(code, message);
+                for (key, value) in details {
+                    envelope = envelope.with_detail(key, value);
+                }
+                (status, envelope)
+            }
             Self::RateLimited {
                 message,
                 retry_after_ms,

@@ -213,6 +213,19 @@ diesel::table! {
 }
 
 diesel::table! {
+    user_erasure_requests (request_id) {
+        request_id -> Text,
+        user_id -> Uuid,
+        request_digest -> Text,
+        canonical_outcome -> Bytea,
+        recorded_at -> Timestamptz,
+        withdrawal_window_ends_at -> Nullable<Timestamptz>,
+        record_issued_at -> Nullable<Timestamptz>,
+        account_status_record_id -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
     recovery_completion_grant_issuances (transaction_id) {
         transaction_id -> Text,
         transaction_request_digest -> Text,
@@ -1065,6 +1078,7 @@ diesel::joinable!(oauth_authorization_grants -> oauth_clients (oauth_client_id))
 diesel::joinable!(oauth_device_code_grant -> oauth_clients (oauth_client_id));
 diesel::joinable!(oauth_session_grants -> user_sessions (user_session_id));
 diesel::joinable!(oauth_session_grants -> oauth_session_grant_operations (issuance_operation_id));
+diesel::joinable!(user_erasure_requests -> users (user_id));
 diesel::joinable!(recovery_completion_grant_issuances -> users (service_account_id));
 diesel::joinable!(recovery_completion_grant_issuances -> oauth_session_grant_operations (session_grant_operation_id));
 diesel::joinable!(oauth_client_localized_metadata -> oauth_clients (client_id));
@@ -1112,6 +1126,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     oauth_session_grants,
     oauth_session_grant_operations,
     recovery_completion_grant_issuances,
+    user_erasure_requests,
     upstream_oauth_providers,
     upstream_oauth_links,
     upstream_oauth_authorization_sessions,

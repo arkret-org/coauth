@@ -264,6 +264,17 @@ fn account_api_subrouters() -> (Router, Router) {
                 .options(oidc_preflight_handler)
                 .post(arkret::issue_recovery_completion_grant_endpoint),
         )
+        // Self-service account erasure entry point
+        // (`ak.gate.account.command.request_erasure`, account-lifecycle.md
+        // §8.1). Accepted directly by the Account Authority on the gate
+        // surface: high-risk fresh-authentication gate, durable intent
+        // record, and the existing `erasure_pending` issuance flow all live
+        // inside this service.
+        .push(
+            Router::with_path("gate/account/erasure-requests")
+                .options(oidc_preflight_handler)
+                .post(arkret::request_account_erasure),
+        )
         .push(
             Router::with_path("peer/account-status/resolve")
                 .post(arkret::resolve_account_status),
@@ -537,6 +548,7 @@ fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
         | "/_arkret/gate/account/session-grants/revoke"
         | "/_arkret/gate/account/session-grants"
         | "/_arkret/gate/account/agent-key-pair"
+        | "/_arkret/gate/account/erasure-requests"
         | "/_arkret/gate/account/recovery-session-grants/issue" => Some("POST, OPTIONS"),
         _ => None,
     }

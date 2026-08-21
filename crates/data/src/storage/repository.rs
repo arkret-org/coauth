@@ -13,6 +13,7 @@ use crate::circle_capability::CircleCapabilityGrantRepository;
 use crate::collaboration_capability::CollaborationCapabilityGrantRepository;
 use crate::did_binding::VerifiedDidBindingRepository;
 use crate::dpop_replay::DpopReplayRepository;
+use crate::erasure_request::UserErasureRequestRepository;
 use crate::notification::NotificationRepository;
 use crate::oauth::{
     OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
@@ -193,6 +194,11 @@ pub trait RepositoryAccess: Send {
     /// Get a [`DpopReplayRepository`].
     fn dpop_replay<'c>(&'c mut self) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c>;
 
+    /// Get a [`UserErasureRequestRepository`].
+    fn user_erasure_request<'c>(
+        &'c mut self,
+    ) -> Box<dyn UserErasureRequestRepository<Error = Self::Error> + 'c>;
+
     /// Get a [`RecoveryAuthorityRepository`].
     fn recovery_authority<'c>(
         &'c mut self,
@@ -355,6 +361,7 @@ mod impls {
     use crate::collaboration_capability::CollaborationCapabilityGrantRepository;
     use crate::did_binding::VerifiedDidBindingRepository;
     use crate::dpop_replay::DpopReplayRepository;
+    use crate::erasure_request::UserErasureRequestRepository;
     use crate::notification::NotificationRepository;
     use crate::oauth::{
         OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
@@ -496,6 +503,15 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(self.inner.dpop_replay(), &mut self.mapper))
+        }
+
+        fn user_erasure_request<'c>(
+            &'c mut self,
+        ) -> Box<dyn UserErasureRequestRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(
+                self.inner.user_erasure_request(),
+                &mut self.mapper,
+            ))
         }
 
         fn recovery_authority<'c>(
@@ -795,6 +811,12 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c> {
             (**self).dpop_replay()
+        }
+
+        fn user_erasure_request<'c>(
+            &'c mut self,
+        ) -> Box<dyn UserErasureRequestRepository<Error = Self::Error> + 'c> {
+            (**self).user_erasure_request()
         }
 
         fn recovery_authority<'c>(

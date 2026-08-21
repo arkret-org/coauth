@@ -312,6 +312,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         password_login_session_grants_enabled: false,
         admin_org_id: None,
         audit_signature_fail_closed: false,
+        erasure_request_max_auth_age: None,
     };
 
     let body = serde_json::to_value(service_describe_response(

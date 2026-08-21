@@ -517,6 +517,7 @@ pub async fn account_register_endpoint(
             &user,
             &durable_binding,
             AccountStatus::Active,
+            None,
             now,
             &mut *rng,
         )

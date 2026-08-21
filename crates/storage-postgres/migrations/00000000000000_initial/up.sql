@@ -198,6 +198,26 @@ CREATE TABLE public.dpop_jti_replay (
     created_at timestamp with time zone NOT NULL
 );
 
+-- Durable self-service erasure intents
+-- (`ak.gate.account.command.request_erasure`, account-lifecycle.md §8.1).
+-- One row per accepted request_id; `canonical_outcome` carries the exact
+-- acceptance bytes for byte-identical replays, and the partial unique index
+-- below enforces at most one live (record not yet signed) intent per user.
+CREATE TABLE public.user_erasure_requests (
+    request_id text NOT NULL,
+    user_id uuid NOT NULL,
+    request_digest text NOT NULL,
+    canonical_outcome bytea NOT NULL,
+    recorded_at timestamp with time zone NOT NULL,
+    withdrawal_window_ends_at timestamp with time zone,
+    record_issued_at timestamp with time zone,
+    account_status_record_id text,
+    PRIMARY KEY (request_id)
+);
+
+CREATE UNIQUE INDEX user_erasure_requests_live_intent_idx
+    ON public.user_erasure_requests (user_id) WHERE record_issued_at IS NULL;
+
 CREATE TABLE public.recovery_completion_grant_issuances (
     transaction_id text NOT NULL,
     transaction_request_digest text NOT NULL,

@@ -40,6 +40,7 @@ pub async fn author_transition_plan(
     user: &User,
     binding: &PrincipalDidBinding,
     target_status: AccountStatus,
+    reason_code: Option<String>,
     now: chrono::DateTime<chrono::Utc>,
     _rng: &mut (dyn RngCore + Send),
 ) -> Result<AccountStatusPublicationPlan, AccountStatusPublicationError> {
@@ -96,7 +97,7 @@ pub async fn author_transition_plan(
             .as_ref()
             .map(|head| head.account_status_record_id.clone()),
         status: target_status,
-        reason_code: None,
+        reason_code,
         reason: None,
         issued_at: now,
         effective_at: now,

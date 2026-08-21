@@ -131,6 +131,7 @@ pub async fn patch_user(
                     &user,
                     &binding,
                     next_status,
+                    None,
                     clock.now(),
                     rng,
                 )

@@ -101,6 +101,7 @@ pub async fn deactivate_current_account(
         &original_user,
         &binding,
         arkret_models_collaboration::objects::account_status::AccountStatus::Deactivated,
+        None,
         clock.now(),
         rng,
     )

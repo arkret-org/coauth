@@ -53,6 +53,8 @@ pub mod collaboration_capability;
 pub mod did_binding;
 /// Durable DPoP proof replay keys.
 pub mod dpop_replay;
+/// Durable self-service account erasure intents (account-lifecycle.md §8.1).
+pub mod erasure_request;
 /// Persisted notification request, delivery, and audit event models.
 pub mod notification;
 /// OAuth client and session models.
@@ -163,6 +165,9 @@ pub use self::did_binding::{
     VerifiedDidBindingRow,
 };
 pub use self::dpop_replay::{DpopReplayRepository, NewDpopJtiReplay};
+pub use self::erasure_request::{
+    NewUserErasureRequest, UserErasureRequest, UserErasureRequestRepository,
+};
 pub use self::notification::{
     NotificationChannel, NotificationDelivery, NotificationDeliveryFailure,
     NotificationDeliveryStatus, NotificationDestination, NotificationEventActor,

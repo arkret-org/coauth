@@ -123,6 +123,9 @@ pub mod collaboration_capability;
 pub mod did_binding;
 /// DPoP proof replay repositories.
 pub mod dpop_replay;
+/// Durable self-service account erasure intent repositories
+/// (account-lifecycle.md §8.1).
+pub mod erasure_request;
 /// Append-only handle audit log repository (T3.2: handle reassignment,
 /// revocation, TTL expiry, DID Document `alsoKnownAs` divergence).
 pub mod handle_audit;

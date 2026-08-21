@@ -9,6 +9,7 @@ use coauth_data::circle_capability::CircleCapabilityGrantRepository;
 use coauth_data::collaboration_capability::CollaborationCapabilityGrantRepository;
 use coauth_data::did_binding::VerifiedDidBindingRepository;
 use coauth_data::dpop_replay::DpopReplayRepository;
+use coauth_data::erasure_request::UserErasureRequestRepository;
 use coauth_data::notification::{NotificationRepository, NotificationTemplateRepository};
 use coauth_data::oauth::{
     OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
@@ -51,6 +52,7 @@ use crate::circle_capability::PgCircleCapabilityGrantRepository;
 use crate::collaboration_capability::PgCollaborationCapabilityGrantRepository;
 use crate::did_binding::PgVerifiedDidBindingRepository;
 use crate::dpop_replay::PgDpopReplayRepository;
+use crate::erasure_request::PgUserErasureRequestRepository;
 use crate::handle_audit::PgHandleAuditRepository;
 use crate::notification::PgNotificationRepository;
 use crate::notification_template::PgNotificationTemplateRepository;
@@ -263,6 +265,12 @@ impl RepositoryAccess for PgRepository {
 
     fn dpop_replay<'c>(&'c mut self) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c> {
         Box::new(PgDpopReplayRepository::new(&mut self.conn))
+    }
+
+    fn user_erasure_request<'c>(
+        &'c mut self,
+    ) -> Box<dyn UserErasureRequestRepository<Error = Self::Error> + 'c> {
+        Box::new(PgUserErasureRequestRepository::new(&mut self.conn))
     }
 
     fn recovery_authority<'c>(

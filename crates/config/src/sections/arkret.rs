@@ -314,6 +314,23 @@ pub struct ArkretConfig {
     #[serde(default, skip_serializing_if = "is_false")]
     pub audit_signature_fail_closed: bool,
 
+    /// Fresh high-risk-action authentication ceiling, in seconds, for the
+    /// self-service erasure entry point
+    /// `ak.gate.account.command.request_erasure`
+    /// (`POST /_arkret/gate/account/erasure-requests`).
+    ///
+    /// account-lifecycle.md §8.1 makes the Account Authority judge
+    /// authentication freshness locally from its own facts (recent login,
+    /// WebAuthn, recovery key). This value is that deployment policy: the
+    /// caller's most recent local authentication must be at most this many
+    /// seconds old. When omitted the deployment has no fresh high-risk
+    /// authentication policy, so every erasure request fails closed with
+    /// `reauthentication_required` and zero writes.
+    #[schemars(with = "Option<u64>", range(min = 1, max = 86400))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "Option<serde_with::DurationSeconds<i64>>")]
+    pub erasure_request_max_auth_age: Option<Duration>,
+
     /// Exact local HTTPS host names eligible for development-mode automatic
     /// principal-server trust enrollment.
     ///
@@ -352,6 +369,7 @@ impl Default for ArkretConfig {
             password_login_session_grants_enabled: false,
             admin_org_id: None,
             audit_signature_fail_closed: false,
+            erasure_request_max_auth_age: None,
             development_auto_enrollment_hosts: Vec::new(),
         }
     }
@@ -374,6 +392,7 @@ impl ArkretConfig {
             && !self.password_login_session_grants_enabled
             && self.admin_org_id.is_none()
             && !self.audit_signature_fail_closed
+            && self.erasure_request_max_auth_age.is_none()
             && self.development_auto_enrollment_hosts.is_empty()
     }
 

@@ -505,6 +505,7 @@ mod tests {
         let service = salvo::Service::new(build_account_api_router(Router::new()));
         for path in [
             "/_arkret/gate/account/did-binding-challenges",
+            "/_arkret/gate/account/erasure-requests",
             "/_arkret/gate/account/register",
             "/_arkret/gate/account/session-grants",
             "/_arkret/gate/account/session-grants/refresh",
