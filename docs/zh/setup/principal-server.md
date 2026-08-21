@@ -51,6 +51,46 @@ $ coauth principal-server trust replace --name soland \
 `coauth principal-server trust revoke --name soland` 则整体移除 pin；此后服务在
 重新存在 pin 之前拒绝提供服务。
 
+## coauth 自身的 service identity
+
+coauth 是 A 类服务：它自行生成并持有自身 service DID 的签名私钥，只把公开的
+`did:webvh` 日志托管在 Provider（即上面配置的 Principal Server）上。运行时的
+身份来源只有两个：
+
+- 本地 `service_identity` 表中已验证的记录；
+- Provider 上按注册键 `{service_kind: auth_server, public_base}` 建立的稳定 mapping。
+
+配置里**不写** coauth 自己的 `service_id`。`embedded_webvh_registration_bearer`
+只是访问 Provider 的部署级传输凭据，不构成身份；真正的控制权在 key backend 里
+kid 为 `coauth-service-identity-v1` 的 Ed25519 私钥上。
+
+### 本地状态丢失后的自动恢复
+
+换库、清库或恢复到一个空库之后，coauth 仍持有该 Ed25519 私钥，但丢掉了
+`service_identity` 记录。此时启动会自动回填原 DID，不需要任何人工步骤：
+
+1. 按注册键查询 Provider，命中既有注册；
+2. 校验返回的 DID Document 与 registration receipt 同本地签名/控制密钥的绑定；
+3. 从 DID 自身派生出的 `did.jsonl` 地址拉取方法原生历史，并完整验证链（SCID 派生
+   与条目签名）；
+4. 要求首条 inception 条目的规范摘要等于 receipt 中 Provider 签署的
+   `log_head_digest`；
+5. 要求该条目的 `updateKeys[0]` 等于本进程从 key backend 派生出的控制密钥。
+
+第 5 步是控制权证明：只有持有本地 service-identity 私钥的进程才能通过，因此属于
+**另一个控制根**的注册永远不会被收养，而是 fail closed 为
+`service_identity_key_mismatch`。
+
+Provider 侧的注册**不需要**人工清理。反过来，人工删掉 Provider 注册会让 coauth
+铸出一个新 DID，使此前签发的凭据与派生身份全部失根——不要这么做。
+
+Provider 或其托管的 `did.jsonl` 暂时不可达时，运行时进入 `WaitingProvider` 并持续
+重试，discovery 返回 `503 service_identity_unavailable` 与 `Retry-After`，恢复后
+无需重启。
+
+key backend 与数据库同时丢失则无法恢复，这是协议要求的密钥自持边界：Provider
+是托管方而非控制者，不持有也无法代持 coauth 的私钥。
+
 ## 服务间信任边界（部署内 S2S）
 
 coauth 以 Auth Server 角色对 Principal Server 发起两类**无 principal session**的

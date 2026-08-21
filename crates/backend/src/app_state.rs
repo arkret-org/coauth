@@ -326,11 +326,16 @@ fn service_identity_unavailable_response(
             Some("5"),
             None,
         ),
-        DidCoreIdentityState::Conflict { .. } => (
+        DidCoreIdentityState::Conflict {
+            stored_service_id,
+            provider_service_id,
+        } => (
             "conflict",
             "service identity conflicts with the Provider mapping",
             None,
-            Some("run `coauth service-identity doctor`".to_owned()),
+            Some(format!(
+                "the persisted service identity is {stored_service_id} but the Provider maps this registration key to {provider_service_id}; restore the database and key backend that belong together, or migrate the registration key with a control-key-signed operation"
+            )),
         ),
         DidCoreIdentityState::Faulted { next_action, .. } => (
             "faulted",

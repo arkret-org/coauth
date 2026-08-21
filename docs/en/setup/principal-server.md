@@ -57,6 +57,56 @@ Replacement revokes session grants bound to the old audience in the same
 transaction. `coauth principal-server trust revoke --name soland` removes the
 pin entirely; the server then refuses to serve until a pin exists again.
 
+## Coauth's own service identity
+
+Coauth is a class-A service: it generates and holds the signing key of its own
+service DID and only *hosts* the public `did:webvh` log on its Provider (the
+Principal Server configured above). At runtime the identity comes from exactly
+two places:
+
+- the verified record in the local `service_identity` table;
+- the stable mapping the Provider keeps for the registration key
+  `{service_kind: auth_server, public_base}`.
+
+Coauth's own `service_id` is never written into configuration.
+`embedded_webvh_registration_bearer` is only the deployment-level transport
+credential used to reach the Provider; it confers no identity. Control lives in
+the Ed25519 private key with kid `coauth-service-identity-v1` in the key
+backend.
+
+### Automatic recovery after local state loss
+
+After a database swap, a wipe, or a restore onto an empty database, coauth
+still holds that Ed25519 key but has lost the `service_identity` record.
+Startup then back-fills the original DID automatically, with no operator step:
+
+1. look the registration key up on the Provider and find the existing registration;
+2. verify the returned DID Document and registration receipt against the local signing and control
+   key binding;
+3. fetch the method-native history from the `did.jsonl` URL derived from the DID itself and verify
+   the whole chain (SCID derivation and entry proofs);
+4. require the canonical digest of the first inception entry to equal the `log_head_digest` the
+   Provider signed into the receipt;
+5. require that entry's `updateKeys[0]` to equal the control key this process derives from its own
+   key backend.
+
+Step 5 is the control proof: only a process holding the local service-identity
+key satisfies it, so a registration rooted in a *different* control root is
+never adopted and instead fails closed as `service_identity_key_mismatch`.
+
+The Provider-side registration must **not** be cleared by hand. Deleting it
+makes coauth mint a new DID and orphans every credential and derived identity
+issued under the old one.
+
+While the Provider or its hosted `did.jsonl` is unreachable the runtime stays in
+`WaitingProvider` and keeps retrying; discovery answers
+`503 service_identity_unavailable` with `Retry-After`, and no restart is needed
+once the Provider returns.
+
+Losing the key backend *and* the database is unrecoverable by design: the
+Provider is a hosting party, not a controller, and never holds coauth's private
+key.
+
 ## Server-to-server trust boundary (deployment-internal)
 
 In its Auth-Server role coauth performs two server-to-server reads/writes

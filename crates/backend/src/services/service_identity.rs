@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use arkret_http_client::{Auth, Client, ClientBuilder};
+use arkret_identity::DidWebvhResolver;
 use arkret_identity::service_identity::{
     DidCoreIdentityBundle, DidCoreIdentityDiagnostic, DidCoreIdentityKeyRef,
     DidCoreIdentityProviderRef, DidCoreIdentityState, LocalDidCoreIdentity, StoredDidCoreIdentity,
@@ -30,6 +31,8 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use url::Url;
 use uuid::Uuid;
+
+use crate::outbound_http;
 
 const RETRY_DELAY_SECONDS: i64 = 5;
 pub(crate) const SERVICE_IDENTITY_VERIFICATION_METHOD_FRAGMENT: &str = "service-key";
@@ -74,6 +77,19 @@ enum LocalKeyBindingError {
     InvalidKeyReference(String),
     #[error("cannot derive the local WebVH control-key digest: {0}")]
     ControlKeyDigest(String),
+}
+
+/// Failure of [`restore_inception_operation`].
+#[derive(Debug, thiserror::Error)]
+enum InceptionRestoreError {
+    #[error("the provider-hosted did:webvh history is unreachable: {0}")]
+    Unreachable(String),
+    #[error("the provider-hosted did:webvh history is not evidence for this registration: {0}")]
+    InvalidEvidence(String),
+    #[error(
+        "the registered did:webvh inception is controlled by key material this deployment does not hold"
+    )]
+    ControlKeyMismatch,
 }
 
 impl LocalKeyBindingError {
@@ -339,6 +355,7 @@ async fn resolve_once(
                 &prepared,
                 stored.as_ref(),
                 outcome,
+                http,
             )
             .await
         }
@@ -368,6 +385,7 @@ async fn resolve_once(
                         &prepared,
                         stored.as_ref(),
                         outcome,
+                        http,
                     )
                     .await
                 }
@@ -387,6 +405,7 @@ async fn resolve_once(
                                 &prepared,
                                 stored.as_ref(),
                                 outcome,
+                                http,
                             )
                             .await
                         }
@@ -467,6 +486,7 @@ async fn accept_provider_outcome(
     prepared: &PreparedInception,
     prior: Option<&StoredIdentityRecord>,
     outcome: ServiceRegistrationOutcome,
+    http: &reqwest::Client,
 ) -> anyhow::Result<DidCoreIdentityState> {
     if let Some(prior) = prior
         && prior.identity.identity.service_id != outcome.service_id
@@ -494,23 +514,159 @@ async fn accept_provider_outcome(
             });
         }
     };
-    let inception_operation = prior
+    let local_operation = prior
         .map(|prior| prior.inception_operation.clone())
         .or_else(|| {
             prepared
                 .service_registration_operation()
                 .ok()
                 .filter(|operation| operation.state.id == stored.identity.full_id)
-        })
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "provider outcome cannot be bound to a signed WebVH inception operation"
-            )
-        })?;
+        });
+    let inception_operation = match local_operation {
+        Some(operation) => operation,
+        None => {
+            match restore_inception_operation(http, registration_key, prepared, &stored).await {
+                Ok(operation) => operation,
+                Err(InceptionRestoreError::Unreachable(error)) => {
+                    tracing::warn!(
+                        %error,
+                        "provider-hosted did:webvh history unreachable while restoring the registered service identity"
+                    );
+                    return Ok(waiting_provider(registration_key));
+                }
+                Err(error @ InceptionRestoreError::ControlKeyMismatch) => {
+                    return Ok(DidCoreIdentityState::Faulted {
+                        diagnostic: DidCoreIdentityDiagnostic::KeyMismatch,
+                        next_action: format!(
+                            "restore the key backend that controls the registered service DID: {error}"
+                        ),
+                    });
+                }
+                Err(error) => {
+                    return Ok(DidCoreIdentityState::Faulted {
+                        diagnostic: DidCoreIdentityDiagnostic::RestoreFailed,
+                        next_action: format!(
+                            "restore a verified service_identity database record or repair the Provider-hosted did:webvh history: {error}"
+                        ),
+                    });
+                }
+            }
+        }
+    };
     save_stored(repository_factory, &stored, inception_operation).await?;
     Ok(DidCoreIdentityState::Ready {
         identity: stored.identity,
     })
+}
+
+/// Recover the byte-exact signed inception operation of an existing Provider
+/// registration from its method-native `did:webvh` history.
+///
+/// `identity/identity-did.md` §3.7 I-3 requires a class-A service to look its
+/// registration key up on the Provider and, when the mapping exists and the
+/// local control/signing key binding checks out, back-fill the original DID.
+/// Losing local persistence (a restore onto a fresh database) leaves the
+/// runtime holding its key backend but no `webvh_history`, and the inception
+/// bytes cannot be re-derived locally: the SCID commits to the original
+/// `versionTime`, which the registration outcome does not carry. Re-signing a
+/// fresh inception would therefore mint a *different* DID, which is exactly
+/// what the Provider's `service_identity_conflict` correctly refuses.
+///
+/// The history is self-certifying — SCID derivation plus entry proofs signed
+/// by `updateKeys` — so nothing here trusts transport or the Provider's word:
+///
+/// 1. the verified head must still be the registration coordinates the Provider just returned, so a
+///    DID whose history has moved on is never silently adopted;
+/// 2. the first entry must be a well-formed inception for this registration key and DID;
+/// 3. its canonical digest must equal the `log_head_digest` the Provider signed into the receipt;
+/// 4. its `updateKeys[0]` must be the control key this process derives from its own key backend.
+///
+/// Step 4 is the control proof. Only a process holding the local
+/// service-identity seed satisfies it, so a registration rooted in foreign key
+/// material fails closed instead of being adopted.
+async fn restore_inception_operation(
+    http: &reqwest::Client,
+    registration_key: &ServiceRegistrationKey,
+    prepared: &PreparedInception,
+    stored: &StoredDidCoreIdentity,
+) -> Result<ServiceWebvhInceptionOperation, InceptionRestoreError> {
+    let full_id = &stored.identity.full_id;
+    let log_url = DidWebvhResolver::log_url(full_id)
+        .map_err(|error| InceptionRestoreError::InvalidEvidence(error.to_string()))?;
+    let log_url = Url::parse(&log_url)
+        .map_err(|error| InceptionRestoreError::InvalidEvidence(error.to_string()))?;
+    let log_bytes = outbound_http::fetch_bounded(
+        http,
+        outbound_http::soland_policy("service_identity_webvh_log"),
+        log_url,
+        outbound_http::WEBVH_LOG_MAX_BYTES,
+    )
+    .await
+    .map_err(|error| match error {
+        outbound_http::BoundedFetchError::Unreachable(message)
+        | outbound_http::BoundedFetchError::EgressDenied(message) => {
+            InceptionRestoreError::Unreachable(message)
+        }
+        outbound_http::BoundedFetchError::TooLarge(message) => {
+            InceptionRestoreError::InvalidEvidence(message)
+        }
+    })?;
+    adopt_inception_from_log(registration_key, prepared, stored, &log_bytes)
+}
+
+/// Pure evidence half of [`restore_inception_operation`]: everything except
+/// the network fetch, so the fail-closed rules are directly testable.
+fn adopt_inception_from_log(
+    registration_key: &ServiceRegistrationKey,
+    prepared: &PreparedInception,
+    stored: &StoredDidCoreIdentity,
+    log_bytes: &[u8],
+) -> Result<ServiceWebvhInceptionOperation, InceptionRestoreError> {
+    let full_id = &stored.identity.full_id;
+    let verified = arkret_identity::verify_did_webvh_v1_chain_bytes(full_id, log_bytes)
+        .map_err(|error| InceptionRestoreError::InvalidEvidence(error.to_string()))?;
+    if verified.head_version_id != stored.identity.version_id {
+        return Err(InceptionRestoreError::InvalidEvidence(format!(
+            "verified did:webvh head {} is not the registered version {}",
+            verified.head_version_id, stored.identity.version_id
+        )));
+    }
+    let genesis = verified.raw_entries.as_slice().first().ok_or_else(|| {
+        InceptionRestoreError::InvalidEvidence(
+            "verified did:webvh history has no inception entry".to_owned(),
+        )
+    })?;
+    let operation: ServiceWebvhInceptionOperation = serde_json::from_value(genesis.clone())
+        .map_err(|error| InceptionRestoreError::InvalidEvidence(error.to_string()))?;
+    operation
+        .validate_for(registration_key)
+        .map_err(|error| InceptionRestoreError::InvalidEvidence(error.to_string()))?;
+    if operation.state.id != *full_id {
+        return Err(InceptionRestoreError::InvalidEvidence(format!(
+            "did:webvh inception subject {} is not the registered service DID {full_id}",
+            operation.state.id
+        )));
+    }
+    let log_head_digest = operation
+        .log_head_digest()
+        .map_err(|error| InceptionRestoreError::InvalidEvidence(error.to_string()))?;
+    if log_head_digest != stored.registration_receipt.log_head_digest {
+        return Err(InceptionRestoreError::InvalidEvidence(
+            "did:webvh inception digest does not match the signed registration receipt".to_owned(),
+        ));
+    }
+    let expected_control_key_digest = prepared
+        .service_registration_operation()
+        .map_err(|error| InceptionRestoreError::InvalidEvidence(error.to_string()))?
+        .control_key_digest()
+        .map_err(|error| InceptionRestoreError::InvalidEvidence(error.to_string()))?;
+    let control_key_digest = operation
+        .control_key_digest()
+        .map_err(|error| InceptionRestoreError::InvalidEvidence(error.to_string()))?;
+    if control_key_digest != expected_control_key_digest {
+        return Err(InceptionRestoreError::ControlKeyMismatch);
+    }
+    Ok(operation)
 }
 
 fn provider_client(provider: &ProviderCandidate, http: reqwest::Client) -> anyhow::Result<Client> {
@@ -843,6 +999,154 @@ mod tests {
             operation.state.signing_key_multibase(),
             Some(expected_public_key.as_str())
         );
+    }
+
+    fn registration_key_for_tests() -> ServiceRegistrationKey {
+        ServiceRegistrationKey::new(
+            ServiceKind::AuthServer,
+            CanonicalServiceUrl::canonicalize("https://account.example/").unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn provider_for_tests() -> ProviderCandidate {
+        let config = ArkretConfig {
+            identity_services: vec![standalone("identity-a", "https://identity.example/")],
+            ..ArkretConfig::default()
+        };
+        select_provider(&config).unwrap()
+    }
+
+    fn did_jsonl(prepared: &PreparedInception) -> Vec<u8> {
+        format!(
+            "{}
+",
+            serde_json::to_string(&prepared.log_entry).unwrap()
+        )
+        .into_bytes()
+    }
+
+    /// A persisted record shaped exactly like the one `stored_from_outcome`
+    /// builds from a Provider registration outcome for `operation`.
+    fn stored_for_tests(
+        registration_key: &ServiceRegistrationKey,
+        operation: &ServiceWebvhInceptionOperation,
+        log_head_digest: String,
+    ) -> StoredDidCoreIdentity {
+        let full_id = operation.state.id.clone();
+        let service_id = arkret_wire::project_full_id_to_core_id(&full_id).unwrap();
+        let key_ref = DidCoreIdentityKeyRef::new("coauth:secrets:ed25519:test".to_owned()).unwrap();
+        let receipt = arkret_models_identity::service_identity::ServiceRegistrationReceipt {
+            registration_receipt_id: arkret_wire::ServiceRegistrationReceiptId::new(format!(
+                "ak:service_registration_receipt:{}",
+                "0".repeat(64)
+            ))
+            .unwrap(),
+            registration_key: registration_key.clone(),
+            service_id: service_id.clone(),
+            full_id: full_id.clone(),
+            version_id: operation.version_id.clone(),
+            log_head_digest,
+            control_key_digest: operation.control_key_digest().unwrap(),
+            issued_at: Utc::now(),
+            provider_service_id: service_id.clone(),
+            proof: arkret_wire::PayloadProof {
+                kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
+                verification_method: arkret_wire::DidUrl::new(format!("{full_id}#service-key"))
+                    .unwrap(),
+                payload_digest: arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))
+                    .unwrap(),
+                created_at: Utc::now(),
+                domain: None,
+                audience: None,
+                proof_purpose: None,
+                jws: "test".to_owned(),
+            },
+        };
+        StoredDidCoreIdentity {
+            identity: LocalDidCoreIdentity {
+                service_id,
+                full_id,
+                registration_key: registration_key.clone(),
+                provider: None,
+                signing_key_refs: vec![key_ref.clone()],
+                active_signing_key_ref: key_ref.clone(),
+                control_key_ref: key_ref,
+                version_id: operation.version_id.clone(),
+                last_verified_at: Utc::now(),
+            },
+            did_document: operation.state.clone(),
+            registration_receipt: receipt,
+            stored_at: Utc::now(),
+        }
+    }
+
+    /// Losing the local `service_identity` row must not cost the deployment
+    /// its DID: the inception bytes come back verbatim from the Provider's
+    /// published history, not from a fresh signature over a new `versionTime`.
+    #[test]
+    fn registered_inception_is_restored_verbatim_from_the_published_history() {
+        let provider = provider_for_tests();
+        let registration_key = registration_key_for_tests();
+        let signing_seed = [7_u8; 32];
+        let prepared = prepare_inception(&provider, &registration_key, &signing_seed).unwrap();
+        let operation = prepared.service_registration_operation().unwrap();
+        let stored = stored_for_tests(
+            &registration_key,
+            &operation,
+            operation.log_head_digest().unwrap(),
+        );
+
+        let restored =
+            adopt_inception_from_log(&registration_key, &prepared, &stored, &did_jsonl(&prepared))
+                .expect("the published history must restore the registered inception");
+
+        assert_eq!(restored, operation);
+    }
+
+    /// The control proof, not the Provider's word, decides adoption: a
+    /// registration for the same key rooted in someone else's update key is
+    /// never adopted, however well formed its history is.
+    #[test]
+    fn history_rooted_in_foreign_control_key_material_is_never_adopted() {
+        let provider = provider_for_tests();
+        let registration_key = registration_key_for_tests();
+        let local = prepare_inception(&provider, &registration_key, &[7_u8; 32]).unwrap();
+        let foreign = prepare_inception(&provider, &registration_key, &[9_u8; 32]).unwrap();
+        let foreign_operation = foreign.service_registration_operation().unwrap();
+        let stored = stored_for_tests(
+            &registration_key,
+            &foreign_operation,
+            foreign_operation.log_head_digest().unwrap(),
+        );
+
+        let error =
+            adopt_inception_from_log(&registration_key, &local, &stored, &did_jsonl(&foreign))
+                .expect_err("a foreign control root must fail closed");
+
+        assert!(matches!(error, InceptionRestoreError::ControlKeyMismatch));
+    }
+
+    /// The published history is only adopted when the Provider's signed
+    /// receipt commits to exactly those inception bytes.
+    #[test]
+    fn history_the_registration_receipt_does_not_cover_is_rejected() {
+        let provider = provider_for_tests();
+        let registration_key = registration_key_for_tests();
+        let signing_seed = [7_u8; 32];
+        let prepared = prepare_inception(&provider, &registration_key, &signing_seed).unwrap();
+        let operation = prepared.service_registration_operation().unwrap();
+        let stored = stored_for_tests(
+            &registration_key,
+            &operation,
+            format!("sha256:{}", "1".repeat(64)),
+        );
+
+        let error =
+            adopt_inception_from_log(&registration_key, &prepared, &stored, &did_jsonl(&prepared))
+                .expect_err("an inception the receipt does not cover must fail closed");
+
+        assert!(matches!(error, InceptionRestoreError::InvalidEvidence(_)));
     }
 
     #[test]

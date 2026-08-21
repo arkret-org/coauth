@@ -108,6 +108,79 @@ impl OutboundRequestPolicy {
     fn max_attempts(self) -> usize {
         self.max_attempts.max(1)
     }
+
+    const fn operation(self) -> &'static str {
+        self.operation
+    }
+}
+
+/// Hard upper bound on a fetched `did:webvh` history log. Shared by every
+/// caller that verifies method-native history so one deployment-wide cap
+/// governs the evidence transport.
+pub(crate) const WEBVH_LOG_MAX_BYTES: usize = 2 * 1024 * 1024;
+
+/// Failure of [`fetch_bounded`], split so callers can keep a transient
+/// transport problem apart from evidence that must never be accepted.
+#[derive(Debug)]
+pub(crate) enum BoundedFetchError {
+    /// The peer was unreachable or answered with a non-success status.
+    Unreachable(String),
+    /// The shared egress guard refused the request.
+    EgressDenied(String),
+    /// The peer answered, but the body exceeded the caller's hard bound.
+    TooLarge(String),
+}
+
+/// `GET` `url` under `policy` and read at most `max_bytes` of the body.
+///
+/// The bound is enforced twice — once against an advertised `Content-Length`
+/// and again while streaming — so a peer that lies about or omits the header
+/// still cannot make this allocate without limit.
+pub(crate) async fn fetch_bounded(
+    http_client: &reqwest::Client,
+    policy: OutboundRequestPolicy,
+    url: url::Url,
+    max_bytes: usize,
+) -> Result<Vec<u8>, BoundedFetchError> {
+    let operation = policy.operation();
+    let response = send_with_policy(policy, || http_client.get(url.clone()))
+        .await
+        .map_err(|error| {
+            if error.is_connect() || error.is_timeout() {
+                BoundedFetchError::Unreachable(error.to_string())
+            } else {
+                BoundedFetchError::EgressDenied(error.to_string())
+            }
+        })?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(BoundedFetchError::Unreachable(format!(
+            "{operation} returned status {status}"
+        )));
+    }
+    if response
+        .content_length()
+        .is_some_and(|length| length > max_bytes as u64)
+    {
+        return Err(BoundedFetchError::TooLarge(format!(
+            "{operation} response exceeds {max_bytes} bytes"
+        )));
+    }
+    let mut body = Vec::new();
+    let mut response = response;
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| BoundedFetchError::Unreachable(error.to_string()))?
+    {
+        if body.len().saturating_add(chunk.len()) > max_bytes {
+            return Err(BoundedFetchError::TooLarge(format!(
+                "{operation} response exceeds {max_bytes} bytes"
+            )));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
 }
 
 /// Policy for calls to the principal server.

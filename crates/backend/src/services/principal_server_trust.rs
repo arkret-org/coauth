@@ -77,9 +77,6 @@ pub const MAX_TRUSTED_AUDIENCE_AGE: Duration = Duration::from_hours(24);
 /// Hard upper bound on a fetched describe body.
 const DESCRIBE_MAX_BYTES: usize = 64 * 1024;
 
-/// Hard upper bound on a fetched `did:webvh` history log.
-const WEBVH_LOG_MAX_BYTES: usize = 2 * 1024 * 1024;
-
 /// Hard upper bound on a fetched service resolution record, matching the
 /// SDK transport bound (`SERVICE_RESOLUTION_FETCH_MAX_BYTES`).
 const RESOLUTION_RECORD_MAX_BYTES: usize = 64 * 1024;
@@ -324,46 +321,24 @@ async fn fetch_bounded(
     url: Url,
     max_bytes: usize,
 ) -> Result<Vec<u8>, TrustVerificationError> {
-    let response = outbound_http::send_with_policy(outbound_http::soland_policy(operation), || {
-        http_client.get(url.clone())
-    })
+    outbound_http::fetch_bounded(
+        http_client,
+        outbound_http::soland_policy(operation),
+        url,
+        max_bytes,
+    )
     .await
-    .map_err(|error| {
-        if error.is_connect() || error.is_timeout() {
-            TrustVerificationError::Unreachable(error.to_string())
-        } else {
-            TrustVerificationError::EgressDenied(error.to_string())
+    .map_err(|error| match error {
+        outbound_http::BoundedFetchError::Unreachable(message) => {
+            TrustVerificationError::Unreachable(message)
         }
-    })?;
-    let status = response.status();
-    if !status.is_success() {
-        return Err(TrustVerificationError::Unreachable(format!(
-            "{operation} returned status {status}"
-        )));
-    }
-    if response
-        .content_length()
-        .is_some_and(|length| length > max_bytes as u64)
-    {
-        return Err(TrustVerificationError::InvalidEvidence(format!(
-            "{operation} response exceeds {max_bytes} bytes"
-        )));
-    }
-    let mut body = Vec::new();
-    let mut response = response;
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|error| TrustVerificationError::Unreachable(error.to_string()))?
-    {
-        if body.len().saturating_add(chunk.len()) > max_bytes {
-            return Err(TrustVerificationError::InvalidEvidence(format!(
-                "{operation} response exceeds {max_bytes} bytes"
-            )));
+        outbound_http::BoundedFetchError::EgressDenied(message) => {
+            TrustVerificationError::EgressDenied(message)
         }
-        body.extend_from_slice(&chunk);
-    }
-    Ok(body)
+        outbound_http::BoundedFetchError::TooLarge(message) => {
+            TrustVerificationError::InvalidEvidence(message)
+        }
+    })
 }
 
 /// The numeric sequence component of a `did:webvh` version id
@@ -486,7 +461,7 @@ pub async fn verify_principal_server_identity(
         http_client,
         "principal_trust_webvh_log",
         log_url,
-        WEBVH_LOG_MAX_BYTES,
+        outbound_http::WEBVH_LOG_MAX_BYTES,
     )
     .await?;
     let verified_log =
