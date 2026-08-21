@@ -105,7 +105,7 @@ pub(crate) fn issue_handle_claim(
         claim_scope: BTreeMap::new(),
         member_delivery_binding: Some(member_delivery_binding.clone()),
         claims: Vec::new(),
-        created_at: now,
+        created_at: Some(now),
         expires_at: Some(expires_at),
         verified_at: None,
         source_refs: Vec::new(),

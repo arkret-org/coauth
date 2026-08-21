@@ -34,10 +34,7 @@ use arkret_identity::DidWebvhResolver;
 use arkret_models_discovery::ServiceDescribe;
 use arkret_models_identity::service_identity::CanonicalServiceUrl;
 use arkret_models_identity::{
-    AuthenticatedServiceResolution, DidDocument, ResolutionCommitment,
-    ResolutionDidBindingEvidenceKind, ResolutionDidBindingEvidenceReceipt,
-    ResolutionDidBindingMethodProof, ResolutionDidBindingMethodProofKind,
-    ResolutionMethodEvidenceBoundary, ResolutionMethodHistoryEvidence, ServiceResolutionRecord,
+    DidDocument, ResolutionCommitment, ServiceResolutionRecord,
     canonical_service_current_record_path,
 };
 use arkret_wire::{BindingKind, DidCoreId, DidFullId, Hash, ServiceKind};
@@ -652,43 +649,11 @@ pub async fn verify_principal_server_identity(
 
     // 5b. Record proof against the WebVH-anchored DID Document, with
     // freshness enforced by the SDK shape validation.
-    let document_digest = Hash::new(
-        arkret_canonical::canonical_sha256(&document)
-            .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?,
-    )
-    .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;
-    let witness_proofs_digest = Hash::new(
-        arkret_canonical::canonical_sha256(&Vec::<serde_json::Value>::new())
-            .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?,
-    )
-    .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;
-    let authenticated = AuthenticatedServiceResolution {
-        service_resolution_record: record,
-        method_history_evidence: ResolutionMethodHistoryEvidence::WebvhLog {
-            adapter_version: "did:webvh:1.0".to_owned(),
-            boundary: ResolutionMethodEvidenceBoundary {
-                from_method_history_head: commitment.method_history_head.clone(),
-                from_version_id: commitment.version_id.clone(),
-                to_method_history_head: commitment.method_history_head.clone(),
-                to_version_id: commitment.version_id.clone(),
-            },
-            evidence: ResolutionDidBindingEvidenceReceipt {
-                kind: ResolutionDidBindingEvidenceKind::AkDidBindingEvidenceV1,
-                method: "webvh".to_owned(),
-                document_digest,
-                method_proofs: vec![ResolutionDidBindingMethodProof {
-                    kind: ResolutionDidBindingMethodProofKind::WebvhLog,
-                    history_head: commitment.method_history_head.clone(),
-                    witnesses: Vec::new(),
-                    witness_proofs_digest,
-                }],
-            },
-        },
-        normalized_did_document: document,
-    };
-    arkret_signatures::service_resolution::verify_authenticated_service_resolution(
-        &authenticated,
-        &service_id,
+    arkret_identity::build_authenticated_webvh_service_resolution(
+        record,
+        document,
+        verified_log.raw_entries.clone(),
+        Vec::new(),
         Utc::now(),
     )
     .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;

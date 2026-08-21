@@ -475,6 +475,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "ed25519-dalek",
+ "p256",
  "rand_core 0.6.4",
  "serde",
  "serde_json",

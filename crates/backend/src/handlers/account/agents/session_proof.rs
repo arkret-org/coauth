@@ -1545,9 +1545,6 @@ pub async fn enforce_authoritative_pairing_handle(
     if expires_at <= now {
         return Err(AgentAuthRejection::PairingRequestExpired);
     }
-    if !key_state.pcr_recovery.is_ready() {
-        return Err(AgentAuthRejection::AgentPcrRecoveryNotReady);
-    }
     Ok((view, server))
 }
 
@@ -1683,18 +1680,15 @@ mod tests {
 
         let (_pending_recovery_server, pending_recovery) =
             lifecycle_config("active", "pair-current", "pending").await;
-        assert_eq!(
-            enforce_authoritative_pairing_handle(
-                &client,
-                &pending_recovery,
-                "did:web:agent.example",
-                "pair-current",
-                chrono::Utc::now(),
-            )
-            .await
-            .expect_err("pairing must not commit before managed PCR recovery is current"),
-            AgentAuthRejection::AgentPcrRecoveryNotReady
-        );
+        enforce_authoritative_pairing_handle(
+            &client,
+            &pending_recovery,
+            "did:web:agent.example",
+            "pair-current",
+            chrono::Utc::now(),
+        )
+        .await
+        .expect("backup availability is not an Agent pairing gate");
     }
 
     fn set(values: &[&str]) -> BTreeSet<String> {

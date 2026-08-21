@@ -3,8 +3,6 @@
 mod agent_auth_error_matrix_tests {
     use arkret_auth::session_grant::AgentKeyProofSigningInput;
     use chrono::Utc;
-    use salvo::prelude::Router;
-    use salvo::test::{ResponseExt as _, TestClient};
 
     fn derive_ed25519_from_seed(seed: &[u8; 32]) -> ed25519_dalek::SigningKey {
         ed25519_dalek::SigningKey::from_bytes(seed)
@@ -23,38 +21,6 @@ mod agent_auth_error_matrix_tests {
     };
     use super::super::proof::verify_proof_signature_bytes;
     use super::super::session_proof::AGENT_SESSION_MAX_TTL;
-
-    #[salvo::handler]
-    async fn agent_pcr_recovery_not_ready_fixture()
-    -> Result<(), crate::handlers::arkret::ArkretRouteError> {
-        Err(AgentAuthRejection::AgentPcrRecoveryNotReady
-            .into_app_error()
-            .into())
-    }
-
-    #[tokio::test]
-    async fn agent_pcr_recovery_not_ready_renders_arkret_error_envelope() {
-        let service = salvo::Service::new(
-            Router::with_path("agent-pcr-recovery-not-ready")
-                .post(agent_pcr_recovery_not_ready_fixture),
-        );
-        let mut response = TestClient::post("http://127.0.0.1:8698/agent-pcr-recovery-not-ready")
-            .send(&service)
-            .await;
-
-        assert_eq!(
-            response.status_code,
-            Some(http::StatusCode::PRECONDITION_FAILED)
-        );
-        let body: serde_json::Value =
-            serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
-        assert_eq!(body["ok"], false);
-        assert_eq!(
-            body["error"]["code"],
-            arkret_wire::ReasonCode::AGENT_PCR_RECOVERY_NOT_READY
-        );
-        assert!(body.get("errors").is_none());
-    }
 
     #[test]
     fn verification_method_mismatch_fires_before_proof_validator() {
@@ -215,13 +181,6 @@ mod agent_auth_error_matrix_tests {
         let err = AgentAuthRejection::PairingRequestExpired;
         assert_eq!(err.reason_code(), Some("pairing_request_expired"));
         assert_eq!(err.http_status(), http::StatusCode::UNAUTHORIZED);
-    }
-
-    #[test]
-    fn agent_pcr_recovery_not_ready_is_a_distinct_precondition() {
-        let err = AgentAuthRejection::AgentPcrRecoveryNotReady;
-        assert_eq!(err.reason_code(), Some("agent_pcr_recovery_not_ready"));
-        assert_eq!(err.http_status(), http::StatusCode::PRECONDITION_FAILED);
     }
 
     #[test]

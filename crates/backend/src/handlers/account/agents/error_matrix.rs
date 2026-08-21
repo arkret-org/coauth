@@ -62,10 +62,6 @@ pub enum AgentAuthRejection {
     /// proof. Never emitted for non-expiring (absent `expires_at`)
     /// authorizations.
     AgentKeyAuthorizationExpired,
-    /// `agent_pcr_recovery_not_ready` — pairing cannot commit until the
-    /// controller-owned managed-PCR recovery tail covers the current Agent
-    /// PCR frontier and MLS epoch.
-    AgentPcrRecoveryNotReady,
     /// `agent_deactivated` — the target agent has been deactivated; the
     /// `ak.self.agent.deactivate` FSM transition is terminal so this rejection
     /// is permanent. Renders 403.
@@ -106,7 +102,6 @@ impl AgentAuthRejection {
             Self::VerificationMethodPrincipalMismatch
             | Self::PairingRequestExpired
             | Self::AgentKeyAuthorizationExpired
-            | Self::AgentPcrRecoveryNotReady
             | Self::AgentRequestedScopeCommitmentInvalid
             | Self::AgentDeactivated
             | Self::AgentPaused => arkret_wire::ErrorCode::FAILED_PRECONDITION,
@@ -131,9 +126,7 @@ impl AgentAuthRejection {
             | Self::PairingRequestExpired
             | Self::AgentKeyAuthorizationExpired
             | Self::ProofInvalid => http::StatusCode::UNAUTHORIZED,
-            Self::AgentPcrRecoveryNotReady | Self::AgentRequestedScopeCommitmentInvalid => {
-                http::StatusCode::PRECONDITION_FAILED
-            }
+            Self::AgentRequestedScopeCommitmentInvalid => http::StatusCode::PRECONDITION_FAILED,
             Self::AgentPaused
             | Self::AgentDeactivated
             | Self::CapabilityDenied
@@ -168,7 +161,6 @@ impl AgentAuthRejection {
             Self::AgentKeyAuthorizationExpired => {
                 Some(arkret_wire::ReasonCode::AGENT_KEY_AUTHORIZATION_EXPIRED)
             }
-            Self::AgentPcrRecoveryNotReady => Some("agent_pcr_recovery_not_ready"),
             Self::AgentRequestedScopeCommitmentInvalid => {
                 Some("agent_requested_scope_commitment_invalid")
             }

@@ -697,9 +697,8 @@ fn validate_controller_authorize_event(
 }
 
 fn verify_authorize_event_identity(event: &arkret_wire::Event) -> Result<(), AppError> {
-    let digest_suite = event.event_id.digest_suite_code().digest_suite();
     event
-        .verify_event_id_matches_content_with_digest_suite(digest_suite)
+        .verify_event_id_matches_content_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
         .map_err(|_| AppError::bad_request("event_id_digest_mismatch"))
 }
 
@@ -1020,8 +1019,15 @@ mod tests {
             }]
         }))
         .unwrap();
-        event.refresh_content_bound_identity().unwrap();
-        let digest = arkret_identifiers::Hash::new(event.event_digest().unwrap()).unwrap();
+        event
+            .refresh_content_bound_identity_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
+            .unwrap();
+        let digest = arkret_identifiers::Hash::new(
+            event
+                .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
+                .unwrap(),
+        )
+        .unwrap();
         event.proofs[0]
             .as_producer_mut()
             .expect("fixture carries a producer proof")
