@@ -8,15 +8,17 @@ use arkret_identity::service_identity::{
     DidCoreIdentityBundle, DidCoreIdentityDiagnostic, DidCoreIdentityKeyRef,
     DidCoreIdentityProviderRef, DidCoreIdentityState, LocalDidCoreIdentity, StoredDidCoreIdentity,
 };
+use arkret_models_discovery::ServiceDescribe;
+use arkret_models_identity::ResolutionCommitment;
 use arkret_models_identity::service_identity::{
     CanonicalServiceUrl, ServiceRegistrationEnsureRequestBody, ServiceRegistrationKey,
-    ServiceRegistrationOutcome, ServiceWebvhInceptionOperation,
+    ServiceRegistrationOutcome, ServiceRegistrationReceipt, ServiceWebvhInceptionOperation,
 };
 use arkret_signatures::webvh::{
     PreparedInception, ServiceRegistrationInceptionInput,
     prepare_service_registration_inception_with_did_key_seed,
 };
-use arkret_wire::ServiceKind;
+use arkret_wire::{DidCoreId, ServiceKind};
 use chrono::Utc;
 use coauth_config::{ArkretConfig, RuntimeServiceIdentity};
 use coauth_keystore::Keystore;
@@ -33,6 +35,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::outbound_http;
+use crate::services::principal_server_trust;
 
 const RETRY_DELAY_SECONDS: i64 = 5;
 pub(crate) const SERVICE_IDENTITY_VERIFICATION_METHOD_FRAGMENT: &str = "service-key";
@@ -41,6 +44,10 @@ pub(crate) const SERVICE_IDENTITY_VERIFICATION_METHOD_FRAGMENT: &str = "service-
 struct ProviderCandidate {
     reference: DidCoreIdentityProviderRef,
     bearer: String,
+    /// Operator pin for the Provider's own stable service identity, when the
+    /// deployment configured one. The Provider proof on a registration receipt
+    /// is only ever accepted for this identity core.
+    expected_service_id: Option<DidCoreId>,
 }
 
 #[derive(QueryableByName)]
@@ -77,6 +84,15 @@ enum LocalKeyBindingError {
     InvalidKeyReference(String),
     #[error("cannot derive the local WebVH control-key digest: {0}")]
     ControlKeyDigest(String),
+}
+
+/// Failure of [`verify_provider_registration_receipt`].
+#[derive(Debug, thiserror::Error)]
+enum ProviderProofError {
+    #[error("the provider identity surface is unreachable: {0}")]
+    Unreachable(String),
+    #[error("the provider proof on the service-registration receipt is not valid: {0}")]
+    InvalidEvidence(String),
 }
 
 /// Failure of [`restore_inception_operation`].
@@ -242,7 +258,14 @@ fn select_provider(config: &ArkretConfig) -> Result<ProviderCandidate, Box<DidCo
             server
                 .embedded_webvh_registration_bearer
                 .as_ref()
-                .map(|bearer| (server.name.clone(), server.endpoint.clone(), bearer.clone()))
+                .map(|bearer| {
+                    (
+                        server.name.clone(),
+                        server.endpoint.clone(),
+                        bearer.clone(),
+                        server.service_id.clone(),
+                    )
+                })
         })
         .collect::<Vec<_>>();
     candidates.extend(config.identity_services.iter().map(|service| {
@@ -250,6 +273,7 @@ fn select_provider(config: &ArkretConfig) -> Result<ProviderCandidate, Box<DidCo
             service.name.clone(),
             service.endpoint.clone(),
             service.registration_bearer.clone(),
+            None,
         )
     }));
     if let Some(selected) = config.identity_provider.as_deref() {
@@ -261,7 +285,7 @@ fn select_provider(config: &ArkretConfig) -> Result<ProviderCandidate, Box<DidCo
             next_action: "configure registration credentials on one trusted principal_servers[] or identity_services[] entry"
                 .to_owned(),
         })),
-        [(name, provider_endpoint, bearer)] => {
+        [(name, provider_endpoint, bearer, expected_service_id)] => {
             let endpoint = CanonicalServiceUrl::canonicalize(provider_endpoint.as_str()).map_err(
                 |error| Box::new(DidCoreIdentityState::Faulted {
                     diagnostic: DidCoreIdentityDiagnostic::ProviderNotConfigured,
@@ -274,6 +298,7 @@ fn select_provider(config: &ArkretConfig) -> Result<ProviderCandidate, Box<DidCo
                     endpoint,
                 },
                 bearer: bearer.clone(),
+                expected_service_id: expected_service_id.clone(),
             })
         }
         _ => Err(Box::new(DidCoreIdentityState::Faulted {
@@ -282,7 +307,7 @@ fn select_provider(config: &ArkretConfig) -> Result<ProviderCandidate, Box<DidCo
                 "set `arkret.identity_provider` to one of: {}",
                 candidates
                     .iter()
-                    .map(|(name, _, _)| name.as_str())
+                    .map(|(name, ..)| name.as_str())
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
@@ -496,6 +521,25 @@ async fn accept_provider_outcome(
             provider_service_id: outcome.service_id,
         });
     }
+    if let Err(error) =
+        verify_provider_registration_receipt(http, provider, &outcome.registration_receipt).await
+    {
+        return Ok(match error {
+            ProviderProofError::Unreachable(message) => {
+                tracing::warn!(
+                    error = %message,
+                    "provider identity surface unreachable while verifying the service-registration receipt"
+                );
+                provider_unreachable(registration_key, prior, message)
+            }
+            error @ ProviderProofError::InvalidEvidence(_) => DidCoreIdentityState::Faulted {
+                diagnostic: DidCoreIdentityDiagnostic::RestoreFailed,
+                next_action: format!(
+                    "reject the Provider result and repair the Provider identity this deployment registers with: {error}"
+                ),
+            },
+        });
+    }
     let stored = match stored_from_outcome(
         provider,
         registration_key,
@@ -556,6 +600,129 @@ async fn accept_provider_outcome(
     save_stored(repository_factory, &stored, inception_operation).await?;
     Ok(DidCoreIdentityState::Ready {
         identity: stored.identity,
+    })
+}
+
+/// Execute `identity/identity-did.md` §3.7 receipt transcript step 4 against
+/// the receipt the Provider just returned.
+///
+/// Coauth is a class-A service: the Provider hosts its `did:webvh` log but
+/// controls nothing, so its registration receipt is only evidence once its
+/// detached JWS verifies under a key the Provider's own method-native history
+/// authorized at issuance. The registration bearer, TLS and a structurally
+/// self-consistent proof prove none of that and the spec forbids substituting
+/// them.
+///
+/// The Provider's complete DID is therefore resolved independently of the
+/// receipt — from its describe surface, constrained by the operator pin when
+/// the deployment configured one — and its published history is verified in
+/// full before `project(full_id) == provider_service_id` binds the receipt to
+/// it. A Provider whose identity surface is temporarily unavailable yields
+/// [`ProviderProofError::Unreachable`] so the caller can wait; everything else
+/// fails closed with zero persistence.
+async fn verify_provider_registration_receipt(
+    http: &reqwest::Client,
+    provider: &ProviderCandidate,
+    receipt: &ServiceRegistrationReceipt,
+) -> Result<(), ProviderProofError> {
+    let describe_url = Url::parse(&format!(
+        "{}{}",
+        provider.reference.endpoint.as_str(),
+        principal_server_trust::DESCRIBE_PATH
+    ))
+    .map_err(|error| ProviderProofError::InvalidEvidence(error.to_string()))?;
+    let describe_bytes = fetch_provider_evidence(
+        http,
+        "service_identity_provider_describe",
+        describe_url,
+        outbound_http::DESCRIBE_MAX_BYTES,
+    )
+    .await?;
+    let description: ServiceDescribe = serde_json::from_slice(&describe_bytes)
+        .map_err(|error| ProviderProofError::InvalidEvidence(error.to_string()))?;
+    description
+        .validate()
+        .map_err(|error| ProviderProofError::InvalidEvidence(error.to_string()))?;
+    let log_url = Url::parse(
+        &DidWebvhResolver::log_url(&description.service_resolution.full_id)
+            .map_err(|error| ProviderProofError::InvalidEvidence(error.to_string()))?,
+    )
+    .map_err(|error| ProviderProofError::InvalidEvidence(error.to_string()))?;
+    let log_bytes = fetch_provider_evidence(
+        http,
+        "service_identity_provider_webvh_log",
+        log_url,
+        outbound_http::WEBVH_LOG_MAX_BYTES,
+    )
+    .await?;
+    accept_provider_receipt_evidence(
+        provider,
+        receipt,
+        &description.service_id,
+        &description.service_resolution,
+        &log_bytes,
+    )
+}
+
+/// Pure evidence half of [`verify_provider_registration_receipt`]: everything
+/// except the two bounded fetches, so the fail-closed rules are directly
+/// testable.
+fn accept_provider_receipt_evidence(
+    provider: &ProviderCandidate,
+    receipt: &ServiceRegistrationReceipt,
+    service_id: &DidCoreId,
+    commitment: &ResolutionCommitment,
+    log_bytes: &[u8],
+) -> Result<(), ProviderProofError> {
+    if let Some(expected) = &provider.expected_service_id
+        && service_id != expected
+    {
+        return Err(ProviderProofError::InvalidEvidence(format!(
+            "provider {} presents service identity {service_id} instead of the configured pin {expected}",
+            provider.reference.name
+        )));
+    }
+    arkret_signatures::service_resolution::verify_full_to_core_binding(
+        &commitment.full_id,
+        service_id,
+    )
+    .map_err(|error| ProviderProofError::InvalidEvidence(error.to_string()))?;
+    let verified = arkret_identity::service_identity::verify_registration_receipt_provider_proof(
+        receipt,
+        &commitment.full_id,
+        log_bytes,
+    )
+    .map_err(|error| ProviderProofError::InvalidEvidence(error.to_string()))?;
+    if verified.head_version_id != commitment.version_id {
+        return Err(ProviderProofError::InvalidEvidence(format!(
+            "provider published history head {} is not the advertised version {}",
+            verified.head_version_id, commitment.version_id
+        )));
+    }
+    Ok(())
+}
+
+async fn fetch_provider_evidence(
+    http: &reqwest::Client,
+    operation: &'static str,
+    url: Url,
+    max_bytes: usize,
+) -> Result<Vec<u8>, ProviderProofError> {
+    outbound_http::fetch_bounded(
+        http,
+        outbound_http::soland_policy(operation),
+        url,
+        max_bytes,
+    )
+    .await
+    .map_err(|error| match error {
+        outbound_http::BoundedFetchError::Unreachable(message)
+        | outbound_http::BoundedFetchError::EgressDenied(message) => {
+            ProviderProofError::Unreachable(message)
+        }
+        outbound_http::BoundedFetchError::TooLarge(message) => {
+            ProviderProofError::InvalidEvidence(message)
+        }
     })
 }
 
@@ -868,6 +1035,25 @@ fn waiting_provider(registration_key: &ServiceRegistrationKey) -> DidCoreIdentit
     }
 }
 
+/// Runtime state for a Provider that is temporarily unreachable, per §3.7: a
+/// record that was already verified before it was persisted MAY keep serving
+/// as `DegradedStored`, and a deployment without one waits instead of
+/// accepting anything unverified.
+fn provider_unreachable(
+    registration_key: &ServiceRegistrationKey,
+    prior: Option<&StoredIdentityRecord>,
+    last_error: String,
+) -> DidCoreIdentityState {
+    prior.map_or_else(
+        || waiting_provider(registration_key),
+        |prior| DidCoreIdentityState::DegradedStored {
+            identity: prior.identity.identity.clone(),
+            retry_at: retry_at(),
+            last_error,
+        },
+    )
+}
+
 fn retry_at() -> chrono::DateTime<Utc> {
     Utc::now() + chrono::Duration::seconds(RETRY_DELAY_SECONDS)
 }
@@ -935,6 +1121,33 @@ mod tests {
                 ..
             }
         )));
+    }
+
+    /// The Provider proof is only ever accepted for the identity the operator
+    /// pinned, so the pin has to reach the candidate that carries it.
+    #[test]
+    fn configured_provider_pin_reaches_the_selected_candidate() {
+        let expected = DidCoreId::new("ak:did_core:webvh:QmProviderPin").unwrap();
+        let config = ArkretConfig {
+            principal_servers: vec![PrincipalServerConfig {
+                service_id: Some(expected.clone()),
+                ..principal("principal-a", "https://principal.example/")
+            }],
+            ..ArkretConfig::default()
+        };
+
+        let selected = select_provider(&config).unwrap();
+
+        assert_eq!(selected.expected_service_id, Some(expected));
+        assert_eq!(
+            select_provider(&ArkretConfig {
+                identity_services: vec![standalone("identity-a", "https://identity.example/")],
+                ..ArkretConfig::default()
+            })
+            .unwrap()
+            .expected_service_id,
+            None
+        );
     }
 
     #[test]
@@ -1147,6 +1360,165 @@ mod tests {
                 .expect_err("an inception the receipt does not cover must fail closed");
 
         assert!(matches!(error, InceptionRestoreError::InvalidEvidence(_)));
+    }
+
+    /// The Provider identity, its published history and the receipt it signed,
+    /// exactly as the describe surface plus `did.jsonl` would deliver them.
+    fn provider_evidence(
+        provider_assertion_seed: &[u8; 32],
+    ) -> (
+        ProviderCandidate,
+        DidCoreId,
+        ResolutionCommitment,
+        Vec<u8>,
+        ServiceRegistrationReceipt,
+    ) {
+        let mut rng = ChaCha20Rng::from_seed([3_u8; 32]);
+        let prepared = prepare_service_registration_inception_with_did_key_seed(
+            &mut rng,
+            &ServiceRegistrationInceptionInput {
+                provider_endpoint: &"https://identity.example/".parse().unwrap(),
+                registration_key: &ServiceRegistrationKey::new(
+                    ServiceKind::PrincipalServer,
+                    CanonicalServiceUrl::new("https://identity.example/").unwrap(),
+                )
+                .unwrap(),
+                also_known_as: &[],
+                version_time: "2026-07-15T00:00:00Z".parse().unwrap(),
+                did_key_fragment: Some("notary-key"),
+            },
+            provider_assertion_seed,
+        )
+        .unwrap();
+        let provider_full_id = arkret_wire::DidFullId::new(prepared.did.clone()).unwrap();
+        let service_id = arkret_wire::project_full_id_to_core_id(&provider_full_id).unwrap();
+        let commitment = ResolutionCommitment {
+            full_id: provider_full_id.clone(),
+            method_history_head: arkret_canonical::canonical_sha256(&prepared.log_entry).unwrap(),
+            version_id: prepared.version_id.clone(),
+        };
+
+        let registration_key = registration_key_for_tests();
+        let registrant =
+            prepare_inception(&provider_for_tests(), &registration_key, &[7_u8; 32]).unwrap();
+        let operation = registrant.service_registration_operation().unwrap();
+        let full_id = operation.state.id.clone();
+        let mut receipt = ServiceRegistrationReceipt {
+            registration_receipt_id: arkret_wire::ServiceRegistrationReceiptId::new(format!(
+                "ak:service_registration_receipt:{}",
+                "0".repeat(64)
+            ))
+            .unwrap(),
+            registration_key,
+            service_id: arkret_wire::project_full_id_to_core_id(&full_id).unwrap(),
+            full_id: full_id.clone(),
+            version_id: operation.version_id.clone(),
+            log_head_digest: operation.log_head_digest().unwrap(),
+            control_key_digest: operation.control_key_digest().unwrap(),
+            issued_at: "2026-07-15T01:00:00Z".parse().unwrap(),
+            provider_service_id: service_id.clone(),
+            proof: arkret_wire::PayloadProof {
+                kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
+                verification_method: arkret_wire::DidUrl::new(format!(
+                    "{provider_full_id}#notary-key"
+                ))
+                .unwrap(),
+                payload_digest: arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))
+                    .unwrap(),
+                created_at: "2026-07-15T01:00:00Z".parse().unwrap(),
+                domain: None,
+                audience: None,
+                proof_purpose: None,
+                jws: "placeholder".to_owned(),
+            },
+        };
+        receipt.registration_receipt_id = receipt.expected_registration_receipt_id().unwrap();
+        receipt.proof.payload_digest = receipt.expected_payload_digest().unwrap();
+        receipt.proof = arkret_signatures::service_identity::sign_registration_receipt_proof(
+            &receipt,
+            &ed25519_dalek::SigningKey::from_bytes(provider_assertion_seed),
+        )
+        .unwrap();
+
+        (
+            provider_for_tests(),
+            service_id,
+            commitment,
+            did_jsonl(&prepared),
+            receipt,
+        )
+    }
+
+    /// The happy path: the Provider's advertised identity, its verified
+    /// method-native history and the receipt signature all agree.
+    #[test]
+    fn receipt_signed_by_the_resolved_provider_identity_is_accepted() {
+        let (provider, service_id, commitment, log_bytes, receipt) = provider_evidence(&[5_u8; 32]);
+
+        accept_provider_receipt_evidence(&provider, &receipt, &service_id, &commitment, &log_bytes)
+            .expect("a receipt signed by the resolved provider assertion key must be accepted");
+    }
+
+    /// A Provider that presents an identity other than the operator pin is
+    /// never accepted, however well its own evidence hangs together.
+    #[test]
+    fn provider_identity_outside_the_configured_pin_is_rejected() {
+        let (mut provider, service_id, commitment, log_bytes, receipt) =
+            provider_evidence(&[5_u8; 32]);
+        provider.expected_service_id =
+            Some(DidCoreId::new("ak:did_core:webvh:QmSomeoneElse").unwrap());
+
+        let error = accept_provider_receipt_evidence(
+            &provider,
+            &receipt,
+            &service_id,
+            &commitment,
+            &log_bytes,
+        )
+        .expect_err("an unpinned provider identity must fail closed");
+
+        assert!(matches!(error, ProviderProofError::InvalidEvidence(_)));
+    }
+
+    /// Structural self-consistency is not evidence: a receipt whose detached
+    /// JWS was produced by other key material is rejected.
+    #[test]
+    fn forged_receipt_signature_is_rejected() {
+        let (provider, service_id, commitment, log_bytes, mut receipt) =
+            provider_evidence(&[5_u8; 32]);
+        let (_, _, _, _, foreign) = provider_evidence(&[6_u8; 32]);
+        receipt.proof.jws = foreign.proof.jws;
+
+        let error = accept_provider_receipt_evidence(
+            &provider,
+            &receipt,
+            &service_id,
+            &commitment,
+            &log_bytes,
+        )
+        .expect_err("a forged receipt signature must fail closed");
+
+        assert!(matches!(error, ProviderProofError::InvalidEvidence(_)));
+    }
+
+    /// The history that was verified must be the one the Provider advertises,
+    /// so a log that does not reach the advertised head is never trusted.
+    #[test]
+    fn history_that_is_not_the_advertised_head_is_rejected() {
+        let (provider, service_id, mut commitment, log_bytes, receipt) =
+            provider_evidence(&[5_u8; 32]);
+        commitment.version_id = format!("2-{}", "z".repeat(46));
+
+        let error = accept_provider_receipt_evidence(
+            &provider,
+            &receipt,
+            &service_id,
+            &commitment,
+            &log_bytes,
+        )
+        .expect_err("a history below the advertised head must fail closed");
+
+        assert!(matches!(error, ProviderProofError::InvalidEvidence(_)));
     }
 
     #[test]

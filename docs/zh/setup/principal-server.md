@@ -64,6 +64,26 @@ coauth 是 A 类服务：它自行生成并持有自身 service DID 的签名私
 只是访问 Provider 的部署级传输凭据，不构成身份；真正的控制权在 key backend 里
 kid 为 `coauth-service-identity-v1` 的 Ed25519 私钥上。
 
+### Provider 证明的验证
+
+Provider 每次返回的 `ServiceRegistrationOutcome` 都带一份 registration receipt。
+coauth 在写入任何本地状态之前先完整验证它的 Provider 证明：
+
+1. 从 Provider 的 `/_arkret/describe` 取得它当前的完整 DID；配置了
+   `principal_servers[].service_id` pin 时，describe 声明的 `service_id` 必须逐字等于该 pin；
+2. 从该 DID 自身派生 `did.jsonl` 地址，完整验证 Provider 的方法原生历史（SCID 派生、条目哈希链、
+   每条条目的签名与轮换授权），并要求验证出的 head 等于 describe 声明的版本；
+3. 要求 `project(full_id)` 等于 receipt 里的 `provider_service_id`，且 receipt
+   `verification_method` 的裸 controller DID 逐字等于该 `full_id`；
+4. 要求该 method 在 receipt `issued_at` 时点属于 Provider DID Document 的 `assertionMethod`；
+5. 实际验证 receipt 的 Ed25519 detached JWS。
+
+传输凭据、mTLS、HTTPS 成功或 proof 结构自洽都**不能**替代这一步。任何一条不成立都是
+`service_registration_restore_failed`，运行时落到 `503 faulted` 且本地零写入；此时
+应排查 Provider 的 describe 与其托管的 `did.jsonl` 是否属于同一个身份、是否与 pin 一致。
+Provider 的 describe 或 `did.jsonl` 暂时不可达时不会误判为失败：没有本地记录时进入
+`WaitingProvider`，已有已验证记录时进入 `DegradedStored`，两者都持续重试。
+
 ### 本地状态丢失后的自动恢复
 
 换库、清库或恢复到一个空库之后，coauth 仍持有该 Ed25519 私钥，但丢掉了

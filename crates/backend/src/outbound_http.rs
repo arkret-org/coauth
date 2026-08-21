@@ -119,6 +119,10 @@ impl OutboundRequestPolicy {
 /// governs the evidence transport.
 pub(crate) const WEBVH_LOG_MAX_BYTES: usize = 2 * 1024 * 1024;
 
+/// Hard upper bound on a fetched `ServiceDescribe` body. Shared by every
+/// caller that resolves a remote service identity from its describe surface.
+pub(crate) const DESCRIBE_MAX_BYTES: usize = 64 * 1024;
+
 /// Failure of [`fetch_bounded`], split so callers can keep a transient
 /// transport problem apart from evidence that must never be accepted.
 #[derive(Debug)]

@@ -55,7 +55,7 @@ use url::Url;
 use crate::outbound_http;
 
 /// Root-relative describe path served by every Arkret Principal Server.
-const DESCRIBE_PATH: &str = "_arkret/describe";
+pub(crate) const DESCRIBE_PATH: &str = "_arkret/describe";
 
 /// Revalidation-interval floor: faster than this just hammers the Principal
 /// Server's describe surface.
@@ -73,9 +73,6 @@ pub const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_mins(5);
 /// lookups return `None` and the background revalidation task treats the
 /// state as expired, terminating the service.
 pub const MAX_TRUSTED_AUDIENCE_AGE: Duration = Duration::from_hours(24);
-
-/// Hard upper bound on a fetched describe body.
-const DESCRIBE_MAX_BYTES: usize = 64 * 1024;
 
 /// Hard upper bound on a fetched service resolution record, matching the
 /// SDK transport bound (`SERVICE_RESOLUTION_FETCH_MAX_BYTES`).
@@ -413,7 +410,7 @@ pub async fn verify_principal_server_identity(
         http_client,
         "principal_trust_describe",
         describe_url,
-        DESCRIBE_MAX_BYTES,
+        outbound_http::DESCRIBE_MAX_BYTES,
     )
     .await?;
     let description: ServiceDescribe = serde_json::from_slice(&describe_bytes)

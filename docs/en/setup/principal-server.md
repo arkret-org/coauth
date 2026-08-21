@@ -74,6 +74,34 @@ credential used to reach the Provider; it confers no identity. Control lives in
 the Ed25519 private key with kid `coauth-service-identity-v1` in the key
 backend.
 
+### Verifying the Provider proof
+
+Every `ServiceRegistrationOutcome` the Provider returns carries a registration
+receipt. Coauth verifies its Provider proof in full before it writes any local
+state:
+
+1. obtain the Provider's current complete DID from its `/_arkret/describe` surface; when
+   `principal_servers[].service_id` is pinned, the advertised `service_id` must equal that pin
+   verbatim;
+2. derive the `did.jsonl` URL from that DID and verify the Provider's method-native history
+   completely (SCID derivation, entry hash chain, every entry proof and the rotation
+   authorization), requiring the verified head to be the version describe advertises;
+3. require `project(full_id)` to equal the receipt's `provider_service_id`, and the bare controller
+   DID of the receipt's `verification_method` to equal that `full_id` verbatim;
+4. require that method to be an `assertionMethod` of the Provider DID Document that was effective at
+   the receipt's `issued_at`;
+5. verify the receipt's Ed25519 detached JWS.
+
+A transport credential, mTLS, a successful HTTPS exchange or a structurally
+self-consistent proof can **never** stand in for this step. Any failure is
+`service_registration_restore_failed`: the runtime reports `503 faulted` and
+writes nothing locally, and the operator should check whether the Provider's
+describe surface and its hosted `did.jsonl` belong to the same identity and
+match the pin. A Provider whose describe surface or `did.jsonl` is temporarily
+unreachable is not mistaken for a failure: with no local record the runtime
+waits in `WaitingProvider`, with an already verified record it serves as
+`DegradedStored`, and both keep retrying.
+
 ### Automatic recovery after local state loss
 
 After a database swap, a wipe, or a restore onto an empty database, coauth
