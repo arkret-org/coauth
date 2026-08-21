@@ -501,7 +501,6 @@ pub(crate) fn service_describe_response(
         service_kind: arkret_wire::ServiceKind::AuthServer,
         protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
         supported_profiles: Vec::new(),
-        supported_schema_profiles: Vec::new(),
         profile_bindings: std::collections::BTreeMap::default(),
         supported_operations: SUPPORTED_OPERATIONS
             .iter()
