@@ -35,7 +35,7 @@ dev: frontend-assets
     # @echo "Waiting for PostgreSQL..."
     # @until docker compose -f .devcontainer/compose.yml exec -T postgres pg_isready -U coauth > /dev/null 2>&1; do sleep 1; done
     # @if [ ! -f config.dev.yaml ]; then just config-dev-generate; fi
-    cargo run -p coauth --features cedar,password-bootstrap -- server -c config.dev.yaml
+    cargo run -p coauth --features cedar,password-bootstrap -- --development-mode server -c config.dev.yaml
 
 # Stop dev services (PostgreSQL)
 dev-down:
@@ -50,7 +50,7 @@ config-dev-generate:
 # Start the backend server (auto-migrates DB)
 backend *ARGS: frontend-assets
     if (!(Test-Path config.dev.yaml)) { just config-dev-generate }
-    cargo run -p coauth --features cedar,password-bootstrap -- server -c config.dev.yaml {{ARGS}}
+    cargo run -p coauth --features cedar,password-bootstrap -- --development-mode server -c config.dev.yaml {{ARGS}}
 
 # Start the backend with a config file
 backend-config config="config.yaml":
