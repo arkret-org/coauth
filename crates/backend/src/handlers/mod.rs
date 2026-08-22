@@ -83,7 +83,7 @@ static METER: LazyLock<Meter> = LazyLock::new(|| {
     opentelemetry::global::meter_with_scope(scope)
 });
 
-pub use self::activity_tracker::{ActivityTracker, Bound as BoundActivityTracker};
+pub use self::activity_tracker::{ActivityTracker, BoundActivityTracker};
 pub use self::common::{make_clock, make_rng, make_rng_from};
 pub use self::notification_language::notification_language;
 pub use self::preferred_language::{

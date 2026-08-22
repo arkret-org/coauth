@@ -28,8 +28,8 @@ pub mod cedar;
 use thiserror::Error;
 
 pub use self::model::{
-    AuthorizationGrantInput, ClientRegistrationInput, Code as ViolationCode, EmailInput,
-    EvaluationResult, GrantType, RegisterInput, RegistrationMethod, Requester, Violation,
+    AuthorizationGrantInput, ClientRegistrationInput, EmailInput, EvaluationResult, GrantType,
+    RegisterInput, RegistrationMethod, Requester, Violation, ViolationCode,
 };
 pub use self::provider::{PolicyEvaluator, PolicyProviderFactory};
 

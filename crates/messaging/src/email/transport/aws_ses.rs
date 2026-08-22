@@ -15,7 +15,7 @@ use super::common::{
     build_raw_message, execute_optional_provider_json_request, execute_provider_json_request,
     execute_provider_request, provider_client_error, provider_url, sender_domain,
 };
-use super::{EmailProvider, Error, OutboundEmail, SendResult};
+use super::{EmailProvider, EmailTransportError, OutboundEmail, SendResult};
 use crate::crypto::{hex_sha256, hmac_sha256};
 
 pub(crate) struct AwsSesProvider {
@@ -93,7 +93,7 @@ impl EmailProvider for AwsSesProvider {
         "email.aws_ses"
     }
 
-    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, Error> {
+    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, EmailTransportError> {
         let raw_message = build_raw_message(email)?;
         let payload = AwsSesRequest {
             from_email_address: email.from.email.to_string(),
@@ -124,7 +124,7 @@ impl EmailProvider for AwsSesProvider {
         .await
     }
 
-    async fn test_connection(&self, from: &Mailbox) -> Result<(), Error> {
+    async fn test_connection(&self, from: &Mailbox) -> Result<(), EmailTransportError> {
         let account: AwsSesAccountResponse =
             execute_provider_json_request(self.aws_signed_request(
                 Method::GET,
@@ -159,7 +159,7 @@ impl AwsSesProvider {
         url: Url,
         body: Option<String>,
         content_type: Option<&str>,
-    ) -> Result<RequestBuilder, Error> {
+    ) -> Result<RequestBuilder, EmailTransportError> {
         let host = url
             .host_str()
             .expect("AWS SES endpoint must contain a hostname");
@@ -234,7 +234,7 @@ impl AwsSesProvider {
         Ok(request)
     }
 
-    async fn ensure_verified_sender(&self, from: &Mailbox) -> Result<(), Error> {
+    async fn ensure_verified_sender(&self, from: &Mailbox) -> Result<(), EmailTransportError> {
         let sender_email = from.email.to_string();
 
         if let Some(identity) = self
@@ -281,7 +281,7 @@ impl AwsSesProvider {
     async fn get_email_identity(
         &self,
         identity: &str,
-    ) -> Result<Option<AwsSesIdentityResponse>, Error> {
+    ) -> Result<Option<AwsSesIdentityResponse>, EmailTransportError> {
         let mut url = self.endpoint.clone();
         {
             let mut segments = url.path_segments_mut().map_err(|()| {

@@ -19,7 +19,7 @@ mod schema;
 pub mod v1;
 
 pub use self::call_context::CallContext;
-pub(crate) use self::call_context::Rejection as CallContextRejection;
+pub(crate) use self::call_context::CallContextRejection;
 pub(crate) use self::model::InconsistentPersonalSession;
 pub(crate) use self::params::{PaginationRejection, UlidPathParamRejection};
 pub(crate) use self::response::ErrorOutcome;

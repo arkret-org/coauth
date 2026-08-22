@@ -6,7 +6,7 @@ use coauth_email_types::Mailbox;
 use coauth_templates::{EmailRecoveryContext, EmailVerificationContext, Templates, WithLanguage};
 use thiserror::Error;
 
-use super::transport::{Error as TransportError, Transport as MailTransport};
+use super::transport::{EmailTransportError, Transport as MailTransport};
 use super::{OutboundEmail, SendResult};
 
 /// Helps sending mails to users
@@ -21,9 +21,9 @@ pub struct Mailer {
 /// Errors that can occur while preparing or sending an email.
 #[derive(Debug, Error)]
 #[error(transparent)]
-pub enum Error {
+pub enum MailerError {
     /// The configured email transport failed.
-    Transport(#[from] TransportError),
+    Transport(#[from] EmailTransportError),
     /// Rendering the email templates failed.
     Templates(#[from] coauth_templates::TemplateError),
 }
@@ -70,7 +70,7 @@ impl Mailer {
         to: Mailbox,
         context: &WithLanguage<EmailVerificationContext>,
         tags: &BTreeMap<String, String>,
-    ) -> Result<OutboundEmail, Error> {
+    ) -> Result<OutboundEmail, MailerError> {
         let text_body = self.templates.render_email_verification_txt(context)?;
         let html_body = self.templates.render_email_verification_html(context)?;
         let subject = self.templates.render_email_verification_subject(context)?;
@@ -83,7 +83,7 @@ impl Mailer {
         to: Mailbox,
         context: &WithLanguage<EmailRecoveryContext>,
         tags: &BTreeMap<String, String>,
-    ) -> Result<OutboundEmail, Error> {
+    ) -> Result<OutboundEmail, MailerError> {
         let text_body = self.templates.render_email_recovery_txt(context)?;
         let html_body = self.templates.render_email_recovery_html(context)?;
         let subject = self.templates.render_email_recovery_subject(context)?;
@@ -109,7 +109,7 @@ impl Mailer {
         to: Mailbox,
         context: &WithLanguage<EmailVerificationContext>,
         tags: &BTreeMap<String, String>,
-    ) -> Result<SendResult, Error> {
+    ) -> Result<SendResult, MailerError> {
         tracing::debug!("Preparing verification email");
         let email = self.prepare_verification_email(to, context, tags)?;
         tracing::debug!("Sending verification email");
@@ -138,7 +138,7 @@ impl Mailer {
         to: Mailbox,
         context: &WithLanguage<EmailRecoveryContext>,
         tags: &BTreeMap<String, String>,
-    ) -> Result<SendResult, Error> {
+    ) -> Result<SendResult, MailerError> {
         tracing::debug!("Preparing recovery email");
         let email = self.prepare_recovery_email(to, context, tags)?;
         tracing::debug!("Sending recovery email");
@@ -153,7 +153,7 @@ impl Mailer {
     ///
     /// Returns an error if the connection failed.
     #[tracing::instrument(name = "email.test_connection", skip_all)]
-    pub async fn test_connection(&self) -> Result<(), TransportError> {
+    pub async fn test_connection(&self) -> Result<(), EmailTransportError> {
         self.transport.test_connection(&self.from).await
     }
 

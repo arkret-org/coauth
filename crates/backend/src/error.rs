@@ -6,8 +6,8 @@ use salvo::oapi::{self, BasicType, Content, EndpointOutRegister, Object};
 use salvo::prelude::{Json, Response, Scribe};
 
 use crate::handlers::admin::{
-    CallContextRejection as AdminCallContextRejection, CreatedJson, ErrorOutcome,
-    InconsistentPersonalSession, PaginationRejection, UlidPathParamRejection,
+    CallContextRejection, CreatedJson, ErrorOutcome, InconsistentPersonalSession,
+    PaginationRejection, UlidPathParamRejection,
 };
 use crate::handlers::common::RouteError as RestRouteError;
 use crate::salvo_utils::sentry::SentryEventId;
@@ -242,28 +242,28 @@ impl From<PaginationRejection> for AppError {
     }
 }
 
-impl From<AdminCallContextRejection> for AppError {
-    fn from(error: AdminCallContextRejection) -> Self {
+impl From<CallContextRejection> for AppError {
+    fn from(error: CallContextRejection) -> Self {
         match error {
-            AdminCallContextRejection::MissingAuthorizationHeader
-            | AdminCallContextRejection::InvalidAuthorizationHeader => {
+            CallContextRejection::MissingAuthorizationHeader
+            | CallContextRejection::InvalidAuthorizationHeader => {
                 Self::bad_request(error.to_string())
             }
-            AdminCallContextRejection::InvalidAccessTokenType(_)
-            | AdminCallContextRejection::UnknownAccessToken
-            | AdminCallContextRejection::TokenExpired
-            | AdminCallContextRejection::SessionRevoked
-            | AdminCallContextRejection::UserLocked
-            | AdminCallContextRejection::InvalidAdminOrg
-            | AdminCallContextRejection::MissingScope => Self::unauthorized(error.to_string()),
-            AdminCallContextRejection::RepositorySetup(source) => Self::with_source(
+            CallContextRejection::InvalidAccessTokenType(_)
+            | CallContextRejection::UnknownAccessToken
+            | CallContextRejection::TokenExpired
+            | CallContextRejection::SessionRevoked
+            | CallContextRejection::UserLocked
+            | CallContextRejection::InvalidAdminOrg
+            | CallContextRejection::MissingScope => Self::unauthorized(error.to_string()),
+            CallContextRejection::RepositorySetup(source) => Self::with_source(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Couldn't load the database repository",
                 source,
                 true,
             ),
-            AdminCallContextRejection::Repository(source) => Self::internal(source),
-            AdminCallContextRejection::LoadSession(_) | AdminCallContextRejection::LoadUser(_) => {
+            CallContextRejection::Repository(source) => Self::internal(source),
+            CallContextRejection::LoadSession(_) | CallContextRejection::LoadUser(_) => {
                 Self::internal(error)
             }
         }

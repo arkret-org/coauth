@@ -108,11 +108,11 @@ pub trait EmailProvider: Send + Sync {
     fn binding_key(&self) -> &'static str;
 
     /// Sends a rendered outbound email through the provider.
-    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, Error>;
+    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, EmailTransportError>;
 
     /// Performs a lightweight connectivity check when the provider supports
     /// it.
-    async fn test_connection(&self, from: &Mailbox) -> Result<(), Error>;
+    async fn test_connection(&self, from: &Mailbox) -> Result<(), EmailTransportError>;
 }
 
 /// A cloneable wrapper around an email provider implementation.
@@ -273,12 +273,12 @@ impl Transport {
     }
 
     /// Send an outbound email through the configured provider.
-    pub async fn send(&self, email: &OutboundEmail) -> Result<SendResult, Error> {
+    pub async fn send(&self, email: &OutboundEmail) -> Result<SendResult, EmailTransportError> {
         self.inner.send(email).await
     }
 
     /// Test the connection to the underlying transport when supported.
-    pub async fn test_connection(&self, from: &Mailbox) -> Result<(), Error> {
+    pub async fn test_connection(&self, from: &Mailbox) -> Result<(), EmailTransportError> {
         self.inner.test_connection(from).await
     }
 
@@ -291,7 +291,7 @@ impl Transport {
 
 #[derive(Debug, Error)]
 /// Errors that can occur while handing an email to a delivery provider.
-pub enum Error {
+pub enum EmailTransportError {
     /// The payload could not be converted into a provider-specific message.
     #[error("failed to build email message: {0}")]
     Message(#[source] std::io::Error),
@@ -359,7 +359,7 @@ impl EmailProvider for BlackholeProvider {
         "email.blackhole"
     }
 
-    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, Error> {
+    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, EmailTransportError> {
         let to: Vec<String> = email.to.iter().map(ToString::to_string).collect();
         tracing::warn!(
             email.to = ?to,
@@ -368,7 +368,7 @@ impl EmailProvider for BlackholeProvider {
         Ok(SendResult::default())
     }
 
-    async fn test_connection(&self, _from: &Mailbox) -> Result<(), Error> {
+    async fn test_connection(&self, _from: &Mailbox) -> Result<(), EmailTransportError> {
         Ok(())
     }
 }
@@ -398,7 +398,7 @@ impl EmailProvider for SmtpProvider {
         "email.smtp"
     }
 
-    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, Error> {
+    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, EmailTransportError> {
         let builder = self.builder()?;
         if matches!(self.mode, SmtpMode::Plain) {
             let mut client = builder.connect_plain().await.map_err(SmtpError::Delivery)?;
@@ -418,7 +418,7 @@ impl EmailProvider for SmtpProvider {
         Ok(SendResult::default())
     }
 
-    async fn test_connection(&self, _from: &Mailbox) -> Result<(), Error> {
+    async fn test_connection(&self, _from: &Mailbox) -> Result<(), EmailTransportError> {
         let builder = self.builder()?;
         if matches!(self.mode, SmtpMode::Plain) {
             builder
@@ -451,7 +451,7 @@ impl EmailProvider for SendmailProvider {
         "email.sendmail"
     }
 
-    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, Error> {
+    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, EmailTransportError> {
         let message = build_raw_message(email)?;
         let mut command = Command::new(&self.command);
         command
@@ -477,7 +477,7 @@ impl EmailProvider for SendmailProvider {
         Ok(SendResult::default())
     }
 
-    async fn test_connection(&self, _from: &Mailbox) -> Result<(), Error> {
+    async fn test_connection(&self, _from: &Mailbox) -> Result<(), EmailTransportError> {
         Ok(())
     }
 }

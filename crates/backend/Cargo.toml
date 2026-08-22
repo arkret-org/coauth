@@ -60,6 +60,7 @@ diesel = {workspace = true}
 diesel-async = {workspace = true}
 ed25519-dalek = {workspace = true}
 elliptic-curve = {workspace = true}
+email_address = {workspace = true}
 form_urlencoded = {workspace = true}
 futures-util = {workspace = true}
 headers = {workspace = true}

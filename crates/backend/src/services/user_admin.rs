@@ -12,7 +12,7 @@ use coauth_data::{
     AdminUserPatch, BoxRepository, Clock, RepositoryAccess, RepositoryError, UpstreamOAuthLink,
     UpstreamOAuthLinkPatch, User, UserEmail, UserEmailPatch,
 };
-use coauth_email_types::{Address, AddressError};
+use coauth_email_types::Address;
 use coauth_principal::ConnectorAdmin;
 use rand_core::RngCore;
 use thiserror::Error;
@@ -63,7 +63,7 @@ pub enum UserAdminServiceError {
     InvalidEmail {
         email: String,
         #[source]
-        source: AddressError,
+        source: email_address::Error,
     },
 
     #[error("user email \"{0}\" already in use")]

@@ -46,13 +46,13 @@ pub struct Payload {
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
-pub struct UpstreamSessions(Vec<Payload>);
+pub struct UpstreamSessionsCookie(Vec<Payload>);
 
 #[derive(Debug, Error, PartialEq, Eq)]
 #[error("upstream session not found")]
 pub struct UpstreamSessionNotFound;
 
-impl TimedCookie for UpstreamSessions {
+impl TimedCookie for UpstreamSessionsCookie {
     const COOKIE_NAME: &'static str = "upstream-oauth-sessions";
 
     fn max_age() -> Duration {
@@ -67,7 +67,7 @@ impl TimedCookie for UpstreamSessions {
     }
 }
 
-impl UpstreamSessions {
+impl UpstreamSessionsCookie {
     /// Returns true if the cookie is empty
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
@@ -163,7 +163,7 @@ mod tests {
             .unwrap();
         let mut rng = ChaChaRng::seed_from_u64(42);
 
-        let sessions = UpstreamSessions::default();
+        let sessions = UpstreamSessionsCookie::default();
 
         let provider_a = coauth_data::new_id(now, &mut rng);
         let provider_b = coauth_data::new_id(now, &mut rng);

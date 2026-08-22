@@ -37,7 +37,7 @@ pub(crate) mod cookie;
 pub mod jwks_cache;
 pub(crate) mod template;
 
-pub(crate) use self::cookie::UpstreamSessions as UpstreamSessionsCookie;
+pub(crate) use self::cookie::UpstreamSessionsCookie;
 
 #[derive(Debug, Error)]
 #[allow(clippy::enum_variant_names)]

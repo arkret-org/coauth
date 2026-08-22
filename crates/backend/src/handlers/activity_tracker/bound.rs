@@ -12,12 +12,12 @@ use crate::handlers::activity_tracker::ActivityTracker;
 
 /// An activity tracker with an IP address bound to it.
 #[derive(Clone)]
-pub struct Bound {
+pub struct BoundActivityTracker {
     tracker: ActivityTracker,
     ip: Option<IpAddr>,
 }
 
-impl Bound {
+impl BoundActivityTracker {
     /// Create a new bound activity tracker.
     #[must_use]
     pub fn new(tracker: ActivityTracker, ip: Option<IpAddr>) -> Self {

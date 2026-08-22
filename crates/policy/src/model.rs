@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 /// Each variant maps to a kebab-case string used in policy responses.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub enum Code {
+pub enum ViolationCode {
     /// The chosen handle does not meet the minimum length requirement.
     HandleTooShort,
 
@@ -55,7 +55,7 @@ pub enum Code {
     TooManySessions,
 }
 
-impl Code {
+impl ViolationCode {
     /// Returns the kebab-case string representation of this code,
     /// matching the serde serialization format.
     #[must_use]
@@ -93,7 +93,7 @@ pub struct Violation {
     pub field: Option<String>,
 
     /// Optional well-known code identifying the violation type
-    pub code: Option<Code>,
+    pub code: Option<ViolationCode>,
 }
 
 /// Aggregated result of evaluating one or more policy rules.
@@ -283,7 +283,7 @@ mod tests {
                 msg: "blocked".to_owned(),
                 redirect_uri: None,
                 field: Some("handle".to_owned()),
-                code: Some(Code::HandleTooShort),
+                code: Some(ViolationCode::HandleTooShort),
             }],
         };
 

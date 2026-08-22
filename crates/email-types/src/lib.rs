@@ -7,7 +7,6 @@
 use std::fmt;
 use std::str::FromStr;
 
-pub use email_address::Error as AddressError;
 use email_address::{EmailAddress, Options};
 
 /// A validated addr-spec without an RFC 5322 display name.
@@ -29,7 +28,7 @@ impl Address {
 }
 
 impl FromStr for Address {
-    type Err = AddressError;
+    type Err = email_address::Error;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         EmailAddress::parse_with_options(value, Options::default().without_display_text()).map(Self)
@@ -76,7 +75,7 @@ impl From<Address> for Mailbox {
 }
 
 impl FromStr for Mailbox {
-    type Err = AddressError;
+    type Err = email_address::Error;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         let parsed = EmailAddress::from_str(value)?;

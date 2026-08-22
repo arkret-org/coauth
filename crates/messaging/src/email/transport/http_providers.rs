@@ -15,7 +15,7 @@ use super::common::{
     execute_provider_json_request, execute_provider_request, map_ref, provider_client_error,
     provider_mailbox, provider_tags, provider_url, sender_domain,
 };
-use super::{EmailProvider, Error, OutboundEmail, SendResult};
+use super::{EmailProvider, EmailTransportError, OutboundEmail, SendResult};
 use crate::crypto::{paloud_internal_nonce, sign_paloud_internal_request};
 
 pub(crate) struct HttpWebhookProvider {
@@ -43,7 +43,7 @@ impl EmailProvider for HttpWebhookProvider {
         "email.http_webhook"
     }
 
-    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, Error> {
+    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, EmailTransportError> {
         let payload = HttpWebhookRequest {
             from: email.from.to_string(),
             reply_to: email.reply_to.as_ref().map(ToString::to_string),
@@ -68,7 +68,7 @@ impl EmailProvider for HttpWebhookProvider {
         execute_provider_request(request).await
     }
 
-    async fn test_connection(&self, _from: &Mailbox) -> Result<(), Error> {
+    async fn test_connection(&self, _from: &Mailbox) -> Result<(), EmailTransportError> {
         Ok(())
     }
 }
@@ -98,11 +98,11 @@ impl EmailProvider for PaloudInternalProvider {
         "email.paloud_internal"
     }
 
-    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, Error> {
+    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, EmailTransportError> {
         let recipient = match email.to.as_slice() {
             [recipient] => recipient.to_string(),
             _ => {
-                return Err(Error::ProviderError {
+                return Err(EmailTransportError::ProviderError {
                     status: 400,
                     code: Some("unsupported_recipient_count".to_owned()),
                     body: "Paloud internal email transport requires exactly one recipient"
@@ -150,7 +150,7 @@ impl EmailProvider for PaloudInternalProvider {
         execute_provider_request(request).await
     }
 
-    async fn test_connection(&self, _from: &Mailbox) -> Result<(), Error> {
+    async fn test_connection(&self, _from: &Mailbox) -> Result<(), EmailTransportError> {
         Ok(())
     }
 }
@@ -201,7 +201,7 @@ impl EmailProvider for ResendProvider {
         "email.resend"
     }
 
-    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, Error> {
+    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, EmailTransportError> {
         let payload = ResendRequest {
             from: email.from.to_string(),
             reply_to: email.reply_to.as_ref().map(ToString::to_string),
@@ -222,7 +222,7 @@ impl EmailProvider for ResendProvider {
         execute_provider_request(request).await
     }
 
-    async fn test_connection(&self, from: &Mailbox) -> Result<(), Error> {
+    async fn test_connection(&self, from: &Mailbox) -> Result<(), EmailTransportError> {
         let response: ResendDomainsResponse = execute_provider_json_request(
             self.client
                 .get(provider_url(&self.base_url, "/domains"))
@@ -314,7 +314,7 @@ impl EmailProvider for SendgridLikeProvider {
         self.binding_key
     }
 
-    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, Error> {
+    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, EmailTransportError> {
         let mut content = vec![SendgridContent {
             content_type: "text/plain",
             value: &email.text_body,
@@ -348,7 +348,7 @@ impl EmailProvider for SendgridLikeProvider {
         execute_provider_request(request).await
     }
 
-    async fn test_connection(&self, from: &Mailbox) -> Result<(), Error> {
+    async fn test_connection(&self, from: &Mailbox) -> Result<(), EmailTransportError> {
         let scopes: SendgridScopesResponse = execute_provider_json_request(
             self.client
                 .get(provider_url(&self.base_url, "/v3/scopes"))
@@ -396,7 +396,7 @@ impl EmailProvider for BrevoProvider {
         "email.brevo"
     }
 
-    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, Error> {
+    async fn send(&self, email: &OutboundEmail) -> Result<SendResult, EmailTransportError> {
         let payload = BrevoRequest {
             sender: provider_mailbox(&email.from),
             to: email.to.iter().map(provider_mailbox).collect(),
@@ -417,7 +417,7 @@ impl EmailProvider for BrevoProvider {
         execute_provider_request(request).await
     }
 
-    async fn test_connection(&self, _from: &Mailbox) -> Result<(), Error> {
+    async fn test_connection(&self, _from: &Mailbox) -> Result<(), EmailTransportError> {
         let _: serde_json::Value = execute_provider_json_request(
             self.client
                 .get(provider_url(&self.base_url, "/v3/account"))
@@ -431,7 +431,7 @@ impl EmailProvider for BrevoProvider {
 async fn validate_sendgrid_sender(
     provider: &SendgridLikeProvider,
     from: &Mailbox,
-) -> Result<(), Error> {
+) -> Result<(), EmailTransportError> {
     let sender_email = from.email.to_string();
     let sender_domain = sender_domain(from).ok_or_else(|| {
         provider_client_error(

@@ -1522,6 +1522,7 @@ dependencies = [
  "diesel-async",
  "ed25519-dalek",
  "elliptic-curve",
+ "email_address",
  "form_urlencoded",
  "futures-util",
  "headers",

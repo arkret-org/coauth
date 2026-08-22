@@ -248,7 +248,7 @@ async fn sendgrid_test_connection_requires_mail_send_scope() {
         .unwrap_err();
 
     match error {
-        Error::ProviderError {
+        EmailTransportError::ProviderError {
             status,
             code,
             retryable,

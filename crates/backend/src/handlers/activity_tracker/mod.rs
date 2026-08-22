@@ -15,7 +15,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use ulid::Ulid;
 
-pub use self::bound::Bound;
+pub use self::bound::BoundActivityTracker;
 use self::worker::Worker;
 
 static MESSAGE_QUEUE_SIZE: usize = 1000;
@@ -83,8 +83,8 @@ impl ActivityTracker {
 
     /// Bind the activity tracker to an IP address.
     #[must_use]
-    pub fn bind(self, ip: Option<IpAddr>) -> Bound {
-        Bound::new(self, ip)
+    pub fn bind(self, ip: Option<IpAddr>) -> BoundActivityTracker {
+        BoundActivityTracker::new(self, ip)
     }
 
     /// Record activity in an OAuth session.

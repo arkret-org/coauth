@@ -18,7 +18,7 @@ use crate::handlers::account::DepotExt;
 use crate::record_error;
 
 #[derive(Debug, thiserror::Error)]
-pub enum Rejection {
+pub enum CallContextRejection {
     /// The authorization header is missing
     #[error("Missing authorization header")]
     MissingAuthorizationHeader,
@@ -73,7 +73,7 @@ pub enum Rejection {
     InvalidAdminOrg,
 }
 
-impl Scribe for Rejection {
+impl Scribe for CallContextRejection {
     fn render(self, res: &mut Response) {
         let response = ErrorOutcome::from_error(&self);
         let sentry_event_id = record_error!(
@@ -85,22 +85,21 @@ impl Scribe for Rejection {
         );
 
         let status = match &self {
-            Rejection::InvalidAuthorizationHeader | Rejection::MissingAuthorizationHeader => {
-                StatusCode::BAD_REQUEST
-            }
+            CallContextRejection::InvalidAuthorizationHeader
+            | CallContextRejection::MissingAuthorizationHeader => StatusCode::BAD_REQUEST,
 
-            Rejection::UnknownAccessToken
-            | Rejection::TokenExpired
-            | Rejection::SessionRevoked
-            | Rejection::UserLocked
-            | Rejection::InvalidAdminOrg
-            | Rejection::MissingScope
-            | Rejection::InvalidAccessTokenType(_) => StatusCode::UNAUTHORIZED,
+            CallContextRejection::UnknownAccessToken
+            | CallContextRejection::TokenExpired
+            | CallContextRejection::SessionRevoked
+            | CallContextRejection::UserLocked
+            | CallContextRejection::InvalidAdminOrg
+            | CallContextRejection::MissingScope
+            | CallContextRejection::InvalidAccessTokenType(_) => StatusCode::UNAUTHORIZED,
 
-            Rejection::RepositorySetup(_)
-            | Rejection::Repository(_)
-            | Rejection::LoadSession(_)
-            | Rejection::LoadUser(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            CallContextRejection::RepositorySetup(_)
+            | CallContextRejection::Repository(_)
+            | CallContextRejection::LoadSession(_)
+            | CallContextRejection::LoadUser(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
         res.status_code(status);
@@ -137,33 +136,36 @@ pub struct CallContext {
     pub org_id: Option<String>,
 }
 
-pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallContext, Rejection> {
+pub async fn extract_call_context(
+    req: &Request,
+    depot: &Depot,
+) -> Result<CallContext, CallContextRejection> {
     let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
     let clock = crate::handlers::account::make_clock();
 
     // Load the database repository
     let repo_factory = depot
         .repo_factory()
-        .map_err(|e| Rejection::RepositorySetup(Box::new(e)))?;
+        .map_err(|e| CallContextRejection::RepositorySetup(Box::new(e)))?;
     let mut repo = repo_factory
         .create()
         .await
-        .map_err(|e| Rejection::RepositorySetup(e.into()))?;
+        .map_err(|e| CallContextRejection::RepositorySetup(e.into()))?;
 
     // Extract the access token from the authorization header
     let auth_header = req
         .headers()
         .get(http::header::AUTHORIZATION)
-        .ok_or(Rejection::MissingAuthorizationHeader)?;
+        .ok_or(CallContextRejection::MissingAuthorizationHeader)?;
 
     let auth_str = auth_header
         .to_str()
-        .map_err(|_| Rejection::InvalidAuthorizationHeader)?;
+        .map_err(|_| CallContextRejection::InvalidAuthorizationHeader)?;
 
     let token = auth_str
         .strip_prefix("Bearer ")
         .or_else(|| auth_str.strip_prefix("bearer "))
-        .ok_or(Rejection::InvalidAuthorizationHeader)?;
+        .ok_or(CallContextRejection::InvalidAuthorizationHeader)?;
 
     let token_type = TokenType::check(token)?;
 
@@ -174,21 +176,21 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
                 .oauth_access_token()
                 .find_by_token(token)
                 .await?
-                .ok_or(Rejection::UnknownAccessToken)?;
+                .ok_or(CallContextRejection::UnknownAccessToken)?;
 
             // Look for the associated session in the database
             let session = repo
                 .oauth_session()
                 .lookup(access_token.session_id)
                 .await?
-                .ok_or_else(|| Rejection::LoadSession(access_token.session_id))?;
+                .ok_or_else(|| CallContextRejection::LoadSession(access_token.session_id))?;
 
             if !session.is_valid() {
-                return Err(Rejection::SessionRevoked);
+                return Err(CallContextRejection::SessionRevoked);
             }
 
             if !access_token.is_valid(clock.now()) {
-                return Err(Rejection::TokenExpired);
+                return Err(CallContextRejection::TokenExpired);
             }
 
             // Record the activity on the session
@@ -204,21 +206,21 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
                 .personal_access_token()
                 .find_by_token(token)
                 .await?
-                .ok_or(Rejection::UnknownAccessToken)?;
+                .ok_or(CallContextRejection::UnknownAccessToken)?;
 
             // Look for the associated session in the database
             let session = repo
                 .personal_session()
                 .lookup(access_token.session_id)
                 .await?
-                .ok_or_else(|| Rejection::LoadSession(access_token.session_id))?;
+                .ok_or_else(|| CallContextRejection::LoadSession(access_token.session_id))?;
 
             if !session.is_valid() {
-                return Err(Rejection::SessionRevoked);
+                return Err(CallContextRejection::SessionRevoked);
             }
 
             if !access_token.is_valid(clock.now()) {
-                return Err(Rejection::TokenExpired);
+                return Err(CallContextRejection::TokenExpired);
             }
 
             // Check the validity of the owner of the personal session
@@ -228,9 +230,9 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
                         .user()
                         .lookup(owner_user_id)
                         .await?
-                        .ok_or_else(|| Rejection::LoadUser(owner_user_id))?;
+                        .ok_or_else(|| CallContextRejection::LoadUser(owner_user_id))?;
                     if !owner_user.is_valid() {
-                        return Err(Rejection::UserLocked);
+                        return Err(CallContextRejection::UserLocked);
                     }
                 }
                 PersonalSessionOwner::OAuthClient(_) => {
@@ -246,7 +248,7 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
             CallerSession::PersonalSession(session)
         }
         _other => {
-            return Err(Rejection::InvalidAccessTokenType(None));
+            return Err(CallContextRejection::InvalidAccessTokenType(None));
         }
     };
 
@@ -256,21 +258,21 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
             .user()
             .lookup(user_id)
             .await?
-            .ok_or_else(|| Rejection::LoadUser(user_id))?;
+            .ok_or_else(|| CallContextRejection::LoadUser(user_id))?;
 
         match session {
             CallerSession::OAuthSession(_) => {
                 // For OAuth sessions: check that the user is valid enough
                 // to be a user.
                 if !user.is_valid() {
-                    return Err(Rejection::UserLocked);
+                    return Err(CallContextRejection::UserLocked);
                 }
             }
             CallerSession::PersonalSession(_) => {
                 // For personal sessions: check that the actor is valid enough
                 // to be an actor.
                 if !user.is_valid_actor() {
-                    return Err(Rejection::UserLocked);
+                    return Err(CallContextRejection::UserLocked);
                 }
             }
         }
@@ -285,7 +287,7 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
     // For now, we only check that the session has the admin scope
     // Later we might want to check other route-specific scopes
     if !super::has_admin_scope(session.scope()) {
-        return Err(Rejection::MissingScope);
+        return Err(CallContextRejection::MissingScope);
     }
 
     let configured_org_id = depot
@@ -312,10 +314,10 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
 fn validate_admin_org(
     configured_org_id: Option<&str>,
     presented_org_id: Option<&str>,
-) -> Result<Option<String>, Rejection> {
+) -> Result<Option<String>, CallContextRejection> {
     match (configured_org_id, presented_org_id) {
         (Some(expected), Some(actual)) if expected == actual => Ok(Some(expected.to_owned())),
-        (Some(_), _) | (None, Some(_)) => Err(Rejection::InvalidAdminOrg),
+        (Some(_), _) | (None, Some(_)) => Err(CallContextRejection::InvalidAdminOrg),
         (None, None) => Ok(None),
     }
 }

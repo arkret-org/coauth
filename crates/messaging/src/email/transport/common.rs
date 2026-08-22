@@ -12,7 +12,7 @@ use reqwest::{RequestBuilder, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use super::{Error, OutboundEmail, SendResult};
+use super::{EmailTransportError, OutboundEmail, SendResult};
 
 /// Per-request timeout applied to every outbound provider HTTP call.
 ///
@@ -33,7 +33,9 @@ pub(crate) struct ProviderTag<'a> {
     pub(crate) value: &'a str,
 }
 
-pub(crate) fn build_message(email: &OutboundEmail) -> Result<MessageBuilder<'static>, Error> {
+pub(crate) fn build_message(
+    email: &OutboundEmail,
+) -> Result<MessageBuilder<'static>, EmailTransportError> {
     let mut builder = MessageBuilder::new()
         .from(header_address(&email.from))
         .subject(email.subject.trim().to_owned());
@@ -78,15 +80,18 @@ pub(crate) fn build_message(email: &OutboundEmail) -> Result<MessageBuilder<'sta
     Ok(builder)
 }
 
-pub(crate) fn build_raw_message(email: &OutboundEmail) -> Result<Vec<u8>, Error> {
-    build_message(email).and_then(|message| message.write_to_vec().map_err(Error::Message))
+pub(crate) fn build_raw_message(email: &OutboundEmail) -> Result<Vec<u8>, EmailTransportError> {
+    build_message(email)
+        .and_then(|message| message.write_to_vec().map_err(EmailTransportError::Message))
 }
 
 fn header_address(mailbox: &Mailbox) -> HeaderAddress<'static> {
     HeaderAddress::new_address(mailbox.name.clone(), mailbox.email.to_string())
 }
 
-pub(crate) async fn execute_provider_request(request: RequestBuilder) -> Result<SendResult, Error> {
+pub(crate) async fn execute_provider_request(
+    request: RequestBuilder,
+) -> Result<SendResult, EmailTransportError> {
     let response = request.timeout(PROVIDER_REQUEST_TIMEOUT).send().await?;
     let status = response.status();
     let headers = response.headers().clone();
@@ -103,7 +108,7 @@ pub(crate) async fn execute_provider_request(request: RequestBuilder) -> Result<
 
 pub(crate) async fn execute_provider_json_request<T: DeserializeOwned>(
     request: RequestBuilder,
-) -> Result<T, Error> {
+) -> Result<T, EmailTransportError> {
     let response = request.timeout(PROVIDER_REQUEST_TIMEOUT).send().await?;
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
@@ -118,7 +123,7 @@ pub(crate) async fn execute_provider_json_request<T: DeserializeOwned>(
 pub(crate) async fn execute_optional_provider_json_request<T: DeserializeOwned>(
     request: RequestBuilder,
     ignored_statuses: &[StatusCode],
-) -> Result<Option<T>, Error> {
+) -> Result<Option<T>, EmailTransportError> {
     let response = request.timeout(PROVIDER_REQUEST_TIMEOUT).send().await?;
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
@@ -134,8 +139,8 @@ pub(crate) async fn execute_optional_provider_json_request<T: DeserializeOwned>(
     Ok(Some(serde_json::from_str(&body)?))
 }
 
-pub(crate) fn provider_error(status: u16, body: String) -> Error {
-    Error::ProviderError {
+pub(crate) fn provider_error(status: u16, body: String) -> EmailTransportError {
+    EmailTransportError::ProviderError {
         status,
         code: extract_provider_error_code(&body),
         retryable: status == 429 || status >= 500,
@@ -143,8 +148,11 @@ pub(crate) fn provider_error(status: u16, body: String) -> Error {
     }
 }
 
-pub(crate) fn provider_client_error(code: impl Into<String>, body: impl Into<String>) -> Error {
-    Error::ProviderError {
+pub(crate) fn provider_client_error(
+    code: impl Into<String>,
+    body: impl Into<String>,
+) -> EmailTransportError {
+    EmailTransportError::ProviderError {
         status: 400,
         code: Some(code.into()),
         retryable: false,
