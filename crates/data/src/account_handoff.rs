@@ -218,8 +218,6 @@ pub enum IdentityCreationLeaseRiskDecision {
     Rejected,
 }
 
-pub use arkret_models_identity::IdentityCreationLeaseState as IdentityCreationSagaState;
-
 #[derive(Clone, Debug)]
 pub struct IdentityCreationLeaseRecord {
     pub service_account_id: Ulid,
@@ -229,7 +227,7 @@ pub struct IdentityCreationLeaseRecord {
     pub fence: u64,
     pub expires_at: DateTime<Utc>,
     pub reserved_identity: Option<arkret_models_identity::ReservedIdentityCreation>,
-    pub state: IdentityCreationSagaState,
+    pub state: arkret_models_identity::IdentityCreationLeaseState,
     pub registry_receipt: Option<arkret_models_identity::DidOperationSubmitOutcome>,
     pub head_event_digest: Option<arkret_identifiers::Hash>,
     /// Complete historical registration evidence frozen at the registry's

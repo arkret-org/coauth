@@ -1,10 +1,11 @@
+use arkret_models_collaboration::objects::account_status::AccountStatus;
 use chrono::Duration;
 use coauth_data::audit::{HandleAuditEventType, NewHandleAuditEvent};
 use coauth_data::clock::MockClock;
 use coauth_data::upstream_oauth::{UpstreamOAuthProviderParams, UpstreamOAuthSessionFilter};
 use coauth_data::user::{
     BrowserSessionFilter, BrowserSessionRepository, PrincipalDidRepository, UserEmailFilter,
-    UserEmailRepository, UserFilter, UserPasswordRepository, UserRepository, UserStatus,
+    UserEmailRepository, UserFilter, UserPasswordRepository, UserRepository,
     VerifiedPrincipalDidBindingInput,
 };
 use coauth_data::{
@@ -588,7 +589,7 @@ async fn test_user_patch_updates_profile_and_state() {
     // Account lifecycle is a single status ladder, not independent flags: a
     // patch asking for both `locked` and `deactivated` settles on the stricter
     // status, and only that status stamps its timestamp.
-    assert_eq!(updated.status, UserStatus::Deactivated);
+    assert_eq!(updated.status, AccountStatus::Deactivated);
     assert!(updated.locked_at.is_none());
     assert!(updated.deactivated_at.is_some());
 
@@ -601,7 +602,7 @@ async fn test_user_patch_updates_profile_and_state() {
     // Round-trips through the `TEXT` column as the canonical `zh`.
     assert_eq!(reloaded.preferred_locale, Some(arkret_locale::UiLocale::Zh));
     assert!(reloaded.can_request_admin);
-    assert_eq!(reloaded.status, UserStatus::Deactivated);
+    assert_eq!(reloaded.status, AccountStatus::Deactivated);
     assert!(reloaded.locked_at.is_none());
     assert!(reloaded.deactivated_at.is_some());
 }

@@ -8,11 +8,12 @@
 //! then propagate changes to the downstream principal system.
 
 use anyhow::Context;
+use arkret_models_collaboration::objects::account_status::AccountStatus;
 use async_trait::async_trait;
 use coauth_data::oauth::{OAuthSessionFilter, SessionGrantFilter};
 use coauth_data::personal::PersonalSessionFilter;
 use coauth_data::queue::{AccountProjectionRewriteJob, DeactivateUserJob};
-use coauth_data::user::{BrowserSessionFilter, User, UserEmailFilter, UserRepository, UserStatus};
+use coauth_data::user::{BrowserSessionFilter, User, UserEmailFilter, UserRepository};
 use coauth_data::{BoxRepository, Clock, Pagination, RepositoryAccess};
 use tracing::info;
 
@@ -185,7 +186,7 @@ impl RunnableJob for DeactivateUserJob {
         // The admin transaction may already have advanced the account to
         // erasure_pending. Never downgrade that terminal state back to
         // deactivated while executing the shared fanout job.
-        let target = if target.status == UserStatus::ErasurePending {
+        let target = if target.status == AccountStatus::ErasurePending {
             target
         } else {
             repo.user()

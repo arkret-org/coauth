@@ -1,6 +1,6 @@
 //! Repositories to interact with entities related to user accounts
 
-pub use arkret_models_collaboration::objects::account_status::AccountStatus as UserStatus;
+use arkret_models_collaboration::objects::account_status::AccountStatus;
 use async_trait::async_trait;
 use coauth_data::{Clock, User, UserPatch, UserProfilePatch};
 use rand_core::RngCore;
@@ -33,7 +33,7 @@ pub use self::terms::UserTermsRepository;
 /// Filter parameters for listing users
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct UserFilter<'a> {
-    status: Option<UserStatus>,
+    status: Option<AccountStatus>,
     can_request_admin: Option<bool>,
     search: Option<&'a str>,
 }
@@ -48,42 +48,42 @@ impl<'a> UserFilter<'a> {
     /// Filter for active users
     #[must_use]
     pub fn active_only(mut self) -> Self {
-        self.status = Some(UserStatus::Active);
+        self.status = Some(AccountStatus::Active);
         self
     }
 
     /// Filter for locked users
     #[must_use]
     pub fn locked_only(mut self) -> Self {
-        self.status = Some(UserStatus::Locked);
+        self.status = Some(AccountStatus::Locked);
         self
     }
 
     /// Filter for deactivated users
     #[must_use]
     pub fn deactivated_only(mut self) -> Self {
-        self.status = Some(UserStatus::Deactivated);
+        self.status = Some(AccountStatus::Deactivated);
         self
     }
 
     /// Filter for users pending erasure.
     #[must_use]
     pub fn erasure_pending_only(mut self) -> Self {
-        self.status = Some(UserStatus::ErasurePending);
+        self.status = Some(AccountStatus::ErasurePending);
         self
     }
 
     /// Filter for suspended users.
     #[must_use]
     pub fn suspended_only(mut self) -> Self {
-        self.status = Some(UserStatus::Suspended);
+        self.status = Some(AccountStatus::Suspended);
         self
     }
 
     /// Filter for soft-logged-out users.
     #[must_use]
     pub fn soft_logged_out_only(mut self) -> Self {
-        self.status = Some(UserStatus::SoftLoggedOut);
+        self.status = Some(AccountStatus::SoftLoggedOut);
         self
     }
 
@@ -112,7 +112,7 @@ impl<'a> UserFilter<'a> {
     ///
     /// Returns [`None`] if no status filter was set
     #[must_use]
-    pub fn status(&self) -> Option<UserStatus> {
+    pub fn status(&self) -> Option<AccountStatus> {
         self.status
     }
 
@@ -209,7 +209,7 @@ pub trait UserRepository: Send + Sync {
         &mut self,
         clock: &dyn Clock,
         user: User,
-        status: UserStatus,
+        status: AccountStatus,
     ) -> Result<User, Self::Error>;
 
     /// Check if a [`User`] exists
@@ -361,7 +361,7 @@ repository_impl!(UserRepository:
         &mut self,
         clock: &dyn Clock,
         user: User,
-        status: UserStatus,
+        status: AccountStatus,
     ) -> Result<User, Self::Error>;
     async fn exists(&mut self, handle: &str) -> Result<bool, Self::Error>;
     async fn lock(&mut self, clock: &dyn Clock, user: User) -> Result<User, Self::Error>;

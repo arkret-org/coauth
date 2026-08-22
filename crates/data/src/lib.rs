@@ -139,9 +139,8 @@ pub use self::account_handoff::{
     IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
     IdentityBindingChallengeIssue, IdentityBindingChallengeRecord, IdentityCreationBindingCommit,
     IdentityCreationLeaseRecord, IdentityCreationLeaseRiskDecision, IdentityCreationRegisterReplay,
-    IdentityCreationRegistrationContext, IdentityCreationSagaState,
-    NewAccountHandoffCreationAttempt, NewControllerGateAttestationIssuance,
-    PublishedDidRegisterCommit, PublishedDidRegisterReplay,
+    IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
+    NewControllerGateAttestationIssuance, PublishedDidRegisterCommit, PublishedDidRegisterReplay,
 };
 pub use self::accountability::{
     AccountabilityGrant, AccountabilityGrantFanoutState, AccountabilitySubjectKind,

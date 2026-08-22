@@ -2,10 +2,11 @@
 //! repositories
 
 use arkret_locale::UiLocale;
+use arkret_models_collaboration::objects::account_status::AccountStatus;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::pagination::PaginationDirection;
-use coauth_data::user::{UserFilter, UserRepository, UserStatus};
+use coauth_data::user::{UserFilter, UserRepository};
 use coauth_data::{Clock, Pagination, User, UserPatch, UserProfilePatch, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -54,26 +55,26 @@ impl<'c> PgUserRepository<'c> {
         Self { conn }
     }
 
-    fn status_from_patch(user: &User, patch: &UserPatch) -> UserStatus {
+    fn status_from_patch(user: &User, patch: &UserPatch) -> AccountStatus {
         let mut status = patch.status.unwrap_or(user.status);
 
         if let Some(locked) = patch.locked {
             if locked {
-                if UserStatus::Locked.is_stricter_than(status) {
-                    status = UserStatus::Locked;
+                if AccountStatus::Locked.is_stricter_than(status) {
+                    status = AccountStatus::Locked;
                 }
-            } else if status == UserStatus::Locked {
-                status = UserStatus::Active;
+            } else if status == AccountStatus::Locked {
+                status = AccountStatus::Active;
             }
         }
 
         if let Some(deactivated) = patch.deactivated {
             if deactivated {
-                if UserStatus::Deactivated.is_stricter_than(status) {
-                    status = UserStatus::Deactivated;
+                if AccountStatus::Deactivated.is_stricter_than(status) {
+                    status = AccountStatus::Deactivated;
                 }
-            } else if status == UserStatus::Deactivated {
-                status = UserStatus::Active;
+            } else if status == AccountStatus::Deactivated {
+                status = AccountStatus::Active;
             }
         }
 
@@ -82,23 +83,23 @@ impl<'c> PgUserRepository<'c> {
 
     fn apply_status_timestamps(user: &mut User, now: DateTime<Utc>) {
         match user.status {
-            UserStatus::Active | UserStatus::SoftLoggedOut | UserStatus::Suspended => {
+            AccountStatus::Active | AccountStatus::SoftLoggedOut | AccountStatus::Suspended => {
                 user.locked_at = None;
                 user.deactivated_at = None;
             }
-            UserStatus::Locked => {
+            AccountStatus::Locked => {
                 user.locked_at = user.locked_at.or(Some(now));
                 user.deactivated_at = None;
             }
-            UserStatus::Deactivated | UserStatus::ErasurePending => {
+            AccountStatus::Deactivated | AccountStatus::ErasurePending => {
                 user.deactivated_at = user.deactivated_at.or(Some(now));
             }
         }
     }
 
     fn validate_status_transition(
-        current: UserStatus,
-        next: UserStatus,
+        current: AccountStatus,
+        next: AccountStatus,
     ) -> Result<(), DatabaseError> {
         current
             .validate_transition_to(next)
@@ -146,7 +147,7 @@ impl TryFrom<UserRow> for User {
 
     fn try_from(row: UserRow) -> Result<Self, Self::Error> {
         let id = Ulid::from(row.id);
-        let status = UserStatus::from_wire(&row.status).ok_or_else(|| {
+        let status = AccountStatus::from_wire(&row.status).ok_or_else(|| {
             DatabaseError::to_invalid_operation(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("unknown account status {:?}", row.status),
@@ -280,7 +281,7 @@ impl UserRepository for PgUserRepository<'_> {
             sub: id.to_string(),
             created_at,
             updated_at: created_at,
-            status: UserStatus::Active,
+            status: AccountStatus::Active,
             locked_at: None,
             deactivated_at: None,
             can_request_admin: false,
@@ -387,7 +388,7 @@ impl UserRepository for PgUserRepository<'_> {
         &mut self,
         clock: &dyn Clock,
         user: User,
-        status: UserStatus,
+        status: AccountStatus,
     ) -> Result<User, Self::Error> {
         self.patch(
             clock,
@@ -426,11 +427,11 @@ impl UserRepository for PgUserRepository<'_> {
         err,
     )]
     async fn lock(&mut self, clock: &dyn Clock, user: User) -> Result<User, Self::Error> {
-        if user.status == UserStatus::Locked {
+        if user.status == AccountStatus::Locked {
             return Ok(user);
         }
 
-        self.set_account_lifecycle_state(clock, user, UserStatus::Locked)
+        self.set_account_lifecycle_state(clock, user, AccountStatus::Locked)
             .await
     }
 
@@ -441,11 +442,11 @@ impl UserRepository for PgUserRepository<'_> {
         err,
     )]
     async fn unlock(&mut self, mut user: User) -> Result<User, Self::Error> {
-        if user.status != UserStatus::Locked {
+        if user.status != AccountStatus::Locked {
             return Ok(user);
         }
-        Self::validate_status_transition(user.status, UserStatus::Active)?;
-        user.status = UserStatus::Active;
+        Self::validate_status_transition(user.status, AccountStatus::Active)?;
+        user.status = AccountStatus::Active;
         user.locked_at = None;
         #[allow(clippy::disallowed_methods)] // trait signature doesn't expose a Clock
         {
@@ -472,10 +473,10 @@ impl UserRepository for PgUserRepository<'_> {
         err,
     )]
     async fn deactivate(&mut self, clock: &dyn Clock, user: User) -> Result<User, Self::Error> {
-        if user.status == UserStatus::Deactivated {
+        if user.status == AccountStatus::Deactivated {
             return Ok(user);
         }
-        self.set_account_lifecycle_state(clock, user, UserStatus::Deactivated)
+        self.set_account_lifecycle_state(clock, user, AccountStatus::Deactivated)
             .await
     }
 

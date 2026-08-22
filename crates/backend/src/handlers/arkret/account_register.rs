@@ -7,14 +7,14 @@ use arkret_models_collaboration::principal_operations::PcrGenesisSubmitRequestBo
 use arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
 use arkret_models_identity::{
     AccountBindingKind, AccountBindingReceipt, AccountBindingState, AccountHandoffAllowedOperation,
-    DidOperationSubmitOutcome, DidOperationSubmitStatus, IdentityCreationOperationStatus,
-    STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,
+    DidOperationSubmitOutcome, DidOperationSubmitStatus, IdentityCreationLeaseState,
+    IdentityCreationOperationStatus, STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,
 };
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::RepositoryAccess as _;
 use coauth_data::account_handoff::{
     IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
-    IdentityCreationRegistrationContext, IdentityCreationSagaState,
+    IdentityCreationRegistrationContext,
 };
 use coauth_data::storage::user::BrowserSessionRepository as _;
 use coauth_data::user::{
@@ -213,7 +213,7 @@ pub async fn account_register_endpoint(
     .map_err(|error| proof_invalid(error.to_string()))?;
 
     let (registry_outcome, registration_did_evidence) = match context.lease.state {
-        IdentityCreationSagaState::Reserved => {
+        IdentityCreationLeaseState::Reserved => {
             let outcome = soland_webvh::submit_did_operation(
                 &depot.http_client()?,
                 &principal_server.endpoint,
@@ -249,9 +249,9 @@ pub async fn account_register_endpoint(
             repo.save().await?;
             (outcome, registration_did_evidence)
         }
-        IdentityCreationSagaState::DidPublished
-        | IdentityCreationSagaState::PcrAccepted
-        | IdentityCreationSagaState::AccountBound => {
+        IdentityCreationLeaseState::DidPublished
+        | IdentityCreationLeaseState::PcrAccepted
+        | IdentityCreationLeaseState::AccountBound => {
             let outcome: DidOperationSubmitOutcome =
                 context.lease.registry_receipt.clone().ok_or_else(|| {
                     failed_precondition("published identity has no registry receipt")
@@ -272,7 +272,7 @@ pub async fn account_register_endpoint(
                 ));
             }
             let head = outcome.head_event_digest.as_ref().expect("validated head");
-            if context.lease.state == IdentityCreationSagaState::DidPublished {
+            if context.lease.state == IdentityCreationLeaseState::DidPublished {
                 let mut repo = depot.repo().await?;
                 if !repo
                     .account_handoff()
@@ -288,12 +288,12 @@ pub async fn account_register_endpoint(
             }
             (outcome, registration_did_evidence)
         }
-        IdentityCreationSagaState::Active => {
+        IdentityCreationLeaseState::Active => {
             return Err(failed_precondition(
                 "identity creation operation has not been reserved",
             ));
         }
-        IdentityCreationSagaState::Completed => {
+        IdentityCreationLeaseState::Completed => {
             return Err(failed_precondition(
                 "reason_code=identity_creation_challenge_already_consumed; identity binding challenge was already consumed",
             ));
@@ -327,7 +327,7 @@ pub async fn account_register_endpoint(
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let pcr_outcome = if matches!(
         context.lease.state,
-        IdentityCreationSagaState::Reserved | IdentityCreationSagaState::DidPublished
+        IdentityCreationLeaseState::Reserved | IdentityCreationLeaseState::DidPublished
     ) {
         let config = depot.arkret_config()?;
         let trust_domain = arkret_identifiers::TrustDomainId::new(trust_domain_for(
@@ -441,7 +441,7 @@ pub async fn account_register_endpoint(
     sign_account_binding_receipt(&mut receipt, &key_store)?;
     let mut rng = make_rng();
     let mut repo = depot.repo().await?;
-    if context.lease.state != IdentityCreationSagaState::AccountBound {
+    if context.lease.state != IdentityCreationLeaseState::AccountBound {
         if !repo
             .account_handoff()
             .mark_account_bound(&context, &receipt, now)

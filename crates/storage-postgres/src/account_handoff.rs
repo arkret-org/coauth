@@ -1,5 +1,6 @@
 //! PostgreSQL account-handoff state machine.
 
+use arkret_models_identity::IdentityCreationLeaseState;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::account_handoff::{
@@ -12,7 +13,7 @@ use coauth_data::account_handoff::{
     IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
     IdentityBindingChallengeIssue, IdentityBindingChallengeRecord, IdentityCreationBindingCommit,
     IdentityCreationLeaseRecord, IdentityCreationLeaseRiskDecision, IdentityCreationRegisterLedger,
-    IdentityCreationRegisterReplay, IdentityCreationRegistrationContext, IdentityCreationSagaState,
+    IdentityCreationRegisterReplay, IdentityCreationRegistrationContext,
     NewAccountHandoffCreationAttempt, NewControllerGateAttestationIssuance,
     PublishedDidRegisterCommit, PublishedDidRegisterReplay,
 };
@@ -914,7 +915,7 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
         fence: u64::try_from(row.fence).map_err(|_| DatabaseError::invalid_operation())?,
         expires_at: row.expires_at,
         reserved_identity,
-        state: IdentityCreationSagaState::try_from(row.state.as_str())
+        state: IdentityCreationLeaseState::try_from(row.state.as_str())
             .map_err(|_| DatabaseError::invalid_operation())?,
         registry_receipt: row
             .registry_receipt
@@ -1656,7 +1657,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
                     false,
                 )
                 .await?
-                .is_some_and(|lease| lease.state == IdentityCreationSagaState::AccountBound);
+                .is_some_and(|lease| lease.state == IdentityCreationLeaseState::AccountBound);
             if !incomplete_lease {
                 return Ok(AccountHandoffCreation::Bound {
                     grant,
@@ -1685,7 +1686,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             )
             .await?;
         if let Some(lease) = existing_lease.as_ref() {
-            if lease.state == IdentityCreationSagaState::Completed {
+            if lease.state == IdentityCreationLeaseState::Completed {
                 let reserved = lease
                     .reserved_identity
                     .as_ref()
@@ -1823,7 +1824,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
                 Ok(AccountHandoffCreation::ExpiredReplay)
             };
         };
-        if lease.state == IdentityCreationSagaState::Completed {
+        if lease.state == IdentityCreationLeaseState::Completed {
             let reserved = lease
                 .reserved_identity
                 .as_ref()
@@ -1919,7 +1920,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             || lease.expires_at <= input.issued_at
             || matches!(
                 lease.state,
-                IdentityCreationSagaState::AccountBound | IdentityCreationSagaState::Completed
+                IdentityCreationLeaseState::AccountBound | IdentityCreationLeaseState::Completed
             )
         {
             return Ok(IdentityBindingChallengeIssue::LeaseMismatch);
@@ -2305,13 +2306,13 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         }
         if matches!(
             lease.state,
-            IdentityCreationSagaState::PcrAccepted
-                | IdentityCreationSagaState::AccountBound
-                | IdentityCreationSagaState::Completed
+            IdentityCreationLeaseState::PcrAccepted
+                | IdentityCreationLeaseState::AccountBound
+                | IdentityCreationLeaseState::Completed
         ) {
             return Ok(IdentityAbandonmentChallengeIssue::AlreadyAccepted);
         }
-        if lease.state != IdentityCreationSagaState::DidPublished {
+        if lease.state != IdentityCreationLeaseState::DidPublished {
             return Ok(IdentityAbandonmentChallengeIssue::CheckpointMismatch);
         }
         let Some(reserved) = lease.reserved_identity.as_ref() else {
@@ -2487,13 +2488,13 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         }
         if matches!(
             lease.state,
-            IdentityCreationSagaState::PcrAccepted
-                | IdentityCreationSagaState::AccountBound
-                | IdentityCreationSagaState::Completed
+            IdentityCreationLeaseState::PcrAccepted
+                | IdentityCreationLeaseState::AccountBound
+                | IdentityCreationLeaseState::Completed
         ) {
             return Ok(IdentityAbandonmentCommit::AlreadyAccepted);
         }
-        if lease.state != IdentityCreationSagaState::DidPublished {
+        if lease.state != IdentityCreationLeaseState::DidPublished {
             return Ok(IdentityAbandonmentCommit::ChallengeMismatch);
         }
         let Some(reserved) = lease.reserved_identity.as_ref() else {
@@ -2627,7 +2628,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         else {
             return Ok(IdentityCreationRegisterReplay::Pending);
         };
-        if lease.state != IdentityCreationSagaState::Completed {
+        if lease.state != IdentityCreationLeaseState::Completed {
             return Ok(IdentityCreationRegisterReplay::Pending);
         }
         let Some(ledger) = lease.register_ledger else {
@@ -2676,11 +2677,11 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             })
             || !matches!(
                 lease.state,
-                IdentityCreationSagaState::Reserved | IdentityCreationSagaState::DidPublished
+                IdentityCreationLeaseState::Reserved | IdentityCreationLeaseState::DidPublished
             )
-            || (lease.state == IdentityCreationSagaState::Reserved
+            || (lease.state == IdentityCreationLeaseState::Reserved
                 && lease.registration_did_evidence.is_some())
-            || (lease.state == IdentityCreationSagaState::DidPublished
+            || (lease.state == IdentityCreationLeaseState::DidPublished
                 && lease.registration_did_evidence.as_ref() != Some(registration_did_evidence))
         {
             return Ok(false);
@@ -2698,7 +2699,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(false);
         }
         match (context.lease.state, lease.state) {
-            (IdentityCreationSagaState::Reserved, IdentityCreationSagaState::Reserved) => {
+            (IdentityCreationLeaseState::Reserved, IdentityCreationLeaseState::Reserved) => {
                 if challenge.consumed_at.is_some() {
                     return Ok(false);
                 }
@@ -2714,7 +2715,10 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
                     return Ok(false);
                 }
             }
-            (IdentityCreationSagaState::DidPublished, IdentityCreationSagaState::DidPublished) => {
+            (
+                IdentityCreationLeaseState::DidPublished,
+                IdentityCreationLeaseState::DidPublished,
+            ) => {
                 if challenge.consumed_at.is_none() {
                     let consumed = diesel::sql_query(
                         "UPDATE identity_binding_challenges SET consumed_at = $1 \
@@ -2785,7 +2789,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             })
             || !matches!(
                 lease.state,
-                IdentityCreationSagaState::DidPublished | IdentityCreationSagaState::PcrAccepted
+                IdentityCreationLeaseState::DidPublished | IdentityCreationLeaseState::PcrAccepted
             )
         {
             return Ok(false);
@@ -2802,7 +2806,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         {
             return Ok(false);
         }
-        if lease.state == IdentityCreationSagaState::PcrAccepted {
+        if lease.state == IdentityCreationLeaseState::PcrAccepted {
             let stored = lease
                 .pcr_genesis_receipt
                 .as_ref()
@@ -2856,7 +2860,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         if lease.lease_id != context.lease.lease_id
             || lease.fence != context.lease.fence
             || lease.holder_jkt != context.grant.cnf_jkt
-            || lease.state != IdentityCreationSagaState::PcrAccepted
+            || lease.state != IdentityCreationLeaseState::PcrAccepted
             || lease.pcr_genesis_receipt.is_none()
         {
             return Ok(false);
@@ -2926,7 +2930,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         {
             return Ok(IdentityCreationBindingCommit::Stale);
         }
-        if lease.state == IdentityCreationSagaState::Completed {
+        if lease.state == IdentityCreationLeaseState::Completed {
             let Some(ledger) = lease.register_ledger else {
                 return Ok(IdentityCreationBindingCommit::DuplicateConflict);
             };
@@ -2939,7 +2943,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             }
             return Ok(IdentityCreationBindingCommit::DuplicateConflict);
         }
-        if lease.state != IdentityCreationSagaState::AccountBound
+        if lease.state != IdentityCreationLeaseState::AccountBound
             || lease.reserved_identity.as_ref().is_none_or(|reserved| {
                 reserved.operation_digest != context.challenge.operation_digest
             })
@@ -3009,19 +3013,19 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
 }
 
 fn registration_challenge_state_is_usable(
-    lease_state: IdentityCreationSagaState,
+    lease_state: IdentityCreationLeaseState,
     challenge_consumed: bool,
 ) -> bool {
     match lease_state {
-        IdentityCreationSagaState::Reserved => !challenge_consumed,
+        IdentityCreationLeaseState::Reserved => !challenge_consumed,
         // A reclaimed lease may issue a fresh holder-bound challenge after the
         // DID was published but before PCR genesis. `mark_did_published`
         // consumes that replacement challenge without republishing the DID.
-        IdentityCreationSagaState::DidPublished => true,
-        IdentityCreationSagaState::PcrAccepted | IdentityCreationSagaState::AccountBound => {
+        IdentityCreationLeaseState::DidPublished => true,
+        IdentityCreationLeaseState::PcrAccepted | IdentityCreationLeaseState::AccountBound => {
             challenge_consumed
         }
-        IdentityCreationSagaState::Active | IdentityCreationSagaState::Completed => false,
+        IdentityCreationLeaseState::Active | IdentityCreationLeaseState::Completed => false,
     }
 }
 
