@@ -920,17 +920,6 @@ mod tests {
             "controller_id": CONTROLLER,
             "principal_control_realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG",
             "controller_authorization_ref": format!("{AGENT_FULL}#managed-controller"),
-            "pcr_recovery": {
-                "status": "ready",
-                "backup_id": "ak:backup:01999999-0000-7000-8000-000000000020",
-                "series_id": "ak:backup_series:01999999-0000-7000-8000-000000000021",
-                "series_seq": 1,
-                "managed_frontier_ref": {
-                    "frontier_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                    "seal_ref": "ak:seal:01999999-0000-7000-8000-000000000022",
-                    "mls_epoch": 0
-                }
-            },
             "requested_scope": {
                 "actions": [
                     "ak.self.events.stream.subscribe",

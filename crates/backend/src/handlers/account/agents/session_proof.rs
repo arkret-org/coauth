@@ -1555,24 +1555,8 @@ mod tests {
     async fn lifecycle_config(
         status: &str,
         pairing_request_id: &str,
-        recovery_status: &str,
     ) -> (MockServer, ArkretConfig) {
         let server = MockServer::start().await;
-        let pcr_recovery = if recovery_status == "ready" {
-            serde_json::json!({
-                "status": "ready",
-                "backup_id": "ak:backup:01999999-0000-7000-8000-000000000020",
-                "series_id": "ak:backup_series:01999999-0000-7000-8000-000000000021",
-                "series_seq": 1,
-                "managed_frontier_ref": {
-                    "frontier_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                    "seal_ref": "ak:seal:01999999-0000-7000-8000-000000000022",
-                    "mls_epoch": 0
-                }
-            })
-        } else {
-            serde_json::json!({ "status": recovery_status })
-        };
         Mock::given(method("GET"))
             .and(header("authorization", "Bearer lifecycle-secret"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -1595,7 +1579,6 @@ mod tests {
                     "controller_id": "ak:did_core:web:controller.example",
                     "principal_control_realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG",
                     "controller_authorization_ref": "did:web:agent.example#managed-controller",
-                    "pcr_recovery": pcr_recovery,
                     "requested_scope": {
                         "actions": ["ak.message.create"],
                         "resources": []
@@ -1631,7 +1614,7 @@ mod tests {
     #[tokio::test]
     async fn authoritative_lifecycle_and_pairing_fail_closed() {
         let client = reqwest::Client::new();
-        let (_active_server, active) = lifecycle_config("active", "pair-current", "ready").await;
+        let (_active_server, active) = lifecycle_config("active", "pair-current").await;
         enforce_authoritative_agent_lifecycle(&client, &active, "did:web:agent.example")
             .await
             .expect("active agent accepts");
@@ -1657,7 +1640,7 @@ mod tests {
             AgentAuthRejection::PairingRequestExpired
         );
 
-        let (_paused_server, paused) = lifecycle_config("paused", "pair-paused", "ready").await;
+        let (_paused_server, paused) = lifecycle_config("paused", "pair-paused").await;
         assert_eq!(
             enforce_authoritative_agent_lifecycle(&client, &paused, "did:web:agent.example")
                 .await
@@ -1674,18 +1657,6 @@ mod tests {
             .expect_err("missing lifecycle authority rejects"),
             AgentAuthRejection::PolicyUnavailable
         );
-
-        let (_pending_recovery_server, pending_recovery) =
-            lifecycle_config("active", "pair-current", "pending").await;
-        enforce_authoritative_pairing_handle(
-            &client,
-            &pending_recovery,
-            "did:web:agent.example",
-            "pair-current",
-            chrono::Utc::now(),
-        )
-        .await
-        .expect("backup availability is not an Agent pairing gate");
     }
 
     fn set(values: &[&str]) -> BTreeSet<String> {
