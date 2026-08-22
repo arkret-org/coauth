@@ -23,29 +23,26 @@ use crate::handlers::arkret::is_allowed_session_grant_audience;
 /// replay landing right after expiry is still rejected.
 const AGENT_PROOF_REPLAY_GRACE: chrono::Duration = chrono::Duration::minutes(5);
 const AGENT_REFRESH_PROOF_MAX_WINDOW: chrono::Duration = chrono::Duration::minutes(5);
+/// Rebuild the SDK refresh-intent digest from already-typed coordinates.
+///
+/// The inputs stay in their protocol types the whole way: the SDK signature is
+/// `(&DidCoreId, &DeviceId, &DidCoreId, &DidUrl)`, so a caller that hands over a
+/// DID URL where a `did_core_id` belongs is a compile error rather than a
+/// runtime `ProofInvalid`.
 fn agent_session_refresh_request_digest(
     prior_grant_jwt: &str,
-    principal_id: &str,
-    device_id: &str,
-    audience: &str,
-    verification_method: &str,
-) -> Result<String, AgentAuthRejection> {
-    let principal_id =
-        DidCoreId::new(principal_id.to_owned()).map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    let device_id = arkret_identifiers::DeviceId::new(device_id.to_owned())
-        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    let audience =
-        DidCoreId::new(audience.to_owned()).map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    let verification_method = arkret_wire::DidUrl::new(verification_method.to_owned())
-        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    principal_id: &DidCoreId,
+    device_id: &arkret_identifiers::DeviceId,
+    audience: &DidCoreId,
+    verification_method: &arkret_wire::DidUrl,
+) -> Result<arkret_identifiers::Hash, AgentAuthRejection> {
     arkret_models_collaboration::session_grant_bodies::agent_session_refresh_request_digest(
         prior_grant_jwt,
-        &principal_id,
-        &device_id,
-        &audience,
-        &verification_method,
+        principal_id,
+        device_id,
+        audience,
+        verification_method,
     )
-    .map(|digest| digest.to_string())
     .map_err(|_| AgentAuthRejection::ProofInvalid)
 }
 
@@ -200,12 +197,12 @@ where
 
     let expected_digest = agent_session_refresh_request_digest(
         prior_grant_jwt,
-        prior_claims.subject.as_str(),
-        device_id.as_str(),
-        proof_audience.as_str(),
-        verification_method.as_str(),
+        &prior_claims.subject,
+        device_id,
+        proof_audience,
+        verification_method,
     )?;
-    if request_digest.as_str() != expected_digest {
+    if *request_digest != expected_digest {
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
     let message = proof
@@ -2473,49 +2470,68 @@ mod tests {
 
     #[test]
     fn agent_refresh_digest_binds_prior_grant_device_audience_and_runtime_key() {
-        let base = agent_session_refresh_request_digest(
+        fn digest(
+            prior_grant_jwt: &str,
+            principal_id: &str,
+            device_id: &str,
+            audience: &str,
+            verification_method: &str,
+        ) -> arkret_identifiers::Hash {
+            agent_session_refresh_request_digest(
+                prior_grant_jwt,
+                &DidCoreId::new(principal_id.to_owned()).unwrap(),
+                &arkret_identifiers::DeviceId::new(device_id.to_owned()).unwrap(),
+                &DidCoreId::new(audience.to_owned()).unwrap(),
+                &arkret_wire::DidUrl::new(verification_method.to_owned()).unwrap(),
+            )
+            .unwrap()
+        }
+
+        let base = digest(
             "grant.jwt.one",
-            "did:web:agent.example",
+            "ak:did_core:web:agent.example",
             "ak:device:01970000-0000-7000-8000-000000000001",
             "ak:did_core:web:service.example",
             "did:web:agent.example#runtime-key-1",
-        )
-        .unwrap();
-        assert!(base.starts_with("sha256:"));
+        );
+        assert!(base.as_str().starts_with("sha256:"));
 
         for changed in [
-            agent_session_refresh_request_digest(
+            digest(
                 "grant.jwt.two",
-                "did:web:agent.example",
+                "ak:did_core:web:agent.example",
                 "ak:device:01970000-0000-7000-8000-000000000001",
                 "ak:did_core:web:service.example",
                 "did:web:agent.example#runtime-key-1",
-            )
-            .unwrap(),
-            agent_session_refresh_request_digest(
+            ),
+            digest(
                 "grant.jwt.one",
-                "did:web:agent.example",
+                "ak:did_core:web:other-agent.example",
+                "ak:device:01970000-0000-7000-8000-000000000001",
+                "ak:did_core:web:service.example",
+                "did:web:agent.example#runtime-key-1",
+            ),
+            digest(
+                "grant.jwt.one",
+                "ak:did_core:web:agent.example",
                 "ak:device:01970000-0000-7000-8000-000000000002",
                 "ak:did_core:web:service.example",
                 "did:web:agent.example#runtime-key-1",
-            )
-            .unwrap(),
-            agent_session_refresh_request_digest(
+            ),
+            digest(
                 "grant.jwt.one",
-                "did:web:agent.example",
+                "ak:did_core:web:agent.example",
                 "ak:device:01970000-0000-7000-8000-000000000001",
                 "ak:did_core:web:other-service.example",
                 "did:web:agent.example#runtime-key-1",
-            )
-            .unwrap(),
-            agent_session_refresh_request_digest(
+            ),
+            digest(
                 "grant.jwt.one",
-                "did:web:agent.example",
+                "ak:did_core:web:agent.example",
                 "ak:device:01970000-0000-7000-8000-000000000001",
                 "ak:did_core:web:service.example",
                 "did:web:agent.example#runtime-key-2",
-            )
-            .unwrap(),
+            ),
         ] {
             assert_ne!(changed, base);
         }
