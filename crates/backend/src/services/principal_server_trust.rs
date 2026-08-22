@@ -34,7 +34,7 @@ use arkret_identity::DidWebvhResolver;
 use arkret_models_discovery::ServiceDescribe;
 use arkret_models_identity::service_identity::CanonicalServiceUrl;
 use arkret_models_identity::{
-    DidDocument, ResolutionCommitment, ServiceResolutionRecord,
+    AuthenticatedServiceResolution, DidDocument, ResolutionCommitment,
     canonical_service_current_record_path,
 };
 use arkret_wire::{BindingKind, DidCoreId, DidFullId, Hash, ServiceKind};
@@ -74,9 +74,10 @@ pub const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_mins(5);
 /// state as expired, terminating the service.
 pub const MAX_TRUSTED_AUDIENCE_AGE: Duration = Duration::from_hours(24);
 
-/// Hard upper bound on a fetched service resolution record, matching the
-/// SDK transport bound (`SERVICE_RESOLUTION_FETCH_MAX_BYTES`).
-const RESOLUTION_RECORD_MAX_BYTES: usize = 64 * 1024;
+/// Hard upper bound on a fetched authenticated service resolution, matching
+/// the SDK transport bound (`SERVICE_RESOLUTION_FETCH_MAX_BYTES`).
+const AUTHENTICATED_RESOLUTION_MAX_BYTES: usize =
+    arkret_http_client::SERVICE_RESOLUTION_FETCH_MAX_BYTES;
 
 /// Defensive cache bound. The cache only ever holds one entry per configured
 /// Principal Server; this cap bounds damage if that invariant ever breaks.
@@ -320,7 +321,7 @@ async fn fetch_bounded(
 ) -> Result<Vec<u8>, TrustVerificationError> {
     outbound_http::fetch_bounded(
         http_client,
-        outbound_http::soland_policy(operation),
+        outbound_http::principal_trust_policy(operation),
         url,
         max_bytes,
     )
@@ -504,7 +505,10 @@ pub async fn verify_principal_server_identity(
         )?;
     }
 
-    // 5. Signed resolution record from the canonical path.
+    // 5. Complete authenticated resolution from the canonical path. The open
+    // endpoint carries the signed record together with its retained method
+    // history and normalized DID Document; the signed record remains the
+    // persisted digest/pin material.
     let record_url = Url::parse(&format!(
         "{canonical_endpoint}{}",
         canonical_service_current_record_path(&service_id).trim_start_matches('/')
@@ -514,14 +518,15 @@ pub async fn verify_principal_server_identity(
         http_client,
         "principal_trust_resolution_record",
         record_url.clone(),
-        RESOLUTION_RECORD_MAX_BYTES,
+        AUTHENTICATED_RESOLUTION_MAX_BYTES,
     )
     .await?;
-    let record: ServiceResolutionRecord =
+    let authenticated_resolution: AuthenticatedServiceResolution =
         arkret_canonical::canonical::from_canonical_json_slice(&record_bytes)
             .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;
+    let record = &authenticated_resolution.service_resolution_record;
     let resolution_record_digest = Hash::new(
-        arkret_canonical::canonical_sha256(&record)
+        arkret_canonical::canonical_sha256(record)
             .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?,
     )
     .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;
@@ -619,13 +624,18 @@ pub async fn verify_principal_server_identity(
         ));
     }
 
-    // 5b. Record proof against the WebVH-anchored DID Document, with
-    // freshness enforced by the SDK shape validation.
-    arkret_identity::build_authenticated_webvh_service_resolution(
-        record,
-        document,
-        verified_log.raw_entries.clone(),
-        Vec::new(),
+    // 5b. Verify the complete retained history, record proof and freshness.
+    // The independently fetched describe/history chain above and the
+    // authenticated resolution must converge on the same normalized document.
+    if authenticated_resolution.normalized_did_document != document {
+        return Err(TrustVerificationError::InvalidEvidence(
+            "authenticated resolution DID Document differs from the verified describe history"
+                .to_owned(),
+        ));
+    }
+    arkret_identity::verify_authenticated_service_resolution_history(
+        &authenticated_resolution,
+        &service_id,
         Utc::now(),
     )
     .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;

@@ -201,6 +201,22 @@ pub(crate) const fn soland_policy(operation: &'static str) -> OutboundRequestPol
         .with_max_attempts(2)
 }
 
+/// Policy for Principal Server trust verification.
+///
+/// Coauth and Soland are commonly launched together behind the same reverse
+/// proxy. During that short readiness window the proxy can legitimately
+/// return 502/503/504 even though the configured endpoint is correct. Use the
+/// full Arkret retry budget here (one initial attempt plus at most five
+/// automatic retries) so startup tolerates that race without weakening any
+/// identity check: only transient transport failures and retryable HTTP
+/// statuses are retried; verified evidence conflicts still fail immediately.
+#[must_use]
+pub(crate) const fn principal_trust_policy(operation: &'static str) -> OutboundRequestPolicy {
+    OutboundRequestPolicy::new("soland", operation)
+        .with_timeout(Duration::from_secs(10))
+        .with_max_attempts(6)
+}
+
 /// Policy for upstream OIDC / IdP authentication-path egress
 /// (discovery / JWKS / userinfo / token exchange) — COA-SEC-02. Short per-call
 /// timeout with a small bounded retry budget, replacing the previous reliance
@@ -690,8 +706,9 @@ mod tests {
     use tokio::net::TcpListener;
 
     use super::{
-        EgressGuard, OutboundRequestPolicy, egress_guard, reqwest_client_builder, retry_after_hint,
-        send_with_policy, server_trusted_loopback_https_hosts, telemetry_url,
+        EgressGuard, OutboundRequestPolicy, egress_guard, principal_trust_policy,
+        reqwest_client_builder, retry_after_hint, send_with_policy,
+        server_trusted_loopback_https_hosts, telemetry_url,
     };
 
     fn addr(raw: &str) -> SocketAddr {
@@ -876,6 +893,30 @@ mod tests {
             reqwest::StatusCode::INTERNAL_SERVER_ERROR
         );
         assert_eq!(attempts.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn principal_trust_policy_survives_gateway_readiness_window() {
+        install_crypto_provider();
+        let (url, attempts) = spawn_http_server(|attempt| async move {
+            if attempt <= 5 {
+                "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    .to_owned()
+            } else {
+                "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned()
+            }
+        })
+        .await;
+        let client = reqwest::Client::new();
+        let policy = principal_trust_policy("principal_trust_readiness")
+            .with_retry(arkret_retry::RetryPolicy::none());
+
+        let response = send_with_policy(policy, || client.get(url.clone()))
+            .await
+            .expect("the sixth attempt should observe the ready upstream");
+
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        assert_eq!(attempts.load(Ordering::SeqCst), 6);
     }
 
     #[tokio::test]
