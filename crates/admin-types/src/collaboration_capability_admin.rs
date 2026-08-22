@@ -6,12 +6,8 @@
 //! These actions intentionally use the exact registry action string; admin
 //! tooling MUST NOT grant umbrella strings such as `ak.pin.*`.
 
-use arkret_models_collaboration::governance::grant_constraint::IssuerAuthorityRef;
 use chrono::{DateTime, Utc};
-use coauth_data_model::{
-    COLLABORATION_CAPABILITY_ACTIONS, collaboration_action_requires_approval,
-    is_collaboration_capability_action,
-};
+use coauth_data_model::{COLLABORATION_CAPABILITY_ACTIONS, collaboration_action_requires_approval};
 pub use coauth_data_model::{CapabilityActionId, CapabilityRiskTier};
 use serde::{Deserialize, Serialize};
 
@@ -127,81 +123,6 @@ pub fn collaboration_capability_templates() -> Vec<CollaborationCapabilityTempla
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct CreateCollaborationCapabilityGrant {
-    pub subject: String,
-    pub realm_id: String,
-    #[cfg_attr(feature = "schema", schemars(with = "String"))]
-    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub action: CapabilityActionId,
-    #[cfg_attr(feature = "schema", schemars(with = "Vec<serde_json::Value>"))]
-    #[cfg_attr(
-        feature = "schema",
-        salvo(schema(value_type = Vec<serde_json::Value>))
-    )]
-    pub issuer_authority_refs: Vec<IssuerAuthorityRef>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub expires_at: Option<DateTime<Utc>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approval_evidence_ref: Option<String>,
-}
-
-impl CreateCollaborationCapabilityGrant {
-    /// Validate operator-side guardrails that are independent of Cedar.
-    ///
-    /// High-risk Realm policy actions require both a finite grant expiry and
-    /// approval evidence. Low/medium actions may still carry an expiry, but it
-    /// is not mandatory by the registry.
-    ///
-    /// # Errors
-    ///
-    /// Returns a human-readable error string when a required field or guardrail
-    /// is missing.
-    pub fn validate(&self) -> Result<(), String> {
-        if self.subject.is_empty() {
-            return Err("subject is required".into());
-        }
-        if self.realm_id.is_empty() {
-            return Err("realm_id is required".into());
-        }
-        if !is_collaboration_capability_action(self.action) {
-            return Err(format!(
-                "action `{}` is not supported by the collaboration grant surface",
-                self.action
-            ));
-        }
-        if self.issuer_authority_refs.is_empty() {
-            return Err("issuer_authority_refs is required".into());
-        }
-        for authority_ref in &self.issuer_authority_refs {
-            if let IssuerAuthorityRef::RealmRoot { realm_id, .. } = authority_ref
-                && realm_id.as_str() != self.realm_id
-            {
-                return Err("realm_root authority reference must match realm_id".into());
-            }
-        }
-        if collaboration_action_requires_approval(self.action) && self.expires_at.is_none() {
-            return Err(format!("action `{}` requires expires_at", self.action));
-        }
-        if collaboration_action_requires_approval(self.action)
-            && match self.approval_evidence_ref.as_deref() {
-                Some(value) => value.is_empty(),
-                None => true,
-            }
-        {
-            return Err(format!(
-                "action `{}` requires approval_evidence_ref",
-                self.action
-            ));
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "schema",
-    derive(schemars::JsonSchema, salvo::oapi::ToSchema)
-)]
 pub struct ListCollaborationCapabilityTemplatesOutcome {
     pub data: Vec<CollaborationCapabilityTemplate>,
 }
@@ -269,118 +190,5 @@ mod tests {
         );
         assert!(search_policy.requires_approval);
         assert!(search_policy.requires_expires_at);
-    }
-
-    #[test]
-    fn wildcard_actions_are_not_grantable() {
-        let body = r#"{
-            "subject":"did:web:alice.example",
-            "realm_id":"ak:realm:demo",
-            "action":"ak.pin.*"
-        }"#;
-
-        assert!(serde_json::from_str::<CreateCollaborationCapabilityGrant>(body).is_err());
-    }
-
-    #[test]
-    fn authority_source_is_required_and_root_must_match_realm() {
-        let mut req = CreateCollaborationCapabilityGrant {
-            subject: "did:web:alice.example".into(),
-            realm_id: "ak:realm:01JS0SP000000000000000000".into(),
-            action: CapabilityActionId::PinAdd,
-            issuer_authority_refs: Vec::new(),
-            expires_at: None,
-            approval_evidence_ref: None,
-        };
-        assert_eq!(
-            req.validate().unwrap_err(),
-            "issuer_authority_refs is required"
-        );
-
-        req.issuer_authority_refs = vec![IssuerAuthorityRef::RealmRoot {
-            realm_id: arkret_identifiers::RealmId::new(
-                "ak:realm:AT0jIIg6naB0Vkqbb-ip6eunf-bHr5-nh4pz2_kYNyVX",
-            )
-            .unwrap(),
-            cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null".into(),
-            controller_epoch_at_issuance: 0,
-            authority_generation: 0,
-        }];
-        assert_eq!(
-            req.validate().unwrap_err(),
-            "realm_root authority reference must match realm_id"
-        );
-    }
-
-    #[test]
-    fn collaboration_policy_actions_validate_approval_requirements() {
-        let req = CreateCollaborationCapabilityGrant {
-            subject: "did:web:admin.example".into(),
-            realm_id: "ak:realm:01JS0SP000000000000000000".into(),
-            action: CapabilityActionId::RealmSearchPolicy,
-            issuer_authority_refs: vec![IssuerAuthorityRef::Grant {
-                grant_id: arkret_identifiers::GrantId::new(
-                    "ak:grant:ATmMdimZScB3dyV-t4q3cq3H-_deWGSYRAHS0N-uU0Pe",
-                )
-                .unwrap(),
-            }],
-            expires_at: None,
-            approval_evidence_ref: None,
-        };
-        assert!(req.validate().unwrap_err().contains("expires_at"));
-
-        let req = CreateCollaborationCapabilityGrant {
-            expires_at: Some("2099-01-01T00:00:00.000Z".parse().unwrap()),
-            ..req
-        };
-        assert!(
-            req.validate()
-                .unwrap_err()
-                .contains("approval_evidence_ref")
-        );
-    }
-
-    #[test]
-    fn low_and_medium_actions_do_not_require_approval() {
-        for action in [
-            CapabilityActionId::RsvpSet,
-            CapabilityActionId::PinAdd,
-            CapabilityActionId::PinRemove,
-            CapabilityActionId::PinReorder,
-        ] {
-            let req = CreateCollaborationCapabilityGrant {
-                subject: "did:web:alice.example".into(),
-                realm_id: "ak:realm:01JS0SP000000000000000000".into(),
-                action,
-                issuer_authority_refs: vec![IssuerAuthorityRef::Grant {
-                    grant_id: arkret_identifiers::GrantId::new(
-                        "ak:grant:ATmMdimZScB3dyV-t4q3cq3H-_deWGSYRAHS0N-uU0Pe",
-                    )
-                    .unwrap(),
-                }],
-                expires_at: None,
-                approval_evidence_ref: None,
-            };
-            assert!(req.validate().is_ok(), "{action} should validate");
-        }
-    }
-
-    #[test]
-    fn registered_action_outside_product_subset_is_rejected() {
-        let req = CreateCollaborationCapabilityGrant {
-            subject: "did:web:alice.example".into(),
-            realm_id: "ak:realm:01JS0SP000000000000000000".into(),
-            action: CapabilityActionId::MessageCreate,
-            issuer_authority_refs: vec![IssuerAuthorityRef::Grant {
-                grant_id: arkret_identifiers::GrantId::new(
-                    "ak:grant:ATmMdimZScB3dyV-t4q3cq3H-_deWGSYRAHS0N-uU0Pe",
-                )
-                .unwrap(),
-            }],
-            expires_at: None,
-            approval_evidence_ref: None,
-        };
-
-        assert!(req.validate().is_err());
     }
 }

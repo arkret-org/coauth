@@ -301,42 +301,6 @@ impl Translator {
     pub fn available_locales(&self) -> Vec<Locale> {
         self.bundles.keys().cloned().collect()
     }
-
-    /// Check if a locale is available.
-    #[must_use]
-    pub fn has_locale(&self, locale: &Locale) -> bool {
-        self.bundles.contains_key(locale)
-    }
-
-    /// Choose the best available locale from a list of candidates.
-    #[must_use]
-    pub fn choose_locale(&self, iter: impl Iterator<Item = Locale>) -> Locale {
-        for candidate in iter {
-            // Exact match?
-            if self.has_locale(&candidate) {
-                return candidate;
-            }
-
-            // Walk the fallback chain for this candidate.
-            let mut chain = FALLBACKER.fallback_for(candidate.into());
-            loop {
-                let current = chain.get();
-                if current.is_unknown() {
-                    break;
-                }
-
-                let current_locale = (*current).into_locale();
-                if self.has_locale(&current_locale) {
-                    return current_locale;
-                }
-
-                chain.step();
-            }
-        }
-
-        // Nothing matched; return the default.
-        self.default_locale.clone()
-    }
 }
 
 #[cfg(test)]

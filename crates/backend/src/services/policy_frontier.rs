@@ -34,7 +34,6 @@
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::time::Duration;
 
 use arkret_identifiers::{Hash, RealmId};
@@ -104,8 +103,8 @@ impl Frontier {
 }
 
 /// Source the per-realm authorization / policy / membership frontier
-/// digests from. Object-safe so handlers can carry a
-/// `Arc<dyn FrontierSource>` in app state.
+/// digests from. Object-safe so handlers can read through a
+/// `&dyn FrontierSource`.
 pub trait FrontierSource: Send + Sync {
     /// Fetch the frontier for the realm being evaluated. Returns
     /// [`FrontierError::Timeout`] if the underlying source does not
@@ -277,10 +276,6 @@ impl FrontierSource for StaticFrontierSource {
         Box::pin(async move { Ok(frontier) })
     }
 }
-
-/// Type alias for the shared, depot-injected handle. Handlers extract a
-/// clone via `DepotExt::policy_frontier_source` (see `app_state.rs`).
-pub type PolicyFrontierSourceHandle = Arc<dyn FrontierSource>;
 
 #[cfg(test)]
 mod tests {

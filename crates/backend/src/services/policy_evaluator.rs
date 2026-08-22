@@ -41,7 +41,6 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::time::Duration;
 
 use arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody;
@@ -184,7 +183,7 @@ impl PolicyDecision {
 }
 
 /// Evaluate a `ak.self.policy.read.check` request against the configured rules.
-/// Object-safe: handlers carry an `Arc<dyn PolicyEvaluator>`.
+/// Object-safe: handlers evaluate through a `&dyn PolicyEvaluator`.
 pub trait PolicyEvaluator: Send + Sync {
     fn evaluate<'a>(
         &'a self,
@@ -552,10 +551,6 @@ fn throttle_retry_after(scope: &Value, action: &str) -> Option<chrono::Duration>
     }
     chrono::Duration::try_milliseconds(i64::try_from(retry_after_ms).ok()?)
 }
-
-/// Type alias for the depot-injected handle. The handler reads it via
-/// `DepotExt::policy_evaluator`.
-pub type PolicyEvaluatorHandle = Arc<dyn PolicyEvaluator>;
 
 #[cfg(test)]
 mod tests {

@@ -128,7 +128,6 @@ arkret-identity = {version = "0.3.0",path = "../arkret-rust-sdk/crates/identity"
 arkret-egress-reqwest = {version = "0.3.0",path = "../arkret-rust-sdk/crates/egress-reqwest",default-features = false}
 arkret-retry = {version = "0.3.0",path = "../arkret-rust-sdk/crates/retry",default-features = false}
 arkret-signatures = {version = "0.3.0",path = "../arkret-rust-sdk/crates/signatures",default-features = false,features = ["collaboration", "service-identity", "signer", "webvh"]}
-arkret-state = {version = "0.3.0",path = "../arkret-rust-sdk/crates/state",default-features = false}
 console = "0.16.3"
 const-oid = {version = "0.9.6",features = ["std"]}
 cookie = {version = "0.18",features = ["private", "key-expansion"]}

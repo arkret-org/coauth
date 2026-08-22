@@ -146,28 +146,6 @@ pub enum MappingError {
     },
 }
 
-/// Extract the issuer from a JWT *without* verifying its signature. Used to
-/// pick a trusted-issuer policy before the cryptographic check.
-///
-/// # Errors
-///
-/// Returns an error if the JWT is malformed or has no `iss` claim.
-pub fn peek_issuer(id_token: &str) -> Result<String, MappingError> {
-    use base64ct::{Base64UrlUnpadded, Encoding};
-    let mut parts = id_token.split('.');
-    let _header = parts.next().ok_or(MappingError::MissingClaim("header"))?;
-    let payload_b64 = parts.next().ok_or(MappingError::MissingClaim("payload"))?;
-    let payload_bytes = Base64UrlUnpadded::decode_vec(payload_b64)
-        .map_err(|err| MappingError::Verification(format!("payload base64 decode: {err}")))?;
-    let payload: HashMap<String, Value> = serde_json::from_slice(&payload_bytes)
-        .map_err(|err| MappingError::Verification(format!("payload json decode: {err}")))?;
-    payload
-        .get("iss")
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .ok_or(MappingError::MissingClaim("iss"))
-}
-
 /// Validate the upstream `id_token` against the matching `TrustedIssuerPolicy`
 /// from `policy_set` and project the claims into `MappedUpstreamIdentity`.
 ///
@@ -308,23 +286,5 @@ mod tests {
         let set = TrustedIssuerPolicySet::new(vec![policy_a, policy_b]);
         let resolved = set.find("https://idp.example").expect("must find");
         assert_eq!(resolved.audience, "client-b");
-    }
-
-    #[test]
-    fn peek_issuer_extracts_iss_without_verifying() {
-        // Hand-craft an unsigned JWT (header.payload.signature) just to
-        // exercise `peek_issuer` parser. The payload is `{"iss":"x"}`.
-        use base64ct::{Base64UrlUnpadded, Encoding};
-        let header = Base64UrlUnpadded::encode_string(b"{\"alg\":\"none\"}");
-        let payload =
-            Base64UrlUnpadded::encode_string(b"{\"iss\":\"https://idp.example\",\"sub\":\"u1\"}");
-        let token = format!("{header}.{payload}.");
-        let issuer = peek_issuer(&token).expect("peek must succeed on well-formed token");
-        assert_eq!(issuer, "https://idp.example");
-    }
-
-    #[test]
-    fn peek_issuer_rejects_garbage() {
-        assert!(peek_issuer("not.a.jwt!@#").is_err());
     }
 }

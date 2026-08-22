@@ -9,19 +9,6 @@ use std::sync::Arc;
 
 pub use self::registry::ConnectorRegistry;
 
-/// Describes what operations a connector provider supports.
-#[derive(Debug, Clone, Default)]
-pub struct ConnectorCapabilities {
-    /// Whether the connector can provision new users.
-    pub can_provision_users: bool,
-    /// Whether the connector can delete/deactivate users.
-    pub can_delete_users: bool,
-    /// Whether the connector can manage devices.
-    pub can_manage_devices: bool,
-    /// Whether the connector can set display names.
-    pub can_set_displayname: bool,
-}
-
 #[derive(Debug)]
 pub struct ConnectorAccountProfile {
     pub displayname: Option<String>,
@@ -719,9 +706,4 @@ where
 pub trait ConnectorProvider: ConnectorAdmin {
     /// A human-readable name for this connector (e.g. "soland").
     fn provider_name(&self) -> &str;
-
-    /// Returns the set of capabilities this connector supports.
-    fn capabilities(&self) -> ConnectorCapabilities {
-        ConnectorCapabilities::default()
-    }
 }

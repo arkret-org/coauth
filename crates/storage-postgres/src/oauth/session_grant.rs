@@ -989,22 +989,6 @@ macro_rules! apply_session_grant_filter {
             q = q.filter(oauth_session_grants::device_id.eq(device_id));
         }
 
-        if let Some(applet_id) = $filter.applet_id() {
-            q = q.filter(oauth_session_grants::applet_id.eq(applet_id));
-        }
-
-        if let Some(effective_scope) = $filter.effective_scope() {
-            q = q.filter(oauth_session_grants::effective_scope.eq(effective_scope));
-        }
-
-        if let Some(registration_epoch) = $filter.registration_epoch() {
-            q = q.filter(oauth_session_grants::registration_epoch.eq(registration_epoch));
-        }
-
-        if let Some(service_id) = $filter.service_id() {
-            q = q.filter(oauth_session_grants::service_id.eq(service_id));
-        }
-
         if let Some(audience) = $filter.audience() {
             q = q.filter(oauth_session_grants::audience.eq(audience));
         }

@@ -80,63 +80,6 @@ pub fn handle_valid(handle: &str) -> bool {
     true
 }
 
-/// Validate that a string is a Arkret typed wire id of shape
-/// `ak:<prefix>:<uuid-v7>`, where `<uuid-v7>` parses as a strict v7 UUID.
-///
-/// This helper is only for producer-allocated Arkret kinds such as
-/// `ak:device:<uuid7>`. Event-derived kinds (`event`, `realm`, `space`,
-/// `circle`, `strand`, and peers) carry complete 44-character Event tokens
-/// and must use their SDK newtypes instead. coauth's internal admin tokens and
-/// personal session ids remain ULID.
-///
-/// ULID bodies are intentionally rejected. Callers that must accept ULID
-/// for some other reason should not use this helper.
-///
-/// # Examples
-/// ```
-/// use coauth_backend::util::is_typed_uuid7;
-/// // valid v7 uuid (timestamp + version bits)
-/// assert!(is_typed_uuid7(
-///     "ak:device:0190a3c0-0000-7000-8000-000000000000",
-///     "device"
-/// ));
-/// // event-derived token and wrong prefix → false
-/// assert!(!is_typed_uuid7(
-///     "ak:space:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
-///     "device"
-/// ));
-/// // ULID body -> false
-/// assert!(!is_typed_uuid7(
-///     "ak:device:01JS0SP000000000000000000",
-///     "device"
-/// ));
-/// ```
-#[must_use]
-pub fn is_typed_uuid7(s: &str, prefix: &str) -> bool {
-    let Some(rest) = s.strip_prefix("ak:") else {
-        return false;
-    };
-    let Some(rest) = rest.strip_prefix(prefix) else {
-        return false;
-    };
-    let Some(body) = rest.strip_prefix(':') else {
-        return false;
-    };
-
-    // Cell-family ids (`ak:cell:<family>:<uuid>`) are intentionally
-    // rejected here — pass `prefix = "cell:<family>"` if you need a
-    // cell-family-specific check, or use a dedicated parser.
-    if body.contains(':') {
-        return false;
-    }
-
-    // `Uuid::parse_str` accepts any version; we further require v7.
-    match uuid::Uuid::parse_str(body) {
-        Ok(u) => u.get_version_num() == 7,
-        Err(_) => false,
-    }
-}
-
 /// Compare bearer-style secrets without leaking the matching prefix length.
 #[must_use]
 pub fn constant_time_token_eq(left: &str, right: &str) -> bool {
@@ -848,46 +791,5 @@ mod tests {
 
         let drop_sql = format!("DROP TABLE IF EXISTS {table_name}");
         sql_query(&drop_sql).execute(&mut *conn).await.unwrap();
-    }
-
-    #[test]
-    fn typed_uuid7_accepts_valid_v7_with_matching_prefix() {
-        let id = Uuid::now_v7();
-        let s = format!("ak:device:{id}");
-        assert!(super::is_typed_uuid7(&s, "device"));
-    }
-
-    #[test]
-    fn typed_uuid7_rejects_wrong_prefix() {
-        let id = Uuid::now_v7();
-        let s = format!("ak:space:{id}");
-        assert!(!super::is_typed_uuid7(&s, "device"));
-    }
-
-    #[test]
-    fn typed_uuid7_rejects_v4_uuid() {
-        // Random v4 — must be rejected since the spec mandates v7.
-        let s = "ak:device:550e8400-e29b-41d4-a716-446655440000";
-        assert!(!super::is_typed_uuid7(s, "device"));
-    }
-
-    #[test]
-    fn typed_uuid7_rejects_missing_cx_namespace() {
-        let id = Uuid::now_v7();
-        let s = format!("device:{id}");
-        assert!(!super::is_typed_uuid7(&s, "device"));
-    }
-
-    #[test]
-    fn typed_uuid7_rejects_extra_segments() {
-        // Cell-family ids have more colons; the basic helper rejects them.
-        let id = Uuid::now_v7().to_string();
-        let s = arkret_wire::subject_cell(arkret_wire::CellFamilyId::CONSENT_GRANT_V1, &id);
-        assert!(!super::is_typed_uuid7(&s, "cell"));
-    }
-
-    #[test]
-    fn typed_uuid7_rejects_empty_body() {
-        assert!(!super::is_typed_uuid7("ak:device:", "device"));
     }
 }

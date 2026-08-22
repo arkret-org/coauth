@@ -120,16 +120,6 @@ impl AuthenticationMethodOrAccessTokenType {
             _ => None,
         }
     }
-
-    /// Get the access token type of this
-    /// `AuthenticationMethodOrAccessTokenType`.
-    #[must_use]
-    pub fn access_token_type(&self) -> Option<&OAuthAccessTokenType> {
-        match self {
-            Self::AccessTokenType(t) => Some(t),
-            _ => None,
-        }
-    }
 }
 
 impl From<OAuthClientAuthenticationMethod> for AuthenticationMethodOrAccessTokenType {

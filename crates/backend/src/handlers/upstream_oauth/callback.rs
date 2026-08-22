@@ -1005,7 +1005,6 @@ async fn verify_id_token_with_rotation_retry<'a>(
             signing_algorithm,
             client_id,
         },
-        None,
         now,
     );
 
@@ -1030,7 +1029,6 @@ async fn verify_id_token_with_rotation_retry<'a>(
                     signing_algorithm,
                     client_id,
                 },
-                None,
                 now,
             )?;
             Ok(verified)

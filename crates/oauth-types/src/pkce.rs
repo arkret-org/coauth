@@ -120,13 +120,6 @@ pub struct AuthorizationRequest {
     pub code_challenge: String,
 }
 
-/// PKCE parameters attached to a token request.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct TokenRequest {
-    /// The original code verifier that produced the challenge.
-    pub code_challenge_verifier: String,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -36,16 +36,6 @@ impl PostAuthAction {
     pub const fn continue_grant(id: Ulid) -> Self {
         Self::ContinueAuthorizationGrant { id }
     }
-
-    #[must_use]
-    pub const fn continue_device_code_grant(id: Ulid) -> Self {
-        Self::ContinueDeviceCodeGrant { id }
-    }
-
-    #[must_use]
-    pub const fn link_upstream(id: Ulid) -> Self {
-        Self::LinkUpstream { id }
-    }
 }
 
 /// Account-management destination carried by [`PostAuthAction::ManageAccount`].

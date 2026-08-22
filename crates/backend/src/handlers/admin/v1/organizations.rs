@@ -20,9 +20,7 @@
 //! explicitly from storage-neutral domain records.
 
 use arkret_canonical::{canonical_json_bytes, sha256_digest};
-use arkret_identifiers::{
-    DidFullId, EventDigestSuiteCode, EventId, Hash, RealmId, new_prefixed_uuid7,
-};
+use arkret_identifiers::{DidFullId, DigestSuiteCode, EventId, Hash, RealmId, new_prefixed_uuid7};
 use arkret_models_collaboration::{RealmOrganizationPayload, RealmOrganizationStatus};
 use coauth_admin_types::organization_admin::{
     BootstrapAuthorizationInput, BootstrapOrganizationRequest, IssueOrganizationStatementRequest,
@@ -69,7 +67,7 @@ fn parse_control_stream_ref(raw: &str) -> Result<EventId, AppError> {
     let event_id = EventId::new(raw.to_owned()).map_err(|error| {
         AppError::bad_request(format!("invalid PCR control stream Event ref: {error}"))
     })?;
-    if event_id.digest_suite_code() != EventDigestSuiteCode::Sha256 {
+    if event_id.digest_suite_code() != DigestSuiteCode::Sha256 {
         return Err(AppError::bad_request(
             "PCR control stream Event ref must use the SHA-256 digest suite",
         ));
@@ -728,7 +726,7 @@ mod tests {
         // sit on a v1 PCR control stream, and reaching `RealmId::from_event_id`
         // with it would abort instead of returning 400.
         let blake3_event = arkret_identifiers::EventId::from_identity(
-            arkret_identifiers::EventIdentityKey::new(EventDigestSuiteCode::Blake3, [6_u8; 32]),
+            arkret_identifiers::EventIdentityKey::new(DigestSuiteCode::Blake3, [6_u8; 32]),
         );
         assert!(
             arkret_identifiers::EventId::new(blake3_event.to_string()).is_ok(),

@@ -24,7 +24,6 @@ use arkret_signatures::http_signature::{
     Component, ContentDigest, ContentDigestAlgorithm, SignedRequestParts, canonical_message,
     format_signature_header, parse_signature_input,
 };
-use arkret_state::SnapshotManifest;
 use arkret_wire::{
     DeviceRevocationGateCheckOutcome, DeviceRevocationGateCheckRequestBody, DidFullId,
     HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN,
@@ -185,29 +184,6 @@ impl<'a> PeerProtocolClient<'a> {
             .validate_for_request(request)
             .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
         Ok(outcome)
-    }
-
-    pub async fn get_snapshot_head(
-        &self,
-        realm_id: &str,
-    ) -> Result<SnapshotManifest, PeerProtocolClientError> {
-        let mut url = self.join_absolute("/_arkret/peer/snapshot/head")?;
-        url.query_pairs_mut().append_pair("realm_id", realm_id);
-        let signed = self.signed_request("GET", &url, None, None)?;
-        let response = outbound_http::send_with_policy(
-            outbound_http::soland_policy("peer_snapshot_head").with_timeout(Duration::from_secs(5)),
-            || {
-                let mut request = self.http_client.get(url.clone());
-                for (name, value) in &signed.headers {
-                    request = request.header(name.as_str(), value.as_str());
-                }
-                request
-            },
-        )
-        .await
-        .map_err(|error| PeerProtocolClientError::Http(error.to_string()))?;
-
-        parse_json_response(response).await
     }
 
     /// Read the peer Event frontier through its registered HTTP QUERY binding.

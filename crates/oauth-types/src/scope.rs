@@ -58,15 +58,6 @@ pub const PROFILE: ScopeToken = ScopeToken::from_static("profile");
 /// `email` — requests the `email` and `email_verified` claims.
 pub const EMAIL: ScopeToken = ScopeToken::from_static("email");
 
-/// `address` — requests the `address` claim.
-pub const ADDRESS: ScopeToken = ScopeToken::from_static("address");
-
-/// `phone` — requests the `phone_number` and `phone_number_verified` claims.
-pub const PHONE: ScopeToken = ScopeToken::from_static("phone");
-
-/// `offline_access` — requests a refresh token for long-lived access.
-pub const OFFLINE_ACCESS: ScopeToken = ScopeToken::from_static("offline_access");
-
 /// `urn:coauth:admin` — canonical coauth admin scope.
 pub const COAUTH_ADMIN: ScopeToken = ScopeToken::from_static("urn:coauth:admin");
 

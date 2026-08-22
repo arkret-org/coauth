@@ -111,14 +111,6 @@ open_enum! {
 }
 
 open_enum! {
-    /// JSON Web Encryption compression algorithm (`zip` parameter).
-    pub enum JsonWebEncryptionCompressionAlgorithm {
-        /// DEFLATE compression
-        Def => "DEF",
-    }
-}
-
-open_enum! {
     /// JSON Web Key type (`kty` parameter).
     ///
     /// Source: <https://www.iana.org/assignments/jose/web-key-types.csv>

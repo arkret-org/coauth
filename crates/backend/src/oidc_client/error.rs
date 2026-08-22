@@ -9,32 +9,6 @@ use coauth_oauth_types::pkce::CodeChallengeError;
 use serde::Deserialize;
 use thiserror::Error;
 
-/// All possible errors when using this crate.
-#[derive(Debug, Error)]
-#[error(transparent)]
-pub enum Error {
-    /// An error occurred fetching provider metadata.
-    Discovery(#[from] DiscoveryError),
-
-    /// An error occurred fetching the provider JWKS.
-    Jwks(#[from] JwksError),
-
-    /// An error occurred building the authorization URL.
-    Authorization(#[from] AuthorizationError),
-
-    /// An error occurred exchanging an authorization code for an access token.
-    TokenAuthorizationCode(#[from] TokenAuthorizationCodeError),
-
-    /// An error occurred requesting an access token with client credentials.
-    TokenClientCredentials(#[from] TokenRequestError),
-
-    /// An error occurred refreshing an access token.
-    TokenRefresh(#[from] TokenRefreshError),
-
-    /// An error occurred requesting user info.
-    UserInfo(#[from] UserInfoError),
-}
-
 /// All possible errors when fetching provider metadata.
 #[derive(Debug, Error)]
 #[error("Fetching provider metadata failed")]
@@ -97,30 +71,6 @@ pub enum TokenRequestError {
         /// The error message.
         msg: String,
     },
-}
-
-/// All possible errors when exchanging a code for an access token.
-#[derive(Debug, Error)]
-pub enum TokenAuthorizationCodeError {
-    /// An error occurred requesting the access token.
-    #[error(transparent)]
-    Token(#[from] TokenRequestError),
-
-    /// An error occurred validating the ID Token.
-    #[error("Verifying the 'id_token' returned by the provider failed")]
-    IdToken(#[from] IdTokenError),
-}
-
-/// All possible errors when refreshing an access token.
-#[derive(Debug, Error)]
-pub enum TokenRefreshError {
-    /// An error occurred requesting the access token.
-    #[error(transparent)]
-    Token(#[from] TokenRequestError),
-
-    /// An error occurred validating the ID Token.
-    #[error("Verifying the 'id_token' returned by the provider failed")]
-    IdToken(#[from] IdTokenError),
 }
 
 /// All possible errors when requesting user info.
@@ -213,15 +163,6 @@ pub enum JwtVerificationError {
 /// All possible errors when verifying an ID token.
 #[derive(Debug, Error)]
 pub enum IdTokenError {
-    /// No ID Token was found in the response although one was expected.
-    #[error("ID token is missing")]
-    MissingIdToken,
-
-    /// The ID Token from the latest Authorization was not provided although
-    /// this request expects to be verified against one.
-    #[error("Authorization ID token is missing")]
-    MissingAuthIdToken,
-
     #[error(transparent)]
     /// An error occurred validating the ID Token's signature and basic claims.
     Jwt(#[from] JwtVerificationError),
@@ -229,16 +170,6 @@ pub enum IdTokenError {
     #[error(transparent)]
     /// An error occurred extracting a claim.
     Claim(#[from] ClaimError),
-
-    /// The subject identifier returned by the issuer is not the same as the one
-    /// we got before.
-    #[error("wrong subject identifier")]
-    WrongSubjectIdentifier,
-
-    /// The authentication time returned by the issuer is not the same as the
-    /// one we got before.
-    #[error("wrong authentication time")]
-    WrongAuthTime,
 }
 
 /// All errors that can occur when adding client credentials to the request.

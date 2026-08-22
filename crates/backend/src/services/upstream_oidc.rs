@@ -430,7 +430,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
                 client_id: &provider.client_id,
                 signing_algorithm: &provider.id_token_signed_response_alg,
             };
-            let id_token = verify_id_token(id_token, verification_data, None, now)
+            let id_token = verify_id_token(id_token, verification_data, now)
                 .map_err(|error| format!("upstream ID token verification failed: {error}"))?;
             let (_headers, mut claims) = id_token.into_parts();
             id_token_subject = claims

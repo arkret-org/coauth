@@ -32,7 +32,6 @@
 //! execute and commit revocation inside their own transactions.
 
 use chrono::{DateTime, Duration, Utc};
-use thiserror::Error;
 
 /// Default absolute rotation window. After this much wall-clock time
 /// has elapsed since the chain root was minted, no token in the chain
@@ -122,32 +121,6 @@ pub fn evaluate_refresh(
     RotationDecision::Accept
 }
 
-#[derive(Debug, Error)]
-pub enum RotationError {
-    #[error("refresh token presented after rotation; chain revoked")]
-    ReuseDetected,
-    #[error("refresh token revoked")]
-    Revoked,
-    #[error("refresh token outside rotation window")]
-    RotationWindowExpired,
-    #[error("refresh token idle window exceeded")]
-    IdleExpired,
-}
-
-impl RotationDecision {
-    /// Convert to an error for the OAuth handler. `Accept` returns
-    /// `Ok(())`.
-    pub fn into_result(self) -> Result<(), RotationError> {
-        match self {
-            Self::Accept => Ok(()),
-            Self::ReuseDetected => Err(RotationError::ReuseDetected),
-            Self::Revoked => Err(RotationError::Revoked),
-            Self::RotationWindowExpired => Err(RotationError::RotationWindowExpired),
-            Self::IdleExpired => Err(RotationError::IdleExpired),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,18 +202,5 @@ mod tests {
             evaluate_refresh(&state, now, RotationPolicy::default()),
             RotationDecision::Revoked
         );
-    }
-
-    #[test]
-    fn decision_into_result_maps_correctly() {
-        assert!(RotationDecision::Accept.into_result().is_ok());
-        assert!(matches!(
-            RotationDecision::ReuseDetected.into_result(),
-            Err(RotationError::ReuseDetected)
-        ));
-        assert!(matches!(
-            RotationDecision::Revoked.into_result(),
-            Err(RotationError::Revoked)
-        ));
     }
 }

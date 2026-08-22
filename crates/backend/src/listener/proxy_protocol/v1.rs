@@ -175,67 +175,6 @@ impl ProxyProtocolV1Info {
 
         Ok(result)
     }
-
-    #[must_use]
-    pub fn is_ipv4(&self) -> bool {
-        match self {
-            Self::Udp {
-                source,
-                destination,
-            }
-            | Self::Tcp {
-                source,
-                destination,
-            } => source.is_ipv4() && destination.is_ipv4(),
-            Self::Unknown => false,
-        }
-    }
-
-    #[must_use]
-    pub fn is_ipv6(&self) -> bool {
-        match self {
-            Self::Udp {
-                source,
-                destination,
-            }
-            | Self::Tcp {
-                source,
-                destination,
-            } => source.is_ipv6() && destination.is_ipv6(),
-            Self::Unknown => false,
-        }
-    }
-
-    #[must_use]
-    pub const fn is_tcp(&self) -> bool {
-        matches!(self, Self::Tcp { .. })
-    }
-
-    #[must_use]
-    pub const fn is_udp(&self) -> bool {
-        matches!(self, Self::Udp { .. })
-    }
-
-    #[must_use]
-    pub const fn is_unknown(&self) -> bool {
-        matches!(self, Self::Unknown)
-    }
-
-    #[must_use]
-    pub const fn source(&self) -> Option<&SocketAddr> {
-        match self {
-            Self::Udp { source, .. } | Self::Tcp { source, .. } => Some(source),
-            Self::Unknown => None,
-        }
-    }
-
-    #[must_use]
-    pub const fn destination(&self) -> Option<&SocketAddr> {
-        match self {
-            Self::Udp { destination, .. } | Self::Tcp { destination, .. } => Some(destination),
-            Self::Unknown => None,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -248,41 +187,37 @@ mod tests {
             b"PROXY TCP4 255.255.255.255 255.255.255.255 65535 65535\r\nhello world".as_slice();
         let info = ProxyProtocolV1Info::parse(&mut buf).unwrap();
         assert_eq!(buf, b"hello world");
-        assert!(info.is_tcp());
-        assert!(!info.is_udp());
-        assert!(!info.is_unknown());
-        assert!(info.is_ipv4());
-        assert!(!info.is_ipv6());
+        assert!(matches!(
+            info,
+            ProxyProtocolV1Info::Tcp {
+                source: SocketAddr::V4(_),
+                destination: SocketAddr::V4(_),
+            }
+        ));
 
         let mut buf =
             b"PROXY TCP6 ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535\r\nhello world"
             .as_slice();
         let info = ProxyProtocolV1Info::parse(&mut buf).unwrap();
         assert_eq!(buf, b"hello world");
-        assert!(info.is_tcp());
-        assert!(!info.is_udp());
-        assert!(!info.is_unknown());
-        assert!(!info.is_ipv4());
-        assert!(info.is_ipv6());
+        assert!(matches!(
+            info,
+            ProxyProtocolV1Info::Tcp {
+                source: SocketAddr::V6(_),
+                destination: SocketAddr::V6(_),
+            }
+        ));
 
         let mut buf = b"PROXY UNKNOWN\r\nhello world".as_slice();
         let info = ProxyProtocolV1Info::parse(&mut buf).unwrap();
         assert_eq!(buf, b"hello world");
-        assert!(!info.is_tcp());
-        assert!(!info.is_udp());
-        assert!(info.is_unknown());
-        assert!(!info.is_ipv4());
-        assert!(!info.is_ipv6());
+        assert!(matches!(info, ProxyProtocolV1Info::Unknown));
 
         let mut buf =
             b"PROXY UNKNOWN ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535\r\nhello world"
             .as_slice();
         let info = ProxyProtocolV1Info::parse(&mut buf).unwrap();
         assert_eq!(buf, b"hello world");
-        assert!(!info.is_tcp());
-        assert!(!info.is_udp());
-        assert!(info.is_unknown());
-        assert!(!info.is_ipv4());
-        assert!(!info.is_ipv6());
+        assert!(matches!(info, ProxyProtocolV1Info::Unknown));
     }
 }

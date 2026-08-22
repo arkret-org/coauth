@@ -16,30 +16,17 @@
 //!
 //! [Authorization Code strand]: https://openid.net/specs/openid-connect-core-1_0.html#CodeStrandAuth
 
-use std::collections::HashSet;
-
 use base64ct::{Base64UrlUnpadded, Encoding};
-use chrono::{DateTime, Utc};
 use coauth_iana::oauth::{OAuthAuthorizationEndpointResponseType, PkceCodeChallengeMethod};
-use coauth_jose::claims::{self, TokenHash};
 use coauth_oauth_types::pkce;
 use coauth_oauth_types::prelude::CodeChallengeMethodExt;
-use coauth_oauth_types::requests::{
-    AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant, AuthorizationRequest, Display,
-    Prompt, ResponseMode,
-};
+use coauth_oauth_types::requests::{AuthorizationRequest, ResponseMode};
 use coauth_oauth_types::scope::{OPENID, Scope};
-use language_tags::LanguageTag;
 use rand_core::RngCore as Rng;
 use serde::Serialize;
 use url::Url;
 
-use super::super::error::{AuthorizationError, IdTokenError, TokenAuthorizationCodeError};
-use super::super::requests::jose::verify_id_token;
-use super::super::requests::token::request_access_token;
-use super::super::types::IdToken;
-use super::super::types::client_credentials::ClientCredentials;
-use super::jose::JwtVerificationData;
+use super::super::error::AuthorizationError;
 
 /// The data necessary to build an authorization request.
 #[derive(Debug, Clone)]
@@ -64,34 +51,9 @@ pub struct AuthorizationRequestData {
     /// set, this security measure will not be used.
     pub code_challenge_methods_supported: Option<Vec<PkceCodeChallengeMethod>>,
 
-    /// How the Authorization Server should display the authentication and
-    /// consent user interface pages to the End-User.
-    pub display: Option<Display>,
-
-    /// Whether the Authorization Server should prompt the End-User for
-    /// reauthentication and consent.
-    ///
-    /// If [`Prompt::None`] is used, it must be the only value.
-    pub prompt: Option<Vec<Prompt>>,
-
-    /// The allowable elapsed time in seconds since the last time the End-User
-    /// was actively authenticated by the OpenID Provider.
-    pub max_age: Option<u32>,
-
-    /// End-User's preferred languages and scripts for the user interface.
-    pub ui_locales: Option<Vec<LanguageTag>>,
-
-    /// ID Token previously issued by the Authorization Server being passed as a
-    /// hint about the End-User's current or past authenticated session with the
-    /// Client.
-    pub id_token_hint: Option<String>,
-
     /// Hint to the Authorization Server about the login identifier the End-User
     /// might use to log in.
     pub login_hint: Option<String>,
-
-    /// Requested Authentication Context Class Reference values.
-    pub acr_values: Option<HashSet<String>>,
 
     /// Requested response mode.
     ///
@@ -110,13 +72,7 @@ impl AuthorizationRequestData {
             scope,
             redirect_uri,
             code_challenge_methods_supported: None,
-            display: None,
-            prompt: None,
-            max_age: None,
-            ui_locales: None,
-            id_token_hint: None,
             login_hint: None,
-            acr_values: None,
             response_mode: None,
         }
     }
@@ -132,52 +88,10 @@ impl AuthorizationRequestData {
         self
     }
 
-    /// Set the `display` field of this `AuthorizationRequestData`.
-    #[must_use]
-    pub fn with_display(mut self, display: Display) -> Self {
-        self.display = Some(display);
-        self
-    }
-
-    /// Set the `prompt` field of this `AuthorizationRequestData`.
-    #[must_use]
-    pub fn with_prompt(mut self, prompt: Vec<Prompt>) -> Self {
-        self.prompt = Some(prompt);
-        self
-    }
-
-    /// Set the `max_age` field of this `AuthorizationRequestData`.
-    #[must_use]
-    pub fn with_max_age(mut self, max_age: u32) -> Self {
-        self.max_age = Some(max_age);
-        self
-    }
-
-    /// Set the `ui_locales` field of this `AuthorizationRequestData`.
-    #[must_use]
-    pub fn with_ui_locales(mut self, ui_locales: Vec<LanguageTag>) -> Self {
-        self.ui_locales = Some(ui_locales);
-        self
-    }
-
-    /// Set the `id_token_hint` field of this `AuthorizationRequestData`.
-    #[must_use]
-    pub fn with_id_token_hint(mut self, id_token_hint: String) -> Self {
-        self.id_token_hint = Some(id_token_hint);
-        self
-    }
-
     /// Set the `login_hint` field of this `AuthorizationRequestData`.
     #[must_use]
     pub fn with_login_hint(mut self, login_hint: String) -> Self {
         self.login_hint = Some(login_hint);
-        self
-    }
-
-    /// Set the `acr_values` field of this `AuthorizationRequestData`.
-    #[must_use]
-    pub fn with_acr_values(mut self, acr_values: HashSet<String>) -> Self {
-        self.acr_values = Some(acr_values);
         self
     }
 
@@ -251,13 +165,7 @@ fn build_authorization_request(
         scope,
         redirect_uri,
         code_challenge_methods_supported,
-        display,
-        prompt,
-        max_age,
-        ui_locales,
-        id_token_hint,
         login_hint,
-        acr_values,
         response_mode,
     } = authorization_data;
 
@@ -305,13 +213,13 @@ fn build_authorization_request(
             state: Some(state.clone()),
             response_mode,
             nonce: nonce.clone(),
-            display,
-            prompt,
-            max_age,
-            ui_locales,
-            id_token_hint,
+            display: None,
+            prompt: None,
+            max_age: None,
+            ui_locales: None,
+            id_token_hint: None,
             login_hint,
-            acr_values,
+            acr_values: None,
             request: None,
             request_uri: None,
             registration: None,
@@ -388,106 +296,4 @@ pub fn build_authorization_url(
     authorization_url.set_query(Some(&full_query));
 
     Ok((authorization_url, validation_data))
-}
-
-/// Exchange an authorization code for an access token.
-///
-/// This should be used as the first step for logging in, and to request a
-/// token with a new scope.
-///
-/// # Arguments
-///
-/// * `http_client` - The reqwest client to use for making HTTP requests.
-///
-/// * `client_credentials` - The credentials obtained when registering the client.
-///
-/// * `token_endpoint` - The URL of the issuer's Token endpoint.
-///
-/// * `code` - The authorization code returned at the Authorization endpoint.
-///
-/// * `validation_data` - The validation data that was returned when building the Authorization URL,
-///   for the state returned at the Authorization endpoint.
-///
-/// * `id_token_verification_data` - The data required to verify the ID Token in the response.
-///
-///   The signing algorithm corresponds to the `id_token_signed_response_alg`
-///   field in the client metadata.
-///
-///   If it is not provided, the ID Token won't be verified. Note that in the
-///   OpenID Connect specification, this verification is required.
-///
-/// * `now` - The current time.
-///
-/// * `rng` - A random number generator.
-///
-/// # Errors
-///
-/// Returns an error if the request fails, the response is invalid or the
-/// verification of the ID Token fails.
-#[allow(clippy::too_many_arguments)]
-#[tracing::instrument(skip_all, fields(token_endpoint))]
-pub async fn access_token_with_authorization_code(
-    http_client: &reqwest::Client,
-    client_credentials: ClientCredentials,
-    token_endpoint: &Url,
-    code: String,
-    validation_data: AuthorizationValidationData,
-    id_token_verification_data: Option<JwtVerificationData<'_>>,
-    now: DateTime<Utc>,
-    rng: &mut impl Rng,
-) -> Result<(AccessTokenResponse, Option<IdToken<'static>>), TokenAuthorizationCodeError> {
-    tracing::debug!("Exchanging authorization code for access token...");
-
-    let token_response = request_access_token(
-        http_client,
-        client_credentials,
-        token_endpoint,
-        AccessTokenRequest::AuthorizationCode(AuthorizationCodeGrant {
-            code: code.clone(),
-            redirect_uri: Some(validation_data.redirect_uri),
-            code_verifier: validation_data.code_challenge_verifier,
-        }),
-        now,
-        rng,
-    )
-    .await?;
-
-    let id_token = if let Some(verification_data) = id_token_verification_data {
-        let signing_alg = verification_data.signing_algorithm;
-
-        let id_token = token_response
-            .id_token
-            .as_deref()
-            .ok_or(IdTokenError::MissingIdToken)?;
-
-        let id_token = verify_id_token(id_token, verification_data, None, now)?;
-
-        let mut claims = id_token.payload().clone();
-
-        // Access token hash must match.
-        claims::AT_HASH
-            .extract_optional_with_options(
-                &mut claims,
-                TokenHash::new(signing_alg, &token_response.access_token),
-            )
-            .map_err(IdTokenError::from)?;
-
-        // Code hash must match.
-        claims::C_HASH
-            .extract_optional_with_options(&mut claims, TokenHash::new(signing_alg, &code))
-            .map_err(IdTokenError::from)?;
-
-        // Nonce must match when present (OpenID Connect mode).
-        if let Some(nonce) = validation_data.nonce.as_deref() {
-            claims::NONCE
-                .extract_required_with_options(&mut claims, nonce)
-                .map_err(IdTokenError::from)?;
-        }
-
-        Some(id_token.into_owned())
-    } else {
-        None
-    };
-
-    Ok((token_response, id_token))
 }

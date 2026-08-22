@@ -230,42 +230,6 @@ impl Client {
         }
     }
 
-    /// Pick the best localised `client_name` for the given locale.
-    ///
-    /// Falls back to a less specific variant of the same language tag, then
-    /// to the non-localised default. Locale matching is a simple
-    /// case-insensitive equality on the tag prefix because the OIDC spec
-    /// only requires byte-for-byte matching, not full BCP-47 fallback.
-    #[must_use]
-    pub fn localized_client_name(&self, locale: &str) -> Option<&str> {
-        pick_localized_str(&self.localized_metadata.client_name, locale)
-            .or(self.client_name.as_deref())
-    }
-
-    /// Pick the best localised `logo_uri` for the given locale.
-    #[must_use]
-    pub fn localized_logo_uri(&self, locale: &str) -> Option<&Url> {
-        pick_localized_url(&self.localized_metadata.logo_uri, locale).or(self.logo_uri.as_ref())
-    }
-
-    /// Pick the best localised `client_uri` for the given locale.
-    #[must_use]
-    pub fn localized_client_uri(&self, locale: &str) -> Option<&Url> {
-        pick_localized_url(&self.localized_metadata.client_uri, locale).or(self.client_uri.as_ref())
-    }
-
-    /// Pick the best localised `policy_uri` for the given locale.
-    #[must_use]
-    pub fn localized_policy_uri(&self, locale: &str) -> Option<&Url> {
-        pick_localized_url(&self.localized_metadata.policy_uri, locale).or(self.policy_uri.as_ref())
-    }
-
-    /// Pick the best localised `tos_uri` for the given locale.
-    #[must_use]
-    pub fn localized_tos_uri(&self, locale: &str) -> Option<&Url> {
-        pick_localized_url(&self.localized_metadata.tos_uri, locale).or(self.tos_uri.as_ref())
-    }
-
     /// coauth extension: create a client metadata object for this client
     #[must_use]
     pub fn into_metadata(self) -> ClientMetadata {
@@ -406,29 +370,6 @@ fn build_localized<T: Clone>(
         }
         (None, true) => None,
     }
-}
-
-/// Pick the best matching localised string for `locale` from `map`. Tries
-/// the exact tag first, then a language-prefix match (`zh-Hans` → `zh`).
-fn pick_localized_str<'a>(map: &'a BTreeMap<String, String>, locale: &str) -> Option<&'a str> {
-    if let Some(value) = map.get(locale) {
-        return Some(value.as_str());
-    }
-    let prefix = locale.split('-').next()?;
-    map.iter()
-        .find(|(tag, _)| tag.split('-').next() == Some(prefix))
-        .map(|(_, v)| v.as_str())
-}
-
-/// Pick the best matching localised URL for `locale` from `map`.
-fn pick_localized_url<'a>(map: &'a BTreeMap<String, Url>, locale: &str) -> Option<&'a Url> {
-    if let Some(value) = map.get(locale) {
-        return Some(value);
-    }
-    let prefix = locale.split('-').next()?;
-    map.iter()
-        .find(|(tag, _)| tag.split('-').next() == Some(prefix))
-        .map(|(_, v)| v)
 }
 
 /// The hosts that match the loopback interface.

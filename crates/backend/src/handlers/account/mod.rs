@@ -6,10 +6,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use chrono::{DateTime, Utc};
-use coauth_account_types::PageInfo;
 use coauth_data::{BoxRepository, Clock, SiteConfig, User};
-use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use crate::handlers::BoundActivityTracker;
@@ -199,37 +196,6 @@ pub fn mask_email(email: &str) -> String {
         // Not a well-formed address; mask the whole thing rather than echo it.
         None => "***".to_owned(),
     }
-}
-
-// ── Pagination helpers ─────────────────────────────────────────
-
-#[derive(Deserialize, Default)]
-pub struct PaginationParams {
-    pub first: Option<i64>,
-    pub after: Option<String>,
-    pub last: Option<i64>,
-    pub before: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct Edge<T: Serialize> {
-    pub cursor: String,
-    pub node: T,
-}
-
-#[derive(Serialize)]
-pub struct Connection<T: Serialize> {
-    pub total_count: i64,
-    pub edges: Vec<Edge<T>>,
-    pub page_info: PageInfo,
-}
-
-// ── Date filter ────────────────────────────────────────────────
-
-#[derive(Deserialize, Default, Clone, Copy)]
-pub struct DateFilter {
-    pub after: Option<DateTime<Utc>>,
-    pub before: Option<DateTime<Utc>>,
 }
 
 /// Cookie management for user registration sessions.

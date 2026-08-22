@@ -78,34 +78,6 @@ impl NewHandleAuditEvent {
         self
     }
 
-    /// Set the interop aliases (e.g. `acct:` form) at the time of the event.
-    #[must_use]
-    pub fn with_handle_aliases(mut self, aliases: Vec<String>) -> Self {
-        self.handle_aliases = aliases;
-        self
-    }
-
-    /// Set the previous DID this handle resolved to (reassignment, divergence).
-    #[must_use]
-    pub fn with_old_did(mut self, did: impl Into<String>) -> Self {
-        self.old_did = Some(did.into());
-        self
-    }
-
-    /// Set the new DID the handle now resolves to.
-    #[must_use]
-    pub fn with_new_did(mut self, did: impl Into<String>) -> Self {
-        self.new_did = Some(did.into());
-        self
-    }
-
-    /// Set the issuer service DID that signed the affected `handle_claim`.
-    #[must_use]
-    pub fn with_issuer_service_id(mut self, did: impl Into<String>) -> Self {
-        self.issuer_service_id = Some(did.into());
-        self
-    }
-
     /// Set the audience the affected `handle_claim` was bound to.
     #[must_use]
     pub fn with_audience(mut self, audience: impl Into<String>) -> Self {
@@ -125,13 +97,6 @@ impl NewHandleAuditEvent {
     #[must_use]
     pub fn with_details(mut self, details: Value) -> Self {
         self.details = details;
-        self
-    }
-
-    /// Identify the actor (admin / system component) that triggered the event.
-    #[must_use]
-    pub fn with_actor(mut self, actor_id: Ulid) -> Self {
-        self.actor_id = Some(actor_id);
         self
     }
 

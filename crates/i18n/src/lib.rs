@@ -10,7 +10,7 @@
 mod translator;
 mod ui_locale;
 
-pub use arkret_locale::{LocaleSource, LocaleSources, TextDirection, UiLocale, resolve};
+pub use arkret_locale::{LocaleSources, TextDirection, UiLocale, resolve};
 pub use icu_calendar;
 pub use icu_datetime;
 pub use icu_locid::{self, Locale, locale};

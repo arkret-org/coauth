@@ -39,18 +39,6 @@ pin_project_lite::pin_project! {
 }
 
 impl<T> MaybeTlsStream<T> {
-    /// Get a reference to the underlying IO stream
-    ///
-    /// Returns [`None`] if the stream closed before the TLS handshake finished.
-    /// It is guaranteed to return [`Some`] value after the handshake finished,
-    /// or if it is a non-TLS connection.
-    pub fn get_ref(&self) -> &T {
-        match self {
-            Self::Secure { stream } => stream.get_ref().0,
-            Self::Insecure { stream } => stream,
-        }
-    }
-
     /// Get a ref to the [`ServerConnection`] of the establish TLS stream.
     ///
     /// Returns [`None`] for non-TLS connections.

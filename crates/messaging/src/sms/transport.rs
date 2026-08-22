@@ -169,23 +169,6 @@ impl SmsTransport {
         })
     }
 
-    /// Construct an Aliyun SMS transport
-    #[must_use]
-    pub fn aliyun(
-        access_key_id: String,
-        access_key_secret: String,
-        sign_name: String,
-        template_code: String,
-    ) -> Self {
-        Self::aliyun_with_client(
-            Client::new(),
-            access_key_id,
-            access_key_secret,
-            sign_name,
-            template_code,
-        )
-    }
-
     /// Construct an Aliyun SMS transport with a caller-supplied HTTP client.
     #[must_use]
     pub fn aliyun_with_client(
@@ -202,25 +185,6 @@ impl SmsTransport {
             sign_name,
             template_code,
         }))
-    }
-
-    /// Construct a Tencent Cloud SMS transport
-    #[must_use]
-    pub fn tencent_cloud(
-        secret_id: String,
-        secret_key: String,
-        sdk_app_id: String,
-        sign_name: String,
-        template_id: String,
-    ) -> Self {
-        Self::tencent_cloud_with_client(
-            Client::new(),
-            secret_id,
-            secret_key,
-            sdk_app_id,
-            sign_name,
-            template_id,
-        )
     }
 
     /// Construct a Tencent Cloud SMS transport with a caller-supplied HTTP

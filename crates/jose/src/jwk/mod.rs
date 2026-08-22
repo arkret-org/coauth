@@ -241,29 +241,6 @@ impl<P> JsonWebKey<P> {
         }
     }
 
-    /// Map the parameters of this [`JsonWebKey`] to a new type, with a fallible
-    /// mapper, cloning the other fields.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the mapper returns an error.
-    pub fn try_cloned_map<M, O, E>(&self, mapper: M) -> Result<JsonWebKey<O>, E>
-    where
-        M: FnOnce(&P) -> Result<O, E>,
-    {
-        Ok(JsonWebKey {
-            parameters: mapper(&self.parameters)?,
-            r#use: self.r#use.clone(),
-            key_ops: self.key_ops.clone(),
-            alg: self.alg.clone(),
-            kid: self.kid.clone(),
-            x5u: self.x5u.clone(),
-            x5c: self.x5c.clone(),
-            x5t: self.x5t.clone(),
-            x5t_s256: self.x5t_s256.clone(),
-        })
-    }
-
     /// Map the parameters of this [`JsonWebKey`] to a new type, cloning the
     /// other fields.
     pub fn cloned_map<M, O>(&self, mapper: M) -> JsonWebKey<O>
@@ -436,16 +413,6 @@ where
         }
 
         Ok(())
-    }
-
-    /// Validate the key and return it for checked builder-style construction.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the metadata is internally inconsistent.
-    pub fn into_validated(self) -> Result<Self, JsonWebKeyValidationError> {
-        self.validate()?;
-        Ok(self)
     }
 
     /// Set the `use` field and validate the resulting key metadata.

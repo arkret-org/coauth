@@ -694,7 +694,7 @@ mod rfc7519 {
 mod oidc_core {
     use url::Url;
 
-    use super::{Claim, Equality, OneOrMany, Timestamp, TokenHash};
+    use super::{Claim, Equality, Timestamp, TokenHash};
 
     /// Time of end-user authentication. OIDC requires it as an integer
     /// seconds-since-epoch (RFC 7519 `NumericDate`), so the strongly
@@ -703,53 +703,15 @@ mod oidc_core {
     /// OIDC nonce. MUST equal the one minted by the relying party at
     /// authorize time; the `Equality<str>` validator enforces that.
     pub const NONCE: Claim<String, Equality<str>> = Claim::new("nonce");
-    /// OIDC Authentication Context Class Reference. Treated as a
-    /// single string (the spec also permits a space-separated set;
-    /// callers requesting a specific class typically check for the
-    /// requested value via [`Equality`]).
-    pub const ACR: Claim<String> = Claim::new("acr");
-    /// OIDC Authentication Methods References. List of identifiers
-    /// describing the authentication ceremony (e.g. `["pwd",
-    /// "mfa"]`). Accepts both single-string and array shapes via
-    /// [`OneOrMany`].
-    pub const AMR: Claim<OneOrMany<String>> = Claim::new("amr");
-    /// OIDC Authorized Party for the ID token (when `aud` has
-    /// multiple entries the `azp` claim names the intended primary
-    /// consumer).
-    pub const AZP: Claim<String> = Claim::new("azp");
     pub const AT_HASH: Claim<String, TokenHash> = Claim::new("at_hash");
     pub const C_HASH: Claim<String, TokenHash> = Claim::new("c_hash");
 
     pub const NAME: Claim<String> = Claim::new("name");
-    pub const GIVEN_NAME: Claim<String> = Claim::new("given_name");
-    pub const FAMILY_NAME: Claim<String> = Claim::new("family_name");
-    pub const MIDDLE_NAME: Claim<String> = Claim::new("middle_name");
-    pub const NICKNAME: Claim<String> = Claim::new("nickname");
-    pub const PREFERRED_USERNAME: Claim<String> = Claim::new("preferred_username");
     pub const PROFILE: Claim<Url> = Claim::new("profile");
-    pub const PICTURE: Claim<Url> = Claim::new("picture");
-    pub const WEBSITE: Claim<Url> = Claim::new("website");
     // Security review 2026-05-31: string is intentional for claim extraction.
     // Email syntax and deliverability validation belong at account/profile
     // boundaries; JOSE keeps OIDC claim values lossless.
     pub const EMAIL: Claim<String> = Claim::new("email");
-    pub const EMAIL_VERIFIED: Claim<bool> = Claim::new("email_verified");
-    pub const GENDER: Claim<String> = Claim::new("gender");
-    // OIDC `birthdate` permits partial dates such as YYYY-MM; keep it as
-    // string here and let product-specific validators opt into stricter forms.
-    pub const BIRTHDATE: Claim<String> = Claim::new("birthdate");
-    // IANA time-zone validation is intentionally outside this JOSE crate.
-    pub const ZONEINFO: Claim<String> = Claim::new("zoneinfo");
-    // Locale parsing is caller-owned so this crate does not force one ICU
-    // representation for all consumers.
-    pub const LOCALE: Claim<String> = Claim::new("locale");
-    // Phone numbers are caller-normalized (usually E.164) before claims are
-    // minted; extraction stays string-preserving.
-    pub const PHONE_NUMBER: Claim<String> = Claim::new("phone_number");
-    pub const PHONE_NUMBER_VERIFIED: Claim<bool> = Claim::new("phone_number_verified");
-    // OIDC `address` is a structured object, not a Timestamp. Add a dedicated
-    // AddressClaim type when a caller needs typed extraction.
-    pub const UPDATED_AT: Claim<Timestamp> = Claim::new("updated_at");
 }
 
 /// Claims defined in OpenID.FrontChannel

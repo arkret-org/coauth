@@ -68,17 +68,6 @@ impl JsonWebSignatureHeader {
     }
 
     #[must_use]
-    pub const fn jku(&self) -> Option<&Url> {
-        self.jku.as_ref()
-    }
-
-    #[must_use]
-    pub fn with_jku(mut self, jku: Url) -> Self {
-        self.jku = Some(jku);
-        self
-    }
-
-    #[must_use]
     pub const fn jwk(&self) -> Option<&PublicJsonWebKey> {
         // Can't use as_deref because it's not a const fn
         match &self.jwk {
@@ -118,11 +107,5 @@ impl JsonWebSignatureHeader {
     #[must_use]
     pub fn crit(&self) -> Option<&[String]> {
         self.crit.as_deref()
-    }
-
-    #[must_use]
-    pub fn with_crit(mut self, crit: Vec<String>) -> Self {
-        self.crit = Some(crit);
-        self
     }
 }

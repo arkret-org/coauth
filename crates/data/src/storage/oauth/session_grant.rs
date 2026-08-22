@@ -24,10 +24,6 @@ pub struct SessionGrantFilter<'a> {
     account_id: Option<Ulid>,
     subject: Option<&'a str>,
     device_id: Option<&'a str>,
-    applet_id: Option<&'a str>,
-    effective_scope: Option<&'a Value>,
-    registration_epoch: Option<&'a str>,
-    service_id: Option<&'a str>,
     audience: Option<&'a str>,
     active_at: Option<DateTime<Utc>>,
 }
@@ -94,46 +90,6 @@ impl<'a> SessionGrantFilter<'a> {
     #[must_use]
     pub fn device_id(&self) -> Option<&'a str> {
         self.device_id
-    }
-
-    /// Restrict results to applet-delegated grants for one effective install epoch.
-    #[must_use]
-    pub fn for_applet_delegation(
-        mut self,
-        applet_id: &'a str,
-        effective_scope: &'a Value,
-        registration_epoch: &'a str,
-        service_id: Option<&'a str>,
-    ) -> Self {
-        self.applet_id = Some(applet_id);
-        self.effective_scope = Some(effective_scope);
-        self.registration_epoch = Some(registration_epoch);
-        self.service_id = service_id;
-        self
-    }
-
-    /// Return the applet id constraint, if present.
-    #[must_use]
-    pub fn applet_id(&self) -> Option<&'a str> {
-        self.applet_id
-    }
-
-    /// Return the effective scope constraint, if present.
-    #[must_use]
-    pub fn effective_scope(&self) -> Option<&'a Value> {
-        self.effective_scope
-    }
-
-    /// Return the registration epoch constraint, if present.
-    #[must_use]
-    pub fn registration_epoch(&self) -> Option<&'a str> {
-        self.registration_epoch
-    }
-
-    /// Return the service DID constraint, if present.
-    #[must_use]
-    pub fn service_id(&self) -> Option<&'a str> {
-        self.service_id
     }
 
     /// Restrict results to a grant audience.

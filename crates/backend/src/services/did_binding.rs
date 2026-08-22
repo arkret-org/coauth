@@ -1005,24 +1005,6 @@ pub async fn invalidate_did_bindings(
         .await
 }
 
-/// Invalidate only the bindings that pin a specific verification method.
-///
-/// # Errors
-///
-/// Returns [`DidBindingError::Store`] when the repository fails.
-pub async fn invalidate_verification_method(
-    repo: &mut BoxRepository,
-    store: &DurableVerifiedDidBindingStore,
-    verification_method: &arkret_wire::DidUrl,
-) -> Result<usize, DidBindingError> {
-    store
-        .invalidate_durable(
-            repo,
-            &BindingInvalidation::for_verification_method(verification_method.clone()),
-        )
-        .await
-}
-
 #[cfg(test)]
 mod tests;
 

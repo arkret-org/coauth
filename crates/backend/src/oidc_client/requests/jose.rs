@@ -163,20 +163,11 @@ pub fn verify_signed_jwt<'a>(
 ///
 /// * The `sub` claim must be present.
 ///
-/// If an authorization ID token is provided, these extra checks are performed:
-///
-/// * The `sub` claims must match.
-///
-/// * The `auth_time` claims must match.
-///
 /// # Arguments
 ///
 /// * `id_token` - The serialized ID Token to decode and verify.
 ///
 /// * `verification_data` - The data necessary to verify the ID Token.
-///
-/// * `auth_id_token` - If the ID Token is not verified during an authorization request, the ID
-///   token that was returned from the latest authorization request.
 ///
 /// * `now` - The current time.
 ///
@@ -186,7 +177,6 @@ pub fn verify_signed_jwt<'a>(
 pub fn verify_id_token<'a>(
     id_token: &'a str,
     verification_data: JwtVerificationData<'_>,
-    auth_id_token: Option<&IdToken<'_>>,
     now: DateTime<Utc>,
 ) -> Result<IdToken<'a>, IdTokenError> {
     let id_token = verify_signed_jwt(id_token, verification_data)?;
@@ -201,27 +191,7 @@ pub fn verify_id_token<'a>(
     claims::IAT.extract_required_with_options(&mut claims, time_options)?;
 
     // Subject identifier must be present.
-    let sub = claims::SUB.extract_required(&mut claims)?;
-
-    // More checks if there is a previous ID token.
-    if let Some(auth_id_token) = auth_id_token {
-        let mut auth_claims = auth_id_token.payload().clone();
-
-        // Subject identifier must always be the same.
-        let auth_sub = claims::SUB.extract_required(&mut auth_claims)?;
-        if sub != auth_sub {
-            return Err(IdTokenError::WrongSubjectIdentifier);
-        }
-
-        // If the authentication time is present, it must be unchanged.
-        if let Some(auth_time) = claims::AUTH_TIME.extract_optional(&mut claims)? {
-            let prev_auth_time = claims::AUTH_TIME.extract_required(&mut auth_claims)?;
-
-            if prev_auth_time != auth_time {
-                return Err(IdTokenError::WrongAuthTime);
-            }
-        }
-    }
+    claims::SUB.extract_required(&mut claims)?;
 
     Ok(id_token)
 }

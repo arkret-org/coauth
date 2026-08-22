@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::{ConnectorCapabilities, ConnectorProvider};
+use crate::ConnectorProvider;
 
 /// A registry of connector providers.
 ///
@@ -56,15 +56,6 @@ impl ConnectorRegistry {
     #[must_use]
     pub fn provider_names(&self) -> Vec<&str> {
         self.providers.keys().map(String::as_str).collect()
-    }
-
-    /// Get capabilities for all providers.
-    #[must_use]
-    pub fn all_capabilities(&self) -> Vec<(&str, ConnectorCapabilities)> {
-        self.providers
-            .iter()
-            .map(|(name, provider)| (name.as_str(), provider.capabilities()))
-            .collect()
     }
 
     /// Check health of all providers by calling

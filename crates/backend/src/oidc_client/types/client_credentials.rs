@@ -20,7 +20,6 @@ use std::fmt;
 use base64ct::{Base64UrlUnpadded, Encoding};
 use chrono::{DateTime, Duration, Utc};
 use coauth_iana::jose::JsonWebSignatureAlg;
-use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use coauth_jose::claims::{self, ClaimError};
 use coauth_jose::constraints::Constrainable;
 use coauth_jose::jwa::{AsymmetricSigningKey, SymmetricKey};
@@ -32,18 +31,6 @@ use serde_json::Value;
 use url::Url;
 
 use super::super::error::CredentialsError;
-
-/// The supported authentication methods of this library.
-///
-/// During client registration, make sure that you only use one of the values
-/// defined here.
-pub const CLIENT_SUPPORTED_AUTH_METHODS: &[OAuthClientAuthenticationMethod] = &[
-    OAuthClientAuthenticationMethod::None,
-    OAuthClientAuthenticationMethod::ClientSecretBasic,
-    OAuthClientAuthenticationMethod::ClientSecretPost,
-    OAuthClientAuthenticationMethod::ClientSecretJwt,
-    OAuthClientAuthenticationMethod::PrivateKeyJwt,
-];
 
 /// The credentials obtained during registration, to authenticate a client on
 /// endpoints that require it.

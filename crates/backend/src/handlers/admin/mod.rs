@@ -24,21 +24,6 @@ pub(crate) use self::model::InconsistentPersonalSession;
 pub(crate) use self::params::{PaginationRejection, UlidPathParamRejection};
 pub(crate) use self::response::ErrorOutcome;
 
-/// Common error response shape for admin API endpoints.
-///
-/// Individual handlers keep their own `RouteError` enums but can convert
-/// to this shared shape for consistent JSON error bodies.
-#[derive(Serialize)]
-pub struct AdminErrorOutcome {
-    /// A short machine-readable error code or label.
-    pub error: String,
-    /// A human-readable description of the error.
-    pub error_description: Option<String>,
-    /// An optional request identifier for correlation.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-}
-
 /// The canonical admin scope for the coauth Admin API.
 pub const ADMIN_SCOPE: &str = "urn:coauth:admin";
 

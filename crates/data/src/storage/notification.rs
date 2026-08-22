@@ -43,27 +43,6 @@ impl NewNotificationRequest {
         }
     }
 
-    /// Attach a deduplication key to this request.
-    #[must_use]
-    pub fn with_dedupe_key(mut self, dedupe_key: impl Into<String>) -> Self {
-        self.dedupe_key = Some(dedupe_key.into());
-        self
-    }
-
-    /// Attach a tracing correlation key to this request.
-    #[must_use]
-    pub fn with_correlation_key(mut self, correlation_key: impl Into<String>) -> Self {
-        self.correlation_key = Some(correlation_key.into());
-        self
-    }
-
-    /// Schedule the request for later delivery.
-    #[must_use]
-    pub fn scheduled_for(mut self, scheduled_at: DateTime<Utc>) -> Self {
-        self.scheduled_at = Some(scheduled_at);
-        self
-    }
-
     /// The template key for this request.
     #[must_use]
     pub fn template_key(&self) -> &str {

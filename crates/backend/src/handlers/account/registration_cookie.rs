@@ -5,7 +5,6 @@ use std::collections::BTreeSet;
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::{Clock, UserRegistration};
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use ulid::Ulid;
 
 use crate::salvo_utils::cookies::{CookieExpiration, CookieJar};
@@ -19,10 +18,6 @@ static SESSION_MAX_TIME: Duration = Duration::hours(1);
 /// The content of the cookie, which stores a list of user registration IDs
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct UserRegistrationSessions(BTreeSet<Ulid>);
-
-#[derive(Debug, Error, PartialEq, Eq)]
-#[error("user registration session not found")]
-pub struct UserRegistrationSessionNotFound;
 
 impl UserRegistrationSessions {
     /// Load the user registration sessions cookie
@@ -80,23 +75,5 @@ impl UserRegistrationSessions {
     pub fn add(mut self, user_registration: &UserRegistration) -> Self {
         self.0.insert(user_registration.id);
         self
-    }
-
-    /// Check if the session is in the list
-    #[must_use]
-    pub fn contains(&self, user_registration: &UserRegistration) -> bool {
-        self.0.contains(&user_registration.id)
-    }
-
-    /// Mark a link as consumed to avoid replay
-    pub fn consume_session(
-        mut self,
-        user_registration: &UserRegistration,
-    ) -> Result<Self, UserRegistrationSessionNotFound> {
-        if !self.0.remove(&user_registration.id) {
-            return Err(UserRegistrationSessionNotFound);
-        }
-
-        Ok(self)
     }
 }

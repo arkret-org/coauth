@@ -133,19 +133,6 @@ pub struct NotificationDelivery {
     pub next_retry_at: Option<DateTime<Utc>>,
 }
 
-impl NotificationDelivery {
-    /// Returns `true` if the delivery should be retried by background workers.
-    #[must_use]
-    pub fn should_retry(&self) -> bool {
-        matches!(self.status, NotificationDeliveryStatus::Failed)
-            && self
-                .last_failure
-                .as_ref()
-                .is_some_and(|failure| failure.retryable)
-            && self.next_retry_at.is_some()
-    }
-}
-
 /// Supported outbound delivery channels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -343,34 +330,9 @@ pub struct NotificationPreference {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Binding between a notification channel and a provider.
-///
-/// Provider bindings map a logical channel to a concrete transport adapter
-/// (e.g., SES for email, Twilio for SMS).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NotificationProviderBinding {
-    /// Stable unique identifier for the binding.
-    pub id: Ulid,
-    /// Delivery channel this binding serves.
-    pub channel: NotificationChannel,
-    /// Stable provider key used to resolve the transport adapter at runtime.
-    pub provider_key: String,
-    /// Provider-specific configuration stored as structured JSON.
-    pub config: Value,
-    /// Whether this binding is currently active.
-    pub enabled: bool,
-    /// When this binding was created.
-    pub created_at: DateTime<Utc>,
-}
-
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::disallowed_methods)]
-
-    use super::{
-        NotificationDelivery, NotificationDeliveryFailure, NotificationDeliveryStatus,
-        NotificationRequestStatus,
-    };
+    use super::NotificationRequestStatus;
 
     #[test]
     fn request_status_terminal_states_are_explicit() {
@@ -379,34 +341,5 @@ mod tests {
         assert!(NotificationRequestStatus::Succeeded.is_terminal());
         assert!(NotificationRequestStatus::Failed.is_terminal());
         assert!(NotificationRequestStatus::Cancelled.is_terminal());
-    }
-
-    #[test]
-    fn delivery_retries_only_when_failure_is_retryable() {
-        let delivery = NotificationDelivery {
-            id: ulid::Ulid::nil(),
-            notification_request_id: ulid::Ulid::nil(),
-            channel: super::NotificationChannel::Email,
-            destination: super::NotificationDestination::Email {
-                email: "user@example.com".to_owned(),
-            },
-            provider_binding_key: None,
-            provider_message_id: None,
-            attempt_count: 1,
-            status: NotificationDeliveryStatus::Failed,
-            last_failure: Some(NotificationDeliveryFailure {
-                code: Some("timeout".to_owned()),
-                message: Some("gateway timeout".to_owned()),
-                retryable: true,
-            }),
-            created_at: chrono::Utc::now(),
-            reserved_at: None,
-            sent_at: None,
-            delivered_at: None,
-            failed_at: Some(chrono::Utc::now()),
-            next_retry_at: Some(chrono::Utc::now()),
-        };
-
-        assert!(delivery.should_retry());
     }
 }

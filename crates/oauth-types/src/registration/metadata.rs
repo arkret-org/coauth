@@ -11,8 +11,8 @@ use super::client_metadata_serde::ClientMetadataSerdeHelper;
 use super::localized::Localized;
 use super::validation::{ClientMetadataVerificationError, VerifiedClientMetadata};
 use super::{
-    DEFAULT_APPLICATION_TYPE, DEFAULT_ENCRYPTION_ENC_ALGORITHM, DEFAULT_GRANT_TYPES,
-    DEFAULT_RESPONSE_TYPES, DEFAULT_SIGNING_ALGORITHM, DEFAULT_TOKEN_AUTH_METHOD,
+    DEFAULT_APPLICATION_TYPE, DEFAULT_GRANT_TYPES, DEFAULT_RESPONSE_TYPES,
+    DEFAULT_SIGNING_ALGORITHM, DEFAULT_TOKEN_AUTH_METHOD,
 };
 use crate::oidc::{ApplicationType, SubjectType};
 use crate::requests::GrantType;
@@ -192,7 +192,7 @@ pub struct ClientMetadata {
     /// [JWE] `enc` algorithm required for encrypting the ID Token issued to
     /// this client.
     ///
-    /// Defaults to [`DEFAULT_ENCRYPTION_ENC_ALGORITHM`] if
+    /// Defaults to `A128CBC-HS256` if
     /// `id_token_encrypted_response_alg` is provided.
     ///
     /// [JWE]: http://tools.ietf.org/html/draft-ietf-jose-json-web-encryption
@@ -218,7 +218,7 @@ pub struct ClientMetadata {
     /// If `userinfo_signed_response_alg` is not provided, this field has no
     /// effect.
     ///
-    /// Defaults to [`DEFAULT_ENCRYPTION_ENC_ALGORITHM`] if
+    /// Defaults to `A128CBC-HS256` if
     /// `userinfo_encrypted_response_alg` is provided.
     ///
     /// [JWE]: http://tools.ietf.org/html/draft-ietf-jose-json-web-encryption
@@ -243,7 +243,7 @@ pub struct ClientMetadata {
     /// [JWE] `enc` algorithm the client is declaring that it may use for
     /// encrypting Request Objects sent to the provider.
     ///
-    /// Defaults to [`DEFAULT_ENCRYPTION_ENC_ALGORITHM`] if
+    /// Defaults to `A128CBC-HS256` if
     /// `request_object_encryption_alg` is provided.
     ///
     /// [JWE]: http://tools.ietf.org/html/draft-ietf-jose-json-web-encryption
@@ -332,7 +332,7 @@ pub struct ClientMetadata {
     /// If `introspection_signed_response_alg` is not provided, this field has
     /// no effect.
     ///
-    /// Defaults to [`DEFAULT_ENCRYPTION_ENC_ALGORITHM`] if
+    /// Defaults to `A128CBC-HS256` if
     /// `introspection_encrypted_response_alg` is provided.
     ///
     /// [JWE]: http://tools.ietf.org/html/draft-ietf-jose-json-web-encryption
@@ -628,72 +628,6 @@ impl ClientMetadata {
             .unwrap_or(DEFAULT_SIGNING_ALGORITHM)
     }
 
-    /// [JWE] `alg` and `enc` algorithms required for encrypting the ID Token
-    /// issued to this client.
-    ///
-    /// Always returns `Some` if `id_token_encrypted_response_alg` is provided,
-    /// using the default of [`DEFAULT_ENCRYPTION_ENC_ALGORITHM`] for the `enc`
-    /// value if needed.
-    ///
-    /// [JWE]: http://tools.ietf.org/html/draft-ietf-jose-json-web-encryption
-    #[must_use]
-    pub fn id_token_encrypted_response(
-        &self,
-    ) -> Option<(&JsonWebEncryptionAlg, &JsonWebEncryptionEnc)> {
-        self.id_token_encrypted_response_alg.as_ref().map(|alg| {
-            (
-                alg,
-                self.id_token_encrypted_response_enc
-                    .as_ref()
-                    .unwrap_or(DEFAULT_ENCRYPTION_ENC_ALGORITHM),
-            )
-        })
-    }
-
-    /// [JWE] `alg` and `enc` algorithms required for encrypting user info
-    /// responses.
-    ///
-    /// Always returns `Some` if `userinfo_encrypted_response_alg` is provided,
-    /// using the default of [`DEFAULT_ENCRYPTION_ENC_ALGORITHM`] for the `enc`
-    /// value if needed.
-    ///
-    /// [JWE]: http://tools.ietf.org/html/draft-ietf-jose-json-web-encryption
-    #[must_use]
-    pub fn userinfo_encrypted_response(
-        &self,
-    ) -> Option<(&JsonWebEncryptionAlg, &JsonWebEncryptionEnc)> {
-        self.userinfo_encrypted_response_alg.as_ref().map(|alg| {
-            (
-                alg,
-                self.userinfo_encrypted_response_enc
-                    .as_ref()
-                    .unwrap_or(DEFAULT_ENCRYPTION_ENC_ALGORITHM),
-            )
-        })
-    }
-
-    /// [JWE] `alg` and `enc` algorithms the client is declaring that it may use
-    /// for encrypting Request Objects sent to the provider.
-    ///
-    /// Always returns `Some` if `request_object_encryption_alg` is provided,
-    /// using the default of [`DEFAULT_ENCRYPTION_ENC_ALGORITHM`] for the `enc`
-    /// value if needed.
-    ///
-    /// [JWE]: http://tools.ietf.org/html/draft-ietf-jose-json-web-encryption
-    #[must_use]
-    pub fn request_object_encryption(
-        &self,
-    ) -> Option<(&JsonWebEncryptionAlg, &JsonWebEncryptionEnc)> {
-        self.request_object_encryption_alg.as_ref().map(|alg| {
-            (
-                alg,
-                self.request_object_encryption_enc
-                    .as_ref()
-                    .unwrap_or(DEFAULT_ENCRYPTION_ENC_ALGORITHM),
-            )
-        })
-    }
-
     /// Whether the `auth_time` Claim in the ID Token is required.
     ///
     /// Defaults to `false`.
@@ -723,30 +657,5 @@ impl ClientMetadata {
     pub fn require_pushed_authorization_requests(&self) -> bool {
         self.require_pushed_authorization_requests
             .unwrap_or_default()
-    }
-
-    /// [JWE] `alg` and `enc` algorithms for encrypting responses of the
-    /// [introspection endpoint].
-    ///
-    /// Always returns `Some` if `introspection_encrypted_response_alg` is
-    /// provided, using the default of [`DEFAULT_ENCRYPTION_ENC_ALGORITHM`] for
-    /// the `enc` value if needed.
-    ///
-    /// [JWE]: http://tools.ietf.org/html/draft-ietf-jose-json-web-encryption
-    /// [introspection endpoint]: https://www.rfc-editor.org/info/rfc7662
-    #[must_use]
-    pub fn introspection_encrypted_response(
-        &self,
-    ) -> Option<(&JsonWebEncryptionAlg, &JsonWebEncryptionEnc)> {
-        self.introspection_encrypted_response_alg
-            .as_ref()
-            .map(|alg| {
-                (
-                    alg,
-                    self.introspection_encrypted_response_enc
-                        .as_ref()
-                        .unwrap_or(DEFAULT_ENCRYPTION_ENC_ALGORITHM),
-                )
-            })
     }
 }

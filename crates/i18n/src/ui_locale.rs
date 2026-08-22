@@ -16,10 +16,8 @@ use icu_locid::{Locale, locale};
 /// The ICU locale that carries a [`UiLocale`]'s translations.
 ///
 /// The returned tag matches a bundled catalogue name (`translations/en.ftl`,
-/// `translations/zh.ftl`), so `Translator::has_locale` is guaranteed to accept
-/// it — the previous code had to guess and then walk a fallback chain, and its
-/// hand-written `zh-CN → zh-Hans` special case existed only because that guess
-/// could miss.
+/// `translations/zh.ftl`), so the translator always has a bundle for it and no
+/// fallback-chain guessing is needed.
 #[must_use]
 pub fn icu_locale_for(ui: UiLocale) -> Locale {
     match ui {

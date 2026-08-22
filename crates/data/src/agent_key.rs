@@ -75,30 +75,3 @@ pub struct AgentKeyAuthorization {
     /// Row update timestamp.
     pub updated_at: DateTime<Utc>,
 }
-
-/// A single consumption of an agent-key-proof session challenge (AKP-0008 §4.6).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentSessionProofReplay {
-    /// Storage row id.
-    pub id: Ulid,
-    /// Agent principal DID the proof authenticated.
-    pub agent_id: String,
-    /// Verification method DID URL the proof was signed with.
-    pub verification_method: String,
-    /// One-time challenge value consumed.
-    pub challenge: String,
-    /// One-time nonce value consumed.
-    pub nonce: String,
-    /// `sha256:<hex>` digest the proof covered.
-    pub request_canonical_digest: String,
-    /// Audience the proof asserted.
-    pub audience: String,
-    /// Timestamp when the proof was consumed.
-    pub consumed_at: DateTime<Utc>,
-    /// Proof `expires_at`.
-    pub proof_expires_at: DateTime<Utc>,
-    /// Replay-table prune horizon (`proof_expires_at` + grace window).
-    pub prune_after: DateTime<Utc>,
-    /// Row creation timestamp.
-    pub created_at: DateTime<Utc>,
-}

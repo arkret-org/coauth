@@ -84,13 +84,6 @@ impl<'a> OAuthSessionFilter<'a> {
         self
     }
 
-    /// List sessions which belong to no user
-    #[must_use]
-    pub fn for_no_user(mut self) -> Self {
-        self.any_user = Some(false);
-        self
-    }
-
     /// Get the 'any user' filter
     ///
     /// Returns [`None`] if no 'any user' filter was set

@@ -1459,7 +1459,6 @@ dependencies = [
 name = "coauth-admin-types"
 version = "0.3.0"
 dependencies = [
- "arkret-identifiers",
  "arkret-models-collaboration",
  "arkret-schema",
  "chrono",
@@ -1491,7 +1490,6 @@ dependencies = [
  "arkret-retry",
  "arkret-schema",
  "arkret-signatures",
- "arkret-state",
  "arkret-wire",
  "async-trait",
  "base64ct",
@@ -1537,7 +1535,6 @@ dependencies = [
  "icu_normalizer",
  "insta",
  "ipnetwork",
- "language-tags",
  "listenfd",
  "mime",
  "minijinja",

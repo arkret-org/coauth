@@ -218,7 +218,7 @@ async fn query_consent_cell_scope(
     if !parsed.ok
         || parsed.holder_principal_id.as_str() != holder_did
         || parsed.peer_principal_id.as_str() != peer_did
-        || normalize_scope(&parsed.consent_scope) != scope
+        || normalize_scope(parsed.consent_scope.as_str()) != scope
     {
         warn!(
             cell_id = %parsed.cell_id,

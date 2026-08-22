@@ -847,28 +847,6 @@ impl fmt::Debug for RevocationRequest {
 }
 
 // ---------------------------------------------------------------------------
-// Pushed Authorization Request (RFC 9126)
-// ---------------------------------------------------------------------------
-
-/// A successful response from the [Pushed Authorization Request Endpoint].
-///
-/// Note that there is no request type because it is by definition the same as
-/// [`AuthorizationRequest`].
-///
-/// [Pushed Authorization Request Endpoint]: https://datatracker.ietf.org/doc/html/rfc9126
-#[serde_as]
-#[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct PushedAuthorizationResponse {
-    /// The `request_uri` to use for the request to the authorization endpoint.
-    pub request_uri: String,
-
-    /// The duration for which the request URI is valid.
-    #[serde_as(as = "DurationSeconds<i64>")]
-    pub expires_in: Duration,
-}
-
-// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

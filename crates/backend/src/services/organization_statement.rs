@@ -26,15 +26,15 @@
 //! delegation fails closed exactly as soland's verifier would reject it.
 
 use arkret_models_collaboration::{
-    ObjectRef, RealmOrganizationAuthorization, RealmOrganizationControlScope,
-    RealmOrganizationIssuerRole, RealmOrganizationPayload, RealmOrganizationRelationship,
-    RealmOrganizationStatus, SignatureMaterial, realm_organization_statement_signing_bytes,
+    RealmOrganizationAuthorization, RealmOrganizationControlScope, RealmOrganizationIssuerRole,
+    RealmOrganizationPayload, RealmOrganizationRelationship, RealmOrganizationStatus,
+    SignatureMaterial, realm_organization_statement_signing_bytes,
 };
 use arkret_policy::{
     NoDelegationResolver, RealmOrganizationDelegation, RealmOrganizationDelegationResolver,
     verify_realm_organization_statement,
 };
-use arkret_wire::{DidCoreId, DidUrl, Hash, NonEmptyString, RealmId};
+use arkret_wire::{DidCoreId, DidUrl, Hash, NonEmptyString, ObjectRef, RealmId};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::organization_control::OrganizationDelegation;
 use coauth_jose::constraints::Constrainable as _;

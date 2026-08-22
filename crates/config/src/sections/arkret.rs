@@ -462,17 +462,6 @@ impl ArkretConfig {
             .map(|server| &server.endpoint)
     }
 
-    /// Returns whether this deployment explicitly opts into `did:web` as a
-    /// principal method. Both fields must match the spec's personal-node
-    /// exception; an omitted `principal_method` still means `did:webvh`.
-    #[must_use]
-    pub const fn did_web_principal_allowed(&self) -> bool {
-        matches!(
-            self.deployment_profile,
-            DeploymentProfileConfig::PersonalNode
-        ) && matches!(self.principal_method, PrincipalMethodConfig::DidWeb)
-    }
-
     /// Validate the configured `trust_domain` (if any) against the SDK
     /// `ak:trust_domain:<scope>` wire format. Returns the borrowed
     /// scope half on success so call-sites can build the
@@ -753,38 +742,17 @@ mod tests {
 
     #[test]
     fn did_web_principal_requires_explicit_personal_node_profile() {
-        assert!(!ArkretConfig::default().did_web_principal_allowed());
-
         let personal_web = ArkretConfig {
             deployment_profile: DeploymentProfileConfig::PersonalNode,
             principal_method: PrincipalMethodConfig::DidWeb,
             ..ArkretConfig::default()
         };
-        assert!(personal_web.did_web_principal_allowed());
         assert!(personal_web.validate(&figment::Figment::new()).is_ok());
-
-        let personal_web_unconfigured = ArkretConfig {
-            deployment_profile: DeploymentProfileConfig::PersonalNode,
-            principal_method: PrincipalMethodConfig::DidWeb,
-            ..ArkretConfig::default()
-        };
-        assert!(
-            personal_web_unconfigured
-                .validate(&figment::Figment::new())
-                .is_ok()
-        );
-
-        let personal_default = ArkretConfig {
-            deployment_profile: DeploymentProfileConfig::PersonalNode,
-            ..ArkretConfig::default()
-        };
-        assert!(!personal_default.did_web_principal_allowed());
 
         let organization_web = ArkretConfig {
             principal_method: PrincipalMethodConfig::DidWeb,
             ..ArkretConfig::default()
         };
-        assert!(!organization_web.did_web_principal_allowed());
         assert!(organization_web.validate(&figment::Figment::new()).is_err());
     }
 

@@ -60,13 +60,6 @@ impl<'a> UpstreamOAuthLinkFilter<'a> {
         self
     }
 
-    /// Set whether to filter for disabled providers
-    #[must_use]
-    pub const fn disabled_providers_only(mut self) -> Self {
-        self.provider_enabled = Some(false);
-        self
-    }
-
     /// Get the provider enabled filter
     #[must_use]
     pub const fn provider_enabled(&self) -> Option<bool> {

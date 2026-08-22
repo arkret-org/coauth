@@ -52,7 +52,6 @@ arkret-http-client = {workspace = true}
 arkret-egress-reqwest = {workspace = true}
 arkret-retry = {workspace = true}
 arkret-signatures = {workspace = true,features = ["signer", "service-identity"]}
-arkret-state = {workspace = true}
 cookie = {workspace = true}
 deadpool = {workspace = true}
 der = {workspace = true}
@@ -73,7 +72,6 @@ hyper-util = {workspace = true}
 icu_locid = {workspace = true}
 icu_normalizer = {workspace = true}
 ipnetwork = {workspace = true}
-language-tags = {workspace = true}
 listenfd = {workspace = true}
 mime = {workspace = true}
 minijinja = {workspace = true}

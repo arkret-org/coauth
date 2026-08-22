@@ -134,65 +134,6 @@ pub enum DidResolveError {
 pub const DID_DOCUMENT_MAX_BYTES: usize = arkret_models_identity::DID_WEB_MAX_DOCUMENT_BYTES;
 const DID_WEBVH_LOG_MAX_BYTES: usize = DID_DOCUMENT_MAX_BYTES * 32;
 
-/// Verify an unpublished principal WebVH entry against the independently
-/// fetched current history. This function never writes to the registry.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct VerifiedUnpublishedWebvhCandidate {
-    pub previous_state: Value,
-    pub candidate_state: Value,
-}
-
-pub async fn verify_unpublished_webvh_candidate(
-    _http_client: &reqwest::Client,
-    egress: &ResolverEgressPolicy,
-    did: &arkret_identifiers::DidFullId,
-    expected_previous_version_id: &str,
-    candidate_entry_bytes: &[u8],
-    expected_candidate_version_id: &str,
-) -> Result<VerifiedUnpublishedWebvhCandidate, DidResolveError> {
-    let log_url = Url::parse(
-        &arkret_identity::DidWebvhResolver::log_url(did)
-            .map_err(|error| DidResolveError::InvalidDid(error.to_string()))?,
-    )?;
-    let request_client = egress.request_client(&log_url).await?;
-    let response = request_client.get(log_url.clone()).send_traced().await?;
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .unwrap_or_else(|error| format!("<failed to read response body: {error}>"));
-        return Err(DidResolveError::BadResolverResponse(format!(
-            "current did:webvh history request {log_url} returned {status}: {body}"
-        )));
-    }
-    if response
-        .content_length()
-        .is_some_and(|length| length > DID_WEBVH_LOG_MAX_BYTES as u64)
-    {
-        return Err(DidResolveError::DocumentTooLarge {
-            limit: DID_WEBVH_LOG_MAX_BYTES,
-        });
-    }
-    let mut history = Vec::new();
-    let mut response = response;
-    while let Some(chunk) = response.chunk().await? {
-        if history.len().saturating_add(chunk.len()) > DID_WEBVH_LOG_MAX_BYTES {
-            return Err(DidResolveError::DocumentTooLarge {
-                limit: DID_WEBVH_LOG_MAX_BYTES,
-            });
-        }
-        history.extend_from_slice(&chunk);
-    }
-    verify_unpublished_webvh_candidate_from_history(
-        did,
-        expected_previous_version_id,
-        &history,
-        candidate_entry_bytes,
-        expected_candidate_version_id,
-    )
-}
-
 /// Resolve the last cryptographically verified `did:webvh` service document
 /// whose version time is not later than an immutable receipt timestamp.
 /// Receipt verification must use the key that controlled the service DID when
@@ -280,50 +221,13 @@ fn verified_webvh_document_at(
     Ok(document)
 }
 
-pub fn verify_unpublished_webvh_candidate_from_history(
-    did: &arkret_identifiers::DidFullId,
-    expected_previous_version_id: &str,
-    history: &[u8],
-    candidate_entry_bytes: &[u8],
-    expected_candidate_version_id: &str,
-) -> Result<VerifiedUnpublishedWebvhCandidate, DidResolveError> {
-    let previous =
-        arkret_identity::verify_did_webvh_v1_log_bytes(did, history).map_err(|error| {
-            DidResolveError::BadResolverResponse(format!(
-                "current did:webvh history failed verification: {error}"
-            ))
-        })?;
-    if previous.head_version_id != expected_previous_version_id {
-        return Err(DidResolveError::BadResolverResponse(
-            "current did:webvh head does not equal the transaction-bound previous version"
-                .to_owned(),
-        ));
-    }
-    let candidate = arkret_identity::verify_did_webvh_v1_candidate_entry_bytes(
-        did,
-        history,
-        expected_previous_version_id,
-        candidate_entry_bytes,
-        expected_candidate_version_id,
-    )
-    .map_err(|error| {
-        DidResolveError::BadResolverResponse(format!(
-            "unpublished did:webvh recovery candidate failed verification: {error}"
-        ))
-    })?;
-    Ok(VerifiedUnpublishedWebvhCandidate {
-        previous_state: previous.head_state,
-        candidate_state: candidate.head_state,
-    })
-}
-
 #[async_trait]
 pub trait DidResolverService: Send + Sync {
     fn service_id(&self, arkret_config: &ArkretConfig) -> String;
     fn issuer_did(&self, arkret_config: &ArkretConfig) -> String;
     /// The resolver egress posture injected at startup. Shared by every fetch
-    /// path — including the free-function historical / unpublished-candidate
-    /// verifiers — so no path falls back to process-wide environment state.
+    /// path — including the free-function historical service-document
+    /// verifier — so no path falls back to process-wide environment state.
     fn resolver_egress_policy(&self) -> &ResolverEgressPolicy;
     /// Resolve the primary principal DID for a user.
     ///
@@ -852,9 +756,8 @@ fn contains_key(value: &Value, key: &str) -> bool {
 ///
 /// Constructed once from the startup [`ArkretConfig`] and injected into the
 /// resolver service, so every fetch path — direct `did:web` / `did:plc`,
-/// the delegated resolver, historical service-document reads, and
-/// unpublished-candidate checks — shares one guard instead of re-reading
-/// process-wide environment state per request.
+/// the delegated resolver, and historical service-document reads — shares one
+/// guard instead of re-reading process-wide environment state per request.
 ///
 /// Rules:
 /// - Scheme MUST be `https`. The DID method document URLs are always HTTPS, and the requirement

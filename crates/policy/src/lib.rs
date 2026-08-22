@@ -18,7 +18,6 @@
 //! [`PolicyFactory`] and [`PolicyInstance`] are the public-facing types that wrap
 //! these traits and form the public API used by handler code.
 
-pub mod audit;
 pub mod model;
 pub mod provider;
 
@@ -42,30 +41,8 @@ pub enum LoadError {
     #[error("failed to read module")]
     Read(#[from] tokio::io::Error),
 
-    #[error("failed to create policy engine")]
-    Engine(#[source] anyhow::Error),
-
-    #[error("module compilation task crashed")]
-    CompilationTask(#[from] tokio::task::JoinError),
-
     #[error("failed to compile policy module")]
     Compilation(#[source] anyhow::Error),
-
-    #[error("invalid policy data")]
-    InvalidData(#[source] anyhow::Error),
-
-    #[error("failed to instantiate a test instance")]
-    Instantiate(#[source] InstantiateError),
-}
-
-impl LoadError {
-    /// Creates an example of an invalid data error, used for API response
-    /// documentation
-    #[doc(hidden)]
-    #[must_use]
-    pub fn invalid_data_example() -> Self {
-        Self::InvalidData(anyhow::Error::msg("Failed to merge policy data objects"))
-    }
 }
 
 #[derive(Debug, Error)]
@@ -101,22 +78,6 @@ pub struct PolicyFactory {
 }
 
 impl PolicyFactory {
-    /// Load Cedar policies from a source string.
-    ///
-    /// Requires the `cedar` feature to be enabled.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if Cedar is not compiled in or policies can't be
-    /// parsed.
-    #[cfg(feature = "cedar")]
-    pub fn load_cedar(policy_src: &str) -> Result<Self, LoadError> {
-        let factory = cedar::CedarProviderFactory::new(policy_src)?;
-        Ok(Self {
-            inner: Box::new(factory),
-        })
-    }
-
     /// Load Cedar policies from a file.
     ///
     /// Requires the `cedar` feature to be enabled.
@@ -131,15 +92,6 @@ impl PolicyFactory {
         Ok(Self {
             inner: Box::new(factory),
         })
-    }
-
-    /// Create a policy factory from an arbitrary [`PolicyProviderFactory`]
-    /// implementation.
-    ///
-    /// This allows users to plug in custom policy backends.
-    #[must_use]
-    pub fn from_provider(provider: Box<dyn PolicyProviderFactory>) -> Self {
-        Self { inner: provider }
     }
 
     /// Set the dynamic data for the policy.

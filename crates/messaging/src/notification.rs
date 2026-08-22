@@ -69,13 +69,6 @@ impl NotificationCenter {
         Self::new(Some(mailer), None)
     }
 
-    /// Attach an email channel to this notification center.
-    #[must_use]
-    pub fn with_email(mut self, mailer: Mailer) -> Self {
-        self.email = Some(mailer);
-        self
-    }
-
     /// Attach an SMS channel to this notification center.
     #[must_use]
     pub fn with_sms(mut self, sender: SmsSender) -> Self {

@@ -687,7 +687,7 @@ mod tests {
                 RotatedOrganizationControl {
                     control_stream_ref: arkret_identifiers::EventId::from_identity(
                         arkret_identifiers::EventIdentityKey::new(
-                            arkret_identifiers::EventDigestSuiteCode::Sha256,
+                            arkret_identifiers::DigestSuiteCode::Sha256,
                             [8_u8; 32],
                         ),
                     ),

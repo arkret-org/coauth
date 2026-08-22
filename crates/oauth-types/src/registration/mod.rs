@@ -2,7 +2,7 @@
 //!
 //! [Dynamic Client Registration]: https://openid.net/specs/openid-connect-registration-1_0.html
 
-use coauth_iana::jose::{JsonWebEncryptionEnc, JsonWebSignatureAlg};
+use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_iana::oauth::{OAuthAuthorizationEndpointResponseType, OAuthClientAuthenticationMethod};
 
 use crate::oidc::ApplicationType;
@@ -38,7 +38,3 @@ pub const DEFAULT_TOKEN_AUTH_METHOD: &OAuthClientAuthenticationMethod =
 
 /// The default value of `id_token_signed_response_alg` if it is not set.
 pub const DEFAULT_SIGNING_ALGORITHM: &JsonWebSignatureAlg = &JsonWebSignatureAlg::Rs256;
-
-/// The default value of `id_token_encrypted_response_enc` if it is not set.
-pub const DEFAULT_ENCRYPTION_ENC_ALGORITHM: &JsonWebEncryptionEnc =
-    &JsonWebEncryptionEnc::A128CbcHs256;
