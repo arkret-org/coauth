@@ -7,7 +7,7 @@ use arkret_models_identity::agent_signer_evidence::{
     ControllerAccountGateBasis, ControllerAccountStatus,
 };
 use arkret_signatures::http_signature::{
-    Component, ContentDigest, Ed25519PublicKey, SignatureVerificationPolicy, parse_signature_input,
+    Component, ContentDigest, SignatureVerificationPolicy, parse_signature_input,
     verify_signed_canonical_json_message,
 };
 use arkret_wire::{DidUrl, NonEmptyString};
@@ -299,7 +299,8 @@ async fn authenticate_agent_authority_request(
         .public_key
         .ed25519_bytes()
         .map_err(|_| not_found())?;
-    let public_key = Ed25519PublicKey::from_bytes(&key_bytes).map_err(|_| not_found())?;
+    let public_key =
+        ed25519_dalek::VerifyingKey::from_bytes(&key_bytes).map_err(|_| not_found())?;
 
     let source = required_header(req, "source-service-id")?;
     let destination = required_header(req, "destination-service-id")?;

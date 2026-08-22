@@ -96,7 +96,7 @@ pub struct AppState {
     /// `coauth_cli::commands::server` (via
     /// `crate::services::verified_profiles::load_from_env`) and surfaced
     /// into the per-request depot as the `verified_profiles` key.
-    pub verified_profiles: Arc<Vec<crate::services::verified_profiles::VerifiedProfileDescriptor>>,
+    pub verified_profiles: Arc<Vec<arkret_models_discovery::VerifiedProfileArtifactEntry>>,
 
     /// Development posture captured once during process startup. Service
     /// discovery uses this same value for every request and suppresses

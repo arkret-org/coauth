@@ -5,7 +5,7 @@ use arkret_models_collaboration::account_lifecycle::{
     AccountStatusResolveOutcome, AccountStatusResolveRequestBody,
 };
 use arkret_signatures::http_signature::{
-    Component, Ed25519PublicKey, SignatureVerificationPolicy, parse_signature_input,
+    Component, SignatureVerificationPolicy, parse_signature_input,
     verify_signed_canonical_json_message,
 };
 use arkret_wire::DidUrl;
@@ -83,7 +83,7 @@ pub async fn resolve_account_status(
         key_id.as_str(),
     )
     .map_err(|_| not_found())?;
-    let public_key = Ed25519PublicKey::from_bytes(
+    let public_key = ed25519_dalek::VerifyingKey::from_bytes(
         &resolved_key
             .public_key
             .ed25519_bytes()
@@ -138,7 +138,7 @@ fn verify_request(
     req: &Request,
     depot: &Depot,
     canonical_body: &[u8],
-    public_key: &Ed25519PublicKey,
+    public_key: &ed25519_dalek::VerifyingKey,
 ) -> Result<(), ArkretRouteError> {
     let public_base = depot.url_builder()?.http_base();
     let authority = public_base

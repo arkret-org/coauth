@@ -8,9 +8,7 @@ use camino::Utf8Path;
 pub const VERIFIED_PROFILES_ARTIFACT_ENV: &str = "COAUTH_VERIFIED_PROFILES_ARTIFACT";
 pub const COAUTH_SERVICE_ROLE: &str = "auth_server";
 
-pub type VerifiedProfileDescriptor = VerifiedProfileArtifactEntry;
-
-pub fn load_from_env() -> Arc<Vec<VerifiedProfileDescriptor>> {
+pub fn load_from_env() -> Arc<Vec<VerifiedProfileArtifactEntry>> {
     let path = match coauth_config::runtime_var(VERIFIED_PROFILES_ARTIFACT_ENV) {
         Ok(value) if !value.is_empty() => value,
         _ => {
@@ -25,7 +23,7 @@ pub fn load_from_env() -> Arc<Vec<VerifiedProfileDescriptor>> {
     Arc::new(load_from_path(path))
 }
 
-pub fn load_from_path(path: impl AsRef<Utf8Path>) -> Vec<VerifiedProfileDescriptor> {
+pub fn load_from_path(path: impl AsRef<Utf8Path>) -> Vec<VerifiedProfileArtifactEntry> {
     let path = path.as_ref();
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,

@@ -202,7 +202,7 @@ fn validate_claimed_profiles_against_sdk_requirements() {
     }
 }
 
-/// G4.T3 — convert the loader's `VerifiedProfileDescriptor` into the wire
+/// G4.T3 — convert the loader's `VerifiedProfileArtifactEntry` into the wire
 /// shape expected by `ServiceDescribeOutcome.verified_profiles[]`. Also
 /// enforces the local cross-check: any entry whose `profile_id` is not in
 /// coauth's hard-coded claimed-profile set is dropped with a `warn!` line.
@@ -214,7 +214,7 @@ fn validate_claimed_profiles_against_sdk_requirements() {
 /// otherwise the cross-check will silently drop legitimate verified
 /// entries.
 fn build_verified_profile_descriptors(
-    loaded: &[crate::services::verified_profiles::VerifiedProfileDescriptor],
+    loaded: &[arkret_models_discovery::VerifiedProfileArtifactEntry],
 ) -> Vec<arkret_models_discovery::VerifiedProfileEntry> {
     loaded
         .iter()
@@ -369,7 +369,7 @@ fn set_auth_metadata_oidc_clients(
 pub(crate) fn service_describe_response(
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
-    loaded_verified_profiles: &[crate::services::verified_profiles::VerifiedProfileDescriptor],
+    loaded_verified_profiles: &[arkret_models_discovery::VerifiedProfileArtifactEntry],
     development_mode: bool,
 ) -> ServiceDescribeOutcome {
     validate_claimed_profiles_against_sdk_requirements();
@@ -608,9 +608,9 @@ pub async fn server_describe(
     // G4.T3 — pull the loaded verified-profile descriptors out of the
     // depot. Empty Arc when COAUTH_VERIFIED_PROFILES_ARTIFACT is unset.
     let verified_profiles_loaded: std::sync::Arc<
-        Vec<crate::services::verified_profiles::VerifiedProfileDescriptor>,
+        Vec<arkret_models_discovery::VerifiedProfileArtifactEntry>,
     > = depot
-        .get::<std::sync::Arc<Vec<crate::services::verified_profiles::VerifiedProfileDescriptor>>>(
+        .get::<std::sync::Arc<Vec<arkret_models_discovery::VerifiedProfileArtifactEntry>>>(
             "verified_profiles",
         )
         .cloned()
