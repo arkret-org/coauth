@@ -29,7 +29,7 @@ clients:
   - http://127.0.0.1/auth/callback
   - http://localhost/auth/callback
 database:
-  uri: postgresql://postgres:root@localhost/coauth_dev_0831
+  uri: postgresql://postgres:root@localhost/coauth_dev
   max_connections: 10
   min_connections: 0
   connect_timeout: 30
