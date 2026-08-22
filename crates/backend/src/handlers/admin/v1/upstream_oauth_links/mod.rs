@@ -467,12 +467,7 @@ fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) 
 
 #[cfg(test)]
 mod test_utils {
-    use coauth_data::upstream_oauth::UpstreamOAuthProviderParams;
-    use coauth_data::{
-        UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,
-        UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderPkceMode,
-        UpstreamOAuthProviderTokenAuthMethod,
-    };
+    use coauth_data::upstream_oauth::{UpstreamOAuthProviderParams, provider};
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_oauth_types::scope::{OPENID, Scope};
 
@@ -482,16 +477,16 @@ mod test_utils {
             human_name: Some(name.to_owned()),
             brand_name: Some(name.to_owned()),
             scope: Scope::from_iter([OPENID]),
-            token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod::ClientSecretBasic,
+            token_endpoint_auth_method: provider::TokenAuthMethod::ClientSecretBasic,
             token_endpoint_signing_alg: None,
             id_token_signed_response_alg: JsonWebSignatureAlg::Rs256,
             fetch_userinfo: false,
             userinfo_signed_response_alg: None,
             client_id: format!("client_{name}"),
             encrypted_client_secret: Some("secret".to_owned()),
-            claims_imports: UpstreamOAuthProviderClaimsImports::default(),
-            discovery_mode: UpstreamOAuthProviderDiscoveryMode::default(),
-            pkce_mode: UpstreamOAuthProviderPkceMode::default(),
+            claims_imports: provider::ClaimsImports::default(),
+            discovery_mode: provider::DiscoveryMode::default(),
+            pkce_mode: provider::PkceMode::default(),
             response_mode: None,
             authorization_endpoint_override: None,
             token_endpoint_override: None,
@@ -500,8 +495,8 @@ mod test_utils {
             additional_authorization_parameters: Vec::new(),
             forward_login_hint: false,
             ui_order: 0,
-            on_backchannel_logout: UpstreamOAuthProviderOnBackchannelLogout::DoNothing,
-            source: coauth_data::UpstreamOAuthProviderSource::Config,
+            on_backchannel_logout: provider::OnBackchannelLogout::DoNothing,
+            source: provider::ProviderSource::Config,
         }
     }
 }

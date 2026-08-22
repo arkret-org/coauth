@@ -3,10 +3,9 @@ use chrono::{DateTime, Utc};
 use coauth_data::pagination::{Node, PaginationDirection};
 use coauth_data::upstream_oauth::{
     UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository,
+    provider,
 };
-use coauth_data::{
-    Clock, Page, Pagination, UpstreamOAuthProvider, UpstreamOAuthProviderClaimsImports, new_id,
-};
+use coauth_data::{Clock, Page, Pagination, UpstreamOAuthProvider, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
@@ -187,7 +186,7 @@ impl TryFrom<ProviderLookup> for UpstreamOAuthProvider {
             .map(|v| serde_json::from_value(v).unwrap_or_default())
             .unwrap_or_default();
 
-        let claims_imports: UpstreamOAuthProviderClaimsImports = value
+        let claims_imports: provider::ClaimsImports = value
             .claims_imports
             .map(|v| serde_json::from_value(v).unwrap_or_default())
             .unwrap_or_default();

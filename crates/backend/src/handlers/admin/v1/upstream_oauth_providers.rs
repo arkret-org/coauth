@@ -2,15 +2,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use coauth_data::RepositoryAccess;
 use coauth_data::audit::AdminOperation;
 use coauth_data::upstream_oauth::{
     UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository,
-};
-use coauth_data::{
-    RepositoryAccess, UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,
-    UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderPkceMode,
-    UpstreamOAuthProviderResponseMode, UpstreamOAuthProviderSource,
-    UpstreamOAuthProviderTokenAuthMethod,
+    provider,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_oauth_types::scope::Scope;
@@ -153,7 +149,7 @@ pub struct ProviderRequestBody {
     /// Plaintext client secret. Encrypted server-side before being persisted.
     client_secret: Option<String>,
     /// Claims-import configuration as JSON. See
-    /// [`UpstreamOAuthProviderClaimsImports`].
+    /// [`provider::ClaimsImports`].
     #[serde(default)]
     #[schemars(with = "serde_json::Value")]
     claims_imports: serde_json::Value,
@@ -193,13 +189,13 @@ fn default_on_backchannel_logout() -> String {
 fn parse_request(
     body: ProviderRequestBody,
     encrypter: &coauth_keystore::Encrypter,
-    source: UpstreamOAuthProviderSource,
+    source: provider::ProviderSource,
 ) -> Result<UpstreamOAuthProviderParams, AppError> {
     let scope: Scope = body
         .scope
         .parse()
         .map_err(|e| AppError::bad_request(format!("scope: {e}")))?;
-    let token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod = body
+    let token_endpoint_auth_method: provider::TokenAuthMethod = body
         .token_endpoint_auth_method
         .parse()
         .map_err(|e| AppError::bad_request(format!("token_endpoint_auth_method: {e}")))?;
@@ -217,25 +213,25 @@ fn parse_request(
         .map(|s| s.parse::<JsonWebSignatureAlg>())
         .transpose()
         .map_err(|e| AppError::bad_request(format!("userinfo_signed_response_alg: {e}")))?;
-    let discovery_mode: UpstreamOAuthProviderDiscoveryMode = body
+    let discovery_mode: provider::DiscoveryMode = body
         .discovery_mode
         .parse()
         .map_err(|e| AppError::bad_request(format!("discovery_mode: {e}")))?;
-    let pkce_mode: UpstreamOAuthProviderPkceMode = body
+    let pkce_mode: provider::PkceMode = body
         .pkce_mode
         .parse()
         .map_err(|e| AppError::bad_request(format!("pkce_mode: {e}")))?;
     let response_mode = body
         .response_mode
-        .map(|s| s.parse::<UpstreamOAuthProviderResponseMode>())
+        .map(|s| s.parse::<provider::ResponseMode>())
         .transpose()
         .map_err(|e| AppError::bad_request(format!("response_mode: {e}")))?;
-    let on_backchannel_logout: UpstreamOAuthProviderOnBackchannelLogout = body
-        .on_backchannel_logout
-        .parse()
-        .map_err(|e| AppError::bad_request(format!("on_backchannel_logout: {e}")))?;
-    let claims_imports: UpstreamOAuthProviderClaimsImports = if body.claims_imports.is_null() {
-        UpstreamOAuthProviderClaimsImports::default()
+    let on_backchannel_logout: provider::OnBackchannelLogout =
+        body.on_backchannel_logout
+            .parse()
+            .map_err(|e| AppError::bad_request(format!("on_backchannel_logout: {e}")))?;
+    let claims_imports: provider::ClaimsImports = if body.claims_imports.is_null() {
+        provider::ClaimsImports::default()
     } else {
         serde_json::from_value(body.claims_imports)
             .map_err(|e| AppError::bad_request(format!("claims_imports: {e}")))?
@@ -293,7 +289,7 @@ pub async fn add_provider(
     let mut rng = crate::handlers::account::make_rng();
     let body: ProviderRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
-    let params = parse_request(body, &encrypter, UpstreamOAuthProviderSource::Manual)?;
+    let params = parse_request(body, &encrypter, provider::ProviderSource::Manual)?;
 
     let provider = repo
         .upstream_oauth_provider()
@@ -349,14 +345,14 @@ pub async fn update_provider(
         .await?
         .ok_or_else(|| AppError::not_found("Provider not found"))?;
 
-    if existing.source == UpstreamOAuthProviderSource::Config {
+    if existing.source == provider::ProviderSource::Config {
         return Err(AppError::conflict(
             "Provider is managed by the configuration file. Edit the config file and run \
              `coauth config sync` instead.",
         ));
     }
 
-    let params = parse_request(body, &encrypter, UpstreamOAuthProviderSource::Manual)?;
+    let params = parse_request(body, &encrypter, provider::ProviderSource::Manual)?;
 
     let provider = repo
         .upstream_oauth_provider()
@@ -407,7 +403,7 @@ pub async fn delete_provider(req: &mut Request, depot: &Depot) -> AppResult<Stat
         .await?
         .ok_or_else(|| AppError::not_found("Provider not found"))?;
 
-    if provider.source == UpstreamOAuthProviderSource::Config && provider.enabled() {
+    if provider.source == provider::ProviderSource::Config && provider.enabled() {
         return Err(AppError::conflict(
             "Provider is managed by the configuration file. Remove it from the config file and \
              restart the server first; once it shows as disabled it can be deleted.",
@@ -527,13 +523,9 @@ pub async fn enable_provider(
 #[cfg(test)]
 mod tests {
     use coauth_data::upstream_oauth::{
-        UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository,
+        UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository, provider,
     };
-    use coauth_data::{
-        RepositoryAccess, UpstreamOAuthProvider, UpstreamOAuthProviderClaimsImports,
-        UpstreamOAuthProviderDiscoveryMode, UpstreamOAuthProviderOnBackchannelLogout,
-        UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderTokenAuthMethod,
-    };
+    use coauth_data::{RepositoryAccess, UpstreamOAuthProvider};
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_oauth_types::scope::{OPENID, Scope};
     use hyper::{Request, StatusCode};
@@ -550,8 +542,8 @@ mod tests {
             issuer: Some("https://accounts.google.com".to_owned()),
             human_name: Some("Google".to_owned()),
             brand_name: Some("google".to_owned()),
-            discovery_mode: UpstreamOAuthProviderDiscoveryMode::Oidc,
-            pkce_mode: UpstreamOAuthProviderPkceMode::Auto,
+            discovery_mode: provider::DiscoveryMode::Oidc,
+            pkce_mode: provider::PkceMode::Auto,
             jwks_uri_override: None,
             authorization_endpoint_override: None,
             token_endpoint_override: None,
@@ -561,16 +553,16 @@ mod tests {
             client_id: "google-client-id".to_owned(),
             encrypted_client_secret: Some("encrypted-secret".to_owned()),
             token_endpoint_signing_alg: None,
-            token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod::ClientSecretPost,
+            token_endpoint_auth_method: provider::TokenAuthMethod::ClientSecretPost,
             id_token_signed_response_alg: JsonWebSignatureAlg::Rs256,
             response_mode: None,
             scope: Scope::from_iter([OPENID]),
-            claims_imports: UpstreamOAuthProviderClaimsImports::default(),
+            claims_imports: provider::ClaimsImports::default(),
             additional_authorization_parameters: vec![],
             forward_login_hint: false,
-            on_backchannel_logout: UpstreamOAuthProviderOnBackchannelLogout::DoNothing,
+            on_backchannel_logout: provider::OnBackchannelLogout::DoNothing,
             ui_order: 0,
-            source: coauth_data::UpstreamOAuthProviderSource::Config,
+            source: provider::ProviderSource::Config,
         };
 
         let provider = repo
@@ -661,8 +653,8 @@ mod tests {
             issuer: Some("https://accounts.google.com".to_owned()),
             human_name: Some("Google".to_owned()),
             brand_name: Some("google".to_owned()),
-            discovery_mode: UpstreamOAuthProviderDiscoveryMode::Oidc,
-            pkce_mode: UpstreamOAuthProviderPkceMode::Auto,
+            discovery_mode: provider::DiscoveryMode::Oidc,
+            pkce_mode: provider::PkceMode::Auto,
             jwks_uri_override: None,
             authorization_endpoint_override: None,
             token_endpoint_override: None,
@@ -672,16 +664,16 @@ mod tests {
             client_id: "google-client-id".to_owned(),
             encrypted_client_secret: Some("encrypted-secret".to_owned()),
             token_endpoint_signing_alg: None,
-            token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod::ClientSecretPost,
+            token_endpoint_auth_method: provider::TokenAuthMethod::ClientSecretPost,
             id_token_signed_response_alg: JsonWebSignatureAlg::Rs256,
             response_mode: None,
             scope: Scope::from_iter([OPENID]),
-            claims_imports: UpstreamOAuthProviderClaimsImports::default(),
+            claims_imports: provider::ClaimsImports::default(),
             additional_authorization_parameters: vec![],
             forward_login_hint: false,
-            on_backchannel_logout: UpstreamOAuthProviderOnBackchannelLogout::DoNothing,
+            on_backchannel_logout: provider::OnBackchannelLogout::DoNothing,
             ui_order: 0,
-            source: coauth_data::UpstreamOAuthProviderSource::Config,
+            source: provider::ProviderSource::Config,
         };
 
         repo.upstream_oauth_provider()
@@ -694,8 +686,8 @@ mod tests {
             issuer: Some("https://appleid.apple.com".to_owned()),
             human_name: Some("Apple ID".to_owned()),
             brand_name: Some("apple".to_owned()),
-            discovery_mode: UpstreamOAuthProviderDiscoveryMode::Oidc,
-            pkce_mode: UpstreamOAuthProviderPkceMode::S256,
+            discovery_mode: provider::DiscoveryMode::Oidc,
+            pkce_mode: provider::PkceMode::S256,
             jwks_uri_override: None,
             authorization_endpoint_override: None,
             token_endpoint_override: None,
@@ -705,16 +697,16 @@ mod tests {
             client_id: "apple-client-id".to_owned(),
             encrypted_client_secret: Some("encrypted-secret".to_owned()),
             token_endpoint_signing_alg: None,
-            token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod::ClientSecretPost,
+            token_endpoint_auth_method: provider::TokenAuthMethod::ClientSecretPost,
             id_token_signed_response_alg: JsonWebSignatureAlg::Rs256,
             response_mode: None,
             scope: Scope::from_iter([OPENID]),
-            claims_imports: UpstreamOAuthProviderClaimsImports::default(),
+            claims_imports: provider::ClaimsImports::default(),
             additional_authorization_parameters: vec![],
             forward_login_hint: false,
-            on_backchannel_logout: UpstreamOAuthProviderOnBackchannelLogout::DoNothing,
+            on_backchannel_logout: provider::OnBackchannelLogout::DoNothing,
             ui_order: 1,
-            source: coauth_data::UpstreamOAuthProviderSource::Config,
+            source: provider::ProviderSource::Config,
         };
 
         let disabled_provider = repo
@@ -734,8 +726,8 @@ mod tests {
             issuer: Some("https://login.microsoftonline.com/common/v2.0".to_owned()),
             human_name: Some("Microsoft".to_owned()),
             brand_name: Some("microsoft".to_owned()),
-            discovery_mode: UpstreamOAuthProviderDiscoveryMode::Oidc,
-            pkce_mode: UpstreamOAuthProviderPkceMode::Auto,
+            discovery_mode: provider::DiscoveryMode::Oidc,
+            pkce_mode: provider::PkceMode::Auto,
             jwks_uri_override: None,
             authorization_endpoint_override: None,
             token_endpoint_override: None,
@@ -745,16 +737,16 @@ mod tests {
             client_id: "microsoft-client-id".to_owned(),
             encrypted_client_secret: Some("encrypted-secret".to_owned()),
             token_endpoint_signing_alg: None,
-            token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod::ClientSecretPost,
+            token_endpoint_auth_method: provider::TokenAuthMethod::ClientSecretPost,
             id_token_signed_response_alg: JsonWebSignatureAlg::Rs256,
             response_mode: None,
             scope: Scope::from_iter([OPENID]),
-            claims_imports: UpstreamOAuthProviderClaimsImports::default(),
+            claims_imports: provider::ClaimsImports::default(),
             additional_authorization_parameters: vec![],
             forward_login_hint: false,
-            on_backchannel_logout: UpstreamOAuthProviderOnBackchannelLogout::DoNothing,
+            on_backchannel_logout: provider::OnBackchannelLogout::DoNothing,
             ui_order: 2,
-            source: coauth_data::UpstreamOAuthProviderSource::Config,
+            source: provider::ProviderSource::Config,
         };
 
         repo.upstream_oauth_provider()

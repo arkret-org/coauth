@@ -331,9 +331,9 @@ fn account_api_subrouters() -> (Router, Router) {
         .push(Router::with_path("self/bootstrap-admin-status").get(bootstrap_admin_status::get))
         .push(
             Router::with_path("self/passkeys")
-                .get(auth::passkey_list)
-                .push(Router::with_path("{id}").patch(auth::passkey_rename))
-                .push(Router::with_path("{id}/revoke").post(auth::passkey_revoke)),
+                .get(auth::passkey::list)
+                .push(Router::with_path("{id}").patch(auth::passkey::rename))
+                .push(Router::with_path("{id}/revoke").post(auth::passkey::revoke)),
         )
         // Site config
         .push(Router::with_path("self/site-config").get(site_config::get))
@@ -387,14 +387,14 @@ fn account_api_subrouters() -> (Router, Router) {
                 .push(
                     Router::with_path("passkey")
                         .push(
-                            Router::with_path("register/start").post(auth::passkey_register_start),
+                            Router::with_path("register/start").post(auth::passkey::register_start),
                         )
                         .push(
                             Router::with_path("register/finish")
-                                .post(auth::passkey_register_finish),
+                                .post(auth::passkey::register_finish),
                         )
-                        .push(Router::with_path("auth/start").post(auth::passkey_auth_start))
-                        .push(Router::with_path("auth/finish").post(auth::passkey_auth_finish)),
+                        .push(Router::with_path("auth/start").post(auth::passkey::auth_start))
+                        .push(Router::with_path("auth/finish").post(auth::passkey::auth_finish)),
                 )
                 .push(Router::with_path("logout").post(auth::logout))
                 .push(Router::with_path("providers").get(auth::providers))

@@ -2,9 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use coauth_data::oauth::OAuthSessionFilter;
 use coauth_data::queue::{QueueJobRepositoryExt as _, SyncDevicesJob};
-use coauth_data::upstream_oauth::UpstreamOAuthSessionFilter;
+use coauth_data::upstream_oauth::{UpstreamOAuthSessionFilter, provider};
 use coauth_data::user::BrowserSessionFilter;
-use coauth_data::{Pagination, UpstreamOAuthProvider, UpstreamOAuthProviderOnBackchannelLogout};
+use coauth_data::{Pagination, UpstreamOAuthProvider};
 use coauth_jose::claims::{self, Claim, TimeOptions};
 use coauth_jose::jwt::JwtDecodeError;
 use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
@@ -222,17 +222,17 @@ pub async fn post(req: &mut Request, depot: &mut Depot) -> Result<(), RouteError
     tracing::info!(sub, sid, %provider.id, "Backchannel logout received, found {count} corresponding authentication sessions");
 
     match provider.on_backchannel_logout {
-        UpstreamOAuthProviderOnBackchannelLogout::DoNothing => {
+        provider::OnBackchannelLogout::DoNothing => {
             tracing::warn!(%provider.id, "Provider configured to do nothing on backchannel logout");
         }
-        UpstreamOAuthProviderOnBackchannelLogout::LogoutBrowserOnly => {
+        provider::OnBackchannelLogout::LogoutBrowserOnly => {
             let filter = BrowserSessionFilter::new()
                 .authenticated_by_upstream_sessions_only(auth_session_filter)
                 .active_only();
             let affected = repo.browser_session().finish_bulk(&clock, filter).await?;
             tracing::info!("Finished {affected} browser sessions");
         }
-        UpstreamOAuthProviderOnBackchannelLogout::LogoutAll => {
+        provider::OnBackchannelLogout::LogoutAll => {
             let browser_session_filter = BrowserSessionFilter::new()
                 .authenticated_by_upstream_sessions_only(auth_session_filter);
 

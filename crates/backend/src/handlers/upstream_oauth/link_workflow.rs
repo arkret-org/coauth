@@ -4,7 +4,7 @@ use anyhow::Error as AnyhowError;
 use coauth_account_types::{PostAuthAction, UpstreamLinkFieldErrors};
 use coauth_data::upstream_oauth::{
     UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
-    UpstreamOAuthSessionRepository,
+    UpstreamOAuthSessionRepository, provider,
 };
 use coauth_data::user::{
     BrowserSessionRepository, UserEmailRepository, UserRegistrationRepository, UserRepository,
@@ -12,7 +12,7 @@ use coauth_data::user::{
 use coauth_data::{
     BoxRepository, BrowserSession, Clock, Pagination, RepositoryAccess, RepositoryError,
     SiteConfig, UpstreamOAuthAuthorizationSession, UpstreamOAuthLink, UpstreamOAuthProvider,
-    UpstreamOAuthProviderOnConflict, UrlBuilder, User, UserRegistration,
+    UrlBuilder, User, UserRegistration,
 };
 use coauth_jose::jwt::Jwt;
 use coauth_policy::{
@@ -681,7 +681,7 @@ async fn pre_check_handle(
 
         // Apply conflict resolution
         match provider.claims_imports.handle.on_conflict {
-            UpstreamOAuthProviderOnConflict::Fail => {
+            provider::OnConflict::Fail => {
                 tracing::warn!(
                     upstream_oauth_provider.id = %provider.id,
                     upstream_oauth_link.id = %link.id,
@@ -691,7 +691,7 @@ async fn pre_check_handle(
                 return Err(UpstreamLinkWorkflowError::ConflictFail { handle: username });
             }
 
-            UpstreamOAuthProviderOnConflict::Add => {
+            provider::OnConflict::Add => {
                 tracing::info!(
                     user.id = %existing_user.id,
                     upstream_oauth_provider.id = %provider.id,
@@ -704,7 +704,7 @@ async fn pre_check_handle(
                     .await?;
             }
 
-            UpstreamOAuthProviderOnConflict::Replace => {
+            provider::OnConflict::Replace => {
                 let filter = UpstreamOAuthLinkFilter::new()
                     .for_provider(provider)
                     .for_user(&existing_user);
@@ -746,7 +746,7 @@ async fn pre_check_handle(
                     .await?;
             }
 
-            UpstreamOAuthProviderOnConflict::Set => {
+            provider::OnConflict::Set => {
                 let filter = UpstreamOAuthLinkFilter::new()
                     .for_provider(provider)
                     .for_user(&existing_user);
@@ -1148,11 +1148,7 @@ async fn prepare_user_registration(
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-    use coauth_data::{
-        UpstreamOAuthAuthorizationSessionState, UpstreamOAuthProviderClaimsImports,
-        UpstreamOAuthProviderHandlePreference, UpstreamOAuthProviderImportAction,
-        UpstreamOAuthProviderImportPreference, UpstreamOAuthProviderTokenAuthMethod,
-    };
+    use coauth_data::UpstreamOAuthAuthorizationSessionState;
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_oauth_types::scope::{OPENID, Scope};
     use serde_json::json;
@@ -1161,13 +1157,13 @@ mod tests {
 
     #[test]
     fn required_claim_import_fails_when_template_renders_empty() {
-        let provider = provider_with_claims_imports(UpstreamOAuthProviderClaimsImports {
-            handle: UpstreamOAuthProviderHandlePreference {
-                action: UpstreamOAuthProviderImportAction::Require,
+        let provider = provider_with_claims_imports(provider::ClaimsImports {
+            handle: provider::HandlePreference {
+                action: provider::ImportAction::Require,
                 template: None,
-                on_conflict: UpstreamOAuthProviderOnConflict::default(),
+                on_conflict: provider::OnConflict::default(),
             },
-            ..UpstreamOAuthProviderClaimsImports::default()
+            ..provider::ClaimsImports::default()
         });
         let session = completed_upstream_session(json!({
             "email": "john@example.com",
@@ -1190,21 +1186,21 @@ mod tests {
 
     #[test]
     fn forced_claim_imports_override_user_registration_toggles() {
-        let provider = provider_with_claims_imports(UpstreamOAuthProviderClaimsImports {
-            handle: UpstreamOAuthProviderHandlePreference {
-                action: UpstreamOAuthProviderImportAction::Force,
+        let provider = provider_with_claims_imports(provider::ClaimsImports {
+            handle: provider::HandlePreference {
+                action: provider::ImportAction::Force,
                 template: None,
-                on_conflict: UpstreamOAuthProviderOnConflict::default(),
+                on_conflict: provider::OnConflict::default(),
             },
-            displayname: UpstreamOAuthProviderImportPreference {
-                action: UpstreamOAuthProviderImportAction::Force,
-                template: None,
-            },
-            email: UpstreamOAuthProviderImportPreference {
-                action: UpstreamOAuthProviderImportAction::Force,
+            displayname: provider::ImportPreference {
+                action: provider::ImportAction::Force,
                 template: None,
             },
-            ..UpstreamOAuthProviderClaimsImports::default()
+            email: provider::ImportPreference {
+                action: provider::ImportAction::Force,
+                template: None,
+            },
+            ..provider::ClaimsImports::default()
         });
         let session = completed_upstream_session(json!({
             "preferred_username": "john",
@@ -1227,15 +1223,15 @@ mod tests {
     }
 
     fn provider_with_claims_imports(
-        claims_imports: UpstreamOAuthProviderClaimsImports,
+        claims_imports: provider::ClaimsImports,
     ) -> UpstreamOAuthProvider {
         UpstreamOAuthProvider {
             id: Ulid::new(),
             issuer: Some("https://example.com/".to_owned()),
             human_name: Some("Example Ltd.".to_owned()),
             brand_name: None,
-            discovery_mode: coauth_data::UpstreamOAuthProviderDiscoveryMode::Oidc,
-            pkce_mode: coauth_data::UpstreamOAuthProviderPkceMode::Auto,
+            discovery_mode: provider::DiscoveryMode::Oidc,
+            pkce_mode: provider::PkceMode::Auto,
             jwks_uri_override: None,
             authorization_endpoint_override: None,
             scope: Scope::from_iter([OPENID]),
@@ -1246,7 +1242,7 @@ mod tests {
             client_id: "client".to_owned(),
             encrypted_client_secret: None,
             token_endpoint_signing_alg: None,
-            token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod::None,
+            token_endpoint_auth_method: provider::TokenAuthMethod::None,
             id_token_signed_response_alg: JsonWebSignatureAlg::Rs256,
             response_mode: None,
             created_at: Utc::now(),
@@ -1254,8 +1250,8 @@ mod tests {
             claims_imports,
             additional_authorization_parameters: Vec::new(),
             forward_login_hint: false,
-            on_backchannel_logout: coauth_data::UpstreamOAuthProviderOnBackchannelLogout::DoNothing,
-            source: coauth_data::UpstreamOAuthProviderSource::Config,
+            on_backchannel_logout: provider::OnBackchannelLogout::DoNothing,
+            source: provider::ProviderSource::Config,
         }
     }
 

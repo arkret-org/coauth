@@ -12,9 +12,8 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use clap::Parser;
-use coauth_config::{
-    AppConfig, ConfigurationSection, HttpBindConfig, HttpListenerConfig, HttpResource,
-};
+use coauth_config::http::{BindConfig, ListenerConfig, Resource};
+use coauth_config::{AppConfig, ConfigurationSection};
 use figment::Figment;
 use tracing::{info, warn};
 
@@ -65,27 +64,27 @@ impl Options {
 /// Pick the first listener that exposes the `health` resource and
 /// derive a probe URL pointing at `127.0.0.1:<port>/health`. Returns
 /// `None` if no such listener exists.
-fn derive_health_url(listeners: &[HttpListenerConfig]) -> Option<String> {
+fn derive_health_url(listeners: &[ListenerConfig]) -> Option<String> {
     listeners
         .iter()
         .find(|listener| {
             listener
                 .resources
                 .iter()
-                .any(|resource| matches!(resource, HttpResource::Health))
+                .any(|resource| matches!(resource, Resource::Health))
         })
         .and_then(|listener| listener.binds.iter().find_map(bind_to_local_url))
 }
 
-/// Convert a [`HttpBindConfig`] to a loopback probe URL.
+/// Convert a [`BindConfig`] to a loopback probe URL.
 ///
 /// We always probe loopback because the healthcheck runs co-located
 /// with the server. Extracting the configured port avoids assumptions
 /// about the default and survives operator port overrides.
-fn bind_to_local_url(bind: &HttpBindConfig) -> Option<String> {
+fn bind_to_local_url(bind: &BindConfig) -> Option<String> {
     match bind {
-        HttpBindConfig::Listen { port, .. } => Some(format!("http://127.0.0.1:{port}/health")),
-        HttpBindConfig::Address { address } => {
+        BindConfig::Listen { port, .. } => Some(format!("http://127.0.0.1:{port}/health")),
+        BindConfig::Address { address } => {
             // Resolve the configured socket address to extract the port,
             // then probe loopback on that port. Wildcard binds
             // (e.g. `[::]:8091`) become `127.0.0.1:8091`.

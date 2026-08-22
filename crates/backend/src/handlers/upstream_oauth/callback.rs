@@ -3,11 +3,9 @@ use std::sync::LazyLock;
 
 use coauth_data::upstream_oauth::{
     UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository, UpstreamOAuthSessionRepository,
+    provider,
 };
-use coauth_data::{
-    Clock, UpstreamOAuthProvider, UpstreamOAuthProviderResponseMode,
-    UpstreamOAuthProviderTokenAuthMethod,
-};
+use coauth_data::{Clock, UpstreamOAuthProvider};
 use coauth_jose::claims::TokenHash;
 use coauth_oauth_types::errors::ClientErrorCode;
 use coauth_oauth_types::requests::AccessTokenRequest;
@@ -121,9 +119,7 @@ pub enum RouteError {
     MissingFormParams,
 
     #[error("Invalid response mode, expected '{expected}'")]
-    InvalidResponseMode {
-        expected: UpstreamOAuthProviderResponseMode,
-    },
+    InvalidResponseMode { expected: provider::ResponseMode },
 
     /// A non-standard provider (QQ / Feishu / Lark / DingTalk / WeChat /
     /// WeCom) MUST contact the upstream over HTTPS. These providers do
@@ -192,16 +188,14 @@ fn require_https_endpoint(name: &'static str, url: &::url::Url) -> Result<(), Ro
     }
 }
 
-fn non_standard_provider_kind(
-    method: UpstreamOAuthProviderTokenAuthMethod,
-) -> Option<&'static str> {
+fn non_standard_provider_kind(method: provider::TokenAuthMethod) -> Option<&'static str> {
     match method {
-        UpstreamOAuthProviderTokenAuthMethod::QQConnect => Some("qq_connect"),
-        UpstreamOAuthProviderTokenAuthMethod::Feishu => Some("feishu"),
-        UpstreamOAuthProviderTokenAuthMethod::Lark => Some("lark"),
-        UpstreamOAuthProviderTokenAuthMethod::DingTalk => Some("dingtalk"),
-        UpstreamOAuthProviderTokenAuthMethod::WeChat => Some("wechat"),
-        UpstreamOAuthProviderTokenAuthMethod::WeCom => Some("wecom"),
+        provider::TokenAuthMethod::QQConnect => Some("qq_connect"),
+        provider::TokenAuthMethod::Feishu => Some("feishu"),
+        provider::TokenAuthMethod::Lark => Some("lark"),
+        provider::TokenAuthMethod::DingTalk => Some("dingtalk"),
+        provider::TokenAuthMethod::WeChat => Some("wechat"),
+        provider::TokenAuthMethod::WeCom => Some("wecom"),
         _ => None,
     }
 }
@@ -332,7 +326,7 @@ pub async fn handler(
     // the query parameters for GET requests. We need to then look at the method do
     // make sure it matches the expected `response_mode`
     match (provider.response_mode, &method) {
-        (Some(UpstreamOAuthProviderResponseMode::FormPost) | None, &http::Method::POST) => {
+        (Some(provider::ResponseMode::FormPost) | None, &http::Method::POST) => {
             // We set the cookies with a `Same-Site` policy set to `Lax`, so because this is
             // usually a cross-site form POST, we need to render a form with the
             // same values, which posts back to the same URL. However, there are
@@ -349,7 +343,7 @@ pub async fn handler(
                 return Ok(());
             }
         }
-        (None, _) | (Some(UpstreamOAuthProviderResponseMode::Query), &http::Method::GET) => {}
+        (None, _) | (Some(provider::ResponseMode::Query), &http::Method::GET) => {}
         (Some(expected), _) => return Err(RouteError::InvalidResponseMode { expected }),
     }
 
@@ -1052,35 +1046,35 @@ mod tests {
     #[test]
     fn non_standard_provider_kind_identifies_userinfo_only_adapters() {
         assert_eq!(
-            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::QQConnect),
+            non_standard_provider_kind(provider::TokenAuthMethod::QQConnect),
             Some("qq_connect")
         );
         assert_eq!(
-            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::Feishu),
+            non_standard_provider_kind(provider::TokenAuthMethod::Feishu),
             Some("feishu")
         );
         assert_eq!(
-            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::Lark),
+            non_standard_provider_kind(provider::TokenAuthMethod::Lark),
             Some("lark")
         );
         assert_eq!(
-            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::DingTalk),
+            non_standard_provider_kind(provider::TokenAuthMethod::DingTalk),
             Some("dingtalk")
         );
         assert_eq!(
-            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::WeChat),
+            non_standard_provider_kind(provider::TokenAuthMethod::WeChat),
             Some("wechat")
         );
         assert_eq!(
-            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::WeCom),
+            non_standard_provider_kind(provider::TokenAuthMethod::WeCom),
             Some("wecom")
         );
         assert_eq!(
-            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::ClientSecretPost),
+            non_standard_provider_kind(provider::TokenAuthMethod::ClientSecretPost),
             None
         );
         assert_eq!(
-            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::SignInWithApple),
+            non_standard_provider_kind(provider::TokenAuthMethod::SignInWithApple),
             None
         );
     }

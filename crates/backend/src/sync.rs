@@ -3,8 +3,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use coauth_config::{ClientsConfig, UpstreamOAuthConfig};
-use coauth_data::upstream_oauth::{UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams};
-use coauth_data::{Clock, Pagination, RepositoryAccess, UpstreamOAuthProviderSource};
+use coauth_data::upstream_oauth::{
+    UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams, provider,
+};
+use coauth_data::{Clock, Pagination, RepositoryAccess};
 use coauth_keystore::Encrypter;
 use coauth_storage_postgres::PgRepository;
 use coauth_storage_postgres::advisory_lock::advisory_lock_key;
@@ -14,69 +16,53 @@ use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use tracing::{error, info, info_span, warn};
 
 fn map_import_action(
-    config: coauth_config::UpstreamOAuthImportAction,
-) -> coauth_data::UpstreamOAuthProviderImportAction {
+    config: coauth_config::upstream_oauth::ImportAction,
+) -> provider::ImportAction {
     match config {
-        coauth_config::UpstreamOAuthImportAction::Ignore => {
-            coauth_data::UpstreamOAuthProviderImportAction::Ignore
-        }
-        coauth_config::UpstreamOAuthImportAction::Suggest => {
-            coauth_data::UpstreamOAuthProviderImportAction::Suggest
-        }
-        coauth_config::UpstreamOAuthImportAction::Force => {
-            coauth_data::UpstreamOAuthProviderImportAction::Force
-        }
-        coauth_config::UpstreamOAuthImportAction::Require => {
-            coauth_data::UpstreamOAuthProviderImportAction::Require
-        }
+        coauth_config::upstream_oauth::ImportAction::Ignore => provider::ImportAction::Ignore,
+        coauth_config::upstream_oauth::ImportAction::Suggest => provider::ImportAction::Suggest,
+        coauth_config::upstream_oauth::ImportAction::Force => provider::ImportAction::Force,
+        coauth_config::upstream_oauth::ImportAction::Require => provider::ImportAction::Require,
     }
 }
 
 fn map_import_on_conflict(
-    config: coauth_config::UpstreamOAuthOnConflict,
-) -> coauth_data::UpstreamOAuthProviderOnConflict {
+    config: coauth_config::upstream_oauth::OnConflict,
+) -> provider::OnConflict {
     match config {
-        coauth_config::UpstreamOAuthOnConflict::Add => {
-            coauth_data::UpstreamOAuthProviderOnConflict::Add
-        }
-        coauth_config::UpstreamOAuthOnConflict::Replace => {
-            coauth_data::UpstreamOAuthProviderOnConflict::Replace
-        }
-        coauth_config::UpstreamOAuthOnConflict::Set => {
-            coauth_data::UpstreamOAuthProviderOnConflict::Set
-        }
-        coauth_config::UpstreamOAuthOnConflict::Fail => {
-            coauth_data::UpstreamOAuthProviderOnConflict::Fail
-        }
+        coauth_config::upstream_oauth::OnConflict::Add => provider::OnConflict::Add,
+        coauth_config::upstream_oauth::OnConflict::Replace => provider::OnConflict::Replace,
+        coauth_config::upstream_oauth::OnConflict::Set => provider::OnConflict::Set,
+        coauth_config::upstream_oauth::OnConflict::Fail => provider::OnConflict::Fail,
     }
 }
 
 fn map_claims_imports(
-    config: &coauth_config::UpstreamOAuthClaimsImports,
-) -> coauth_data::UpstreamOAuthProviderClaimsImports {
-    coauth_data::UpstreamOAuthProviderClaimsImports {
-        subject: coauth_data::UpstreamOAuthProviderSubjectPreference {
+    config: &coauth_config::upstream_oauth::ClaimsImports,
+) -> provider::ClaimsImports {
+    provider::ClaimsImports {
+        subject: provider::SubjectPreference {
             template: config.subject.template.clone(),
         },
         skip_confirmation: config.skip_confirmation,
-        handle: coauth_data::UpstreamOAuthProviderHandlePreference {
+        handle: provider::HandlePreference {
             action: map_import_action(config.handle.action),
             template: config.handle.template.clone(),
             on_conflict: map_import_on_conflict(config.handle.on_conflict),
         },
-        displayname: coauth_data::UpstreamOAuthProviderImportPreference {
+        displayname: provider::ImportPreference {
             action: map_import_action(config.displayname.action),
             template: config.displayname.template.clone(),
         },
-        email: coauth_data::UpstreamOAuthProviderImportPreference {
+        email: provider::ImportPreference {
             action: map_import_action(config.email.action),
             template: config.email.template.clone(),
         },
-        avatar: coauth_data::UpstreamOAuthProviderImportPreference {
+        avatar: provider::ImportPreference {
             action: map_import_action(config.avatar.action),
             template: config.avatar.template.clone(),
         },
-        account_name: coauth_data::UpstreamOAuthProviderSubjectPreference {
+        account_name: provider::SubjectPreference {
             template: config.account_name.template.clone(),
         },
     }
@@ -126,7 +112,7 @@ pub async fn config_sync(
         // Only consider config-sourced rows. Manually-managed providers
         // (created via the admin API) must be left untouched by sync.
         let config_filter =
-            UpstreamOAuthProviderFilter::default().with_source(UpstreamOAuthProviderSource::Config);
+            UpstreamOAuthProviderFilter::default().with_source(provider::ProviderSource::Config);
 
         // Let's assume we have less than 1000 providers
         let page = repo
@@ -234,64 +220,62 @@ pub async fn config_sync(
             };
 
             let discovery_mode = match provider.discovery_mode {
-                coauth_config::UpstreamOAuthDiscoveryMode::Oidc => {
-                    coauth_data::UpstreamOAuthProviderDiscoveryMode::Oidc
+                coauth_config::upstream_oauth::DiscoveryMode::Oidc => provider::DiscoveryMode::Oidc,
+                coauth_config::upstream_oauth::DiscoveryMode::Insecure => {
+                    provider::DiscoveryMode::Insecure
                 }
-                coauth_config::UpstreamOAuthDiscoveryMode::Insecure => {
-                    coauth_data::UpstreamOAuthProviderDiscoveryMode::Insecure
-                }
-                coauth_config::UpstreamOAuthDiscoveryMode::Disabled => {
-                    coauth_data::UpstreamOAuthProviderDiscoveryMode::Disabled
+                coauth_config::upstream_oauth::DiscoveryMode::Disabled => {
+                    provider::DiscoveryMode::Disabled
                 }
             };
 
             let token_endpoint_auth_method = match provider.token_endpoint_auth_method {
-                coauth_config::UpstreamOAuthTokenAuthMethod::None => {
-                    coauth_data::UpstreamOAuthProviderTokenAuthMethod::None
+                coauth_config::upstream_oauth::TokenAuthMethod::None => {
+                    provider::TokenAuthMethod::None
                 }
-                coauth_config::UpstreamOAuthTokenAuthMethod::ClientSecretBasic => {
-                    coauth_data::UpstreamOAuthProviderTokenAuthMethod::ClientSecretBasic
+                coauth_config::upstream_oauth::TokenAuthMethod::ClientSecretBasic => {
+                    provider::TokenAuthMethod::ClientSecretBasic
                 }
-                coauth_config::UpstreamOAuthTokenAuthMethod::ClientSecretPost => {
-                    coauth_data::UpstreamOAuthProviderTokenAuthMethod::ClientSecretPost
+                coauth_config::upstream_oauth::TokenAuthMethod::ClientSecretPost => {
+                    provider::TokenAuthMethod::ClientSecretPost
                 }
-                coauth_config::UpstreamOAuthTokenAuthMethod::ClientSecretJwt => {
-                    coauth_data::UpstreamOAuthProviderTokenAuthMethod::ClientSecretJwt
+                coauth_config::upstream_oauth::TokenAuthMethod::ClientSecretJwt => {
+                    provider::TokenAuthMethod::ClientSecretJwt
                 }
-                coauth_config::UpstreamOAuthTokenAuthMethod::PrivateKeyJwt => {
-                    coauth_data::UpstreamOAuthProviderTokenAuthMethod::PrivateKeyJwt
+                coauth_config::upstream_oauth::TokenAuthMethod::PrivateKeyJwt => {
+                    provider::TokenAuthMethod::PrivateKeyJwt
                 }
-                coauth_config::UpstreamOAuthTokenAuthMethod::SignInWithApple => {
-                    coauth_data::UpstreamOAuthProviderTokenAuthMethod::SignInWithApple
+                coauth_config::upstream_oauth::TokenAuthMethod::SignInWithApple => {
+                    provider::TokenAuthMethod::SignInWithApple
                 }
-                coauth_config::UpstreamOAuthTokenAuthMethod::QQConnect => {
-                    coauth_data::UpstreamOAuthProviderTokenAuthMethod::QQConnect
+                coauth_config::upstream_oauth::TokenAuthMethod::QQConnect => {
+                    provider::TokenAuthMethod::QQConnect
                 }
-                coauth_config::UpstreamOAuthTokenAuthMethod::Feishu => {
-                    coauth_data::UpstreamOAuthProviderTokenAuthMethod::Feishu
+                coauth_config::upstream_oauth::TokenAuthMethod::Feishu => {
+                    provider::TokenAuthMethod::Feishu
                 }
-                coauth_config::UpstreamOAuthTokenAuthMethod::Lark => {
-                    coauth_data::UpstreamOAuthProviderTokenAuthMethod::Lark
+                coauth_config::upstream_oauth::TokenAuthMethod::Lark => {
+                    provider::TokenAuthMethod::Lark
                 }
-                coauth_config::UpstreamOAuthTokenAuthMethod::DingTalk => {
-                    coauth_data::UpstreamOAuthProviderTokenAuthMethod::DingTalk
+                coauth_config::upstream_oauth::TokenAuthMethod::DingTalk => {
+                    provider::TokenAuthMethod::DingTalk
                 }
-                coauth_config::UpstreamOAuthTokenAuthMethod::WeChat => {
-                    coauth_data::UpstreamOAuthProviderTokenAuthMethod::WeChat
+                coauth_config::upstream_oauth::TokenAuthMethod::WeChat => {
+                    provider::TokenAuthMethod::WeChat
                 }
-                coauth_config::UpstreamOAuthTokenAuthMethod::WeCom => {
-                    coauth_data::UpstreamOAuthProviderTokenAuthMethod::WeCom
+                coauth_config::upstream_oauth::TokenAuthMethod::WeCom => {
+                    provider::TokenAuthMethod::WeCom
                 }
             };
 
             let response_mode = provider
                 .response_mode
                 .map(|response_mode| match response_mode {
-                    coauth_config::UpstreamOAuthResponseMode::Query => {
-                        coauth_data::UpstreamOAuthProviderResponseMode::Query
+                    coauth_config::upstream_oauth::ResponseMode::Query => {
+                        provider::ResponseMode::Query
                     }
-                    coauth_config::UpstreamOAuthResponseMode::FormPost => {
-                        coauth_data::UpstreamOAuthProviderResponseMode::FormPost
+                    coauth_config::upstream_oauth::ResponseMode::FormPost => {
+                        provider::ResponseMode::FormPost
                     }
                 });
 
@@ -310,26 +294,20 @@ pub async fn config_sync(
             }
 
             let pkce_mode = match provider.pkce_method {
-                coauth_config::UpstreamOAuthPkceMethod::Auto => {
-                    coauth_data::UpstreamOAuthProviderPkceMode::Auto
-                }
-                coauth_config::UpstreamOAuthPkceMethod::Always => {
-                    coauth_data::UpstreamOAuthProviderPkceMode::S256
-                }
-                coauth_config::UpstreamOAuthPkceMethod::Never => {
-                    coauth_data::UpstreamOAuthProviderPkceMode::Disabled
-                }
+                coauth_config::upstream_oauth::PkceMethod::Auto => provider::PkceMode::Auto,
+                coauth_config::upstream_oauth::PkceMethod::Always => provider::PkceMode::S256,
+                coauth_config::upstream_oauth::PkceMethod::Never => provider::PkceMode::Disabled,
             };
 
             let on_backchannel_logout = match provider.on_backchannel_logout {
-                coauth_config::UpstreamOAuthOnBackchannelLogout::DoNothing => {
-                    coauth_data::UpstreamOAuthProviderOnBackchannelLogout::DoNothing
+                coauth_config::upstream_oauth::OnBackchannelLogout::DoNothing => {
+                    provider::OnBackchannelLogout::DoNothing
                 }
-                coauth_config::UpstreamOAuthOnBackchannelLogout::LogoutBrowserOnly => {
-                    coauth_data::UpstreamOAuthProviderOnBackchannelLogout::LogoutBrowserOnly
+                coauth_config::upstream_oauth::OnBackchannelLogout::LogoutBrowserOnly => {
+                    provider::OnBackchannelLogout::LogoutBrowserOnly
                 }
-                coauth_config::UpstreamOAuthOnBackchannelLogout::LogoutAll => {
-                    coauth_data::UpstreamOAuthProviderOnBackchannelLogout::LogoutAll
+                coauth_config::upstream_oauth::OnBackchannelLogout::LogoutAll => {
+                    provider::OnBackchannelLogout::LogoutAll
                 }
             };
 
@@ -337,7 +315,7 @@ pub async fn config_sync(
             // clobber it. The admin and the operator have to reconcile by
             // hand.
             if let Some(existing) = repo.upstream_oauth_provider().lookup(provider.id).await?
-                && existing.source == UpstreamOAuthProviderSource::Manual
+                && existing.source == provider::ProviderSource::Manual
             {
                 warn!(
                     provider.id = %provider.id,
@@ -377,7 +355,7 @@ pub async fn config_sync(
                         forward_login_hint: provider.forward_login_hint,
                         ui_order,
                         on_backchannel_logout,
-                        source: UpstreamOAuthProviderSource::Config,
+                        source: provider::ProviderSource::Config,
                     },
                 )
                 .await?;

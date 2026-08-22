@@ -2,7 +2,9 @@ use arkret_models_collaboration::objects::account_status::AccountStatus;
 use chrono::Duration;
 use coauth_data::audit::{HandleAuditEventType, NewHandleAuditEvent};
 use coauth_data::clock::MockClock;
-use coauth_data::upstream_oauth::{UpstreamOAuthProviderParams, UpstreamOAuthSessionFilter};
+use coauth_data::upstream_oauth::{
+    UpstreamOAuthProviderParams, UpstreamOAuthSessionFilter, provider,
+};
 use coauth_data::user::{
     BrowserSessionFilter, BrowserSessionRepository, PrincipalDidRepository, UserEmailFilter,
     UserEmailRepository, UserFilter, UserPasswordRepository, UserRepository,
@@ -1191,27 +1193,26 @@ async fn test_user_session() {
                 human_name: None,
                 brand_name: None,
                 scope: Scope::from_iter([OPENID]),
-                token_endpoint_auth_method: coauth_data::UpstreamOAuthProviderTokenAuthMethod::None,
+                token_endpoint_auth_method: provider::TokenAuthMethod::None,
                 token_endpoint_signing_alg: None,
                 id_token_signed_response_alg: JsonWebSignatureAlg::Rs256,
                 fetch_userinfo: false,
                 userinfo_signed_response_alg: None,
                 client_id: "client".to_owned(),
                 encrypted_client_secret: None,
-                claims_imports: coauth_data::UpstreamOAuthProviderClaimsImports::default(),
+                claims_imports: provider::ClaimsImports::default(),
                 authorization_endpoint_override: None,
                 token_endpoint_override: None,
                 userinfo_endpoint_override: None,
                 jwks_uri_override: None,
-                discovery_mode: coauth_data::UpstreamOAuthProviderDiscoveryMode::Disabled,
-                pkce_mode: coauth_data::UpstreamOAuthProviderPkceMode::Disabled,
+                discovery_mode: provider::DiscoveryMode::Disabled,
+                pkce_mode: provider::PkceMode::Disabled,
                 response_mode: None,
                 additional_authorization_parameters: Vec::new(),
                 forward_login_hint: false,
                 ui_order: 0,
-                on_backchannel_logout:
-                    coauth_data::UpstreamOAuthProviderOnBackchannelLogout::DoNothing,
-                source: coauth_data::UpstreamOAuthProviderSource::Config,
+                on_backchannel_logout: provider::OnBackchannelLogout::DoNothing,
+                source: provider::ProviderSource::Config,
             },
         )
         .await

@@ -18,11 +18,6 @@ use coauth_jose::jwk::PublicJsonWebKey;
 pub use oidc_bridge::integration_describe;
 use opentelemetry::metrics::Counter;
 use opentelemetry::{Key, KeyValue};
-pub use passkey::{
-    auth_finish as passkey_auth_finish, auth_start as passkey_auth_start, list as passkey_list,
-    register_finish as passkey_register_finish, register_start as passkey_register_start,
-    rename as passkey_rename, revoke as passkey_revoke,
-};
 use salvo::prelude::*;
 use serde::Deserialize;
 

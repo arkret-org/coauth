@@ -16,9 +16,9 @@ use coauth_backend::util::{
     principal_server_connection_from_config, site_config_from_config, templates_from_config,
     test_mailer_in_background,
 };
+use coauth_config::http::{BindConfig, ListenerConfig, Resource};
 use coauth_config::{
-    AppConfig, ClientsConfig, ConfigurationSection, ConfigurationSectionExt, HttpBindConfig,
-    HttpListenerConfig, HttpResource, UpstreamOAuthConfig,
+    AppConfig, ClientsConfig, ConfigurationSection, ConfigurationSectionExt, UpstreamOAuthConfig,
 };
 use coauth_data::{SystemClock, UrlBuilder};
 use coauth_storage_postgres::PgRepositoryFactory;
@@ -220,7 +220,7 @@ impl Options {
             .iter()
             .flat_map(|l| &l.resources)
             .find_map(|r| {
-                if let HttpResource::Assets { path } = r {
+                if let Resource::Assets { path } = r {
                     coauth_backend::server::discover_frontend_script(path)
                 } else {
                     None
@@ -448,7 +448,7 @@ impl Options {
     }
 }
 
-fn metrics_listener_from_env() -> anyhow::Result<Option<HttpListenerConfig>> {
+fn metrics_listener_from_env() -> anyhow::Result<Option<ListenerConfig>> {
     let Ok(raw) = coauth_config::runtime_var(super::METRICS_BIND_ENV) else {
         return Ok(None);
     };
@@ -457,9 +457,9 @@ fn metrics_listener_from_env() -> anyhow::Result<Option<HttpListenerConfig>> {
         return Ok(None);
     }
 
-    Ok(Some(HttpListenerConfig {
+    Ok(Some(ListenerConfig {
         name: Some("metrics".to_owned()),
-        resources: vec![HttpResource::Prometheus],
+        resources: vec![Resource::Prometheus],
         prefix: None,
         binds: vec![parse_metrics_bind(raw)?],
         proxy_protocol: false,
@@ -467,21 +467,21 @@ fn metrics_listener_from_env() -> anyhow::Result<Option<HttpListenerConfig>> {
     }))
 }
 
-fn parse_metrics_bind(raw: &str) -> anyhow::Result<HttpBindConfig> {
+fn parse_metrics_bind(raw: &str) -> anyhow::Result<BindConfig> {
     let value = raw.trim();
     if value.is_empty() {
         anyhow::bail!("{} must not be empty", super::METRICS_BIND_ENV);
     }
 
     if let Ok(port) = value.parse::<u16>() {
-        return Ok(HttpBindConfig::Listen {
+        return Ok(BindConfig::Listen {
             host: Some("127.0.0.1".to_owned()),
             port,
         });
     }
 
     if value.parse::<std::net::SocketAddr>().is_ok() {
-        return Ok(HttpBindConfig::Address {
+        return Ok(BindConfig::Address {
             address: value.to_owned(),
         });
     }
@@ -497,7 +497,7 @@ fn parse_metrics_bind(raw: &str) -> anyhow::Result<HttpBindConfig> {
             .trim()
             .parse::<u16>()
             .with_context(|| format!("{} must end in a TCP port", super::METRICS_BIND_ENV))?;
-        return Ok(HttpBindConfig::Listen {
+        return Ok(BindConfig::Listen {
             host: Some(host.to_owned()),
             port,
         });
@@ -518,7 +518,7 @@ mod tests {
         let bind = parse_metrics_bind("9091").expect("bare port should parse");
 
         match bind {
-            HttpBindConfig::Listen { host, port } => {
+            BindConfig::Listen { host, port } => {
                 assert_eq!(host.as_deref(), Some("127.0.0.1"));
                 assert_eq!(port, 9091);
             }
@@ -531,7 +531,7 @@ mod tests {
         let bind = parse_metrics_bind("localhost:9091").expect("host:port should parse");
 
         match bind {
-            HttpBindConfig::Listen { host, port } => {
+            BindConfig::Listen { host, port } => {
                 assert_eq!(host.as_deref(), Some("localhost"));
                 assert_eq!(port, 9091);
             }
@@ -544,7 +544,7 @@ mod tests {
         let bind = parse_metrics_bind("127.0.0.1:9091").expect("socket address should parse");
 
         match bind {
-            HttpBindConfig::Address { address } => assert_eq!(address, "127.0.0.1:9091"),
+            BindConfig::Address { address } => assert_eq!(address, "127.0.0.1:9091"),
             other => panic!("unexpected bind: {other:?}"),
         }
     }

@@ -569,11 +569,9 @@ mod tests {
 
     use coauth_account_types::PostAuthAction;
     use coauth_data::clock::MockClock;
-    use coauth_data::upstream_oauth::UpstreamOAuthProviderParams;
+    use coauth_data::upstream_oauth::{UpstreamOAuthProviderParams, provider};
     use coauth_data::{
-        Clock, RepositoryAccess as _, RepositoryFactory as _, UpstreamOAuthProviderClaimsImports,
-        UpstreamOAuthProviderDiscoveryMode, UpstreamOAuthProviderOnBackchannelLogout,
-        UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderTokenAuthMethod, UserRegistration,
+        Clock, RepositoryAccess as _, RepositoryFactory as _, UserRegistration,
         UserRegistrationPassword,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
@@ -1092,26 +1090,26 @@ mod tests {
                     human_name: Some("Example Ltd.".to_owned()),
                     brand_name: None,
                     scope: Scope::from_iter([coauth_oauth_types::scope::OPENID]),
-                    token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod::None,
+                    token_endpoint_auth_method: provider::TokenAuthMethod::None,
                     token_endpoint_signing_alg: None,
                     id_token_signed_response_alg: JsonWebSignatureAlg::Rs256,
                     client_id: "client".to_owned(),
                     encrypted_client_secret: None,
-                    claims_imports: UpstreamOAuthProviderClaimsImports::default(),
+                    claims_imports: provider::ClaimsImports::default(),
                     authorization_endpoint_override: None,
                     token_endpoint_override: None,
                     userinfo_endpoint_override: None,
                     fetch_userinfo: false,
                     userinfo_signed_response_alg: None,
                     jwks_uri_override: None,
-                    discovery_mode: UpstreamOAuthProviderDiscoveryMode::Oidc,
-                    pkce_mode: UpstreamOAuthProviderPkceMode::Auto,
+                    discovery_mode: provider::DiscoveryMode::Oidc,
+                    pkce_mode: provider::PkceMode::Auto,
                     response_mode: None,
                     additional_authorization_parameters: Vec::new(),
                     forward_login_hint: false,
                     ui_order: 0,
-                    on_backchannel_logout: UpstreamOAuthProviderOnBackchannelLogout::DoNothing,
-                    source: coauth_data::UpstreamOAuthProviderSource::Config,
+                    on_backchannel_logout: provider::OnBackchannelLogout::DoNothing,
+                    source: provider::ProviderSource::Config,
                 },
             )
             .await

@@ -4,7 +4,8 @@ use std::os::unix::net::UnixListener;
 use std::time::{Duration, SystemTime};
 
 use anyhow::Context;
-use coauth_config::{HttpBindConfig, HttpResource, HttpTlsConfig, UnixOrTcp};
+use coauth_config::UnixOrTcp;
+use coauth_config::http::{BindConfig, Resource, TlsConfig};
 use listenfd::ListenFd;
 use rustls::ServerConfig;
 use salvo::prelude::*;
@@ -78,7 +79,7 @@ pub fn discover_frontend_script(assets_root: &camino::Utf8Path) -> Option<String
 #[must_use]
 pub fn build_router(
     state: AppState,
-    resources: &[HttpResource],
+    resources: &[Resource],
     prefix: Option<&str>,
     _name: Option<&str>,
 ) -> Router {
@@ -105,15 +106,15 @@ pub fn build_router(
 
     for resource in resources {
         router = match resource {
-            coauth_config::HttpResource::Health => router
+            Resource::Health => router
                 .push(Router::with_path("/health").get(health::get))
                 .push(Router::with_path("/livez").get(health::livez))
                 .push(Router::with_path("/healthz").get(health::get))
                 .push(Router::with_path("/readyz").get(health::readyz)),
-            coauth_config::HttpResource::Prometheus => {
+            Resource::Prometheus => {
                 router.push(Router::with_path("/metrics").get(crate::telemetry::prometheus_handler))
             }
-            coauth_config::HttpResource::Discovery => router
+            Resource::Discovery => router
                 .push(
                     Router::with_path("/.well-known/openid-configuration")
                         .hoop(public_oidc_browser_cors())
@@ -133,9 +134,9 @@ pub fn build_router(
             // grants, handle claims) are verified via the introspection
             // endpoints and the OAuth JWKS, never by resolving a
             // coauth-hosted DID document.
-            coauth_config::HttpResource::Human => build_human_router(router, templates.clone()),
-            coauth_config::HttpResource::RestApi => build_account_api_router(router),
-            coauth_config::HttpResource::Assets { path } => router
+            Resource::Human => build_human_router(router, templates.clone()),
+            Resource::RestApi => build_account_api_router(router),
+            Resource::Assets { path } => router
                 .push(Router::with_path("/favicon.ico").get(favicon_handler))
                 .push(
                     Router::with_path("/assets/{**path}")
@@ -160,9 +161,9 @@ pub fn build_router(
                                 .auto_list(false),
                         ),
                 ),
-            coauth_config::HttpResource::OAuth => build_oauth_router(router),
-            coauth_config::HttpResource::AdminApi => build_admin_router(router),
-            coauth_config::HttpResource::ConnectionInfo => {
+            Resource::OAuth => build_oauth_router(router),
+            Resource::AdminApi => build_admin_router(router),
+            Resource::ConnectionInfo => {
                 router.push(Router::with_path("/connection-info").get(connection_info_handler))
             }
         }
@@ -185,7 +186,7 @@ pub fn build_router(
         .hoop(sentry_middleware)
 }
 
-pub fn build_tls_server_config(config: &HttpTlsConfig) -> Result<ServerConfig, anyhow::Error> {
+pub fn build_tls_server_config(config: &TlsConfig) -> Result<ServerConfig, anyhow::Error> {
     let (key, chain) = config.load()?;
 
     // Pin the protocol-version floor to TLS 1.2 (TLS 1.3 preferred and
@@ -205,19 +206,19 @@ pub fn build_tls_server_config(config: &HttpTlsConfig) -> Result<ServerConfig, a
     Ok(config)
 }
 
-fn bind_description(bind: &HttpBindConfig) -> String {
+fn bind_description(bind: &BindConfig) -> String {
     match bind {
-        HttpBindConfig::Listen { host, port } => match host {
+        BindConfig::Listen { host, port } => match host {
             Some(host) => format!("TCP listener {host}:{port}"),
             None => format!("TCP listener [::]:{port} or 0.0.0.0:{port}"),
         },
-        HttpBindConfig::Address { address } => format!("TCP listener {address}"),
-        HttpBindConfig::Unix { socket } => format!("UNIX socket {socket}"),
-        HttpBindConfig::FileDescriptor {
+        BindConfig::Address { address } => format!("TCP listener {address}"),
+        BindConfig::Unix { socket } => format!("UNIX socket {socket}"),
+        BindConfig::FileDescriptor {
             fd,
             kind: UnixOrTcp::Tcp,
         } => format!("TCP listener on file descriptor {fd}"),
-        HttpBindConfig::FileDescriptor {
+        BindConfig::FileDescriptor {
             fd,
             kind: UnixOrTcp::Unix,
         } => format!("UNIX listener on file descriptor {fd}"),
@@ -226,14 +227,14 @@ fn bind_description(bind: &HttpBindConfig) -> String {
 
 pub fn build_listeners(
     fd_manager: &mut ListenFd,
-    configs: &[HttpBindConfig],
+    configs: &[BindConfig],
 ) -> Result<Vec<UnixOrTcpListener>, anyhow::Error> {
     let mut listeners = Vec::with_capacity(configs.len());
 
     for bind in configs {
         let bind_description = bind_description(bind);
         let listener = match bind {
-            HttpBindConfig::Listen { host, port } => {
+            BindConfig::Listen { host, port } => {
                 let addrs = match host.as_deref() {
                     Some(host) => (host, *port)
                         .to_socket_addrs()
@@ -254,7 +255,7 @@ pub fn build_listeners(
                 listener.try_into()?
             }
 
-            HttpBindConfig::Address { address } => {
+            BindConfig::Address { address } => {
                 let addr: SocketAddr = address
                     .parse()
                     .with_context(|| format!("could not parse listener address {address}"))?;
@@ -265,7 +266,7 @@ pub fn build_listeners(
             }
 
             #[cfg(unix)]
-            HttpBindConfig::Unix { socket } => {
+            BindConfig::Unix { socket } => {
                 let listener = UnixListener::bind(&socket)
                     .with_context(|| format!("could not bind {bind_description}"))?;
                 listener.set_nonblocking(true)?;
@@ -276,11 +277,11 @@ pub fn build_listeners(
             }
 
             #[cfg(not(unix))]
-            HttpBindConfig::Unix { .. } => {
+            BindConfig::Unix { .. } => {
                 anyhow::bail!("UNIX domain sockets are not supported on this platform");
             }
 
-            HttpBindConfig::FileDescriptor {
+            BindConfig::FileDescriptor {
                 fd,
                 kind: UnixOrTcp::Tcp,
             } => {
@@ -292,7 +293,7 @@ pub fn build_listeners(
             }
 
             #[cfg(unix)]
-            HttpBindConfig::FileDescriptor {
+            BindConfig::FileDescriptor {
                 fd,
                 kind: UnixOrTcp::Unix,
             } => {
@@ -304,7 +305,7 @@ pub fn build_listeners(
             }
 
             #[cfg(not(unix))]
-            HttpBindConfig::FileDescriptor {
+            BindConfig::FileDescriptor {
                 kind: UnixOrTcp::Unix,
                 ..
             } => {
@@ -324,7 +325,7 @@ pub fn build_listeners(
 mod tests {
     use std::net::TcpListener;
 
-    use coauth_config::HttpBindConfig;
+    use coauth_config::http::BindConfig;
     use coauth_data::UrlBuilder;
     use http::StatusCode;
     use http::header::{ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE};
@@ -344,7 +345,7 @@ mod tests {
 
         let error = match build_listeners(
             &mut fd_manager,
-            &[HttpBindConfig::Address {
+            &[BindConfig::Address {
                 address: format!("127.0.0.1:{port}"),
             }],
         ) {

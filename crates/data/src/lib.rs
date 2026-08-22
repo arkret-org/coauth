@@ -207,12 +207,7 @@ pub use self::tokens::{
 };
 pub use self::upstream_oauth::{
     UpstreamOAuthAuthorizationSession, UpstreamOAuthAuthorizationSessionState, UpstreamOAuthLink,
-    UpstreamOAuthLinkPatch, UpstreamOAuthProvider, UpstreamOAuthProviderClaimsImports,
-    UpstreamOAuthProviderDiscoveryMode, UpstreamOAuthProviderHandlePreference,
-    UpstreamOAuthProviderImportAction, UpstreamOAuthProviderImportPreference,
-    UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderOnConflict,
-    UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderResponseMode, UpstreamOAuthProviderSource,
-    UpstreamOAuthProviderSubjectPreference, UpstreamOAuthProviderTokenAuthMethod,
+    UpstreamOAuthLinkPatch, UpstreamOAuthProvider,
 };
 pub use self::url_builder::UrlBuilder;
 pub use self::user_agent::{DeviceType, UserAgent};

@@ -19,8 +19,10 @@ mod clients;
 mod database;
 mod email;
 mod experimental;
-mod http;
-mod passwords;
+/// HTTP listener, resource, and TLS configuration.
+pub mod http;
+/// Password hashing scheme configuration.
+pub mod passwords;
 mod policy;
 mod rate_limiting;
 mod secrets;
@@ -28,7 +30,8 @@ pub mod sms;
 mod storage;
 mod telemetry;
 mod templates;
-mod upstream_oauth;
+/// Upstream OAuth / OIDC provider configuration.
+pub mod upstream_oauth;
 
 // ── Re-exports ──
 
@@ -49,14 +52,8 @@ pub use self::email::{
     SmtpEmailProviderConfig, TwilioEmailProviderConfig,
 };
 pub use self::experimental::{ExperimentalConfig, MAX_ACCESS_TOKEN_TTL_SECS};
-pub use self::http::{
-    BindConfig as HttpBindConfig, HstsConfig as HttpHstsConfig, HttpConfig,
-    ListenerConfig as HttpListenerConfig, Resource as HttpResource, TlsConfig as HttpTlsConfig,
-    UnixOrTcp,
-};
-pub use self::passwords::{
-    Algorithm as PasswordAlgorithm, HashingScheme as PasswordHashingScheme, PasswordsConfig,
-};
+pub use self::http::{HttpConfig, UnixOrTcp};
+pub use self::passwords::PasswordsConfig;
 pub use self::policy::{PolicyConfig, PolicyEngine};
 pub use self::rate_limiting::{LoginLockoutConfig, RateLimiterConfiguration, RateLimitingConfig};
 pub use self::secrets::SecretsConfig;
@@ -70,15 +67,7 @@ pub use self::telemetry::{
     TracingExporterKind,
 };
 pub use self::templates::TemplatesConfig;
-pub use self::upstream_oauth::{
-    ClaimsImports as UpstreamOAuthClaimsImports, DiscoveryMode as UpstreamOAuthDiscoveryMode,
-    EmailImportPreference as UpstreamOAuthEmailImportPreference,
-    ImportAction as UpstreamOAuthImportAction,
-    OnBackchannelLogout as UpstreamOAuthOnBackchannelLogout, OnConflict as UpstreamOAuthOnConflict,
-    PkceMethod as UpstreamOAuthPkceMethod, Provider as UpstreamOAuthProvider,
-    ResponseMode as UpstreamOAuthResponseMode, TokenAuthMethod as UpstreamOAuthTokenAuthMethod,
-    UpstreamOAuthConfig,
-};
+pub use self::upstream_oauth::UpstreamOAuthConfig;
 use crate::util::ConfigurationSection;
 
 // ── Client Secret ──

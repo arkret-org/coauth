@@ -1,11 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use coauth_data::upstream_oauth::UpstreamOAuthProviderRepository;
-use coauth_data::{
-    RepositoryAccess, UpstreamOAuthProvider, UpstreamOAuthProviderDiscoveryMode,
-    UpstreamOAuthProviderPkceMode,
-};
+use coauth_data::upstream_oauth::{UpstreamOAuthProviderRepository, provider};
+use coauth_data::{RepositoryAccess, UpstreamOAuthProvider};
 use coauth_iana::oauth::PkceCodeChallengeMethod;
 use coauth_oauth_types::oidc::VerifiedProviderMetadata;
 use tokio::sync::RwLock;
@@ -58,9 +55,9 @@ impl<'a> LazyProviderInfos<'a> {
         }
 
         let verify = match self.provider.discovery_mode {
-            UpstreamOAuthProviderDiscoveryMode::Oidc => true,
-            UpstreamOAuthProviderDiscoveryMode::Insecure => false,
-            UpstreamOAuthProviderDiscoveryMode::Disabled => {
+            provider::DiscoveryMode::Oidc => true,
+            provider::DiscoveryMode::Insecure => false,
+            provider::DiscoveryMode::Disabled => {
                 return Err(DiscoveryError::Disabled);
             }
         };
@@ -131,12 +128,12 @@ impl<'a> LazyProviderInfos<'a> {
         &mut self,
     ) -> Result<Option<Vec<PkceCodeChallengeMethod>>, DiscoveryError> {
         let methods = match self.provider.pkce_mode {
-            UpstreamOAuthProviderPkceMode::Auto => self
+            provider::PkceMode::Auto => self
                 .maybe_discover()
                 .await?
                 .and_then(|metadata| metadata.code_challenge_methods_supported.clone()),
-            UpstreamOAuthProviderPkceMode::S256 => Some(vec![PkceCodeChallengeMethod::S256]),
-            UpstreamOAuthProviderPkceMode::Disabled => None,
+            provider::PkceMode::S256 => Some(vec![PkceCodeChallengeMethod::S256]),
+            provider::PkceMode::Disabled => None,
         };
 
         Ok(methods)
@@ -207,9 +204,9 @@ impl MetadataCache {
 
         for provider in providers {
             let verify = match provider.discovery_mode {
-                UpstreamOAuthProviderDiscoveryMode::Oidc => true,
-                UpstreamOAuthProviderDiscoveryMode::Insecure => false,
-                UpstreamOAuthProviderDiscoveryMode::Disabled => continue,
+                provider::DiscoveryMode::Oidc => true,
+                provider::DiscoveryMode::Insecure => false,
+                provider::DiscoveryMode::Disabled => continue,
             };
 
             let Some(issuer) = &provider.issuer else {
@@ -327,11 +324,8 @@ mod tests {
     // TODO: sadly, we can't test HTTPS requests with wiremock, so we can only test
     // 'insecure' discovery
 
+    use coauth_data::Clock;
     use coauth_data::clock::MockClock;
-    use coauth_data::{
-        Clock, UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderOnBackchannelLogout,
-        UpstreamOAuthProviderTokenAuthMethod,
-    };
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_oauth_types::scope::{OPENID, Scope};
     use ulid::Ulid;
@@ -438,8 +432,8 @@ mod tests {
             issuer: Some(mock_server.uri()),
             human_name: Some("Example Ltd.".to_owned()),
             brand_name: None,
-            discovery_mode: UpstreamOAuthProviderDiscoveryMode::Insecure,
-            pkce_mode: UpstreamOAuthProviderPkceMode::Auto,
+            discovery_mode: provider::DiscoveryMode::Insecure,
+            pkce_mode: provider::PkceMode::Auto,
             fetch_userinfo: false,
             userinfo_signed_response_alg: None,
             jwks_uri_override: None,
@@ -450,16 +444,16 @@ mod tests {
             client_id: "client_id".to_owned(),
             encrypted_client_secret: None,
             token_endpoint_signing_alg: None,
-            token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod::None,
+            token_endpoint_auth_method: provider::TokenAuthMethod::None,
             id_token_signed_response_alg: JsonWebSignatureAlg::Rs256,
             response_mode: None,
             created_at: clock.now(),
             disabled_at: None,
-            claims_imports: UpstreamOAuthProviderClaimsImports::default(),
+            claims_imports: provider::ClaimsImports::default(),
             additional_authorization_parameters: Vec::new(),
             forward_login_hint: false,
-            on_backchannel_logout: UpstreamOAuthProviderOnBackchannelLogout::DoNothing,
-            source: coauth_data::UpstreamOAuthProviderSource::Config,
+            on_backchannel_logout: provider::OnBackchannelLogout::DoNothing,
+            source: provider::ProviderSource::Config,
         };
 
         // Without any override, it should just use discovery
@@ -515,7 +509,7 @@ mod tests {
         // Loading an insecure provider with secure discovery should fail
         {
             let provider = UpstreamOAuthProvider {
-                discovery_mode: UpstreamOAuthProviderDiscoveryMode::Oidc,
+                discovery_mode: provider::DiscoveryMode::Oidc,
                 ..provider.clone()
             };
             let cache = MetadataCache::new();
@@ -528,7 +522,7 @@ mod tests {
         // Getting endpoints when discovery is disabled only works for overridden ones
         {
             let provider = UpstreamOAuthProvider {
-                discovery_mode: UpstreamOAuthProviderDiscoveryMode::Disabled,
+                discovery_mode: provider::DiscoveryMode::Disabled,
                 authorization_endpoint_override: Some(
                     Url::parse("https://example.com/authorize_override").unwrap(),
                 ),

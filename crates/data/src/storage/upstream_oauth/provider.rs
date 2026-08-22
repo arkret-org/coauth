@@ -1,12 +1,8 @@
 use std::marker::PhantomData;
 
 use async_trait::async_trait;
-use coauth_data::{
-    Clock, UpstreamOAuthProvider, UpstreamOAuthProviderClaimsImports,
-    UpstreamOAuthProviderDiscoveryMode, UpstreamOAuthProviderOnBackchannelLogout,
-    UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderResponseMode,
-    UpstreamOAuthProviderTokenAuthMethod,
-};
+use coauth_data::upstream_oauth::provider;
+use coauth_data::{Clock, UpstreamOAuthProvider};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_oauth_types::scope::Scope;
 use rand_core::RngCore;
@@ -14,7 +10,6 @@ use ulid::Ulid;
 use url::Url;
 
 use crate::pagination::Page;
-use crate::upstream_oauth::UpstreamOAuthProviderSource;
 use crate::{Pagination, repository_impl};
 
 /// Structure which holds parameters when inserting or updating an upstream
@@ -33,7 +28,7 @@ pub struct UpstreamOAuthProviderParams {
     pub scope: Scope,
 
     /// The token endpoint authentication method
-    pub token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod,
+    pub token_endpoint_auth_method: provider::TokenAuthMethod,
 
     /// The JWT signing algorithm to use when then `client_secret_jwt` or
     /// `private_key_jwt` authentication methods are used
@@ -64,7 +59,7 @@ pub struct UpstreamOAuthProviderParams {
     pub encrypted_client_secret: Option<String>,
 
     /// How claims should be imported from the upstream provider
-    pub claims_imports: UpstreamOAuthProviderClaimsImports,
+    pub claims_imports: provider::ClaimsImports,
 
     /// The URL to use as the authorization endpoint. If `None`, the URL will be
     /// discovered
@@ -82,13 +77,13 @@ pub struct UpstreamOAuthProviderParams {
     pub jwks_uri_override: Option<Url>,
 
     /// How the provider metadata should be discovered
-    pub discovery_mode: UpstreamOAuthProviderDiscoveryMode,
+    pub discovery_mode: provider::DiscoveryMode,
 
     /// How should PKCE be used
-    pub pkce_mode: UpstreamOAuthProviderPkceMode,
+    pub pkce_mode: provider::PkceMode,
 
     /// What response mode it should ask
-    pub response_mode: Option<UpstreamOAuthProviderResponseMode>,
+    pub response_mode: Option<provider::ResponseMode>,
 
     /// Additional parameters to include in the authorization request
     pub additional_authorization_parameters: Vec<(String, String)>,
@@ -100,10 +95,10 @@ pub struct UpstreamOAuthProviderParams {
     pub ui_order: i32,
 
     /// The behavior when receiving a backchannel logout notification
-    pub on_backchannel_logout: UpstreamOAuthProviderOnBackchannelLogout,
+    pub on_backchannel_logout: provider::OnBackchannelLogout,
 
     /// Origin of the row (config file vs admin API)
-    pub source: UpstreamOAuthProviderSource,
+    pub source: provider::ProviderSource,
 }
 
 /// Filter parameters for listing upstream OAuth providers
@@ -115,7 +110,7 @@ pub struct UpstreamOAuthProviderFilter<'a> {
     enabled: Option<bool>,
 
     /// Filter by the row's source (config vs manual)
-    source: Option<UpstreamOAuthProviderSource>,
+    source: Option<provider::ProviderSource>,
 
     _lifetime: PhantomData<&'a ()>,
 }
@@ -143,7 +138,7 @@ impl UpstreamOAuthProviderFilter<'_> {
 
     /// Restrict to a specific provider source
     #[must_use]
-    pub const fn with_source(mut self, source: UpstreamOAuthProviderSource) -> Self {
+    pub const fn with_source(mut self, source: provider::ProviderSource) -> Self {
         self.source = Some(source);
         self
     }
@@ -158,7 +153,7 @@ impl UpstreamOAuthProviderFilter<'_> {
 
     /// Get the source filter
     #[must_use]
-    pub const fn source(&self) -> Option<UpstreamOAuthProviderSource> {
+    pub const fn source(&self) -> Option<provider::ProviderSource> {
         self.source
     }
 }

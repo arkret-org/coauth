@@ -156,13 +156,13 @@ pub async fn password_manager_from_config(
         |(version, algorithm, cost, secret, unicode_normalization)| {
             use crate::handlers::passwords::Hasher;
             let hasher = match algorithm {
-                coauth_config::PasswordAlgorithm::Pbkdf2 => {
+                coauth_config::passwords::Algorithm::Pbkdf2 => {
                     Hasher::pbkdf2(secret, unicode_normalization)
                 }
-                coauth_config::PasswordAlgorithm::Bcrypt => {
+                coauth_config::passwords::Algorithm::Bcrypt => {
                     Hasher::bcrypt(cost, secret, unicode_normalization)
                 }
-                coauth_config::PasswordAlgorithm::Argon2id => {
+                coauth_config::passwords::Algorithm::Argon2id => {
                     Hasher::argon2id(secret, unicode_normalization)
                 }
             };

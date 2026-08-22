@@ -19,7 +19,8 @@
 
 use std::string::FromUtf8Error;
 
-use coauth_data::{UpstreamOAuthProvider, UpstreamOAuthProviderTokenAuthMethod};
+use coauth_data::UpstreamOAuthProvider;
+use coauth_data::upstream_oauth::provider;
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_keystore::{DecryptError, Encrypter, Keystore};
 use pkcs8::DecodePrivateKey;
@@ -97,38 +98,29 @@ pub(crate) fn client_credentials_for_provider(
         .transpose()?;
 
     let client_credentials = match provider.token_endpoint_auth_method {
-        UpstreamOAuthProviderTokenAuthMethod::None => ClientCredentials::None { client_id },
+        provider::TokenAuthMethod::None => ClientCredentials::None { client_id },
 
-        UpstreamOAuthProviderTokenAuthMethod::ClientSecretPost => {
-            ClientCredentials::ClientSecretPost {
-                client_id,
-                client_secret: client_secret
-                    .ok_or(ProviderCredentialsError::MissingClientSecret)?,
-            }
-        }
+        provider::TokenAuthMethod::ClientSecretPost => ClientCredentials::ClientSecretPost {
+            client_id,
+            client_secret: client_secret.ok_or(ProviderCredentialsError::MissingClientSecret)?,
+        },
 
-        UpstreamOAuthProviderTokenAuthMethod::ClientSecretBasic => {
-            ClientCredentials::ClientSecretBasic {
-                client_id,
-                client_secret: client_secret
-                    .ok_or(ProviderCredentialsError::MissingClientSecret)?,
-            }
-        }
+        provider::TokenAuthMethod::ClientSecretBasic => ClientCredentials::ClientSecretBasic {
+            client_id,
+            client_secret: client_secret.ok_or(ProviderCredentialsError::MissingClientSecret)?,
+        },
 
-        UpstreamOAuthProviderTokenAuthMethod::ClientSecretJwt => {
-            ClientCredentials::ClientSecretJwt {
-                client_id,
-                client_secret: client_secret
-                    .ok_or(ProviderCredentialsError::MissingClientSecret)?,
-                signing_algorithm: provider
-                    .token_endpoint_signing_alg
-                    .clone()
-                    .unwrap_or(JsonWebSignatureAlg::Rs256),
-                token_endpoint: token_endpoint.clone(),
-            }
-        }
+        provider::TokenAuthMethod::ClientSecretJwt => ClientCredentials::ClientSecretJwt {
+            client_id,
+            client_secret: client_secret.ok_or(ProviderCredentialsError::MissingClientSecret)?,
+            signing_algorithm: provider
+                .token_endpoint_signing_alg
+                .clone()
+                .unwrap_or(JsonWebSignatureAlg::Rs256),
+            token_endpoint: token_endpoint.clone(),
+        },
 
-        UpstreamOAuthProviderTokenAuthMethod::PrivateKeyJwt => ClientCredentials::PrivateKeyJwt {
+        provider::TokenAuthMethod::PrivateKeyJwt => ClientCredentials::PrivateKeyJwt {
             client_id,
             keystore: keystore.clone(),
             signing_algorithm: provider
@@ -138,7 +130,7 @@ pub(crate) fn client_credentials_for_provider(
             token_endpoint: token_endpoint.clone(),
         },
 
-        UpstreamOAuthProviderTokenAuthMethod::SignInWithApple => {
+        provider::TokenAuthMethod::SignInWithApple => {
             let params = client_secret.ok_or(ProviderCredentialsError::MissingClientSecret)?;
             let params: SignInWithApple = serde_json::from_str(&params)?;
 
@@ -152,32 +144,32 @@ pub(crate) fn client_credentials_for_provider(
             }
         }
 
-        UpstreamOAuthProviderTokenAuthMethod::QQConnect => ClientCredentials::QQConnect {
+        provider::TokenAuthMethod::QQConnect => ClientCredentials::QQConnect {
             client_id,
             client_secret: client_secret.ok_or(ProviderCredentialsError::MissingClientSecret)?,
         },
 
-        UpstreamOAuthProviderTokenAuthMethod::Feishu => ClientCredentials::Feishu {
+        provider::TokenAuthMethod::Feishu => ClientCredentials::Feishu {
             client_id,
             client_secret: client_secret.ok_or(ProviderCredentialsError::MissingClientSecret)?,
         },
 
-        UpstreamOAuthProviderTokenAuthMethod::Lark => ClientCredentials::Lark {
+        provider::TokenAuthMethod::Lark => ClientCredentials::Lark {
             client_id,
             client_secret: client_secret.ok_or(ProviderCredentialsError::MissingClientSecret)?,
         },
 
-        UpstreamOAuthProviderTokenAuthMethod::DingTalk => ClientCredentials::DingTalk {
+        provider::TokenAuthMethod::DingTalk => ClientCredentials::DingTalk {
             client_id,
             client_secret: client_secret.ok_or(ProviderCredentialsError::MissingClientSecret)?,
         },
 
-        UpstreamOAuthProviderTokenAuthMethod::WeChat => ClientCredentials::WeChat {
+        provider::TokenAuthMethod::WeChat => ClientCredentials::WeChat {
             client_id,
             client_secret: client_secret.ok_or(ProviderCredentialsError::MissingClientSecret)?,
         },
 
-        UpstreamOAuthProviderTokenAuthMethod::WeCom => ClientCredentials::WeCom {
+        provider::TokenAuthMethod::WeCom => ClientCredentials::WeCom {
             client_id,
             client_secret: client_secret.ok_or(ProviderCredentialsError::MissingClientSecret)?,
         },

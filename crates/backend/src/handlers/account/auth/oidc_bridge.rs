@@ -17,10 +17,8 @@ use arkret_identifiers::{DeviceId, DidCoreId, DidFullId};
 use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
 };
-use coauth_data::{
-    AuthorizationGrant, BoxRepository, RepositoryAccess, Session,
-    UpstreamOAuthProviderDiscoveryMode, User,
-};
+use coauth_data::upstream_oauth::provider;
+use coauth_data::{AuthorizationGrant, BoxRepository, RepositoryAccess, Session, User};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
 use coauth_oauth_types::requests::{
@@ -712,10 +710,10 @@ async fn exchange_oidc_code(
             }
         }
         UpstreamOidcExchangeMode::Federated { provider } => match provider.discovery_mode {
-            UpstreamOAuthProviderDiscoveryMode::Oidc => {
+            provider::DiscoveryMode::Oidc => {
                 discovery::discover(&http_client, issuer.as_str()).await
             }
-            UpstreamOAuthProviderDiscoveryMode::Insecure => {
+            provider::DiscoveryMode::Insecure => {
                 tracing::warn!(
                     target: "coauth.oidc_exchange",
                     %issuer,
@@ -725,7 +723,7 @@ async fn exchange_oidc_code(
                 );
                 discovery::insecure_discover(&http_client, issuer.as_str()).await
             }
-            UpstreamOAuthProviderDiscoveryMode::Disabled => {
+            provider::DiscoveryMode::Disabled => {
                 return Err(OidcExchangeError::new(
                     "invalid_discovery_binding",
                     "federated OIDC exchange requires discovery-enabled upstream provider metadata",
