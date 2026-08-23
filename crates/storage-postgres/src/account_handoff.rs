@@ -441,8 +441,12 @@ impl<'c> PgAccountHandoffRepository<'c> {
         // `text` cannot contain NUL bytes, so use a length-prefixed transcript
         // rather than the protocol-style NUL separator used by some hashes.
         let key = lease_quota_advisory_key(account_subject, audience);
+        // A PostgreSQL `void` result is not SQL NULL. Select a sentinel row
+        // from the volatile lock function instead of testing the result with
+        // `IS NULL`, which is always false and trips the debug assertion.
         let lock = diesel::sql_query(
-            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0)) IS NULL AS locked",
+            "SELECT TRUE AS locked \
+             FROM pg_advisory_xact_lock(hashtextextended($1, 0))",
         )
         .bind::<Text, _>(key)
         .get_result::<AdvisoryLockRow>(self.conn)
