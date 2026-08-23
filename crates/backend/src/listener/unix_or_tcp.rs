@@ -120,10 +120,6 @@ impl UnixOrTcpListener {
         }
     }
 
-    pub const fn is_tcp(&self) -> bool {
-        matches!(self, Self::Tcp(_))
-    }
-
     /// Accept an incoming connection
     ///
     /// # Cancel safety
