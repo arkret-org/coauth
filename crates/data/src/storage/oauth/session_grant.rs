@@ -220,6 +220,21 @@ pub struct SessionGrantExactOutcome<'a> {
     pub response_digest: [u8; 32],
 }
 
+/// Atomic refresh inputs that must be committed as one repository operation.
+#[derive(Debug)]
+pub struct SessionGrantRefreshCommit<'a> {
+    /// Reserved durable operation identity.
+    pub operation_id: Ulid,
+    /// Authorization checkpoint consumed by this refresh.
+    pub authorization: SessionGrantProofAuthorization<'a>,
+    /// Byte-exact response to retain for replay.
+    pub outcome: SessionGrantExactOutcome<'a>,
+    /// Active predecessor that the operation is allowed to supersede.
+    pub predecessor_grant_id: &'a SessionGrantId,
+    /// Successor grant material to insert atomically.
+    pub successor: NewSessionGrant<'a>,
+}
+
 /// Closed selector for one durable revoke mutation.
 #[derive(Debug, Clone, Copy)]
 pub enum SessionGrantRevokeSelector<'a> {
@@ -271,14 +286,14 @@ pub enum SessionGrantRefreshOutcome {
     /// This call committed the first successor.
     Committed {
         /// Atomically superseded predecessor.
-        predecessor: SessionGrant,
+        predecessor: Box<SessionGrant>,
         /// Atomically inserted successor.
-        successor: SessionGrant,
+        successor: Box<SessionGrant>,
     },
     /// A prior refresh committed the byte-exact outcome.
     Replay(SessionGrantOperation),
     /// The predecessor was already revoked or superseded by another operation.
-    PredecessorTerminal(SessionGrant),
+    PredecessorTerminal(Box<SessionGrant>),
     /// The operation is an evicted tombstone.
     Indeterminate(SessionGrantOperation),
 }
@@ -346,11 +361,7 @@ pub trait SessionGrantRepository: Send + Sync {
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        operation_id: Ulid,
-        authorization: SessionGrantProofAuthorization<'_>,
-        outcome: SessionGrantExactOutcome<'_>,
-        predecessor_grant_id: &SessionGrantId,
-        successor: NewSessionGrant<'_>,
+        commit: SessionGrantRefreshCommit<'_>,
     ) -> Result<SessionGrantRefreshOutcome, Self::Error>;
 
     /// Atomically revoke an active grant and commit an exact-replay outcome.
@@ -464,11 +475,7 @@ repository_impl!(SessionGrantRepository:
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        operation_id: Ulid,
-        authorization: SessionGrantProofAuthorization<'_>,
-        outcome: SessionGrantExactOutcome<'_>,
-        predecessor_grant_id: &SessionGrantId,
-        successor: NewSessionGrant<'_>,
+        commit: SessionGrantRefreshCommit<'_>,
     ) -> Result<SessionGrantRefreshOutcome, Self::Error>;
 
     async fn commit_revoke(

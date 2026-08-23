@@ -498,7 +498,7 @@ async fn issue_account_handoff_session_grant(
         granted_scope,
         Some(binding.principal_id.as_str()),
         &binding.principal_authority,
-        dpop.jkt.to_string(),
+        dpop.jkt.clone(),
         device_binding,
         SessionGrantProofKind::AccountHandoff,
     )

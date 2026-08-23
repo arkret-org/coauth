@@ -1712,7 +1712,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
 
         let is_acquisition = existing_lease
             .as_ref()
-            .map_or(true, |lease| lease.expires_at <= input.issued_at);
+            .is_none_or(|lease| lease.expires_at <= input.issued_at);
         let exact_quota_replay = self
             .quota_event_exists(input.request_id.uuid(), "acquisition")
             .await?
@@ -2166,7 +2166,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         if updated != 1 {
             return Ok(DidBindingChallengeConsume::Stale);
         }
-        Ok(DidBindingChallengeConsume::Consumed(record))
+        Ok(DidBindingChallengeConsume::Consumed(Box::new(record)))
     }
 
     async fn published_did_registration_replay(
@@ -2199,7 +2199,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         if record.consumed_at.is_some() || input.expires_at <= now {
             return Ok(PublishedDidRegisterReplay::Stale);
         }
-        Ok(PublishedDidRegisterReplay::Pending(record))
+        Ok(PublishedDidRegisterReplay::Pending(Box::new(record)))
     }
 
     async fn commit_published_did_registration(
@@ -3108,7 +3108,7 @@ mod tests {
             arkret_identifiers::Hash::new(format!("sha256:{}", "1".repeat(64))).expect("digest");
         let other_digest =
             arkret_identifiers::Hash::new(format!("sha256:{}", "2".repeat(64))).expect("digest");
-        let grant_id = Ulid::new();
+        let grant_id = Ulid::from(1_u128);
 
         assert_eq!(
             classify_existing_did_binding_challenge(

@@ -40,14 +40,14 @@ const EMAIL_VERIFICATION_LANGUAGE: &str = "en";
 /// Delay before each redelivery attempt of a notification.
 static DELIVERY_LADDER: &[std::time::Duration] = &[
     std::time::Duration::from_secs(30),
-    std::time::Duration::from_secs(120),
+    std::time::Duration::from_mins(2),
 ];
 
 /// The recovery-mail ladder, which carries one extra step.
 static RECOVERY_DELIVERY_LADDER: &[std::time::Duration] = &[
     std::time::Duration::from_secs(30),
-    std::time::Duration::from_secs(120),
-    std::time::Duration::from_secs(600),
+    std::time::Duration::from_mins(2),
+    std::time::Duration::from_mins(10),
 ];
 
 const RECOVERY_TICKET_CHARSET: &[u8] =

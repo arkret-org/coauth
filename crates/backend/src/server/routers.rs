@@ -498,8 +498,10 @@ async fn arkret_not_found(req: &Request, res: &mut Response) {
         .headers()
         .get(crate::server::ARKRET_REQUEST_ID_HEADER)
         .and_then(|value| value.to_str().ok())
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(|| format!("ak:request:{}", uuid::Uuid::now_v7()));
+        .map_or_else(
+            || format!("ak:request:{}", uuid::Uuid::now_v7()),
+            ToOwned::to_owned,
+        );
     if let Some(allowed) = arkret_allowed_methods(req.uri().path()) {
         res.status_code(StatusCode::METHOD_NOT_ALLOWED);
         if let Ok(value) = http::HeaderValue::from_str(allowed) {

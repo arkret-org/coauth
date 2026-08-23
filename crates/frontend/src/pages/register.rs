@@ -866,16 +866,14 @@ pub fn RegisterFinish(id: String) -> Element {
             let mut redirected = false;
 
             // 1. API-returned post_auth_action (set during upstream OIDC registration strands)
-            if let Some(action) = resp.post_auth_action.as_ref() {
-                if let coauth_account_types::PostAuthAction::ContinueAuthorizationGrant {
-                    id: grant_id,
-                } = action
-                {
-                    nav.push(Route::OAuthApproval {
-                        grant_id: grant_id.to_string(),
-                    });
-                    redirected = true;
-                }
+            if let Some(coauth_account_types::PostAuthAction::ContinueAuthorizationGrant {
+                id: grant_id,
+            }) = resp.post_auth_action.as_ref()
+            {
+                nav.push(Route::OAuthApproval {
+                    grant_id: grant_id.to_string(),
+                });
+                redirected = true;
             }
 
             if !redirected

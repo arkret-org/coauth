@@ -125,7 +125,9 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
             }
         };
         if !is_next {
-            return Ok(AccountStatusAppendOutcome::Conflict { current });
+            return Ok(AccountStatusAppendOutcome::Conflict {
+                current: current.map(Box::new),
+            });
         }
 
         let status_seq =
@@ -267,7 +269,10 @@ mod tests {
         let factory = PgRepositoryFactory::new(pool.clone());
         let clock = coauth_data::clock::MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(0x625);
-        let handle = format!("account-status-rollback-{}", ulid::Ulid::new());
+        let handle = format!(
+            "account-status-rollback-{}",
+            coauth_data::new_id(clock.now(), &mut rng)
+        );
 
         let mut setup = factory.create().await.unwrap();
         let user = setup.user().add(&mut rng, &clock, handle).await.unwrap();
@@ -408,7 +413,7 @@ mod tests {
         let factory = PgRepositoryFactory::new(pool.clone());
         let clock = coauth_data::clock::MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(0x626);
-        let account_id = ulid::Ulid::new();
+        let account_id = coauth_data::new_id(clock.now(), &mut rng);
         let record = genesis_record(account_id, clock.now());
         let body = AccountStatusPublicationRequestBody {
             publication: AccountStatusPublication::Initial(AccountStatusInitialPublication {

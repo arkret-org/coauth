@@ -7,7 +7,8 @@ use arkret_models_identity::SessionGrantProofKind;
 use chrono::{DateTime, Utc};
 use coauth_data::{
     NewSessionGrantOperation, SessionGrantExactOutcome, SessionGrantProofAuthorization,
-    SessionGrantRefreshOutcome as LedgerRefreshOutcome, SessionGrantReserveOutcome,
+    SessionGrantRefreshCommit, SessionGrantRefreshOutcome as LedgerRefreshOutcome,
+    SessionGrantReserveOutcome,
 };
 use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
@@ -654,15 +655,17 @@ pub async fn refresh_session_grant(
             .commit_refresh(
                 &mut rng,
                 &*clock,
-                operation.id,
-                SessionGrantProofAuthorization {
-                    authorization_ref: &authorization_ref,
-                    checkpoint: &checkpoint,
-                    proof_expires_at,
+                SessionGrantRefreshCommit {
+                    operation_id: operation.id,
+                    authorization: SessionGrantProofAuthorization {
+                        authorization_ref: &authorization_ref,
+                        checkpoint: &checkpoint,
+                        proof_expires_at,
+                    },
+                    outcome: exact_outcome,
+                    predecessor_grant_id: &prior_grant.grant_id,
+                    successor: new_session_grant_record(None, &new_material),
                 },
-                exact_outcome,
-                &prior_grant.grant_id,
-                new_session_grant_record(None, &new_material),
             )
             .await
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
@@ -924,18 +927,20 @@ pub async fn refresh_session_grant(
         .commit_refresh(
             &mut rng,
             &*clock,
-            operation.id,
-            SessionGrantProofAuthorization {
-                authorization_ref: &authorization_ref,
-                checkpoint: &checkpoint,
-                proof_expires_at,
+            SessionGrantRefreshCommit {
+                operation_id: operation.id,
+                authorization: SessionGrantProofAuthorization {
+                    authorization_ref: &authorization_ref,
+                    checkpoint: &checkpoint,
+                    proof_expires_at,
+                },
+                outcome: SessionGrantExactOutcome {
+                    canonical_response: &canonical_outcome,
+                    response_digest: sha2::Sha256::digest(&canonical_outcome).into(),
+                },
+                predecessor_grant_id: &prior_grant.grant_id,
+                successor: new_session_grant_record(Some(browser_session.id), &new_material),
             },
-            SessionGrantExactOutcome {
-                canonical_response: &canonical_outcome,
-                response_digest: sha2::Sha256::digest(&canonical_outcome).into(),
-            },
-            &prior_grant.grant_id,
-            new_session_grant_record(Some(browser_session.id), &new_material),
         )
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;

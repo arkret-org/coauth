@@ -328,33 +328,10 @@ fn map_handle_claim_issue_error(error: SessionGrantError) -> ArkretRouteError {
 }
 
 fn did_document_endorses_handle(document: &DidDocument, canonical_handle: &str) -> bool {
-    let Some((_, domain)) = canonical_handle.split_once(':') else {
-        return false;
-    };
     document
         .also_known_as
         .iter()
-        .any(|alias| normalize_handle_alias(alias, domain).as_deref() == Some(canonical_handle))
-}
-
-fn normalize_handle_alias(alias: &str, default_domain: &str) -> Option<String> {
-    let trimmed = alias.trim().to_ascii_lowercase();
-    let without_acct = trimmed.strip_prefix("acct:").unwrap_or(trimmed.as_str());
-    let without_at_prefix = without_acct.strip_prefix('@').unwrap_or(without_acct);
-    let (localpart, authority) =
-        if let Some((localpart, authority)) = without_at_prefix.rsplit_once('@') {
-            (localpart, authority)
-        } else if let Some((localpart, authority)) = without_at_prefix.split_once(':') {
-            (localpart, authority)
-        } else {
-            (without_at_prefix, default_domain)
-        };
-    let localpart = localpart.trim();
-    let authority = authority.trim();
-    if localpart.is_empty() || authority.is_empty() {
-        return None;
-    }
-    Some(format!("{localpart}:{authority}"))
+        .any(|alias| alias == canonical_handle)
 }
 
 async fn directory_resolve_not_found(started_at: Instant) -> ArkretRouteError {
@@ -398,4 +375,42 @@ fn did_document_object(
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn document_with_alias(alias: &str) -> DidDocument {
+        DidDocument {
+            id: "did:webvh:zExample:example.com".to_owned(),
+            also_known_as: vec![alias.to_owned()],
+            verification_method: Vec::new(),
+            authentication: Vec::new(),
+            assertion_method: Vec::new(),
+            service: Vec::new(),
+            metadata: None,
+        }
+    }
+
+    #[test]
+    fn handle_endorsement_requires_exact_canonical_alias() {
+        let canonical = "alice:example.com";
+        assert!(did_document_endorses_handle(
+            &document_with_alias(canonical),
+            canonical
+        ));
+        for non_canonical in [
+            "acct:alice@example.com",
+            "@alice:example.com",
+            "alice@example.com",
+            "Alice:example.com",
+            " alice:example.com ",
+        ] {
+            assert!(!did_document_endorses_handle(
+                &document_with_alias(non_canonical),
+                canonical
+            ));
+        }
+    }
 }

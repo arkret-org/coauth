@@ -11,8 +11,9 @@ use coauth_data::oauth::{
     SessionGrantCommitOutcome, SessionGrantExactOutcome, SessionGrantFilter,
     SessionGrantLifecycleState, SessionGrantOperation, SessionGrantOperationDescriptor,
     SessionGrantOperationKind, SessionGrantOperationState, SessionGrantProofAuthorization,
-    SessionGrantRefreshOutcome, SessionGrantRepository, SessionGrantReserveOutcome,
-    SessionGrantRevokeOutcome, SessionGrantRevokeSelector, SessionGrantRevokeTarget,
+    SessionGrantRefreshCommit, SessionGrantRefreshOutcome, SessionGrantRepository,
+    SessionGrantReserveOutcome, SessionGrantRevokeOutcome, SessionGrantRevokeSelector,
+    SessionGrantRevokeTarget,
 };
 use coauth_data::pagination::{Node, PaginationDirection};
 use coauth_data::{Clock, Page, Pagination, SessionGrant, new_id};
@@ -825,7 +826,9 @@ mod authorization_checkpoint_tests {
 
     #[test]
     fn authorized_exact_checkpoint_can_finish_after_proof_expiry() {
-        let now = Utc::now();
+        let now = DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .expect("fixture timestamp")
+            .with_timezone(&Utc);
         let checkpoint = serde_json::json!({"kind":"oidc","subject":"did:web:alice.example"});
         let authorization = SessionGrantProofAuthorization {
             authorization_ref: "oidc:code-hash",
@@ -840,7 +843,9 @@ mod authorization_checkpoint_tests {
 
     #[test]
     fn reserved_operation_cannot_first_consume_expired_proof() {
-        let now = Utc::now();
+        let now = DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .expect("fixture timestamp")
+            .with_timezone(&Utc);
         let checkpoint = serde_json::json!({"kind":"oidc"});
         let authorization = SessionGrantProofAuthorization {
             authorization_ref: "oidc:code-hash",
@@ -854,7 +859,9 @@ mod authorization_checkpoint_tests {
 
     #[test]
     fn authorized_resume_rejects_changed_checkpoint_after_expiry() {
-        let now = Utc::now();
+        let now = DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .expect("fixture timestamp")
+            .with_timezone(&Utc);
         let stored = serde_json::json!({"kind":"oidc","subject":"did:web:alice.example"});
         let changed = serde_json::json!({"kind":"oidc","subject":"did:web:bob.example"});
         let stored_authorization = SessionGrantProofAuthorization {
@@ -916,17 +923,31 @@ async fn lock_session_grant_subject(
     Ok(())
 }
 
-async fn commit_operation_outcome(
-    conn: &mut diesel_async::AsyncPgConnection,
+struct CommitOperationOutcome<'a> {
     operation_id: Ulid,
-    authorization: SessionGrantProofAuthorization<'_>,
-    outcome: SessionGrantExactOutcome<'_>,
-    target_session_grant_id: Option<&SessionGrantId>,
-    result_grant_id: Option<&SessionGrantId>,
-    affected_grant_ids: &[SessionGrantId],
+    authorization: SessionGrantProofAuthorization<'a>,
+    outcome: SessionGrantExactOutcome<'a>,
+    target_session_grant_id: Option<&'a SessionGrantId>,
+    result_grant_id: Option<&'a SessionGrantId>,
+    affected_grant_ids: &'a [SessionGrantId],
     retained_until: DateTime<Utc>,
     committed_at: DateTime<Utc>,
+}
+
+async fn commit_operation_outcome(
+    conn: &mut diesel_async::AsyncPgConnection,
+    commit: CommitOperationOutcome<'_>,
 ) -> Result<(), DatabaseError> {
+    let CommitOperationOutcome {
+        operation_id,
+        authorization,
+        outcome,
+        target_session_grant_id,
+        result_grant_id,
+        affected_grant_ids,
+        retained_until,
+        committed_at,
+    } = commit;
     let affected_grant_ids = affected_grant_ids
         .iter()
         .map(|id| Some(id.token_bytes().to_vec()))
@@ -1287,14 +1308,16 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                     .await?;
                 commit_operation_outcome(
                     conn,
-                    operation_id,
-                    authorization,
-                    outcome,
-                    None,
-                    Some(&grant_id),
-                    &[],
-                    retained_until,
-                    now,
+                    CommitOperationOutcome {
+                        operation_id,
+                        authorization,
+                        outcome,
+                        target_session_grant_id: None,
+                        result_grant_id: Some(&grant_id),
+                        affected_grant_ids: &[],
+                        retained_until,
+                        committed_at: now,
+                    },
                 )
                 .await?;
                 Ok(SessionGrantCommitOutcome::Committed(owned_grant(
@@ -1311,12 +1334,15 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        operation_id: Ulid,
-        authorization: SessionGrantProofAuthorization<'_>,
-        outcome: SessionGrantExactOutcome<'_>,
-        predecessor_grant_id: &SessionGrantId,
-        successor: NewSessionGrant<'_>,
+        commit: SessionGrantRefreshCommit<'_>,
     ) -> Result<SessionGrantRefreshOutcome, Self::Error> {
+        let SessionGrantRefreshCommit {
+            operation_id,
+            authorization,
+            outcome,
+            predecessor_grant_id,
+            successor,
+        } = commit;
         validate_exact_outcome(outcome)?;
         let now = clock.now();
         let successor_row_id = new_id(now, rng);
@@ -1360,7 +1386,9 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 if predecessor.lifecycle_state != SessionGrantLifecycleState::Active
                     || predecessor.expires_at <= now
                 {
-                    return Ok(SessionGrantRefreshOutcome::PredecessorTerminal(predecessor));
+                    return Ok(SessionGrantRefreshOutcome::PredecessorTerminal(Box::new(
+                        predecessor,
+                    )));
                 }
                 let successor_grant_id = successor.grant_id.clone();
                 diesel::insert_into(oauth_session_grants::table)
@@ -1390,22 +1418,29 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 let retained_until = operation.retained_until.max(authorization.proof_expires_at);
                 commit_operation_outcome(
                     conn,
-                    operation_id,
-                    authorization,
-                    outcome,
-                    Some(predecessor_grant_id),
-                    Some(&successor_grant_id),
-                    &[],
-                    retained_until,
-                    now,
+                    CommitOperationOutcome {
+                        operation_id,
+                        authorization,
+                        outcome,
+                        target_session_grant_id: Some(predecessor_grant_id),
+                        result_grant_id: Some(&successor_grant_id),
+                        affected_grant_ids: &[],
+                        retained_until,
+                        committed_at: now,
+                    },
                 )
                 .await?;
                 let predecessor = load_grant_by_protocol_id(conn, predecessor_grant_id)
                     .await?
                     .ok_or_else(DatabaseError::invalid_operation)?;
                 Ok(SessionGrantRefreshOutcome::Committed {
-                    predecessor,
-                    successor: owned_grant(successor_row_id, operation_id, now, successor),
+                    predecessor: Box::new(predecessor),
+                    successor: Box::new(owned_grant(
+                        successor_row_id,
+                        operation_id,
+                        now,
+                        successor,
+                    )),
                 })
             })
             .await
@@ -1545,17 +1580,19 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 };
                 commit_operation_outcome(
                     conn,
-                    operation_id,
-                    authorization,
-                    SessionGrantExactOutcome {
-                        canonical_response: &canonical_response,
-                        response_digest,
+                    CommitOperationOutcome {
+                        operation_id,
+                        authorization,
+                        outcome: SessionGrantExactOutcome {
+                            canonical_response: &canonical_response,
+                            response_digest,
+                        },
+                        target_session_grant_id: target,
+                        result_grant_id: None,
+                        affected_grant_ids: &active_ids,
+                        retained_until,
+                        committed_at: now,
                     },
-                    target,
-                    None,
-                    &active_ids,
-                    retained_until,
-                    now,
                 )
                 .await?;
                 let committed_operation = load_operation_for_update(conn, operation_id).await?;

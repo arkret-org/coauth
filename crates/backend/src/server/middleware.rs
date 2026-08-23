@@ -23,8 +23,10 @@ fn arkret_request_id(req: &Request) -> String {
         .get(ARKRET_REQUEST_ID_HEADER)
         .and_then(|value| value.to_str().ok())
         .filter(|value| arkret_identifiers::RequestId::new((*value).to_owned()).is_ok())
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(|| format!("ak:request:{}", uuid::Uuid::now_v7()))
+        .map_or_else(
+            || format!("ak:request:{}", uuid::Uuid::now_v7()),
+            ToOwned::to_owned,
+        )
 }
 
 /// Establish one correlation id before any Arkret handler or error renderer

@@ -179,9 +179,9 @@ pub use self::oauth::{
     LocalizedClientMetadata, NewSessionGrantOperation, Pkce, Session, SessionGrant,
     SessionGrantCommitOutcome, SessionGrantExactOutcome, SessionGrantLifecycleState,
     SessionGrantOperation, SessionGrantOperationDescriptor, SessionGrantOperationKind,
-    SessionGrantOperationState, SessionGrantProofAuthorization, SessionGrantRefreshOutcome,
-    SessionGrantReserveOutcome, SessionGrantRevokeOutcome, SessionGrantRevokeSelector,
-    SessionGrantRevokeTarget, SessionState,
+    SessionGrantOperationState, SessionGrantProofAuthorization, SessionGrantRefreshCommit,
+    SessionGrantRefreshOutcome, SessionGrantReserveOutcome, SessionGrantRevokeOutcome,
+    SessionGrantRevokeSelector, SessionGrantRevokeTarget, SessionState,
 };
 pub use self::organization_control::{
     NewOrganizationDelegation, NewOrganizationPrincipalControl, OrganizationBootstrapAuthorization,

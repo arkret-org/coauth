@@ -179,7 +179,9 @@ pub fn account_binding_receipt(
     version_id: &str,
     head_event_digest: arkret_identifiers::Hash,
 ) -> arkret_models_identity::AccountBindingReceipt {
-    let issued_at = chrono::Utc::now();
+    let issued_at = chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+        .expect("fixture timestamp")
+        .with_timezone(&chrono::Utc);
     let mut receipt = arkret_models_identity::AccountBindingReceipt {
         binding_state: arkret_models_identity::AccountBindingState::Bound,
         binding_kind: arkret_models_identity::AccountBindingKind::IdentityCreation,

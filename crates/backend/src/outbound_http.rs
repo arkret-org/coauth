@@ -354,7 +354,7 @@ fn base_client_builder() -> reqwest::ClientBuilder {
         let pem = std::fs::read(&path).unwrap_or_else(|error| {
             panic!(
                 "failed to read SSL_CERT_FILE {}: {error}",
-                std::path::Path::new(&path).display()
+                path.to_string_lossy()
             )
         });
         let certificates = reqwest::Certificate::from_pem_bundle(&pem)
@@ -957,7 +957,7 @@ mod tests {
         })
         .await;
         let large = reqwest::Client::new().get(large_url).send().await.unwrap();
-        assert_eq!(retry_after_hint(&large), Some(Duration::from_secs(86_400)));
+        assert_eq!(retry_after_hint(&large), Some(Duration::from_hours(24)));
 
         let (invalid_url, _) = spawn_http_server(|_| async {
             "HTTP/1.1 503 retry\r\nRetry-After: eventually\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned()

@@ -608,7 +608,6 @@ pub async fn load_policy_factory_dynamic_data(
 /// Backed by coauth's own Postgres (`users`) via `repository_factory` — see
 /// [`crate::services::principal_facade::DbConnectorAdmin`]. Replaces the
 /// former in-memory mock, which lost all state on restart.
-#[must_use]
 pub fn principal_server_connection_from_config(
     site_config: &SiteConfig,
     repository_factory: BoxRepositoryFactory,
@@ -617,14 +616,12 @@ pub fn principal_server_connection_from_config(
     key_store: &coauth_keystore::Keystore,
     url_builder: &UrlBuilder,
 ) -> Result<(Arc<dyn ConnectorAdmin>, ConnectorRegistry), anyhow::Error> {
-    let registry = ConnectorRegistry::new();
-
     let source_trust_domain = arkret_identifiers::TrustDomainId::new(
         crate::handlers::arkret::trust_domain_for(url_builder, &arkret_config),
     )
     .map_err(|error| anyhow::anyhow!("configured Arkret trust domain is invalid: {error}"))?;
 
-    let admin: Arc<dyn ConnectorAdmin> = Arc::new(
+    let provider = Arc::new(
         crate::services::principal_facade::DbConnectorAdmin::new(
             site_config.server_name.clone(),
             repository_factory,
@@ -633,6 +630,9 @@ pub fn principal_server_connection_from_config(
         )
         .with_peer_signing(key_store.clone(), source_trust_domain, url_builder.clone()),
     );
+    let admin: Arc<dyn ConnectorAdmin> = provider.clone();
+    let mut registry = ConnectorRegistry::new();
+    registry.register(provider);
     Ok((admin, registry))
 }
 

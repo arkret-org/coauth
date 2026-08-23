@@ -26,7 +26,7 @@ use async_trait::async_trait;
 use coauth_config::{ArkretConfig, PrincipalServerConfig};
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess};
 use coauth_principal::{
-    ConnectorAccountProfile, ConnectorAdmin, ConnectorProvisionRequest,
+    ConnectorAccountProfile, ConnectorAdmin, ConnectorProvider, ConnectorProvisionRequest,
     PrincipalAccountStatusPublicationRequest, PrincipalAgentKeyPairCommitRequest,
     PrincipalErasureReceiptRequest,
 };
@@ -495,6 +495,16 @@ impl ConnectorAdmin for DbConnectorAdmin {
 
     async fn unset_displayname(&self, _handle: &str) -> Result<(), anyhow::Error> {
         Ok(())
+    }
+}
+
+impl ConnectorProvider for DbConnectorAdmin {
+    #[allow(
+        clippy::unnecessary_literal_bound,
+        reason = "the public provider trait permits names borrowed from provider state"
+    )]
+    fn provider_name(&self) -> &str {
+        "principal"
     }
 }
 

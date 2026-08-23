@@ -480,14 +480,14 @@ pub enum DidBindingChallengeIssue {
 
 #[derive(Clone, Debug)]
 pub enum DidBindingChallengeConsume {
-    Consumed(DidBindingChallengeRecord),
+    Consumed(Box<DidBindingChallengeRecord>),
     Mismatch,
     Stale,
 }
 
 #[derive(Clone, Debug)]
 pub enum PublishedDidRegisterReplay {
-    Pending(DidBindingChallengeRecord),
+    Pending(Box<DidBindingChallengeRecord>),
     Replay(Box<arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome>),
     DuplicateConflict,
     Stale,

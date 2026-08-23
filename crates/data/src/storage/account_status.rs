@@ -15,7 +15,7 @@ pub enum AccountStatusAppendOutcome {
     /// The candidate is not the next record after the durable current head.
     Conflict {
         /// Current durable head, if the ledger is non-empty.
-        current: Option<AccountStatusRecord>,
+        current: Option<Box<AccountStatusRecord>>,
     },
 }
 
