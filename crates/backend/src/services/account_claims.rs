@@ -39,7 +39,7 @@ pub struct AccountClaimRecord {
     pub subject: String,
     pub issuer: String,
     pub verifier_did: String,
-    pub represented_org: String,
+    pub represented_organization: String,
     /// Verifier-owned claim document. `claim_kind` selects the verifier and
     /// its registered schema; lifecycle `status` does not select this shape.
     pub payload: Value,
@@ -57,7 +57,7 @@ pub struct IssueAccountClaim {
     pub subject: String,
     pub issuer: String,
     pub verifier_did: String,
-    pub represented_org: String,
+    pub represented_organization: String,
     /// Claim document already validated by the verifier selected by
     /// `claim_kind`; it is an open verifier boundary, not lifecycle data.
     pub payload: Value,
@@ -131,7 +131,7 @@ struct AccountClaimRow {
     #[diesel(sql_type = Text)]
     verifier_did: String,
     #[diesel(sql_type = Text)]
-    represented_org: String,
+    represented_organization: String,
     #[diesel(sql_type = Jsonb)]
     payload: Value,
     #[diesel(sql_type = Timestamptz)]
@@ -161,7 +161,7 @@ impl AccountClaimRow {
             subject: self.subject,
             issuer: self.issuer,
             verifier_did: self.verifier_did,
-            represented_org: self.represented_org,
+            represented_organization: self.represented_organization,
             payload: self.payload,
             status,
             issued_at: self.issued_at,
@@ -223,7 +223,7 @@ impl PgAccountClaimsService {
                 subject,
                 issuer,
                 verifier_did,
-                represented_org,
+                represented_organization,
                 payload,
                 issued_at,
                 expires_at,
@@ -238,7 +238,7 @@ impl PgAccountClaimsService {
                 subject,
                 issuer,
                 verifier_did,
-                represented_org,
+                represented_organization,
                 payload,
                 issued_at,
                 expires_at,
@@ -252,7 +252,7 @@ impl PgAccountClaimsService {
         .bind::<Text, _>(input.subject)
         .bind::<Text, _>(input.issuer)
         .bind::<Text, _>(input.verifier_did)
-        .bind::<Text, _>(input.represented_org)
+        .bind::<Text, _>(input.represented_organization)
         .bind::<Jsonb, _>(input.payload)
         .bind::<Timestamptz, _>(input.issued_at)
         .bind::<Nullable<Timestamptz>, _>(input.expires_at)
@@ -283,7 +283,7 @@ impl PgAccountClaimsService {
                 subject,
                 issuer,
                 verifier_did,
-                represented_org,
+                represented_organization,
                 payload,
                 issued_at,
                 expires_at,
@@ -337,7 +337,7 @@ impl PgAccountClaimsService {
                 subject,
                 issuer,
                 verifier_did,
-                represented_org,
+                represented_organization,
                 payload,
                 issued_at,
                 expires_at,

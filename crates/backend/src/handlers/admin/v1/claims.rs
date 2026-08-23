@@ -54,7 +54,7 @@ pub struct ClaimRecord {
     /// Bound local account, when the subject resolves to a coauth account.
     account_id: Option<String>,
 
-    /// Claim kind, for example `verified_email_domain` or `org_role`.
+    /// Claim kind, for example `verified_email_domain` or `organization_role`.
     claim_kind: String,
 
     /// Subject account or DID.
@@ -67,7 +67,7 @@ pub struct ClaimRecord {
     verifier_did: String,
 
     /// Organization represented by the verifier.
-    represented_org: String,
+    represented_organization: String,
 
     /// Claim payload.
     payload: serde_json::Value,
@@ -100,7 +100,7 @@ pub struct IssueClaimRequestBody {
     #[schemars(with = "Option<crate::handlers::admin::schema::Ulid>")]
     account_id: Option<Ulid>,
 
-    /// Claim kind, for example `verified_email_domain` or `org_role`.
+    /// Claim kind, for example `verified_email_domain` or `organization_role`.
     claim_kind: String,
 
     /// Subject account, local DID, username, or external DID.
@@ -114,7 +114,7 @@ pub struct IssueClaimRequestBody {
     verifier_did: String,
 
     /// Organization represented by the verifier.
-    represented_org: String,
+    represented_organization: String,
 
     /// Claim payload.
     payload: serde_json::Value,
@@ -169,7 +169,8 @@ pub async fn issue_claim(req: &mut Request, depot: &Depot) -> CreatedJsonResult<
     let claim_kind = require_non_empty(body.claim_kind, "claim_kind")?;
     let subject = require_non_empty(body.subject, "subject")?;
     let verifier_did = require_did(body.verifier_did, "verifier_did")?;
-    let represented_org = require_non_empty(body.represented_org, "represented_org")?;
+    let represented_organization =
+        require_non_empty(body.represented_organization, "represented_organization")?;
     let account_id = resolve_account_id_for_issue(&mut repo, body.account_id, &subject).await?;
 
     let issuer = if let Some(value) = body.issuer {
@@ -188,7 +189,7 @@ pub async fn issue_claim(req: &mut Request, depot: &Depot) -> CreatedJsonResult<
             subject,
             issuer,
             verifier_did,
-            represented_org,
+            represented_organization,
             payload: body.payload,
             issued_at: now,
             expires_at: body.expires_at,
@@ -210,7 +211,7 @@ pub async fn issue_claim(req: &mut Request, depot: &Depot) -> CreatedJsonResult<
             "claim_kind": &record.claim_kind,
             "issuer": &record.issuer,
             "verifier_did": &record.verifier_did,
-            "represented_org": &record.represented_org,
+            "represented_organization": &record.represented_organization,
             "expires_at": &record.expires_at,
         }),
     )
@@ -304,7 +305,7 @@ pub(crate) fn claim_record_from_service(record: StoredClaimRecord) -> ClaimRecor
         subject: record.subject,
         issuer: record.issuer,
         verifier_did: record.verifier_did,
-        represented_org: record.represented_org,
+        represented_organization: record.represented_organization,
         payload: record.payload,
         status: ClaimStatus::from_service(record.status),
         issued_at: record.issued_at,
@@ -435,10 +436,10 @@ mod tests {
             .request(Request::post("/_coauth/admin/claims").bearer(&token).json(
                 serde_json::json!({
                     "account_id": user.id.to_string(),
-                    "claim_kind": "org_role",
+                    "claim_kind": "organization_role",
                     "subject": user.id.to_string(),
                     "verifier_did": "did:web:verifier.example",
-                    "represented_org": "Example Org",
+                    "represented_organization": "Example Org",
                     "payload": {
                         "value": "admin",
                         "scope": "progressive_disclosure"
@@ -451,7 +452,7 @@ mod tests {
         assert_eq!(body["account_id"], user.id.to_string());
         assert_eq!(body["status"], "active");
         assert_eq!(body["verifier_did"], "did:web:verifier.example");
-        assert_eq!(body["represented_org"], "Example Org");
+        assert_eq!(body["represented_organization"], "Example Org");
         let claim_id = body["id"].as_str().unwrap().to_owned();
 
         let response = state
@@ -466,7 +467,7 @@ mod tests {
         assert_eq!(body["data"][0]["id"], claim_id);
         assert_eq!(body["data"][0]["state"], "active");
         assert_eq!(body["data"][0]["value"], "admin");
-        assert_eq!(body["data"][0]["represented_org"], "Example Org");
+        assert_eq!(body["data"][0]["represented_organization"], "Example Org");
 
         let response = state
             .request(

@@ -616,7 +616,7 @@ fn account_claim_record_from_service(record: StoredAccountClaimRecord) -> Accoun
         subject: record.subject,
         issuer: record.issuer,
         verifier_did: record.verifier_did,
-        represented_org: record.represented_org,
+        represented_organization: record.represented_organization,
         payload: record.payload,
         issued_at: Some(record.issued_at),
         expires_at: record.expires_at,

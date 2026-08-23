@@ -322,7 +322,7 @@ diesel::table! {
         subject -> Text,
         issuer -> Text,
         verifier_did -> Text,
-        represented_org -> Text,
+        represented_organization -> Text,
         payload -> Jsonb,
         issued_at -> Timestamptz,
         expires_at -> Nullable<Timestamptz>,

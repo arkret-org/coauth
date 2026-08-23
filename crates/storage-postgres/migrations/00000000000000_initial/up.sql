@@ -17,7 +17,7 @@ CREATE TABLE public.account_claims (
     subject text NOT NULL,
     issuer text NOT NULL,
     verifier_did text NOT NULL,
-    represented_org text NOT NULL,
+    represented_organization text NOT NULL,
     payload jsonb DEFAULT '{}'::jsonb NOT NULL,
     issued_at timestamp with time zone DEFAULT now() NOT NULL,
     expires_at timestamp with time zone,
@@ -27,7 +27,7 @@ CREATE TABLE public.account_claims (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT account_claims_claim_kind_non_empty CHECK ((btrim(claim_kind) <> ''::text)),
     CONSTRAINT account_claims_issuer_non_empty CHECK ((btrim(issuer) <> ''::text)),
-    CONSTRAINT account_claims_represented_org_non_empty CHECK ((btrim(represented_org) <> ''::text)),
+    CONSTRAINT account_claims_represented_organization_non_empty CHECK ((btrim(represented_organization) <> ''::text)),
     CONSTRAINT account_claims_subject_non_empty CHECK ((btrim(subject) <> ''::text)),
     CONSTRAINT account_claims_verifier_did_non_empty CHECK ((btrim(verifier_did) <> ''::text))
 );
@@ -1608,7 +1608,7 @@ CREATE INDEX account_claims_account_id_issued_idx ON public.account_claims USING
 
 CREATE INDEX account_claims_lifecycle_idx ON public.account_claims USING btree (revoked_at, expires_at);
 
-CREATE INDEX account_claims_represented_org_idx ON public.account_claims USING btree (represented_org);
+CREATE INDEX account_claims_represented_organization_idx ON public.account_claims USING btree (represented_organization);
 
 CREATE INDEX account_claims_subject_idx ON public.account_claims USING btree (subject);
 

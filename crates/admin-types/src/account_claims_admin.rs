@@ -42,7 +42,7 @@ pub struct AdminAccountClaimRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_id: Option<String>,
 
-    /// Claim kind, for example `verified_email_domain`, `org_role`,
+    /// Claim kind, for example `verified_email_domain`, `organization_role`,
     /// `handle`, `principal_id`.
     #[serde(default)]
     pub claim_kind: String,
@@ -79,7 +79,7 @@ pub struct AdminAccountClaimRecord {
 
     /// Organization represented by the verifier.
     #[serde(default)]
-    pub represented_org: String,
+    pub represented_organization: String,
 
     /// Raw claim payload — kept untyped so the verifier-supplied JSON
     /// schema can vary per claim kind.
@@ -149,7 +149,7 @@ mod tests {
             subject: "01H...".into(),
             issuer: "did:web:issuer.example".into(),
             verifier_did: "did:web:verifier.example".into(),
-            represented_org: "Example Org".into(),
+            represented_organization: "Example Org".into(),
             payload: serde_json::json!({"value": "alice"}),
             ..AdminAccountClaimRecord::default()
         };
@@ -170,14 +170,14 @@ mod tests {
             "data": [{
                 "id": "01HXYZ...",
                 "account_id": "01HACC...",
-                "claim_kind": "org_role",
+                "claim_kind": "organization_role",
                 "value": "admin",
                 "state": "active",
                 "source": "coauth_claim_repository",
                 "subject": "01HACC...",
                 "issuer": "did:web:issuer.example",
                 "verifier_did": "did:web:verifier.example",
-                "represented_org": "Example Org",
+                "represented_organization": "Example Org",
                 "payload": {"value": "admin"},
                 "issued_at": "2026-05-01T00:00:00.000Z",
                 "expires_at": null,
@@ -188,11 +188,11 @@ mod tests {
         let resp: AdminAccountClaimsOutcome = serde_json::from_str(wire).unwrap();
         assert_eq!(resp.data.len(), 1);
         let row = &resp.data[0];
-        assert_eq!(row.claim_kind, "org_role");
+        assert_eq!(row.claim_kind, "organization_role");
         assert_eq!(row.state, "active");
         assert_eq!(row.source, "coauth_claim_repository");
         assert_eq!(row.value.as_deref(), Some("admin"));
-        assert_eq!(row.represented_org, "Example Org");
+        assert_eq!(row.represented_organization, "Example Org");
         assert!(!row.is_revoked());
         assert!(row.issued_at.is_some());
     }
