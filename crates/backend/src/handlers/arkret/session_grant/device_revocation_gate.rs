@@ -171,7 +171,7 @@ async fn verify_gate_receipt(
                 &document.verification_method,
                 proof.verification_method.as_str(),
             )
-            .map_err(|error| arkret_wire::Error::Protocol(error.to_string()))
+            .map_err(|error| arkret_wire::WireError::Protocol(error.to_string()))
         })
         .map_err(gate_protocol_error)
 }

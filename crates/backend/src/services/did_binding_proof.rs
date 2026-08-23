@@ -268,7 +268,7 @@ pub(crate) fn verify_detached_jws_against_method(
 
 #[cfg(test)]
 mod tests {
-    use base64ct::{Base64UrlUnpadded, Encoding as _};
+    use base64ct::Base64UrlUnpadded;
     use ed25519_dalek::Signer as _;
 
     use super::*;
