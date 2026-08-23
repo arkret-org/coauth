@@ -2,7 +2,9 @@ use arkret_models_collaboration::session_grant_bodies::{
     SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND, SessionGrantIntrospectStatus,
     SessionGrantIntrospectionProofClaims,
 };
-use arkret_models_identity::SignedSessionGrantClaims;
+use arkret_models_identity::{
+    SessionGrantCredentialClass, SessionGrantHolderBinding, SignedSessionGrantClaims,
+};
 use chrono::{Duration, Utc};
 use coauth_config::{
     ArkretConfig, DeploymentProfileConfig, IdentityRegistryConfig, PrincipalMethodConfig,
@@ -870,6 +872,96 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
         grant
             .session_public_key
             .contains("\"kid\":\"test-session-key\"")
+    );
+}
+
+#[test]
+fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
+    let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
+    let arkret_config = personal_node_did_web_config();
+    let key_store = test_keystore();
+    let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    let seed = SessionGrantIssuanceSeed::new(
+        arkret_canonical::base64url_encode([0x33; 32]),
+        "recovery-session-chain-1",
+        now,
+        now + Duration::minutes(15),
+        "test-ed25519",
+    )
+    .unwrap();
+    let mut signing_rng = ChaChaRng::seed_from_u64(77);
+    let holder_key = PrivateKey::generate_ed25519(&mut signing_rng);
+    let holder_jwk = test_session_public_jwk(&holder_key, "recovery-holder-key");
+    let audience = required_audience_for(&url_builder, &arkret_config);
+    let principal_id = "ak:did_core:web:alice.example";
+    let authority = test_principal_authority(principal_id, &audience);
+    let device_id =
+        arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000077")
+            .unwrap();
+
+    let material = issue_recovery_session_grant_for_audience(
+        &seed,
+        &arkret_config,
+        &key_store,
+        holder_jwk,
+        audience,
+        device_id.clone(),
+        arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS
+            .map(str::to_owned)
+            .to_vec(),
+        principal_id,
+        &authority,
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
+    )
+    .unwrap();
+
+    let jwt = Jwt::<SignedSessionGrantClaims>::try_from(material.grant_jwt.as_str()).unwrap();
+    jwt.verify_with_jwks(&key_store.public_jwks()).unwrap();
+    let payload = jwt.payload();
+    assert_eq!(
+        payload.credential_class,
+        SessionGrantCredentialClass::RecoverySession
+    );
+    assert_eq!(
+        payload.holder_binding,
+        SessionGrantHolderBinding::RecoveryCandidateDevice { device_id }
+    );
+    assert!(payload.device_binding.is_none());
+    assert!(payload.scope_details.is_none());
+    assert_eq!(
+        payload.expires_at - payload.not_before,
+        Duration::minutes(15)
+    );
+    assert_eq!(
+        payload.scopes,
+        arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS.map(str::to_owned)
+    );
+
+    let overlong_seed = SessionGrantIssuanceSeed::new(
+        arkret_canonical::base64url_encode([0x44; 32]),
+        "recovery-session-chain-2",
+        now,
+        now + Duration::minutes(15) + Duration::milliseconds(1),
+        "test-ed25519",
+    )
+    .unwrap();
+    assert!(
+        issue_recovery_session_grant_for_audience(
+            &overlong_seed,
+            &arkret_config,
+            &key_store,
+            test_session_public_jwk(&holder_key, "recovery-holder-key"),
+            required_audience_for(&url_builder, &arkret_config),
+            arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000077",)
+                .unwrap(),
+            arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS
+                .map(str::to_owned)
+                .to_vec(),
+            principal_id,
+            &authority,
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
+        )
+        .is_err()
     );
 }
 

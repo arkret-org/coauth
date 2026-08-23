@@ -200,6 +200,117 @@ pub(crate) fn issue_session_grant_for_audience(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) fn issue_recovery_session_grant_for_audience(
+    issuance_seed: &SessionGrantIssuanceSeed,
+    arkret_config: &ArkretConfig,
+    key_store: &Keystore,
+    session_public_key: PublicJsonWebKey,
+    audience: String,
+    device_id: DeviceId,
+    scopes: Vec<String>,
+    subject: &str,
+    principal_authority: &arkret_wire::PrincipalAuthorityKey,
+    dpop_jkt: String,
+) -> Result<SessionGrantMaterial, SessionGrantError> {
+    let session_public_key =
+        CanonicalSessionPublicJwk::new(serde_json::to_string(&session_public_key)?)?;
+    let now = issuance_seed.not_before;
+    let expires_at = issuance_seed.expires_at;
+    if expires_at - now > chrono::Duration::minutes(15) {
+        return Err(arkret_wire::WireError::Protocol(
+            "recovery session grant TTL exceeds 15 minutes".to_owned(),
+        )
+        .into());
+    }
+    let issuer = service_id_for(arkret_config);
+    let subject_id =
+        DidCoreId::new(subject.to_owned()).map_err(|_| SessionGrantError::PrincipalUnknown)?;
+    let audience_id = DidCoreId::new(audience)?;
+    principal_authority.validate()?;
+    if principal_authority.principal_id != subject_id
+        || principal_authority.principal_server_id != audience_id
+    {
+        return Err(SessionGrantError::PrincipalUnknown);
+    }
+    let mut scopes = scopes;
+    scopes.sort_unstable();
+    scopes.dedup();
+    let issuance_nonce = issuance_seed.issuance_nonce.clone();
+    let session_id = issuance_seed.session_id.clone();
+    let preimage = SessionGrantIssuancePreimage {
+        schema: SESSION_GRANT_ISSUANCE_SCHEMA.to_owned(),
+        issuer: issuer.clone(),
+        issuance_nonce: issuance_nonce.clone(),
+        subject: subject_id,
+        session_public_key: session_public_key.clone(),
+        audience: audience_id.clone(),
+        scopes: scopes.clone(),
+        not_before: now,
+        expires_at,
+        session_id: session_id.clone(),
+        cnf: SessionGrantCnf {
+            jkt: dpop_jkt.clone(),
+        },
+        credential_class: SessionGrantCredentialClass::RecoverySession,
+        holder_binding: SessionGrantHolderBinding::RecoveryCandidateDevice {
+            device_id: device_id.clone(),
+        },
+        device_binding: None,
+        proof_kind: Some(SessionGrantProofKind::AccountHandoff),
+        scope_details: None,
+    };
+    let issuance_preimage = preimage.canonical_bytes()?;
+    let issuance_digest = preimage.issuance_digest()?;
+    let grant_id = preimage.grant_id()?;
+    let payload = SignedSessionGrantClaims {
+        kind: SESSION_GRANT_CREDENTIAL_KIND.to_owned(),
+        grant_id: grant_id.clone(),
+        issuer: preimage.issuer,
+        issuance_nonce: preimage.issuance_nonce,
+        subject: preimage.subject,
+        session_public_key: preimage.session_public_key.clone(),
+        audience: preimage.audience,
+        scopes: preimage.scopes,
+        not_before: preimage.not_before,
+        expires_at: preimage.expires_at,
+        session_id: preimage.session_id,
+        cnf: preimage.cnf,
+        credential_class: preimage.credential_class,
+        holder_binding: preimage.holder_binding,
+        device_binding: preimage.device_binding,
+        proof_kind: preimage.proof_kind,
+        scope_details: preimage.scope_details,
+    };
+    payload.validate()?;
+    let (alg, key) = reserved_signing_key(key_store, &issuance_seed.signing_key_id)
+        .ok_or(SessionGrantError::NoSigningKey)?;
+    let key_id = issuance_seed.signing_key_id.clone();
+    let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
+    let signer = key.params().signing_key_for_alg(&alg)?;
+    let grant_jwt = Jwt::sign(header, payload, &signer)?.into_string();
+    Ok(SessionGrantMaterial {
+        grant_id,
+        grant_jwt,
+        session_public_key: session_public_key.into_string(),
+        credential_class: "recovery_session".to_owned(),
+        expires_at: format_timestamp_canonical(expires_at),
+        expires_at_timestamp: expires_at,
+        not_before_timestamp: now,
+        issuer: issuer.to_string(),
+        subject: subject.to_owned(),
+        device_id: Some(device_id.to_string()),
+        audience: audience_id.to_string(),
+        scopes,
+        dpop_jkt: Some(dpop_jkt),
+        session_id,
+        issuance_nonce: issuance_nonce.to_string(),
+        issuance_preimage,
+        issuance_digest,
+        signing_key_id: key_id,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn issue_test_session_grant_for_audience(
     issuance_seed: &SessionGrantIssuanceSeed,
     clock: &dyn Clock,

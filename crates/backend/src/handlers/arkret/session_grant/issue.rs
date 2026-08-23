@@ -1,6 +1,6 @@
 use arkret_models_collaboration::session_grant_bodies::{
-    AgentSessionGrantRequest, HumanSessionGrantRequest, SessionGrantOutcome,
-    SessionGrantRequestBody,
+    AgentSessionGrantRequest, HumanSessionGrantRequest, RecoverySessionGrantRequest,
+    SessionGrantOutcome, SessionGrantRequestBody,
 };
 use coauth_data::user::PrincipalDidRepository as _;
 use coauth_data::{
@@ -85,6 +85,7 @@ async fn reserve_issue_operation(
     depot: &Depot,
     body: &SessionGrantRequestBody,
     holder_jkt: &str,
+    expires_at_cap: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<Result<SessionGrantOperation, Vec<u8>>, ArkretRouteError> {
     let redacted_request = redact_session_grant_intent(body)?;
     let canonical_intent = arkret_canonical::canonical_json_bytes(&serde_json::json!({
@@ -99,14 +100,22 @@ async fn reserve_issue_operation(
         )
     })?;
     let canonical_intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_intent).into();
-    let (proof_kind, identity_material, is_agent) = match body {
+    let (proof_kind, identity_material, ttl_cap) = match body {
         SessionGrantRequestBody::Human(request) => (
             arkret_models_identity::SessionGrantProofKind::AccountHandoff,
             serde_json::json!({
                 "proof_kind": "account_handoff",
                 "request_id": request.request_id,
             }),
-            false,
+            None,
+        ),
+        SessionGrantRequestBody::Recovery(request) => (
+            arkret_models_identity::SessionGrantProofKind::AccountHandoff,
+            serde_json::json!({
+                "proof_kind": "account_handoff_recovery_session",
+                "request_id": request.request_id,
+            }),
+            Some(chrono::Duration::minutes(15)),
         ),
         SessionGrantRequestBody::Agent(request) => (
             arkret_models_identity::SessionGrantProofKind::AgentKeyProof,
@@ -116,7 +125,7 @@ async fn reserve_issue_operation(
                 "verification_method": request.proof.verification_method,
                 "challenge": request.proof.challenge,
             }),
-            true,
+            Some(crate::handlers::account::agents::AGENT_SESSION_MAX_TTL),
         ),
     };
     let identity_bytes = arkret_canonical::canonical_json_bytes(&identity_material)
@@ -128,10 +137,19 @@ async fn reserve_issue_operation(
     let clock = crate::handlers::make_clock();
     let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
     let mut grant_ttl = depot.arkret_config()?.session_grant_ttl;
-    if is_agent {
-        grant_ttl = grant_ttl.min(crate::handlers::account::agents::AGENT_SESSION_MAX_TTL);
+    if let Some(ttl_cap) = ttl_cap {
+        grant_ttl = grant_ttl.min(ttl_cap);
     }
-    let grant_expires_at = now + grant_ttl;
+    let grant_expires_at = expires_at_cap
+        .map(|cap| (now + grant_ttl).min(cap))
+        .unwrap_or(now + grant_ttl);
+    if grant_expires_at <= now {
+        return Err(ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            "account handoff expires before a recovery session grant can be issued",
+        ));
+    }
     let signing_key_store = depot.key_store()?;
     let (_, signing_key) = preferred_signing_key(&signing_key_store)
         .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
@@ -302,10 +320,11 @@ pub async fn issue_session_grant_endpoint(
             let binding =
                 require_agent_key_proof_dpop_binding(dpop_binding, &agent.dpop_binding_proof)?;
             let request = SessionGrantRequestBody::Agent(agent.clone());
-            let operation = match reserve_issue_operation(depot, &request, &binding.jkt).await? {
-                Ok(operation) => operation,
-                Err(outcome) => return Ok(CanonicalJsonResponse(outcome)),
-            };
+            let operation =
+                match reserve_issue_operation(depot, &request, &binding.jkt, None).await? {
+                    Ok(operation) => operation,
+                    Err(outcome) => return Ok(CanonicalJsonResponse(outcome)),
+                };
             issue_agent_key_proof_session_grant(req, depot, binding, &agent, operation).await
         }
         SessionGrantRequestBody::Human(human) => {
@@ -315,13 +334,138 @@ pub async fn issue_session_grant_endpoint(
                 )?;
             validate_human_issue_proof_before_reservation(&human, &handoff_token, &dpop.jkt)?;
             let request = SessionGrantRequestBody::Human(human.clone());
-            let operation = match reserve_issue_operation(depot, &request, &dpop.jkt).await? {
+            let operation = match reserve_issue_operation(depot, &request, &dpop.jkt, None).await? {
                 Ok(operation) => operation,
                 Err(outcome) => return Ok(CanonicalJsonResponse(outcome)),
             };
             issue_account_handoff_session_grant(depot, &human, handoff_token, dpop, operation).await
         }
+        SessionGrantRequestBody::Recovery(recovery) => {
+            let (handoff_token, dpop) =
+                super::super::account_handoff::verify_account_handoff_holder_without_lookup(
+                    req, depot,
+                )?;
+            let handoff_expires_at = validate_recovery_handoff_request_before_reservation(
+                depot,
+                &handoff_token,
+                &dpop.jkt,
+                &recovery,
+            )
+            .await?;
+            let request = SessionGrantRequestBody::Recovery(recovery.clone());
+            let operation =
+                match reserve_issue_operation(depot, &request, &dpop.jkt, Some(handoff_expires_at))
+                    .await?
+                {
+                    Ok(operation) => operation,
+                    Err(outcome) => {
+                        consume_recovery_dpop_jti(depot, &dpop).await?;
+                        return Ok(CanonicalJsonResponse(outcome));
+                    }
+                };
+            issue_recovery_session_grant(depot, &recovery, handoff_token, dpop, operation).await
+        }
     }
+}
+
+async fn validate_recovery_handoff_request_before_reservation(
+    depot: &Depot,
+    handoff_token: &str,
+    holder_jkt: &str,
+    body: &RecoverySessionGrantRequest,
+) -> Result<chrono::DateTime<chrono::Utc>, ArkretRouteError> {
+    use coauth_data::storage::user::BrowserSessionRepository as _;
+    use coauth_data::user::UserRepository as _;
+
+    let clock = crate::handlers::make_clock();
+    let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
+    let mut repo = depot.repo().await?;
+    let handoff = repo
+        .account_handoff()
+        .get_active_by_token(handoff_token, now)
+        .await?
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                "account handoff is no longer active for recovery session issuance",
+            )
+        })?;
+    super::super::account_handoff::enforce_handoff_operation(
+        &handoff,
+        arkret_models_identity::AccountHandoffAllowedOperation::IssueSessionGrant,
+    )?;
+    if handoff.cnf_jkt != holder_jkt || handoff.audience != body.audience.as_str() {
+        repo.cancel().await.ok();
+        return Err(ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            arkret_wire::ErrorCode::SIGNATURE_INVALID,
+            "recovery request does not match the AccountHandoff holder or audience",
+        ));
+    }
+    let user = repo
+        .user()
+        .lookup(handoff.service_account_id)
+        .await?
+        .ok_or(ArkretRouteError::NotFound)?;
+    repo.principal_did()
+        .get_for_user_and_audience(&user, &handoff.audience)
+        .await?
+        .filter(|binding| binding.principal_id == body.principal_id)
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::NOT_FOUND,
+                arkret_wire::ErrorCode::PRINCIPAL_UNKNOWN,
+                "recovery request principal is not bound to the authenticated account",
+            )
+        })?;
+    let browser_session_id = handoff.browser_session_id.ok_or_else(|| {
+        ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            "account handoff has no authenticated browser session",
+        )
+    })?;
+    repo.browser_session()
+        .lookup(browser_session_id)
+        .await?
+        .filter(|session| session.user.id == user.id && session.active())
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                "account handoff browser session is no longer active",
+            )
+        })?;
+    let expires_at = handoff.expires_at;
+    repo.cancel().await.ok();
+    Ok(expires_at)
+}
+
+async fn consume_recovery_dpop_jti(
+    depot: &Depot,
+    dpop: &crate::services::dpop::DpopVerification,
+) -> Result<(), ArkretRouteError> {
+    let clock = crate::handlers::make_clock();
+    let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
+    let mut repo = depot.repo().await?;
+    if !repo
+        .dpop_replay()
+        .consume_jti(crate::services::dpop::dpop_replay_record(
+            &dpop.claims.jti,
+            now,
+        ))
+        .await?
+    {
+        repo.cancel().await.ok();
+        return Err(ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            arkret_wire::ErrorCode::SIGNATURE_INVALID,
+            "reason_code=proof_invalid; handoff DPoP JTI was already consumed",
+        ));
+    }
+    repo.save().await?;
+    Ok(())
 }
 
 /// Exchange a server-authoritative Bound account handoff for a Standard
@@ -610,6 +754,220 @@ async fn issue_account_handoff_session_grant(
                 StatusCode::SERVICE_UNAVAILABLE,
                 arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
                 "handoff session issuance outcome is indeterminate",
+            ))
+        }
+    }
+}
+
+async fn issue_recovery_session_grant(
+    depot: &Depot,
+    body: &RecoverySessionGrantRequest,
+    handoff_token: String,
+    dpop: crate::services::dpop::DpopVerification,
+    operation: SessionGrantOperation,
+) -> Result<CanonicalJsonResponse, ArkretRouteError> {
+    use coauth_data::storage::user::BrowserSessionRepository as _;
+    use coauth_data::user::UserRepository as _;
+
+    let proof_invalid = |message: &str| {
+        ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            arkret_wire::ErrorCode::SIGNATURE_INVALID,
+            format!("reason_code=proof_invalid; {message}"),
+        )
+    };
+    let clock = crate::handlers::make_clock();
+    let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
+    let mut repo = depot.repo().await?;
+    let handoff = repo
+        .account_handoff()
+        .get_active_by_token(&handoff_token, now)
+        .await?
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                "account handoff is no longer active for recovery session issuance",
+            )
+        })?;
+    super::super::account_handoff::enforce_handoff_operation(
+        &handoff,
+        arkret_models_identity::AccountHandoffAllowedOperation::IssueSessionGrant,
+    )?;
+    if dpop.jkt != handoff.cnf_jkt || body.audience.as_str() != handoff.audience {
+        repo.cancel().await.ok();
+        return Err(proof_invalid(
+            "AccountHandoff holder key or audience does not match recovery request",
+        ));
+    }
+    let user = repo
+        .user()
+        .lookup(handoff.service_account_id)
+        .await?
+        .ok_or(ArkretRouteError::NotFound)?;
+    let binding = repo
+        .principal_did()
+        .get_for_user_and_audience(&user, &handoff.audience)
+        .await?
+        .filter(|binding| binding.principal_id == body.principal_id)
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::NOT_FOUND,
+                arkret_wire::ErrorCode::PRINCIPAL_UNKNOWN,
+                "principal binding is missing",
+            )
+        })?;
+    let browser_session_id = handoff.browser_session_id.ok_or_else(|| {
+        ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            "account handoff has no authenticated browser session",
+        )
+    })?;
+    let browser_session = repo
+        .browser_session()
+        .lookup(browser_session_id)
+        .await?
+        .filter(|session| session.user.id == user.id && session.active())
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                "account handoff browser session is no longer active",
+            )
+        })?;
+    let handoff_id = handoff.id;
+    let handoff_service_account_id = handoff.service_account_id;
+    let handoff_audience = handoff.audience.clone();
+    let handoff_cnf_jkt = handoff.cnf_jkt.clone();
+    let handoff_expires_at = handoff.expires_at;
+    repo.cancel().await.ok();
+
+    let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    if issuance_seed.expires_at > handoff_expires_at {
+        return Err(ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            "recovery session grant would outlive its AccountHandoff",
+        ));
+    }
+    let granted_scope = arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS
+        .map(str::to_owned)
+        .to_vec();
+    let material = issue_recovery_session_grant_for_audience(
+        &issuance_seed,
+        &depot.arkret_config()?,
+        &depot.key_store()?,
+        dpop.jwk.clone(),
+        handoff_audience.clone(),
+        body.device_id.clone(),
+        granted_scope,
+        binding.principal_id.as_str(),
+        &binding.principal_authority,
+        dpop.jkt.clone(),
+    )
+    .map_err(map_session_grant_material_error)?;
+    let wire_outcome = SessionGrantOutcome {
+        principal_id: binding.principal_id,
+        device_id: Some(body.device_id.clone()),
+        session_grant: material.grant_jwt.clone(),
+        expires_at: material.expires_at_timestamp,
+        session_grant_id: material.grant_id.clone(),
+        session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
+            &material.session_public_key,
+        )
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        audience: body.audience.clone(),
+        granted_scope: material.scopes.clone(),
+        scope_details: None,
+    };
+    let canonical_outcome = arkret_canonical::canonical_json_bytes(&wire_outcome)
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+
+    let mut rng = crate::handlers::make_rng();
+    let commit_now = arkret_canonical::normalize_timestamp_canonical(clock.now());
+    let mut repo = depot.repo().await?;
+    let current_handoff = repo
+        .account_handoff()
+        .get_active_by_token(&handoff_token, commit_now)
+        .await?
+        .filter(|current| {
+            current.id == handoff_id
+                && current.service_account_id == handoff_service_account_id
+                && current.audience == handoff_audience
+                && current.cnf_jkt == handoff_cnf_jkt
+        })
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                "account handoff changed or was consumed before recovery grant commit",
+            )
+        })?;
+    let checkpoint = serde_json::json!({
+        "kind": "account_handoff_recovery_session",
+        "handoff_grant_id": current_handoff.id.to_string(),
+        "dpop_jti_digest": crate::services::dpop::dpop_jti_digest(&dpop.claims.jti),
+    });
+    let committed = commit_session_grant_issuance(
+        &mut repo,
+        &mut rng,
+        &*clock,
+        operation.id,
+        &format!("account-handoff-recovery:{handoff_id}"),
+        &checkpoint,
+        handoff_expires_at,
+        &canonical_outcome,
+        Some(browser_session.id),
+        &material,
+    )
+    .await
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    match committed {
+        SessionGrantCommitOutcome::Committed(_) => {
+            if !repo
+                .dpop_replay()
+                .consume_jti(crate::services::dpop::dpop_replay_record(
+                    &dpop.claims.jti,
+                    commit_now,
+                ))
+                .await?
+            {
+                repo.cancel().await.ok();
+                return Err(proof_invalid("handoff DPoP JTI was already consumed"));
+            }
+            repo.save().await?;
+            Ok(CanonicalJsonResponse(canonical_outcome))
+        }
+        SessionGrantCommitOutcome::Replay(operation) => {
+            let outcome = operation.canonical_outcome.ok_or_else(|| {
+                ArkretRouteError::coded(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                    "replayed recovery grant issuance has no canonical outcome",
+                )
+            })?;
+            if !repo
+                .dpop_replay()
+                .consume_jti(crate::services::dpop::dpop_replay_record(
+                    &dpop.claims.jti,
+                    commit_now,
+                ))
+                .await?
+            {
+                repo.cancel().await.ok();
+                return Err(proof_invalid("handoff DPoP JTI was already consumed"));
+            }
+            repo.save().await?;
+            Ok(CanonicalJsonResponse(outcome))
+        }
+        SessionGrantCommitOutcome::Indeterminate(_) => {
+            repo.cancel().await.ok();
+            Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "recovery grant issuance outcome is indeterminate",
             ))
         }
     }

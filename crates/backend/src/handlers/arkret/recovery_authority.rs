@@ -49,9 +49,10 @@ impl Scribe for RecoveryCompletionCanonicalJson {
 /// `POST /_arkret/gate/account/recovery-session-grants/issue`.
 ///
 /// A still-valid, Bound account handoff authenticates the account and the new
-/// session key. The trusted recovery coordinator proves that root re-anchor and
-/// replacement-device authorization completed. Coauth then issues a fresh
-/// Standard grant directly; there is no restricted predecessor credential.
+/// session key. The handoff audience Principal Server proves that root
+/// re-anchor and replacement-device authorization completed. Coauth then
+/// issues a fresh Standard grant directly; there is no restricted predecessor
+/// credential or cross-service recovery-coordinator authority.
 #[handler]
 pub async fn issue_recovery_completion_grant_endpoint(
     req: &mut Request,
@@ -138,7 +139,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         receipt.principal_id.as_str(),
     )
     .await?;
-    verify_coordinator_signatures(
+    verify_principal_server_completion_signatures(
         depot,
         &mut prerequisite_repo,
         &handoff.audience,
@@ -480,18 +481,18 @@ async fn verify_account_principal_binding(
     Ok(binding.principal_authority)
 }
 
-async fn verify_coordinator_signatures(
+async fn verify_principal_server_completion_signatures(
     depot: &Depot,
     repo: &mut coauth_data::BoxRepository,
-    expected_coordinator: &str,
+    expected_principal_server: &str,
     request: &IssueRecoveryCompletionGrantRequest,
     receipt: &RecoveryReceipt,
 ) -> Result<(), ArkretRouteError> {
     let attestation = &request.completion_attestation;
     if verification_method_did(attestation.auth_data.verification_method.as_str())
-        != expected_coordinator
+        != expected_principal_server
         || verification_method_did(receipt.auth_data.verification_method.as_str())
-            != expected_coordinator
+            != expected_principal_server
     {
         return Err(signature_invalid(
             "recovery receipt and completion attestation must be signed by the handoff audience",
@@ -502,10 +503,10 @@ async fn verify_coordinator_signatures(
         .principal_servers
         .iter()
         .filter_map(|server| effective_audience(server, shared()))
-        .any(|service_id| service_id.as_str() == expected_coordinator);
+        .any(|service_id| service_id.as_str() == expected_principal_server);
     if !trusted {
         return Err(signature_invalid(
-            "recovery coordinator is not a configured Principal Server",
+            "recovery completion signer is not the configured Principal Server",
         ));
     }
     let resolution = crate::services::did_binding::authority_document(
@@ -516,7 +517,7 @@ async fn verify_coordinator_signatures(
         repo,
         depot.did_resolver_service()?.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),
-        expected_coordinator,
+        expected_principal_server,
         arkret_identity::DidBindingPurpose::Recovery,
         crate::services::did_binding::high_risk_freshness(),
         crate::handlers::make_clock().now(),
@@ -524,7 +525,7 @@ async fn verify_coordinator_signatures(
     .await
     .map_err(|error| {
         signature_invalid(format!(
-            "no fresh trusted recovery binding for the coordinator: {error}"
+            "no fresh trusted recovery binding for the Principal Server: {error}"
         ))
     })?;
     verify_with_document_method(

@@ -3,7 +3,7 @@ use arkret_models_collaboration::session_grant_bodies::{
     HumanSessionGrantRefreshRequest, SessionGrantRefreshOutcome, SessionGrantRefreshRequestBody,
     session_grant_refresh_request_digest,
 };
-use arkret_models_identity::SessionGrantProofKind;
+use arkret_models_identity::{SessionGrantCredentialClass, SessionGrantProofKind};
 use chrono::{DateTime, Utc};
 use coauth_data::{
     NewSessionGrantOperation, SessionGrantExactOutcome, SessionGrantProofAuthorization,
@@ -126,6 +126,20 @@ fn validate_human_refresh_before_reservation(
 // and `debug_issue_dpop_grant` is the cotest harness seam that mints a
 // fully signed grant without going through OIDC.
 
+fn ensure_refreshable_credential_class(
+    credential_class: SessionGrantCredentialClass,
+) -> Result<(), ArkretRouteError> {
+    if credential_class == SessionGrantCredentialClass::RecoverySession {
+        Err(ArkretRouteError::coded(
+            StatusCode::CONFLICT,
+            arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            "recovery_session grants are non-refreshable; recovery completion issues a distinct standard grant",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 /// `POST /_arkret/gate/account/session-grants/refresh` — exchange a near-expiry
 /// DPoP-bound session grant for a fresh one. The caller MUST present:
 ///
@@ -133,11 +147,6 @@ fn validate_human_refresh_before_reservation(
 ///   (`cnf.jkt` on the old grant must match the new proof's `jkt`).
 /// * A request body carrying the prior grant JWT, the bound `device_id`, and a fresh human-device
 ///   DID proof over the soft-logout restore transcript.
-///
-/// The route currently fails closed before rotation because its request DTO
-/// does not yet carry the SDK aggregate device evidence needed to verify the
-/// exact principal authority pair and its pair-bound local PCR lineage. A
-/// current product-local directory assertion is deliberately insufficient.
 #[handler]
 pub async fn refresh_session_grant(
     req: &mut Request,
@@ -212,6 +221,7 @@ pub async fn refresh_session_grant(
     prior_payload
         .validate()
         .map_err(|error| ArkretRouteError::BadRequest(format!("invalid grant_jwt: {error}")))?;
+    ensure_refreshable_credential_class(prior_payload.credential_class)?;
     let expected_jkt = prior_payload.cnf.jkt.clone();
 
     let mut repo = depot.repo().await?;
@@ -1039,5 +1049,15 @@ mod tests {
             .expect("matching device bindings should pass");
 
         assert_eq!(device_id, DEVICE_ID);
+    }
+
+    #[test]
+    fn recovery_session_grant_is_never_refreshable() {
+        let error =
+            ensure_refreshable_credential_class(SessionGrantCredentialClass::RecoverySession)
+                .expect_err("recovery completion must issue a distinct Standard grant");
+        let message = assert_coded(error, arkret_wire::ErrorCode::FAILED_PRECONDITION);
+        assert!(message.contains("non-refreshable"));
+        ensure_refreshable_credential_class(SessionGrantCredentialClass::Standard).unwrap();
     }
 }
