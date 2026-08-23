@@ -1,5 +1,6 @@
 use arkret_models_collaboration::session_grant_bodies::{
-    AgentSessionGrantRequest, HumanSessionGrantRequest, SessionGrantRequestBody,
+    AgentSessionGrantRequest, HumanSessionGrantRequest, SessionGrantOutcome,
+    SessionGrantRequestBody,
 };
 use coauth_data::user::PrincipalDidRepository as _;
 use coauth_data::{
@@ -11,8 +12,6 @@ use sha2::Digest as _;
 
 use super::*;
 use crate::handlers::arkret::*;
-
-type SessionGrantOutcome = arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
 
 pub struct CanonicalJsonResponse(Vec<u8>);
 
