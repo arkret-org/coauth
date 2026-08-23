@@ -206,18 +206,12 @@ dependencies = [
 name = "arkret-auth"
 version = "0.3.0"
 dependencies = [
- "argon2",
  "arkret-canonical",
  "arkret-models-collaboration",
- "arkret-models-identity",
- "arkret-signatures",
  "arkret-wire",
  "chrono",
- "getrandom 0.4.2",
  "serde",
- "serde_json",
  "thiserror 2.0.18",
- "uuid",
 ]
 
 [[package]]
@@ -435,7 +429,6 @@ dependencies = [
  "arkret-schema",
  "arkret-wire",
  "chrono",
- "chrono-tz",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
