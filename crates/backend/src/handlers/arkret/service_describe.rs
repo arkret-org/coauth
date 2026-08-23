@@ -118,8 +118,6 @@ struct OAuthClientHintDescriptor {
 // `extra` (`additionalProperties: true`) flatten map so they round-trip on
 // the wire exactly as before without resurrecting a hand-rolled struct.
 
-pub(crate) type ServiceDescribeOutcome = ServiceDescribe;
-
 pub(crate) fn delegated_identity_registry_descriptor(
     arkret_config: &ArkretConfig,
 ) -> Option<IdentityRegistryDescriptor> {
@@ -203,7 +201,7 @@ fn validate_claimed_profiles_against_sdk_requirements() {
 }
 
 /// G4.T3 — convert the loader's `VerifiedProfileArtifactEntry` into the wire
-/// shape expected by `ServiceDescribeOutcome.verified_profiles[]`. Also
+/// shape expected by `ServiceDescribe.verified_profiles[]`. Also
 /// enforces the local cross-check: any entry whose `profile_id` is not in
 /// coauth's hard-coded claimed-profile set is dropped with a `warn!` line.
 ///
@@ -371,7 +369,7 @@ pub(crate) fn service_describe_response(
     arkret_config: &ArkretConfig,
     loaded_verified_profiles: &[arkret_models_discovery::VerifiedProfileArtifactEntry],
     development_mode: bool,
-) -> ServiceDescribeOutcome {
+) -> ServiceDescribe {
     validate_claimed_profiles_against_sdk_requirements();
 
     let principal_servers: Vec<PrincipalServerDescriptor> = arkret_config
@@ -561,7 +559,7 @@ pub(crate) fn service_describe_response(
 pub async fn server_describe(
     depot: &Depot,
     req: &Request,
-) -> Result<Json<ServiceDescribeOutcome>, ArkretRouteError> {
+) -> Result<Json<ServiceDescribe>, ArkretRouteError> {
     if let Some(service_kind) = req.query::<String>("service_kind")
         && service_kind != arkret_wire::ServiceKind::AuthServer.as_str()
     {
