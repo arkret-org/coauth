@@ -38,10 +38,6 @@ struct EnrollmentRow {
     name: String,
     canonical_endpoint: String,
     service_id: String,
-    // Read back so `as_select` covers the full row; the DB CHECK constraint
-    // already pins the only value this table ever holds.
-    #[allow(dead_code)]
-    service_kind: String,
     full_id: String,
     method_history_head: String,
     version_id: String,

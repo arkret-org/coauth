@@ -441,12 +441,13 @@ impl<'c> PgAccountHandoffRepository<'c> {
         // `text` cannot contain NUL bytes, so use a length-prefixed transcript
         // rather than the protocol-style NUL separator used by some hashes.
         let key = lease_quota_advisory_key(account_subject, audience);
-        let _ = diesel::sql_query(
+        let lock = diesel::sql_query(
             "SELECT pg_advisory_xact_lock(hashtextextended($1, 0)) IS NULL AS locked",
         )
         .bind::<Text, _>(key)
         .get_result::<AdvisoryLockRow>(self.conn)
         .await?;
+        debug_assert!(lock.locked);
         Ok(())
     }
 
@@ -599,7 +600,6 @@ struct AccountStatusRow {
 #[derive(QueryableByName)]
 struct AdvisoryLockRow {
     #[diesel(sql_type = diesel::sql_types::Bool)]
-    #[allow(dead_code)]
     locked: bool,
 }
 

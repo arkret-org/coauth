@@ -35,10 +35,6 @@ struct TemplateVersionRow {
     template_key: String,
     version: i32,
     channel: String,
-    // Selected for diesel `Selectable` column completeness; not read back
-    // (the projection key is (template_key, channel) today).
-    #[allow(dead_code)]
-    locale: String,
     subject_template: Option<String>,
     body_template: String,
     published_at: Option<DateTime<Utc>>,

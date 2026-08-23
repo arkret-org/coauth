@@ -115,9 +115,7 @@ pub(crate) fn build_oauth_router(router: Router) -> Router {
 /// documents. `build_account_api_router` layers the documents on top; the
 /// in-process test harness mounts the same routes through this entry point so
 /// the route table can never drift from production.
-// Consumed only by the `#[cfg(test)]` test harness, so non-test builds see no
-// caller.
-#[allow(dead_code)]
+#[cfg(test)]
 pub(crate) fn build_account_api_routes(router: Router) -> Router {
     let (arkret_router, coauth_router) = account_api_subrouters();
     router.push(arkret_router).push(coauth_router)
@@ -563,9 +561,7 @@ pub(super) fn build_arkret_protocol_openapi_doc(arkret_router: &Router) -> salvo
 /// Swagger UI. `build_admin_router` layers those on top; the in-process test
 /// harness mounts the same routes through this entry point so the route table
 /// can never drift from production.
-// Consumed only by the `#[cfg(test)]` test harness, so non-test builds see no
-// caller.
-#[allow(dead_code)]
+#[cfg(test)]
 pub(crate) fn build_admin_routes(router: Router) -> Router {
     router.push(admin_subrouter())
 }
