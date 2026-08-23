@@ -4,6 +4,7 @@
 
 //! Creation endpoints: `POST /accounts` and `POST /accounts/batch-invite`.
 
+use arkret_wire::ConsentScope;
 use chrono::Duration;
 use coauth_config::ArkretConfig;
 use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
@@ -172,7 +173,8 @@ pub struct BatchInviteConsentGate {
     /// Tag scope to match against the holder's `OrSet` tags. Defaults to
     /// `invite` (matches `peer=...;scope=invite` and `peer=...;scope=any`).
     #[serde(default = "default_invite_scope")]
-    pub scope: String,
+    #[schemars(with = "String")]
+    pub scope: ConsentScope,
 
     /// Override the first configured Principal Server endpoint per request. Useful
     /// when a deployment fans out across multiple `server_names` and
@@ -187,8 +189,8 @@ pub struct BatchInviteConsentGate {
     pub consent_required: bool,
 }
 
-fn default_invite_scope() -> String {
-    "invite".to_owned()
+fn default_invite_scope() -> ConsentScope {
+    ConsentScope::Invite
 }
 
 fn default_require_consent() -> bool {
@@ -290,13 +292,12 @@ pub async fn evaluate_batch_invite_gate(
         &gate.target_holder_did,
         &gate.consent_id,
         &gate.peer_did,
-        &gate.scope,
+        gate.scope,
         http_client,
     )
     .await;
 
-    let decision =
-        evaluate_invite_gate(&lookup, &gate.peer_did, &gate.scope, gate.consent_required);
+    let decision = evaluate_invite_gate(&lookup, &gate.peer_did, gate.scope, gate.consent_required);
     match decision {
         InviteGateDecision::Allow => BatchInviteGateOutcome::Allow,
         InviteGateDecision::ConsentRequired => BatchInviteGateOutcome::ConsentRequired,
@@ -444,7 +445,7 @@ pub async fn batch_invite(
                         peer_did: gate.peer_did.clone(),
                         target_holder_did: gate.target_holder_did.clone(),
                         consent_id: gate.consent_id.clone(),
-                        scope: gate.scope.clone(),
+                        scope: gate.scope.to_string(),
                         requesting_admin_did: admin_user.as_ref().map(|u| u.localpart.clone()),
                         payload,
                     })
@@ -517,7 +518,7 @@ mod consent_gate_tests {
             peer_did: peer.to_owned(),
             target_holder_did: holder.to_owned(),
             consent_id: consent_id.to_owned(),
-            scope: "invite".to_owned(),
+            scope: ConsentScope::Invite,
             target_principal_url: None,
             consent_required: true,
         }

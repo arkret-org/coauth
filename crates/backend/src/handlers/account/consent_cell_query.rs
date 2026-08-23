@@ -25,6 +25,7 @@
 use arkret_models_collaboration::account_lifecycle::{
     ConsentCellView, ConsentState as SdkConsentState,
 };
+use arkret_wire::ConsentScope;
 use tracing::{debug, warn};
 use url::Url;
 
@@ -72,7 +73,7 @@ pub async fn query_consent_cell(
     holder_did: &str,
     consent_id: &str,
     peer_did: &str,
-    scope: &str,
+    scope: ConsentScope,
     http_client: &reqwest::Client,
 ) -> ConsentLookup {
     let Some(base) = principal_server_url else {
@@ -85,14 +86,13 @@ pub async fn query_consent_cell(
         };
     };
 
-    let normalized_scope = normalize_scope(scope);
-    let mut scopes = vec![normalized_scope.clone()];
-    if normalized_scope != "any" {
-        scopes.push("any".to_owned());
+    let mut scopes = vec![scope];
+    if scope != ConsentScope::Any {
+        scopes.push(ConsentScope::Any);
     }
 
     for candidate_scope in scopes {
-        match query_consent_cell_scope(base, holder_did, peer_did, &candidate_scope, http_client)
+        match query_consent_cell_scope(base, holder_did, peer_did, candidate_scope, http_client)
             .await
         {
             ConsentScopeLookup::Active { cell_id } => {
@@ -101,7 +101,7 @@ pub async fn query_consent_cell(
                     %cell_id,
                     consent_id,
                     peer_did,
-                    scope = candidate_scope,
+                    scope = %candidate_scope,
                     "consent cell query: active"
                 );
                 return ConsentLookup::Known(ConsentState {
@@ -116,7 +116,7 @@ pub async fn query_consent_cell(
                     ?state,
                     consent_id,
                     peer_did,
-                    scope = candidate_scope,
+                    scope = %candidate_scope,
                     "consent cell query: inactive"
                 );
                 return ConsentLookup::Known(ConsentState {
@@ -158,7 +158,7 @@ async fn query_consent_cell_scope(
     base: &Url,
     holder_did: &str,
     peer_did: &str,
-    scope: &str,
+    scope: ConsentScope,
     http_client: &reqwest::Client,
 ) -> ConsentScopeLookup {
     let path = format!(
@@ -176,7 +176,7 @@ async fn query_consent_cell_scope(
     };
     url.query_pairs_mut()
         .append_pair("peer", peer_did)
-        .append_pair("consent_scope", scope);
+        .append_pair("consent_scope", scope.as_str());
 
     let response = match outbound_http::send_with_policy(
         outbound_http::soland_policy("consent_cell_read")
@@ -218,7 +218,7 @@ async fn query_consent_cell_scope(
     if !parsed.ok
         || parsed.holder_principal_id.as_str() != holder_did
         || parsed.peer_principal_id.as_str() != peer_did
-        || normalize_scope(&parsed.consent_scope) != scope
+        || parsed.consent_scope != scope
     {
         warn!(
             cell_id = %parsed.cell_id,
@@ -227,7 +227,7 @@ async fn query_consent_cell_scope(
             response_scope = parsed.consent_scope.as_str(),
             holder_did,
             peer_did,
-            scope,
+            scope = %scope,
             "consent cell query: response key mismatch"
         );
         return ConsentScopeLookup::Unknown {
@@ -244,15 +244,6 @@ async fn query_consent_cell_scope(
             cell_id: parsed.cell_id,
             state: parsed.state,
         }
-    }
-}
-
-fn normalize_scope(scope: &str) -> String {
-    match scope.trim().to_ascii_lowercase().as_str() {
-        "message" | "messaging" | "dm" => "direct_message".to_owned(),
-        "call" => "voice_call".to_owned(),
-        "" => "direct_message".to_owned(),
-        other => other.to_owned(),
     }
 }
 
@@ -282,7 +273,7 @@ pub enum InviteGateDecision {
 pub fn evaluate_invite_gate(
     lookup: &ConsentLookup,
     peer_did: &str,
-    scope: &str,
+    scope: ConsentScope,
     consent_required: bool,
 ) -> InviteGateDecision {
     match lookup {
@@ -397,7 +388,7 @@ mod tests {
             "ak:did_core:web:holder",
             "c-123",
             "ak:did_core:web:peer",
-            "invite",
+            ConsentScope::Invite,
             &client,
         )
         .await;
@@ -430,7 +421,7 @@ mod tests {
             "ak:did_core:web:holder",
             "c-123",
             "ak:did_core:web:peer",
-            "invite",
+            ConsentScope::Invite,
             &client,
         )
         .await;
@@ -468,7 +459,7 @@ mod tests {
             "ak:did_core:web:holder",
             "c-123",
             "ak:did_core:web:peer",
-            "invite",
+            ConsentScope::Invite,
             &client,
         )
         .await;
@@ -499,7 +490,7 @@ mod tests {
             "ak:did_core:web:holder",
             "c-123",
             "ak:did_core:web:peer",
-            "invite",
+            ConsentScope::Invite,
             &client,
         )
         .await;
@@ -531,7 +522,7 @@ mod tests {
             "ak:did_core:web:holder",
             "c-123",
             "ak:did_core:web:peer",
-            "invite",
+            ConsentScope::Invite,
             &client,
         )
         .await;
@@ -563,7 +554,7 @@ mod tests {
             "ak:did_core:web:holder",
             "c-404",
             "ak:did_core:web:peer",
-            "invite",
+            ConsentScope::Invite,
             &client,
         )
         .await;
@@ -586,7 +577,7 @@ mod tests {
             tags: vec!["peer=ak:did_core:web:peer;scope=invite".into()],
         });
         assert_eq!(
-            evaluate_invite_gate(&lookup, "ak:did_core:web:peer", "invite", true),
+            evaluate_invite_gate(&lookup, "ak:did_core:web:peer", ConsentScope::Invite, true),
             InviteGateDecision::Allow,
         );
     }
@@ -599,7 +590,7 @@ mod tests {
             tags: vec!["peer=ak:did_core:web:peer;scope=any".into()],
         });
         assert_eq!(
-            evaluate_invite_gate(&lookup, "ak:did_core:web:peer", "invite", true),
+            evaluate_invite_gate(&lookup, "ak:did_core:web:peer", ConsentScope::Invite, true),
             InviteGateDecision::Allow,
         );
     }
@@ -610,7 +601,7 @@ mod tests {
             reason: "principal_server_url_not_configured",
         };
         assert_eq!(
-            evaluate_invite_gate(&lookup, "ak:did_core:web:peer", "invite", true),
+            evaluate_invite_gate(&lookup, "ak:did_core:web:peer", ConsentScope::Invite, true),
             InviteGateDecision::ConsentRequired,
         );
     }
@@ -621,7 +612,7 @@ mod tests {
             reason: "principal_server_unreachable",
         };
         assert_eq!(
-            evaluate_invite_gate(&lookup, "ak:did_core:web:peer", "invite", false),
+            evaluate_invite_gate(&lookup, "ak:did_core:web:peer", ConsentScope::Invite, false),
             InviteGateDecision::Quarantine,
         );
     }
@@ -634,7 +625,7 @@ mod tests {
             tags: vec![],
         });
         assert_eq!(
-            evaluate_invite_gate(&lookup, "ak:did_core:web:peer", "invite", true),
+            evaluate_invite_gate(&lookup, "ak:did_core:web:peer", ConsentScope::Invite, true),
             InviteGateDecision::ConsentRequired,
         );
     }
@@ -647,7 +638,7 @@ mod tests {
             tags: vec!["peer=did:web:other;scope=invite".into()],
         });
         assert_eq!(
-            evaluate_invite_gate(&lookup, "ak:did_core:web:peer", "invite", true),
+            evaluate_invite_gate(&lookup, "ak:did_core:web:peer", ConsentScope::Invite, true),
             InviteGateDecision::ConsentRequired,
         );
     }

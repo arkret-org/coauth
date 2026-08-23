@@ -31,6 +31,7 @@
 //! posted by inkson, not by coauth. coauth's only responsibility here is
 //! the gate-check + forward; it never signs Moves on the holder's behalf.
 
+use arkret_wire::ConsentScope;
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -78,7 +79,7 @@ pub struct InviteRelayRequestBody {
 
     /// Tag scope to match against the consent cell's `OrSet` tags
     /// (`peer=...;scope=<scope>` or `peer=...;scope=any`).
-    pub scope: String,
+    pub scope: ConsentScope,
 
     /// Mirror of the holder's `ak.realm.policy_bundle` payload path
     /// `preauth.consent_required` policy bit. Defaults to `true` (fail closed).
@@ -172,7 +173,7 @@ pub async fn relay_invite_with(
     target_holder_did: &str,
     consent_id: &str,
     peer_did: &str,
-    scope: &str,
+    scope: ConsentScope,
     consent_required: bool,
     peer_protocol_client: Option<&PeerProtocolClient<'_>>,
     invite_delivery: Option<
@@ -197,7 +198,7 @@ pub async fn relay_invite_with(
     let decision = evaluate_invite_gate(&lookup, peer_did, scope, consent_required);
     debug!(
         ?decision,
-        consent_id, peer_did, scope, "invite-relay gate decision"
+        consent_id, peer_did, scope = %scope, "invite-relay gate decision"
     );
 
     match decision {
@@ -243,7 +244,6 @@ pub async fn post_invite_relay(
     if params.inviter_did.is_empty()
         || params.target_holder_did.is_empty()
         || params.consent_id.is_empty()
-        || params.scope.is_empty()
     {
         return Err(RouteError::BadRequest("missing_required_fields".into()));
     }
@@ -351,7 +351,7 @@ pub async fn post_invite_relay(
         &params.target_holder_did,
         &params.consent_id,
         &params.inviter_did,
-        &params.scope,
+        params.scope,
         params.consent_required,
         peer_client.as_ref(),
         params.invite_delivery.as_ref(),
@@ -528,7 +528,7 @@ mod tests {
             "ak:did_core:web:holder",
             "c-allow",
             "ak:did_core:web:inviter",
-            "invite",
+            ConsentScope::Invite,
             true,
             Some(&peer),
             Some(&delivery),
@@ -569,7 +569,7 @@ mod tests {
             "ak:did_core:web:holder",
             "c-missing",
             "ak:did_core:web:inviter",
-            "invite",
+            ConsentScope::Invite,
             true, // consent_required
             None,
             None,
@@ -605,7 +605,7 @@ mod tests {
             "ak:did_core:web:holder",
             "c-unknown",
             "ak:did_core:web:inviter",
-            "invite",
+            ConsentScope::Invite,
             false, // consent_required off
             None,
             None,
@@ -632,7 +632,7 @@ mod tests {
             "ak:did_core:web:holder",
             "c-x",
             "ak:did_core:web:inviter",
-            "invite",
+            ConsentScope::Invite,
             true,
             None,
             None,
@@ -697,7 +697,7 @@ mod tests {
             "ak:did_core:web:holder",
             "c-allow",
             "ak:did_core:web:inviter",
-            "invite",
+            ConsentScope::Invite,
             true,
             Some(&peer),
             Some(&delivery),
@@ -746,7 +746,7 @@ mod tests {
             "ak:did_core:web:holder",
             "c-allow",
             "ak:did_core:web:inviter",
-            "invite",
+            ConsentScope::Invite,
             true,
             None, // no forward target
             None, // no payload
