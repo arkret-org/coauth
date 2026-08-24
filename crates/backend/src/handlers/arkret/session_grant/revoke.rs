@@ -416,7 +416,11 @@ pub async fn revoke_session_grant_endpoint(
         Some(&presented_grant_jwt),
     )
     .map_err(|error| lifecycle_proof_invalid(error.to_string()))?;
-    DpopVerifier::require_matching_jkt(&dpop.jkt, &presented_claims.cnf.jkt)
+    let expected_jkt = presented_claims
+        .session_public_key
+        .thumbprint_sha256()
+        .map_err(|error| lifecycle_proof_invalid(error.to_string()))?;
+    DpopVerifier::require_matching_jkt(&dpop.jkt, &expected_jkt)
         .map_err(|error| lifecycle_proof_invalid(error.to_string()))?;
 
     let current_device_id = current_grant

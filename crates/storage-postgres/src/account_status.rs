@@ -249,13 +249,10 @@ mod tests {
             issued_at: now,
             effective_at: now,
             expires_at: None,
-            verification_method: DidUrl::new(
-                "did:webvh:zrollbackauthority:auth.example#account-status-key",
-            )
-            .unwrap(),
         };
         arkret_signatures::account_status::sign_account_status_record(
             unsigned,
+            DidUrl::new("did:webvh:zrollbackauthority:auth.example#account-status-key").unwrap(),
             &ed25519_dalek::SigningKey::from_bytes(&[0x52; 32]),
         )
         .unwrap()

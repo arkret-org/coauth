@@ -22,7 +22,7 @@ mod tests {
     use arkret_identifiers::DidCoreId;
     use arkret_models_identity::{
         CanonicalSessionPublicJwk, SESSION_GRANT_CREDENTIAL_KIND, SESSION_GRANT_ISSUANCE_SCHEMA,
-        SessionGrantCnf, SessionGrantCredentialClass, SessionGrantHolderBinding,
+        SessionGrantCredentialClass, SessionGrantHolderBinding,
         SessionGrantIssuanceNonce, SessionGrantIssuancePreimage, SessionGrantProofKind,
         SignedSessionGrantClaims,
     };
@@ -131,9 +131,6 @@ mod tests {
             not_before,
             expires_at,
             session_id: seed.session_id.to_owned(),
-            cnf: SessionGrantCnf {
-                jkt: arkret_canonical::base64url_encode([0x5a; 32]),
-            },
             credential_class: SessionGrantCredentialClass::Standard,
             holder_binding: SessionGrantHolderBinding::HumanDevice {
                 device_binding: seed.device_id.to_owned(),
@@ -157,7 +154,6 @@ mod tests {
             not_before: preimage.not_before,
             expires_at: preimage.expires_at,
             session_id: preimage.session_id.clone(),
-            cnf: preimage.cnf.clone(),
             credential_class: preimage.credential_class,
             holder_binding: preimage.holder_binding.clone(),
             device_binding: preimage.device_binding.clone(),

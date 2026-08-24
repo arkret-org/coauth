@@ -2,7 +2,7 @@ use arkret_canonical::format_timestamp_canonical;
 use arkret_identifiers::{DeviceId, DidCoreId, EventId};
 use arkret_models_identity::{
     CanonicalSessionPublicJwk, SESSION_GRANT_CREDENTIAL_KIND, SESSION_GRANT_ISSUANCE_SCHEMA,
-    SessionGrantCnf, SessionGrantCredentialClass, SessionGrantDeviceBinding,
+    SessionGrantCredentialClass, SessionGrantDeviceBinding,
     SessionGrantHolderBinding, SessionGrantIssuancePreimage, SessionGrantProofKind,
     SignedSessionGrantClaims,
 };
@@ -95,7 +95,7 @@ pub(crate) fn issue_session_grant_for_audience(
     scopes: Vec<String>,
     subject_override: Option<&str>,
     principal_authority: &arkret_wire::PrincipalAuthorityKey,
-    dpop_jkt: String,
+    _dpop_jkt: String,
     device_binding: SessionGrantDeviceBinding,
     proof_kind: SessionGrantProofKind,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
@@ -109,9 +109,6 @@ pub(crate) fn issue_session_grant_for_audience(
     let now = issuance_seed.not_before;
     let expires_at = issuance_seed.expires_at;
     let issuer = service_id_for(arkret_config);
-    let cnf = SessionGrantCnf {
-        jkt: dpop_jkt.clone(),
-    };
     let subject_id =
         DidCoreId::new(subject.clone()).map_err(|_| SessionGrantError::PrincipalUnknown)?;
     let audience_id = DidCoreId::new(audience.clone())?;
@@ -137,7 +134,6 @@ pub(crate) fn issue_session_grant_for_audience(
         not_before: now,
         expires_at,
         session_id: session_id.clone(),
-        cnf: cnf.clone(),
         credential_class: SessionGrantCredentialClass::Standard,
         holder_binding: SessionGrantHolderBinding::HumanDevice {
             device_binding: device_id.to_string(),
@@ -161,7 +157,6 @@ pub(crate) fn issue_session_grant_for_audience(
         not_before: preimage.not_before,
         expires_at: preimage.expires_at,
         session_id: preimage.session_id,
-        cnf: preimage.cnf,
         credential_class: preimage.credential_class,
         holder_binding: preimage.holder_binding,
         device_binding: preimage.device_binding,
@@ -248,9 +243,6 @@ pub(crate) fn issue_recovery_session_grant_for_audience(
         not_before: now,
         expires_at,
         session_id: session_id.clone(),
-        cnf: SessionGrantCnf {
-            jkt: dpop_jkt.clone(),
-        },
         credential_class: SessionGrantCredentialClass::RecoverySession,
         holder_binding: SessionGrantHolderBinding::RecoveryCandidateDevice {
             device_id: device_id.clone(),
@@ -274,7 +266,6 @@ pub(crate) fn issue_recovery_session_grant_for_audience(
         not_before: preimage.not_before,
         expires_at: preimage.expires_at,
         session_id: preimage.session_id,
-        cnf: preimage.cnf,
         credential_class: preimage.credential_class,
         holder_binding: preimage.holder_binding,
         device_binding: preimage.device_binding,
@@ -323,7 +314,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
     scopes: Vec<String>,
     subject_override: Option<&str>,
     principal_authority: &arkret_wire::PrincipalAuthorityKey,
-    dpop_jkt: String,
+    _dpop_jkt: String,
     device_binding: SessionGrantDeviceBinding,
     proof_kind: SessionGrantProofKind,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
@@ -573,9 +564,6 @@ pub(crate) fn mint_agent_session_grant(
     let now = issuance_seed.not_before;
     let expires_at = issuance_seed.expires_at;
     let issuer = service_id_for(arkret_config);
-    let cnf = SessionGrantCnf {
-        jkt: dpop_jkt.clone(),
-    };
     let session_id = issuance_seed.session_id.clone();
     let scope_details = compact_agent_scope_details(scope_details);
     let session_public_key = CanonicalSessionPublicJwk::new(session_public_key)?;
@@ -597,7 +585,6 @@ pub(crate) fn mint_agent_session_grant(
         not_before: now,
         expires_at,
         session_id: session_id.clone(),
-        cnf: cnf.clone(),
         credential_class: SessionGrantCredentialClass::Standard,
         holder_binding: SessionGrantHolderBinding::AgentRuntime {
             agent_id: subject,
@@ -624,7 +611,6 @@ pub(crate) fn mint_agent_session_grant(
         not_before: preimage.not_before,
         expires_at: preimage.expires_at,
         session_id: preimage.session_id,
-        cnf: preimage.cnf,
         credential_class: preimage.credential_class,
         holder_binding: preimage.holder_binding,
         device_binding: preimage.device_binding,

@@ -102,13 +102,13 @@ pub async fn author_transition_plan(
         issued_at: now,
         effective_at: now,
         expires_at: None,
-        verification_method: binding.binding_receipt.proof.verification_method.clone(),
     };
     let signing_seed = keystore
         .service_identity_seed()
         .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
     let record = arkret_signatures::account_status::sign_account_status_record(
         unsigned,
+        binding.binding_receipt.proof.verification_method.clone(),
         &ed25519_dalek::SigningKey::from_bytes(&signing_seed),
     )
     .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;

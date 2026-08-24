@@ -511,6 +511,9 @@ mod tests {
         );
         let canonical = PolicySigner::canonical_transcript_bytes(&response)
             .expect("wire transcript should canonicalize");
+        let transcript: serde_json::Value = serde_json::from_slice(&canonical).unwrap();
+        assert_eq!(transcript["domain"], "ak.policy.check.transcript.v1");
+        assert!(transcript.get("kind").is_none());
 
         let (_did, key_id) = response
             .signature

@@ -19,9 +19,8 @@ fn introspection_grant_record(
     grant: &SessionGrant,
     browser_session: Option<&BrowserSession>,
 ) -> Result<SessionGrantIntrospectGrant, ArkretRouteError> {
-    // `cnf.jkt` is not stored as its own column — it lives inside the signed
-    // grant payload. Parse it back out of the persisted `grant_jwt` (the same
-    // way the refresh / logout paths read the prior grant's binding).
+    // The thumbprint is derived from the signed session_public_key; it is not
+    // duplicated as an independently authorable claim or database column.
     let parsed_jwt = Jwt::<SignedSessionGrantClaims>::try_from(grant.grant_jwt.as_str())
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     parsed_jwt.payload().validate().map_err(|error| {
@@ -30,7 +29,11 @@ fn introspection_grant_record(
         )))
     })?;
     let parsed_payload = parsed_jwt.payload().clone();
-    let cnf_jkt = parsed_payload.cnf.jkt.clone();
+    let cnf_jkt = parsed_payload.session_public_key.thumbprint_sha256().map_err(|error| {
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "stored session public key is invalid: {error}"
+        )))
+    })?;
     let service_account_id = browser_session
         .map(|session| session.user.id.to_string())
         .or_else(|| grant.browser_session_id.map(|id| id.to_string()))

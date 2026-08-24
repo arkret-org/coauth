@@ -927,7 +927,6 @@ mod tests {
                 ],
                 "resources": []
             },
-            "requested_scope_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "active_authorizations": [],
         }))
         .unwrap()

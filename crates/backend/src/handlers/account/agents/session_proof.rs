@@ -708,20 +708,12 @@ fn validate_authoritative_agent_session_evidence(
     disclosure
         .validate()
         .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
-    let computed_digest = arkret_signatures::agent::agent_requested_scope_digest(
-        &disclosure.agent_id,
-        &disclosure.controller_id,
-        &disclosure.requested_scope,
-    )
-    .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
     if paired_request.agent_id.as_str() != authorization.agent_id
         || paired_request.verification_method.as_str() != authorization.verification_method
         || paired_request.authorize_event.event.event_id.as_str()
             != authorization.authorized_event_id
         || disclosure.agent_id.as_str() != authorization.agent_id
         || disclosure.controller_id.as_str() != authorization.accountable_principal_id
-        || disclosure.requested_scope_digest != computed_digest
-        || disclosure.requested_scope_digest != key_state.requested_scope_digest
         || disclosure.requested_scope != key_state.requested_scope
     {
         return Err(AgentAuthRejection::AgentRequestedScopeCommitmentInvalid);
@@ -1583,7 +1575,6 @@ mod tests {
                         "actions": ["ak.message.create"],
                         "resources": []
                     },
-                    "requested_scope_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "pairing_request_id": pairing_request_id,
                     "pairing_mode": "bootstrap",
                     "pairing_expires_at": "2099-01-01T00:00:00.000Z",

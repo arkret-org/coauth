@@ -864,10 +864,7 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
     assert_subject_did_occurs_once(&raw_payload, payload.subject.as_str());
     assert!(raw_payload.get("session_public_key").is_some());
-    assert_eq!(
-        raw_payload["cnf"]["jkt"],
-        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    );
+    assert!(raw_payload.get("cnf").is_none());
     assert!(
         grant
             .session_public_key
@@ -1212,15 +1209,10 @@ async fn seed_persisted_session_grant(
     let raw_payload = jwt_payload_value(&material.grant_jwt);
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
     assert!(raw_payload.get("session_public_key").is_some());
-    // The grant JWT carries its DPoP holder binding: refresh and introspection
-    // both prove possession of the key bound into `cnf.jkt`
+    // The grant JWT carries its DPoP holder binding as the canonical public
+    // key; refresh and introspection derive the thumbprint from that one source.
     // (spec zh/sync/service-http-binding.md, session-grants surface).
-    assert!(
-        raw_payload["cnf"]["jkt"]
-            .as_str()
-            .is_some_and(|jkt| !jkt.is_empty()),
-        "session grant JWT must carry its cnf.jkt holder binding"
-    );
+    assert!(raw_payload.get("cnf").is_none());
     let grant = persist_session_grant(
         &mut repo,
         &mut rng,
@@ -1500,7 +1492,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     let raw_payload = jwt_payload_value(&material.grant_jwt);
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
     assert!(raw_payload.get("session_public_key").is_some());
-    assert_eq!(raw_payload["cnf"]["jkt"].as_str(), Some(bound_jkt.as_str()));
+    assert!(raw_payload.get("cnf").is_none());
     let grant = persist_session_grant(
         &mut repo,
         &mut rng,
@@ -1610,7 +1602,6 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
                     "actions": ["ak.message.create"],
                     "resources": []
                 },
-                "requested_scope_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "pairing_request_id": "agent-pairing-request",
                 "pairing_mode": "bootstrap",
                 "pairing_expires_at": "2099-01-01T00:00:00.000Z",
@@ -1690,10 +1681,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         Some("ak:did_core:web:agent.example")
     );
     assert!(raw_payload.get("session_public_key").is_some());
-    assert_eq!(
-        raw_payload["cnf"]["jkt"].as_str(),
-        Some("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC")
-    );
+    assert!(raw_payload.get("cnf").is_none());
     // `proof_kind` and `scope_details` ride the signed grant payload; the
     // wire introspection grant record omits them (spec
     // SessionGrantIntrospectGrant is additionalProperties:false without

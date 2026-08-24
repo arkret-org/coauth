@@ -606,7 +606,7 @@ fn validate_refresh_chain(
         || predecessor_preimage.subject != successor_preimage.subject
         || predecessor_preimage.audience != successor_preimage.audience
         || predecessor_preimage.session_id != successor_preimage.session_id
-        || predecessor_preimage.cnf != successor_preimage.cnf
+        || predecessor_preimage.session_public_key != successor_preimage.session_public_key
         || successor_preimage
             .scopes
             .iter()

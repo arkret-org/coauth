@@ -222,6 +222,9 @@ mod tests {
         assert!(a.starts_with(b"{"));
         let s = std::str::from_utf8(&a).unwrap();
         assert!(s.contains("ak.policy.check.transcript.v1"));
+        let transcript: serde_json::Value = serde_json::from_slice(&a).unwrap();
+        assert_eq!(transcript["domain"], "ak.policy.check.transcript.v1");
+        assert!(transcript.get("kind").is_none());
         // Lexicographic key order: `auth_state_digest` precedes `bound_to`
         // precedes `decision`; the serializer
         // sorts keys so we can spot-check the prefix.
