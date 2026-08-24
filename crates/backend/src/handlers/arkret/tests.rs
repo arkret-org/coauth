@@ -2008,12 +2008,6 @@ async fn primary_handle_patch_validates_claims() {
     assert_eq!(body["primary_handle"], serde_json::Value::Null);
 }
 
-// Removed: `did_document_resolution_uses_primary_handle_preference_as_of_query`
-// exercised coauth-fabricated local user DID documents (`/users/{id}/did.json`
-// + the identity resolve/document short-circuits). coauth hosts no DID
-// documents any more - user principal DIDs are `did:webvh:...` served by the
-// principal server.
-
 #[test]
 fn parse_local_handle_round_trips_local_user_handle() {
     let url_builder = UrlBuilder::new(
@@ -2045,10 +2039,6 @@ fn parse_local_handle_round_trips_local_user_handle() {
         None
     );
 }
-
-// Removed: `identity_document_exposes_user_handle_binding` — it asserted the
-// shape of coauth-fabricated user DID documents (`user_did_document`), which
-// were deleted along with all coauth DID-document hosting.
 
 #[test]
 fn require_canonical_handle_rejects_acct_aliases() {
