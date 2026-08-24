@@ -22,9 +22,8 @@ mod tests {
     use arkret_identifiers::DidCoreId;
     use arkret_models_identity::{
         CanonicalSessionPublicJwk, SESSION_GRANT_CREDENTIAL_KIND, SESSION_GRANT_ISSUANCE_SCHEMA,
-        SessionGrantCredentialClass, SessionGrantHolderBinding,
-        SessionGrantIssuanceNonce, SessionGrantIssuancePreimage, SessionGrantProofKind,
-        SignedSessionGrantClaims,
+        SessionGrantCredentialClass, SessionGrantHolderBinding, SessionGrantIssuanceNonce,
+        SessionGrantIssuancePreimage, SessionGrantProofKind, SignedSessionGrantClaims,
     };
     use chrono::Duration;
     use coauth_data::clock::MockClock;

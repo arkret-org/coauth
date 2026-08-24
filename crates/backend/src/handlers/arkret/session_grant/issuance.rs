@@ -2,9 +2,8 @@ use arkret_canonical::format_timestamp_canonical;
 use arkret_identifiers::{DeviceId, DidCoreId, EventId};
 use arkret_models_identity::{
     CanonicalSessionPublicJwk, SESSION_GRANT_CREDENTIAL_KIND, SESSION_GRANT_ISSUANCE_SCHEMA,
-    SessionGrantCredentialClass, SessionGrantDeviceBinding,
-    SessionGrantHolderBinding, SessionGrantIssuancePreimage, SessionGrantProofKind,
-    SignedSessionGrantClaims,
+    SessionGrantCredentialClass, SessionGrantDeviceBinding, SessionGrantHolderBinding,
+    SessionGrantIssuancePreimage, SessionGrantProofKind, SignedSessionGrantClaims,
 };
 use arkret_wire::DidUrl;
 use chrono::{DateTime, Utc};

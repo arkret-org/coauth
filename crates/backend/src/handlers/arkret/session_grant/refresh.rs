@@ -213,8 +213,8 @@ pub async fn refresh_session_grant(
     }
 
     // 2. Parse + load the existing grant. We never verify the JWT signature here — the persisted
-    //    row IS the source of truth; the holder thumbprint is derived from the
-    //    signed session_public_key carried by the claims.
+    //    row IS the source of truth; the holder thumbprint is derived from the signed
+    //    session_public_key carried by the claims.
     let jwt: Jwt<'_, SignedSessionGrantClaims> = Jwt::try_from(grant_jwt)
         .map_err(|_| ArkretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
     let prior_payload = jwt.payload().clone();
@@ -225,7 +225,9 @@ pub async fn refresh_session_grant(
     let expected_jkt = prior_payload
         .session_public_key
         .thumbprint_sha256()
-        .map_err(|error| ArkretRouteError::BadRequest(format!("invalid session_public_key: {error}")))?;
+        .map_err(|error| {
+            ArkretRouteError::BadRequest(format!("invalid session_public_key: {error}"))
+        })?;
 
     let mut repo = depot.repo().await?;
     let prior_grant = repo

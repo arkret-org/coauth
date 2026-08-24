@@ -29,11 +29,14 @@ fn introspection_grant_record(
         )))
     })?;
     let parsed_payload = parsed_jwt.payload().clone();
-    let cnf_jkt = parsed_payload.session_public_key.thumbprint_sha256().map_err(|error| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "stored session public key is invalid: {error}"
-        )))
-    })?;
+    let cnf_jkt = parsed_payload
+        .session_public_key
+        .thumbprint_sha256()
+        .map_err(|error| {
+            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                "stored session public key is invalid: {error}"
+            )))
+        })?;
     let service_account_id = browser_session
         .map(|session| session.user.id.to_string())
         .or_else(|| grant.browser_session_id.map(|id| id.to_string()))
