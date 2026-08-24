@@ -514,11 +514,11 @@ async fn accept_provider_outcome(
     http: &reqwest::Client,
 ) -> anyhow::Result<DidCoreIdentityState> {
     if let Some(prior) = prior
-        && prior.identity.identity.service_id != outcome.service_id
+        && &prior.identity.identity.service_id != outcome.service_id()
     {
         return Ok(DidCoreIdentityState::Conflict {
             stored_service_id: prior.identity.identity.service_id.clone(),
-            provider_service_id: outcome.service_id,
+            provider_service_id: outcome.service_id().clone(),
         });
     }
     if let Err(error) =
@@ -888,16 +888,19 @@ fn stored_from_outcome(
         prepared.update_public_key_multibase
     ))
     .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let service_id = outcome.service_id().clone();
+    let full_id = outcome.full_id().clone();
+    let version_id = outcome.version_id().to_owned();
     let stored = StoredDidCoreIdentity {
         identity: LocalDidCoreIdentity {
-            service_id: outcome.service_id,
-            full_id: outcome.full_id,
+            service_id,
+            full_id,
             registration_key: registration_key.clone(),
             provider: Some(provider.reference.clone()),
             signing_key_refs: vec![signing_key_ref.clone()],
             active_signing_key_ref: signing_key_ref,
             control_key_ref,
-            version_id: outcome.version_id,
+            version_id,
             last_verified_at: Utc::now(),
         },
         did_document: outcome.did_document,
