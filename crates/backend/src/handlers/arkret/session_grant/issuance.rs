@@ -94,7 +94,7 @@ pub(crate) fn issue_session_grant_for_audience(
     scopes: Vec<String>,
     subject_override: Option<&str>,
     principal_authority: &arkret_wire::PrincipalAuthorityKey,
-    _dpop_jkt: String,
+    dpop_jkt: String,
     device_binding: SessionGrantDeviceBinding,
     proof_kind: SessionGrantProofKind,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
@@ -313,7 +313,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
     scopes: Vec<String>,
     subject_override: Option<&str>,
     principal_authority: &arkret_wire::PrincipalAuthorityKey,
-    _dpop_jkt: String,
+    dpop_jkt: String,
     device_binding: SessionGrantDeviceBinding,
     proof_kind: SessionGrantProofKind,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
