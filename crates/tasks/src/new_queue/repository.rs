@@ -166,35 +166,6 @@ pub(super) async fn tick_worker(
     Ok(leader)
 }
 
-pub(super) async fn process_all_jobs_in_tests(
-    state: &State,
-    registration: &Worker,
-    tracker: &mut JobTracker,
-    cancellation_token: &CancellationToken,
-) -> Result<(), QueueRunnerError> {
-    let clock = state.clock();
-    let mut rng = state.rng();
-
-    let conn = state
-        .pool()
-        .get()
-        .await
-        .map_err(|e| QueueRunnerError::Pool(Box::new(e)))?;
-    let mut repo = PgRepository::new(conn);
-
-    let queues = tracker.queues();
-    let jobs = repo
-        .queue_job()
-        .reserve(clock, registration, &queues, 10_000)
-        .await?;
-
-    runtime::spawn_reserved_jobs(tracker, state, cancellation_token, jobs);
-    tracker
-        .process_jobs(&mut rng, clock, &mut repo, true)
-        .await?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::jobs_to_fetch_capacity;

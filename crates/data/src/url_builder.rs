@@ -167,12 +167,6 @@ impl UrlBuilder {
         self.absolute_url("/oauth/keys.json")
     }
 
-    /// Static asset base path.
-    #[must_use]
-    pub fn assets_base(&self) -> &str {
-        &self.assets_base
-    }
-
     /// Upstream redirect URI.
     #[must_use]
     pub fn upstream_oauth_callback(&self, id: Ulid) -> Url {

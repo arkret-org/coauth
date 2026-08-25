@@ -188,7 +188,6 @@ pub struct PersonalSessionFilter<'a> {
     state: Option<PersonalSessionState>,
     scope: Option<&'a Scope>,
     last_active_before: Option<DateTime<Utc>>,
-    last_active_after: Option<DateTime<Utc>>,
     expires_before: Option<DateTime<Utc>>,
     expires_after: Option<DateTime<Utc>>,
     expires: Option<bool>,
@@ -264,27 +263,12 @@ impl<'a> PersonalSessionFilter<'a> {
         self
     }
 
-    /// Only return sessions with a last active time after the given time
-    #[must_use]
-    pub fn with_last_active_after(mut self, last_active_after: DateTime<Utc>) -> Self {
-        self.last_active_after = Some(last_active_after);
-        self
-    }
-
     /// Get the last active before filter
     ///
     /// Returns [`None`] if no client filter was set
     #[must_use]
     pub fn last_active_before(&self) -> Option<DateTime<Utc>> {
         self.last_active_before
-    }
-
-    /// Get the last active after filter
-    ///
-    /// Returns [`None`] if no client filter was set
-    #[must_use]
-    pub fn last_active_after(&self) -> Option<DateTime<Utc>> {
-        self.last_active_after
     }
 
     /// Only return active sessions

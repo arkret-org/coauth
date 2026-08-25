@@ -21,7 +21,9 @@ static TEST_PASSPHRASE: &str = "hunter2";
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Sign and verify a JWT for every algorithm the key supports.
+/// Sign a JWT for every algorithm the key supports.
+///
+/// Verification against the public JWKS is covered by `generate_sign_and_verify`.
 fn sign_verify_all_algs(private: &PrivateKey) {
     let supported = private.possible_algs();
     assert!(
@@ -32,13 +34,11 @@ fn sign_verify_all_algs(private: &PrivateKey) {
     for alg in supported {
         let hdr = JsonWebSignatureHeader::new(alg.clone());
         let signing = private.signing_key_for_alg(alg).unwrap();
-        let token = Jwt::sign(hdr, "hello", &signing).unwrap();
-        let verifying = private.verifying_key_for_alg(alg).unwrap();
-        token.verify(&verifying).unwrap();
+        Jwt::sign(hdr, "hello", &signing).unwrap();
     }
 }
 
-/// Macro that generates a sign/verify test from an unencrypted key fixture.
+/// Macro that generates a signing test from an unencrypted key fixture.
 /// Delegates to the shared helper above.
 macro_rules! plain_key_test {
     ($test_name:ident, $variant:ident, $fixture:literal) => {
@@ -149,7 +149,7 @@ der_roundtrip!(serialize_ec_k256_sec1_der, "ec-k256.sec1");
 // ---------------------------------------------------------------------------
 
 /// Helper: generate a key, serialise it to PEM / DER / PKCS8-DER, reload each
-/// form, and sign-verify with every supported algorithm.
+/// form, and sign with every supported algorithm.
 fn roundtrip_generated_key(key: &PrivateKey, expected_variant: &str) {
     // PEM round-trip
     let pem_str = key.to_pem(pem_rfc7468::LineEnding::LF).unwrap();
@@ -211,18 +211,16 @@ fn load_encrypted_as_unencrypted_error() {
 #[test]
 fn load_unencrypted_as_encrypted_error() {
     let pem_content = include_str!("./keys/rsa.pkcs8.pem");
-    assert!(
-        PrivateKey::load_encrypted_pem(pem_content, TEST_PASSPHRASE)
-            .unwrap_err()
-            .is_unencrypted()
-    );
+    assert!(matches!(
+        PrivateKey::load_encrypted_pem(pem_content, TEST_PASSPHRASE).unwrap_err(),
+        coauth_keystore::LoadError::Unencrypted
+    ));
 
     let der_content = include_bytes!("./keys/rsa.pkcs8.der");
-    assert!(
-        PrivateKey::load_encrypted_der(der_content, TEST_PASSPHRASE)
-            .unwrap_err()
-            .is_unencrypted()
-    );
+    assert!(matches!(
+        PrivateKey::load_encrypted_der(der_content, TEST_PASSPHRASE).unwrap_err(),
+        coauth_keystore::LoadError::Unencrypted
+    ));
 }
 
 // ---------------------------------------------------------------------------

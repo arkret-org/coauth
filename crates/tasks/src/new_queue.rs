@@ -269,19 +269,4 @@ impl QueueWorker {
 
         leader::run_leader_duties(&self.state, &self.schedules).await
     }
-
-    /// Helper for integration tests: performs one full pass of leader duties
-    /// then runs every available job to completion.
-    pub async fn process_all_jobs_in_tests(&mut self) -> Result<(), QueueRunnerError> {
-        self.am_i_leader = true;
-        self.perform_leader_duties().await?;
-
-        repo_runtime::process_all_jobs_in_tests(
-            &self.state,
-            &self.registration,
-            &mut self.tracker,
-            &self.cancellation_token,
-        )
-        .await
-    }
 }

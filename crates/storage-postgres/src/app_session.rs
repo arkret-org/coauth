@@ -134,10 +134,6 @@ macro_rules! apply_app_session_filter {
             query = query.filter(oauth_sessions::last_active_at.lt(last_active_before));
         }
 
-        if let Some(last_active_after) = filter.last_active_after() {
-            query = query.filter(oauth_sessions::last_active_at.gt(last_active_after));
-        }
-
         query
     }};
 }

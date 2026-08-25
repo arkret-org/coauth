@@ -394,10 +394,6 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
             sub = sub.filter(personal_sessions::last_active_at.lt(last_active_before));
         }
 
-        if let Some(last_active_after) = filter.last_active_after() {
-            sub = sub.filter(personal_sessions::last_active_at.gt(last_active_after));
-        }
-
         // Token-level filters
         if let Some(expires_before) = filter.expires_before() {
             sub = sub.filter(personal_access_tokens::expires_at.lt(expires_before));
@@ -481,10 +477,6 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
 
         if let Some(last_active_before) = filter.last_active_before() {
             query = query.filter(personal_sessions::last_active_at.lt(last_active_before));
-        }
-
-        if let Some(last_active_after) = filter.last_active_after() {
-            query = query.filter(personal_sessions::last_active_at.gt(last_active_after));
         }
 
         // Token-level filters
@@ -585,10 +577,6 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
 
         if let Some(last_active_before) = filter.last_active_before() {
             query = query.filter(personal_sessions::last_active_at.lt(last_active_before));
-        }
-
-        if let Some(last_active_after) = filter.last_active_after() {
-            query = query.filter(personal_sessions::last_active_at.gt(last_active_after));
         }
 
         // Token-level filters

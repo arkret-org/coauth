@@ -169,10 +169,6 @@ macro_rules! apply_session_filter {
                 subquery = subquery.filter(user_sessions::last_active_at.lt(last_active_before));
             }
 
-            if let Some(last_active_after) = browser_session_filter.last_active_after() {
-                subquery = subquery.filter(user_sessions::last_active_at.gt(last_active_after));
-            }
-
             q = q.filter(oauth_sessions::user_session_id.eq_any(subquery));
         }
 
@@ -195,10 +191,6 @@ macro_rules! apply_session_filter {
             } else {
                 q = q.filter(oauth_sessions::user_id.is_null());
             }
-        }
-
-        if let Some(last_active_after) = $filter.last_active_after() {
-            q = q.filter(oauth_sessions::last_active_at.gt(last_active_after));
         }
 
         if let Some(last_active_before) = $filter.last_active_before() {

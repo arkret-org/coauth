@@ -27,20 +27,6 @@ enum FieldUpdate<T> {
     Clear,
 }
 
-impl<T> FieldUpdate<T> {
-    /// Invoke `handler` when the field should be mutated (assigned or cleared).
-    fn apply<F>(&self, handler: F)
-    where
-        F: FnOnce(Option<&T>),
-    {
-        match self {
-            Self::Assign(val) => handler(Some(val)),
-            Self::Clear => handler(None),
-            Self::Unchanged => {}
-        }
-    }
-}
-
 pub struct ConnectorProvisionRequest {
     handle: String,
     sub: String,
@@ -99,20 +85,6 @@ impl ConnectorProvisionRequest {
         self
     }
 
-    /// Call the given callback if the displayname should be set or unset.
-    ///
-    /// # Parameters
-    ///
-    /// * `callback` - The callback to call.
-    pub fn on_displayname<F>(&self, callback: F) -> &Self
-    where
-        F: FnOnce(Option<&str>),
-    {
-        self.displayname
-            .apply(|opt| callback(opt.map(String::as_str)));
-        self
-    }
-
     /// Ask to set the avatar URL of the user.
     ///
     /// # Parameters
@@ -124,27 +96,6 @@ impl ConnectorProvisionRequest {
         self
     }
 
-    /// Ask to unset the avatar URL of the user.
-    #[must_use]
-    pub fn unset_avatar_url(mut self) -> Self {
-        self.avatar_url = FieldUpdate::Clear;
-        self
-    }
-
-    /// Call the given callback if the avatar URL should be set or unset.
-    ///
-    /// # Parameters
-    ///
-    /// * `callback` - The callback to call.
-    pub fn on_avatar_url<F>(&self, callback: F) -> &Self
-    where
-        F: FnOnce(Option<&str>),
-    {
-        self.avatar_url
-            .apply(|opt| callback(opt.map(String::as_str)));
-        self
-    }
-
     /// Ask to set the emails of the user.
     ///
     /// # Parameters
@@ -153,26 +104,6 @@ impl ConnectorProvisionRequest {
     #[must_use]
     pub fn set_emails(mut self, emails: Vec<String>) -> Self {
         self.emails = FieldUpdate::Assign(emails);
-        self
-    }
-
-    /// Ask to unset the emails of the user.
-    #[must_use]
-    pub fn unset_emails(mut self) -> Self {
-        self.emails = FieldUpdate::Clear;
-        self
-    }
-
-    /// Call the given callback if the emails should be set or unset.
-    ///
-    /// # Parameters
-    ///
-    /// * `callback` - The callback to call.
-    pub fn on_emails<F>(&self, callback: F) -> &Self
-    where
-        F: FnOnce(Option<&[String]>),
-    {
-        self.emails.apply(|opt| callback(opt.map(Vec::as_slice)));
         self
     }
 

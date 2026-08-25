@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use coauth_iana::jose::{JsonWebKeyType, JsonWebSignatureAlg};
 use coauth_jose::constraints::Constrainable;
-use coauth_jose::jwa::{AsymmetricSigningKey, AsymmetricVerifyingKey};
+use coauth_jose::jwa::AsymmetricSigningKey;
 pub use coauth_jose::jwk::{JsonWebKey, JsonWebKeySet};
 use coauth_jose::jwk::{
     JsonWebKeyPublicParameters, ParametersInfo, PublicJsonWebKeySet, Thumbprint,
@@ -104,14 +104,6 @@ impl LoadError {
     #[must_use]
     pub fn is_encrypted(&self) -> bool {
         matches!(self, Self::Encrypted)
-    }
-
-    /// Returns `true` if the load error is [`Unencrypted`].
-    ///
-    /// [`Unencrypted`]: LoadError::Unencrypted
-    #[must_use]
-    pub fn is_unencrypted(&self) -> bool {
-        matches!(self, Self::Unencrypted)
     }
 }
 
@@ -474,61 +466,6 @@ impl PrivateKey {
         Err(LoadError::UnsupportedPemLabel {
             label: label.to_owned(),
         })
-    }
-
-    /// Get an [`AsymmetricVerifyingKey`] out of this key, for the specified
-    /// [`JsonWebSignatureAlg`]
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the key is not suited for the selected algorithm
-    pub fn verifying_key_for_alg(
-        &self,
-        alg: &JsonWebSignatureAlg,
-    ) -> Result<AsymmetricVerifyingKey, WrongAlgorithmError> {
-        self.try_build_verifier(alg).ok_or(WrongAlgorithmError)
-    }
-
-    /// Internal helper that returns `None` when the key/alg combination is
-    /// invalid, keeping the public API's error type unchanged.
-    fn try_build_verifier(&self, alg: &JsonWebSignatureAlg) -> Option<AsymmetricVerifyingKey> {
-        match self {
-            Self::Rsa(rsa_key) => {
-                let public = rsa_key.to_public_key();
-                let vk = match alg {
-                    JsonWebSignatureAlg::Rs256 => AsymmetricVerifyingKey::rs256(public),
-                    JsonWebSignatureAlg::Rs384 => AsymmetricVerifyingKey::rs384(public),
-                    JsonWebSignatureAlg::Rs512 => AsymmetricVerifyingKey::rs512(public),
-                    JsonWebSignatureAlg::Ps256 => AsymmetricVerifyingKey::ps256(public),
-                    JsonWebSignatureAlg::Ps384 => AsymmetricVerifyingKey::ps384(public),
-                    JsonWebSignatureAlg::Ps512 => AsymmetricVerifyingKey::ps512(public),
-                    _ => return None,
-                };
-                Some(vk)
-            }
-
-            Self::EcP256(k) if matches!(alg, JsonWebSignatureAlg::Es256) => {
-                Some(AsymmetricVerifyingKey::es256(k.public_key()))
-            }
-
-            Self::EcP384(k) if matches!(alg, JsonWebSignatureAlg::Es384) => {
-                Some(AsymmetricVerifyingKey::es384(k.public_key()))
-            }
-
-            Self::EcP521(k) if matches!(alg, JsonWebSignatureAlg::Es512) => {
-                Some(AsymmetricVerifyingKey::es512(k.public_key()))
-            }
-
-            Self::EcK256(k) if matches!(alg, JsonWebSignatureAlg::Es256K) => {
-                Some(AsymmetricVerifyingKey::es256k(k.public_key()))
-            }
-
-            Self::OkpEd25519(k) if matches!(alg, JsonWebSignatureAlg::Ed25519) => {
-                Some(AsymmetricVerifyingKey::ed25519(k.verifying_key()))
-            }
-
-            _ => None,
-        }
     }
 
     /// Get a [`AsymmetricSigningKey`] out of this key, for the specified

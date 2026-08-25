@@ -209,9 +209,6 @@ macro_rules! apply_session_filter {
                 q = q.filter(user_sessions::finished_at.is_not_null());
             }
         }
-        if let Some(last_active_after) = $filter.last_active_after() {
-            q = q.filter(user_sessions::last_active_at.gt(last_active_after));
-        }
         if let Some(last_active_before) = $filter.last_active_before() {
             q = q.filter(user_sessions::last_active_at.lt(last_active_before));
         }
