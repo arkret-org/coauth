@@ -7,11 +7,13 @@ use chrono::{DateTime, Utc};
 use coauth_data::audit::{AdminOperation, AdminOperationFilter};
 use coauth_data::oauth::SessionGrantFilter;
 use coauth_data::{Pagination, RepositoryAccess};
-use salvo::oapi::ToSchema;
 use salvo::prelude::*;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 use ulid::Ulid;
+
+use coauth_admin_types::{
+    DeviceListResBody, DeviceMfaState, DeviceRecord, DeviceRevokeOutcome, DeviceRiskLevel,
+    RevokeDeviceRequestBody,
+};
 
 use crate::handlers::admin::audit_helper::record_admin_operation;
 use crate::handlers::admin::call_context::extract_call_context;
@@ -20,63 +22,6 @@ use crate::services::device_revoke::cascade_revoke_session_grants;
 use crate::{AppError, JsonResult};
 
 const DESTRUCTIVE_REASON_MAX_CHARS: usize = 512;
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum DeviceRiskLevel {
-    Low,
-    Medium,
-    High,
-    Unknown,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum DeviceMfaState {
-    Verified,
-    Required,
-    Unknown,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct DeviceRecord {
-    /// Device identifier.
-    id: String,
-
-    /// Owning account ULID.
-    account_id: Option<String>,
-
-    /// Human-facing device label.
-    display_name: Option<String>,
-
-    /// Current device risk level.
-    risk_level: DeviceRiskLevel,
-
-    /// MFA/passkey state for this device.
-    mfa_state: DeviceMfaState,
-
-    /// When the device was registered.
-    registered_at: Option<DateTime<Utc>>,
-
-    /// When the device was revoked.
-    revoked_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct DeviceListResBody {
-    data: Vec<DeviceRecord>,
-}
-
-#[derive(Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "RevokeDeviceRequestBody")]
-pub struct RevokeDeviceRequestBody {
-    /// Operator-supplied reason for audit.
-    pub reason: String,
-
-    /// Optional approval proof for high-risk revocations.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approval_proof: Option<String>,
-}
 
 fn validate_destructive_reason(reason: &str) -> Result<String, AppError> {
     let reason = reason.trim();
@@ -110,15 +55,6 @@ fn validate_destructive_reason(reason: &str) -> Result<String, AppError> {
         ));
     }
     Ok(reason.to_owned())
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct DeviceRevokeOutcome {
-    /// The device that was revoked.
-    pub device: DeviceRecord,
-
-    /// How many active session grants were cascade-revoked atomically.
-    pub revoked_session_grants: usize,
 }
 
 struct DeviceDraft {
