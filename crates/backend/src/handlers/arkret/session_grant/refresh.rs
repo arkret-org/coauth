@@ -12,7 +12,6 @@ use coauth_data::{
 };
 use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
-use sha2::Digest as _;
 
 use super::*;
 use crate::handlers::arkret::*;
@@ -333,7 +332,7 @@ pub async fn refresh_session_grant(
         "holder_jkt": verification.jkt,
     }))
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let canonical_intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_intent).into();
+    let canonical_intent_digest: [u8; 32] = arkret_canonical::sha256_bytes(&canonical_intent);
     let grant_not_before = arkret_canonical::normalize_timestamp_canonical(now);
     let ttl = if prior_payload.proof_kind == Some(SessionGrantProofKind::AgentKeyProof) {
         arkret_config
@@ -590,7 +589,7 @@ pub async fn refresh_session_grant(
         let scope_details = prior_payload.scope_details.clone().ok_or_else(|| {
             refresh_proof_invalid("Agent session grant is missing its authorization scope binding")
         })?;
-        let session_public_key = serde_json::to_string(&verification.jwk)
+        let session_public_key = serde_json::to_string(&verification.public_jwk)
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
         let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
@@ -663,7 +662,7 @@ pub async fn refresh_session_grant(
         let authorization_ref = format!("agent-refresh:{}", authorization.authorized_event_id);
         let exact_outcome = SessionGrantExactOutcome {
             canonical_response: &canonical_outcome,
-            response_digest: sha2::Sha256::digest(&canonical_outcome).into(),
+            response_digest: arkret_canonical::sha256_bytes(&canonical_outcome),
         };
         let committed = repo
             .oauth_session_grant()
@@ -878,7 +877,8 @@ pub async fn refresh_session_grant(
         &arkret_config,
         &key_store,
         &browser_session,
-        verification.jwk.clone(),
+        crate::services::dpop::session_public_jwk(&verification.public_jwk)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         audience,
         arkret_identifiers::DeviceId::new(device_id.to_owned())
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
@@ -951,7 +951,7 @@ pub async fn refresh_session_grant(
                 },
                 outcome: SessionGrantExactOutcome {
                     canonical_response: &canonical_outcome,
-                    response_digest: sha2::Sha256::digest(&canonical_outcome).into(),
+                    response_digest: arkret_canonical::sha256_bytes(&canonical_outcome),
                 },
                 predecessor_grant_id: &prior_grant.grant_id,
                 successor: new_session_grant_record(Some(browser_session.id), &new_material),

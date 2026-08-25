@@ -3,7 +3,6 @@
 // The header and payload are JSON-serialised, base64url-encoded, joined with
 // a dot, signed, and then the signature is appended as a third segment.
 
-use base64ct::{Base64UrlUnpadded, Encoding};
 use serde::Serialize;
 use signature::rand_core::CryptoRngCore;
 use signature::{RandomizedSigner, SignatureEncoding};
@@ -56,7 +55,7 @@ impl JwtSignatureError {
 /// padding).
 fn serialize_to_b64url<S: Serialize>(value: &S) -> Result<String, serde_json::Error> {
     let json_bytes = serde_json::to_vec(value)?;
-    Ok(Base64UrlUnpadded::encode_string(&json_bytes))
+    Ok(arkret_canonical::base64url_encode(json_bytes))
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +110,7 @@ impl<T> Jwt<'static, T> {
 
         // Produce the cryptographic signature and base64url-encode it.
         let raw_sig = key.try_sign_with_rng(rng, message.as_bytes())?.to_vec();
-        let encoded_sig = Base64UrlUnpadded::encode_string(&raw_sig);
+        let encoded_sig = arkret_canonical::base64url_encode(&raw_sig);
 
         // Build the full compact token: "<header>.<payload>.<signature>"
         let mut compact = message;

@@ -14,7 +14,6 @@ use coauth_account_types::{
 };
 use coauth_data::oauth::{LoginHint, OAuthAuthorizationGrantRepository};
 use coauth_data::{AuthorizationGrant, SiteConfig, UrlBuilder};
-use coauth_jose::jwk::PublicJsonWebKey;
 pub use oidc_bridge::integration_describe;
 use opentelemetry::metrics::Counter;
 use opentelemetry::{Key, KeyValue};
@@ -38,7 +37,7 @@ pub(crate) struct DpopSessionBinding {
     pub proof_jwt: String,
     pub jti: String,
     pub jkt: String,
-    pub public_jwk: PublicJsonWebKey,
+    pub public_jwk: arkret_signatures::jwk::JsonWebKey,
 }
 
 /// Extract a DPoP proof from the "kickoff" request — i.e. the initial
@@ -71,7 +70,7 @@ pub(crate) async fn extract_dpop_binding_for_kickoff(
         proof_jwt: header,
         jti: result.claims.jti,
         jkt: result.jkt,
-        public_jwk: result.jwk,
+        public_jwk: result.public_jwk,
     }))
 }
 
@@ -95,7 +94,7 @@ pub(crate) fn extract_dpop_binding_for_kickoff_without_replay(
         proof_jwt: header,
         jti: result.claims.jti,
         jkt: result.jkt,
-        public_jwk: result.jwk,
+        public_jwk: result.public_jwk,
     }))
 }
 

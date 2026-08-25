@@ -6,6 +6,7 @@ use arkret_models_identity::{
     IdentityAbandonmentChallengeRequestBody, IdentityAbandonmentRequestBody,
     IdentityBindingChallengeRequestBody,
 };
+use arkret_signatures::dpop::VerifiedDpopProof;
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::Duration;
 use coauth_data::{
@@ -20,7 +21,6 @@ use coauth_data::{
 };
 use rand_core::RngCore;
 use salvo::prelude::*;
-use sha2::Digest as _;
 
 use super::session_grant::map_oidc_exchange_error;
 use super::{ArkretRouteError, DepotExt, trust_domain_for};
@@ -31,9 +31,7 @@ use crate::handlers::account::auth::{
     DpopSessionBinding, extract_dpop_binding_for_kickoff_without_replay,
 };
 use crate::handlers::{make_clock, make_rng};
-use crate::services::dpop::{
-    DpopVerification, DpopVerifier, dpop_header_from_request, dpop_htu, dpop_replay_record,
-};
+use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu, dpop_replay_record};
 
 const HANDOFF_TTL: Duration = Duration::minutes(10);
 const IDENTITY_CREATION_LEASE_TTL: Duration = Duration::minutes(15);
@@ -690,11 +688,8 @@ fn redacted_handoff_intent(
 }
 
 fn sha256_hash(bytes: &[u8]) -> Result<arkret_identifiers::Hash, ArkretRouteError> {
-    arkret_identifiers::Hash::new(format!(
-        "sha256:{}",
-        hex::encode(sha2::Sha256::digest(bytes))
-    ))
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
+    arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(bytes))
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
 }
 
 fn authorized_checkpoint(
@@ -1167,7 +1162,7 @@ pub(crate) async fn authenticate_account_handoff(
     req: &Request,
     depot: &Depot,
     operation: AccountHandoffAllowedOperation,
-) -> Result<(AccountHandoffGrant, DpopVerification), ArkretRouteError> {
+) -> Result<(AccountHandoffGrant, VerifiedDpopProof), ArkretRouteError> {
     authenticate_account_handoff_inner(req, depot, Some(operation)).await
 }
 
@@ -1178,7 +1173,7 @@ pub(crate) async fn authenticate_account_handoff(
 pub(crate) fn verify_account_handoff_holder_without_lookup(
     req: &Request,
     depot: &Depot,
-) -> Result<(String, DpopVerification), ArkretRouteError> {
+) -> Result<(String, VerifiedDpopProof), ArkretRouteError> {
     let token = account_handoff_authorization(req)?.to_owned();
     let now = chrono::Utc::now();
     let dpop = dpop_header_from_request(req)
@@ -1196,7 +1191,7 @@ async fn authenticate_account_handoff_inner(
     req: &Request,
     depot: &Depot,
     operation: Option<AccountHandoffAllowedOperation>,
-) -> Result<(AccountHandoffGrant, DpopVerification), ArkretRouteError> {
+) -> Result<(AccountHandoffGrant, VerifiedDpopProof), ArkretRouteError> {
     let token = account_handoff_authorization(req)?;
     let now = chrono::Utc::now();
     let mut repo = depot.repo().await?;
@@ -1241,7 +1236,7 @@ async fn authenticate_account_handoff_inner(
 async fn authenticate_account_handoff_snapshot(
     req: &Request,
     depot: &Depot,
-) -> Result<(AccountHandoffGrant, DpopVerification), ArkretRouteError> {
+) -> Result<(AccountHandoffGrant, VerifiedDpopProof), ArkretRouteError> {
     let token = account_handoff_authorization(req)?;
     let now = chrono::Utc::now();
     let mut repo = depot.repo().await?;
@@ -1503,7 +1498,6 @@ mod tests {
         RequestBuilderExt as _, ResponseExt as _, TEST_PRINCIPAL_SERVER_AUDIENCE, TestState, setup,
         unique_test_nonce,
     };
-    use crate::services::dpop::DpopClaims;
 
     const HANDOFF_PATH: &str = "/_arkret/gate/account/authentication-handoffs";
 
@@ -1626,7 +1620,7 @@ mod tests {
             .with_typ("dpop+jwt".to_owned())
             .with_jwk(public);
         let signer = AsymmetricSigningKey::ed25519(signing.clone());
-        let claims = DpopClaims {
+        let claims = arkret_signatures::dpop::VerifiedDpopClaims {
             jti,
             htm: "POST".to_owned(),
             htu: format!("https://example.com{HANDOFF_PATH}"),

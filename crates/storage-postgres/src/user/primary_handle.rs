@@ -83,7 +83,6 @@ struct HandleClaimAuditRow {
     user_id: Option<Uuid>,
     event_type: String,
     handle: Option<String>,
-    claim_digest: Option<String>,
     created_at: DateTime<Utc>,
 }
 
@@ -178,15 +177,11 @@ impl UserPrimaryHandlePreferenceRepository for PgUserPrimaryHandlePreferenceRepo
         let Some(handle) = row.handle else {
             return Ok(None);
         };
-        let Some(claim_digest) = row.claim_digest else {
-            return Ok(None);
-        };
 
         Ok(Some(VerifiedUserHandleClaim {
             id: row.id.into(),
             user_id,
             handle,
-            claim_digest,
             issued_at: row.created_at,
         }))
     }

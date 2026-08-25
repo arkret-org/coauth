@@ -75,7 +75,6 @@ pub struct VerifiedUserHandleClaim {
     pub id: Ulid,
     pub user_id: Ulid,
     pub handle: String,
-    pub claim_digest: String,
     pub issued_at: DateTime<Utc>,
 }
 
@@ -102,7 +101,7 @@ impl NewUserPrimaryHandlePreference {
             user_id,
             handle,
             source_claim_id: claim.map(|claim| claim.id),
-            source_claim_digest: claim.map(|claim| claim.claim_digest.clone()),
+            source_claim_digest: None,
             actor_user_id: Some(actor_user_id),
             source: "self_service".to_owned(),
         }
@@ -141,12 +140,6 @@ impl User {
         Ok(Handle::prepare(&format!("{}:{host}", self.localpart))?
             .canonical()
             .to_owned())
-    }
-
-    /// Interop `acct:` alias for this user against the supplied host. Used
-    /// to populate `handle_claim.handle_aliases[]`. Never used as canonical.
-    pub fn acct_alias(&self, host: &str) -> arkret_wire::Result<String> {
-        Ok(Handle::prepare(&format!("{}:{host}", self.localpart))?.to_acct())
     }
 }
 

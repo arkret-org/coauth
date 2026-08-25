@@ -1100,8 +1100,7 @@ pub async fn debug_issue_dpop_grant(
         "holder_jkt": jkt,
     }))
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    use sha2::Digest as _;
-    let canonical_intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_intent).into();
+    let canonical_intent_digest: [u8; 32] = arkret_canonical::sha256_bytes(&canonical_intent);
     let request_identity = format!("cotest:sha256:{}", hex::encode(canonical_intent_digest));
     let not_before = arkret_canonical::normalize_timestamp_canonical(clock.now());
     let expires_at = not_before + arkret_config.session_grant_ttl;

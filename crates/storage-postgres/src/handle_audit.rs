@@ -144,7 +144,7 @@ impl HandleAuditRepository for PgHandleAuditRepository<'_> {
             new_did: params.new_did().map(ToOwned::to_owned),
             issuer_service_id: params.issuer_service_id().map(ToOwned::to_owned),
             audience: params.audience().map(ToOwned::to_owned),
-            claim_digest: params.claim_digest().map(ToOwned::to_owned),
+            claim_digest: None,
             details: params.details().clone(),
             actor_id: params.actor_id().map(Uuid::from),
             created_at,

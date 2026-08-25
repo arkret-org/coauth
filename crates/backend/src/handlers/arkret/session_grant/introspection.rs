@@ -10,7 +10,6 @@ use coauth_data::{BrowserSession, SessionGrant, User};
 use coauth_jose::jwk::{PublicJsonWebKey, PublicJsonWebKeySet};
 use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
-use sha2::Digest as _;
 
 use super::*;
 use crate::handlers::arkret::*;
@@ -125,10 +124,7 @@ pub(crate) fn introspection_status(
 }
 
 pub(crate) fn session_grant_jwt_digest(grant_jwt: &str) -> String {
-    format!(
-        "sha256:{}",
-        hex::encode(sha2::Sha256::digest(grant_jwt.as_bytes()))
-    )
+    arkret_canonical::sha256_digest(grant_jwt.as_bytes())
 }
 
 fn verify_session_grant_introspection_proof(

@@ -8,7 +8,6 @@ use coauth_data::{
     SessionGrantOperation, SessionGrantReserveOutcome,
 };
 use salvo::prelude::*;
-use sha2::Digest as _;
 
 use super::*;
 use crate::handlers::arkret::*;
@@ -35,10 +34,7 @@ fn redact_session_grant_intent(
     let hash_value = |value: &serde_json::Value| -> Result<String, ArkretRouteError> {
         let bytes = arkret_canonical::canonical_json_bytes(value)
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-        Ok(format!(
-            "sha256:{}",
-            hex::encode(sha2::Sha256::digest(bytes))
-        ))
+        Ok(arkret_canonical::sha256_digest(bytes))
     };
     if let Some(proof) = value
         .get_mut("proof")
@@ -99,7 +95,7 @@ async fn reserve_issue_operation(
             format!("session-grant request canonicalization failed: {error}"),
         )
     })?;
-    let canonical_intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_intent).into();
+    let canonical_intent_digest: [u8; 32] = arkret_canonical::sha256_bytes(&canonical_intent);
     let (proof_kind, identity_material, ttl_cap) = match body {
         SessionGrantRequestBody::Human(request) => (
             arkret_models_identity::SessionGrantProofKind::AccountHandoff,
@@ -130,10 +126,7 @@ async fn reserve_issue_operation(
     };
     let identity_bytes = arkret_canonical::canonical_json_bytes(&identity_material)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let request_identity = format!(
-        "sha256:{}",
-        hex::encode(sha2::Sha256::digest(identity_bytes))
-    );
+    let request_identity = arkret_canonical::sha256_digest(identity_bytes);
     let clock = crate::handlers::make_clock();
     let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
     let mut grant_ttl = depot.arkret_config()?.session_grant_ttl;
@@ -444,7 +437,7 @@ async fn validate_recovery_handoff_request_before_reservation(
 
 async fn consume_recovery_dpop_jti(
     depot: &Depot,
-    dpop: &crate::services::dpop::DpopVerification,
+    dpop: &arkret_signatures::dpop::VerifiedDpopProof,
 ) -> Result<(), ArkretRouteError> {
     let clock = crate::handlers::make_clock();
     let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
@@ -496,11 +489,9 @@ fn validate_human_issue_proof_before_reservation(
             "reason_code=proof_invalid; accepted-device proof holder key does not match DPoP",
         ));
     }
-    let handoff_digest = arkret_identifiers::Hash::new(format!(
-        "sha256:{}",
-        hex::encode(sha2::Sha256::digest(handoff_token.as_bytes()))
-    ))
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let handoff_digest =
+        arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(handoff_token.as_bytes()))
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     if proof.account_handoff_grant_digest != handoff_digest {
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
@@ -515,7 +506,7 @@ async fn issue_account_handoff_session_grant(
     depot: &Depot,
     body: &HumanSessionGrantRequest,
     handoff_token: String,
-    dpop: crate::services::dpop::DpopVerification,
+    dpop: arkret_signatures::dpop::VerifiedDpopProof,
     operation: SessionGrantOperation,
 ) -> Result<CanonicalJsonResponse, ArkretRouteError> {
     use arkret_models_identity::{AccountHandoffAllowedOperation, SessionGrantProofKind};
@@ -636,7 +627,8 @@ async fn issue_account_handoff_session_grant(
         &depot.arkret_config()?,
         &depot.key_store()?,
         &browser_session,
-        dpop.jwk.clone(),
+        crate::services::dpop::session_public_jwk(&dpop.public_jwk)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         handoff_audience.clone(),
         device_id.clone(),
         granted_scope,
@@ -763,7 +755,7 @@ async fn issue_recovery_session_grant(
     depot: &Depot,
     body: &RecoverySessionGrantRequest,
     handoff_token: String,
-    dpop: crate::services::dpop::DpopVerification,
+    dpop: arkret_signatures::dpop::VerifiedDpopProof,
     operation: SessionGrantOperation,
 ) -> Result<CanonicalJsonResponse, ArkretRouteError> {
     use coauth_data::storage::user::BrowserSessionRepository as _;
@@ -859,7 +851,8 @@ async fn issue_recovery_session_grant(
         &issuance_seed,
         &depot.arkret_config()?,
         &depot.key_store()?,
-        dpop.jwk.clone(),
+        crate::services::dpop::session_public_jwk(&dpop.public_jwk)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         handoff_audience.clone(),
         body.device_id.clone(),
         granted_scope,
@@ -1354,8 +1347,6 @@ pub(crate) fn map_oidc_exchange_error(
 
 #[cfg(test)]
 mod tests {
-    use coauth_iana::jose::JsonWebSignatureAlg;
-    use coauth_jose::jwk::{JsonWebKeyPublicParameters, PublicJsonWebKey};
     use ed25519_dalek::SigningKey;
     use rand_core::OsRng;
 
@@ -1365,9 +1356,9 @@ mod tests {
 
     fn test_dpop_binding(proof_jwt: &str) -> DpopSessionBinding {
         let signing = SigningKey::generate(&mut OsRng);
-        let public_jwk =
-            PublicJsonWebKey::new(JsonWebKeyPublicParameters::from(&signing.verifying_key()))
-                .with_alg(JsonWebSignatureAlg::Ed25519);
+        let public_jwk = arkret_signatures::jwk::JsonWebKey::from_ed25519_verifying_key(
+            &signing.verifying_key(),
+        );
         DpopSessionBinding {
             proof_jwt: proof_jwt.to_owned(),
             jti: "test-jti".to_owned(),

@@ -7,13 +7,15 @@
 //! principal server's job (soland's embedded webvh provider); coauth
 //! artefacts are verified via introspection + OAuth JWKS instead.
 //!
-//! NOTE (CAU-DRY-02, kept by ruling): this is intentionally NOT the SDK
-//! `arkret_models_identity::DidDocument`. The SDK type is a simplified product
-//! contract (verification methods collapsed to a map); this one is the
-//! full-document wire shape consumed from external resolvers (JWK and Multikey
-//! verification methods, `service` entries, holder-preference metadata).
-//! Reach for the SDK type for product contracts — do not grow this one into
-//! a second general-purpose DID model.
+//! NOTE (CAU-DRY-02, rechecked): this is intentionally not the SDK
+//! `arkret_models_identity::DidDocument`. The SDK model now preserves unknown
+//! properties losslessly, so conversion into accepted identity evidence no
+//! longer drops fields. This resolver-bound type still provides operational
+//! JOSE access to full JWK/Multikey verification methods and typed service and
+//! holder-preference entries. Moving those generic DID/JOSE semantics into the
+//! Arkret product model would invert the dependency boundary. The JSON
+//! conversion in `services::did_binding` is therefore the explicit handoff,
+//! not a second protocol model.
 
 use arkret_signatures::proof::PublicKeyMaterial;
 use coauth_jose::jwk::{JsonWebKeyPublicParameters, PublicJsonWebKey};

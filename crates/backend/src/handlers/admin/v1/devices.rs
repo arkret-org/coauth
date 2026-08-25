@@ -4,16 +4,15 @@ use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 
 use chrono::{DateTime, Utc};
+use coauth_admin_types::{
+    DeviceListResBody, DeviceMfaState, DeviceRecord, DeviceRevokeOutcome, DeviceRiskLevel,
+    RevokeDeviceRequestBody,
+};
 use coauth_data::audit::{AdminOperation, AdminOperationFilter};
 use coauth_data::oauth::SessionGrantFilter;
 use coauth_data::{Pagination, RepositoryAccess};
 use salvo::prelude::*;
 use ulid::Ulid;
-
-use coauth_admin_types::{
-    DeviceListResBody, DeviceMfaState, DeviceRecord, DeviceRevokeOutcome, DeviceRiskLevel,
-    RevokeDeviceRequestBody,
-};
 
 use crate::handlers::admin::audit_helper::record_admin_operation;
 use crate::handlers::admin::call_context::extract_call_context;

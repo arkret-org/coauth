@@ -1938,8 +1938,7 @@ async fn primary_handle_patch_validates_claims() {
                 coauth_data::audit::HandleAuditEventType::ClaimIssued,
             )
             .with_user(alice.id)
-            .with_handle(&handle)
-            .with_claim_digest("sha256:alice-primary"),
+            .with_handle(&handle),
         )
         .await
         .unwrap();
@@ -1959,7 +1958,7 @@ async fn primary_handle_patch_validates_claims() {
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
     assert_eq!(body["primary_handle"], handle);
-    assert_eq!(body["source_claim_digest"], "sha256:alice-primary");
+    assert!(body["source_claim_digest"].is_null());
 
     let response = state
         .request(alice_cookies.with_cookies(

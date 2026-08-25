@@ -36,7 +36,6 @@ pub struct NewHandleAuditEvent {
     new_did: Option<String>,
     issuer_service_id: Option<String>,
     audience: Option<String>,
-    claim_digest: Option<String>,
     details: Value,
     actor_id: Option<Ulid>,
 }
@@ -55,7 +54,6 @@ impl NewHandleAuditEvent {
             new_did: None,
             issuer_service_id: None,
             audience: None,
-            claim_digest: None,
             details: Value::Null,
             actor_id: None,
         }
@@ -75,21 +73,6 @@ impl NewHandleAuditEvent {
     #[must_use]
     pub fn with_handle(mut self, handle: impl Into<String>) -> Self {
         self.handle = Some(handle.into());
-        self
-    }
-
-    /// Set the audience the affected `handle_claim` was bound to.
-    #[must_use]
-    pub fn with_audience(mut self, audience: impl Into<String>) -> Self {
-        self.audience = Some(audience.into());
-        self
-    }
-
-    /// Set the `sha256:<hex>` digest of the canonical-JSON form of the
-    /// emitted claim, suitable as an audit-chain anchor.
-    #[must_use]
-    pub fn with_claim_digest(mut self, digest: impl Into<String>) -> Self {
-        self.claim_digest = Some(digest.into());
         self
     }
 
@@ -146,12 +129,6 @@ impl NewHandleAuditEvent {
     #[must_use]
     pub fn audience(&self) -> Option<&str> {
         self.audience.as_deref()
-    }
-
-    /// Borrow the claim digest.
-    #[must_use]
-    pub fn claim_digest(&self) -> Option<&str> {
-        self.claim_digest.as_deref()
     }
 
     /// Borrow the free-form details.

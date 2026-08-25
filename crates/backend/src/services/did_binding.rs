@@ -436,11 +436,11 @@ fn evidence_receipt(
 
 /// Convert coauth's full-document wire shape into the shared SDK model.
 ///
-/// CAU-DRY-02 keeps the two types distinct on purpose (coauth's carries JWK /
-/// Multikey verification methods, `service` entries and holder-preference
-/// metadata). The conversion is a JSON round-trip through the SDK's
-/// `Deserialize`, which files everything it does not index into
-/// `raw_properties`, so the pinned document is loss-free for digest purposes.
+/// CAU-DRY-02 keeps the resolver/JOSE type distinct from the SDK product
+/// model. The conversion is a JSON round-trip through the SDK's `Deserialize`,
+/// which files every non-indexed property into `raw_properties`; the pinned
+/// document is therefore loss-free for digest purposes while generic DID JWK
+/// behavior remains in coauth.
 pub fn to_shared_document(
     document: &CoauthDidDocument,
 ) -> Result<arkret_models_identity::DidDocument, DidBindingError> {

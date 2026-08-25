@@ -7,7 +7,6 @@ use coauth_data::Pagination;
 use coauth_data::oauth::SessionGrantFilter;
 use salvo::prelude::*;
 use serde::Serialize;
-use sha2::Digest as _;
 use ulid::Ulid;
 
 use crate::handlers::account::DepotExt as _;
@@ -122,7 +121,7 @@ pub async fn revoke_session_grant(
         "grant_id": grant.grant_id,
     }))
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let canonical_intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_intent).into();
+    let canonical_intent_digest: [u8; 32] = arkret_canonical::sha256_bytes(&canonical_intent);
     let request_identity = format!("admin-revoke:{}", grant.grant_id);
     let now = clock.now();
     let reserved = repo

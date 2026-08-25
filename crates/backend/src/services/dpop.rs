@@ -8,8 +8,7 @@
 //! grants. A DPoP proof is a compact-serialisation JWS with:
 //!
 //! * `typ = "dpop+jwt"`
-//! * `alg ∈ { ES256, Ed25519 }` — locked down to the asymmetric algs we already support in
-//!   `coauth_jose`.
+//! * `alg = "Ed25519"` — locked by the SDK verifier (`arkret_signatures::dpop::DPOP_PROOF_ALG`).
 //! * `jwk` — the protected-header MUST carry the public key the proof is signed with. We verify the
 //!   JWS using exactly that embedded key, then reconstruct the RFC 7638 JWK SHA-256 thumbprint
 //!   (`jkt`) and bind it to the issued session grant via a `cnf.jkt` claim (RFC 9449 §6.1).
@@ -32,17 +31,15 @@
 //! own primitive crypto.
 
 use std::collections::HashMap;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 use std::time::Duration as StdDuration;
 
-use arkret_signatures::dpop::{DpopVerificationError, DpopVerificationRequest, verify_dpop_proof};
+use arkret_signatures::dpop::{DpopVerificationRequest, VerifiedDpopProof, verify_dpop_proof};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::{NewDpopJtiReplay, RepositoryAccess as _, RepositoryFactory as _};
 use coauth_jose::jwk::PublicJsonWebKey;
 use coauth_storage_postgres::PgRepositoryFactory;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest as _, Sha256};
 use thiserror::Error;
 use tokio::sync::Mutex;
 
@@ -55,88 +52,19 @@ const MAX_FUTURE_SKEW: Duration = Duration::seconds(30);
 const NONCE_TTL: StdDuration = StdDuration::from_mins(5);
 const MAX_IN_MEMORY_JTIS: usize = 100_000;
 
-/// The `jkt` thumbprint extracted from a DPoP proof, base64url-encoded
-/// per RFC 7638. Used as the value of the `cnf.jkt` claim on tokens
-/// issued bound to the proof.
-pub type Jkt = String;
-
-/// Decoded DPoP proof claims (RFC 9449 §4.2).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DpopClaims {
-    /// Unique identifier for the proof — used for replay protection.
-    pub jti: String,
-    /// HTTP method, uppercase. MUST match the protected request.
-    pub htm: String,
-    /// HTTP target URI without query / fragment.
-    pub htu: String,
-    /// `issued at` — Unix seconds. MUST be inside the accepted freshness window.
-    pub iat: i64,
-    /// Access-token hash, set when the proof accompanies a Bearer token.
-    /// Equal to `base64url(sha256(access_token))`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ath: Option<String>,
-    /// Server-issued challenge nonce; we accept whatever the proof
-    /// carries but don't currently mandate it (RFC 9449 §8 nonce strand is
-    /// optional).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub nonce: Option<String>,
-}
-
-/// Result of a successful DPoP proof verification.
-#[derive(Debug, Clone)]
-pub struct DpopVerification {
-    /// JWK thumbprint (RFC 7638) of the embedded `jwk`, base64url-encoded.
-    pub jkt: Jkt,
-    /// Decoded proof claims.
-    pub claims: DpopClaims,
-    /// Echo of the embedded JWK so callers can persist or re-serialise.
-    pub jwk: PublicJsonWebKey,
-}
-
-/// What can go wrong while verifying a DPoP proof.
+/// What can go wrong while verifying a DPoP proof. Cryptographic, target
+/// and freshness failures surface verbatim from the SDK verifier; this
+/// type adds the replay-window and `jkt`-binding failures enforced on top.
 #[derive(Debug, Error)]
 pub enum DpopError {
     #[error("DPoP header is missing")]
     Missing,
 
-    #[error("DPoP header is malformed: {0}")]
-    Malformed(String),
-
-    #[error("DPoP header is not a parseable JWT: {0}")]
-    NotJwt(String),
-
-    #[error("DPoP header `typ` must be `dpop+jwt`")]
-    BadTyp,
-
-    #[error("DPoP header `alg` `{0}` is not supported (only Ed25519)")]
-    BadAlg(String),
-
-    #[error("DPoP header is missing the embedded `jwk`")]
-    MissingJwk,
-
-    #[error("DPoP signature verification failed")]
-    BadSignature,
-
-    #[error("DPoP claim `{0}` is missing or empty")]
-    MissingClaim(&'static str),
-
-    #[error("DPoP `htm` does not match the request method")]
-    HtmMismatch,
-
-    #[error("DPoP `htu` does not match the request URI")]
-    HtuMismatch,
-
-    #[error("DPoP `iat` is outside the accepted freshness window")]
-    IatOutOfRange,
+    #[error(transparent)]
+    Verification(#[from] arkret_signatures::dpop::DpopVerificationError),
 
     #[error("DPoP `jti` `{0}` was already presented within the replay window")]
     JtiReplayed(String),
-
-    #[error("DPoP `ath` is missing — required when an access token is presented")]
-    MissingAth,
-
-    #[error("DPoP `ath` does not match the presented access token")]
-    AthMismatch,
 
     #[error("DPoP `jkt` `{actual}` does not match the bound token `cnf.jkt` `{expected}`")]
     JktMismatch { expected: String, actual: String },
@@ -276,9 +204,15 @@ impl JtiReplayStore for RepositoryJtiStore {
 }
 
 pub(crate) fn dpop_jti_digest(jti: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(jti.as_bytes());
-    format!("sha256:{}", hex::encode(hasher.finalize()))
+    arkret_canonical::sha256_digest(jti.as_bytes())
+}
+
+/// Adapt the SDK JWK of a verified proof into the coauth JOSE public-key
+/// type used by session-grant issuance.
+pub(crate) fn session_public_jwk(
+    jwk: &arkret_signatures::jwk::JsonWebKey,
+) -> serde_json::Result<PublicJsonWebKey> {
+    serde_json::from_value(serde_json::to_value(jwk)?)
 }
 
 /// RFC 9449 DPoP proof verifier. Cheap to clone — holds an `Arc` over a
@@ -314,14 +248,6 @@ impl DpopVerifier {
         Self { jti_store }
     }
 
-    /// Process-wide singleton for tests and single-process fixtures.
-    /// Production handlers must not fall back to this weaker store.
-    #[must_use]
-    pub fn shared() -> Self {
-        static SHARED: LazyLock<DpopVerifier> = LazyLock::new(DpopVerifier::new);
-        SHARED.clone()
-    }
-
     /// Verify a DPoP proof.
     ///
     /// `dpop_header` is the raw value of the request's `DPoP` HTTP header.
@@ -331,8 +257,9 @@ impl DpopVerifier {
     /// `access_token` is the Bearer token, if one was presented; when set,
     /// the proof MUST carry a matching `ath` claim.
     ///
-    /// On success returns the proof's `jkt` thumbprint plus decoded
-    /// claims. On failure returns the most-specific [`DpopError`] variant.
+    /// On success returns the SDK-verified proof: its `jkt` thumbprint,
+    /// decoded claims, and the embedded public JWK. On failure returns the
+    /// most-specific [`DpopError`] variant.
     ///
     /// # Errors
     ///
@@ -345,7 +272,7 @@ impl DpopVerifier {
         htu: &str,
         now: DateTime<Utc>,
         access_token: Option<&str>,
-    ) -> Result<DpopVerification, DpopError> {
+    ) -> Result<VerifiedDpopProof, DpopError> {
         let verification = Self::verify_without_replay(dpop_header, htm, htu, now, access_token)?;
         self.jti_store
             .check_and_record(&verification.claims.jti, now, NONCE_TTL)
@@ -363,13 +290,13 @@ impl DpopVerifier {
         htu: &str,
         now: DateTime<Utc>,
         access_token: Option<&str>,
-    ) -> Result<DpopVerification, DpopError> {
+    ) -> Result<VerifiedDpopProof, DpopError> {
         let trimmed = dpop_header.trim();
         if trimmed.is_empty() {
             return Err(DpopError::Missing);
         }
 
-        let verified = verify_dpop_proof(&DpopVerificationRequest {
+        Ok(verify_dpop_proof(&DpopVerificationRequest {
             proof_jwt: trimmed,
             method: htm,
             htu,
@@ -377,24 +304,7 @@ impl DpopVerifier {
             now,
             max_age: MAX_PROOF_AGE,
             max_future_skew: MAX_FUTURE_SKEW,
-        })
-        .map_err(map_verification_error)?;
-        let claims = DpopClaims {
-            jti: verified.claims.jti,
-            htm: verified.claims.htm,
-            htu: verified.claims.htu,
-            iat: verified.claims.iat,
-            ath: verified.claims.ath,
-            nonce: verified.claims.nonce,
-        };
-        let jkt = verified.jkt;
-        let jwk = serde_json::from_value(
-            serde_json::to_value(verified.public_jwk)
-                .map_err(|error| DpopError::Malformed(error.to_string()))?,
-        )
-        .map_err(|error| DpopError::Malformed(error.to_string()))?;
-
-        Ok(DpopVerification { jkt, claims, jwk })
+        })?)
     }
 
     /// Convenience helper to confirm that a proof presented on a
@@ -422,26 +332,6 @@ pub(crate) fn dpop_replay_record(jti: &str, now: DateTime<Utc>) -> NewDpopJtiRep
         seen_at: now,
         expires_at: now
             + Duration::from_std(NONCE_TTL).expect("NONCE_TTL fits in chrono::Duration"),
-    }
-}
-
-fn map_verification_error(error: DpopVerificationError) -> DpopError {
-    match error {
-        DpopVerificationError::Malformed | DpopVerificationError::InvalidJson => {
-            DpopError::NotJwt(error.to_string())
-        }
-        DpopVerificationError::InvalidType => DpopError::BadTyp,
-        DpopVerificationError::InvalidAlgorithm => DpopError::BadAlg("not Ed25519".to_owned()),
-        DpopVerificationError::InvalidJwk => DpopError::MissingJwk,
-        DpopVerificationError::SignatureInvalid => DpopError::BadSignature,
-        DpopVerificationError::MissingClaim(claim) => DpopError::MissingClaim(claim),
-        DpopVerificationError::MethodMismatch => DpopError::HtmMismatch,
-        DpopVerificationError::InvalidTargetUri | DpopVerificationError::TargetUriMismatch => {
-            DpopError::HtuMismatch
-        }
-        DpopVerificationError::IssuedAtOutOfRange => DpopError::IatOutOfRange,
-        DpopVerificationError::MissingAccessTokenHash => DpopError::MissingAth,
-        DpopVerificationError::AccessTokenHashMismatch => DpopError::AthMismatch,
     }
 }
 
@@ -493,9 +383,9 @@ pub fn dpop_htu(public_base: &url::Url, req: &salvo::Request) -> String {
     }
 }
 
-/// Trim query string and fragment from `htu`, lowercase scheme + host.
 #[cfg(test)]
 mod tests {
+    use arkret_signatures::dpop::{DpopVerificationError, VerifiedDpopClaims};
     use arkret_signatures::dpop_access_token_hash;
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::jwa::AsymmetricSigningKey;
@@ -506,7 +396,7 @@ mod tests {
 
     use super::*;
 
-    fn sign_proof(claims: &DpopClaims, signing: &SigningKey) -> String {
+    fn sign_proof(claims: &VerifiedDpopClaims, signing: &SigningKey) -> String {
         let verifying = signing.verifying_key();
         let public = PublicJsonWebKey::new(JsonWebKeyPublicParameters::from(&verifying))
             .with_alg(JsonWebSignatureAlg::Ed25519);
@@ -523,7 +413,7 @@ mod tests {
     async fn verifies_well_formed_proof_and_extracts_jkt() {
         let signing = SigningKey::generate(&mut OsRng);
         let now = Utc::now();
-        let claims = DpopClaims {
+        let claims = VerifiedDpopClaims {
             jti: "test-jti-1".to_owned(),
             htm: "POST".to_owned(),
             htu: "https://example.test/_arkret/gate/account/session-grants/refresh".to_owned(),
@@ -551,7 +441,7 @@ mod tests {
     async fn rejects_replayed_jti() {
         let signing = SigningKey::generate(&mut OsRng);
         let now = Utc::now();
-        let claims = DpopClaims {
+        let claims = VerifiedDpopClaims {
             jti: "test-jti-replay".to_owned(),
             htm: "POST".to_owned(),
             htu: "https://example.test/_arkret/gate/account/session-grants/refresh".to_owned(),
@@ -589,7 +479,7 @@ mod tests {
     async fn rejects_htm_mismatch() {
         let signing = SigningKey::generate(&mut OsRng);
         let now = Utc::now();
-        let claims = DpopClaims {
+        let claims = VerifiedDpopClaims {
             jti: "test-jti-htm".to_owned(),
             htm: "GET".to_owned(),
             htu: "https://example.test/_arkret/gate/account/session-grants/refresh".to_owned(),
@@ -609,14 +499,19 @@ mod tests {
                 None,
             )
             .await;
-        assert!(matches!(result, Err(DpopError::HtmMismatch)));
+        assert!(matches!(
+            result,
+            Err(DpopError::Verification(
+                DpopVerificationError::MethodMismatch
+            ))
+        ));
     }
 
     #[tokio::test]
     async fn rejects_iat_outside_skew() {
         let signing = SigningKey::generate(&mut OsRng);
         let now = Utc::now();
-        let claims = DpopClaims {
+        let claims = VerifiedDpopClaims {
             jti: "test-jti-iat".to_owned(),
             htm: "POST".to_owned(),
             htu: "https://example.test/_arkret/gate/account/session-grants/refresh".to_owned(),
@@ -636,7 +531,12 @@ mod tests {
                 None,
             )
             .await;
-        assert!(matches!(result, Err(DpopError::IatOutOfRange)));
+        assert!(matches!(
+            result,
+            Err(DpopError::Verification(
+                DpopVerificationError::IssuedAtOutOfRange
+            ))
+        ));
     }
 
     #[tokio::test]
@@ -644,7 +544,7 @@ mod tests {
         let signing = SigningKey::generate(&mut OsRng);
         let now = Utc::now();
         let token = "some-access-token";
-        let claims = DpopClaims {
+        let claims = VerifiedDpopClaims {
             jti: "test-jti-ath".to_owned(),
             htm: "POST".to_owned(),
             htu: "https://example.test/_arkret/gate/account/session-grants/refresh".to_owned(),
@@ -671,7 +571,7 @@ mod tests {
     async fn rejects_ath_for_a_different_access_token() {
         let signing = SigningKey::generate(&mut OsRng);
         let now = Utc::now();
-        let claims = DpopClaims {
+        let claims = VerifiedDpopClaims {
             jti: "test-jti-ath-mismatch".to_owned(),
             htm: "POST".to_owned(),
             htu: "https://example.test/_arkret/gate/account/session-grants/refresh".to_owned(),
@@ -691,7 +591,12 @@ mod tests {
                 Some("other-access-token"),
             )
             .await;
-        assert!(matches!(result, Err(DpopError::AthMismatch)));
+        assert!(matches!(
+            result,
+            Err(DpopError::Verification(
+                DpopVerificationError::AccessTokenHashMismatch
+            ))
+        ));
     }
 
     #[test]

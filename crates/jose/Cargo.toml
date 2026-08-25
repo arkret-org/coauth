@@ -23,6 +23,7 @@ workspace = true
 # Encoding & misc
 
 # Workspace crates
+arkret-canonical = {workspace = true}
 base64ct = {workspace = true}
 chrono = {workspace = true}
 coauth-iana = {workspace = true}

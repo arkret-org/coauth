@@ -316,8 +316,7 @@ async fn primary_handle_preference_versions_current_and_as_of() {
             &clock,
             NewHandleAuditEvent::new(HandleAuditEventType::ClaimIssued)
                 .with_user(user.id)
-                .with_handle(handle)
-                .with_claim_digest("sha256:primary"),
+                .with_handle(handle),
         )
         .await
         .unwrap();
@@ -329,7 +328,6 @@ async fn primary_handle_preference_versions_current_and_as_of() {
         .unwrap()
         .expect("claim_issued audit event should verify the holder handle");
     assert_eq!(verified.id, claim.id);
-    assert_eq!(verified.claim_digest, "sha256:primary");
 
     let first = repo
         .user_primary_handle_preference()
@@ -417,8 +415,7 @@ async fn primary_handle_verified_claim_rejects_unknown_wrong_holder_and_expired_
             &clock,
             NewHandleAuditEvent::new(HandleAuditEventType::ClaimIssued)
                 .with_user(alice.id)
-                .with_handle(handle)
-                .with_claim_digest("sha256:alice"),
+                .with_handle(handle),
         )
         .await
         .unwrap();
@@ -460,8 +457,7 @@ async fn primary_handle_verified_claim_rejects_unknown_wrong_holder_and_expired_
             &clock,
             NewHandleAuditEvent::new(HandleAuditEventType::ClaimIssued)
                 .with_user(alice.id)
-                .with_handle(handle)
-                .with_claim_digest("sha256:alice-renewed"),
+                .with_handle(handle),
         )
         .await
         .unwrap();
