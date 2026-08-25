@@ -1,4 +1,4 @@
-use arkret_identifiers::SessionGrantId;
+use arkret_identifiers::{DidCoreId, SessionGrantId};
 use arkret_models_identity::SessionGrantIssuanceNonce;
 use chrono::{DateTime, Utc};
 use coauth_data::SessionGrant;
@@ -14,7 +14,7 @@ pub struct SessionGrantMaterial {
     pub expires_at: String,
     pub expires_at_timestamp: DateTime<Utc>,
     pub not_before_timestamp: DateTime<Utc>,
-    pub issuer: String,
+    pub issuer: DidCoreId,
     pub subject: String,
     pub device_id: Option<String>,
     pub audience: String,
@@ -131,7 +131,7 @@ pub(crate) struct SessionGrantRecord {
     id: String,
     grant_id: SessionGrantId,
     browser_session_id: Option<String>,
-    issuer: String,
+    issuer: DidCoreId,
     subject: String,
     device_id: Option<String>,
     audience: String,

@@ -1,4 +1,4 @@
-use arkret_identifiers::SessionGrantId;
+use arkret_identifiers::{DidCoreId, SessionGrantId};
 use arkret_models_identity::SessionGrantProofKind;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -127,7 +127,7 @@ pub struct NewSessionGrant<'a> {
     /// Browser session that the grant is bound to.
     pub browser_session_id: Option<Ulid>,
     /// DID issuer of the signed grant.
-    pub issuer: &'a str,
+    pub issuer: &'a DidCoreId,
     /// DID subject authorized by the grant.
     pub subject: &'a str,
     /// Optional Arkret client device id.
@@ -171,8 +171,12 @@ pub struct NewSessionGrant<'a> {
 /// Stable exact-replay identity and canonical intent for one issuer operation.
 #[derive(Debug)]
 pub struct NewSessionGrantOperation<'a> {
-    /// Issuer DID that owns this replay namespace.
-    pub issuer: &'a str,
+    /// Stable issuer core DID that owns this replay namespace.
+    ///
+    /// This is deliberately not a string: a complete [`arkret_identifiers::DidFullId`]
+    /// identifies a particular DID document version and must never partition
+    /// the durable issuer ledger.
+    pub issuer: DidCoreId,
     /// Closed lifecycle operation family.
     pub operation: SessionGrantOperationDescriptor,
     /// Signed proof kind for initial issuance; absent for other operations.

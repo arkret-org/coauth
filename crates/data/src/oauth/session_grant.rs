@@ -1,4 +1,4 @@
-use arkret_identifiers::SessionGrantId;
+use arkret_identifiers::{DidCoreId, SessionGrantId};
 use arkret_models_identity::SessionGrantProofKind;
 use chrono::{DateTime, Utc};
 use coauth_oauth_types::scope::Scope;
@@ -109,7 +109,7 @@ pub enum SessionGrantOperationState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SessionGrantOperation {
     pub id: Ulid,
-    pub issuer: String,
+    pub issuer: DidCoreId,
     pub operation: SessionGrantOperationDescriptor,
     pub proof_kind: Option<SessionGrantProofKind>,
     pub request_identity: String,
@@ -139,7 +139,7 @@ pub struct SessionGrant {
     pub id: Ulid,
     pub grant_id: SessionGrantId,
     pub browser_session_id: Option<Ulid>,
-    pub issuer: String,
+    pub issuer: DidCoreId,
     pub subject: String,
     pub device_id: Option<String>,
     pub applet_id: Option<String>,

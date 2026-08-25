@@ -161,7 +161,7 @@ async fn reserve_issue_operation(
     // retry horizons. A committed operation can still retain its canonical
     // outcome longer in storage policy; this is the minimum requested here.
     let retained_until = now + depot.arkret_config()?.session_grant_ttl + chrono::Duration::days(7);
-    let issuer = issuer_did_for(&depot.arkret_config()?).to_string();
+    let issuer = service_id_for(&depot.arkret_config()?);
     let mut rng = crate::handlers::make_rng();
     let mut repo = depot.repo().await?;
     let reserved = repo
@@ -170,7 +170,7 @@ async fn reserve_issue_operation(
             &mut rng,
             &*clock,
             NewSessionGrantOperation {
-                issuer: &issuer,
+                issuer,
                 operation: coauth_data::SessionGrantOperationDescriptor::Issue,
                 proof_kind: Some(proof_kind),
                 request_identity: &request_identity,

@@ -1,4 +1,4 @@
-use arkret_identifiers::SessionGrantId;
+use arkret_identifiers::{DidCoreId, SessionGrantId};
 use arkret_models_collaboration::account_lifecycle::SessionRevokeOutcome as WireSessionRevokeOutcome;
 use arkret_models_identity::{
     SessionGrantCredentialClass, SessionGrantHolderBinding, SessionGrantIssuancePreimage,
@@ -224,9 +224,11 @@ impl TryFrom<SessionGrantOperationRow> for SessionGrantOperation {
             )
         })?;
 
+        let issuer = DidCoreId::new(value.issuer)
+            .map_err(|error| inconsistent("issuer", Box::new(error)))?;
         Ok(Self {
             id,
-            issuer: value.issuer,
+            issuer,
             operation,
             proof_kind,
             request_identity: value.request_identity,
@@ -364,11 +366,17 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
                     .source(error)
             })?;
 
+        let issuer = DidCoreId::new(value.issuer).map_err(|error| {
+            DatabaseInconsistencyError::on("oauth_session_grants")
+                .column("issuer")
+                .row(id)
+                .source(error)
+        })?;
         Ok(Self {
             id,
             grant_id,
             browser_session_id: value.user_session_id.map(Into::into),
-            issuer: value.issuer,
+            issuer,
             subject: value.subject,
             device_id: value.device_id,
             applet_id: value.applet_id,
@@ -523,11 +531,8 @@ fn validate_grant_material(
             claim_preimage.grant_id().ok().as_ref() == Some(&grant.grant_id),
         ),
         ("header_kid", header_kid == grant.signing_key_id),
-        (
-            "preimage_issuer",
-            preimage.issuer.to_string() == grant.issuer,
-        ),
-        ("operation_issuer", operation.issuer == grant.issuer),
+        ("preimage_issuer", preimage.issuer == *grant.issuer),
+        ("operation_issuer", operation.issuer == *grant.issuer),
         (
             "preimage_subject",
             preimage.subject.to_string() == grant.subject,
@@ -636,7 +641,7 @@ fn new_grant_row<'a>(
         grant_id: grant.grant_id.token_bytes().to_vec(),
         issuance_operation_id: Uuid::from(operation_id),
         user_session_id: grant.browser_session_id.map(Uuid::from),
-        issuer: grant.issuer,
+        issuer: grant.issuer.as_str(),
         subject: grant.subject,
         device_id: grant.device_id,
         applet_id: grant.applet_id,
@@ -674,7 +679,7 @@ fn owned_grant(
         id,
         grant_id: grant.grant_id,
         browser_session_id: grant.browser_session_id,
-        issuer: grant.issuer.to_owned(),
+        issuer: grant.issuer.clone(),
         subject: grant.subject.to_owned(),
         device_id: grant.device_id.map(ToOwned::to_owned),
         applet_id: grant.applet_id.map(ToOwned::to_owned),
@@ -796,7 +801,7 @@ mod authorization_checkpoint_tests {
     ) -> SessionGrantOperation {
         SessionGrantOperation {
             id: Ulid::from(1_u128),
-            issuer: "did:web:issuer.example".to_owned(),
+            issuer: DidCoreId::new("ak:did_core:web:issuer.example".to_owned()).unwrap(),
             operation: SessionGrantOperationDescriptor::Issue,
             proof_kind: None,
             request_identity: "oidc-code-hash".to_owned(),
@@ -1034,8 +1039,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         operation: NewSessionGrantOperation<'_>,
     ) -> Result<SessionGrantReserveOutcome, Self::Error> {
         let now = clock.now();
-        if operation.issuer.trim().is_empty()
-            || operation.request_identity.trim().is_empty()
+        if operation.request_identity.trim().is_empty()
             || operation.canonical_intent.is_empty()
             || arkret_canonical::sha256_bytes(operation.canonical_intent)
                 != operation.canonical_intent_digest
@@ -1129,7 +1133,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         let id = new_id(now, rng);
         let row = NewSessionGrantOperationRow {
             id: Uuid::from(id),
-            issuer: operation.issuer,
+            issuer: operation.issuer.as_str(),
             operation_kind: operation_kind.as_str(),
             proof_kind: proof_kind.as_deref(),
             request_identity: operation.request_identity,
@@ -1156,7 +1160,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
             == 1;
 
         let stored_query = oauth_session_grant_operations::table
-            .filter(oauth_session_grant_operations::issuer.eq(operation.issuer))
+            .filter(oauth_session_grant_operations::issuer.eq(operation.issuer.as_str()))
             .filter(oauth_session_grant_operations::operation_kind.eq(operation_kind.as_str()))
             .filter(oauth_session_grant_operations::request_identity.eq(operation.request_identity))
             .into_boxed();
@@ -1296,7 +1300,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 }
                 validate_authorization(&operation, authorization, now)?;
                 validate_grant_material(&operation, &grant)?;
-                lock_session_grant_subject(conn, grant.issuer, grant.subject).await?;
+                lock_session_grant_subject(conn, grant.issuer.as_str(), grant.subject).await?;
                 let retained_until = operation.retained_until.max(authorization.proof_expires_at);
                 let grant_id = grant.grant_id.clone();
                 let row = new_grant_row(id, operation_id, now, &grant);
@@ -1370,11 +1374,12 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 }
 
                 validate_grant_material(&operation, &successor)?;
-                lock_session_grant_subject(conn, successor.issuer, successor.subject).await?;
+                lock_session_grant_subject(conn, successor.issuer.as_str(), successor.subject)
+                    .await?;
                 let predecessor = load_grant_by_protocol_id_for_update(conn, predecessor_grant_id)
                     .await?
                     .ok_or_else(DatabaseError::invalid_operation)?;
-                if predecessor.issuer != successor.issuer
+                if predecessor.issuer != *successor.issuer
                     || predecessor.subject != successor.subject
                     || predecessor.session_id != successor.session_id
                 {
@@ -1504,10 +1509,10 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 {
                     return Err(DatabaseError::invalid_operation());
                 }
-                lock_session_grant_subject(conn, &operation.issuer, &subject).await?;
+                lock_session_grant_subject(conn, operation.issuer.as_str(), &subject).await?;
 
                 let mut query = oauth_session_grants::table
-                    .filter(oauth_session_grants::issuer.eq(&operation.issuer))
+                    .filter(oauth_session_grants::issuer.eq(operation.issuer.as_str()))
                     .filter(oauth_session_grants::subject.eq(&subject))
                     .into_boxed();
                 match selector {

@@ -354,7 +354,7 @@ pub async fn refresh_session_grant(
             &mut rng,
             &*clock,
             NewSessionGrantOperation {
-                issuer: &prior_grant.issuer,
+                issuer: prior_payload.issuer.clone(),
                 operation: coauth_data::SessionGrantOperationDescriptor::Refresh {
                     predecessor_grant_id: prior_grant.grant_id.clone(),
                 },

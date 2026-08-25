@@ -161,13 +161,15 @@ mod tests {
         };
         let grant_jwt = test_session_grant_jwt(&claims);
 
+        let issuer = arkret_identifiers::DidCoreId::new(TEST_SESSION_GRANT_ISSUER.to_owned())
+            .expect("test session grant issuer");
         let reserved = repo
             .oauth_session_grant()
             .reserve_operation(
                 rng,
                 clock,
                 coauth_data::NewSessionGrantOperation {
-                    issuer: TEST_SESSION_GRANT_ISSUER,
+                    issuer: issuer.clone(),
                     operation: coauth_data::SessionGrantOperationDescriptor::Issue,
                     // An `issue` reservation is only valid with a proof kind,
                     // and it must be the one signed into the preimage.
@@ -210,7 +212,7 @@ mod tests {
                 NewSessionGrant {
                     grant_id,
                     browser_session_id: seed.browser_session_id,
-                    issuer: TEST_SESSION_GRANT_ISSUER,
+                    issuer: &issuer,
                     subject: TEST_SESSION_GRANT_SUBJECT,
                     device_id: Some(seed.device_id),
                     applet_id: None,

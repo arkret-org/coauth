@@ -182,7 +182,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             ))
         })?
         .to_owned();
-    let issuer = super::issuer_did_for(&config).to_string();
+    let issuer = super::service_id_for(&config);
     let request_identity = format!("recovery-completion:{}", request.transaction_id);
     let intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_request).into();
     let mut rng = crate::handlers::make_rng();
@@ -193,7 +193,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             &mut rng,
             &*clock,
             NewSessionGrantOperation {
-                issuer: &issuer,
+                issuer,
                 operation: coauth_data::SessionGrantOperationDescriptor::Issue,
                 proof_kind: Some(SessionGrantProofKind::AccountHandoff),
                 request_identity: &request_identity,

@@ -115,6 +115,7 @@ pub async fn revoke_session_grant(
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .ok_or(ArkretRouteError::NotFound)?;
+    let issuer = grant.issuer.clone();
 
     let canonical_intent = arkret_canonical::canonical_json_bytes(&serde_json::json!({
         "operation": "admin_revoke_session_grant",
@@ -130,7 +131,7 @@ pub async fn revoke_session_grant(
             &mut rng,
             &clock,
             coauth_data::NewSessionGrantOperation {
-                issuer: &grant.issuer,
+                issuer,
                 operation: coauth_data::SessionGrantOperationDescriptor::Revoke {
                     selector: coauth_data::SessionGrantRevokeTarget::Grant {
                         grant_id: grant.grant_id.clone(),

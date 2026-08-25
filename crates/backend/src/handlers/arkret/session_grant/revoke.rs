@@ -397,7 +397,7 @@ pub async fn revoke_session_grant_endpoint(
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .ok_or_else(session_grant_not_found)?;
     if presented_claims.grant_id != current_grant.grant_id
-        || presented_claims.issuer.as_str() != current_grant.issuer
+        || presented_claims.issuer != current_grant.issuer
         || presented_claims.subject.as_str() != current_grant.subject
     {
         repo.cancel().await.ok();
@@ -545,7 +545,7 @@ pub async fn revoke_session_grant_endpoint(
             &mut rng,
             &*clock,
             NewSessionGrantOperation {
-                issuer: &current_grant.issuer,
+                issuer: presented_claims.issuer.clone(),
                 operation: coauth_data::SessionGrantOperationDescriptor::Revoke {
                     selector: operation_selector,
                 },
