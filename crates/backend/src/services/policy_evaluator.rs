@@ -489,14 +489,9 @@ fn profile_declared_for_policy(data: &Value, scopes: &[&Value], profile: &str) -
 }
 
 fn policy_scope_declares_profile(scope: &Value, profile: &str) -> bool {
-    [
-        "enabled_profile_refs",
-        "claimed_profiles",
-        "active_profiles",
-        "profiles",
-    ]
-    .into_iter()
-    .any(|field| profile_list_contains(scope.get(field), profile))
+    ["enabled_profile_refs", "claimed_profiles"]
+        .into_iter()
+        .any(|field| profile_list_contains(scope.get(field), profile))
 }
 
 fn profile_list_contains(haystack: Option<&Value>, needle: &str) -> bool {
@@ -774,6 +769,25 @@ mod tests {
         );
         assert!(matches!(allowed.decision, AuthzDecision::Allow));
         assert_eq!(allowed.reason_code.as_str(), "ok");
+    }
+
+    #[test]
+    fn retired_generic_profile_fields_do_not_activate_profile_actions() {
+        let request = req("ak:did_core:web:alice.example", "ak.pin.add");
+        let grant = collaboration_grant(CapabilityActionId::PinAdd);
+        for retired_field in ["active_profiles", "profiles"] {
+            let denied = match_rules_with_grants(
+                &serde_json::json!({
+                    (retired_field): ["ak.profile.pinned_items.v1"]
+                }),
+                &request,
+                &frontier(FreshnessState::Fresh),
+                "v",
+                std::slice::from_ref(&grant),
+            );
+            assert!(matches!(denied.decision, AuthzDecision::HardDeny));
+            assert_eq!(denied.reason_code.as_str(), "unsupported_feature");
+        }
     }
 
     #[test]
