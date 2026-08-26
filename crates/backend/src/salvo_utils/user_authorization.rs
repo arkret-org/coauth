@@ -132,6 +132,7 @@ pub enum AuthorizationVerificationError<E> {
 enum BearerError {
     InvalidRequest,
     InvalidToken,
+    InsufficientScope,
 }
 
 impl BearerError {
@@ -139,6 +140,7 @@ impl BearerError {
         match self {
             BearerError::InvalidRequest => HeaderValue::from_static("invalid_request"),
             BearerError::InvalidToken => HeaderValue::from_static("invalid_token"),
+            BearerError::InsufficientScope => HeaderValue::from_static("insufficient_scope"),
         }
     }
 }
@@ -234,14 +236,26 @@ where
                     res.headers_mut().insert(name.clone(), value.clone());
                 }
             }
-            Self::InvalidToken | Self::InsufficientScope => {
+            Self::InvalidToken => {
                 let mut headers = HeaderMap::new();
                 headers.typed_insert(WwwAuthenticate::Bearer {
                     realm: None,
                     error: BearerError::InvalidToken,
                     error_description: None,
                 });
-                res.status_code(StatusCode::BAD_REQUEST);
+                res.status_code(StatusCode::UNAUTHORIZED);
+                for (name, value) in &headers {
+                    res.headers_mut().insert(name.clone(), value.clone());
+                }
+            }
+            Self::InsufficientScope => {
+                let mut headers = HeaderMap::new();
+                headers.typed_insert(WwwAuthenticate::Bearer {
+                    realm: None,
+                    error: BearerError::InsufficientScope,
+                    error_description: None,
+                });
+                res.status_code(StatusCode::FORBIDDEN);
                 for (name, value) in &headers {
                     res.headers_mut().insert(name.clone(), value.clone());
                 }

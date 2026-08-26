@@ -4,6 +4,7 @@ use std::sync::LazyLock;
 use coauth_data::oauth::OAuthClientRepository;
 use coauth_data::{Client, JwksOrJwksUri, RepositoryAccess};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
+use coauth_jose::claims::{self, TimeOptions};
 use coauth_jose::jwk::PublicJsonWebKeySet;
 use coauth_jose::jwt::Jwt;
 use coauth_keystore::Encrypter;
@@ -18,6 +19,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::record_error;
+use crate::services::dpop::{DpopError, DpopVerifier};
 
 static JWT_BEARER_CLIENT_ASSERTION: &str = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
 
@@ -109,6 +111,9 @@ impl Credentials {
         encrypter: &Encrypter,
         method: &OAuthClientAuthenticationMethod,
         client: &Client,
+        expected_audience: &str,
+        now: chrono::DateTime<chrono::Utc>,
+        replay_store: &DpopVerifier,
     ) -> Result<(), CredentialsVerificationError> {
         match (self, method) {
             (Credentials::None { .. }, OAuthClientAuthenticationMethod::None) => {}
@@ -179,8 +184,61 @@ impl Credentials {
                 return Err(CredentialsVerificationError::AuthenticationMethodMismatch);
             }
         }
+        if let Credentials::ClientAssertionJwtBearer { client_id, jwt } = self {
+            validate_client_assertion(jwt, client_id, expected_audience, now, replay_store).await?;
+        }
         Ok(())
     }
+}
+
+async fn validate_client_assertion(
+    jwt: &Jwt<'_, HashMap<String, Value>>,
+    client_id: &str,
+    expected_audience: &str,
+    now: chrono::DateTime<chrono::Utc>,
+    replay_store: &DpopVerifier,
+) -> Result<(), CredentialsVerificationError> {
+    let mut payload = jwt.payload().clone();
+    let time_options = TimeOptions::new(now);
+    claims::ISS
+        .extract_required_with_options(&mut payload, client_id)
+        .map_err(|_| CredentialsVerificationError::InvalidAssertionClaims)?;
+    let subject = claims::SUB
+        .extract_required(&mut payload)
+        .map_err(|_| CredentialsVerificationError::InvalidAssertionClaims)?;
+    if subject != client_id {
+        return Err(CredentialsVerificationError::InvalidAssertionClaims);
+    }
+    claims::AUD
+        .extract_required_with_options(&mut payload, &expected_audience.to_owned())
+        .map_err(|_| CredentialsVerificationError::InvalidAssertionClaims)?;
+    let expires_at = claims::EXP
+        .extract_required_with_options(&mut payload, &time_options)
+        .map_err(|_| CredentialsVerificationError::InvalidAssertionClaims)?;
+    let issued_at = claims::IAT
+        .extract_required_with_options(&mut payload, &time_options)
+        .map_err(|_| CredentialsVerificationError::InvalidAssertionClaims)?;
+    if *expires_at <= *issued_at || *expires_at - *issued_at > chrono::Duration::minutes(5) {
+        return Err(CredentialsVerificationError::InvalidAssertionClaims);
+    }
+    let jti = claims::JTI
+        .extract_required(&mut payload)
+        .map_err(|_| CredentialsVerificationError::InvalidAssertionClaims)?;
+    if jti.trim().is_empty() {
+        return Err(CredentialsVerificationError::InvalidAssertionClaims);
+    }
+    let ttl = (*expires_at - now)
+        .to_std()
+        .map_err(|_| CredentialsVerificationError::InvalidAssertionClaims)?;
+    let replay_key = format!("oauth-client-assertion:{client_id}:{jti}");
+    replay_store
+        .check_and_record_replay_key(&replay_key, now, ttl)
+        .await
+        .map_err(|error| match error {
+            DpopError::JtiReplayed(_) => CredentialsVerificationError::AssertionReplayed,
+            other => CredentialsVerificationError::AssertionReplayStore(other.to_string()),
+        })?;
+    Ok(())
 }
 
 async fn fetch_jwks(
@@ -211,6 +269,15 @@ pub enum CredentialsVerificationError {
     #[error("invalid assertion signature")]
     InvalidAssertionSignature,
 
+    #[error("invalid client assertion claims")]
+    InvalidAssertionClaims,
+
+    #[error("client assertion was already used")]
+    AssertionReplayed,
+
+    #[error("client assertion replay store failed: {0}")]
+    AssertionReplayStore(String),
+
     #[error("failed to fetch jwks")]
     JwksFetchFailed(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
 }
@@ -221,7 +288,10 @@ impl CredentialsVerificationError {
     pub fn is_internal(&self) -> bool {
         matches!(
             self,
-            Self::DecryptionError | Self::InvalidClientConfig | Self::JwksFetchFailed(_)
+            Self::DecryptionError
+                | Self::InvalidClientConfig
+                | Self::JwksFetchFailed(_)
+                | Self::AssertionReplayStore(_)
         )
     }
 }
@@ -528,8 +598,71 @@ where
 
 #[cfg(test)]
 mod tests {
+    use base64ct::{Base64UrlUnpadded, Encoding as _};
+    use chrono::{Duration, TimeZone as _, Utc};
 
-    // Tests would need to be updated for Salvo's test utilities
-    // For now, we'll skip the tests as they require significant Salvo-specific
-    // changes
+    use super::*;
+
+    fn assertion(claims: serde_json::Value) -> Jwt<'static, HashMap<String, Value>> {
+        let header = Base64UrlUnpadded::encode_string(br#"{"alg":"HS256"}"#);
+        let payload = Base64UrlUnpadded::encode_string(&serde_json::to_vec(&claims).unwrap());
+        Jwt::try_from(format!("{header}.{payload}.AA"))
+            .unwrap()
+            .into_owned()
+    }
+
+    #[tokio::test]
+    async fn client_assertion_claims_are_endpoint_bound_and_single_use() {
+        let now = Utc.with_ymd_and_hms(2026, 8, 26, 4, 0, 0).unwrap();
+        let jwt = assertion(serde_json::json!({
+            "iss": "client-a",
+            "sub": "client-a",
+            "aud": "https://auth.example/oauth/token",
+            "iat": now.timestamp(),
+            "exp": (now + Duration::minutes(5)).timestamp(),
+            "jti": "assertion-1"
+        }));
+        let replay = DpopVerifier::new();
+
+        validate_client_assertion(
+            &jwt,
+            "client-a",
+            "https://auth.example/oauth/token",
+            now,
+            &replay,
+        )
+        .await
+        .unwrap();
+        assert!(matches!(
+            validate_client_assertion(
+                &jwt,
+                "client-a",
+                "https://auth.example/oauth/token",
+                now,
+                &replay,
+            )
+            .await,
+            Err(CredentialsVerificationError::AssertionReplayed)
+        ));
+
+        let wrong_endpoint = assertion(serde_json::json!({
+            "iss": "client-a",
+            "sub": "client-a",
+            "aud": "https://auth.example/oauth/revoke",
+            "iat": now.timestamp(),
+            "exp": (now + Duration::minutes(5)).timestamp(),
+            "jti": "assertion-2"
+        }));
+        assert!(matches!(
+            validate_client_assertion(
+                &wrong_endpoint,
+                "client-a",
+                "https://auth.example/oauth/token",
+                now,
+                &replay,
+            )
+            .await,
+            Err(CredentialsVerificationError::InvalidAssertionClaims)
+        ));
+    }
 }

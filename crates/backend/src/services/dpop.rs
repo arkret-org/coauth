@@ -248,6 +248,15 @@ impl DpopVerifier {
         Self { jti_store }
     }
 
+    pub(crate) async fn check_and_record_replay_key(
+        &self,
+        key: &str,
+        now: DateTime<Utc>,
+        ttl: StdDuration,
+    ) -> Result<(), DpopError> {
+        self.jti_store.check_and_record(key, now, ttl).await
+    }
+
     /// Verify a DPoP proof.
     ///
     /// `dpop_header` is the raw value of the request's `DPoP` HTTP header.
@@ -304,6 +313,7 @@ impl DpopVerifier {
             now,
             max_age: MAX_PROOF_AGE,
             max_future_skew: MAX_FUTURE_SKEW,
+            expected_nonce: None,
         })?)
     }
 

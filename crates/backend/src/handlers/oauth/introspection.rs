@@ -197,6 +197,10 @@ async fn handle_post(
     let url_builder = depot
         .get::<UrlBuilder>("url_builder")
         .map_err(|_| depot_missing("UrlBuilder"))?;
+    let assertion_replay = depot
+        .get::<crate::services::dpop::DpopVerifier>("dpop_verifier")
+        .map_err(|_| depot_missing("DpopVerifier"))?;
+    let assertion_audience = url_builder.oauth_introspection_endpoint().to_string();
     let arkret_config = depot
         .get::<ArkretConfig>("arkret_config")
         .cloned()
@@ -235,7 +239,15 @@ async fn handle_post(
         };
 
         credentials
-            .verify(http_client, encrypter, method, &client)
+            .verify(
+                http_client,
+                encrypter,
+                method,
+                &client,
+                &assertion_audience,
+                clock.now(),
+                assertion_replay,
+            )
             .await?;
         introspection_service::ArkretAssociationDisclosure::Redacted
     };

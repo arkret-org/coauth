@@ -338,6 +338,10 @@ async fn handle_post(
     let url_builder = depot
         .get::<UrlBuilder>("url_builder")
         .expect("UrlBuilder not found in depot");
+    let assertion_replay = depot
+        .get::<crate::services::dpop::DpopVerifier>("dpop_verifier")
+        .expect("DpopVerifier not found in depot");
+    let assertion_audience = url_builder.oauth_token_endpoint().to_string();
     let arkret_config = depot
         .get::<ArkretConfig>("arkret_config")
         .cloned()
@@ -388,7 +392,15 @@ async fn handle_post(
 
     client_authorization
         .credentials
-        .verify(http_client, encrypter, method, &client)
+        .verify(
+            http_client,
+            encrypter,
+            method,
+            &client,
+            &assertion_audience,
+            clock.now(),
+            assertion_replay,
+        )
         .await
         .map_err(|err| {
             // Classify the error differently, depending on whether it's an 'internal'

@@ -127,6 +127,13 @@ async fn handle_post(req: &mut Request, depot: &mut Depot) -> Result<(), RouteEr
     let encrypter = depot
         .get::<Encrypter>("encrypter")
         .expect("Encrypter not found in depot");
+    let url_builder = depot
+        .get::<coauth_data::UrlBuilder>("url_builder")
+        .expect("UrlBuilder not found in depot");
+    let assertion_replay = depot
+        .get::<crate::services::dpop::DpopVerifier>("dpop_verifier")
+        .expect("DpopVerifier not found in depot");
+    let assertion_audience = url_builder.oauth_revocation_endpoint().to_string();
     let principal_server = depot
         .get::<Arc<dyn ConnectorAdmin>>("principal_server_admin")
         .expect("ConnectorAdmin not found in depot");
@@ -172,7 +179,15 @@ async fn handle_post(req: &mut Request, depot: &mut Depot) -> Result<(), RouteEr
 
         client_authorization
             .credentials
-            .verify(http_client, encrypter, method, &client)
+            .verify(
+                http_client,
+                encrypter,
+                method,
+                &client,
+                &assertion_audience,
+                clock.now(),
+                assertion_replay,
+            )
             .await
             .map_err(|err| {
                 if err.is_internal() {

@@ -107,6 +107,10 @@ async fn handle_post(
 
     let mut rng = crate::handlers::account::make_rng();
     let clock = crate::handlers::account::make_clock();
+    let assertion_replay = depot.dpop_verifier()?;
+    let assertion_audience = url_builder
+        .oauth_device_authorization_endpoint()
+        .to_string();
 
     let user_agent: Option<String> = req.header("user-agent");
 
@@ -124,7 +128,15 @@ async fn handle_post(
 
     client_authorization
         .credentials
-        .verify(&http_client, &encrypter, method, &client)
+        .verify(
+            &http_client,
+            &encrypter,
+            method,
+            &client,
+            &assertion_audience,
+            clock.now(),
+            &assertion_replay,
+        )
         .await
         .map_err(|err| {
             if err.is_internal() {
