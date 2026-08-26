@@ -51,11 +51,6 @@ fn agent_session_refresh_request_digest(
 /// this regardless of the (human-oriented) `arkret.session_grant_ttl`.
 pub const AGENT_SESSION_MAX_TTL: chrono::Duration = chrono::Duration::minutes(15);
 
-const AGENT_KEY_SCOPE_ACCOUNT: &str = "account";
-const AGENT_KEY_SCOPE_REALM: &str = "realm";
-const AGENT_KEY_SCOPE_APPLET: &str = "applet";
-pub(super) const AGENT_KEY_SCOPE_LIMITED: &str = "limited";
-
 const AGENT_SERVICE_SCOPE_ACTIONS: &[&str] = &[
     arkret_wire::ServiceOperationId::SELF_EVENTS_READ_DESCRIBE,
     arkret_wire::ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT,
@@ -74,25 +69,9 @@ const AGENT_SERVICE_SCOPE_ACTIONS: &[&str] = &[
     arkret_wire::ServiceOperationId::SELF_SIGNAL_COMMAND_SEND,
 ];
 
-/// Closed action set of the `limited` tier (AKP-0008 §4.5 baseline). Shared
-/// with `key_pair.rs`, which projects the same set into the spec-typed
-/// `agent_key_scope.actions` on the `ak.agent.key.authorize` fan-out payload.
-pub(super) const LIMITED_AGENT_SCOPE_ACTIONS: &[&str] = &[
-    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_DESCRIBE,
-    arkret_wire::ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT,
-    arkret_wire::ServiceOperationId::SELF_EVENTS_RESOURCE_GET,
-    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_RESOLVE,
-    arkret_wire::CapabilityActionId::SELF_EVENTS_READ_SCAN,
-    arkret_wire::CapabilityActionId::SELF_EVENTS_STREAM_SUBSCRIBE,
-    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_FRONTIER,
-    arkret_wire::ServiceOperationId::SELF_SEALS_READ_FRONTIER,
-    arkret_wire::ServiceOperationId::SELF_AUTHORIZATION_LEASES_COMMAND_ISSUE,
-    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE,
-    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME,
-    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_REVOKE,
-    arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST,
-    arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK,
-    arkret_wire::ServiceOperationId::SELF_SIGNAL_COMMAND_SEND,
+/// Content actions which are valid members of the closed
+/// `agent_key_scope.actions` object but are not service operation ids.
+const AGENT_CONTENT_SCOPE_ACTIONS: &[&str] = &[
     arkret_wire::CapabilityActionId::EVENT_READ,
     arkret_wire::CapabilityActionId::MESSAGE_CREATE,
     arkret_wire::CapabilityActionId::REACTION_ADD,
@@ -195,7 +174,11 @@ where
         verification_method.as_str(),
         proof_audience.as_str(),
     )?;
-    validate_authoritative_agent_session_evidence(&authorization, authoritative_agent)?;
+    validate_authoritative_agent_session_evidence(
+        &authorization,
+        authoritative_agent,
+        &prior_claims.scopes,
+    )?;
 
     let expected_digest = agent_session_refresh_request_digest(
         prior_grant_jwt,
@@ -389,7 +372,11 @@ pub async fn validate_agent_session_proof(
         tracing::warn!(agent_id, verification_method, authorization_ref, audience = %proof.audience, "agent_key_proof rejected: authorization binding mismatch");
         return Err(error.into());
     }
-    validate_authoritative_agent_session_evidence(&authorization, authoritative_agent)?;
+    validate_authoritative_agent_session_evidence(
+        &authorization,
+        authoritative_agent,
+        &body.requested_scope,
+    )?;
     // Reconstruct the exact SDK-owned signing input used by clients. Keeping
     // this canonical shape in one owner prevents the session verifier from
     // silently drifting from the request builder.
@@ -683,6 +670,7 @@ fn validate_agent_key_authorization_binding(
 fn validate_authoritative_agent_session_evidence(
     authorization: &coauth_data::agent_key::AgentKeyAuthorization,
     view: &arkret_models_collaboration::agent_operations::AgentView,
+    session_scope: &[String],
 ) -> Result<(), AgentAuthRejection> {
     let key_state = view
         .key_state
@@ -719,6 +707,56 @@ fn validate_authoritative_agent_session_evidence(
         || disclosure.requested_scope != key_state.requested_scope
     {
         return Err(AgentAuthRejection::AgentRequestedScopeCommitmentInvalid);
+    }
+
+    let key_actions = parse_agent_key_scope_actions(&authorization.agent_key_scope)?;
+    let provision_actions = &key_state.requested_scope.actions;
+    let mut capabilities = Vec::new();
+    if provision_actions.iter().any(|action| {
+        matches!(
+            action.as_str(),
+            arkret_wire::ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT
+                | arkret_wire::ServiceOperationId::SELF_EVENTS_READ_FRONTIER
+                | arkret_wire::CapabilityActionId::SELF_EVENTS_READ_SCAN
+                | arkret_wire::CapabilityActionId::SELF_EVENTS_STREAM_SUBSCRIBE
+                | arkret_wire::CapabilityActionId::MESSAGE_CREATE
+                | arkret_wire::CapabilityActionId::REACTION_ADD
+        )
+    }) {
+        capabilities
+            .push(arkret_schema::agent_runtime_scope::AgentRuntimeCapability::InteractiveChat);
+    }
+    if provision_actions.iter().any(|action| {
+        matches!(
+            action.as_str(),
+            arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE
+                | arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME
+                | arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_REVOKE
+                | arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST
+                | arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK
+        )
+    }) {
+        capabilities.push(arkret_schema::agent_runtime_scope::AgentRuntimeCapability::E2ee);
+    }
+    let deficiency = arkret_schema::agent_runtime_scope::assess_agent_runtime_scopes(
+        capabilities,
+        &key_state.requested_scope.actions,
+        &key_actions,
+        session_scope,
+    )
+    .map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
+    if let Some(deficiency) = deficiency {
+        return Err(match deficiency.layer {
+            arkret_schema::agent_runtime_scope::AgentRuntimeScopeLayer::Provision => {
+                AgentAuthRejection::AgentProvisionScopeMigrationRequired
+            }
+            arkret_schema::agent_runtime_scope::AgentRuntimeScopeLayer::KeyAuthorization => {
+                AgentAuthRejection::AgentKeyScopeReauthorizationRequired
+            }
+            arkret_schema::agent_runtime_scope::AgentRuntimeScopeLayer::Session => {
+                AgentAuthRejection::AgentSessionScopeRefreshRequired
+            }
+        });
     }
     Ok(())
 }
@@ -952,21 +990,11 @@ fn intersect_requested_scope_with_agent_key_scope(
         return Err(AgentAuthRejection::ProofInvalid);
     }
 
-    if let Some(authorized_actions) = parse_agent_key_scope_actions(agent_key_scope)? {
-        for token in &normalized {
-            if !authorized_actions.contains(token) || !registered_agent_session_scope_token(token)?
-            {
-                return Err(AgentAuthRejection::ProofInvalid);
-            }
+    let authorized_actions = parse_agent_key_scope_actions(agent_key_scope)?;
+    for token in &normalized {
+        if !authorized_actions.contains(token) || !registered_agent_session_scope_token(token)? {
+            return Err(AgentAuthRejection::ProofInvalid);
         }
-        return Ok(normalized);
-    }
-
-    if normalized
-        .iter()
-        .any(|token| !scope_token_allowed_by_agent_key_scope(agent_key_scope, token))
-    {
-        return Err(AgentAuthRejection::ProofInvalid);
     }
 
     Ok(normalized)
@@ -974,32 +1002,22 @@ fn intersect_requested_scope_with_agent_key_scope(
 
 fn parse_agent_key_scope_actions(
     agent_key_scope: &str,
-) -> Result<Option<BTreeSet<String>>, AgentAuthRejection> {
-    let trimmed = agent_key_scope.trim();
-    if !trimmed.starts_with('{') {
-        return Ok(None);
-    }
-    let value: Value =
-        serde_json::from_str(trimmed).map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    let actions = value
-        .get("actions")
-        .and_then(Value::as_array)
-        .ok_or(AgentAuthRejection::ProofInvalid)?;
-    if actions.is_empty() {
+) -> Result<BTreeSet<String>, AgentAuthRejection> {
+    let scope: arkret_models_collaboration::events_payloads::agent::AgentKeyScope =
+        serde_json::from_str(agent_key_scope.trim())
+            .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    if scope.actions.is_empty() {
         return Err(AgentAuthRejection::ProofInvalid);
     }
     let mut normalized = BTreeSet::new();
-    for action in actions {
-        let Some(action) = action
-            .as_str()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        else {
+    for action in scope.actions {
+        let action = action.trim();
+        if action.is_empty() {
             return Err(AgentAuthRejection::ProofInvalid);
-        };
+        }
         normalized.insert(action.to_owned());
     }
-    Ok(Some(normalized))
+    Ok(normalized)
 }
 
 fn registered_agent_session_scope_token(token: &str) -> Result<bool, AgentAuthRejection> {
@@ -1047,7 +1065,7 @@ fn applet_service_scope_token(token: &str) -> bool {
 }
 
 fn content_capability_scope_token(token: &str) -> Result<bool, AgentAuthRejection> {
-    if LIMITED_AGENT_SCOPE_ACTIONS.contains(&token) && !service_surface_scope_token(token) {
+    if AGENT_CONTENT_SCOPE_ACTIONS.contains(&token) && !service_surface_scope_token(token) {
         return Ok(true);
     }
     arkret_schema::embedded_capability_action(token)
@@ -1357,57 +1375,6 @@ where
     }
 }
 
-fn scope_token_allowed_by_agent_key_scope(agent_key_scope: &str, token: &str) -> bool {
-    match agent_key_scope {
-        AGENT_KEY_SCOPE_LIMITED => limited_agent_scope_token_allowed(token),
-        AGENT_KEY_SCOPE_APPLET => applet_agent_scope_token_allowed(token),
-        AGENT_KEY_SCOPE_REALM => realm_agent_scope_token_allowed(token),
-        AGENT_KEY_SCOPE_ACCOUNT => account_agent_scope_token_allowed(token),
-        _ => false,
-    }
-}
-
-fn limited_agent_scope_token_allowed(token: &str) -> bool {
-    LIMITED_AGENT_SCOPE_ACTIONS.contains(&token)
-}
-
-fn applet_agent_scope_token_allowed(token: &str) -> bool {
-    limited_agent_scope_token_allowed(token) || applet_service_scope_token(token)
-}
-
-fn realm_agent_scope_token_allowed(token: &str) -> bool {
-    // `ak.self.account.*` is the account surface, which only the account tier
-    // grants (see `account_agent_scope_token_allowed`). The capability-action
-    // registry carries those non-event service surfaces as capability actions,
-    // so without this denial a realm-tier key would reach the account surface
-    // through `content_capability_scope_token`.
-    if token.starts_with("ak.account.")
-        || token.starts_with("ak.admin.")
-        || token.starts_with("ak.self.account.")
-        || token.starts_with("ak.self.agent.")
-        || token.starts_with("ak.gate.")
-    {
-        return false;
-    }
-
-    limited_agent_scope_token_allowed(token)
-        || content_capability_scope_token(token).unwrap_or(false)
-}
-
-fn account_agent_scope_token_allowed(token: &str) -> bool {
-    if token.starts_with("ak.admin.")
-        || token.starts_with("ak.gate.")
-        || token.starts_with("ak.self.agent.")
-    {
-        return false;
-    }
-
-    service_surface_scope_token(token)
-        || token.starts_with("ak.self.account.")
-        || token.starts_with("ak.account.")
-        || realm_agent_scope_token_allowed(token)
-}
-
 /// Resolve the current reducer-stamped agent lifecycle state from a configured
 /// Principal Server. Missing or unreachable authority fails closed.
 pub(super) async fn fetch_authoritative_agent_view(
@@ -1656,6 +1623,15 @@ mod tests {
         values.iter().map(|value| (*value).to_owned()).collect()
     }
 
+    fn canonical_agent_key_scope() -> String {
+        let actions = AGENT_SERVICE_SCOPE_ACTIONS
+            .iter()
+            .chain(AGENT_CONTENT_SCOPE_ACTIONS)
+            .copied()
+            .collect::<BTreeSet<_>>();
+        serde_json::json!({"actions": actions, "resources": []}).to_string()
+    }
+
     fn capability_scope(actions: &[&str]) -> AgentSessionCapabilityScope {
         AgentSessionCapabilityScope {
             actions: set(actions),
@@ -1688,7 +1664,7 @@ mod tests {
                 "publicKeyMultibase": "z6MksG8zH7ZkUVGqdnqQWUV7s6jVMrptHToH6aQahJ2HWaW1",
             }),
             accountable_principal_id: "did:web:controller.example".to_owned(),
-            agent_key_scope: AGENT_KEY_SCOPE_LIMITED.to_owned(),
+            agent_key_scope: canonical_agent_key_scope(),
             audience: vec!["https://arkret.example/_arkret".to_owned()],
             issued_at: now,
             expires_at: Some(now + chrono::Duration::minutes(15)),
@@ -1889,9 +1865,9 @@ mod tests {
     }
 
     #[test]
-    fn limited_agent_key_scope_dedupes_and_allows_runtime_scope() {
+    fn canonical_agent_key_scope_dedupes_and_allows_runtime_scope() {
         let scope = intersect_requested_scope_with_agent_key_scope(
-            AGENT_KEY_SCOPE_LIMITED,
+            &canonical_agent_key_scope(),
             &[
                 " ak.self.events.command.submit ".to_owned(),
                 "ak.message.create".to_owned(),
@@ -1906,7 +1882,7 @@ mod tests {
                 "ak.self.device_messages.command.ack".to_owned(),
             ],
         )
-        .expect("limited runtime scope should be accepted");
+        .expect("canonical runtime scope should be accepted");
 
         assert_eq!(
             scope,
@@ -1936,7 +1912,7 @@ mod tests {
         .map(str::to_owned);
 
         let effective_scope = intersect_agent_session_scope(
-            AGENT_KEY_SCOPE_LIMITED,
+            &canonical_agent_key_scope(),
             &requested_scope,
             &AgentScopeRequestInput::default(),
             &AgentSessionCapabilityScope::default(),
@@ -1986,31 +1962,31 @@ mod tests {
     }
 
     #[test]
-    fn limited_agent_key_scope_rejects_admin_or_control_surface() {
+    fn canonical_agent_key_scope_rejects_unlisted_admin_surface() {
         let err = intersect_requested_scope_with_agent_key_scope(
-            AGENT_KEY_SCOPE_LIMITED,
+            &canonical_agent_key_scope(),
             &["ak.self.agent.command.deactivate".to_owned()],
         )
-        .expect_err("limited key must not mint control-plane scope");
+        .expect_err("key scope must not mint an unlisted control-plane action");
 
         assert_eq!(err, AgentAuthRejection::ProofInvalid);
     }
 
     #[test]
-    fn realm_agent_key_scope_rejects_account_surface() {
+    fn canonical_agent_key_scope_rejects_unlisted_account_surface() {
         let err = intersect_requested_scope_with_agent_key_scope(
-            AGENT_KEY_SCOPE_REALM,
+            &canonical_agent_key_scope(),
             &["ak.self.account.read.describe".to_owned()],
         )
-        .expect_err("realm key must not mint account-surface scope");
+        .expect_err("key scope must not mint an unlisted account-surface action");
 
         assert_eq!(err, AgentAuthRejection::ProofInvalid);
     }
 
     #[test]
-    fn realm_agent_key_scope_rejects_unknown_content_action() {
+    fn canonical_agent_key_scope_rejects_unknown_content_action() {
         let err = intersect_requested_scope_with_agent_key_scope(
-            AGENT_KEY_SCOPE_REALM,
+            &canonical_agent_key_scope(),
             &["ak.message.not_registered".to_owned()],
         )
         .expect_err("unknown content actions must fail closed");
@@ -2023,32 +1999,24 @@ mod tests {
         // The registered stream action is `ak.self.events.stream.subscribe`
         // (capabilities.md §5.5). `ak.self.events.subscribe` is not in the
         // closed set, and §5.0 requires verbatim `actions[]` matching with no
-        // subsumption, so both key tiers must fail closed on it.
+        // subsumption, so the canonical key scope must fail closed on it.
         let unregistered_scope = format!("ak.self.events.{}", "subscribe");
         let err = intersect_requested_scope_with_agent_key_scope(
-            AGENT_KEY_SCOPE_LIMITED,
+            &canonical_agent_key_scope(),
             std::slice::from_ref(&unregistered_scope),
         )
         .expect_err("an unregistered service token must fail closed");
 
         assert_eq!(err, AgentAuthRejection::ProofInvalid);
-
-        let err = intersect_requested_scope_with_agent_key_scope(
-            AGENT_KEY_SCOPE_ACCOUNT,
-            std::slice::from_ref(&unregistered_scope),
-        )
-        .expect_err("account-tier keys must also reject the unregistered service token");
-
-        assert_eq!(err, AgentAuthRejection::ProofInvalid);
     }
 
     #[test]
-    fn unknown_agent_key_scope_rejects_fail_closed() {
+    fn schema_external_agent_key_scope_rejects_fail_closed() {
         let err = intersect_requested_scope_with_agent_key_scope(
             "delegated-root",
             &["ak.self.events.read.scan".to_owned()],
         )
-        .expect_err("unknown key tiers must fail closed");
+        .expect_err("schema-external key scope must fail closed");
 
         assert_eq!(err, AgentAuthRejection::ProofInvalid);
     }
@@ -2056,7 +2024,7 @@ mod tests {
     #[test]
     fn empty_requested_scope_rejects_after_normalization() {
         let err = intersect_requested_scope_with_agent_key_scope(
-            AGENT_KEY_SCOPE_LIMITED,
+            &canonical_agent_key_scope(),
             &[" ".to_owned(), String::new()],
         )
         .expect_err("empty scope must fail closed");
@@ -2082,7 +2050,7 @@ mod tests {
         let policy_data = serde_json::json!({});
 
         let effective_scope = intersect_agent_session_scope(
-            AGENT_KEY_SCOPE_REALM,
+            &canonical_agent_key_scope(),
             &["ak.message.create".to_owned(), "ak.reaction.add".to_owned()],
             &scope_request,
             &capability_scope,
@@ -2117,7 +2085,7 @@ mod tests {
         let policy_data = serde_json::json!({});
 
         let effective_scope = intersect_agent_session_scope(
-            AGENT_KEY_SCOPE_LIMITED,
+            &canonical_agent_key_scope(),
             &[
                 "ak.self.events.stream.subscribe".to_owned(),
                 "ak.event.read".to_owned(),
@@ -2154,7 +2122,7 @@ mod tests {
         let policy_data = serde_json::json!({});
 
         let effective_scope = intersect_agent_session_scope(
-            AGENT_KEY_SCOPE_LIMITED,
+            &canonical_agent_key_scope(),
             &[
                 "ak.self.events.stream.subscribe".to_owned(),
                 "ak.event.read".to_owned(),
@@ -2188,7 +2156,7 @@ mod tests {
         let policy_data = serde_json::json!({});
 
         let effective_scope = intersect_agent_session_scope(
-            AGENT_KEY_SCOPE_LIMITED,
+            &canonical_agent_key_scope(),
             &[
                 "ak.self.events.command.submit".to_owned(),
                 "ak.message.create".to_owned(),
@@ -2210,7 +2178,7 @@ mod tests {
     #[test]
     fn account_global_service_scope_does_not_require_realm_policy() {
         let effective_scope = intersect_agent_session_scope(
-            AGENT_KEY_SCOPE_LIMITED,
+            &canonical_agent_key_scope(),
             &[
                 "ak.self.events.stream.subscribe".to_owned(),
                 "ak.event.read".to_owned(),
@@ -2238,7 +2206,7 @@ mod tests {
         let policy_data = serde_json::json!({});
 
         let err = intersect_agent_session_scope(
-            AGENT_KEY_SCOPE_LIMITED,
+            &canonical_agent_key_scope(),
             &["ak.message.create".to_owned()],
             &scope_request,
             &capability_scope,
@@ -2263,7 +2231,7 @@ mod tests {
         let policy_data = serde_json::json!({});
 
         let err = intersect_agent_session_scope(
-            AGENT_KEY_SCOPE_REALM,
+            &canonical_agent_key_scope(),
             &["ak.message.create".to_owned()],
             &scope_request,
             &capability_scope,
@@ -2286,7 +2254,7 @@ mod tests {
         };
 
         let err = intersect_agent_session_scope(
-            AGENT_KEY_SCOPE_REALM,
+            &canonical_agent_key_scope(),
             &["ak.message.create".to_owned()],
             &scope_request,
             &capability_scope,
@@ -2320,7 +2288,7 @@ mod tests {
         });
 
         let err = intersect_agent_session_scope(
-            AGENT_KEY_SCOPE_REALM,
+            &canonical_agent_key_scope(),
             &["ak.message.create".to_owned()],
             &scope_request,
             &capability_scope,
@@ -2351,7 +2319,7 @@ mod tests {
         let policy_data = serde_json::json!({});
 
         let err = intersect_agent_session_scope(
-            AGENT_KEY_SCOPE_REALM,
+            &canonical_agent_key_scope(),
             &["ak.message.create".to_owned()],
             &scope_request,
             &capability_scope,

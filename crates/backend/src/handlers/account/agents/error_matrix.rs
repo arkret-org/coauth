@@ -83,6 +83,12 @@ pub enum AgentAuthRejection {
     /// `agent_requested_scope_commitment_invalid` — verifier-private scope
     /// evidence no longer matches the accepted-at Agent DID commitment.
     AgentRequestedScopeCommitmentInvalid,
+    /// Immutable provision ceiling omits a mandatory runtime operation.
+    AgentProvisionScopeMigrationRequired,
+    /// Accepted Agent key authorization omits a mandatory runtime operation.
+    AgentKeyScopeReauthorizationRequired,
+    /// Requested/current session omits a mandatory runtime operation.
+    AgentSessionScopeRefreshRequired,
     /// `capability_denied` — an active Realm capability grant did not cover
     /// the requested agent session content action or resource selector.
     CapabilityDenied,
@@ -103,6 +109,9 @@ impl AgentAuthRejection {
             | Self::PairingRequestExpired
             | Self::AgentKeyAuthorizationExpired
             | Self::AgentRequestedScopeCommitmentInvalid
+            | Self::AgentProvisionScopeMigrationRequired
+            | Self::AgentKeyScopeReauthorizationRequired
+            | Self::AgentSessionScopeRefreshRequired
             | Self::AgentDeactivated
             | Self::AgentPaused => arkret_wire::ErrorCode::FAILED_PRECONDITION,
             Self::ProofInvalid => arkret_wire::ErrorCode::SIGNATURE_INVALID,
@@ -126,7 +135,10 @@ impl AgentAuthRejection {
             | Self::PairingRequestExpired
             | Self::AgentKeyAuthorizationExpired
             | Self::ProofInvalid => http::StatusCode::UNAUTHORIZED,
-            Self::AgentRequestedScopeCommitmentInvalid => http::StatusCode::PRECONDITION_FAILED,
+            Self::AgentRequestedScopeCommitmentInvalid
+            | Self::AgentProvisionScopeMigrationRequired
+            | Self::AgentKeyScopeReauthorizationRequired
+            | Self::AgentSessionScopeRefreshRequired => http::StatusCode::PRECONDITION_FAILED,
             Self::AgentPaused
             | Self::AgentDeactivated
             | Self::CapabilityDenied
@@ -163,6 +175,15 @@ impl AgentAuthRejection {
             }
             Self::AgentRequestedScopeCommitmentInvalid => {
                 Some("agent_requested_scope_commitment_invalid")
+            }
+            Self::AgentProvisionScopeMigrationRequired => {
+                Some(arkret_wire::ReasonCode::AGENT_PROVISION_SCOPE_MIGRATION_REQUIRED)
+            }
+            Self::AgentKeyScopeReauthorizationRequired => {
+                Some(arkret_wire::ReasonCode::AGENT_KEY_SCOPE_REAUTHORIZATION_REQUIRED)
+            }
+            Self::AgentSessionScopeRefreshRequired => {
+                Some(arkret_wire::ReasonCode::AGENT_SESSION_SCOPE_REFRESH_REQUIRED)
             }
             Self::ProofInvalid => Some("proof_invalid"),
             Self::AgentDeactivated => Some("agent_deactivated"),
