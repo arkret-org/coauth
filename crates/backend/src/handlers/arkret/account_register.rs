@@ -34,8 +34,7 @@ use super::session_grant::{
     persist_session_grant,
 };
 use super::{
-    ArkretRouteError, DepotExt, SessionGrantError, issuer_did_for, preferred_signing_key,
-    service_id_for, trust_domain_for,
+    ArkretRouteError, DepotExt, SessionGrantError, issuer_did_for, service_id_for, trust_domain_for,
 };
 use crate::handlers::account::auth::oidc_bridge::{
     VerifiedPrincipalIdentity, ensure_soland_account_registered,
@@ -190,7 +189,7 @@ pub async fn account_register_endpoint(
         .ok_or_else(|| failed_precondition("originating browser session no longer exists"))?;
     prerequisite_repo.cancel().await.ok();
     let key_store = depot.key_store()?;
-    let (_, session_signing_key) = preferred_signing_key(&key_store)
+    let (_, session_signing_key) = crate::services::preferred_service_signing_key(&key_store)
         .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
     let session_signing_key_id = session_signing_key
         .kid()

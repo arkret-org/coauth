@@ -342,7 +342,7 @@ pub async fn refresh_session_grant(
         arkret_config.session_grant_ttl
     };
     let grant_expires_at = grant_not_before + ttl;
-    let (_, signing_key) = preferred_signing_key(&key_store)
+    let (_, signing_key) = crate::services::preferred_service_signing_key(&key_store)
         .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
     let signing_key_id = signing_key
         .kid()

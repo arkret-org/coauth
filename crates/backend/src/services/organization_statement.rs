@@ -121,8 +121,8 @@ where
 
     // Resolve the signing key + verification method up front so the statement can
     // be built before signing.
-    let (alg, key) =
-        preferred_service_signing_key(key_store).ok_or(OrganizationStatementError::NoSigningKey)?;
+    let (alg, key) = crate::services::preferred_service_signing_key(key_store)
+        .ok_or(OrganizationStatementError::NoSigningKey)?;
     let key_id = key.kid().ok_or(OrganizationStatementError::NoSigningKey)?;
     let verification_method = DidUrl::new(format!("{service_id}#{key_id}"))
         .map_err(|error| OrganizationStatementError::Canonical(error.to_owned()))?;
@@ -237,37 +237,6 @@ impl RealmOrganizationDelegationResolver for RepositoryDelegationResolver {
 #[must_use]
 pub fn offline_resolver() -> NoDelegationResolver {
     NoDelegationResolver
-}
-
-/// Pick the preferred service signing key from the keystore — identical key
-/// selection to [`crate::services::policy_signer`] and
-/// `handlers::arkret::preferred_signing_key`, so coauth signs organization
-/// statements with the same key it uses for every other service artefact.
-fn preferred_service_signing_key(
-    key_store: &Keystore,
-) -> Option<(
-    coauth_iana::jose::JsonWebSignatureAlg,
-    &coauth_keystore::JsonWebKey<coauth_keystore::PrivateKey>,
-)> {
-    use coauth_iana::jose::JsonWebSignatureAlg;
-    [
-        JsonWebSignatureAlg::Ed25519,
-        JsonWebSignatureAlg::Es512,
-        JsonWebSignatureAlg::Es384,
-        JsonWebSignatureAlg::Es256,
-        JsonWebSignatureAlg::Rs512,
-        JsonWebSignatureAlg::Rs384,
-        JsonWebSignatureAlg::Rs256,
-        JsonWebSignatureAlg::Ps512,
-        JsonWebSignatureAlg::Ps384,
-        JsonWebSignatureAlg::Ps256,
-    ]
-    .into_iter()
-    .find_map(|alg| {
-        key_store
-            .signing_key_for_algorithm(&alg)
-            .map(|key| (alg, key))
-    })
 }
 
 #[cfg(test)]

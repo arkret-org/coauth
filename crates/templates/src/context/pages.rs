@@ -11,29 +11,12 @@ use super::wrappers::{SampleIdentifier, TemplateContext, sample_list};
 
 // -- Frontend application shell ---------------------------------------------
 
-/// An error state injected by the backend so the frontend displays an
-/// error page instead of the normal SPA routes.
-#[derive(Serialize, Clone, Default)]
-pub struct AppErrorState {
-    /// One of: `account_deactivated`, `account_locked`, `session_ended`,
-    /// `generic`.
-    pub kind: String,
-    /// The local handle (without `@` / `:server`), if known.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub handle: Option<String>,
-    /// Human-readable description, if any.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-}
-
 /// Frontend application configuration serialized as `snake_case` JSON.
 #[derive(Serialize)]
 pub struct AppConfig {
     root: String,
     api_endpoint: String,
     script_src: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<AppErrorState>,
 }
 
 /// Data passed to the `app.html` template.
@@ -54,17 +37,8 @@ impl AppContext {
                 root,
                 api_endpoint: format!("{prefix}/_coauth"),
                 script_src: script_src.to_owned(),
-                error: None,
             },
         }
-    }
-
-    /// Attach an error state that the frontend will display instead of
-    /// its normal routes.
-    #[must_use]
-    pub fn with_error(mut self, error: AppErrorState) -> Self {
-        self.app_config.error = Some(error);
-        self
     }
 }
 

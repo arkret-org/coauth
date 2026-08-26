@@ -30,9 +30,9 @@ mod functions;
 mod macros;
 
 pub use self::context::{
-    AppContext, AppErrorState, DeviceNameContext, EmailRecoveryContext, EmailVerificationContext,
-    EmptyContext, ErrorContext, FormPostContext, SiteBranding, SiteConfigExt, SiteFeatures,
-    TemplateContext, WithLanguage,
+    AppContext, DeviceNameContext, EmailRecoveryContext, EmailVerificationContext, EmptyContext,
+    ErrorContext, FormPostContext, SiteBranding, SiteConfigExt, SiteFeatures, TemplateContext,
+    WithLanguage,
 };
 use crate::context::SampleIdentifier;
 

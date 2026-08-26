@@ -18,6 +18,7 @@ pub use crate::handlers::common::{
 };
 use crate::handlers::passwords::PasswordManager;
 use crate::salvo_utils::SessionInfo;
+use crate::services::user_profile::UserProfileServiceError;
 
 pub mod agents;
 pub mod approval;
@@ -201,3 +202,24 @@ pub fn mask_email(email: &str) -> String {
 /// Cookie management for user registration sessions.
 pub mod registration_cookie;
 pub(crate) mod service;
+
+/// Single mapping from the user-profile service error surface to the account
+/// route error surface. Handlers MUST route every `UserProfileServiceError`
+/// through this function so one variant cannot map to two different statuses.
+pub(crate) fn map_user_profile_error(error: UserProfileServiceError) -> RouteError {
+    match error {
+        UserProfileServiceError::NotFound => RouteError::NotFound,
+        UserProfileServiceError::Unauthorized => RouteError::Unauthorized,
+        UserProfileServiceError::InvalidDisplayName => {
+            RouteError::BadRequest("Invalid display name".into())
+        }
+        UserProfileServiceError::UnsupportedNotificationChannel(channel) => {
+            RouteError::BadRequest(format!("Unsupported notification channel: {channel}"))
+        }
+        UserProfileServiceError::DuplicateNotificationChannel(channel) => {
+            RouteError::BadRequest(format!("Duplicate notification channel: {channel}"))
+        }
+        UserProfileServiceError::PrincipalServer(error) => RouteError::Internal(error.into()),
+        UserProfileServiceError::Repository(error) => RouteError::from(error),
+    }
+}

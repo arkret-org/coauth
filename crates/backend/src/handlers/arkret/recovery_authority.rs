@@ -20,6 +20,7 @@ use coauth_jose::constraints::Constrainable as _;
 use salvo::prelude::*;
 use sha2::Digest as _;
 
+use super::ArkretRouteError;
 use super::account_handoff::{
     authenticate_account_handoff, enforce_handoff_operation,
     verify_account_handoff_holder_without_lookup,
@@ -28,7 +29,6 @@ use super::session_grant::{
     SessionGrantIssuanceSeed, acquire_human_device_binding, issue_session_grant_for_audience,
     new_session_grant_record,
 };
-use super::{ArkretRouteError, preferred_signing_key};
 use crate::handlers::common::DepotExt;
 use crate::services::principal_server_trust::{effective_audience, shared};
 
@@ -168,11 +168,12 @@ pub async fn issue_recovery_completion_grant_endpoint(
     let config = depot.arkret_config()?;
     let expires_at = now + config.session_grant_ttl;
     let key_store = depot.key_store()?;
-    let (_, signing_key) = preferred_signing_key(&key_store).ok_or_else(|| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
-            "no session-grant signing key is available",
-        ))
-    })?;
+    let (_, signing_key) =
+        crate::services::preferred_service_signing_key(&key_store).ok_or_else(|| {
+            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                "no session-grant signing key is available",
+            ))
+        })?;
     let signing_key_id = signing_key
         .kid()
         .filter(|value| !value.trim().is_empty())

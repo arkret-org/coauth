@@ -34,8 +34,7 @@ use arkret_identity::DidWebvhResolver;
 use arkret_models_discovery::ServiceDescribe;
 use arkret_models_identity::service_identity::CanonicalServiceUrl;
 use arkret_models_identity::{
-    AuthenticatedServiceResolution, DidDocument, ResolutionCommitment,
-    canonical_service_current_record_path,
+    AuthenticatedServiceResolution, DidDocument, canonical_service_current_record_path,
 };
 use arkret_wire::{BindingKind, DidCoreId, DidFullId, Hash, ServiceKind};
 use chrono::Utc;
@@ -48,7 +47,6 @@ use coauth_data::{RepositoryAccess, RepositoryError, RepositoryFactory, SystemCl
 use coauth_storage_postgres::PgRepositoryFactory;
 use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
-use serde::Serialize;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
@@ -299,18 +297,6 @@ pub struct VerifiedPrincipalServerIdentity {
     pub resolution_record_digest: String,
     /// Canonical endpoint the identity is bound to.
     pub canonical_endpoint: String,
-}
-
-/// Route-binding projection whose canonical digest is published as
-/// `describe_digest` in the signed service resolution record. The shape is
-/// normative (see the SDK resolution-record transcript); field order and
-/// names must not change.
-#[derive(Serialize)]
-struct RouteBindingProjection<'a> {
-    service_id: &'a DidCoreId,
-    service_kind: ServiceKind,
-    service_resolution: &'a ResolutionCommitment,
-    http_json_base_url: &'a str,
 }
 
 async fn fetch_bounded(
@@ -608,14 +594,11 @@ pub async fn verify_principal_server_identity(
             record.record.base_url
         )));
     }
-    let route_binding_digest = Hash::new(
-        arkret_canonical::canonical_sha256(&RouteBindingProjection {
-            service_id: &service_id,
-            service_kind: ServiceKind::PrincipalServer,
-            service_resolution: &commitment,
-            http_json_base_url: advertised_base,
-        })
-        .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?,
+    let route_binding_digest = arkret_models_identity::route_binding_describe_digest(
+        &service_id,
+        ServiceKind::PrincipalServer.as_str(),
+        &commitment,
+        advertised_base,
     )
     .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;
     if route_binding_digest != record.record.describe_digest {

@@ -31,10 +31,9 @@ use arkret_wire::ErrorEnvelope;
 use coauth_config::ArkretConfig;
 use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
 use coauth_data::{RepositoryAccess, UrlBuilder, User};
-use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable;
 use coauth_jose::jwt::JwtSignatureError;
-use coauth_keystore::{Keystore, WrongAlgorithmError};
+use coauth_keystore::WrongAlgorithmError;
 use coauth_oauth_types::scope::Scope;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -922,32 +921,6 @@ pub(crate) fn primary_device_id(scope: &Scope) -> Option<String> {
     )
 }
 
-fn preferred_signing_key(
-    key_store: &Keystore,
-) -> Option<(
-    JsonWebSignatureAlg,
-    &coauth_keystore::JsonWebKey<coauth_keystore::PrivateKey>,
-)> {
-    [
-        JsonWebSignatureAlg::Ed25519,
-        JsonWebSignatureAlg::Es512,
-        JsonWebSignatureAlg::Es384,
-        JsonWebSignatureAlg::Es256,
-        JsonWebSignatureAlg::Rs512,
-        JsonWebSignatureAlg::Rs384,
-        JsonWebSignatureAlg::Rs256,
-        JsonWebSignatureAlg::Ps512,
-        JsonWebSignatureAlg::Ps384,
-        JsonWebSignatureAlg::Ps256,
-    ]
-    .into_iter()
-    .find_map(|alg| {
-        key_store
-            .signing_key_for_algorithm(&alg)
-            .map(|key| (alg, key))
-    })
-}
-
 pub(crate) fn parse_local_handle(url_builder: &UrlBuilder, handle: &str) -> Option<String> {
     // Spec 7157ee8 §3.1 canonical form: `<localpart>:<domain>`.
     let trimmed = handle.trim();
@@ -1104,7 +1077,7 @@ pub async fn debug_issue_dpop_grant(
     let request_identity = format!("cotest:sha256:{}", hex::encode(canonical_intent_digest));
     let not_before = arkret_canonical::normalize_timestamp_canonical(clock.now());
     let expires_at = not_before + arkret_config.session_grant_ttl;
-    let (_, signing_key) = preferred_signing_key(&key_store)
+    let (_, signing_key) = crate::services::preferred_service_signing_key(&key_store)
         .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
     let signing_key_id = signing_key
         .kid()

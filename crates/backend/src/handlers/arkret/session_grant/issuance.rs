@@ -43,8 +43,8 @@ pub(crate) fn issue_session_grant(
     let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
     let mut nonce = [0_u8; 32];
     rng.fill_bytes(&mut nonce);
-    let (_, signing_key) =
-        preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
+    let (_, signing_key) = crate::services::preferred_service_signing_key(key_store)
+        .ok_or(SessionGrantError::NoSigningKey)?;
     let signing_key_id = signing_key.kid().ok_or(SessionGrantError::NoSigningKey)?;
     let issuance_seed = SessionGrantIssuanceSeed::new(
         arkret_models_identity::SessionGrantIssuanceNonce::from_bytes(nonce).to_string(),

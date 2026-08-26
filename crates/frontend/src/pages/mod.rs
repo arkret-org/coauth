@@ -9,7 +9,6 @@ pub mod device_link;
 pub mod device_redirect;
 pub mod email_in_use;
 pub mod email_verify;
-pub mod error_pages;
 pub mod identity_bindings;
 pub mod login;
 pub mod notification_preferences;

@@ -1,30 +1,13 @@
-/// A server-injected error state, rendered instead of the normal SPA when
-/// the backend detects an account-level problem during session loading.
-#[derive(Debug, Clone, PartialEq)]
-pub struct AppError {
-    /// One of: `account_deactivated`, `account_locked`, `session_ended`,
-    /// `generic`.
-    pub kind: String,
-    /// The local username (without `@` prefix or `:server` suffix), if known.
-    pub handle: Option<String>,
-    /// Human-readable error description, if any.
-    pub description: Option<String>,
-}
-
 /// Application configuration, loaded from the server-rendered JSON config.
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     pub api_endpoint: String,
-    /// If set, the backend wants the frontend to display an error page
-    /// instead of the normal router.
-    pub error: Option<AppError>,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
             api_endpoint: "/_coauth".to_owned(),
-            error: None,
         }
     }
 }
@@ -45,12 +28,7 @@ pub fn get_config() -> AppConfig {
                 })
                 .unwrap_or_else(|| "/_coauth".to_string());
 
-            let error = read_error_from_js(&val);
-
-            return AppConfig {
-                api_endpoint,
-                error,
-            };
+            return AppConfig { api_endpoint };
         }
     }
 
@@ -73,33 +51,6 @@ fn read_config_value() -> Option<web_sys::wasm_bindgen::JsValue> {
     js_sys::Reflect::get(&window, &"APP_CONFIG".into())
         .ok()
         .filter(|value| !value.is_undefined() && !value.is_null())
-}
-
-/// Try to read the optional `error` object from the JS config.
-#[cfg(target_arch = "wasm32")]
-fn read_error_from_js(config: &web_sys::wasm_bindgen::JsValue) -> Option<AppError> {
-    let err = js_sys::Reflect::get(config, &"error".into()).ok()?;
-    if err.is_undefined() || err.is_null() {
-        return None;
-    }
-
-    let kind = js_sys::Reflect::get(&err, &"kind".into())
-        .ok()
-        .and_then(|v| v.as_string())?;
-
-    let handle = js_sys::Reflect::get(&err, &"handle".into())
-        .ok()
-        .and_then(|v| v.as_string());
-
-    let description = js_sys::Reflect::get(&err, &"description".into())
-        .ok()
-        .and_then(|v| v.as_string());
-
-    Some(AppError {
-        kind,
-        handle,
-        description,
-    })
 }
 
 /// Resolve the full API base URL based on the current location.

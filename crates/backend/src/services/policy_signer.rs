@@ -21,7 +21,7 @@
 //! This module owns:
 //!
 //! - canonical-transcript serialisation (no nondeterministic ordering),
-//! - key selection (mirrors `handlers::arkret::preferred_signing_key`),
+//! - key selection (`crate::services::preferred_service_signing_key`),
 //! - DID-URL `kid` construction (`<policy_server_did>#<jwk_kid>`),
 //! - signature emission as base64url-unpadded.
 //!
@@ -98,8 +98,8 @@ impl<'a> PolicySigner<'a> {
         // Ed25519 key first; ECDSA / RSA fall-back paths are accepted so
         // a deployment that has not yet rotated to Ed25519 still gets a
         // real signature (not a stub).
-        let (alg, key) =
-            preferred_service_signing_key(self.key_store).ok_or(PolicySignerError::NoSigningKey)?;
+        let (alg, key) = crate::services::preferred_service_signing_key(self.key_store)
+            .ok_or(PolicySignerError::NoSigningKey)?;
         let key_id = key.kid().ok_or(PolicySignerError::NoSigningKey)?;
         let signer = self
             .key_store
@@ -129,41 +129,6 @@ impl<'a> PolicySigner<'a> {
         policy_decision_transcript_bytes(outcome)
             .map_err(|e| PolicySignerError::Canonical(e.to_string()))
     }
-}
-
-/// Pick the preferred service signing key from the keystore. Mirrors
-/// `handlers::arkret::preferred_signing_key` so the policy decision
-/// signer uses the *same* key the rest of coauth uses for
-/// service-issued artefacts (session grant JWTs, handle-claim proofs).
-///
-/// Returned as an owned `(alg, key)` because the caller needs both the
-/// algorithm (for `signing_key_for_alg`) and the JWK reference (for
-/// `kid`). The key reference borrows from the keystore.
-fn preferred_service_signing_key(
-    key_store: &Keystore,
-) -> Option<(
-    coauth_iana::jose::JsonWebSignatureAlg,
-    &coauth_keystore::JsonWebKey<coauth_keystore::PrivateKey>,
-)> {
-    use coauth_iana::jose::JsonWebSignatureAlg;
-    [
-        JsonWebSignatureAlg::Ed25519,
-        JsonWebSignatureAlg::Es512,
-        JsonWebSignatureAlg::Es384,
-        JsonWebSignatureAlg::Es256,
-        JsonWebSignatureAlg::Rs512,
-        JsonWebSignatureAlg::Rs384,
-        JsonWebSignatureAlg::Rs256,
-        JsonWebSignatureAlg::Ps512,
-        JsonWebSignatureAlg::Ps384,
-        JsonWebSignatureAlg::Ps256,
-    ]
-    .into_iter()
-    .find_map(|alg| {
-        key_store
-            .signing_key_for_algorithm(&alg)
-            .map(|key| (alg, key))
-    })
 }
 
 #[cfg(test)]

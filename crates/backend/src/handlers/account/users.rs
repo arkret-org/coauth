@@ -9,7 +9,7 @@ use super::{
 use crate::handlers::account::service::profile::{
     AccountProfileError, DeactivateAccountOutcome, deactivate_current_account,
 };
-use crate::services::user_profile::{self, UserProfileServiceError};
+use crate::services::user_profile;
 
 // ── PATCH /_coauth/self/viewer/profile ────────────────────────────────
 
@@ -85,7 +85,7 @@ pub async fn patch_profile(
         patch,
     )
     .await
-    .map_err(map_user_profile_error)?;
+    .map_err(super::map_user_profile_error)?;
 
     repo.save().await?;
 
@@ -174,24 +174,6 @@ fn map_account_profile_error(error: AccountProfileError) -> RouteError {
         AccountProfileError::Password(error) => RouteError::Internal(error.into()),
         AccountProfileError::Repository(error) => RouteError::from(error),
         AccountProfileError::AccountStatusPublication(error) => RouteError::Internal(error.into()),
-    }
-}
-
-fn map_user_profile_error(error: UserProfileServiceError) -> RouteError {
-    match error {
-        UserProfileServiceError::NotFound => RouteError::NotFound,
-        UserProfileServiceError::Unauthorized => RouteError::Unauthorized,
-        UserProfileServiceError::InvalidDisplayName => {
-            RouteError::BadRequest("Invalid display name".into())
-        }
-        UserProfileServiceError::UnsupportedNotificationChannel(channel) => {
-            RouteError::BadRequest(format!("Unsupported notification channel: {channel}"))
-        }
-        UserProfileServiceError::DuplicateNotificationChannel(channel) => {
-            RouteError::BadRequest(format!("Duplicate notification channel: {channel}"))
-        }
-        UserProfileServiceError::PrincipalServer(error) => RouteError::Internal(error.into()),
-        UserProfileServiceError::Repository(error) => RouteError::from(error),
     }
 }
 

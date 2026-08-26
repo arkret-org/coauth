@@ -25,5 +25,5 @@ pub use self::email::{EmailRecoveryContext, EmailVerificationContext};
 pub use self::ext::SiteConfigExt;
 pub use self::features::SiteFeatures;
 pub use self::oauth::FormPostContext;
-pub use self::pages::{AppContext, AppErrorState, ErrorContext};
+pub use self::pages::{AppContext, ErrorContext};
 pub use self::wrappers::{EmptyContext, SampleIdentifier, TemplateContext, WithLanguage};

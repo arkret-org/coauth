@@ -16,8 +16,7 @@ use super::{
     make_clock, make_rng,
 };
 use crate::services::user_profile::{
-    self, NotificationPreferenceState, UserProfileServiceError, notification_channel_from_key,
-    notification_channel_key,
+    self, NotificationPreferenceState, notification_channel_from_key, notification_channel_key,
 };
 
 // ── Response / request types ─────────────────────────────────
@@ -52,7 +51,7 @@ pub async fn get_notification_preferences(
 
     let data = user_profile::load_notification_preferences(&mut repo, &config, user)
         .await
-        .map_err(map_user_profile_error)?;
+        .map_err(super::map_user_profile_error)?;
 
     repo.cancel().await?;
 
@@ -114,7 +113,7 @@ pub async fn patch_notification_preferences(
             })
         })
         .collect::<Result<Vec<_>, _>>()
-        .map_err(map_user_profile_error)?;
+        .map_err(super::map_user_profile_error)?;
 
     let updated = user_profile::patch_notification_preferences(
         &mut repo,
@@ -125,7 +124,7 @@ pub async fn patch_notification_preferences(
         preferences,
     )
     .await
-    .map_err(map_user_profile_error)?;
+    .map_err(super::map_user_profile_error)?;
 
     repo.save().await?;
 
@@ -139,24 +138,6 @@ pub async fn patch_notification_preferences(
             })
             .collect(),
     }))
-}
-
-fn map_user_profile_error(error: UserProfileServiceError) -> RouteError {
-    match error {
-        UserProfileServiceError::NotFound => RouteError::NotFound,
-        UserProfileServiceError::Unauthorized => RouteError::Unauthorized,
-        UserProfileServiceError::InvalidDisplayName => {
-            RouteError::BadRequest("Invalid display name".into())
-        }
-        UserProfileServiceError::UnsupportedNotificationChannel(channel) => {
-            RouteError::BadRequest(format!("Unsupported notification channel: {channel}"))
-        }
-        UserProfileServiceError::DuplicateNotificationChannel(channel) => {
-            RouteError::BadRequest(format!("Duplicate notification channel: {channel}"))
-        }
-        UserProfileServiceError::PrincipalServer(error) => RouteError::Internal(error.into()),
-        UserProfileServiceError::Repository(error) => RouteError::from(error),
-    }
 }
 
 #[cfg(test)]

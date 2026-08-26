@@ -144,7 +144,7 @@ async fn reserve_issue_operation(
         ));
     }
     let signing_key_store = depot.key_store()?;
-    let (_, signing_key) = preferred_signing_key(&signing_key_store)
+    let (_, signing_key) = crate::services::preferred_service_signing_key(&signing_key_store)
         .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
     let signing_key_id = signing_key
         .kid()

@@ -12,7 +12,7 @@ use super::{
 };
 use crate::handlers::account::service::connections::load_linked_accounts;
 use crate::handlers::arkret;
-use crate::services::user_profile::{UserProfileServiceError, load_viewer_profile};
+use crate::services::user_profile::load_viewer_profile;
 
 // ── Response types ─────────────────────────────────────────────
 
@@ -132,7 +132,7 @@ pub async fn get_viewer(
             // Load viewer profile from service
             let profile = load_viewer_profile(&mut repo, principal_server.as_ref(), user)
                 .await
-                .map_err(map_user_profile_error)?;
+                .map_err(super::map_user_profile_error)?;
 
             let principal = Some(PrincipalUserData {
                 principal_id: profile.principal_id,
@@ -242,24 +242,6 @@ pub async fn get_viewer(
         viewer_session,
         site_config: from_site_config(&config),
     }))
-}
-
-fn map_user_profile_error(error: UserProfileServiceError) -> RouteError {
-    match error {
-        UserProfileServiceError::NotFound => RouteError::NotFound,
-        UserProfileServiceError::Unauthorized => RouteError::Unauthorized,
-        UserProfileServiceError::InvalidDisplayName => {
-            RouteError::BadRequest("Invalid display name".into())
-        }
-        UserProfileServiceError::UnsupportedNotificationChannel(channel) => {
-            RouteError::BadRequest(format!("Unsupported notification channel: {channel}"))
-        }
-        UserProfileServiceError::DuplicateNotificationChannel(channel) => {
-            RouteError::BadRequest(format!("Duplicate notification channel: {channel}"))
-        }
-        UserProfileServiceError::PrincipalServer(error) => RouteError::Internal(error.into()),
-        UserProfileServiceError::Repository(error) => RouteError::from(error),
-    }
 }
 
 // ── GET /_coauth/self/viewer/security ───────────────────────────────

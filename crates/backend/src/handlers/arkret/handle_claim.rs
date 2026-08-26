@@ -118,7 +118,8 @@ pub(crate) fn issue_handle_claim(
     // claim without renaming.
     let claim_digest = arkret_canonical::canonical_sha256(&payload_no_proofs)?;
 
-    let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
+    let (alg, key) = crate::services::preferred_service_signing_key(key_store)
+        .ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
     let verification_method = did_url_for_handle_claim(format!("{issuer_full_id}#{key_id}"))?;
     let proof_payload_digest = hash_for_handle_claim(claim_digest.clone())?;
