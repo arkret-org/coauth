@@ -119,7 +119,7 @@ fn validate_returned_nonce(grant_nonce: Option<&str>, expected_nonce: &str) -> R
 fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url, String> {
     let base = url::Url::parse(principal_endpoint)
         .map_err(|error| format!("invalid principal server endpoint: {error}"))?;
-    base.join("/_arkret/gate/account/register")
+    base.join("/_soland/gate/account/project")
         .map_err(|error| format!("invalid principal account register endpoint: {error}"))
 }
 
@@ -1421,7 +1421,7 @@ mod tests {
     const TEST_PRINCIPAL_FULL_ID: &str = "did:webvh:scid:local.host:webvh:01k";
     const TEST_DEVICE_ID: &str = "ak:device:01964137-0000-7000-8000-000000000001";
     const TEST_OPERATION_BEARER: &str = "account-operation-secret";
-    const ACCOUNT_REGISTER_PATH: &str = "/_arkret/gate/account/register";
+    const ACCOUNT_REGISTER_PATH: &str = "/_soland/gate/account/project";
 
     fn test_principal() -> VerifiedPrincipalIdentity {
         let principal_id = DidCoreId::new(TEST_PRINCIPAL_ID).unwrap();
@@ -1480,14 +1480,14 @@ mod tests {
     }
 
     #[test]
-    fn soland_account_register_endpoint_uses_arkret_gate_path() {
+    fn soland_account_register_endpoint_uses_private_projection_path() {
         let endpoint = soland_account_register_endpoint("https://local.host/base/path").unwrap();
 
         // The standard account-register route lives at the service root;
         // the join must also discard any base path on the endpoint URL.
         assert_eq!(
             endpoint.as_str(),
-            "https://local.host/_arkret/gate/account/register"
+            "https://local.host/_soland/gate/account/project"
         );
     }
 

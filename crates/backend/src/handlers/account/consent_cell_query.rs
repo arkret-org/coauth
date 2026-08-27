@@ -341,7 +341,7 @@ mod urlencoding {
 
 #[cfg(test)]
 mod tests {
-    use wiremock::matchers::{method, path_regex, query_param};
+    use wiremock::matchers::{header, method, path_regex, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -410,6 +410,10 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
+            .and(header(
+                "Arkret-Operation",
+                arkret_wire::ServiceOperationId::SELF_CONSENT_RESOURCE_GET_V1,
+            ))
             .and(query_param("peer", "ak:did_core:web:peer"))
             .and(query_param("consent_scope", "invite"))
             .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("invite")))
