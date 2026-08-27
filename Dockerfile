@@ -8,7 +8,6 @@
 # The Debian version and version name must be in sync
 ARG DEBIAN_VERSION=12
 ARG DEBIAN_VERSION_NAME=bookworm
-ARG RUSTC_VERSION=1.97.0
 ARG CARGO_AUDITABLE_VERSION=0.7.0
 ARG CARGO_CHEF_VERSION=0.1.77
 ARG DIOXUS_CLI_VERSION=0.7.5
@@ -17,7 +16,7 @@ ARG FRONTEND_DIST_SOURCE=frontend-build
 ############################################
 ## Shared frontend toolchain             ##
 ############################################
-FROM --platform=${BUILDPLATFORM} docker.io/library/rust:${RUSTC_VERSION}-${DEBIAN_VERSION_NAME} AS frontend-toolchain
+FROM --platform=${BUILDPLATFORM} docker.io/library/rust:${DEBIAN_VERSION_NAME} AS frontend-toolchain
 
 ARG DIOXUS_CLI_VERSION
 ARG CARGO_CHEF_VERSION
@@ -102,11 +101,10 @@ FROM ${FRONTEND_DIST_SOURCE} AS frontend-assets
 ########################################
 ## Build stage that builds the binary ##
 ########################################
-FROM --platform=${TARGETPLATFORM} docker.io/library/rust:${RUSTC_VERSION}-${DEBIAN_VERSION_NAME} AS builder-base
+FROM --platform=${TARGETPLATFORM} docker.io/library/rust:${DEBIAN_VERSION_NAME} AS builder-base
 
 ARG CARGO_AUDITABLE_VERSION
 ARG CARGO_CHEF_VERSION
-ARG RUSTC_VERSION
 ARG TARGETARCH
 
 ENV CARGO_HOME=/usr/local/cargo

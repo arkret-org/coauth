@@ -68,7 +68,7 @@ jobs:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
         run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
 
-      - name: Verify Rust version pins
+      - name: Verify Rust toolchain policy
         run: |
           python - <<'PY'
           import pathlib
@@ -79,16 +79,15 @@ jobs:
           expected = manifest["workspace"]["package"]["rust-version"]
           dockerfile = pathlib.Path("Dockerfile").read_text()
           workflow = pathlib.Path(".github/workflows/ci.yaml").read_text()
-          docker_pin = re.search(r"^ARG RUSTC_VERSION=(\d+\.\d+)(?:\.\d+)?$", dockerfile, re.M)
           clippy_pin = re.search(r"^\s+toolchain: (\d+\.\d+)(?:\.\d+)?$", workflow, re.M)
-          assert docker_pin and docker_pin.group(1) == expected, "Docker Rust pin differs from workspace MSRV"
+          assert dockerfile.count("docker.io/library/rust:${DEBIAN_VERSION_NAME}") == 2, "Docker builders must use latest stable Rust on the selected Debian baseline"
           assert clippy_pin and clippy_pin.group(1) == expected, "Clippy Rust pin differs from workspace MSRV"
           PY
 
-      - name: Set up Rust 1.97.0 with Clippy
+      - name: Set up Rust 1.98.0 with Clippy
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
-          toolchain: 1.97.0
+          toolchain: 1.98.0
           components: clippy
 
       - name: Configure sccache
