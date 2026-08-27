@@ -4,11 +4,11 @@ use std::time::{Duration, Instant};
 use arkret_identifiers::DidFullId;
 use arkret_identity::DidBindingPurpose;
 use arkret_models_discovery::{
-    DirectoryHandleResolutionOutcome, DirectoryResolveHandleRequestBody,
+    DirectoryHandleResolutionOutcome, DirectoryResolveHandleRequestBody, ServiceDescribe,
 };
-use arkret_models_identity::http_bodies::{IdentityDescribeOutcome, IdentityDocumentViewOutcome};
+use arkret_models_identity::http_bodies::IdentityDocumentViewOutcome;
 use arkret_models_identity::{
-    IdentityDescription, IdentityDocumentView, IdentityResolveOutcome, IdentityResolveRequestBody,
+    IdentityDocumentView, IdentityResolveOutcome, IdentityResolveRequestBody,
 };
 use coauth_data::RepositoryAccess;
 use salvo::prelude::*;
@@ -21,23 +21,10 @@ use crate::services::did_binding;
 const DIRECTORY_RESOLVE_FAILURE_FLOOR: Duration = Duration::from_millis(25);
 
 #[handler]
-pub async fn identity_describe(
-    depot: &Depot,
-) -> Result<Json<IdentityDescribeOutcome>, ArkretRouteError> {
-    let arkret_config = depot.arkret_config()?;
-    let registry_mode = if delegated_identity_registry_descriptor(&arkret_config).is_some() {
-        "delegated_resolver"
-    } else {
-        "local_bindings"
-    };
-
-    Ok(Json(IdentityDescribeOutcome(IdentityDescription {
-        service_id: service_id_for(&arkret_config),
-        registry_mode: registry_mode.to_owned(),
-        supported_receipts: Vec::new(),
-        protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
-        profiles: Vec::new(),
-    })))
+pub async fn identity_describe(depot: &Depot) -> Result<Json<ServiceDescribe>, ArkretRouteError> {
+    Ok(Json(
+        super::service_describe::service_describe_from_depot(depot).await?,
+    ))
 }
 
 #[handler]

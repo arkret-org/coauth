@@ -549,6 +549,12 @@ pub async fn server_describe(
             format!("service_kind {service_kind:?} is not available on this binding"),
         ));
     }
+    Ok(Json(service_describe_from_depot(depot).await?))
+}
+
+pub(crate) async fn service_describe_from_depot(
+    depot: &Depot,
+) -> Result<ServiceDescribe, ArkretRouteError> {
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let mut repo = depot.repo().await?;
@@ -607,5 +613,5 @@ pub async fn server_describe(
     response
         .validate()
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    Ok(Json(response))
+    Ok(response)
 }

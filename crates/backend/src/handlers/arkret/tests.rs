@@ -337,6 +337,12 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     assert_eq!(body["service_id"], "ak:did_core:webvh:ztest");
     assert_eq!(body["trust_domain"], "ak:trust_domain:auth.example.com");
     assert_eq!(body["service_kind"], "auth_server");
+    for retired_field in ["registry_mode", "supported_receipts", "profiles"] {
+        assert!(
+            body.get(retired_field).is_none(),
+            "retired identity describe field must not be emitted: {retired_field}"
+        );
+    }
     assert_eq!(
         body["x_coauth_admin_audience"],
         "https://auth.example.com/api/admin"
