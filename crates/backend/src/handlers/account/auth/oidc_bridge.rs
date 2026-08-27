@@ -119,7 +119,7 @@ fn validate_returned_nonce(grant_nonce: Option<&str>, expected_nonce: &str) -> R
 fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url, String> {
     let base = url::Url::parse(principal_endpoint)
         .map_err(|error| format!("invalid principal server endpoint: {error}"))?;
-    base.join("/_soland/gate/account/project")
+    base.join(soland_contracts::ACCOUNT_PROJECTION_PATH)
         .map_err(|error| format!("invalid principal account register endpoint: {error}"))
 }
 
@@ -142,23 +142,12 @@ fn soland_account_localparts_endpoint(
     Ok(endpoint)
 }
 
-/// Deployment-private projection command. This deliberately does not reuse
-/// the public `AccountRegisterRequestBody`: only the Account Authority may
-/// invoke it after the canonical binding flow has completed.
-#[derive(Debug, serde::Serialize)]
-struct AccountProjectionRegisterRequestBody {
-    principal_id: DidCoreId,
-    full_id: DidFullId,
-    display_name: Option<String>,
-    device_id: Option<DeviceId>,
-}
-
 fn soland_account_register_body(
     principal: &VerifiedPrincipalIdentity,
     display_name: Option<&str>,
     device_id: Option<&str>,
-) -> Result<AccountProjectionRegisterRequestBody, String> {
-    Ok(AccountProjectionRegisterRequestBody {
+) -> Result<soland_contracts::AccountProjectionRequestBody, String> {
+    Ok(soland_contracts::AccountProjectionRequestBody {
         principal_id: principal.principal_id.clone(),
         full_id: principal.full_id.clone(),
         display_name: display_name.map(ToOwned::to_owned),
@@ -175,7 +164,7 @@ async fn send_soland_account_register(
     http_client: &reqwest::Client,
     endpoint: &url::Url,
     bearer: &str,
-    body: &AccountProjectionRegisterRequestBody,
+    body: &soland_contracts::AccountProjectionRequestBody,
 ) -> Result<(reqwest::StatusCode, String), String> {
     let body_bytes = arkret_canonical::canonical_json_bytes(body)
         .map_err(|error| format!("canonicalize principal account register request: {error}"))?;
@@ -184,10 +173,6 @@ async fn send_soland_account_register(
             http_client
                 .post(endpoint.clone())
                 .bearer_auth(bearer)
-                .header(
-                    "Arkret-Operation",
-                    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER_V1,
-                )
                 .header(reqwest::header::CONTENT_TYPE, "application/json")
                 .body(body_bytes.clone())
         })
@@ -1421,7 +1406,7 @@ mod tests {
     const TEST_PRINCIPAL_FULL_ID: &str = "did:webvh:scid:local.host:webvh:01k";
     const TEST_DEVICE_ID: &str = "ak:device:01964137-0000-7000-8000-000000000001";
     const TEST_OPERATION_BEARER: &str = "account-operation-secret";
-    const ACCOUNT_REGISTER_PATH: &str = "/_soland/gate/account/project";
+    const ACCOUNT_REGISTER_PATH: &str = soland_contracts::ACCOUNT_PROJECTION_PATH;
 
     fn test_principal() -> VerifiedPrincipalIdentity {
         let principal_id = DidCoreId::new(TEST_PRINCIPAL_ID).unwrap();
@@ -1453,16 +1438,6 @@ mod tests {
                 .get("authorization")
                 .and_then(|value| value.to_str().ok())
                 .is_some_and(|value| value == format!("Bearer {expected}"))
-        }
-    }
-
-    fn request_has_operation(expected: &'static str) -> impl Fn(&WiremockRequest) -> bool {
-        move |request| {
-            request
-                .headers
-                .get("arkret-operation")
-                .and_then(|value| value.to_str().ok())
-                == Some(expected)
         }
     }
 
@@ -1509,9 +1484,6 @@ mod tests {
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
             .and(request_has_bearer(TEST_OPERATION_BEARER))
-            .and(request_has_operation(
-                arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER_V1,
-            ))
             .and(|request: &WiremockRequest| request_json(request).get("handle").is_none())
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "principal_id": TEST_PRINCIPAL_ID,
@@ -1567,9 +1539,6 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
-            .and(request_has_operation(
-                arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER_V1,
-            ))
             .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
                 arkret_wire::ErrorCode::FAILED_PRECONDITION,
                 "account registration is closed",
@@ -1598,9 +1567,6 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
-            .and(request_has_operation(
-                arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER_V1,
-            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "principal_id": TEST_PRINCIPAL_ID,
                 "state": "active",
