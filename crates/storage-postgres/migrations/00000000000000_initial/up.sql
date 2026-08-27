@@ -199,7 +199,7 @@ CREATE TABLE public.dpop_jti_replay (
 );
 
 -- Durable self-service erasure intents
--- (`ak.gate.account.command.request_erasure`, account-lifecycle.md §8.1).
+-- (`ak.gate.account.command.request_erasure.v1`, account-lifecycle.md §8.1).
 -- One row per accepted request_id; `canonical_outcome` carries the exact
 -- acceptance bytes for byte-identical replays, and the partial unique index
 -- below enforces at most one live (record not yet signed) intent per user.
@@ -730,7 +730,7 @@ CREATE TABLE public.account_handoff_grants (
     CONSTRAINT account_handoff_grants_request_digest_valid CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT account_handoff_grants_audience_nonempty CHECK ((btrim(audience) <> ''::text)),
     CONSTRAINT account_handoff_grants_cnf_jkt_valid CHECK ((cnf_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
-    CONSTRAINT account_handoff_grants_allowed_operations_closed CHECK ((allowed_operations = ARRAY['ak.gate.account.command.issue_did_binding_challenge'::text, 'ak.gate.account.command.issue_identity_binding_challenge'::text, 'ak.gate.account.command.issue_identity_abandonment_challenge'::text, 'ak.gate.account.command.abandon_identity_creation'::text, 'ak.gate.account.command.register'::text, 'ak.gate.account.command.issue_session_grant'::text, 'ak.gate.account.command.issue_recovery_completion_grant'::text])),
+    CONSTRAINT account_handoff_grants_allowed_operations_closed CHECK ((allowed_operations = ARRAY['ak.gate.account.command.issue_did_binding_challenge.v1'::text, 'ak.gate.account.command.issue_identity_binding_challenge.v1'::text, 'ak.gate.account.command.issue_identity_abandonment_challenge.v1'::text, 'ak.gate.account.command.abandon_identity_creation.v1'::text, 'ak.gate.account.command.register.v1'::text, 'ak.gate.account.command.issue_session_grant.v1'::text, 'ak.gate.account.command.issue_recovery_completion_grant.v1'::text])),
     CONSTRAINT account_handoff_grants_token_nonempty CHECK ((length(account_handoff_grant) >= 32)),
     CONSTRAINT account_handoff_grants_expiry_valid CHECK ((expires_at > issued_at))
 );

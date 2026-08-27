@@ -129,7 +129,12 @@ async fn check_arkret_server_describe(http: &reqwest::Client, public_base: &Url)
         }
     };
 
-    match http.get(url.as_str()).send().await {
+    match http
+        .get(url.as_str())
+        .header("Arkret-Operation", "ak.server.read.describe.v1")
+        .send()
+        .await
+    {
         Ok(response) if response.status().is_success() => {
             info!(%url, "Arkret server description endpoint is reachable");
         }

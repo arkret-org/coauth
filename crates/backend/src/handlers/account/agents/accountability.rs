@@ -46,15 +46,15 @@ fn is_registered_agent_capability(action: &str) -> bool {
         Some(
             CapabilityActionId::AgentKeyAuthorize
                 | CapabilityActionId::AgentKeyRevoke
-                | CapabilityActionId::SelfAgentCommandProvision
-                | CapabilityActionId::SelfAgentCommandPause
-                | CapabilityActionId::SelfAgentCommandResume
-                | CapabilityActionId::SelfAgentCommandDeactivate
+                | CapabilityActionId::SelfAgentCommandProvisionV1
+                | CapabilityActionId::SelfAgentCommandPauseV1
+                | CapabilityActionId::SelfAgentCommandResumeV1
+                | CapabilityActionId::SelfAgentCommandDeactivateV1
                 | CapabilityActionId::AgentDraftPropose
                 | CapabilityActionId::AgentActionRequest
                 | CapabilityActionId::AgentActionApprove
                 | CapabilityActionId::AgentActionReject
-                | CapabilityActionId::SelfAgentSidecarCommandEnsure
+                | CapabilityActionId::SelfAgentSidecarCommandEnsureV1
                 | CapabilityActionId::AgentSidecarWrite
                 | CapabilityActionId::AgentSidecarPublish
         )

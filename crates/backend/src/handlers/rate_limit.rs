@@ -803,15 +803,15 @@ impl Limiter {
             policy_version: Some("1".to_owned()),
             entries: vec![
                 entry(
-                    arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE,
+                    arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE_V1,
                     self.inner.identity_resolution_config,
                 ),
                 entry(
-                    arkret_wire::ServiceOperationId::ROOT_IDENTITY_DOCUMENT_RESOURCE_GET,
+                    arkret_wire::ServiceOperationId::ROOT_IDENTITY_DOCUMENT_RESOURCE_GET_V1,
                     self.inner.identity_resolution_config,
                 ),
                 entry(
-                    arkret_wire::ServiceOperationId::FIND_DIRECTORY_READ_RESOLVE_HANDLE,
+                    arkret_wire::ServiceOperationId::FIND_DIRECTORY_READ_RESOLVE_HANDLE_V1,
                     self.inner.directory_lookup_config,
                 ),
             ],
@@ -1010,7 +1010,7 @@ mod tests {
         assert_eq!(policy.entries.len(), 3);
         assert!(policy.entries.iter().any(|entry| {
             entry.operation_id.as_deref()
-                == Some(arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE)
+                == Some(arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE_V1)
                 && entry.window_seconds == Some(60)
                 && entry.max_requests == Some(60)
         }));

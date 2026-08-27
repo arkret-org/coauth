@@ -620,6 +620,17 @@ impl TestState {
             other => panic!("Unsupported HTTP method: {other}"),
         };
 
+        if uri.path().starts_with("/_arkret/")
+            && parts.method != hyper::Method::OPTIONS
+            && !parts.headers.contains_key("arkret-operation")
+            && let Some(operation) = arkret_wire::ServiceOperationId::from_http_request(
+                parts.method.as_str(),
+                uri.path(),
+            )
+        {
+            test_req = test_req.add_header("Arkret-Operation", operation.as_str(), true);
+        }
+
         for (name, value) in &parts.headers {
             test_req = test_req.add_header(name, value, true);
         }

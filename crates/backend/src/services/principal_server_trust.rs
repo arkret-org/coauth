@@ -36,7 +36,7 @@ use arkret_models_identity::service_identity::CanonicalServiceUrl;
 use arkret_models_identity::{
     AuthenticatedServiceResolution, DidDocument, canonical_service_current_record_path,
 };
-use arkret_wire::{BindingKind, DidCoreId, DidFullId, Hash, ServiceKind};
+use arkret_wire::{DidCoreId, DidFullId, Hash, ServiceKind};
 use chrono::Utc;
 use coauth_config::{ArkretConfig, PrincipalServerConfig};
 use coauth_data::storage::principal_server_trust::{
@@ -304,15 +304,15 @@ async fn fetch_bounded(
     operation: &'static str,
     url: Url,
     max_bytes: usize,
+    arkret_operation: Option<&str>,
 ) -> Result<Vec<u8>, TrustVerificationError> {
-    outbound_http::fetch_bounded(
-        http_client,
-        outbound_http::principal_trust_policy(operation),
-        url,
-        max_bytes,
-    )
-    .await
-    .map_err(|error| match error {
+    let policy = outbound_http::principal_trust_policy(operation);
+    let result = if let Some(operation_id) = arkret_operation {
+        outbound_http::fetch_bounded_arkret(http_client, policy, url, max_bytes, operation_id).await
+    } else {
+        outbound_http::fetch_bounded(http_client, policy, url, max_bytes).await
+    };
+    result.map_err(|error| match error {
         outbound_http::BoundedFetchError::Unreachable(message) => {
             TrustVerificationError::Unreachable(message)
         }
@@ -398,6 +398,7 @@ pub async fn verify_principal_server_identity(
         "principal_trust_describe",
         describe_url,
         outbound_http::DESCRIBE_MAX_BYTES,
+        Some(arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE_V1),
     )
     .await?;
     let description: ServiceDescribe = serde_json::from_slice(&describe_bytes)
@@ -446,6 +447,7 @@ pub async fn verify_principal_server_identity(
         "principal_trust_webvh_log",
         log_url,
         outbound_http::WEBVH_LOG_MAX_BYTES,
+        None,
     )
     .await?;
     let verified_log =
@@ -505,6 +507,7 @@ pub async fn verify_principal_server_identity(
         "principal_trust_resolution_record",
         record_url.clone(),
         AUTHENTICATED_RESOLUTION_MAX_BYTES,
+        None,
     )
     .await?;
     let authenticated_resolution: AuthenticatedServiceResolution =
@@ -569,10 +572,13 @@ pub async fn verify_principal_server_identity(
             "resolution event ref does not match the verified method-history head".to_owned(),
         ));
     }
-    let mut http_json_bindings = description
-        .supported_bindings
-        .iter()
-        .filter(|binding| binding.kind == BindingKind::HttpJson);
+    let mut http_json_bindings = description.transport_bindings.iter().filter_map(|binding| {
+        if let arkret_models_discovery::TransportBinding::HttpJson { base_url, .. } = binding {
+            Some(base_url)
+        } else {
+            None
+        }
+    });
     let binding = http_json_bindings.next().ok_or_else(|| {
         TrustVerificationError::EndpointBinding(
             "ServiceDescribe has no http_json binding".to_owned(),
@@ -583,11 +589,7 @@ pub async fn verify_principal_server_identity(
             "ServiceDescribe has multiple http_json bindings".to_owned(),
         ));
     }
-    let advertised_base = binding.base_url.as_deref().ok_or_else(|| {
-        TrustVerificationError::EndpointBinding(
-            "ServiceDescribe http_json binding has no base_url".to_owned(),
-        )
-    })?;
+    let advertised_base = binding.as_str();
     if advertised_base != record.record.base_url {
         return Err(TrustVerificationError::EndpointBinding(format!(
             "ServiceDescribe http_json base {advertised_base} does not match the signed record target {}",

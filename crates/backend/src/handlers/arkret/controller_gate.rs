@@ -27,7 +27,7 @@ use crate::handlers::common::DepotExt;
 const GATE_TTL: Duration = Duration::minutes(5);
 const REPLAY_RETENTION: Duration = Duration::days(7);
 const GATE_OPERATION_ID: &str =
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_CONTROLLER_GATE_ATTESTATION;
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_CONTROLLER_GATE_ATTESTATION_V1;
 
 pub struct ControllerGateCanonicalJson(Vec<u8>);
 

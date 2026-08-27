@@ -154,6 +154,7 @@ fn account_api_subrouters() -> (Router, Router) {
 
     let arkret_router = Router::with_path("/_arkret")
         .hoop(public_oidc_browser_cors())
+        .hoop(crate::server::arkret_operation_selector_middleware)
         .push(Router::with_path("describe").get(arkret::server_describe))
         .push(Router::with_path("root/identity/describe").get(arkret::identity_describe))
         .push(Router::with_path("root/identity/resolve").post(arkret::identity_resolve))
@@ -232,7 +233,7 @@ fn account_api_subrouters() -> (Router, Router) {
         // Principal Server validating a presented grant calls this to learn
         // whether it is active and to obtain the session public key for RFC 9421
         // PoP verification. It is a spec operation
-        // (`ak.gate.account.command.introspect_session_grant`), so it lives under
+        // (`ak.gate.account.command.introspect_session_grant.v1`), so it lives under
         // `/_arkret`; the handler self-authorizes via the configured
         // `session_grant_introspection_bearer` (or an admin scope).
         .push(
@@ -249,7 +250,7 @@ fn account_api_subrouters() -> (Router, Router) {
                 .post(arkret::issue_session_grant_endpoint),
         )
         // AKP-0008 §4.5 runtime key pairing
-        // (`ak.gate.account.command.pair_agent_key`): the agent runtime submits
+        // (`ak.gate.account.command.pair_agent_key.v1`): the agent runtime submits
         // its locally-generated public key + proof-of-possession; coauth
         // validates the PoP, writes a durable agent key authorization, and fans
         // `ak.agent.key.authorize` out to soland.
@@ -264,7 +265,7 @@ fn account_api_subrouters() -> (Router, Router) {
                 .post(arkret::issue_recovery_completion_grant_endpoint),
         )
         // Self-service account erasure entry point
-        // (`ak.gate.account.command.request_erasure`, account-lifecycle.md
+        // (`ak.gate.account.command.request_erasure.v1`, account-lifecycle.md
         // §8.1). Accepted directly by the Account Authority on the gate
         // surface: high-risk fresh-authentication gate, durable intent
         // record, and the existing `erasure_pending` issuance flow all live

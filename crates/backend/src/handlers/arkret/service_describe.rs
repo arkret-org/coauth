@@ -1,10 +1,7 @@
 use arkret_models_discovery::{
     AccountAuthority, AuthGrantExchange, AuthGrantExchangeKind, AuthMetadata, AuthMethod,
     AuthMethodKind, ClaimedProfileEntry, InteropSurfaceEntry, PlaintextVisibility, ServerLimits,
-    ServiceDescribe, SupportedBinding,
-};
-use arkret_wire::generated::profile_requirements::{
-    requirements_for, validate_profile_requirements,
+    ServiceDescribe, TransportBinding,
 };
 use coauth_config::ArkretConfig;
 use coauth_data::{RepositoryAccess, UrlBuilder};
@@ -16,35 +13,19 @@ use crate::handlers::common::DepotExt;
 
 const CLAIMED_PROFILE_IDS: &[&str] = &[arkret_wire::ProfileId::AUTH_SERVER_V1];
 
-const SUPPORTED_OPERATIONS: &[&str] = &[
-    arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE,
-    arkret_wire::ServiceOperationId::ROOT_IDENTITY_REGISTRY_READ_DESCRIBE,
-    arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE,
-    arkret_wire::ServiceOperationId::ROOT_IDENTITY_DOCUMENT_RESOURCE_GET,
-    arkret_wire::ServiceOperationId::FIND_DIRECTORY_READ_RESOLVE_HANDLE,
-    arkret_wire::ServiceOperationId::SELF_POLICY_READ_CHECK,
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_EXCHANGE_CREATE_HANDOFF,
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE,
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER,
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT,
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_RECOVERY_COMPLETION_GRANT,
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REFRESH_SESSION_GRANT,
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_LOGOUT_AUTH_SESSION,
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_INTROSPECT_SESSION_GRANT,
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REVOKE_SESSION,
-    // Account Authority issuer-ledger read, served at
-    // `POST /_arkret/peer/account-status/resolve`.
-    arkret_wire::ServiceOperationId::PEER_ACCOUNT_STATUS_READ_RESOLVE,
+pub(crate) const SUPPORTED_OPERATION_BUNDLES: &[&str] = &[
+    "ak.operation_bundle.auth_server.describe.v1",
+    "ak.operation_bundle.auth_server.http_core.v1",
 ];
 
-const IMPLEMENTED_PROFILE_EVENT_KINDS: &[&str] = &[];
-
-const IMPLEMENTED_PROFILE_SCHEMAS: &[&str] = &[
-    arkret_wire::SchemaId::ACCOUNT_STATUS_RECORD_V1,
-    arkret_wire::SchemaId::HANDLE_CLAIM_V1,
-    arkret_wire::SchemaId::SERVICE_DESCRIBE_V1,
-];
+pub(crate) fn supports_advertised_http_operation(
+    operation: arkret_wire::ServiceOperationId,
+) -> bool {
+    SUPPORTED_OPERATION_BUNDLES.iter().any(|bundle_id| {
+        arkret_wire::operation_bundle_descriptor(bundle_id)
+            .is_some_and(|bundle| bundle.contains(operation, arkret_wire::BindingKind::HttpJson))
+    })
+}
 
 #[derive(Debug, Clone, Serialize)]
 struct PrincipalServerDescriptor {
@@ -181,19 +162,46 @@ fn problem_details_descriptor() -> ProblemDetailsDescriptor {
     }
 }
 
-fn validate_claimed_profiles_against_sdk_requirements() {
+/// Validate coauth's self-claimed profiles once during process startup.
+///
+/// Profile requirements are a startup claim guard, not request-routing or
+/// authorization input. Callers must abort startup on any error.
+pub fn validate_claimed_profiles_at_startup() -> Result<(), arkret_wire::WireError> {
+    let advertised_pairs = SUPPORTED_OPERATION_BUNDLES
+        .iter()
+        .map(|bundle_id| {
+            arkret_wire::operation_bundle_descriptor(bundle_id).ok_or_else(|| {
+                arkret_wire::WireError::Protocol(format!(
+                    "coauth advertises unknown operation bundle {bundle_id}"
+                ))
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .flat_map(|bundle| bundle.members.iter().copied())
+        .collect::<std::collections::BTreeSet<_>>();
     for profile_id in CLAIMED_PROFILE_IDS {
-        debug_assert!(requirements_for(profile_id).is_some());
-        debug_assert!(
-            validate_profile_requirements(
-                profile_id,
-                SUPPORTED_OPERATIONS,
-                IMPLEMENTED_PROFILE_EVENT_KINDS,
-                IMPLEMENTED_PROFILE_SCHEMAS,
-            )
-            .is_ok()
-        );
+        let requirements = arkret_wire::generated::profile_requirements::requirements_for(
+            profile_id,
+        )
+        .ok_or_else(|| {
+            arkret_wire::WireError::Protocol(format!("coauth claims unknown profile {profile_id}"))
+        })?;
+        for requirement in requirements.provide_requirements() {
+            let pair = arkret_wire::OperationBindingPair {
+                operation_id: requirement.operation_id,
+                binding_kind: requirement.binding_kind,
+            };
+            if !advertised_pairs.contains(&pair) {
+                return Err(arkret_wire::WireError::Protocol(format!(
+                    "coauth profile {profile_id} requires advertised operation/binding pair {}/{}",
+                    requirement.operation_id.as_str(),
+                    requirement.binding_kind.as_str(),
+                )));
+            }
+        }
     }
+    Ok(())
 }
 
 /// G4.T3 — convert the loader's `VerifiedProfileArtifactEntry` into the wire
@@ -366,8 +374,6 @@ pub(crate) fn service_describe_response(
     loaded_verified_profiles: &[arkret_models_discovery::VerifiedProfileArtifactEntry],
     development_mode: bool,
 ) -> ServiceDescribe {
-    validate_claimed_profiles_against_sdk_requirements();
-
     let principal_servers: Vec<PrincipalServerDescriptor> = arkret_config
         .principal_servers
         .iter()
@@ -388,38 +394,24 @@ pub(crate) fn service_describe_response(
     } else {
         build_verified_profile_descriptors(loaded_verified_profiles)
     };
-    let features = [
-        "oidc",
-        "account_first_onboarding",
-        "session_grant",
-        "did_binding",
-        "did_resolution",
-        "handle_resolution",
-        "account_recovery",
-        "claim_attestation",
-        "policy_hook",
-        "session_grant_revocation",
-    ]
-    .map(str::to_owned)
-    .to_vec();
     let mut claimed_profile = ClaimedProfileEntry::self_claimed(CLAIMED_PROFILE_IDS[0]);
     claimed_profile.notes = Some(
         "Auth-server-shaped profile: issues short-lived audience-bound ak.session.grant, exposes \
-         ak.server.read.describe, MAY expose ak.policy.check. NOT an identity registry (DID \
+         ak.server.read.describe.v1, MAY expose ak.policy.check. NOT an identity registry (DID \
          resolution is delegated; see interop_surfaces)."
             .to_owned(),
     );
     let interop_surfaces = [
         (
-            arkret_wire::ServiceOperationId::ROOT_IDENTITY_REGISTRY_READ_DESCRIBE,
+            arkret_wire::ServiceOperationId::ROOT_IDENTITY_REGISTRY_READ_DESCRIBE_V1,
             "delegated-resolver interop: reports the upstream registry coauth proxies to; does not assert canonical ownership.",
         ),
         (
-            arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE,
+            arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE_V1,
             "delegated-resolver interop: DID resolution is performed against the configured identity_registry_resolver; coauth caches but does not author DID documents.",
         ),
         (
-            arkret_wire::ServiceOperationId::ROOT_IDENTITY_DOCUMENT_RESOURCE_GET,
+            arkret_wire::ServiceOperationId::ROOT_IDENTITY_DOCUMENT_RESOURCE_GET_V1,
             "delegated-resolver interop: returns the cached/resolved DID document; coauth holds no authoritative key log for external DIDs.",
         ),
     ]
@@ -495,20 +487,15 @@ pub(crate) fn service_describe_response(
         protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
         supported_profiles: Vec::new(),
         profile_bindings: std::collections::BTreeMap::default(),
-        operation_bindings: SUPPORTED_OPERATIONS
+        supported_operation_bundles: SUPPORTED_OPERATION_BUNDLES
             .iter()
-            .map(|value| {
-                let operation_id = arkret_wire::ServiceOperationId::from_wire(value)
-                    .expect("coauth supported operation is registered");
-                arkret_models_discovery::OperationBinding::current_http_json(operation_id)
-                    .expect("coauth supported operation descriptor is valid")
-            })
+            .map(|value| (*value).to_owned())
             .collect(),
-        supported_bindings: vec![
-            SupportedBinding::new(arkret_wire::BindingKind::HttpJson)
-                .with_base_url(url_builder.http_base().to_string()),
-        ],
-        supported_features: features.clone(),
+        transport_bindings: vec![TransportBinding::HttpJson {
+            base_url: url_builder.http_base().to_string(),
+            extension_profile_required: (),
+        }],
+        supported_features: Vec::new(),
         calendar_tzdb_versions: Vec::new(),
         auth_metadata: build_auth_metadata(url_builder, arkret_config),
         limits: ServerLimits {
@@ -517,25 +504,16 @@ pub(crate) fn service_describe_response(
         plaintext_visibility: PlaintextVisibility::none(),
         privacy_derivation: None,
         receive_policy_constraints: None,
-        implemented_features: features,
         claimed_profiles: vec![claimed_profile],
         verified_profiles,
-        experimental_features: [
-            "session_grant_issue",
-            "session_grant_introspection",
-            "session_grant_revocation",
-            "did_webvh_embedded_registration",
-            "principal_server_delegation_targets",
-        ]
-        .map(str::to_owned)
-        .to_vec(),
         interop_surfaces,
+        invite_addressing: None,
         development_mode,
         rate_limit_policy: Some(arkret_models_discovery::RateLimitPolicy::unspecified()),
         rate_limit_policy_id: None,
+        private_contact_discovery: None,
         egress_network_policy: None,
         resource_kinds: Vec::new(),
-        discovery_profiles: Vec::new(),
         restricted_query_proof: None,
         ingest_modes: Vec::new(),
         accept_policy_kind: None,

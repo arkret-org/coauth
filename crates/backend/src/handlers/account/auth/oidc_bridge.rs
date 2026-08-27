@@ -1380,8 +1380,9 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 name: "session_grants".to_owned(),
                 method: "POST".to_owned(),
                 path: "/_arkret/gate/account/session-grants".to_owned(),
-                contract: arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT
-                    .to_owned(),
+                contract:
+                    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT_V1
+                        .to_owned(),
             },
             IntegrationManifestSurface {
                 name: "passkey_auth".to_owned(),

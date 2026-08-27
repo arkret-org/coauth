@@ -50,6 +50,58 @@ pub(crate) async fn arkret_request_id_middleware(
     ctrl.call_next(req, depot, res).await;
 }
 
+#[handler]
+pub(crate) async fn arkret_operation_selector_middleware(
+    req: &mut Request,
+    depot: &mut Depot,
+    res: &mut Response,
+    ctrl: &mut FlowCtrl,
+) {
+    if req.method() == Method::OPTIONS {
+        ctrl.call_next(req, depot, res).await;
+        return;
+    }
+
+    let mut selectors = req.headers().get_all("arkret-operation").iter();
+    let (status, code, message) = match selectors.next() {
+        None => (
+            StatusCode::BAD_REQUEST,
+            arkret_wire::ErrorCode::OPERATION_SELECTOR_REQUIRED,
+            "canonical Arkret HTTP requests require Arkret-Operation",
+        ),
+        Some(_selector) if selectors.next().is_some() => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            arkret_wire::ErrorCode::UNSUPPORTED_OPERATION_VERSION,
+            "Arkret-Operation must contain exactly one value",
+        ),
+        Some(selector) => {
+            let selected = selector
+                .to_str()
+                .ok()
+                .and_then(arkret_wire::ServiceOperationId::from_wire);
+            if selected.is_some_and(|operation| {
+                crate::handlers::arkret::supports_advertised_http_operation(operation)
+                    && operation.matches_http_request(req.method().as_str(), req.uri().path())
+            }) {
+                ctrl.call_next(req, depot, res).await;
+                return;
+            }
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                arkret_wire::ErrorCode::UNSUPPORTED_OPERATION_VERSION,
+                "Arkret-Operation is unknown, not advertised, or does not match the selected HTTP route",
+            )
+        }
+    };
+    let request_id = depot.get::<String>("arkret_request_id").ok().cloned();
+    let mut envelope = arkret_wire::ErrorEnvelope::new(code, message);
+    if let Some(request_id) = request_id {
+        envelope = envelope.with_request_id(request_id);
+    }
+    crate::handlers::arkret::render_problem(res, status, envelope);
+    ctrl.skip_rest();
+}
+
 #[inline]
 fn otel_http_method(method: &Method) -> &'static str {
     match method {
@@ -438,6 +490,7 @@ pub(super) fn public_oidc_browser_cors() -> impl Handler {
             ACCEPT,
             AUTHORIZATION,
             CONTENT_TYPE,
+            HeaderName::from_static("arkret-operation"),
             HeaderName::from_static("dpop"),
             HeaderName::from_static("idempotency-key"),
         ])
@@ -458,4 +511,78 @@ pub(super) async fn favicon_handler(res: &mut Response) {
         HeaderValue::from_static("image/svg+xml; charset=utf-8"),
     );
     res.render(Text::Plain(INLINE_FAVICON_SVG));
+}
+
+#[cfg(test)]
+mod tests {
+    use salvo::test::TestClient;
+
+    use super::*;
+
+    #[handler]
+    async fn selector_test_ok(res: &mut Response) {
+        res.status_code(StatusCode::NO_CONTENT);
+    }
+
+    fn selector_test_service() -> Service {
+        Service::new(
+            Router::with_path("/_arkret")
+                .hoop(arkret_operation_selector_middleware)
+                .push(Router::with_path("describe").get(selector_test_ok))
+                .push(
+                    Router::with_path("gate/account/controller-gate-attestations")
+                        .post(selector_test_ok),
+                ),
+        )
+    }
+
+    #[tokio::test]
+    async fn operation_selector_is_required_and_exact_before_handlers() {
+        let service = selector_test_service();
+        let missing = TestClient::get("http://local/_arkret/describe")
+            .send(&service)
+            .await;
+        assert_eq!(missing.status_code, Some(StatusCode::BAD_REQUEST));
+
+        let unknown = TestClient::get("http://local/_arkret/describe")
+            .add_header("Arkret-Operation", "ak.server.read.describe.v9", true)
+            .send(&service)
+            .await;
+        assert_eq!(unknown.status_code, Some(StatusCode::UNPROCESSABLE_ENTITY));
+
+        let mismatch = TestClient::get("http://local/_arkret/describe")
+            .add_header(
+                "Arkret-Operation",
+                arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE_V1,
+                true,
+            )
+            .send(&service)
+            .await;
+        assert_eq!(mismatch.status_code, Some(StatusCode::UNPROCESSABLE_ENTITY));
+
+        let unadvertised = TestClient::post(
+            "http://local/_arkret/gate/account/controller-gate-attestations",
+        )
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_CONTROLLER_GATE_ATTESTATION_V1,
+            true,
+        )
+        .send(&service)
+        .await;
+        assert_eq!(
+            unadvertised.status_code,
+            Some(StatusCode::UNPROCESSABLE_ENTITY)
+        );
+
+        let accepted = TestClient::get("http://local/_arkret/describe")
+            .add_header(
+                "Arkret-Operation",
+                arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE_V1,
+                true,
+            )
+            .send(&service)
+            .await;
+        assert_eq!(accepted.status_code, Some(StatusCode::NO_CONTENT));
+    }
 }

@@ -1,5 +1,5 @@
 //! AKP-0008 §4.6 agent runtime authentication (`agent_key_proof` branch of
-//! `ak.gate.account.command.issue_session_grant`).
+//! `ak.gate.account.command.issue_session_grant.v1`).
 //!
 //! This is the independent validator the session-grant endpoint calls; it MUST
 //! NOT fall back to the password / OIDC / passkey validators.
@@ -52,21 +52,21 @@ fn agent_session_refresh_request_digest(
 pub const AGENT_SESSION_MAX_TTL: chrono::Duration = chrono::Duration::minutes(15);
 
 const AGENT_SERVICE_SCOPE_ACTIONS: &[&str] = &[
-    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_DESCRIBE,
-    arkret_wire::ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT,
-    arkret_wire::ServiceOperationId::SELF_EVENTS_RESOURCE_GET,
-    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_RESOLVE,
-    arkret_wire::CapabilityActionId::SELF_EVENTS_READ_SCAN,
-    arkret_wire::CapabilityActionId::SELF_EVENTS_STREAM_SUBSCRIBE,
-    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_FRONTIER,
-    arkret_wire::ServiceOperationId::SELF_SEALS_READ_FRONTIER,
-    arkret_wire::ServiceOperationId::SELF_AUTHORIZATION_LEASES_COMMAND_ISSUE,
-    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE,
-    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME,
-    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_REVOKE,
-    arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST,
-    arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK,
-    arkret_wire::ServiceOperationId::SELF_SIGNAL_COMMAND_SEND,
+    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_DESCRIBE_V1,
+    arkret_wire::ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT_V1,
+    arkret_wire::ServiceOperationId::SELF_EVENTS_RESOURCE_GET_V1,
+    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_RESOLVE_V1,
+    arkret_wire::CapabilityActionId::SELF_EVENTS_READ_SCAN_V1,
+    arkret_wire::CapabilityActionId::SELF_EVENTS_STREAM_SUBSCRIBE_V1,
+    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_FRONTIER_V1,
+    arkret_wire::ServiceOperationId::SELF_SEALS_READ_FRONTIER_V1,
+    arkret_wire::ServiceOperationId::SELF_AUTHORIZATION_LEASES_COMMAND_ISSUE_V1,
+    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE_V1,
+    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1,
+    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_REVOKE_V1,
+    arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST_V1,
+    arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK_V1,
+    arkret_wire::ServiceOperationId::SELF_SIGNAL_COMMAND_SEND_V1,
 ];
 
 /// Content actions which are valid members of the closed
@@ -715,10 +715,10 @@ fn validate_authoritative_agent_session_evidence(
     if provision_actions.iter().any(|action| {
         matches!(
             action.as_str(),
-            arkret_wire::ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT
-                | arkret_wire::ServiceOperationId::SELF_EVENTS_READ_FRONTIER
-                | arkret_wire::CapabilityActionId::SELF_EVENTS_READ_SCAN
-                | arkret_wire::CapabilityActionId::SELF_EVENTS_STREAM_SUBSCRIBE
+            arkret_wire::ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT_V1
+                | arkret_wire::ServiceOperationId::SELF_EVENTS_READ_FRONTIER_V1
+                | arkret_wire::CapabilityActionId::SELF_EVENTS_READ_SCAN_V1
+                | arkret_wire::CapabilityActionId::SELF_EVENTS_STREAM_SUBSCRIBE_V1
                 | arkret_wire::CapabilityActionId::MESSAGE_CREATE
                 | arkret_wire::CapabilityActionId::REACTION_ADD
         )
@@ -729,11 +729,11 @@ fn validate_authoritative_agent_session_evidence(
     if provision_actions.iter().any(|action| {
         matches!(
             action.as_str(),
-            arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE
-                | arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME
-                | arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_REVOKE
-                | arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST
-                | arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK
+            arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE_V1
+                | arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1
+                | arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_REVOKE_V1
+                | arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST_V1
+                | arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK_V1
         )
     }) {
         capabilities.push(arkret_schema::agent_runtime_scope::AgentRuntimeCapability::E2ee);
@@ -1060,8 +1060,8 @@ fn service_surface_scope_token(token: &str) -> bool {
 }
 
 fn applet_service_scope_token(token: &str) -> bool {
-    token == arkret_wire::ServiceOperationId::EDGE_APPLET_READ_DESCRIBE
-        || token == arkret_wire::ServiceOperationId::EDGE_APPLET_COMMAND_TRANSACTION
+    token == arkret_wire::ServiceOperationId::EDGE_APPLET_READ_DESCRIBE_V1
+        || token == arkret_wire::ServiceOperationId::EDGE_APPLET_COMMAND_TRANSACTION_V1
 }
 
 fn content_capability_scope_token(token: &str) -> Result<bool, AgentAuthRejection> {
@@ -1869,17 +1869,17 @@ mod tests {
         let scope = intersect_requested_scope_with_agent_key_scope(
             &canonical_agent_key_scope(),
             &[
-                " ak.self.events.command.submit ".to_owned(),
+                " ak.self.events.command.submit.v1 ".to_owned(),
                 "ak.message.create".to_owned(),
-                "ak.self.events.command.submit".to_owned(),
-                "ak.self.events.read.frontier".to_owned(),
-                "ak.self.authorization_leases.command.issue".to_owned(),
-                "ak.self.signal.command.send".to_owned(),
+                "ak.self.events.command.submit.v1".to_owned(),
+                "ak.self.events.read.frontier.v1".to_owned(),
+                "ak.self.authorization_leases.command.issue.v1".to_owned(),
+                "ak.self.signal.command.send.v1".to_owned(),
                 "ak.reaction.add".to_owned(),
-                "ak.self.keys.keypackages.upload.create".to_owned(),
-                "ak.self.keys.keypackages.command.consume".to_owned(),
-                "ak.self.device_messages.read.list".to_owned(),
-                "ak.self.device_messages.command.ack".to_owned(),
+                "ak.self.keys.keypackages.upload.create.v1".to_owned(),
+                "ak.self.keys.keypackages.command.consume.v1".to_owned(),
+                "ak.self.device_messages.read.list.v1".to_owned(),
+                "ak.self.device_messages.command.ack.v1".to_owned(),
             ],
         )
         .expect("canonical runtime scope should be accepted");
@@ -1889,14 +1889,14 @@ mod tests {
             vec![
                 "ak.message.create".to_owned(),
                 "ak.reaction.add".to_owned(),
-                "ak.self.authorization_leases.command.issue".to_owned(),
-                "ak.self.device_messages.command.ack".to_owned(),
-                "ak.self.device_messages.read.list".to_owned(),
-                "ak.self.events.command.submit".to_owned(),
-                "ak.self.events.read.frontier".to_owned(),
-                "ak.self.keys.keypackages.command.consume".to_owned(),
-                "ak.self.keys.keypackages.upload.create".to_owned(),
-                "ak.self.signal.command.send".to_owned(),
+                "ak.self.authorization_leases.command.issue.v1".to_owned(),
+                "ak.self.device_messages.command.ack.v1".to_owned(),
+                "ak.self.device_messages.read.list.v1".to_owned(),
+                "ak.self.events.command.submit.v1".to_owned(),
+                "ak.self.events.read.frontier.v1".to_owned(),
+                "ak.self.keys.keypackages.command.consume.v1".to_owned(),
+                "ak.self.keys.keypackages.upload.create.v1".to_owned(),
+                "ak.self.signal.command.send.v1".to_owned(),
             ]
         );
     }
@@ -1904,10 +1904,10 @@ mod tests {
     #[test]
     fn secure_messaging_service_scope_needs_no_realm_content_grant() {
         let requested_scope = [
-            "ak.self.device_messages.command.ack",
-            "ak.self.device_messages.read.list",
-            "ak.self.keys.keypackages.command.consume",
-            "ak.self.keys.keypackages.upload.create",
+            "ak.self.device_messages.command.ack.v1",
+            "ak.self.device_messages.read.list.v1",
+            "ak.self.keys.keypackages.command.consume.v1",
+            "ak.self.keys.keypackages.upload.create.v1",
         ]
         .map(str::to_owned);
 
@@ -1930,7 +1930,7 @@ mod tests {
     fn spec_agent_key_scope_object_limits_requested_actions() {
         let agent_key_scope = serde_json::json!({
             "actions": [
-                "ak.self.events.stream.subscribe",
+                "ak.self.events.stream.subscribe.v1",
                 "ak.event.read"
             ],
             "resources": []
@@ -1940,7 +1940,7 @@ mod tests {
         let scope = intersect_requested_scope_with_agent_key_scope(
             &agent_key_scope,
             &[
-                "ak.self.events.stream.subscribe".to_owned(),
+                "ak.self.events.stream.subscribe.v1".to_owned(),
                 "ak.event.read".to_owned(),
             ],
         )
@@ -1949,13 +1949,13 @@ mod tests {
             scope,
             vec![
                 "ak.event.read".to_owned(),
-                "ak.self.events.stream.subscribe".to_owned(),
+                "ak.self.events.stream.subscribe.v1".to_owned(),
             ]
         );
 
         let err = intersect_requested_scope_with_agent_key_scope(
             &agent_key_scope,
-            &["ak.self.events.command.submit".to_owned()],
+            &["ak.self.events.command.submit.v1".to_owned()],
         )
         .expect_err("actions outside the signed agent_key_scope must reject");
         assert_eq!(err, AgentAuthRejection::ProofInvalid);
@@ -1965,7 +1965,7 @@ mod tests {
     fn canonical_agent_key_scope_rejects_unlisted_admin_surface() {
         let err = intersect_requested_scope_with_agent_key_scope(
             &canonical_agent_key_scope(),
-            &["ak.self.agent.command.deactivate".to_owned()],
+            &["ak.self.agent.command.deactivate.v1".to_owned()],
         )
         .expect_err("key scope must not mint an unlisted control-plane action");
 
@@ -1976,7 +1976,7 @@ mod tests {
     fn canonical_agent_key_scope_rejects_unlisted_account_surface() {
         let err = intersect_requested_scope_with_agent_key_scope(
             &canonical_agent_key_scope(),
-            &["ak.self.account.read.describe".to_owned()],
+            &["ak.self.account.read.describe.v1".to_owned()],
         )
         .expect_err("key scope must not mint an unlisted account-surface action");
 
@@ -1996,7 +1996,7 @@ mod tests {
 
     #[test]
     fn unregistered_events_subscribe_scope_rejects_fail_closed() {
-        // The registered stream action is `ak.self.events.stream.subscribe`
+        // The registered stream action is `ak.self.events.stream.subscribe.v1`
         // (capabilities.md §5.5). `ak.self.events.subscribe` is not in the
         // closed set, and §5.0 requires verbatim `actions[]` matching with no
         // subsumption, so the canonical key scope must fail closed on it.
@@ -2014,7 +2014,7 @@ mod tests {
     fn schema_external_agent_key_scope_rejects_fail_closed() {
         let err = intersect_requested_scope_with_agent_key_scope(
             "delegated-root",
-            &["ak.self.events.read.scan".to_owned()],
+            &["ak.self.events.read.scan.v1".to_owned()],
         )
         .expect_err("schema-external key scope must fail closed");
 
@@ -2087,7 +2087,7 @@ mod tests {
         let effective_scope = intersect_agent_session_scope(
             &canonical_agent_key_scope(),
             &[
-                "ak.self.events.stream.subscribe".to_owned(),
+                "ak.self.events.stream.subscribe.v1".to_owned(),
                 "ak.event.read".to_owned(),
             ],
             &scope_request,
@@ -2102,7 +2102,7 @@ mod tests {
             effective_scope.granted_scope,
             vec![
                 "ak.event.read".to_owned(),
-                "ak.self.events.stream.subscribe".to_owned()
+                "ak.self.events.stream.subscribe.v1".to_owned()
             ]
         );
     }
@@ -2124,7 +2124,7 @@ mod tests {
         let effective_scope = intersect_agent_session_scope(
             &canonical_agent_key_scope(),
             &[
-                "ak.self.events.stream.subscribe".to_owned(),
+                "ak.self.events.stream.subscribe.v1".to_owned(),
                 "ak.event.read".to_owned(),
             ],
             &scope_request,
@@ -2137,7 +2137,7 @@ mod tests {
 
         assert_eq!(
             effective_scope.granted_scope,
-            vec!["ak.self.events.stream.subscribe"]
+            vec!["ak.self.events.stream.subscribe.v1"]
         );
     }
 
@@ -2158,7 +2158,7 @@ mod tests {
         let effective_scope = intersect_agent_session_scope(
             &canonical_agent_key_scope(),
             &[
-                "ak.self.events.command.submit".to_owned(),
+                "ak.self.events.command.submit.v1".to_owned(),
                 "ak.message.create".to_owned(),
             ],
             &scope_request,
@@ -2171,7 +2171,7 @@ mod tests {
 
         assert_eq!(
             effective_scope.granted_scope,
-            vec!["ak.self.events.command.submit"]
+            vec!["ak.self.events.command.submit.v1"]
         );
     }
 
@@ -2180,7 +2180,7 @@ mod tests {
         let effective_scope = intersect_agent_session_scope(
             &canonical_agent_key_scope(),
             &[
-                "ak.self.events.stream.subscribe".to_owned(),
+                "ak.self.events.stream.subscribe.v1".to_owned(),
                 "ak.event.read".to_owned(),
             ],
             &AgentScopeRequestInput::default(),
@@ -2193,7 +2193,7 @@ mod tests {
 
         assert_eq!(
             effective_scope.granted_scope,
-            vec!["ak.self.events.stream.subscribe"]
+            vec!["ak.self.events.stream.subscribe.v1"]
         );
         assert!(effective_scope.realm_ids.is_empty());
         assert!(effective_scope.policy_refs.is_empty());

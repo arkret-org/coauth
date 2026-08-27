@@ -51,7 +51,7 @@ pub mod health;
 pub mod oauth;
 /// Password hashing, verification, and complexity checking.
 pub mod passwords;
-/// Arkret v1 `ak.self.policy.read.check` handler. Canonical wire shape:
+/// Arkret v1 `ak.self.policy.read.check.v1` handler. Canonical wire shape:
 /// `PolicyCheckRequestBody` → `PolicyCheckOutcome` with full `bound_to`
 /// binding + frontier hashes + DID-URL signature kid.
 pub mod policy_check;

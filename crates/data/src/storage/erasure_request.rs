@@ -1,5 +1,5 @@
 //! Durable self-service account erasure intents
-//! (`ak.gate.account.command.request_erasure`, account-lifecycle.md §8.1).
+//! (`ak.gate.account.command.request_erasure.v1`, account-lifecycle.md §8.1).
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};

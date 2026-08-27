@@ -2,8 +2,8 @@
 
 coauth currently exposes only the internal accountability-grant issuance
 surface for agent principals. It does not expose
-`ak.gate.account.command.pair_agent_key` or the agent branch of
-`ak.gate.account.command.issue_session_grant`.
+`ak.gate.account.command.pair_agent_key.v1` or the agent branch of
+`ak.gate.account.command.issue_session_grant.v1`.
 
 Until those routes are wired, clients and sodmin must not present them as
 available coauth operations. The rejection helpers and error-code matrix remain
@@ -36,17 +36,17 @@ controller DIDs or agent principals are also rejected.
 
 ## Deferred Surface
 
-### `ak.gate.account.command.pair_agent_key`
+### `ak.gate.account.command.pair_agent_key.v1`
 
 This operation is not routed in coauth. No pairing token is created, no key pair
-is bound to an agent DID, and no `ak.gate.account.command.pair_agent_key` event is emitted by
+is bound to an agent DID, and no `ak.gate.account.command.pair_agent_key.v1` event is emitted by
 the current coauth service.
 
 Reserved failure codes such as `pairing_request_expired`, `proof_invalid`, and
 `verification_method_principal_mismatch` describe the future wire contract only.
 They are not evidence that a production pairing route exists.
 
-### `ak.gate.account.command.issue_session_grant` agent branch
+### `ak.gate.account.command.issue_session_grant.v1` agent branch
 
 The agent-principal branch of session-grant issuance is not routed in coauth.
 Existing session-grant endpoints do not accept agent-principal issuance

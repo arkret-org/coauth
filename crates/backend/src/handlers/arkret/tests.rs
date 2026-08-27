@@ -27,6 +27,21 @@ use crate::handlers::test_utils::{
 };
 use crate::salvo_utils::SessionInfoExt;
 
+fn advertised_operation_ids(body: &serde_json::Value) -> std::collections::BTreeSet<String> {
+    body["supported_operation_bundles"]
+        .as_array()
+        .expect("supported_operation_bundles array")
+        .iter()
+        .flat_map(|bundle_id| {
+            arkret_wire::operation_bundle_descriptor(bundle_id.as_str().expect("bundle id"))
+                .expect("registered advertised bundle")
+                .members
+                .iter()
+                .map(|member| member.operation_id.as_str().to_owned())
+        })
+        .collect()
+}
+
 #[salvo::handler]
 async fn human_approval_error_fixture() -> Result<(), ArkretRouteError> {
     Err(ArkretRouteError::HumanApprovalRequired(
@@ -77,7 +92,7 @@ async fn arkret_errors_receive_a_server_generated_request_id() {
     let body: serde_json::Value =
         serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
     assert!(response_request_id.starts_with("ak:request:"));
-    assert_eq!(body["request_id"], response_request_id);
+    assert_eq!(body["instance"], response_request_id);
 }
 
 #[tokio::test]
@@ -99,8 +114,8 @@ async fn rate_limited_endpoint_renders_canonical_retry_hints() {
     );
     let body: serde_json::Value =
         serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
-    assert_eq!(body["error"]["code"], "rate_limited");
-    assert_eq!(body["error"]["retry_after_ms"], 59_728);
+    assert_eq!(body["type"], "https://arkret.org/problems/rate_limited");
+    assert_eq!(body["retry_after_ms"], 59_728);
 }
 
 #[tokio::test]
@@ -121,16 +136,10 @@ async fn human_approval_endpoint_renders_closed_claim_required_details() {
     );
     let body: serde_json::Value =
         serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
-    assert_eq!(body["ok"], false);
-    assert_eq!(body["error"]["code"], "claim_required");
-    assert_eq!(body["error"]["message"], "controller approval required");
-    assert_eq!(
-        body["error"]["details"],
-        serde_json::json!({
-            "reason_code": "human_approval_required",
-            "approval_request_id": "approval-opaque-01",
-        })
-    );
+    assert_eq!(body["type"], "https://arkret.org/problems/claim_required");
+    assert_eq!(body["detail"], "controller approval required");
+    assert_eq!(body["reason_code"], "human_approval_required");
+    assert_eq!(body["approval_request_id"], "approval-opaque-01");
     let serialized = body.to_string();
     for forbidden in ["captcha", "otp", "password", "redirect"] {
         assert!(!serialized.contains(forbidden));
@@ -387,10 +396,10 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     // `service-describe.schema.json`; schema profiles are expressed through
     // registered extensions or concrete operation contracts instead.
     assert!(body.get("supported_schema_profiles").is_none());
-    let supported_operations = body["supported_operations"].as_array().unwrap();
+    let advertised_operations = advertised_operation_ids(&body);
     assert!(
-        supported_operations.contains(&serde_json::json!("ak.self.policy.read.check")),
-        "implemented POST /api/v1/policy/check MUST be advertised as ak.self.policy.read.check"
+        advertised_operations.contains("ak.self.policy.read.check.v1"),
+        "implemented POST /api/v1/policy/check MUST be advertised as ak.self.policy.read.check.v1"
     );
     let not_authoritative_for = body["x_coauth_service_boundary"]["not_authoritative_for"]
         .as_array()
@@ -420,13 +429,14 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         .filter_map(|entry| Some((entry["name"].as_str()?, entry["notes"].as_str()?)))
         .collect();
     assert!(interop.iter().any(|(name, notes)| {
-        *name == "ak.root.identity.read.resolve" && notes.contains("delegated-resolver")
+        *name == "ak.root.identity.read.resolve.v1" && notes.contains("delegated-resolver")
     }));
     assert!(interop.iter().any(|(name, notes)| {
-        *name == "ak.root.identity.document.resource.get" && notes.contains("delegated-resolver")
+        *name == "ak.root.identity.document.resource.get.v1" && notes.contains("delegated-resolver")
     }));
     assert!(interop.iter().any(|(name, notes)| {
-        *name == "ak.root.identity.registry.read.describe" && notes.contains("delegated-resolver")
+        *name == "ak.root.identity.registry.read.describe.v1"
+            && notes.contains("delegated-resolver")
     }));
     // verified_profiles MUST NOT include ak.profile.identity_registry.v1
     // because coauth is a delegated resolver, not a registry.
@@ -496,43 +506,44 @@ fn service_describe_advertises_auth_session_logout_boundary() {
     let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
     let body =
         serde_json::to_value(service_describe_response(&url_builder, &config, &[], false)).unwrap();
-    let supported_operations = body["supported_operations"].as_array().unwrap();
+    let advertised_operations = advertised_operation_ids(&body);
 
     assert!(
-        supported_operations.contains(&serde_json::json!(
-            "ak.gate.account.command.logout_auth_session"
-        )),
+        advertised_operations.contains("ak.gate.account.command.logout_auth_session.v1"),
         "coauth exposes only the Auth-side hard logout sub-operation"
     );
     assert!(
-        !supported_operations.contains(&serde_json::json!(
-            "ak.gate.account.command.logout_session_grant"
-        )),
-        "the removed grant-only logout operation MUST NOT be advertised"
-    );
-    assert!(
-        !supported_operations.contains(&serde_json::json!("ak.gate.account.command.logout")),
+        !advertised_operations.contains("ak.gate.account.command.logout.v1"),
         "the client-visible account logout operation belongs to the Account Authority"
     );
 }
 
 #[test]
-fn service_describe_advertises_complete_account_first_onboarding_surface() {
+fn service_describe_advertises_only_bundled_account_first_surface() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
     let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
     let body =
         serde_json::to_value(service_describe_response(&url_builder, &config, &[], false)).unwrap();
-    let supported_operations = body["supported_operations"].as_array().unwrap();
+    let advertised_operations = advertised_operation_ids(&body);
 
     for operation in [
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_EXCHANGE_CREATE_HANDOFF,
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE,
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER,
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER_V1,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT_V1,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_EXCHANGE_CREATE_HANDOFF_V1,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE_V1,
     ] {
         assert!(
-            supported_operations.contains(&serde_json::json!(operation)),
-            "account-first endpoint operation {operation} must be advertised"
+            advertised_operations.contains(operation),
+            "bundled account-first endpoint operation {operation} must be advertised"
+        );
+    }
+    for operation in [
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_READ_ONBOARDING_V1,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_DID_BINDING_CHALLENGE_V1,
+    ] {
+        assert!(
+            !advertised_operations.contains(operation),
+            "unbundled account-first endpoint operation {operation} must fail closed"
         );
     }
 }
@@ -596,7 +607,7 @@ fn principal_server_static_session_grant_bearer_ignores_unset_field() {
 #[test]
 fn describe_separates_claim_levels() {
     // T6.1 — describe response MUST partition into
-    // supported_operations (wire-callable) and the new claim-level arrays.
+    // registered operation bundles and profile claim-level arrays.
     // Exercise the development posture explicitly so the response cannot
     // accidentally advertise verifier output while development mode is on.
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
@@ -629,26 +640,18 @@ fn describe_separates_claim_levels() {
         );
     }
 
-    // implemented_features must be a non-empty subset of "code
-    // exists" features.
-    let implemented = body["implemented_features"]
+    let bundles = body["supported_operation_bundles"]
         .as_array()
-        .expect("implemented_features array present");
-    assert!(!implemented.is_empty());
-
-    // experimental_features and verified_profiles MUST NOT
-    // intersect.
-    let experimental: std::collections::HashSet<&str> = body["experimental_features"]
-        .as_array()
-        .expect("experimental_features array present")
-        .iter()
-        .filter_map(|v| v.as_str())
-        .collect();
-    let verified_ids: std::collections::HashSet<&str> = verified
-        .iter()
-        .filter_map(|v| v["profile_id"].as_str())
-        .collect();
-    assert!(experimental.is_disjoint(&verified_ids));
+        .expect("supported_operation_bundles array present");
+    assert_eq!(
+        bundles,
+        &[
+            serde_json::json!("ak.operation_bundle.auth_server.describe.v1"),
+            serde_json::json!("ak.operation_bundle.auth_server.http_core.v1"),
+        ]
+    );
+    assert!(body["supported_features"].as_array().unwrap().is_empty());
+    assert_eq!(body["transport_bindings"][0]["kind"], "http_json");
 
     // interop_surfaces entries must declare a kind from the closed
     // `service-describe.schema.json#/properties/interop_surfaces/items/properties/kind`
@@ -681,10 +684,8 @@ fn describe_separates_claim_levels() {
     // development_mode field must be present so downstream tools
     // (sodmin / cotest) can render the dev banner.
     assert_eq!(body["development_mode"], true);
-    let supported_operations = body["supported_operations"]
-        .as_array()
-        .expect("supported_operations array present");
-    assert!(supported_operations.contains(&serde_json::json!("ak.self.policy.read.check")));
+    let advertised_operations = advertised_operation_ids(&body);
+    assert!(advertised_operations.contains("ak.self.policy.read.check.v1"));
 }
 
 #[test]

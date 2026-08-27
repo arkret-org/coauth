@@ -17,7 +17,9 @@ use crate::listener::unix_or_tcp::UnixOrTcpListener;
 mod middleware;
 pub(crate) mod routers;
 
-pub(crate) use middleware::{ARKRET_REQUEST_ID_HEADER, arkret_request_id_middleware};
+pub(crate) use middleware::{
+    ARKRET_REQUEST_ID_HEADER, arkret_operation_selector_middleware, arkret_request_id_middleware,
+};
 use middleware::{InjectAppState, RequestTimeout, favicon_handler, public_oidc_browser_cors};
 pub use middleware::{
     cache_control_middleware, log_response_middleware, override_response_csp,
@@ -463,41 +465,40 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn arkret_unknown_path_and_method_use_protocol_errors() {
+    async fn arkret_unknown_path_and_method_fail_at_operation_selector() {
         let service = salvo::Service::new(build_account_api_router(Router::new()));
 
         let mut unknown = TestClient::get("http://127.0.0.1:8698/_arkret/missing")
+            .add_header(
+                "Arkret-Operation",
+                arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE_V1,
+                true,
+            )
             .send(&service)
             .await;
-        assert_eq!(unknown.status_code, Some(StatusCode::NOT_FOUND));
+        assert_eq!(unknown.status_code, Some(StatusCode::UNPROCESSABLE_ENTITY));
         let unknown_body = unknown.take_json::<serde_json::Value>().await.unwrap();
         assert_eq!(
-            unknown_body
-                .pointer("/error/code")
-                .and_then(|value| value.as_str()),
-            Some("unrecognized_endpoint")
+            unknown_body["type"],
+            "https://arkret.org/problems/unsupported_operation_version"
         );
 
         let mut wrong_method = TestClient::get("http://127.0.0.1:8698/_arkret/self/policy/check")
+            .add_header(
+                "Arkret-Operation",
+                arkret_wire::ServiceOperationId::SELF_POLICY_READ_CHECK_V1,
+                true,
+            )
             .send(&service)
             .await;
         assert_eq!(
             wrong_method.status_code,
-            Some(StatusCode::METHOD_NOT_ALLOWED)
-        );
-        assert_eq!(
-            wrong_method
-                .headers()
-                .get(http::header::ALLOW)
-                .and_then(|value| value.to_str().ok()),
-            Some("POST")
+            Some(StatusCode::UNPROCESSABLE_ENTITY)
         );
         let wrong_method_body = wrong_method.take_json::<serde_json::Value>().await.unwrap();
         assert_eq!(
-            wrong_method_body
-                .pointer("/error/code")
-                .and_then(|value| value.as_str()),
-            Some("method_not_allowed")
+            wrong_method_body["type"],
+            "https://arkret.org/problems/unsupported_operation_version"
         );
     }
 

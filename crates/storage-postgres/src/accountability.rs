@@ -79,7 +79,7 @@ mod tests {
             accountability_grant_id: grant_id(rng, clock),
             agent_id: agent.to_owned(),
             controller_id: controller.to_owned(),
-            capabilities: vec!["ak.self.agent.command.provision".to_owned()],
+            capabilities: vec!["ak.self.agent.command.provision.v1".to_owned()],
             capabilities_digest: digest(label),
             reason: Some("test grant".to_owned()),
             issued_at: now,

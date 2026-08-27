@@ -1398,7 +1398,7 @@
           "type": "boolean"
         },
         "erasure_request_max_auth_age": {
-          "description": "Fresh high-risk-action authentication ceiling, in seconds, for the\nself-service erasure entry point\n`ak.gate.account.command.request_erasure`\n(`POST /_arkret/gate/account/erasure-requests`).\n\naccount-lifecycle.md §8.1 makes the Account Authority judge\nauthentication freshness locally from its own facts (recent login,\nWebAuthn, recovery key). This value is that deployment policy: the\ncaller's most recent local authentication must be at most this many\nseconds old. When omitted the deployment has no fresh high-risk\nauthentication policy, so every erasure request fails closed with\n`reauthentication_required` and zero writes.",
+          "description": "Fresh high-risk-action authentication ceiling, in seconds, for the\nself-service erasure entry point\n`ak.gate.account.command.request_erasure.v1`\n(`POST /_arkret/gate/account/erasure-requests`).\n\naccount-lifecycle.md §8.1 makes the Account Authority judge\nauthentication freshness locally from its own facts (recent login,\nWebAuthn, recovery key). This value is that deployment policy: the\ncaller's most recent local authentication must be at most this many\nseconds old. When omitted the deployment has no fresh high-risk\nauthentication policy, so every erasure request fails closed with\n`reauthentication_required` and zero writes.",
           "type": [
             "integer",
             "null"

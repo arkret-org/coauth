@@ -789,7 +789,7 @@ mod tests {
             "ak:did_core:web:agent.example",
             &DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000006").unwrap(),
             "ak:did_core:web:soland.example".to_owned(),
-            vec!["ak.self.events.stream.subscribe".to_owned()],
+            vec!["ak.self.events.stream.subscribe.v1".to_owned()],
             "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_owned(),
             session_public_key,
             serde_json::Map::from_iter([
@@ -824,7 +824,7 @@ mod tests {
             service_id: None,
             capability_grant_refs: Vec::new(),
             audience: material.audience,
-            scope: Scope::from_iter(["ak.self.events.stream.subscribe".parse().unwrap()]),
+            scope: Scope::from_iter(["ak.self.events.stream.subscribe.v1".parse().unwrap()]),
             grant_jwt: material.grant_jwt,
             session_id: material.session_id,
             issuance_nonce: material.issuance_nonce,

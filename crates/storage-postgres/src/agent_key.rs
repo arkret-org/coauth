@@ -83,7 +83,7 @@ mod tests {
             verification_method: format!("{agent_id}#runtime-key-1"),
             public_key: serde_json::json!({ "kty": "OKP", "key": "fixture" }),
             accountable_principal_id: format!("did:web:{label}-controller.example"),
-            agent_key_scope: r#"{"actions":["ak.self.events.stream.subscribe"],"resources":[]}"#
+            agent_key_scope: r#"{"actions":["ak.self.events.stream.subscribe.v1"],"resources":[]}"#
                 .to_owned(),
             audience: vec!["did:web:soland.test".to_owned()],
             issued_at: clock.now(),

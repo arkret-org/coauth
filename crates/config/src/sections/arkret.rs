@@ -316,7 +316,7 @@ pub struct ArkretConfig {
 
     /// Fresh high-risk-action authentication ceiling, in seconds, for the
     /// self-service erasure entry point
-    /// `ak.gate.account.command.request_erasure`
+    /// `ak.gate.account.command.request_erasure.v1`
     /// (`POST /_arkret/gate/account/erasure-requests`).
     ///
     /// account-lifecycle.md §8.1 makes the Account Authority judge

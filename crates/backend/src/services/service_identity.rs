@@ -636,6 +636,7 @@ async fn verify_provider_registration_receipt(
         "service_identity_provider_describe",
         describe_url,
         outbound_http::DESCRIBE_MAX_BYTES,
+        Some(arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE_V1),
     )
     .await?;
     let description: ServiceDescribe = serde_json::from_slice(&describe_bytes)
@@ -653,6 +654,7 @@ async fn verify_provider_registration_receipt(
         "service_identity_provider_webvh_log",
         log_url,
         outbound_http::WEBVH_LOG_MAX_BYTES,
+        None,
     )
     .await?;
     accept_provider_receipt_evidence(
@@ -707,15 +709,15 @@ async fn fetch_provider_evidence(
     operation: &'static str,
     url: Url,
     max_bytes: usize,
+    arkret_operation: Option<&str>,
 ) -> Result<Vec<u8>, ProviderProofError> {
-    outbound_http::fetch_bounded(
-        http,
-        outbound_http::soland_policy(operation),
-        url,
-        max_bytes,
-    )
-    .await
-    .map_err(|error| match error {
+    let policy = outbound_http::soland_policy(operation);
+    let result = if let Some(operation_id) = arkret_operation {
+        outbound_http::fetch_bounded_arkret(http, policy, url, max_bytes, operation_id).await
+    } else {
+        outbound_http::fetch_bounded(http, policy, url, max_bytes).await
+    };
+    result.map_err(|error| match error {
         outbound_http::BoundedFetchError::Unreachable(message)
         | outbound_http::BoundedFetchError::EgressDenied(message) => {
             ProviderProofError::Unreachable(message)

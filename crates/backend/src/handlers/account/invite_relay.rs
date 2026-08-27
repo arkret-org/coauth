@@ -466,7 +466,6 @@ mod tests {
 
     fn active_cell(scope: &str) -> serde_json::Value {
         serde_json::json!({
-            "ok": true,
             "cell_id": arkret_wire::subject_cell(
                 arkret_wire::CellFamilyId::CONSENT_GRANT_V1,
                 &format!("c-{scope}"),

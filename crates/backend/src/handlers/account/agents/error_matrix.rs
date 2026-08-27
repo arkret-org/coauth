@@ -1,8 +1,8 @@
 //! R3 spec-sync agent auth error matrix and fail-closed enforcement helpers.
 //!
 //! The wire-level rejection codes and the fail-closed enforcement guards for
-//! the `ak.gate.account.command.pair_agent_key` operation and the agent branch
-//! of `ak.gate.account.command.issue_session_grant`.
+//! the `ak.gate.account.command.pair_agent_key.v1` operation and the agent branch
+//! of `ak.gate.account.command.issue_session_grant.v1`.
 use chrono::{DateTime, Utc};
 
 use crate::AppError;
@@ -10,11 +10,11 @@ use crate::AppError;
 // ─────────────────────────────────────────────────────────────────────────
 // R3 spec-sync (2026-05-27, arkret-spec b47ff6ec) — agent auth error matrix.
 //
-// AUTH-1: `ak.gate.account.command.pair_agent_key` error matrix. Before invoking the
+// AUTH-1: `ak.gate.account.command.pair_agent_key.v1` error matrix. Before invoking the
 // proof         validator, fail-closed DID match →
 // `verification_method_principal_mismatch`.         Distinct codes for
 // `pairing_request_expired`, `proof_invalid`,         `agent_deactivated`.
-// AUTH-2: `ak.gate.account.command.issue_session_grant` agent branch errors. Emit
+// AUTH-2: `ak.gate.account.command.issue_session_grant.v1` agent branch errors. Emit
 //         `agent_paused`, `agent_deactivated`, `proof_invalid`,
 //         `verification_method_principal_mismatch`,
 // `accountability_grant_missing`. AUTH-3: Revocation freshness window for
@@ -35,8 +35,8 @@ use crate::AppError;
 // changing this strategy explicitly.
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Wire-level rejection reasons for the `ak.gate.account.command.pair_agent_key`
-/// operation and the agent branch of `ak.gate.account.command.issue_session_grant`.
+/// Wire-level rejection reasons for the `ak.gate.account.command.pair_agent_key.v1`
+/// operation and the agent branch of `ak.gate.account.command.issue_session_grant.v1`.
 /// Each variant renders to a canonical error code from
 /// `arkret-spec/v1/artifacts/error-code-registry.json` v2026-05-27.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,10 +73,10 @@ pub enum AgentAuthRejection {
     AgentPaused,
     /// `accountability_grant_missing` — the controller's accountability
     /// relation for this Agent is absent, revoked, or expired.
-    /// Used on `ak.gate.account.command.issue_session_grant` (agent branch) and
-    /// `ak.self.agent.command.provision` / `ak.self.agent.command.resume` per
+    /// Used on `ak.gate.account.command.issue_session_grant.v1` (agent branch) and
+    /// `ak.self.agent.command.provision.v1` / `ak.self.agent.command.resume.v1` per
     /// `operations↔error mapping` §0.8. It is deliberately not a
-    /// `ak.gate.account.command.pair_agent_key` rejection: provisioning already
+    /// `ak.gate.account.command.pair_agent_key.v1` rejection: provisioning already
     /// established the durable accountability event before issuing a pairing
     /// handle.
     AccountabilityGrantMissing,

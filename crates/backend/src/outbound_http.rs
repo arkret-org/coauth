@@ -146,16 +146,42 @@ pub(crate) async fn fetch_bounded(
     url: url::Url,
     max_bytes: usize,
 ) -> Result<Vec<u8>, BoundedFetchError> {
+    fetch_bounded_inner(http_client, policy, url, max_bytes, None).await
+}
+
+pub(crate) async fn fetch_bounded_arkret(
+    http_client: &reqwest::Client,
+    policy: OutboundRequestPolicy,
+    url: url::Url,
+    max_bytes: usize,
+    operation_id: &str,
+) -> Result<Vec<u8>, BoundedFetchError> {
+    fetch_bounded_inner(http_client, policy, url, max_bytes, Some(operation_id)).await
+}
+
+async fn fetch_bounded_inner(
+    http_client: &reqwest::Client,
+    policy: OutboundRequestPolicy,
+    url: url::Url,
+    max_bytes: usize,
+    operation_id: Option<&str>,
+) -> Result<Vec<u8>, BoundedFetchError> {
     let operation = policy.operation();
-    let response = send_with_policy(policy, || http_client.get(url.clone()))
-        .await
-        .map_err(|error| {
-            if error.is_connect() || error.is_timeout() {
-                BoundedFetchError::Unreachable(error.to_string())
-            } else {
-                BoundedFetchError::EgressDenied(error.to_string())
-            }
-        })?;
+    let response = send_with_policy(policy, || {
+        let mut request = http_client.get(url.clone());
+        if let Some(operation_id) = operation_id {
+            request = request.header("Arkret-Operation", operation_id);
+        }
+        request
+    })
+    .await
+    .map_err(|error| {
+        if error.is_connect() || error.is_timeout() {
+            BoundedFetchError::Unreachable(error.to_string())
+        } else {
+            BoundedFetchError::EgressDenied(error.to_string())
+        }
+    })?;
     let status = response.status();
     if !status.is_success() {
         return Err(BoundedFetchError::Unreachable(format!(

@@ -1,5 +1,5 @@
 //! `POST /_arkret/gate/account/erasure-requests` —
-//! `ak.gate.account.command.request_erasure` (account-lifecycle.md §8.1).
+//! `ak.gate.account.command.request_erasure.v1` (account-lifecycle.md §8.1).
 //!
 //! The only client entry point for self-initiated account erasure. The
 //! Account Authority (coauth) accepts it directly on the gate surface and

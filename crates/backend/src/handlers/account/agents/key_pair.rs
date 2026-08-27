@@ -1,4 +1,4 @@
-//! AKP-0008 §4.5 runtime key pairing (`ak.gate.account.command.pair_agent_key`).
+//! AKP-0008 §4.5 runtime key pairing (`ak.gate.account.command.pair_agent_key.v1`).
 //!
 //! `POST /_arkret/gate/account/agent-key-pair`. The agent runtime generated a
 //! key pair locally and submits the public key plus a proof-of-possession. The
@@ -37,7 +37,7 @@ use crate::services::did_binding_proof::normalize_did_for_binding;
 const AGENT_KEY_PAIR_COMMIT_QUEUE: &str = "principal-agent-key-pair-commit";
 
 /// `POST /_arkret/gate/account/agent-key-pair`
-/// (`ak.gate.account.command.pair_agent_key`).
+/// (`ak.gate.account.command.pair_agent_key.v1`).
 ///
 /// Validates the runtime key pairing proof-of-possession and, on success,
 /// records a pending local agent key authorization, commits the exact same
@@ -919,7 +919,7 @@ mod tests {
             "controller_authorization_ref": format!("{AGENT_FULL}#managed-controller"),
             "requested_scope": {
                 "actions": [
-                    "ak.self.events.stream.subscribe",
+                    "ak.self.events.stream.subscribe.v1",
                     "ak.event.read"
                 ],
                 "resources": []
@@ -980,7 +980,7 @@ mod tests {
                 "accountable_principal_id": CONTROLLER,
                 "agent_key_scope": {
                     "actions": [
-                        "ak.self.events.stream.subscribe",
+                        "ak.self.events.stream.subscribe.v1",
                         "ak.event.read"
                     ],
                     "resources": []
