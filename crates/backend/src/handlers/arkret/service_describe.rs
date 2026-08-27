@@ -78,24 +78,21 @@ struct ServiceBoundaryDescriptor {
 }
 
 #[derive(Debug, Serialize)]
-struct StandardErrorEnvelopeDescriptor {
+struct ProblemDetailsDescriptor {
     schema: &'static str,
     content_type: &'static str,
-    example: StandardErrorEnvelopeExample,
+    example: ProblemDetailsExample,
     codes: Vec<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
-struct StandardErrorEnvelopeExample {
-    ok: bool,
-    error: StandardErrorExampleBody,
-    request_id: &'static str,
-}
-
-#[derive(Debug, Serialize)]
-struct StandardErrorExampleBody {
-    code: &'static str,
-    message: &'static str,
+struct ProblemDetailsExample {
+    #[serde(rename = "type")]
+    problem_type: &'static str,
+    title: &'static str,
+    status: u16,
+    detail: &'static str,
+    instance: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -169,17 +166,16 @@ fn service_boundary_descriptor() -> ServiceBoundaryDescriptor {
     }
 }
 
-fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
-    StandardErrorEnvelopeDescriptor {
-        schema: arkret_wire::SchemaId::HTTP_ERROR_ENVELOPE_V1,
-        content_type: "application/json",
-        example: StandardErrorEnvelopeExample {
-            ok: false,
-            error: StandardErrorExampleBody {
-                code: "machine_readable_code",
-                message: "human-readable message",
-            },
-            request_id: "ak:request:01964137-0000-7000-8000-000000000000",
+fn problem_details_descriptor() -> ProblemDetailsDescriptor {
+    ProblemDetailsDescriptor {
+        schema: arkret_wire::SchemaId::HTTP_PROBLEM_DETAILS_V1,
+        content_type: "application/problem+json",
+        example: ProblemDetailsExample {
+            problem_type: "https://arkret.org/problems/not_found",
+            title: "Not found",
+            status: 404,
+            detail: "not found",
+            instance: "ak:request:01964137-0000-7000-8000-000000000000",
         },
         codes: vec!["json_invalid", "not_found", "internal_error"],
     }
@@ -473,9 +469,8 @@ pub(crate) fn service_describe_response(
         serde_json::to_value(service_boundary_descriptor()).unwrap_or(serde_json::Value::Null),
     );
     extensions.insert(
-        "x_coauth_standard_error_envelope".to_owned(),
-        serde_json::to_value(standard_error_envelope_descriptor())
-            .unwrap_or(serde_json::Value::Null),
+        "x_coauth_problem_details".to_owned(),
+        serde_json::to_value(problem_details_descriptor()).unwrap_or(serde_json::Value::Null),
     );
 
     let service_id = service_id_for(arkret_config);
@@ -500,9 +495,14 @@ pub(crate) fn service_describe_response(
         protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
         supported_profiles: Vec::new(),
         profile_bindings: std::collections::BTreeMap::default(),
-        supported_operations: SUPPORTED_OPERATIONS
+        operation_bindings: SUPPORTED_OPERATIONS
             .iter()
-            .map(|value| (*value).to_owned())
+            .map(|value| {
+                let operation_id = arkret_wire::ServiceOperationId::from_wire(value)
+                    .expect("coauth supported operation is registered");
+                arkret_models_discovery::OperationBinding::current_http_json(operation_id)
+                    .expect("coauth supported operation descriptor is valid")
+            })
             .collect(),
         supported_bindings: vec![
             SupportedBinding::new(arkret_wire::BindingKind::HttpJson)
@@ -551,7 +551,8 @@ pub(crate) fn service_describe_response(
         frontier: Vec::new(),
         snapshot_frontier: Vec::new(),
         last_materialized_at: None,
-        extensions,
+        extensions: arkret_wire::XExtensionMap::new(extensions)
+            .expect("coauth describe extension keys are registered x_* names"),
     }
 }
 

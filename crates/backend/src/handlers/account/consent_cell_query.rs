@@ -215,8 +215,7 @@ async fn query_consent_cell_scope(
         }
     };
 
-    if !parsed.ok
-        || parsed.holder_principal_id.as_str() != holder_did
+    if parsed.holder_principal_id.as_str() != holder_did
         || parsed.peer_principal_id.as_str() != peer_did
         || parsed.consent_scope != scope
     {

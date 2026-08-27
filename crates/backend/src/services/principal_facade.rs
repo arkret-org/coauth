@@ -190,10 +190,6 @@ fn validate_agent_key_pair_response(
     response: &arkret_models_collaboration::agent_operations::AgentKeyPairOutcome,
 ) -> Result<(), anyhow::Error> {
     anyhow::ensure!(
-        response.ok,
-        "Agent key-pair commit response is not successful"
-    );
-    anyhow::ensure!(
         response.authorize_event_ref.as_str() == request.authorized_event_id(),
         "response authorize_event_ref mismatch"
     );

@@ -515,6 +515,24 @@ fn internal_error_envelope(
     }
 }
 
+pub(crate) fn render_problem(res: &mut Response, status: StatusCode, envelope: ErrorEnvelope) {
+    let problem = arkret_wire::Problem::from_error_envelope(&envelope, status.as_u16());
+    let mut output = salvo::http::Problem::new(status)
+        .kind(problem.problem_type)
+        .title(problem.title)
+        .detail(problem.detail)
+        .with_extensions(
+            problem
+                .extensions
+                .into_iter()
+                .collect::<serde_json::Map<_, _>>(),
+        );
+    if let Some(instance) = problem.instance {
+        output = output.instance(instance);
+    }
+    res.render(output);
+}
+
 impl Scribe for ArkretRouteError {
     fn render(self, res: &mut Response) {
         let request_id = res
@@ -634,8 +652,7 @@ impl Scribe for ArkretRouteError {
             Some(request_id) => envelope.with_request_id(request_id),
             None => envelope,
         };
-        res.status_code(status);
-        res.render(Json(envelope));
+        render_problem(res, status, envelope);
     }
 }
 

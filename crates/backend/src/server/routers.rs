@@ -3,6 +3,7 @@ use coauth_templates::Templates;
 use salvo::prelude::*;
 
 use super::middleware::{OpenApiYaml, oidc_preflight_handler, public_oidc_browser_cors};
+use crate::handlers::arkret;
 use crate::listener::ConnectionInfo;
 
 pub(crate) fn build_human_router(router: Router, _templates: Templates) -> Router {
@@ -503,26 +504,28 @@ async fn arkret_not_found(req: &Request, res: &mut Response) {
             ToOwned::to_owned,
         );
     if let Some(allowed) = arkret_allowed_methods(req.uri().path()) {
-        res.status_code(StatusCode::METHOD_NOT_ALLOWED);
         if let Ok(value) = http::HeaderValue::from_str(allowed) {
             res.headers_mut().insert(http::header::ALLOW, value);
         }
-        res.render(Json(
+        arkret::render_problem(
+            res,
+            StatusCode::METHOD_NOT_ALLOWED,
             arkret_wire::ErrorEnvelope::new(
                 arkret_wire::ErrorCode::METHOD_NOT_ALLOWED,
                 "method not allowed",
             )
             .with_request_id(&request_id),
-        ));
+        );
     } else {
-        res.status_code(StatusCode::NOT_FOUND);
-        res.render(Json(
+        arkret::render_problem(
+            res,
+            StatusCode::NOT_FOUND,
             arkret_wire::ErrorEnvelope::new(
                 arkret_wire::ErrorCode::UNRECOGNIZED_ENDPOINT,
                 "unrecognized Arkret endpoint",
             )
             .with_request_id(&request_id),
-        ));
+        );
     }
 }
 

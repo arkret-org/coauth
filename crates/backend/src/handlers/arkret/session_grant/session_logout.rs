@@ -218,7 +218,6 @@ async fn terminate_auth_side_session_by_grant_jwt(
 
 fn success_outcome() -> AuthSessionLogoutOutcome {
     AuthSessionLogoutOutcome {
-        ok: true,
         grant_chain_terminated: true,
         auth_session_logged_out: true,
     }

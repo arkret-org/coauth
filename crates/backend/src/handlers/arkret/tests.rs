@@ -369,14 +369,13 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         "https://resolver.example.com/resolve"
     );
     assert_eq!(
-        body["x_coauth_standard_error_envelope"]["example"],
+        body["x_coauth_problem_details"]["example"],
         serde_json::json!({
-            "ok": false,
-            "error": {
-                "code": "machine_readable_code",
-                "message": "human-readable message"
-            },
-            "request_id": "ak:request:01964137-0000-7000-8000-000000000000"
+            "type": "https://arkret.org/problems/not_found",
+            "title": "Not found",
+            "status": 404,
+            "detail": "not found",
+            "instance": "ak:request:01964137-0000-7000-8000-000000000000"
         })
     );
 

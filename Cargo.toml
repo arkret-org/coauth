@@ -284,7 +284,7 @@ rsa = {version = "0.9.10",features = ["std", "pem"]}
 rustls = "0.23.40"
 rustls-pki-types = "1.14.1"
 rustls-platform-verifier = "0.7.0"
-salvo = {version = "=0.95.2",default-features = false,features = [
+salvo = {version = "=0.96.0",default-features = false,features = [
     "fix-http1-request-uri",
     "server",
     "server-handle",
@@ -292,6 +292,7 @@ salvo = {version = "=0.95.2",default-features = false,features = [
     "http2",
     "matched-path",
     "oapi",
+    "rfc9457",
     "cors",
     "cookie",
     "serve-static",

@@ -203,7 +203,6 @@ pub async fn post_agent_key_pair(
             };
             return Ok(Json(
                 arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
-                    ok: true,
                     activation_state,
                     authorize_event_ref,
                     signing_key_binding: stored_body.signing_key_binding,
@@ -222,7 +221,6 @@ pub async fn post_agent_key_pair(
         .await?;
         return Ok(Json(
             arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
-                ok: true,
                 activation_state: arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::AwaitingAcceptedFrontier,
                 authorize_event_ref,
                 signing_key_binding,
@@ -476,7 +474,6 @@ pub async fn post_agent_key_pair(
 
     Ok(Json(
         arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
-            ok: true,
             activation_state: arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::AwaitingAcceptedFrontier,
             authorize_event_ref: outcome_event_id,
             signing_key_binding,
