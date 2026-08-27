@@ -439,10 +439,6 @@ fn capability_action_gate_decision(
     action: &str,
     policy_version: &str,
 ) -> Option<PolicyDecision> {
-    if is_candidate_join_policy_action(action) {
-        return Some(unsupported_feature(policy_version));
-    }
-
     let descriptor = match arkret_schema::embedded_capability_action(action) {
         Ok(Some(descriptor)) => descriptor,
         Ok(None) => return Some(unsupported_feature(policy_version)),
@@ -475,10 +471,6 @@ fn unsupported_feature(policy_version: &str) -> PolicyDecision {
         ReasonCode::from_wire(arkret_wire::ErrorCode::UNSUPPORTED_FEATURE),
         policy_version.to_owned(),
     )
-}
-
-fn is_candidate_join_policy_action(action: &str) -> bool {
-    action == CapabilityActionId::REALM_JOIN_REVIEW
 }
 
 fn profile_declared_for_policy(data: &Value, scopes: &[&Value], profile: &str) -> bool {
@@ -680,7 +672,7 @@ mod tests {
     }
 
     #[test]
-    fn absent_rules_still_reject_candidate_join_policy_profile_action() {
+    fn retired_join_review_capability_fails_closed_as_unknown() {
         let r = req("ak:did_core:web:alice.example", "ak.realm.join.review");
         let d = match_rules(
             &Value::Null,
@@ -693,7 +685,7 @@ mod tests {
     }
 
     #[test]
-    fn candidate_join_policy_profile_action_cannot_be_enabled_by_loose_rules() {
+    fn loose_rules_cannot_enable_retired_join_review_capability() {
         let data = serde_json::json!({
             "require_review_actions": ["ak.realm.join.review"]
         });
@@ -704,7 +696,7 @@ mod tests {
     }
 
     #[test]
-    fn candidate_join_policy_profile_action_cannot_be_enabled_by_profile_claim() {
+    fn profile_claim_cannot_revive_retired_join_review_capability() {
         let data = serde_json::json!({
             "enabled_profile_refs": ["ak.profile.candidate.join_policy.v1"],
             "require_review_actions": ["ak.realm.join.review"]
