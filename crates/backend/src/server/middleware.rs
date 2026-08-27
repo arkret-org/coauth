@@ -84,6 +84,12 @@ pub(crate) async fn arkret_operation_selector_middleware(
                     && operation.matches_http_request(req.method().as_str(), req.uri().path())
             }) {
                 ctrl.call_next(req, depot, res).await;
+                if res.status_code.unwrap_or(StatusCode::OK).is_success() {
+                    res.headers_mut().insert(
+                        "arkret-operation",
+                        HeaderValue::from_static(selected.expect("validated selector").as_str()),
+                    );
+                }
                 return;
             }
             (
@@ -494,6 +500,7 @@ pub(super) fn public_oidc_browser_cors() -> impl Handler {
             HeaderName::from_static("dpop"),
             HeaderName::from_static("idempotency-key"),
         ])
+        .expose_headers([HeaderName::from_static("arkret-operation")])
         .into_handler()
 }
 
@@ -529,10 +536,8 @@ mod tests {
             Router::with_path("/_arkret")
                 .hoop(arkret_operation_selector_middleware)
                 .push(Router::with_path("describe").get(selector_test_ok))
-                .push(
-                    Router::with_path("gate/account/controller-gate-attestations")
-                        .post(selector_test_ok),
-                ),
+                .push(Router::with_path("gate/account/onboarding").get(selector_test_ok))
+                .push(Router::with_path("gate/account/logout").post(selector_test_ok)),
         )
     }
 
@@ -560,16 +565,14 @@ mod tests {
             .await;
         assert_eq!(mismatch.status_code, Some(StatusCode::UNPROCESSABLE_ENTITY));
 
-        let unadvertised = TestClient::post(
-            "http://local/_arkret/gate/account/controller-gate-attestations",
-        )
-        .add_header(
-            "Arkret-Operation",
-            arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_CONTROLLER_GATE_ATTESTATION_V1,
-            true,
-        )
-        .send(&service)
-        .await;
+        let unadvertised = TestClient::post("http://local/_arkret/gate/account/logout")
+            .add_header(
+                "Arkret-Operation",
+                arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_LOGOUT_V1,
+                true,
+            )
+            .send(&service)
+            .await;
         assert_eq!(
             unadvertised.status_code,
             Some(StatusCode::UNPROCESSABLE_ENTITY)
@@ -584,5 +587,41 @@ mod tests {
             .send(&service)
             .await;
         assert_eq!(accepted.status_code, Some(StatusCode::NO_CONTENT));
+        assert_eq!(
+            accepted
+                .headers()
+                .get("arkret-operation")
+                .and_then(|value| value.to_str().ok()),
+            Some(arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE_V1)
+        );
+
+        let accepted_onboarding = TestClient::get("http://local/_arkret/gate/account/onboarding")
+            .add_header(
+                "Arkret-Operation",
+                arkret_wire::ServiceOperationId::GATE_ACCOUNT_READ_ONBOARDING_V1,
+                true,
+            )
+            .send(&service)
+            .await;
+        assert_eq!(
+            accepted_onboarding.status_code,
+            Some(StatusCode::NO_CONTENT)
+        );
+        assert_eq!(
+            accepted_onboarding
+                .headers()
+                .get("arkret-operation")
+                .and_then(|value| value.to_str().ok()),
+            Some(arkret_wire::ServiceOperationId::GATE_ACCOUNT_READ_ONBOARDING_V1)
+        );
+
+        let unadvertised_without_selector =
+            TestClient::post("http://local/_arkret/gate/account/logout")
+                .send(&service)
+                .await;
+        assert_eq!(
+            unadvertised_without_selector.status_code,
+            Some(StatusCode::BAD_REQUEST)
+        );
     }
 }

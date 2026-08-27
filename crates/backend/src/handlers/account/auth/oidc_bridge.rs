@@ -184,6 +184,10 @@ async fn send_soland_account_register(
             http_client
                 .post(endpoint.clone())
                 .bearer_auth(bearer)
+                .header(
+                    "Arkret-Operation",
+                    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER_V1,
+                )
                 .header(reqwest::header::CONTENT_TYPE, "application/json")
                 .body(body_bytes.clone())
         })
@@ -1452,6 +1456,16 @@ mod tests {
         }
     }
 
+    fn request_has_operation(expected: &'static str) -> impl Fn(&WiremockRequest) -> bool {
+        move |request| {
+            request
+                .headers
+                .get("arkret-operation")
+                .and_then(|value| value.to_str().ok())
+                == Some(expected)
+        }
+    }
+
     #[test]
     fn returned_nonce_validation_is_exact() {
         assert!(validate_returned_nonce(Some("nonce"), "nonce").is_ok());
@@ -1495,6 +1509,9 @@ mod tests {
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
             .and(request_has_bearer(TEST_OPERATION_BEARER))
+            .and(request_has_operation(
+                arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER_V1,
+            ))
             .and(|request: &WiremockRequest| request_json(request).get("handle").is_none())
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "principal_id": TEST_PRINCIPAL_ID,
@@ -1550,6 +1567,9 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
+            .and(request_has_operation(
+                arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER_V1,
+            ))
             .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
                 arkret_wire::ErrorCode::FAILED_PRECONDITION,
                 "account registration is closed",
@@ -1578,6 +1598,9 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
+            .and(request_has_operation(
+                arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER_V1,
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "principal_id": TEST_PRINCIPAL_ID,
                 "state": "active",

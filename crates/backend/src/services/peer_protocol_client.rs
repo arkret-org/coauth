@@ -27,7 +27,7 @@ use arkret_signatures::http_signature::{
 use arkret_wire::{
     DeviceRevocationGateCheckOutcome, DeviceRevocationGateCheckRequestBody, DidFullId,
     HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN,
-    PATH_PEER_DEVICE_REVOCATIONS_CHECK,
+    PATH_PEER_DEVICE_REVOCATIONS_CHECK, ServiceOperationId,
 };
 use coauth_keystore::Keystore;
 use serde::Serialize;
@@ -40,6 +40,7 @@ const SIGNATURE_LABEL: &str = "sig1";
 const SIGNATURE_WINDOW_SECONDS: i64 = 300;
 const SOURCE_SERVICE_ID_HEADER: &str = "Source-Service-ID";
 const DESTINATION_SERVICE_ID_HEADER: &str = "Destination-Service-ID";
+const ARKRET_OPERATION_HEADER: &str = "Arkret-Operation";
 
 #[derive(Debug, Error)]
 pub enum PeerProtocolClientError {
@@ -110,6 +111,7 @@ impl<'a> PeerProtocolClient<'a> {
         self.post_json(
             "peer_invites_submit",
             url,
+            ServiceOperationId::PEER_INVITES_COMMAND_SUBMIT_V1,
             request,
             Some(&request.idempotency_key),
         )
@@ -128,6 +130,7 @@ impl<'a> PeerProtocolClient<'a> {
         self.post_json(
             "peer_account_status_submit",
             url,
+            ServiceOperationId::PEER_ACCOUNT_STATUS_COMMAND_SUBMIT_V1,
             request,
             Some(idempotency_key),
         )
@@ -139,7 +142,12 @@ impl<'a> PeerProtocolClient<'a> {
         receipt_id: &str,
     ) -> Result<ErasureReceiptResource, PeerProtocolClientError> {
         let url = self.join_absolute(&format!("/_arkret/peer/erasure-receipts/{receipt_id}"))?;
-        self.get_json("peer_erasure_receipt_get", url).await
+        self.get_json(
+            "peer_erasure_receipt_get",
+            url,
+            ServiceOperationId::PEER_ERASURE_RECEIPT_RESOURCE_GET_V1,
+        )
+        .await
     }
 
     /// Relay the exact client-signed PCR genesis unit. The Account Authority
@@ -157,6 +165,7 @@ impl<'a> PeerProtocolClient<'a> {
             .post_json(
                 "peer_principal_genesis_submit",
                 url,
+                ServiceOperationId::PEER_PRINCIPAL_GENESIS_COMMAND_SUBMIT_V1,
                 request,
                 Some(request.idempotency_key.as_str()),
             )
@@ -178,7 +187,13 @@ impl<'a> PeerProtocolClient<'a> {
             .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
         let url = self.join_absolute(PATH_PEER_DEVICE_REVOCATIONS_CHECK)?;
         let outcome: DeviceRevocationGateCheckOutcome = self
-            .post_json("peer_device_revocations_check", url, request, None)
+            .post_json(
+                "peer_device_revocations_check",
+                url,
+                ServiceOperationId::PEER_DEVICE_REVOCATIONS_COMMAND_CHECK_V1,
+                request,
+                None,
+            )
             .await?;
         outcome
             .validate_for_request(request)
@@ -194,7 +209,13 @@ impl<'a> PeerProtocolClient<'a> {
         let url = self.join_absolute("/_arkret/peer/events/frontier")?;
         let body_bytes = canonical_json_bytes(request)
             .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
-        let signed = self.signed_request("QUERY", &url, Some(&body_bytes), None)?;
+        let signed = self.signed_request(
+            "QUERY",
+            &url,
+            ServiceOperationId::PEER_EVENTS_READ_FRONTIER_V1,
+            Some(&body_bytes),
+            None,
+        )?;
         let query_method = reqwest::Method::from_bytes(b"QUERY")
             .map_err(|error| PeerProtocolClientError::InvalidUrl(error.to_string()))?;
         let response = outbound_http::send_with_policy(
@@ -228,6 +249,7 @@ impl<'a> PeerProtocolClient<'a> {
         &self,
         policy_name: &'static str,
         url: Url,
+        operation_id: &str,
         body: &T,
         idempotency_key: Option<&str>,
     ) -> Result<R, PeerProtocolClientError>
@@ -237,7 +259,13 @@ impl<'a> PeerProtocolClient<'a> {
     {
         let body_bytes = canonical_json_bytes(body)
             .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
-        let signed = self.signed_request("POST", &url, Some(&body_bytes), idempotency_key)?;
+        let signed = self.signed_request(
+            "POST",
+            &url,
+            operation_id,
+            Some(&body_bytes),
+            idempotency_key,
+        )?;
 
         let response = outbound_http::send_with_policy(
             outbound_http::soland_policy(policy_name).with_timeout(Duration::from_secs(5)),
@@ -263,11 +291,12 @@ impl<'a> PeerProtocolClient<'a> {
         &self,
         policy_name: &'static str,
         url: Url,
+        operation_id: &str,
     ) -> Result<R, PeerProtocolClientError>
     where
         R: serde::de::DeserializeOwned,
     {
-        let signed = self.signed_request("GET", &url, None, None)?;
+        let signed = self.signed_request("GET", &url, operation_id, None, None)?;
         let response = outbound_http::send_with_policy(
             outbound_http::soland_policy(policy_name).with_timeout(Duration::from_secs(5)),
             || {
@@ -287,6 +316,7 @@ impl<'a> PeerProtocolClient<'a> {
         &self,
         method: &str,
         url: &Url,
+        operation_id: &str,
         body: Option<&[u8]>,
         idempotency_key: Option<&str>,
     ) -> Result<SignedPeerRequest, PeerProtocolClientError> {
@@ -307,6 +337,7 @@ impl<'a> PeerProtocolClient<'a> {
                 HEADER_DESTINATION_TRUST_DOMAIN.to_owned(),
                 self.destination_trust_domain.to_string(),
             ),
+            (ARKRET_OPERATION_HEADER.to_owned(), operation_id.to_owned()),
         ];
 
         let mut covered = vec![
@@ -317,6 +348,7 @@ impl<'a> PeerProtocolClient<'a> {
             Component::Header(DESTINATION_SERVICE_ID_HEADER.to_ascii_lowercase()),
             Component::Header(HEADER_SOURCE_TRUST_DOMAIN.to_ascii_lowercase()),
             Component::Header(HEADER_DESTINATION_TRUST_DOMAIN.to_ascii_lowercase()),
+            Component::Header(ARKRET_OPERATION_HEADER.to_ascii_lowercase()),
         ];
 
         let body_digest =
@@ -474,7 +506,13 @@ mod tests {
         let url = base.join("/_arkret/peer/invites").unwrap();
 
         let signed = peer
-            .signed_request("POST", &url, Some(body), Some("idem-1"))
+            .signed_request(
+                "POST",
+                &url,
+                ServiceOperationId::PEER_INVITES_COMMAND_SUBMIT_V1,
+                Some(body),
+                Some("idem-1"),
+            )
             .unwrap();
         let header = |name: &str| {
             signed
@@ -487,6 +525,10 @@ mod tests {
         assert_eq!(
             header("Source-Service-ID"),
             Some("ak:did_core:web:auth.example")
+        );
+        assert_eq!(
+            header("Arkret-Operation"),
+            Some(ServiceOperationId::PEER_INVITES_COMMAND_SUBMIT_V1)
         );
         assert!(header("Content-Digest").is_some());
         assert!(
@@ -516,6 +558,7 @@ mod tests {
             Component::Header("destination-service-id".to_owned()),
             Component::Header("source-trust-domain".to_owned()),
             Component::Header("destination-trust-domain".to_owned()),
+            Component::Header("arkret-operation".to_owned()),
             Component::Header("content-digest".to_owned()),
             Component::Header("idempotency-key".to_owned()),
         ])
@@ -557,7 +600,15 @@ mod tests {
             .join("/_arkret/peer/snapshot/head?realm_id=ak:realm:test")
             .unwrap();
 
-        let signed = peer.signed_request("GET", &url, None, None).unwrap();
+        let signed = peer
+            .signed_request(
+                "GET",
+                &url,
+                ServiceOperationId::PEER_SNAPSHOT_READ_MANIFEST_HEAD_V1,
+                None,
+                None,
+            )
+            .unwrap();
 
         assert!(
             signed
@@ -587,7 +638,13 @@ mod tests {
         let body = br#"{"realm_id":"ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K"}"#;
 
         let signed = peer
-            .signed_request("QUERY", &url, Some(body), None)
+            .signed_request(
+                "QUERY",
+                &url,
+                ServiceOperationId::PEER_EVENTS_READ_FRONTIER_V1,
+                Some(body),
+                None,
+            )
             .unwrap();
         let signature_input = signed
             .headers
@@ -597,6 +654,7 @@ mod tests {
             .unwrap();
         assert!(signature_input.contains("\"@method\""));
         assert!(signature_input.contains("\"@target-uri\""));
+        assert!(signature_input.contains("\"arkret-operation\""));
         assert!(signature_input.contains("\"content-digest\""));
         assert!(
             signed

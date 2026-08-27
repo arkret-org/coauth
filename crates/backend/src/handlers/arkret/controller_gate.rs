@@ -304,11 +304,13 @@ async fn authenticate_agent_authority_request(
 
     let source = required_header(req, "source-service-id")?;
     let destination = required_header(req, "destination-service-id")?;
+    let selector = required_header(req, "arkret-operation")?;
     let operation = required_header(req, "arkret-operation-id")?;
     let request_id = required_header(req, "arkret-request-id")?;
     let local_service_id = service_id_for(&config);
     if source != request.agent_authority_service_id.as_str()
         || destination != local_service_id.as_str()
+        || selector != GATE_OPERATION_ID
         || operation != GATE_OPERATION_ID
         || request_id != request.request_id.as_str()
     {
@@ -339,6 +341,7 @@ async fn authenticate_agent_authority_request(
         Component::Header("content-digest".to_owned()),
         Component::Header("source-service-id".to_owned()),
         Component::Header("destination-service-id".to_owned()),
+        Component::Header("arkret-operation".to_owned()),
         Component::Header("arkret-operation-id".to_owned()),
         Component::Header("arkret-request-id".to_owned()),
     ])

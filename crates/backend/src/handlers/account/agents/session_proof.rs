@@ -1411,6 +1411,10 @@ pub(super) async fn fetch_authoritative_agent_view(
 
         let response = http_client
             .get(endpoint)
+            .header(
+                "arkret-operation",
+                arkret_wire::ServiceOperationId::SELF_AGENT_RESOURCE_GET_V1,
+            )
             .bearer_auth(bearer)
             .send()
             .await

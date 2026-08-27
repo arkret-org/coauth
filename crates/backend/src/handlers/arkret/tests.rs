@@ -519,7 +519,7 @@ fn service_describe_advertises_auth_session_logout_boundary() {
 }
 
 #[test]
-fn service_describe_advertises_only_bundled_account_first_surface() {
+fn service_describe_advertises_complete_bundled_account_first_surface() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
     let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
     let body =
@@ -531,19 +531,16 @@ fn service_describe_advertises_only_bundled_account_first_surface() {
         arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT_V1,
         arkret_wire::ServiceOperationId::GATE_ACCOUNT_EXCHANGE_CREATE_HANDOFF_V1,
         arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE_V1,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_READ_ONBOARDING_V1,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_DID_BINDING_CHALLENGE_V1,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_ABANDONMENT_CHALLENGE_V1,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ABANDON_IDENTITY_CREATION_V1,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_CONTROLLER_GATE_ATTESTATION_V1,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REQUEST_ERASURE_V1,
     ] {
         assert!(
             advertised_operations.contains(operation),
             "bundled account-first endpoint operation {operation} must be advertised"
-        );
-    }
-    for operation in [
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_READ_ONBOARDING_V1,
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_DID_BINDING_CHALLENGE_V1,
-    ] {
-        assert!(
-            !advertised_operations.contains(operation),
-            "unbundled account-first endpoint operation {operation} must fail closed"
         );
     }
 }
@@ -646,6 +643,7 @@ fn describe_separates_claim_levels() {
     assert_eq!(
         bundles,
         &[
+            serde_json::json!("ak.operation_bundle.auth_server.account_authority.v1"),
             serde_json::json!("ak.operation_bundle.auth_server.describe.v1"),
             serde_json::json!("ak.operation_bundle.auth_server.http_core.v1"),
         ]

@@ -14,6 +14,7 @@ use crate::handlers::common::DepotExt;
 const CLAIMED_PROFILE_IDS: &[&str] = &[arkret_wire::ProfileId::AUTH_SERVER_V1];
 
 pub(crate) const SUPPORTED_OPERATION_BUNDLES: &[&str] = &[
+    "ak.operation_bundle.auth_server.account_authority.v1",
     "ak.operation_bundle.auth_server.describe.v1",
     "ak.operation_bundle.auth_server.http_core.v1",
 ];

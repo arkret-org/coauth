@@ -507,7 +507,7 @@ pub async fn verify_principal_server_identity(
         "principal_trust_resolution_record",
         record_url.clone(),
         AUTHENTICATED_RESOLUTION_MAX_BYTES,
-        None,
+        Some(arkret_wire::ServiceOperationId::OPEN_SERVICE_READ_RESOLUTION_V1),
     )
     .await?;
     let authenticated_resolution: AuthenticatedServiceResolution =

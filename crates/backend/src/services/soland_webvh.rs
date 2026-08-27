@@ -37,6 +37,10 @@ pub async fn submit_did_operation(
         || {
             let mut request = http_client
                 .post(endpoint.clone())
+                .header(
+                    "Arkret-Operation",
+                    arkret_wire::ServiceOperationId::ROOT_IDENTITY_COMMAND_SUBMIT_DID_OPERATION_V1,
+                )
                 .header(reqwest::header::CONTENT_TYPE, "application/json")
                 .body(body_bytes.clone());
             if let Some(token) = bearer {

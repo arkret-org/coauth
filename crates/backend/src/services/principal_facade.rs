@@ -142,6 +142,10 @@ async fn submit_agent_key_pair_to_target(
     let response = http_client
         .post(url.clone())
         .bearer_auth(bearer)
+        .header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY_V1,
+        )
         .header("idempotency-key", request.idempotency_key())
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(body_bytes)

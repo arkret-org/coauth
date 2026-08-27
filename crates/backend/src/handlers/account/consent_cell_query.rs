@@ -181,7 +181,12 @@ async fn query_consent_cell_scope(
     let response = match outbound_http::send_with_policy(
         outbound_http::soland_policy("consent_cell_read")
             .with_timeout(std::time::Duration::from_secs(5)),
-        || http_client.get(url.clone()),
+        || {
+            http_client.get(url.clone()).header(
+                "Arkret-Operation",
+                arkret_wire::ServiceOperationId::SELF_CONSENT_RESOURCE_GET_V1,
+            )
+        },
     )
     .await
     {

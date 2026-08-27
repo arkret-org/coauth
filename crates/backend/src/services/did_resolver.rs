@@ -564,6 +564,10 @@ fn delegated_resolver_request(
     })?;
     Ok(http_client
         .post(url.clone())
+        .header(
+            "arkret-operation",
+            arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE_V1,
+        )
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(body_bytes))
 }
@@ -1037,6 +1041,13 @@ mod tests {
 
         assert_eq!(request.method(), reqwest::Method::POST);
         assert_eq!(request.url(), &url);
+        assert_eq!(
+            request
+                .headers()
+                .get("arkret-operation")
+                .and_then(|value| value.to_str().ok()),
+            Some(arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE_V1)
+        );
         let body: Value = serde_json::from_slice(
             request
                 .body()
