@@ -198,7 +198,10 @@ pub(crate) async fn build_policy_check_response(
     // Step 1 — frontier. On any frontier error we fall back to the
     // "unknown frontier" sentinel and let the evaluator produce a
     // signed deny if its rules require it.
-    let frontier = match frontier_source.fetch(&request.realm_id).await {
+    let frontier = match frontier_source
+        .fetch(&request.realm_id, &request.actor_id)
+        .await
+    {
         Ok(f) => f,
         Err(err) => {
             tracing::warn!(

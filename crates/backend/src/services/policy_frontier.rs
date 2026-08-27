@@ -11,12 +11,10 @@
 //! - `policy_frontier_digest` — policy-source frontier digest;
 //! - `membership_frontier_digest` — membership / role frontier digest.
 //!
-//! These come from soland's `/_arkret/self/events/frontier?peer_role=
-//! federation_peer` response, which returns
-//! [`arkret_models_collaboration::event_sync::EventsFrontierFederationPeerState`] including a
-//! single `frontier_root`. The federation-peer variant is the only one
-//! that exposes the root commitment; account-client and
-//! anonymous-health variants intentionally omit it.
+//! These come from soland's actor-scoped
+//! `/_arkret/peer/events/frontier` response. Generic federation probes carry
+//! only the replication frontier; policy checks name an actor and require all
+//! three independently computed commitments.
 //!
 //! ## Pluggable
 //!
@@ -113,6 +111,7 @@ pub trait FrontierSource: Send + Sync {
     fn fetch<'a>(
         &'a self,
         realm_id: &'a RealmId,
+        actor_id: &'a arkret_identifiers::DidCoreId,
     ) -> Pin<Box<dyn Future<Output = Result<Frontier, FrontierError>> + Send + 'a>>;
 }
 
@@ -122,16 +121,10 @@ impl fmt::Debug for dyn FrontierSource {
     }
 }
 
-/// Production frontier source — calls soland's federation-peer frontier
-/// endpoint and lifts `frontier_root` into
-/// [`Frontier::policy_frontier_digest`].
-///
-/// Today soland only exposes a single `frontier_root` covering all
-/// federation-visible events; the spec splits the digest into three
-/// (auth / policy / membership) but soland has not yet wired separate
-/// roots. We therefore use `frontier_root` for all three slots and
-/// leave a clearly-marked TODO so the next round of soland work can
-/// switch to dedicated roots without touching the policy-check handler.
+/// Production frontier source — calls soland's actor-scoped federation-peer
+/// frontier endpoint and maps each signed commitment to its matching policy
+/// decision field. Missing actor roots are rejected instead of being filled
+/// from the unrelated replication `frontier_root`.
 pub struct SolandFrontierSource {
     base_url: Option<Url>,
     http_client: reqwest::Client,
@@ -178,6 +171,7 @@ impl FrontierSource for SolandFrontierSource {
     fn fetch<'a>(
         &'a self,
         realm_id: &'a RealmId,
+        actor_id: &'a arkret_identifiers::DidCoreId,
     ) -> Pin<Box<dyn Future<Output = Result<Frontier, FrontierError>> + Send + 'a>> {
         Box::pin(async move {
             let Some(base) = self.base_url.as_ref() else {
@@ -187,13 +181,6 @@ impl FrontierSource for SolandFrontierSource {
                 return Ok(Frontier::empty());
             };
 
-            // TODO(G3.S0): when soland exposes dedicated
-            // `auth_state_root`, `policy_frontier_root`,
-            // `membership_frontier_root` fields on
-            // `EventsFrontierFederationPeerState`, plumb each into
-            // the matching slot below instead of duplicating
-            // `frontier_root`. See `soland/crates/http/src/routing/events/event_log.rs`
-            // around `events_frontier` for the response builder.
             // Spec-canonical federation-peer frontier path is the
             // version-less `/_arkret/peer/events/frontier`. We join with
             // a leading slash so the absolute path replaces any existing
@@ -216,6 +203,7 @@ impl FrontierSource for SolandFrontierSource {
             .map_err(|error| FrontierError::Http(error.to_string()))?;
             let request = PeerEventsFrontierRequestBody {
                 realm_id: realm_id.clone(),
+                actor_id: Some(actor_id.clone()),
             };
             let frontier =
                 tokio::time::timeout(self.request_timeout, client.read_events_frontier(&request))
@@ -223,12 +211,17 @@ impl FrontierSource for SolandFrontierSource {
                     .map_err(|_| FrontierError::Timeout)?
                     .map_err(|error| FrontierError::Http(error.to_string()))?;
 
-            let h = frontier.frontier_root.clone();
             let freshness_state = frontier_freshness_state(&frontier.observed_at, Utc::now());
             Ok(Frontier {
-                auth_state_digest: h.clone(),
-                policy_frontier_digest: h.clone(),
-                membership_frontier_digest: h,
+                auth_state_digest: frontier
+                    .auth_state_root
+                    .ok_or(FrontierError::MissingField("auth_state_root"))?,
+                policy_frontier_digest: frontier
+                    .policy_frontier_root
+                    .ok_or(FrontierError::MissingField("policy_frontier_root"))?,
+                membership_frontier_digest: frontier
+                    .membership_frontier_root
+                    .ok_or(FrontierError::MissingField("membership_frontier_root"))?,
                 freshness_state,
                 policy_version: Some("v1".to_owned()),
             })
@@ -271,6 +264,7 @@ impl FrontierSource for StaticFrontierSource {
     fn fetch<'a>(
         &'a self,
         _realm_id: &'a RealmId,
+        _actor_id: &'a arkret_identifiers::DidCoreId,
     ) -> Pin<Box<dyn Future<Output = Result<Frontier, FrontierError>> + Send + 'a>> {
         let frontier = self.frontier.clone();
         Box::pin(async move { Ok(frontier) })
@@ -304,7 +298,9 @@ mod tests {
     async fn static_source_returns_configured_frontier() {
         let frontier = Frontier::empty();
         let source = StaticFrontierSource::new(frontier.clone());
-        let got = source.fetch(&realm()).await.unwrap();
+        let actor =
+            arkret_identifiers::DidCoreId::new("ak:did_core:web:alice.example".to_owned()).unwrap();
+        let got = source.fetch(&realm(), &actor).await.unwrap();
         assert_eq!(got, frontier);
     }
 
@@ -312,7 +308,9 @@ mod tests {
     async fn soland_source_with_no_base_url_returns_sentinel() {
         install_crypto_provider();
         let source = SolandFrontierSource::new(None, reqwest::Client::new(), None);
-        let got = source.fetch(&realm()).await.unwrap();
+        let actor =
+            arkret_identifiers::DidCoreId::new("ak:did_core:web:alice.example".to_owned()).unwrap();
+        let got = source.fetch(&realm(), &actor).await.unwrap();
         assert_eq!(got, Frontier::empty());
         assert_eq!(got.freshness_state, FreshnessState::Unknown);
     }
