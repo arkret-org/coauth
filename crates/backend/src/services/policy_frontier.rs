@@ -192,7 +192,7 @@ impl FrontierSource for SolandFrontierSource {
             // `membership_frontier_root` fields on
             // `EventsFrontierFederationPeerState`, plumb each into
             // the matching slot below instead of duplicating
-            // `frontier_root`. See `soland/src/routing/events/event_log.rs`
+            // `frontier_root`. See `soland/crates/http/src/routing/events/event_log.rs`
             // around `events_frontier` for the response builder.
             // Spec-canonical federation-peer frontier path is the
             // version-less `/_arkret/peer/events/frontier`. We join with

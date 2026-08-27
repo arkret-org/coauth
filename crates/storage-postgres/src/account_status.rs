@@ -397,7 +397,7 @@ mod tests {
             .unwrap();
     }
 
-    /// `account-lifecycle.md` §"每个 destination 最多一条未完成状态更新": a
+    /// `account-lifecycle.md` §"at most one unfinished status update per destination": a
     /// destination may hold at most one unfinished publication per record. The
     /// partial unique index is the only thing enforcing it, and it enforces
     /// nothing unless its expressions actually resolve — a key that does not

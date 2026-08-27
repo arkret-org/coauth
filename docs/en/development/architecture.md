@@ -38,7 +38,7 @@ This includes:
  - [`coauth-email-types`][coauth-email-types]: Email wire types shared by the sender and the templates
  - [`coauth-messaging`][coauth-messaging]: Email/SMS transport implementations
  - [`coauth-templates`][coauth-templates]: Server-rendered template registry and render context
- - [`coauth-i18n`][coauth-i18n] / [`coauth-i18n-scan`][coauth-i18n-scan]: Fluent translation loading, and the translation-key scanner used at build time
+ - [`coauth-i18n`][coauth-i18n] / [`coauth-i18n-scan`][coauth-i18n-scan]: Fluent translation loading, and the opt-in CLI scanner for translation keys in MiniJinja templates
  - [`coauth-policy`][coauth-policy]: Policy engine abstraction layer; the shipped backend is Cedar
  - [`coauth-principal`][coauth-principal]: Principal-server client types and helpers
  - [`coauth-keystore`][coauth-keystore]: Key material storage and encryption

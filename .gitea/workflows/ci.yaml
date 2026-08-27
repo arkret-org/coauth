@@ -118,7 +118,7 @@ jobs:
         run: cargo install typos-cli --locked
 
       - name: Run typos
-        run: typos --config ./typos.toml
+        run: typos --config ./.typos.toml
 
   cargo-deny:
     name: Audit dependencies with cargo-deny

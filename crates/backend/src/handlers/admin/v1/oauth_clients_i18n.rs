@@ -6,7 +6,7 @@
 //! `POST /_coauth/admin/oauth/clients/{id}/i18n`
 //!
 //! Body:
-//!     { "locale": "zh-CN", "`display_name"`: "示例", "description": "..." }
+//!     { "locale": "zh-CN", "`display_name"`: "Example", "description": "..." }
 //!
 //! The handler upserts the entry into the `oauth_clients.i18n` JSONB
 //! column (see migration `20260510000100_oauth_clients_i18n`). Other

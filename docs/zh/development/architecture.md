@@ -70,7 +70,7 @@ coauth 是 Arkret 的 Auth Server，负责账号认证、OAuth/OIDC、会话授�
 |-------|------|
 | `coauth-frontend` | Dioxus 前端（Rust SPA） |
 | `coauth-i18n` | 国际化 |
-| `coauth-i18n-scan` | 构建期翻译 key 扫描 |
+| `coauth-i18n-scan` | MiniJinja 模板翻译 key 的按需 CLI 扫描器 |
 
 ### 基础设施
 

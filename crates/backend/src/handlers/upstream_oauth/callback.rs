@@ -677,7 +677,7 @@ pub async fn handler(
             (None, None, context.build(), Some(userinfo_value))
         }
 
-        // ── WeCom (企业微信) ────────────────────────────────────────
+        // ── WeCom (WeChat Work) ───────────────────────────────────
         ClientCredentials::WeCom {
             client_id,
             client_secret,

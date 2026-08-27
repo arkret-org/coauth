@@ -337,7 +337,7 @@ pub enum DidBindingError {
 /// | `DegradedResolverState` | `Stale` | same shape: real evidence, degraded availability |
 /// | `WebvhCacheTooStale` | `Stale` | literally an age problem; `Stale` is the status §5 names for it |
 /// | `WeakResolverEvidence` | `Stale` | `trust_profile`/`resolver_assurance` says limited/read-only; the document is what the method published, only the assurance level is reduced |
-/// | `DidWebFallback` | `Quarantined` | the resolver **substituted a weaker DID method**. §5: "不得在失败时把信任降级到另一个 DID method". Serving it even on a low-risk read would render a document whose control was never demonstrated under the requested method |
+/// | `DidWebFallback` | `Quarantined` | the resolver **substituted a weaker DID method**. §5: "trust must not be downgraded to another DID method on failure". Serving it even on a low-risk read would render a document whose control was never demonstrated under the requested method |
 /// | `MissingWebvhHistoryEvidence` | `Quarantined` | a `did:webvh` answer with `history_evidence_kind = none` proves nothing about key continuity |
 /// | `ControllerProofUnverified` | `Quarantined` | control was explicitly *not* proven; conflicting evidence is exactly what `Quarantined` is for |
 ///
