@@ -121,7 +121,7 @@ pub(crate) const WEBVH_LOG_MAX_BYTES: usize = 2 * 1024 * 1024;
 
 /// Hard upper bound on a fetched `ServiceDescribe` body. Shared by every
 /// caller that resolves a remote service identity from its describe surface.
-pub(crate) const DESCRIBE_MAX_BYTES: usize = 64 * 1024;
+pub(crate) const DESCRIBE_MAX_BYTES: usize = arkret_http_client::SERVICE_DESCRIBE_FETCH_MAX_BYTES;
 
 /// Failure of [`fetch_bounded`], split so callers can keep a transient
 /// transport problem apart from evidence that must never be accepted.
@@ -732,10 +732,19 @@ mod tests {
     use tokio::net::TcpListener;
 
     use super::{
-        EgressGuard, OutboundRequestPolicy, egress_guard, principal_trust_policy,
-        reqwest_client_builder, retry_after_hint, send_with_policy,
+        DESCRIBE_MAX_BYTES, EgressGuard, OutboundRequestPolicy, egress_guard,
+        principal_trust_policy, reqwest_client_builder, retry_after_hint, send_with_policy,
         server_trusted_loopback_https_hosts, telemetry_url,
     };
+
+    #[test]
+    fn describe_bound_tracks_the_shared_sdk_transport_bound() {
+        assert_eq!(
+            DESCRIBE_MAX_BYTES,
+            arkret_http_client::SERVICE_DESCRIBE_FETCH_MAX_BYTES
+        );
+        assert!(DESCRIBE_MAX_BYTES > 64 * 1024);
+    }
 
     fn addr(raw: &str) -> SocketAddr {
         raw.parse().expect("socket address")
