@@ -538,8 +538,14 @@ impl<'c> PgAccountHandoffRepository<'c> {
         if let Some(retry_at) = retry_at {
             return Ok(Some(retry_after_ms(retry_at, now)));
         }
-        self.insert_quota_event(request_id, account_subject, audience_id, lease_id, "renewal")
-            .await?;
+        self.insert_quota_event(
+            request_id,
+            account_subject,
+            audience_id,
+            lease_id,
+            "renewal",
+        )
+        .await?;
         Ok(None)
     }
 
@@ -583,7 +589,10 @@ impl<'c> PgAccountHandoffRepository<'c> {
     }
 }
 
-fn lease_quota_advisory_key(account_subject: &arkret_identifiers::Hash, audience_id: &str) -> String {
+fn lease_quota_advisory_key(
+    account_subject: &arkret_identifiers::Hash,
+    audience_id: &str,
+) -> String {
     let account_subject = account_subject.as_str();
     format!("{}:{account_subject}{audience_id}", account_subject.len())
 }
@@ -1783,7 +1792,11 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .await?;
         }
         let lease = self
-            .lease_for_account(Uuid::from(input.service_account_id), &input.audience_id, false)
+            .lease_for_account(
+                Uuid::from(input.service_account_id),
+                &input.audience_id,
+                false,
+            )
             .await?
             .ok_or_else(DatabaseError::invalid_operation)?;
         Ok(AccountHandoffCreation::Active {
@@ -1801,7 +1814,11 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(AccountHandoffCreation::ExpiredReplay);
         }
         let lease = self
-            .lease_for_account(Uuid::from(grant.service_account_id), &grant.audience_id, false)
+            .lease_for_account(
+                Uuid::from(grant.service_account_id),
+                &grant.audience_id,
+                false,
+            )
             .await?;
         let Some(lease) = lease else {
             return if let Some((principal_id, did)) = self
@@ -2571,7 +2588,11 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         now: DateTime<Utc>,
     ) -> Result<Option<IdentityCreationRegistrationContext>, Self::Error> {
         let Some(lease) = self
-            .lease_for_account(Uuid::from(grant.service_account_id), &grant.audience_id, true)
+            .lease_for_account(
+                Uuid::from(grant.service_account_id),
+                &grant.audience_id,
+                true,
+            )
             .await?
         else {
             return Ok(None);
@@ -3042,7 +3063,10 @@ mod tests {
 
         let key = lease_quota_advisory_key(&account_subject, audience_id);
 
-        assert_eq!(key, format!("71:{}{audience_id}", account_subject.as_str(),));
+        assert_eq!(
+            key,
+            format!("71:{}{audience_id}", account_subject.as_str(),)
+        );
         assert!(!key.contains('\0'));
     }
 

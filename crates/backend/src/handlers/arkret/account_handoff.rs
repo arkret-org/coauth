@@ -601,7 +601,7 @@ pub async fn account_onboarding_snapshot(
             .allowed_goals()
             .contains(&arkret_models_identity::IdentityCreationGoal::AbandonProvisionalIdentity)
     {
-    let audience = arkret_identifiers::DidCoreId::new(grant.audience_id.clone())
+        let audience = arkret_identifiers::DidCoreId::new(grant.audience_id.clone())
             .map_err(|error| failed_precondition(error.to_string()))?;
         repo.account_handoff()
             .active_identity_abandonment_challenge(
@@ -1728,8 +1728,10 @@ mod tests {
                     "0".repeat(64)
                 ))
                 .unwrap(),
-                audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:principal.example")
-                    .unwrap(),
+                audience_id: arkret_identifiers::DidCoreId::new(
+                    "ak:did_core:web:principal.example",
+                )
+                .unwrap(),
                 issuer_uri: "https://issuer.example".to_owned(),
                 client_id: "arkret-client".to_owned(),
                 redirect_uri: "https://client.example/callback".to_owned(),

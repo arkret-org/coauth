@@ -1039,8 +1039,10 @@ fn session_grant_record_exposes_metadata_without_secrets() {
         )
         .unwrap(),
         browser_session_id: Some(Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap()),
-        issuer_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example.com".to_owned())
-            .unwrap(),
+        issuer_id: arkret_identifiers::DidCoreId::new(
+            "ak:did_core:web:auth.example.com".to_owned(),
+        )
+        .unwrap(),
         subject_id: "did:web:auth.example.com:users:01J44Q10GR4AMTFZEEF936DTCP".to_owned(),
         device_id: Some("device-1".to_owned()),
         applet_id: None,
@@ -1091,8 +1093,10 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
         )
         .unwrap(),
         browser_session_id: Some(Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap()),
-        issuer_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example.com".to_owned())
-            .unwrap(),
+        issuer_id: arkret_identifiers::DidCoreId::new(
+            "ak:did_core:web:auth.example.com".to_owned(),
+        )
+        .unwrap(),
         subject_id: format!("did:web:auth.example.com:users:{}", user.id),
         device_id: Some("device-1".to_owned()),
         applet_id: None,
