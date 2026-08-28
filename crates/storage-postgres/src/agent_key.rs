@@ -435,7 +435,7 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
             )
             .map_err(|_| DatabaseError::invalid_operation())?,
             agent_key_scope: params.agent_key_scope,
-            audience_id: params.audience_id,
+            audience: params.audience,
             issued_at: params.issued_at,
             expires_at: params.expires_at,
             pairing_request_id: params.pairing_request_id,
@@ -673,7 +673,7 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
             challenge: params.challenge,
             nonce: params.nonce,
             request_canonical_digest: params.request_canonical_digest,
-            audience: params.audience,
+            audience_id: params.audience_id,
             consumed_at: now,
             proof_expires_at: params.proof_expires_at,
             prune_after: params.prune_after,
