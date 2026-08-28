@@ -448,12 +448,12 @@ mod tests {
 
     #[test]
     fn device_draft_does_not_synthesize_device_did() {
-        // A device is not a DID subject: even when the id has a `did:`
-        // shape, `DeviceDraft` no longer derives any device_did (that
-        // field was removed). A device only has a device_id.
-        let record = DeviceDraft::new("did:web:device.example".to_owned()).into_record();
+        // A device is not a DID subject. `DeviceDraft` no longer derives any
+        // device DID; a device only has its typed device id.
+        let record = DeviceDraft::new("ak:device:0196419b-0000-7000-8000-000000000006".to_owned())
+            .into_record();
 
-        assert_eq!(record.id, "did:web:device.example");
+        assert_eq!(record.id, "ak:device:0196419b-0000-7000-8000-000000000006");
         assert!(record.revoked_at.is_none());
     }
 

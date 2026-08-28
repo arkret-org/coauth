@@ -102,11 +102,14 @@ mod tests {
         // a regression here would break every sodmin client.
         let now = Utc::now();
         let outcome = DeviceRevokeOutcome {
-            device_id: "did:web:device.example".to_owned(),
+            device_id: "ak:device:0196419b-0000-7000-8000-000000000006".to_owned(),
             revoked_session_grants: 0,
             revoked_at: now,
         };
-        assert_eq!(outcome.device_id, "did:web:device.example");
+        assert_eq!(
+            outcome.device_id,
+            "ak:device:0196419b-0000-7000-8000-000000000006"
+        );
         assert_eq!(outcome.revoked_session_grants, 0);
         assert_eq!(outcome.revoked_at, now);
     }

@@ -85,7 +85,7 @@ fn DeviceApprovalForm(data: ApprovalDataOutcome, id: String) -> Element {
                     p { class: "text-secondary",
                         strong { "{client_name}" }
                         " on a new device wants to access your account as "
-                        strong { "{data.user.principal_id}" }
+                        strong { "{data.user.principal_address}" }
                     }
 
                     if let Some(ref err) = *error.read() {

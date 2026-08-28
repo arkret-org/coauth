@@ -14,8 +14,8 @@
 //! ## Strand
 //!
 //! 1. The inviter signs an invite payload (out of band) and POSTs it to `POST
-//!    /_coauth/self/account/invites/relay` along with `(target_principal_url, target_holder_principal_id,
-//!    consent_id, scope)`.
+//!    /_coauth/self/account/invites/relay` along with `(target_principal_url,
+//!    target_holder_principal_id, consent_id, scope)`.
 //! 2. Coauth queries the target's consent cell via `consent_cell_query::query_consent_cell`.
 //! 3. Coauth runs `evaluate_invite_gate(...)` to translate the lookup + `consent_required` policy
 //!    bit into an `Allow / ConsentRequired / Quarantine` decision.
@@ -31,7 +31,7 @@
 //! posted by inkson, not by coauth. coauth's only responsibility here is
 //! the gate-check + forward; it never signs Moves on the holder's behalf.
 
-use arkret_wire::ConsentScope;
+use arkret_wire::{ConsentScope, DidCoreId};
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -59,7 +59,7 @@ pub struct InviteRelayRequestBody {
     /// only relay for their own published principal DID, while an admin
     /// session may relay on behalf of any `inviter_id`. The value is never
     /// trusted as authentication on its own.
-    pub inviter_id: String,
+    pub inviter_id: DidCoreId,
 
     /// Base URL of the target's `server_name` (`soland`).
     ///
@@ -72,7 +72,7 @@ pub struct InviteRelayRequestBody {
 
     /// DID of the holder whose cell we're consulting. Embedded in the
     /// `X-Arkret-Holder-Did` header on the soland query.
-    pub target_holder_principal_id: String,
+    pub target_holder_principal_id: DidCoreId,
 
     /// Consent-cell identifier per spec §6.
     pub consent_id: String,
@@ -170,9 +170,9 @@ pub fn relay_outcome_to_response(outcome: &RelayOutcome) -> (StatusCode, InviteR
 /// decisions are reported via `Ok(RelayOutcome::*)`.
 pub async fn relay_invite_with(
     target_principal_url: Option<&Url>,
-    target_holder_principal_id: &str,
+    target_holder_principal_id: &DidCoreId,
     consent_id: &str,
-    peer_principal_id: &str,
+    peer_principal_id: &DidCoreId,
     scope: ConsentScope,
     consent_required: bool,
     peer_protocol_client: Option<&PeerProtocolClient<'_>>,
@@ -198,7 +198,7 @@ pub async fn relay_invite_with(
     let decision = evaluate_invite_gate(&lookup, peer_principal_id, scope, consent_required);
     debug!(
         ?decision,
-        consent_id, peer_principal_id, scope = %scope, "invite-relay gate decision"
+        consent_id, peer_principal_id = %peer_principal_id, scope = %scope, "invite-relay gate decision"
     );
 
     match decision {
@@ -241,10 +241,7 @@ pub async fn post_invite_relay(
         .await
         .map_err(|_| RouteError::BadRequest("invalid_request_body".into()))?;
 
-    if params.inviter_id.is_empty()
-        || params.target_holder_principal_id.is_empty()
-        || params.consent_id.is_empty()
-    {
+    if params.consent_id.is_empty() {
         return Err(RouteError::BadRequest("missing_required_fields".into()));
     }
 
@@ -277,7 +274,7 @@ pub async fn post_invite_relay(
         let caller_id = arkret::published_principal_id_for_user(&mut repo, &arkret_config, user)
             .await?
             .ok_or(RouteError::Unauthorized)?;
-        if caller_id != params.inviter_id {
+        if caller_id != params.inviter_id.as_str() {
             return Err(RouteError::Unauthorized);
         }
     }
@@ -311,7 +308,7 @@ pub async fn post_invite_relay(
         delivery
             .validate_minimal()
             .map_err(|error| RouteError::BadRequest(format!("invalid_invite_delivery: {error}")))?;
-        if delivery.invite_address.subject_id.as_str() != params.target_holder_principal_id {
+        if delivery.invite_address.subject_id != params.target_holder_principal_id {
             return Err(RouteError::BadRequest(
                 "invite_delivery_subject_mismatch".to_owned(),
             ));
@@ -374,6 +371,10 @@ mod tests {
 
     use super::*;
     use crate::handlers::test_utils::setup;
+
+    fn core_id(value: &str) -> DidCoreId {
+        DidCoreId::new(value).unwrap()
+    }
 
     fn test_keystore() -> coauth_keystore::Keystore {
         use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
@@ -524,9 +525,9 @@ mod tests {
 
         let outcome = relay_invite_with(
             Some(&base),
-            "ak:did_core:web:holder",
+            &core_id("ak:did_core:web:holder"),
             "c-allow",
-            "ak:did_core:web:inviter",
+            &core_id("ak:did_core:web:inviter"),
             ConsentScope::Invite,
             true,
             Some(&peer),
@@ -565,9 +566,9 @@ mod tests {
 
         let outcome = relay_invite_with(
             Some(&base),
-            "ak:did_core:web:holder",
+            &core_id("ak:did_core:web:holder"),
             "c-missing",
-            "ak:did_core:web:inviter",
+            &core_id("ak:did_core:web:inviter"),
             ConsentScope::Invite,
             true, // consent_required
             None,
@@ -601,9 +602,9 @@ mod tests {
 
         let outcome = relay_invite_with(
             Some(&base),
-            "ak:did_core:web:holder",
+            &core_id("ak:did_core:web:holder"),
             "c-unknown",
-            "ak:did_core:web:inviter",
+            &core_id("ak:did_core:web:inviter"),
             ConsentScope::Invite,
             false, // consent_required off
             None,
@@ -628,9 +629,9 @@ mod tests {
 
         let err = relay_invite_with(
             None, // no URL
-            "ak:did_core:web:holder",
+            &core_id("ak:did_core:web:holder"),
             "c-x",
-            "ak:did_core:web:inviter",
+            &core_id("ak:did_core:web:inviter"),
             ConsentScope::Invite,
             true,
             None,
@@ -693,9 +694,9 @@ mod tests {
 
         let outcome = relay_invite_with(
             Some(&base),
-            "ak:did_core:web:holder",
+            &core_id("ak:did_core:web:holder"),
             "c-allow",
-            "ak:did_core:web:inviter",
+            &core_id("ak:did_core:web:inviter"),
             ConsentScope::Invite,
             true,
             Some(&peer),
@@ -742,9 +743,9 @@ mod tests {
 
         let outcome = relay_invite_with(
             Some(&base),
-            "ak:did_core:web:holder",
+            &core_id("ak:did_core:web:holder"),
             "c-allow",
-            "ak:did_core:web:inviter",
+            &core_id("ak:did_core:web:inviter"),
             ConsentScope::Invite,
             true,
             None, // no forward target

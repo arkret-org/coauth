@@ -291,23 +291,14 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 .is_some_and(|value| !value.is_empty());
 
             if !session_grants_enabled || !client_requested_session_grant {
-                let mut viewer_repo = depot.repo().await?;
-                let viewer_id = arkret::published_principal_id_for_user(
-                    &mut viewer_repo,
-                    &arkret_config,
-                    &user,
-                )
-                .await?;
-                viewer_repo.cancel().await.ok();
                 cookie_jar.finalize(
                     res,
                     Json(LoginOutcome::success(
                         Some(ViewerInfo {
                             id: NodeType::User.serialize(user.id),
                             handle: user.localpart.clone(),
-                            did: viewer_id,
                             federated_handle: arkret::user_handle(&url_builder, &user),
-                            principal_id: principal_server.principal_id(&user.localpart),
+                            principal_address: principal_server.principal_address(&user.localpart),
                             display_name,
                         }),
                         None,

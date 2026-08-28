@@ -63,8 +63,8 @@ mod tests {
         )
     }
 
-    fn agent_did(label: &str) -> String {
-        format!("did:web:{label}-agent.example")
+    fn agent_id(label: &str) -> String {
+        format!("ak:did_core:web:{label}-agent.example")
     }
 
     fn sample_new(
@@ -108,8 +108,8 @@ mod tests {
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(42);
         let label = unique_label("duplicate");
-        let agent = agent_did(&label);
-        let controller = format!("did:web:{label}.example");
+        let agent = agent_id(&label);
+        let controller = format!("ak:did_core:web:{label}.example");
 
         let grant = sample_new(&mut rng, &clock, &label, &agent, &controller);
         repo.accountability_grant()
@@ -141,8 +141,8 @@ mod tests {
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(43);
         let label = unique_label("fanout");
-        let agent = agent_did(&label);
-        let controller = format!("did:web:{label}.example");
+        let agent = agent_id(&label);
+        let controller = format!("ak:did_core:web:{label}.example");
         let grant_input = sample_new(&mut rng, &clock, &label, &agent, &controller);
         let grant = repo
             .accountability_grant()
@@ -197,8 +197,8 @@ mod tests {
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(45);
         let label = unique_label("durable");
-        let agent = agent_did(&label);
-        let controller = format!("did:web:{label}.example");
+        let agent = agent_id(&label);
+        let controller = format!("ak:did_core:web:{label}.example");
 
         let mut repo = factory.create().await.unwrap();
         let grant_input = sample_new(&mut rng, &clock, &label, &agent, &controller);
@@ -246,10 +246,10 @@ mod tests {
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(44);
         let label = unique_label("revocation");
-        let controller = format!("did:web:{label}.example");
-        let other_controller = format!("did:web:{label}-other.example");
-        let agent_one = format!("did:web:{label}-agent-one.example");
-        let agent_two = format!("did:web:{label}-agent-two.example");
+        let controller = format!("ak:did_core:web:{label}.example");
+        let other_controller = format!("ak:did_core:web:{label}-other.example");
+        let agent_one = format!("ak:did_core:web:{label}-agent-one.example");
+        let agent_two = format!("ak:did_core:web:{label}-agent-two.example");
 
         let grant_one_input = sample_new(
             &mut rng,

@@ -34,7 +34,9 @@ use arkret_policy::{
     NoDelegationResolver, RealmOrganizationDelegation, RealmOrganizationDelegationResolver,
     verify_realm_organization_statement,
 };
-use arkret_wire::{DidCoreId, DidUrl, Hash, NonEmptyString, ObjectRef, RealmId};
+use arkret_wire::{
+    Did, DidCoreId, DidUrl, Hash, NonEmptyString, ObjectRef, RealmId, project_did_to_core_id,
+};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::organization_control::OrganizationDelegation;
 use coauth_jose::constraints::Constrainable as _;
@@ -219,8 +221,11 @@ impl RealmOrganizationDelegationResolver for RepositoryDelegationResolver {
         };
         // Fail closed when the loaded row does not match the requested ref or
         // is anchored to a different organization.
+        let projected_organization_id = Did::new(delegation.organization_did.clone())
+            .ok()
+            .and_then(|did| project_did_to_core_id(&did).ok());
         if &delegation.delegation_ref != delegation_ref
-            || delegation.organization_did != organization_id.as_str()
+            || projected_organization_id.as_ref() != Some(organization_id)
         {
             return Ok(None);
         }
@@ -295,7 +300,7 @@ mod tests {
         OrganizationDelegation {
             id: "01J0".to_owned(),
             delegation_ref: reference.to_owned(),
-            organization_did: "did:webvh:example.test".to_owned(),
+            organization_did: "did:webvh:example.test:org.example".to_owned(),
             delegate_did: "did:web:server.acme.example".to_owned(),
             issuer_role: RealmOrganizationIssuerRole::GovernanceService,
             purposes: vec!["principal_control_realm_bootstrap".to_owned()],

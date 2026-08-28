@@ -345,10 +345,10 @@ CREATE TABLE public.invite_quarantine_queue (
     resolution_note text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT invite_quarantine_queue_consent_id_non_empty CHECK ((btrim(consent_id) <> ''::text)),
-    CONSTRAINT invite_quarantine_queue_peer_principal_id_non_empty CHECK ((btrim(peer_principal_id) <> ''::text)),
+    CONSTRAINT invite_quarantine_queue_peer_principal_id_shape CHECK ((peer_principal_id LIKE 'ak:did_core:%'::text)),
     CONSTRAINT invite_quarantine_queue_scope_non_empty CHECK ((btrim(scope) <> ''::text)),
     CONSTRAINT invite_quarantine_queue_status_known CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text]))),
-    CONSTRAINT invite_quarantine_queue_target_holder_principal_id_non_empty CHECK ((btrim(target_holder_principal_id) <> ''::text))
+    CONSTRAINT invite_quarantine_queue_target_holder_principal_id_shape CHECK ((target_holder_principal_id LIKE 'ak:did_core:%'::text))
 );
 
 CREATE TABLE public.notification_deliveries (

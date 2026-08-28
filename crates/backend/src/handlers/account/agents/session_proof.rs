@@ -1579,13 +1579,13 @@ mod tests {
     async fn authoritative_lifecycle_and_pairing_fail_closed() {
         let client = reqwest::Client::new();
         let (_active_server, active) = lifecycle_config("active", "pair-current").await;
-        enforce_authoritative_agent_lifecycle(&client, &active, "did:web:agent.example")
+        enforce_authoritative_agent_lifecycle(&client, &active, "ak:did_core:web:agent.example")
             .await
             .expect("active agent accepts");
         enforce_authoritative_pairing_handle(
             &client,
             &active,
-            "did:web:agent.example",
+            "ak:did_core:web:agent.example",
             "pair-current",
             chrono::Utc::now(),
         )
@@ -1595,7 +1595,7 @@ mod tests {
             enforce_authoritative_pairing_handle(
                 &client,
                 &active,
-                "did:web:agent.example",
+                "ak:did_core:web:agent.example",
                 "pair-old",
                 chrono::Utc::now(),
             )
@@ -1606,16 +1606,20 @@ mod tests {
 
         let (_paused_server, paused) = lifecycle_config("paused", "pair-paused").await;
         assert_eq!(
-            enforce_authoritative_agent_lifecycle(&client, &paused, "did:web:agent.example")
-                .await
-                .expect_err("paused agent rejects"),
+            enforce_authoritative_agent_lifecycle(
+                &client,
+                &paused,
+                "ak:did_core:web:agent.example",
+            )
+            .await
+            .expect_err("paused agent rejects"),
             AgentAuthRejection::AgentPaused
         );
         assert_eq!(
             enforce_authoritative_agent_lifecycle(
                 &client,
                 &ArkretConfig::default(),
-                "did:web:agent.example",
+                "ak:did_core:web:agent.example",
             )
             .await
             .expect_err("missing lifecycle authority rejects"),
@@ -1658,7 +1662,7 @@ mod tests {
         coauth_data::agent_key::AgentKeyAuthorization {
             id: coauth_data::Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
             authorized_event_id: "ak:event:AQoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoK".to_owned(),
-            agent_id: "did:web:agent.example".to_owned(),
+            agent_id: "ak:did_core:web:agent.example".to_owned(),
             key_id: "runtime-key-1".to_owned(),
             verification_method: "did:web:agent.example#runtime-key-1".to_owned(),
             public_key: serde_json::json!({
@@ -1667,7 +1671,7 @@ mod tests {
                 "controller": "did:web:agent.example",
                 "publicKeyMultibase": "z6MksG8zH7ZkUVGqdnqQWUV7s6jVMrptHToH6aQahJ2HWaW1",
             }),
-            accountable_principal_id: "did:web:controller.example".to_owned(),
+            accountable_principal_id: "ak:did_core:web:controller.example".to_owned(),
             agent_key_scope: canonical_agent_key_scope(),
             audience: vec!["https://arkret.example/_arkret".to_owned()],
             issued_at: now,
@@ -1699,7 +1703,7 @@ mod tests {
         validate_agent_key_authorization_binding(
             &authorization,
             now,
-            "did:web:agent.example",
+            "ak:did_core:web:agent.example",
             "did:web:agent.example#runtime-key-1",
             "https://arkret.example/_arkret",
         )
@@ -1715,7 +1719,7 @@ mod tests {
         let err = validate_agent_key_authorization_binding(
             &authorization,
             now,
-            "did:web:agent.example",
+            "ak:did_core:web:agent.example",
             "did:web:agent.example#runtime-key-1",
             "https://arkret.example/_arkret",
         )
@@ -1734,7 +1738,7 @@ mod tests {
         let error = validate_agent_key_authorization_binding(
             &authorization,
             now,
-            "did:web:agent.example",
+            "ak:did_core:web:agent.example",
             "did:web:agent.example#runtime-key-1",
             "https://arkret.example/_arkret",
         )
@@ -1752,7 +1756,7 @@ mod tests {
         let err = validate_agent_key_authorization_binding(
             &authorization,
             now,
-            "did:web:agent.example",
+            "ak:did_core:web:agent.example",
             "did:web:agent.example#runtime-key-1",
             "https://arkret.example/_arkret",
         )
@@ -1770,7 +1774,7 @@ mod tests {
         let err = validate_agent_key_authorization_binding(
             &authorization,
             now,
-            "did:web:agent.example",
+            "ak:did_core:web:agent.example",
             "did:web:agent.example#runtime-key-1",
             "https://arkret.example/_arkret",
         )
@@ -1788,7 +1792,7 @@ mod tests {
         validate_agent_key_authorization_binding(
             &authorization,
             now,
-            "did:web:agent.example",
+            "ak:did_core:web:agent.example",
             "did:web:agent.example#runtime-key-1",
             "https://arkret.example/_arkret",
         )
@@ -1807,7 +1811,7 @@ mod tests {
         let err = validate_agent_key_authorization_binding(
             &authorization,
             now,
-            "did:web:agent.example",
+            "ak:did_core:web:agent.example",
             "did:web:agent.example#runtime-key-1",
             "https://arkret.example/_arkret",
         )
@@ -1824,7 +1828,7 @@ mod tests {
         let err = validate_agent_key_authorization_binding(
             &authorization,
             now,
-            "did:web:agent.example",
+            "ak:did_core:web:agent.example",
             "did:web:agent.example#runtime-key-1",
             "https://evil.example/_arkret",
         )
@@ -1841,7 +1845,7 @@ mod tests {
         let err = validate_agent_key_authorization_binding(
             &authorization,
             now,
-            "did:web:agent.example",
+            "ak:did_core:web:agent.example",
             "did:web:agent.example#other-key",
             "https://arkret.example/_arkret",
         )

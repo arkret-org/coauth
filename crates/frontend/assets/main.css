@@ -991,7 +991,7 @@ html[data-theme="dark"] .btn-secondary:hover:not(:disabled) {
     flex: 1;
 }
 
-.user-principal-id {
+.user-principal-address {
     color: var(--color-text-secondary);
     font-size: var(--font-size-sm);
     overflow: hidden;

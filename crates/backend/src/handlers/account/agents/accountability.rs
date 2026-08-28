@@ -34,7 +34,7 @@ use super::proof::canonical_digest;
 use crate::handlers::account::{DepotExt, make_clock, make_rng};
 use crate::handlers::admin::CreatedJson;
 use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
-use crate::handlers::arkret::service_id_for;
+use crate::handlers::arkret::{issuer_did_for, service_id_for};
 use crate::services::did_binding_proof::normalize_did_for_binding;
 use crate::{AppError, CreatedJsonResult};
 
@@ -258,12 +258,13 @@ pub async fn post_accountability_grant(
         }
     });
     let key_store = depot.key_store()?;
+    let service_did = issuer_did_for(&arkret_config);
     record_service_admin_operation_signed(
         &mut repo,
         &mut *rng,
         &*clock,
         &key_store,
-        service_id.as_str(),
+        &service_did,
         arkret_config.audit_signature_fail_closed,
         AdminOperation::Other("accountability_grant_issued".to_owned()),
         "agent",

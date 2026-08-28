@@ -775,7 +775,7 @@ fn primary_did_for_user_never_resolves() {
         );
     }
     assert!(
-        body.contains("principal_id()"),
+        body.contains("principal_did()"),
         "primary_did_for_user must read the persisted principal binding"
     );
 }

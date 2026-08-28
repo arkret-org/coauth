@@ -156,7 +156,7 @@ pub struct ViewerInfo {
     pub id: String,
     pub handle: String,
     pub federated_handle: String,
-    pub principal_id: String,
+    pub principal_address: String,
     #[serde(default)]
     pub display_name: Option<String>,
 }
@@ -377,7 +377,7 @@ mod tests {
                 "id": "user:01KVVVKSMNEAFSMKH4HCXD1E7T",
                 "handle": "alice",
                 "federated_handle": "alice:auth.local.host",
-                "principal_id": "alice@auth.local.host",
+                "principal_address": "alice@auth.local.host",
                 "display_name": "alice"
             },
             "session_grant": null,

@@ -1714,7 +1714,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
                     "crv": "Ed25519",
                     "x": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                 }),
-                accountable_principal_id: "did:web:alice.example".to_owned(),
+                accountable_principal_id: "ak:did_core:web:alice.example".to_owned(),
                 agent_key_scope: serde_json::json!({
                     "actions": ["ak.agent.action:message.send"],
                     "resources": [],

@@ -4,7 +4,7 @@
 
 //! Creation endpoints: `POST /accounts` and `POST /accounts/batch-invite`.
 
-use arkret_wire::ConsentScope;
+use arkret_wire::{ConsentScope, DidCoreId};
 use chrono::Duration;
 use coauth_config::ArkretConfig;
 use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
@@ -162,10 +162,12 @@ pub struct BatchInviteRequestBody {
 pub struct BatchInviteConsentGate {
     /// DID of the requesting peer (the admin / service issuing this
     /// batch on behalf of someone). Triggers the gate when set.
-    pub peer_principal_id: String,
+    #[schemars(with = "String")]
+    pub peer_principal_id: DidCoreId,
 
     /// DID of the target holder whose consent cell governs the invite.
-    pub target_holder_principal_id: String,
+    #[schemars(with = "String")]
+    pub target_holder_principal_id: DidCoreId,
 
     /// Consent-cell identifier per spec §6.
     pub consent_id: String,
@@ -297,7 +299,12 @@ pub async fn evaluate_batch_invite_gate(
     )
     .await;
 
-    let decision = evaluate_invite_gate(&lookup, &gate.peer_principal_id, gate.scope, gate.consent_required);
+    let decision = evaluate_invite_gate(
+        &lookup,
+        &gate.peer_principal_id,
+        gate.scope,
+        gate.consent_required,
+    );
     match decision {
         InviteGateDecision::Allow => BatchInviteGateOutcome::Allow,
         InviteGateDecision::ConsentRequired => BatchInviteGateOutcome::ConsentRequired,
@@ -446,7 +453,9 @@ pub async fn batch_invite(
                         target_holder_principal_id: gate.target_holder_principal_id.clone(),
                         consent_id: gate.consent_id.clone(),
                         scope: gate.scope.to_string(),
-                        requesting_admin_localpart: admin_user.as_ref().map(|u| u.localpart.clone()),
+                        requesting_admin_localpart: admin_user
+                            .as_ref()
+                            .map(|u| u.localpart.clone()),
                         payload,
                     })
                     .await;
@@ -515,8 +524,8 @@ mod consent_gate_tests {
 
     fn gate_for(consent_id: &str, peer: &str, holder: &str) -> BatchInviteConsentGate {
         BatchInviteConsentGate {
-            peer_principal_id: peer.to_owned(),
-            target_holder_principal_id: holder.to_owned(),
+            peer_principal_id: DidCoreId::new(peer).unwrap(),
+            target_holder_principal_id: DidCoreId::new(holder).unwrap(),
             consent_id: consent_id.to_owned(),
             scope: ConsentScope::Invite,
             target_principal_url: None,

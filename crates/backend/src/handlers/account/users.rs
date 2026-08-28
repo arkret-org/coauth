@@ -39,7 +39,7 @@ pub struct ViewerProfileData {
 
 #[derive(Serialize, ToSchema)]
 pub struct PrincipalUserData {
-    pub principal_id: String,
+    pub principal_address: String,
     pub display_name: Option<String>,
 }
 
@@ -97,7 +97,7 @@ pub async fn patch_profile(
             updated_at: arkret_canonical::format_timestamp_canonical(user.updated_at),
         },
         principal: PrincipalUserData {
-            principal_id: principal_server.principal_id(&user.localpart),
+            principal_address: principal_server.principal_address(&user.localpart),
             display_name: user.display_name,
         },
     }))

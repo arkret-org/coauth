@@ -39,7 +39,7 @@ pub struct ConsentScreen {
     pub grant_id: Ulid,
     pub client: Client,
     pub scope: String,
-    pub user_principal_id: String,
+    pub user_principal_address: String,
     pub user_display_name: Option<String>,
     pub policy_violation: bool,
 }
@@ -50,7 +50,7 @@ impl From<AuthorizationConsentInfo> for ConsentScreen {
             grant_id: info.grant.id,
             scope: info.grant.scope.to_string(),
             client: info.client,
-            user_principal_id: info.principal_user.principal_id,
+            user_principal_address: info.principal_user.principal_address,
             user_display_name: info.principal_user.display_name,
             policy_violation: info.policy_violation,
         }
@@ -157,7 +157,7 @@ pub async fn load_authorization_consent(
         grant,
         client,
         principal_user: PrincipalUser {
-            principal_id: principal_server.principal_id(username),
+            principal_address: principal_server.principal_address(username),
             display_name: user_display_name,
         },
         policy_violation,
@@ -333,7 +333,7 @@ pub async fn load_device_consent(
         grant_id: grant.id,
         client,
         scope: grant.scope.to_string(),
-        user_principal_id: principal_server.principal_id(username),
+        user_principal_address: principal_server.principal_address(username),
         user_display_name,
         policy_violation,
     })

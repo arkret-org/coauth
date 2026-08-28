@@ -19,7 +19,7 @@ pub struct ViewerProfile {
     pub emails: Vec<UserEmail>,
     pub has_password: bool,
     pub principal_display_name: Option<String>,
-    pub principal_id: String,
+    pub principal_address: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,7 +99,7 @@ pub async fn load_viewer_profile(
     principal_server: &dyn ConnectorAdmin,
     user: &User,
 ) -> Result<ViewerProfile, UserProfileServiceError> {
-    let principal_id = principal_server.principal_id(&user.localpart);
+    let principal_address = principal_server.principal_address(&user.localpart);
     let principal_display_name = match principal_server.query_user(&user.localpart).await {
         Ok(info) => info.displayname.or_else(|| user.display_name.clone()),
         Err(_) => user.display_name.clone(),
@@ -120,7 +120,7 @@ pub async fn load_viewer_profile(
         emails,
         has_password,
         principal_display_name,
-        principal_id,
+        principal_address,
     })
 }
 

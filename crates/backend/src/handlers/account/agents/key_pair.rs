@@ -28,7 +28,7 @@ use crate::AppError;
 use crate::handlers::account::{DepotExt, make_clock, make_rng};
 use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
 use crate::handlers::arkret::{
-    ArkretRouteError, is_allowed_session_grant_audience, service_id_for,
+    ArkretRouteError, is_allowed_session_grant_audience, issuer_did_for, service_id_for,
 };
 use crate::services::did_binding_proof::normalize_did_for_binding;
 
@@ -432,12 +432,13 @@ pub async fn post_agent_key_pair(
         }
     });
     let key_store = depot.key_store()?;
+    let service_did = issuer_did_for(&arkret_config);
     record_service_admin_operation_signed(
         &mut repo,
         &mut *rng,
         &*clock,
         &key_store,
-        service_id.as_str(),
+        &service_did,
         arkret_config.audit_signature_fail_closed,
         AdminOperation::Other("agent_key_authorize_issued".to_owned()),
         "agent",

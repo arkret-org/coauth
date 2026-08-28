@@ -35,7 +35,7 @@ enum ViewerData {
 struct ViewerUser {
     id: String,
     username: String,
-    did: String,
+    principal_id: String,
     handle: String,
     can_request_admin: bool,
     has_password: bool,
@@ -70,7 +70,7 @@ struct BrowserSessionData {
 
 #[derive(Serialize, ToSchema)]
 struct PrincipalUserData {
-    principal_id: String,
+    principal_address: String,
     display_name: Option<String>,
 }
 
@@ -135,7 +135,7 @@ pub async fn get_viewer(
                 .map_err(super::map_user_profile_error)?;
 
             let principal = Some(PrincipalUserData {
-                principal_id: profile.principal_id,
+                principal_address: profile.principal_address,
                 display_name: profile.principal_display_name,
             });
 
@@ -157,14 +157,15 @@ pub async fn get_viewer(
             let total = email_edges.len() as i64;
 
             let has_password = profile.has_password;
-            let did = arkret::published_principal_id_for_user(&mut repo, &arkret_config, user)
-                .await?
-                .ok_or_else(|| {
-                    RouteError::Internal(Box::new(std::io::Error::other(format!(
-                        "missing principal DID for user {}",
-                        user.id
-                    ))))
-                })?;
+            let principal_id =
+                arkret::published_principal_id_for_user(&mut repo, &arkret_config, user)
+                    .await?
+                    .ok_or_else(|| {
+                        RouteError::Internal(Box::new(std::io::Error::other(format!(
+                            "missing principal DID for user {}",
+                            user.id
+                        ))))
+                    })?;
 
             // Fetch linked upstream OAuth accounts
             let linked_accounts: Vec<LinkedAccount> = load_linked_accounts(&mut repo, user, 100)
@@ -184,7 +185,7 @@ pub async fn get_viewer(
             let viewer_user = ViewerUser {
                 id: NodeType::User.serialize(user.id),
                 username: user.localpart.clone(),
-                did,
+                principal_id,
                 handle: arkret::user_handle(&url_builder, user),
                 can_request_admin: user.can_request_admin,
                 has_password,

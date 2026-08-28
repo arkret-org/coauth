@@ -107,7 +107,7 @@ fn OAuthApprovalForm(data: ApprovalDataOutcome, grant_id: String) -> Element {
                 p { class: "text-secondary",
                     strong { "{client_name}" }
                     " wants to access your account as "
-                    strong { "{data.user.principal_id}" }
+                    strong { "{data.user.principal_address}" }
                 }
 
                 if !scope_descriptions.read().is_empty() {

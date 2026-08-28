@@ -346,10 +346,7 @@ pub async fn introspect_token(
                 aud: None,
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: None,
-                arkret_principal_id: disclosure
-                    .is_full()
-                    .then_some(actor_principal_id)
-                    .flatten(),
+                arkret_principal_id: disclosure.is_full().then_some(actor_principal_id).flatten(),
                 arkret_device_id: disclosure.is_full().then_some(device_id).flatten(),
                 arkret_session_id: disclosure.is_full().then(|| session.id.to_string()),
             }

@@ -15,6 +15,7 @@
 //! projection the backend emits and must be carried by every consumer of
 //! this shape.
 
+use arkret_identifiers::DidCoreId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -156,23 +157,27 @@ pub struct AdminAccountAttributes {
 
     /// Primary principal identifier once DID binding storage is available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub primary_principal_id: Option<String>,
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = Option<String>)))]
+    pub primary_principal_id: Option<DidCoreId>,
 
     /// Bound principal identifiers.
     #[serde(default)]
-    pub principal_ids: Vec<String>,
+    #[cfg_attr(feature = "schema", schemars(with = "Vec<String>"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = Vec<String>)))]
+    pub principal_ids: Vec<DidCoreId>,
 }
 
 impl AdminAccountAttributes {
-    /// Convenience: pick the best available primary DID. Prefers the
+    /// Convenience: pick the best available primary principal id. Prefers the
     /// explicit `primary_principal_id` and falls back to the first
     /// entry in `principal_ids` so callers do not have to repeat that
     /// fallback at every call site.
     #[must_use]
-    pub fn effective_primary_did(&self) -> Option<&str> {
+    pub fn effective_primary_id(&self) -> Option<&DidCoreId> {
         self.primary_principal_id
-            .as_deref()
-            .or_else(|| self.principal_ids.first().map(String::as_str))
+            .as_ref()
+            .or_else(|| self.principal_ids.first())
     }
 }
 
@@ -210,15 +215,22 @@ mod tests {
     }
 
     #[test]
-    fn effective_primary_did_falls_back_to_principal_list() {
+    fn effective_primary_id_falls_back_to_principal_list() {
         let mut a = AdminAccountAttributes::default();
-        assert_eq!(a.effective_primary_did(), None);
+        assert_eq!(a.effective_primary_id(), None);
 
-        a.principal_ids.push("did:web:fallback.example".into());
-        assert_eq!(a.effective_primary_did(), Some("did:web:fallback.example"));
+        a.principal_ids
+            .push(DidCoreId::new("ak:did_core:web:fallback.example").unwrap());
+        assert_eq!(
+            a.effective_primary_id().map(DidCoreId::as_str),
+            Some("ak:did_core:web:fallback.example")
+        );
 
-        a.primary_principal_id = Some("did:web:explicit.example".into());
-        assert_eq!(a.effective_primary_did(), Some("did:web:explicit.example"));
+        a.primary_principal_id = Some(DidCoreId::new("ak:did_core:web:explicit.example").unwrap());
+        assert_eq!(
+            a.effective_primary_id().map(DidCoreId::as_str),
+            Some("ak:did_core:web:explicit.example")
+        );
     }
 
     #[test]

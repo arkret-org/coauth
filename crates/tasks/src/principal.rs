@@ -75,11 +75,11 @@ impl RunnableJob for ProvisionUserJob {
             .await
             .map_err(JobError::retry)?;
 
-        let principal_id = principal.principal_id(&user.localpart);
+        let principal_address = principal.principal_address(&user.localpart);
         if created {
-            info!(%user.id, %principal_id, "user created on principal");
+            info!(%user.id, %principal_address, "user created on principal");
         } else {
-            info!(%user.id, %principal_id, "user updated on principal");
+            info!(%user.id, %principal_address, "user updated on principal");
         }
 
         // Follow up with a device sync

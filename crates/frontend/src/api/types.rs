@@ -55,7 +55,7 @@ pub struct User {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct PrincipalUser {
-    pub principal_id: String,
+    pub principal_address: String,
     pub display_name: Option<String>,
 }
 
@@ -473,7 +473,7 @@ pub struct ApprovalClientInfo {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ApprovalUserInfo {
-    pub principal_id: String,
+    pub principal_address: String,
     #[serde(default)]
     pub display_name: Option<String>,
 }

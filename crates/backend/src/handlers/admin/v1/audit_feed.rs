@@ -15,7 +15,7 @@ use crate::handlers::admin::audit_helper::{
     AuditSignatureStatus, verify_admin_operation_signature,
 };
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::arkret::service_id_for;
+use crate::handlers::arkret::issuer_did_for;
 use crate::handlers::common::DepotExt;
 use crate::{AppError, JsonResult};
 
@@ -95,7 +95,7 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<AuditFeedOu
         .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
     let key_store = depot.key_store()?;
     let arkret_config = depot.arkret_config()?;
-    let service_id = service_id_for(&arkret_config);
+    let service_did = issuer_did_for(&arkret_config);
 
     let mut filter = AdminOperationFilter::new().with_limit(query.limit.unwrap_or(50));
 
@@ -116,8 +116,7 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<AuditFeedOu
     let data: Vec<AuditEntry> = logs
         .into_iter()
         .map(|log| {
-            let signature_status =
-                verify_admin_operation_signature(&log, &key_store, service_id.as_str());
+            let signature_status = verify_admin_operation_signature(&log, &key_store, &service_did);
             audit_entry_from_log(log, signature_status)
         })
         .collect();

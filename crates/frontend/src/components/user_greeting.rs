@@ -20,13 +20,13 @@ pub fn UserGreeting(
     let initial = display_name
         .as_ref()
         .and_then(|name| name.chars().next())
-        .or_else(|| principal.principal_id.chars().next())
+        .or_else(|| principal.principal_address.chars().next())
         .unwrap_or('?')
         .to_uppercase()
         .to_string();
 
     let avatar_url = profile.avatar_url.clone();
-    let principal_id = principal.principal_id.clone();
+    let principal_address = principal.principal_address.clone();
     drop(profile);
     drop(principal);
 
@@ -44,9 +44,9 @@ pub fn UserGreeting(
             div { class: "user-meta",
                 if let Some(display_name) = display_name {
                     span { class: "text-lg font-semibold", "{display_name}" }
-                    span { class: "user-principal-id", "{principal_id}" }
+                    span { class: "user-principal-address", "{principal_address}" }
                 } else {
-                    span { class: "text-lg font-semibold", "{principal_id}" }
+                    span { class: "text-lg font-semibold", "{principal_address}" }
                 }
             }
             if display_name_change_allowed {
@@ -89,7 +89,7 @@ pub fn EditProfileDialog(
         .as_ref()
         .or(principal.display_name.as_ref())
         .and_then(|name| name.chars().next())
-        .or_else(|| principal.principal_id.chars().next())
+        .or_else(|| principal.principal_address.chars().next())
         .unwrap_or('?')
         .to_uppercase()
         .to_string();
@@ -245,7 +245,7 @@ pub fn EditProfileDialog(
                     input {
                         class: "form-input",
                         r#type: "text",
-                        value: "{principal.principal_id}",
+                        value: "{principal.principal_address}",
                         readonly: true,
                     }
                 }

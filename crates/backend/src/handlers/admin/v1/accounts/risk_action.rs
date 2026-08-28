@@ -473,7 +473,7 @@ pub async fn propose(
     let risk_action_proposals = depot.risk_action_proposals_service()?;
     let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
-    let service_id = service_id_for(&arkret_config);
+    let service_did = crate::handlers::arkret::issuer_did_for(&arkret_config);
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
         clock,
@@ -518,7 +518,7 @@ pub async fn propose(
             &mut rng,
             &*clock,
             &key_store,
-            service_id.as_str(),
+            &service_did,
             arkret_config.audit_signature_fail_closed,
             admin_user.as_ref(),
             AdminOperation::Other(format!("account_{}_proposal", params.action)),
@@ -599,7 +599,7 @@ pub async fn approve(
     let key_store = depot.key_store()?;
     let url_builder = depot.url_builder()?;
     let http_client = depot.http_client().map_err(AppError::internal)?;
-    let service_id = service_id_for(&arkret_config);
+    let service_did = crate::handlers::arkret::issuer_did_for(&arkret_config);
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
         clock,
@@ -678,7 +678,7 @@ pub async fn approve(
             &mut rng,
             &*clock,
             &key_store,
-            service_id.as_str(),
+            &service_did,
             arkret_config.audit_signature_fail_closed,
             admin_user.as_ref(),
             AdminOperation::Other(format!("account_{}_proposal_approved", params.action)),
@@ -808,9 +808,11 @@ pub async fn execute(
     let principal_server = depot.principal_server()?;
     let key_store = depot.key_store()?;
     let service_id = service_id_for(&arkret_config);
+    let service_did = crate::handlers::arkret::issuer_did_for(&arkret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
-        service_id: service_id.as_str(),
+        service_id: &service_id,
+        service_did: &service_did,
         fail_closed: arkret_config.audit_signature_fail_closed,
     };
     let executed_at = clock.now();
@@ -878,7 +880,7 @@ pub async fn execute(
         &mut rng,
         &*clock,
         &key_store,
-        service_id.as_str(),
+        &service_did,
         arkret_config.audit_signature_fail_closed,
         admin_user.as_ref(),
         AdminOperation::Other(format!("account_{}_proposal_executed", params.action)),

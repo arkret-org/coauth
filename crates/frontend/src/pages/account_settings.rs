@@ -46,10 +46,10 @@ pub fn AccountSettings() -> Element {
             let password_login_enabled = result.site_config.password_login_enabled;
             let account_deactivation_allowed = result.site_config.account_deactivation_allowed;
             let session_id = session.id.clone();
-            let user_principal_id = user
+            let user_principal_address = user
                 .principal
                 .as_ref()
-                .map(|m| m.principal_id.clone())
+                .map(|m| m.principal_address.clone())
                 .unwrap_or_default();
 
             rsx! {
@@ -91,7 +91,7 @@ pub fn AccountSettings() -> Element {
                     if account_deactivation_allowed {
                         Separator {}
                         AccountDeleteButton {
-                            principal_id: user_principal_id.clone(),
+                            principal_address: user_principal_address.clone(),
                             has_password: has_password,
                             password_login_enabled: password_login_enabled,
                         }
@@ -272,7 +272,7 @@ fn LinkedAccountsSection(accounts: Vec<LinkedAccount>) -> Element {
 
 #[component]
 fn AccountDeleteButton(
-    principal_id: String,
+    principal_address: String,
     has_password: bool,
     password_login_enabled: bool,
 ) -> Element {
@@ -283,9 +283,9 @@ fn AccountDeleteButton(
     let mut erase_data = use_signal(|| false);
     let mut confirm_enabled = use_signal(|| false);
     let mut password = use_signal(String::new);
-    let mut principal_id_confirm = use_signal(String::new);
-    let principal_id_clone = principal_id.clone();
-    let principal_id_for_check = principal_id.clone();
+    let mut principal_address_confirm = use_signal(String::new);
+    let principal_address_clone = principal_address.clone();
+    let principal_address_for_check = principal_address.clone();
 
     let use_password_mode = has_password && password_login_enabled;
 
@@ -304,7 +304,7 @@ fn AccountDeleteButton(
     let form_valid = if use_password_mode {
         !password.read().is_empty()
     } else {
-        *principal_id_confirm.read() == principal_id_for_check
+        *principal_address_confirm.read() == principal_address_for_check
     };
 
     rsx! {
@@ -315,17 +315,17 @@ fn AccountDeleteButton(
                 erase_data.set(false);
                 error.set(None);
                 password.set(String::new());
-                principal_id_confirm.set(String::new());
+                principal_address_confirm.set(String::new());
                 show_dialog.set(true);
             },
             "Deactivate account"
         }
 
         Dialog { open: show_dialog, title: "Deactivate account".to_owned(),
-            if !principal_id_clone.is_empty() {
+            if !principal_address_clone.is_empty() {
                 p { class: "text-md",
                     "Account: "
-                    strong { "{principal_id_clone}" }
+                    strong { "{principal_address_clone}" }
                 }
             }
 
@@ -350,7 +350,7 @@ fn AccountDeleteButton(
                 }
             }
 
-            // Password or principal_id confirmation
+            // Password or account-address confirmation
             if use_password_mode {
                 div { class: "form-field",
                     label { class: "form-label", "Enter your password to confirm" }
@@ -362,18 +362,18 @@ fn AccountDeleteButton(
                         oninput: move |e| password.set(e.value()),
                     }
                 }
-            } else if !principal_id_clone.is_empty() {
+            } else if !principal_address_clone.is_empty() {
                 div { class: "form-field",
                     label { class: "form-label",
                         "Type "
-                        strong { "{principal_id_clone}" }
+                        strong { "{principal_address_clone}" }
                         " to confirm"
                     }
                     input {
                         class: "form-input",
                         r#type: "text",
-                        value: "{principal_id_confirm}",
-                        oninput: move |e| principal_id_confirm.set(e.value()),
+                        value: "{principal_address_confirm}",
+                        oninput: move |e| principal_address_confirm.set(e.value()),
                     }
                 }
             }

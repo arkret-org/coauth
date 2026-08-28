@@ -14,6 +14,7 @@ pub mod update;
 #[cfg(test)]
 mod api_tests;
 
+use arkret_identifiers::{Did, project_did_to_core_id};
 use coauth_admin_types::{
     AdminAccountAttributes, AdminAccountClaimRecord as AccountClaimRecord,
     AdminAccountClaimsOutcome as AccountClaimsOutcome, AdminAccountStatus as AccountStatus,
@@ -35,7 +36,6 @@ use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
 use crate::handlers::admin::v1::account_dids::primary_did_for_user;
-use crate::handlers::arkret::service_id_for;
 use crate::handlers::common::DepotExt;
 use crate::services::account_claims::{
     AccountClaimFilter, AccountClaimRecord as StoredAccountClaimRecord,
@@ -81,7 +81,24 @@ impl AccountRecord {
         let mut repo = depot.repo().await?;
         let status = admin_account_status(user.status);
         let primary_principal_id =
-            primary_did_for_user(&mut repo, &user, &arkret_config, did_resolver.as_ref()).await?;
+            primary_did_for_user(&mut repo, &user, &arkret_config, did_resolver.as_ref())
+                .await?
+                .map(|did| {
+                    Did::new(did)
+                        .map_err(|error| {
+                            AppError::internal(std::io::Error::other(format!(
+                                "stored primary DID is invalid: {error}"
+                            )))
+                        })
+                        .and_then(|did| {
+                            project_did_to_core_id(&did).map_err(|error| {
+                                AppError::internal(std::io::Error::other(format!(
+                                    "stored primary DID cannot project to a principal id: {error}"
+                                )))
+                            })
+                        })
+                })
+                .transpose()?;
         let principal_ids = primary_principal_id.iter().cloned().collect();
         repo.cancel().await?;
 
@@ -434,10 +451,12 @@ async fn patch_account(
     let id = extract_ulid_param(req)?;
     let principal_server = depot.principal_server()?;
     let key_store = depot.key_store()?;
-    let service_id = service_id_for(&arkret_config);
+    let service_id = crate::handlers::arkret::service_id_for(&arkret_config);
+    let service_did = crate::handlers::arkret::issuer_did_for(&arkret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
-        service_id: service_id.as_str(),
+        service_id: &service_id,
+        service_did: &service_did,
         fail_closed: arkret_config.audit_signature_fail_closed,
     };
     let mut rng = crate::handlers::account::make_rng();

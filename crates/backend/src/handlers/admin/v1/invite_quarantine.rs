@@ -29,6 +29,7 @@
 //! been resolved out of band) rather than auto-minting tokens that the
 //! caller never reviewed.
 
+use arkret_wire::DidCoreId;
 use chrono::{DateTime, Utc};
 use coauth_data::audit::AdminOperation;
 use salvo::oapi::ToSchema;
@@ -75,8 +76,12 @@ impl From<InviteQuarantineStatus> for WireStatus {
 pub struct InviteQuarantineEntry {
     pub id: String,
     pub created_at: DateTime<Utc>,
-    pub peer_principal_id: String,
-    pub target_holder_principal_id: String,
+    #[schemars(with = "String")]
+    #[salvo(schema(value_type = String))]
+    pub peer_principal_id: DidCoreId,
+    #[schemars(with = "String")]
+    #[salvo(schema(value_type = String))]
+    pub target_holder_principal_id: DidCoreId,
     pub consent_id: String,
     pub scope: String,
     pub requesting_admin_localpart: Option<String>,
@@ -390,8 +395,8 @@ mod tests {
         let rec = InviteQuarantineRecord {
             id,
             created_at: now,
-            peer_principal_id: "did:web:peer".into(),
-            target_holder_principal_id: "did:web:holder".into(),
+            peer_principal_id: DidCoreId::new("ak:did_core:web:peer").unwrap(),
+            target_holder_principal_id: DidCoreId::new("ak:did_core:web:holder").unwrap(),
             consent_id: "c-99".into(),
             scope: "invite".into(),
             requesting_admin_localpart: Some("admin1".into()),
@@ -402,8 +407,11 @@ mod tests {
         };
         let entry = InviteQuarantineEntry::from(rec);
         assert_eq!(entry.id, id.to_string());
-        assert_eq!(entry.peer_principal_id, "did:web:peer");
-        assert_eq!(entry.target_holder_principal_id, "did:web:holder");
+        assert_eq!(entry.peer_principal_id.as_str(), "ak:did_core:web:peer");
+        assert_eq!(
+            entry.target_holder_principal_id.as_str(),
+            "ak:did_core:web:holder"
+        );
         assert_eq!(entry.consent_id, "c-99");
         assert_eq!(entry.scope, "invite");
         assert_eq!(entry.requesting_admin_localpart.as_deref(), Some("admin1"));

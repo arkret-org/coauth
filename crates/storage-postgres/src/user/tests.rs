@@ -26,8 +26,8 @@ use crate::test_utils::{
     principal_control_realm_id, verified_principal_binding_input,
 };
 
-/// Complete Account Authority DID these repository fixtures were bound under.
-const TEST_ACCOUNT_AUTHORITY_ID: &str = "did:webvh:zaccountauthority:account.example";
+/// Stable Account Authority identity these repository fixtures are bound under.
+const TEST_ACCOUNT_AUTHORITY_ID: &str = "ak:did_core:webvh:zaccountauthority:account.example";
 
 fn registration_binding_input(
     audience: impl Into<String>,

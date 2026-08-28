@@ -37,7 +37,7 @@ pub struct ClientInfo {
 
 #[derive(Serialize, ToSchema)]
 pub struct UserInfo {
-    pub principal_id: String,
+    pub principal_address: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
 }
@@ -100,7 +100,7 @@ fn approval_get_response(screen: ConsentScreen) -> ApprovalGetOutcome {
         client: client_info(&screen.client),
         scope: screen.scope,
         user: UserInfo {
-            principal_id: screen.user_principal_id,
+            principal_address: screen.user_principal_address,
             display_name: screen.user_display_name,
         },
         policy_violation: screen.policy_violation,

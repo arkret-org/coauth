@@ -26,6 +26,7 @@
 
 use std::sync::Arc;
 
+use arkret_wire::DidCoreId;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use diesel::QueryableByName;
@@ -72,8 +73,8 @@ impl InviteQuarantineStatus {
 pub struct InviteQuarantineRecord {
     pub id: Uuid,
     pub created_at: DateTime<Utc>,
-    pub peer_principal_id: String,
-    pub target_holder_principal_id: String,
+    pub peer_principal_id: DidCoreId,
+    pub target_holder_principal_id: DidCoreId,
     pub consent_id: String,
     pub scope: String,
     pub requesting_admin_localpart: Option<String>,
@@ -90,8 +91,8 @@ pub struct InviteQuarantineRecord {
 /// `batch_invite`, which has not minted any tokens yet at the gate point).
 #[derive(Clone, Debug)]
 pub struct EnqueueInviteQuarantine {
-    pub peer_principal_id: String,
-    pub target_holder_principal_id: String,
+    pub peer_principal_id: DidCoreId,
+    pub target_holder_principal_id: DidCoreId,
     pub consent_id: String,
     pub scope: String,
     pub requesting_admin_localpart: Option<String>,
@@ -156,14 +157,21 @@ struct InviteQuarantineRow {
 }
 
 impl InviteQuarantineRow {
-    fn into_record(self) -> InviteQuarantineRecord {
+    fn try_into_record(self) -> anyhow::Result<InviteQuarantineRecord> {
         let status =
             InviteQuarantineStatus::parse(&self.status).unwrap_or(InviteQuarantineStatus::Pending);
-        InviteQuarantineRecord {
+        let peer_principal_id = DidCoreId::new(self.peer_principal_id).map_err(|error| {
+            anyhow::anyhow!("invalid invite quarantine peer_principal_id: {error}")
+        })?;
+        let target_holder_principal_id =
+            DidCoreId::new(self.target_holder_principal_id).map_err(|error| {
+                anyhow::anyhow!("invalid invite quarantine target_holder_principal_id: {error}")
+            })?;
+        Ok(InviteQuarantineRecord {
             id: self.id,
             created_at: self.created_at,
-            peer_principal_id: self.peer_principal_id,
-            target_holder_principal_id: self.target_holder_principal_id,
+            peer_principal_id,
+            target_holder_principal_id,
             consent_id: self.consent_id,
             scope: self.scope,
             requesting_admin_localpart: self.requesting_admin_localpart,
@@ -171,7 +179,7 @@ impl InviteQuarantineRow {
             status,
             resolved_at: self.resolved_at,
             resolution_note: self.resolution_note,
-        }
+        })
     }
 }
 
@@ -218,8 +226,8 @@ impl PgInviteQuarantineService {
             ",
         )
         .bind::<DieselUuid, _>(id)
-        .bind::<Text, _>(input.peer_principal_id)
-        .bind::<Text, _>(input.target_holder_principal_id)
+        .bind::<Text, _>(input.peer_principal_id.as_str())
+        .bind::<Text, _>(input.target_holder_principal_id.as_str())
         .bind::<Text, _>(input.consent_id)
         .bind::<Text, _>(input.scope)
         .bind::<Nullable<Text>, _>(input.requesting_admin_localpart)
@@ -229,7 +237,8 @@ impl PgInviteQuarantineService {
 
         rows.into_iter()
             .next()
-            .map(InviteQuarantineRow::into_record)
+            .map(InviteQuarantineRow::try_into_record)
+            .transpose()?
             .ok_or_else(|| anyhow::anyhow!("invite_quarantine_queue insert returned no row"))
     }
 
@@ -260,10 +269,9 @@ impl PgInviteQuarantineService {
         .get_results::<InviteQuarantineRow>(&mut *conn)
         .await?;
 
-        Ok(rows
-            .into_iter()
-            .map(InviteQuarantineRow::into_record)
-            .collect())
+        rows.into_iter()
+            .map(InviteQuarantineRow::try_into_record)
+            .collect()
     }
 
     async fn get_inner(&self, id: Uuid) -> anyhow::Result<Option<InviteQuarantineRecord>> {
@@ -290,10 +298,10 @@ impl PgInviteQuarantineService {
         .get_results::<InviteQuarantineRow>(&mut *conn)
         .await?;
 
-        Ok(rows
-            .into_iter()
+        rows.into_iter()
             .next()
-            .map(InviteQuarantineRow::into_record))
+            .map(InviteQuarantineRow::try_into_record)
+            .transpose()
     }
 
     async fn mark_resolved_inner(
@@ -335,10 +343,10 @@ impl PgInviteQuarantineService {
         .get_results::<InviteQuarantineRow>(&mut *conn)
         .await?;
 
-        Ok(rows
-            .into_iter()
+        rows.into_iter()
             .next()
-            .map(InviteQuarantineRow::into_record))
+            .map(InviteQuarantineRow::try_into_record)
+            .transpose()
     }
 }
 
@@ -418,8 +426,8 @@ mod tests {
         let row = InviteQuarantineRow {
             id: Uuid::now_v7(),
             created_at: Utc::now(),
-            peer_principal_id: "did:web:p".into(),
-            target_holder_principal_id: "did:web:h".into(),
+            peer_principal_id: "ak:did_core:web:p".into(),
+            target_holder_principal_id: "ak:did_core:web:h".into(),
             consent_id: "c-1".into(),
             scope: "invite".into(),
             requesting_admin_localpart: None,
@@ -428,18 +436,18 @@ mod tests {
             resolved_at: None,
             resolution_note: None,
         };
-        let rec = row.into_record();
+        let rec = row.try_into_record().unwrap();
         assert_eq!(rec.status, InviteQuarantineStatus::Pending);
     }
 
     #[test]
     fn enqueue_dto_carries_payload() {
         let dto = EnqueueInviteQuarantine {
-            peer_principal_id: "did:web:peer".into(),
-            target_holder_principal_id: "did:web:holder".into(),
+            peer_principal_id: DidCoreId::new("ak:did_core:web:peer").unwrap(),
+            target_holder_principal_id: DidCoreId::new("ak:did_core:web:holder").unwrap(),
             consent_id: "c-1".into(),
             scope: "invite".into(),
-            requesting_admin_localpart: Some("did:web:admin".into()),
+            requesting_admin_localpart: Some("admin".into()),
             payload: serde_json::json!({"reason": "missing-grant"}),
         };
         assert_eq!(dto.scope, "invite");

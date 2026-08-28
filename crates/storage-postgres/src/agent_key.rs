@@ -59,7 +59,7 @@ mod tests {
     fn proof_replay(label: &str, clock: &dyn Clock) -> NewAgentSessionProofReplay {
         let now = clock.now();
         NewAgentSessionProofReplay {
-            agent_id: format!("did:web:{label}-agent.example"),
+            agent_id: format!("ak:did_core:web:{label}-agent.example"),
             verification_method: format!("did:web:{label}-agent.example#runtime-key-1"),
             challenge: format!("challenge-{label}"),
             nonce: format!("nonce-{label}"),
@@ -75,14 +75,14 @@ mod tests {
         event_suffix: &str,
         clock: &dyn Clock,
     ) -> NewAgentKeyAuthorization {
-        let agent_id = format!("did:web:{label}-agent.example");
+        let agent_id = format!("ak:did_core:web:{label}-agent.example");
         NewAgentKeyAuthorization {
             authorized_event_id: format!("ak:event:{event_suffix}"),
             agent_id: agent_id.clone(),
             key_id: "runtime-key-1".to_owned(),
-            verification_method: format!("{agent_id}#runtime-key-1"),
+            verification_method: format!("did:web:{label}-agent.example#runtime-key-1"),
             public_key: serde_json::json!({ "kty": "OKP", "key": "fixture" }),
-            accountable_principal_id: format!("did:web:{label}-controller.example"),
+            accountable_principal_id: format!("ak:did_core:web:{label}-controller.example"),
             agent_key_scope: r#"{"actions":["ak.self.events.stream.subscribe.v1"],"resources":[]}"#
                 .to_owned(),
             audience: vec!["did:web:soland.test".to_owned()],

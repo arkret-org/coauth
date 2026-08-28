@@ -290,12 +290,12 @@ pub trait ConnectorAdmin: Send + Sync {
         ))
     }
 
-    /// Get the downstream principal account ID for the given handle.
+    /// Get the downstream principal account address for the given handle.
     ///
     /// # Parameters
     ///
     /// * `handle` - The local account handle.
-    fn principal_id(&self, handle: &str) -> String {
+    fn principal_address(&self, handle: &str) -> String {
         format!("{handle}@{}", self.principal_authority())
     }
 

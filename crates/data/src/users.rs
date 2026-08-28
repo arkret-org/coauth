@@ -14,7 +14,7 @@ use crate::pagination::Node;
 /// A downstream principal account projection used by consent and viewer APIs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PrincipalUser {
-    pub principal_id: String,
+    pub principal_address: String,
     pub display_name: Option<String>,
 }
 
