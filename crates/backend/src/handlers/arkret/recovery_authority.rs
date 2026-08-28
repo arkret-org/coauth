@@ -135,14 +135,14 @@ pub async fn issue_recovery_completion_grant_endpoint(
     let principal_authority = verify_account_principal_binding(
         &mut prerequisite_repo,
         handoff.service_account_id,
-        &handoff.audience,
+        &handoff.audience_id,
         receipt.principal_id.as_str(),
     )
     .await?;
     verify_principal_server_completion_signatures(
         depot,
         &mut prerequisite_repo,
-        &handoff.audience,
+        &handoff.audience_id,
         &request,
         &receipt,
     )
@@ -278,7 +278,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         &key_store,
         &browser_session,
         session_public_key,
-        initial.audience.to_string(),
+        initial.audience_id.to_string(),
         initial.device_id.clone(),
         STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
             .iter()
@@ -298,7 +298,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         expires_at: material.expires_at_timestamp,
         session_grant_id: material.grant_id.clone(),
         session_public_key: initial.session_public_key.clone(),
-        audience: initial.audience.clone(),
+        audience_id: initial.audience_id.clone(),
         granted_scope: material.scopes.clone(),
         scope_details: None,
     };
@@ -431,13 +431,13 @@ fn validate_completion_evidence(
         || receipt.authorization_event_id != attestation.device_authorization_event_id
         || receipt_generation != request_generation
         || receipt.completed_at != attestation.completed_at
-        || attestation.coordinator_id.as_str() != handoff.audience
+        || attestation.coordinator_id.as_str() != handoff.audience_id
     {
         return Err(failed_precondition(
             "recovery receipt, completion attestation, replacement device and current generation disagree",
         ));
     }
-    if initial.audience.as_str() != handoff.audience {
+    if initial.audience_id.as_str() != handoff.audience_id {
         return Err(failed_precondition(
             "initial SessionGrant audience does not match the account handoff audience",
         ));

@@ -121,7 +121,7 @@ pub async fn issue_did_binding_challenge(
                 ));
             }
         };
-    let audience = arkret_identifiers::DidCoreId::new(grant.audience.clone())
+    let audience = arkret_identifiers::DidCoreId::new(grant.audience_id.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
     let trust_domain =
         arkret_identifiers::TrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
@@ -146,8 +146,8 @@ pub async fn issue_did_binding_challenge(
             challenge_id: random_opaque(&mut *rng, 24),
             challenge: random_opaque(&mut *rng, 32),
             dpop_jkt: grant.cnf_jkt,
-            audience,
-            origin,
+            audience_id: audience,
+            origin_uri: origin,
             trust_domain,
             issued_at: now,
             expires_at: now + IDENTITY_BINDING_CHALLENGE_TTL,
@@ -226,7 +226,7 @@ pub async fn create_account_handoff(
     // the `UpstreamOidcExchangeMode::LocalCoauth` condition of
     // `exchange_mode_for_issuer`; an unparseable issuer falls through to the
     // federated path, which rejects it as `proof_invalid` like before.
-    if url::Url::parse(body.proof.issuer.trim())
+    if url::Url::parse(body.proof.issuer_uri.trim())
         .is_ok_and(|issuer| issuer == url_builder.oidc_issuer())
     {
         return create_local_account_handoff(
@@ -252,7 +252,7 @@ pub async fn create_account_handoff(
             canonical_intent_digest: canonical_intent_digest.clone(),
             canonical_intent,
             holder_jkt: dpop_binding.jkt.clone(),
-            issuer: body.proof.issuer.clone(),
+            issuer: body.proof.issuer_uri.clone(),
             client_id: body.proof.client_id.clone(),
             authorization_code_digest,
             dpop_jti_digest,
@@ -293,11 +293,11 @@ pub async fn create_account_handoff(
         authorization_code: proof.authorization_code.clone(),
         code_verifier: proof.code_verifier.clone(),
         redirect_uri: proof.redirect_uri.clone(),
-        issuer: proof.issuer.clone(),
+        issuer: proof.issuer_uri.clone(),
         client_id: proof.client_id.clone(),
         state: proof.state.clone(),
         nonce: proof.nonce.clone(),
-        requested_audience: Some(proof.audience.to_string()),
+        requested_audience: Some(proof.audience_id.to_string()),
     };
     let authenticated =
         exchange_oidc_code_for_account_handoff(req, depot, dpop_binding.clone(), input)
@@ -310,7 +310,7 @@ pub async fn create_account_handoff(
                 );
                 map_oidc_exchange_error(error)
             })?;
-    if authenticated.audience != proof.audience.as_str() {
+    if authenticated.audience != proof.audience_id.as_str() {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
@@ -326,7 +326,7 @@ pub async fn create_account_handoff(
     let checkpoint = AccountHandoffAuthorizationCheckpoint {
         service_account_id: authenticated.user.id.to_string(),
         browser_session_id: authenticated.browser_session_id.map(|id| id.to_string()),
-        audience: arkret_identifiers::DidCoreId::new(authenticated.audience)
+        audience_id: arkret_identifiers::DidCoreId::new(authenticated.audience)
             .map_err(|error| failed_precondition(error.to_string()))?,
         account_handle: account_handle.to_string(),
         preferred_locale: preferred_locale.map(|locale| locale.code().to_owned()),
@@ -410,7 +410,7 @@ async fn create_local_account_handoff(
             canonical_intent_digest: canonical_intent_digest.clone(),
             canonical_intent,
             holder_jkt: dpop_binding.jkt.clone(),
-            issuer: body.proof.issuer.clone(),
+            issuer: body.proof.issuer_uri.clone(),
             client_id: body.proof.client_id.clone(),
             authorization_code_digest,
             dpop_jti_digest,
@@ -454,11 +454,11 @@ async fn create_local_account_handoff(
         authorization_code: proof.authorization_code.clone(),
         code_verifier: proof.code_verifier.clone(),
         redirect_uri: proof.redirect_uri.clone(),
-        issuer: proof.issuer.clone(),
+        issuer: proof.issuer_uri.clone(),
         client_id: proof.client_id.clone(),
         state: proof.state.clone(),
         nonce: proof.nonce.clone(),
-        requested_audience: Some(proof.audience.to_string()),
+        requested_audience: Some(proof.audience_id.to_string()),
     };
     let authenticated =
         match authenticate_local_handoff_code(depot, &mut repo, &clock, &input).await {
@@ -473,7 +473,7 @@ async fn create_local_account_handoff(
                 return Err(map_oidc_exchange_error(error));
             }
         };
-    if authenticated.audience != proof.audience.as_str() {
+    if authenticated.audience != proof.audience_id.as_str() {
         repo.cancel().await.ok();
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
@@ -506,7 +506,7 @@ async fn create_local_account_handoff(
     let checkpoint = AccountHandoffAuthorizationCheckpoint {
         service_account_id: authenticated.user.id.to_string(),
         browser_session_id: Some(authenticated.browser_session_id.to_string()),
-        audience: arkret_identifiers::DidCoreId::new(authenticated.audience)
+        audience_id: arkret_identifiers::DidCoreId::new(authenticated.audience)
             .map_err(|error| failed_precondition(error.to_string()))?,
         account_handle: account_handle.to_string(),
         preferred_locale: authenticated
@@ -601,7 +601,7 @@ pub async fn account_onboarding_snapshot(
             .allowed_goals()
             .contains(&arkret_models_identity::IdentityCreationGoal::AbandonProvisionalIdentity)
     {
-        let audience = arkret_identifiers::DidCoreId::new(grant.audience.clone())
+    let audience = arkret_identifiers::DidCoreId::new(grant.audience_id.clone())
             .map_err(|error| failed_precondition(error.to_string()))?;
         repo.account_handoff()
             .active_identity_abandonment_challenge(
@@ -763,7 +763,7 @@ async fn finalize_handoff_creation(
             request_digest: attempt.request_digest.clone(),
             service_account_id,
             browser_session_id,
-            audience: checkpoint.audience.to_string(),
+            audience_id: checkpoint.audience_id.to_string(),
             account_subject: account_subject.clone(),
             // The checkpoint exists only after the OIDC bridge has rejected
             // locked, suspended, deactivated, or otherwise invalid accounts.
@@ -871,7 +871,7 @@ pub async fn issue_identity_binding_challenge(
     let trust_domain = trust_domain_for(&url_builder, &arkret_config);
     let trust_domain = arkret_identifiers::TrustDomainId::new(trust_domain)
         .map_err(|error| failed_precondition(error.to_string()))?;
-    let audience = arkret_identifiers::DidCoreId::new(grant.audience.clone())
+    let audience = arkret_identifiers::DidCoreId::new(grant.audience_id.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
     let origin = depot
         .url_builder()?
@@ -888,7 +888,7 @@ pub async fn issue_identity_binding_challenge(
             request_id: body.request_id,
             request_digest,
             service_account_id: grant.service_account_id,
-            audience: audience.clone(),
+            audience_id: audience.clone(),
             lease_id: body.identity_creation_lease_id,
             lease_fence: body.lease_fence,
             holder_jkt: grant.cnf_jkt.clone(),
@@ -906,7 +906,7 @@ pub async fn issue_identity_binding_challenge(
             initial_session_request_digest: body.initial_session_request_digest,
             challenge_id: random_opaque(&mut *rng, 24),
             challenge: random_opaque(&mut *rng, 32),
-            origin,
+            origin_uri: origin,
             trust_domain,
             issued_at: now,
             expires_at: now + IDENTITY_BINDING_CHALLENGE_TTL,
@@ -918,7 +918,7 @@ pub async fn issue_identity_binding_challenge(
         | IdentityBindingChallengeIssue::Replay(challenge) => {
             repo.save().await?;
             let outcome = challenge.wire_outcome();
-            if outcome.audience != audience {
+            if outcome.audience_id != audience {
                 return Err(failed_precondition(
                     "persisted challenge audience does not match the handoff",
                 ));
@@ -983,7 +983,7 @@ pub async fn issue_identity_abandonment_challenge(
     let trust_domain =
         arkret_identifiers::TrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
             .map_err(|error| failed_precondition(error.to_string()))?;
-    let audience = arkret_identifiers::DidCoreId::new(grant.audience.clone())
+    let audience = arkret_identifiers::DidCoreId::new(grant.audience_id.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
     let origin = url_builder.http_base().origin().ascii_serialization();
     let now = make_clock().now();
@@ -996,7 +996,7 @@ pub async fn issue_identity_abandonment_challenge(
             request_digest,
             issuing_handoff_grant_id: grant.id,
             service_account_id: grant.service_account_id,
-            audience: audience.clone(),
+            audience_id: audience.clone(),
             account_subject,
             holder_jkt: grant.cnf_jkt.clone(),
             lease_id: body.identity_creation_lease_id,
@@ -1005,7 +1005,7 @@ pub async fn issue_identity_abandonment_challenge(
             did_version_id: body.did_version_id,
             challenge_id: random_opaque(&mut *rng, 24),
             challenge: random_opaque(&mut *rng, 32),
-            origin,
+            origin_uri: origin,
             trust_domain,
             issued_at: now,
             expires_at: now + IDENTITY_ABANDONMENT_CHALLENGE_TTL,
@@ -1018,7 +1018,7 @@ pub async fn issue_identity_abandonment_challenge(
             outcome
                 .validate()
                 .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-            if outcome.audience != audience {
+            if outcome.audience_id != audience {
                 repo.cancel().await.ok();
                 return Err(failed_precondition(
                     "persisted abandonment challenge audience does not match the handoff",
@@ -1079,7 +1079,7 @@ pub async fn abandon_identity_creation(
     let request_digest = body
         .canonical_request_digest()
         .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
-    let audience = arkret_identifiers::DidCoreId::new(grant.audience.clone())
+    let audience = arkret_identifiers::DidCoreId::new(grant.audience_id.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
     let mut repo = depot.repo().await?;
     let commit = repo
@@ -1089,7 +1089,7 @@ pub async fn abandon_identity_creation(
             request_digest,
             confirming_handoff_grant_id: grant.id,
             service_account_id: grant.service_account_id,
-            audience,
+            audience_id: audience,
             holder_jkt: grant.cnf_jkt,
             challenge_id: body.challenge_id,
             challenge: body.challenge,
@@ -1644,8 +1644,8 @@ mod tests {
     ) -> hyper::Request<String> {
         let proof = arkret_models_identity::UnsignedAccountHandoffAuthenticationProof {
             challenge: seed.nonce.clone(),
-            audience: arkret_identifiers::DidCoreId::new(audience).unwrap(),
-            issuer: state.url_builder.oidc_issuer().to_string(),
+            audience_id: arkret_identifiers::DidCoreId::new(audience).unwrap(),
+            issuer_uri: state.url_builder.oidc_issuer().to_string(),
             client_id: seed.client_id.clone(),
             redirect_uri: seed.redirect_uri.clone(),
             state: state_value.unwrap_or(&seed.state).to_owned(),
@@ -1728,9 +1728,9 @@ mod tests {
                     "0".repeat(64)
                 ))
                 .unwrap(),
-                audience: arkret_identifiers::DidCoreId::new("ak:did_core:web:principal.example")
+                audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:principal.example")
                     .unwrap(),
-                issuer: "https://issuer.example".to_owned(),
+                issuer_uri: "https://issuer.example".to_owned(),
                 client_id: "arkret-client".to_owned(),
                 redirect_uri: "https://client.example/callback".to_owned(),
                 state: "private-state".to_owned(),

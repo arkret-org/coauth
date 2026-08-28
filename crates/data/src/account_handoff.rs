@@ -26,7 +26,7 @@ pub struct NewControllerGateAttestationIssuance {
     pub request_id: arkret_identifiers::RequestId,
     pub canonical_intent_digest: arkret_identifiers::Hash,
     pub principal_id: arkret_identifiers::DidCoreId,
-    pub agent_authority_service_id: arkret_identifiers::DidCoreId,
+    pub agent_authority_id: arkret_identifiers::DidCoreId,
     pub retained_until: DateTime<Utc>,
     pub now: DateTime<Utc>,
 }
@@ -89,7 +89,7 @@ impl TryFrom<&str> for AccountHandoffCreationAttemptState {
 pub struct AccountHandoffAuthorizationCheckpoint {
     pub service_account_id: String,
     pub browser_session_id: Option<String>,
-    pub audience: arkret_identifiers::DidCoreId,
+    pub audience_id: arkret_identifiers::DidCoreId,
     pub account_handle: String,
     pub preferred_locale: Option<String>,
 }
@@ -159,7 +159,7 @@ pub struct AccountHandoffGrant {
     pub request_digest: arkret_identifiers::Hash,
     pub service_account_id: Ulid,
     pub browser_session_id: Option<Ulid>,
-    pub audience: String,
+    pub audience_id: String,
     pub cnf_jkt: String,
     pub allowed_operations: [arkret_models_identity::AccountHandoffAllowedOperation; 7],
     pub account_handoff_grant: String,
@@ -178,7 +178,7 @@ impl std::fmt::Debug for AccountHandoffGrant {
             .field("request_digest", &self.request_digest)
             .field("service_account_id", &self.service_account_id)
             .field("browser_session_id", &self.browser_session_id)
-            .field("audience", &self.audience)
+            .field("audience_id", &self.audience_id)
             .field("cnf_jkt", &self.cnf_jkt)
             .field("allowed_operations", &self.allowed_operations)
             .field("account_handoff_grant", &"<redacted>")
@@ -197,7 +197,7 @@ pub struct AccountHandoffGrantInput {
     pub request_digest: arkret_identifiers::Hash,
     pub service_account_id: Ulid,
     pub browser_session_id: Option<Ulid>,
-    pub audience: String,
+    pub audience_id: String,
     /// Stable, non-reversible subject used to serialize and rate-limit lease
     /// acquisition without persisting the raw upstream OIDC subject.
     pub account_subject: arkret_identifiers::Hash,
@@ -221,7 +221,7 @@ pub enum IdentityCreationLeaseRiskDecision {
 #[derive(Clone, Debug)]
 pub struct IdentityCreationLeaseRecord {
     pub service_account_id: Ulid,
-    pub audience: String,
+    pub audience_id: String,
     pub lease_id: String,
     pub holder_jkt: String,
     pub fence: u64,
@@ -314,7 +314,7 @@ pub struct IdentityBindingChallengeInput {
     pub request_id: arkret_identifiers::RequestId,
     pub request_digest: arkret_identifiers::Hash,
     pub service_account_id: Ulid,
-    pub audience: arkret_identifiers::DidCoreId,
+    pub audience_id: arkret_identifiers::DidCoreId,
     pub lease_id: String,
     pub lease_fence: u64,
     pub holder_jkt: String,
@@ -332,7 +332,7 @@ pub struct IdentityBindingChallengeInput {
     pub initial_session_request_digest: arkret_identifiers::Hash,
     pub challenge_id: String,
     pub challenge: String,
-    pub origin: String,
+    pub origin_uri: String,
     pub trust_domain: arkret_identifiers::TrustDomainId,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -361,8 +361,8 @@ pub struct IdentityBindingChallengeRecord {
     pub lease_id: String,
     pub lease_fence: u64,
     pub dpop_jkt: String,
-    pub audience: arkret_identifiers::DidCoreId,
-    pub origin: String,
+    pub audience_id: arkret_identifiers::DidCoreId,
+    pub origin_uri: String,
     pub trust_domain: arkret_identifiers::TrustDomainId,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -392,8 +392,8 @@ impl IdentityBindingChallengeRecord {
             identity_creation_lease_id: self.lease_id.clone(),
             lease_fence: self.lease_fence,
             dpop_jkt: self.dpop_jkt.clone(),
-            audience: self.audience.clone(),
-            origin: self.origin.clone(),
+            audience_id: self.audience_id.clone(),
+            origin_uri: self.origin_uri.clone(),
             trust_domain: self.trust_domain.clone(),
             issued_at: self.issued_at,
             expires_at: self.expires_at,
@@ -429,8 +429,8 @@ pub struct DidBindingChallengeInput {
     pub challenge_id: String,
     pub challenge: String,
     pub dpop_jkt: String,
-    pub audience: arkret_identifiers::DidCoreId,
-    pub origin: String,
+    pub audience_id: arkret_identifiers::DidCoreId,
+    pub origin_uri: String,
     pub trust_domain: arkret_identifiers::TrustDomainId,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -461,8 +461,8 @@ impl DidBindingChallengeRecord {
             control_key_digest: input.control_key_digest.clone(),
             witness_evidence: input.witness_evidence.clone(),
             dpop_jkt: input.dpop_jkt.clone(),
-            audience: input.audience.clone(),
-            origin: input.origin.clone(),
+            audience_id: input.audience_id.clone(),
+            origin_uri: input.origin_uri.clone(),
             trust_domain: input.trust_domain.clone(),
             issued_at: input.issued_at,
             expires_at: input.expires_at,
@@ -510,7 +510,7 @@ pub struct IdentityAbandonmentChallengeInput {
     pub request_digest: arkret_identifiers::Hash,
     pub issuing_handoff_grant_id: Ulid,
     pub service_account_id: Ulid,
-    pub audience: arkret_identifiers::DidCoreId,
+    pub audience_id: arkret_identifiers::DidCoreId,
     pub account_subject: arkret_identifiers::Hash,
     pub holder_jkt: String,
     pub lease_id: String,
@@ -519,7 +519,7 @@ pub struct IdentityAbandonmentChallengeInput {
     pub did_version_id: String,
     pub challenge_id: String,
     pub challenge: String,
-    pub origin: String,
+    pub origin_uri: String,
     pub trust_domain: arkret_identifiers::TrustDomainId,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -531,7 +531,7 @@ pub struct IdentityAbandonmentChallengeRecord {
     pub request_digest: arkret_identifiers::Hash,
     pub issuing_handoff_grant_id: Ulid,
     pub service_account_id: Ulid,
-    pub audience: arkret_identifiers::DidCoreId,
+    pub audience_id: arkret_identifiers::DidCoreId,
     pub account_subject: arkret_identifiers::Hash,
     pub holder_jkt: String,
     pub lease_id: String,
@@ -540,7 +540,7 @@ pub struct IdentityAbandonmentChallengeRecord {
     pub did_version_id: String,
     pub challenge_id: String,
     pub challenge: String,
-    pub origin: String,
+    pub origin_uri: String,
     pub trust_domain: arkret_identifiers::TrustDomainId,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -566,8 +566,8 @@ impl IdentityAbandonmentChallengeRecord {
             consequence_disclosure:
                 arkret_models_identity::IDENTITY_ABANDONMENT_CONSEQUENCE_DISCLOSURE,
             dpop_jkt: self.holder_jkt.clone(),
-            audience: self.audience.clone(),
-            origin: self.origin.clone(),
+            audience_id: self.audience_id.clone(),
+            origin_uri: self.origin_uri.clone(),
             trust_domain: self.trust_domain.clone(),
             issued_at: self.issued_at,
             expires_at: self.expires_at,
@@ -591,7 +591,7 @@ pub struct IdentityAbandonmentCommitInput {
     pub request_digest: arkret_identifiers::Hash,
     pub confirming_handoff_grant_id: Ulid,
     pub service_account_id: Ulid,
-    pub audience: arkret_identifiers::DidCoreId,
+    pub audience_id: arkret_identifiers::DidCoreId,
     pub holder_jkt: String,
     pub challenge_id: String,
     pub challenge: String,

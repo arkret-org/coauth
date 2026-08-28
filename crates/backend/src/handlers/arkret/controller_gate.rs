@@ -79,7 +79,7 @@ pub async fn issue_controller_gate_attestation(
             request.agent_authority_id.as_str(),
         )
         .await?
-        .filter(|binding| binding.accepted_service_id == request.agent_authority_id)
+        .filter(|binding| binding.accepted_id == request.agent_authority_id)
         .ok_or_else(not_found)?;
     let user = repo
         .user()
@@ -144,7 +144,7 @@ pub async fn issue_controller_gate_attestation(
     let basis_digest = arkret_identifiers::Hash::new(
         arkret_canonical::canonical_sha256(&serde_json::json!({
             "principal_id": &request.principal_id,
-            "accepted_service_id": &request.agent_authority_id,
+            "accepted_id": &request.agent_authority_id,
             "status": status,
             "basis": &basis,
         }))

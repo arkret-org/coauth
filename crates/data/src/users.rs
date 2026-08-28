@@ -581,7 +581,7 @@ pub struct PrincipalDidBinding {
     pub id: Ulid,
     pub user_id: Ulid,
     /// Principal server that verified the submitted DID.
-    pub audience: arkret_identifiers::DidCoreId,
+    pub audience_id: arkret_identifiers::DidCoreId,
     /// Principal DID supplied by the client and verified by the authoritative host.
     pub principal_id: arkret_identifiers::DidCoreId,
     /// Verified DID history head returned by the authoritative host.
@@ -591,7 +591,7 @@ pub struct PrincipalDidBinding {
     pub verified_did: arkret_identifiers::Did,
     pub verified_version_id: String,
     pub binding_receipt: arkret_models_identity::AccountBindingReceipt,
-    pub accepted_service_id: arkret_identifiers::DidCoreId,
+    pub accepted_id: arkret_identifiers::DidCoreId,
     pub binding_version: u64,
     pub binding_frontier_digest: arkret_identifiers::Hash,
     pub principal_authority: arkret_wire::PrincipalAuthorityKey,

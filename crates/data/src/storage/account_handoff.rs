@@ -162,7 +162,7 @@ pub trait AccountHandoffRepository: Send + Sync {
     async fn active_identity_abandonment_challenge(
         &mut self,
         service_account_id: Ulid,
-        audience: &arkret_identifiers::DidCoreId,
+        audience_id: &arkret_identifiers::DidCoreId,
         lease_id: &str,
         now: DateTime<Utc>,
     ) -> Result<Option<IdentityAbandonmentChallengeRecord>, Self::Error>;
@@ -333,7 +333,7 @@ repository_impl!(AccountHandoffRepository:
     async fn active_identity_abandonment_challenge(
         &mut self,
         service_account_id: Ulid,
-        audience: &arkret_identifiers::DidCoreId,
+        audience_id: &arkret_identifiers::DidCoreId,
         lease_id: &str,
         now: DateTime<Utc>,
     ) -> Result<Option<IdentityAbandonmentChallengeRecord>, Self::Error>;

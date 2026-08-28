@@ -74,8 +74,8 @@ pub fn validate_account_registration_control_proof(
         || proof.log_head_digest != stored.log_head_digest
         || proof.control_key_digest != stored.control_key_digest
         || proof.dpop_jkt != stored.dpop_jkt
-        || proof.audience != stored.audience
-        || proof.origin != stored.origin
+        || proof.audience_id != stored.audience_id
+        || proof.origin_uri != stored.origin_uri
         || proof.trust_domain != stored.trust_domain
         || proof.issued_at != stored.issued_at
         || proof.expires_at != stored.expires_at
@@ -83,8 +83,8 @@ pub fn validate_account_registration_control_proof(
     {
         return Err(DidBindingProofError::ChallengeMismatch("transcript"));
     }
-    if &proof.audience != expected_audience
-        || proof.origin != expected_origin
+    if &proof.audience_id != expected_audience
+        || proof.origin_uri != expected_origin
         || &proof.trust_domain != expected_trust_domain
         || proof.dpop_jkt != expected_dpop_jkt
     {
@@ -322,8 +322,8 @@ mod tests {
             log_head_digest: log_head_digest.clone(),
             control_key_digest: control_key_digest.clone(),
             dpop_jkt: "dpop-thumbprint".to_owned(),
-            audience: audience.clone(),
-            origin: "https://auth.example".to_owned(),
+            audience_id: audience.clone(),
+            origin_uri: "https://auth.example".to_owned(),
             trust_domain: trust_domain.clone(),
             issued_at,
             expires_at,
@@ -355,8 +355,8 @@ mod tests {
                 challenge_id: proof.challenge_id.clone(),
                 challenge: proof.challenge.clone(),
                 dpop_jkt: proof.dpop_jkt.clone(),
-                audience: audience.clone(),
-                origin: proof.origin.clone(),
+                audience_id: audience.clone(),
+                origin_uri: proof.origin_uri.clone(),
                 trust_domain: trust_domain.clone(),
                 issued_at,
                 expires_at,

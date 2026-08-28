@@ -144,7 +144,7 @@ pub async fn patch_user(
         let plan = account_status_publication
             .as_ref()
             .ok_or(UserAdminServiceError::MissingAccountStatusPublication)?;
-        if plan.destination_name != destination_name || plan.audience != audience {
+        if plan.destination_name != destination_name || plan.audience_id != audience {
             return Err(UserAdminServiceError::InvalidAccountStatusPublication(
                 "publication destination does not match the configured Principal Server".to_owned(),
             ));

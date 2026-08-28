@@ -84,7 +84,7 @@ struct InsertableHandleAudit {
     handle_aliases: Vec<String>,
     old_did: Option<String>,
     new_did: Option<String>,
-    issuer_service_id: Option<String>,
+    issuer_id: Option<String>,
     audience: Option<String>,
     claim_digest: Option<String>,
     details: serde_json::Value,

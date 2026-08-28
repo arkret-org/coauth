@@ -152,7 +152,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
     ) -> Result<Option<AccountHandoffGrant>, DatabaseError> {
         let row = diesel::sql_query(
             "SELECT id, request_id, request_digest, service_account_id, browser_session_id, \
-             audience, cnf_jkt, allowed_operations, account_handoff_grant, issued_at, expires_at, \
+             audience_id, cnf_jkt, allowed_operations, account_handoff_grant, issued_at, expires_at, \
              revoked_at, consumed_at FROM account_handoff_grants WHERE request_id = $1",
         )
         .bind::<SqlUuid, _>(request_id)
@@ -165,21 +165,21 @@ impl<'c> PgAccountHandoffRepository<'c> {
     async fn lease_for_account(
         &mut self,
         service_account_id: Uuid,
-        audience: &str,
+        audience_id: &str,
         for_update: bool,
     ) -> Result<Option<IdentityCreationLeaseRecord>, DatabaseError> {
         let suffix = if for_update { " FOR UPDATE" } else { "" };
         let query = format!(
-            "SELECT service_account_id, audience, lease_id, holder_jkt, fence, expires_at, \
+            "SELECT service_account_id, audience_id, lease_id, holder_jkt, fence, expires_at, \
              reserved_principal_id, reserved_operation_digest, did_operation, state, \
              registry_receipt, head_event_digest, registration_did_evidence, pcr_genesis_request_digest, \
              pcr_genesis_receipt, binding_receipt, register_handoff_grant_id, \
              register_challenge_id, register_request_digest, register_outcome, created_at, updated_at \
-             FROM identity_creation_leases WHERE service_account_id = $1 AND audience = $2{suffix}"
+             FROM identity_creation_leases WHERE service_account_id = $1 AND audience_id = $2{suffix}"
         );
         let row = diesel::sql_query(query)
             .bind::<SqlUuid, _>(service_account_id)
-            .bind::<Text, _>(audience)
+            .bind::<Text, _>(audience_id)
             .get_result::<LeaseRow>(self.conn)
             .await
             .optional()?;
@@ -189,17 +189,17 @@ impl<'c> PgAccountHandoffRepository<'c> {
     async fn bound_principal(
         &mut self,
         service_account_id: Uuid,
-        audience: &str,
+        audience_id: &str,
     ) -> Result<Option<(arkret_identifiers::DidCoreId, arkret_identifiers::Did)>, DatabaseError>
     {
         let row = diesel::sql_query(
             "SELECT owners.principal_id, bindings.verified_did \
              FROM principal_did_bindings bindings \
              JOIN principal_did_owners owners ON owners.id = bindings.principal_did_owner_id \
-             WHERE bindings.user_id = $1 AND bindings.audience = $2",
+             WHERE bindings.user_id = $1 AND bindings.audience_id = $2",
         )
         .bind::<SqlUuid, _>(service_account_id)
-        .bind::<Text, _>(audience)
+        .bind::<Text, _>(audience_id)
         .get_result::<PrincipalRow>(self.conn)
         .await
         .optional()?;
@@ -220,8 +220,8 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let row = diesel::sql_query(
             "SELECT request_id, request_digest, service_account_id, challenge_id, challenge, \
              purpose, account_subject, principal_id, did, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
-             founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience, \
-             origin, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
+             founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience_id, \
+             origin_uri, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
              FROM identity_binding_challenges WHERE request_id = $1",
         )
         .bind::<SqlUuid, _>(request_id)
@@ -240,8 +240,8 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let query = format!(
             "SELECT request_id, request_digest, service_account_id, challenge_id, challenge, \
              purpose, account_subject, principal_id, did, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
-             founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience, \
-             origin, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
+             founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience_id, \
+             origin_uri, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
              FROM identity_binding_challenges WHERE challenge_id = $1{suffix}"
         );
         let row = diesel::sql_query(query)
@@ -259,8 +259,8 @@ impl<'c> PgAccountHandoffRepository<'c> {
         diesel::sql_query(
             "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
              account_subject, principal_id, did, did_version_id, log_head_digest, \
-             control_key_digest, witness_evidence, challenge_id, challenge, dpop_jkt, audience, \
-             origin, trust_domain, issued_at, expires_at, consumed_at, register_request_digest, \
+             control_key_digest, witness_evidence, challenge_id, challenge, dpop_jkt, audience_id, \
+             origin_uri, trust_domain, issued_at, expires_at, consumed_at, register_request_digest, \
              register_outcome FROM did_binding_challenges WHERE request_id = $1",
         )
         .bind::<SqlUuid, _>(request_id)
@@ -280,8 +280,8 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let query = format!(
             "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
              account_subject, principal_id, did, did_version_id, log_head_digest, \
-             control_key_digest, witness_evidence, challenge_id, challenge, dpop_jkt, audience, \
-             origin, trust_domain, issued_at, expires_at, consumed_at, register_request_digest, \
+             control_key_digest, witness_evidence, challenge_id, challenge, dpop_jkt, audience_id, \
+             origin_uri, trust_domain, issued_at, expires_at, consumed_at, register_request_digest, \
              register_outcome FROM did_binding_challenges WHERE challenge_id = $1{suffix}"
         );
         diesel::sql_query(query)
@@ -301,8 +301,8 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let suffix = if for_update { " FOR UPDATE" } else { "" };
         let query = format!(
             "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
-             audience, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
-             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
+             audience_id, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
+             did_version_id, challenge_id, challenge, origin_uri, trust_domain, issued_at, expires_at, \
              consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
              FROM identity_abandonment_challenges WHERE request_id = $1{suffix}"
         );
@@ -323,8 +323,8 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let suffix = if for_update { " FOR UPDATE" } else { "" };
         let query = format!(
             "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
-             audience, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
-             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
+             audience_id, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
+             did_version_id, challenge_id, challenge, origin_uri, trust_domain, issued_at, expires_at, \
              consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
              FROM identity_abandonment_challenges WHERE challenge_id = $1{suffix}"
         );
@@ -345,8 +345,8 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let suffix = if for_update { " FOR UPDATE" } else { "" };
         let query = format!(
             "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
-             audience, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
-             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
+             audience_id, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
+             did_version_id, challenge_id, challenge, origin_uri, trust_domain, issued_at, expires_at, \
              consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
              FROM identity_abandonment_challenges WHERE confirmation_request_id = $1{suffix}"
         );
@@ -434,12 +434,12 @@ impl<'c> PgAccountHandoffRepository<'c> {
     async fn lock_lease_quota(
         &mut self,
         account_subject: &arkret_identifiers::Hash,
-        audience: &str,
+        audience_id: &str,
     ) -> Result<(), DatabaseError> {
         // Serialize the no-row acquisition case as well as renewal. PostgreSQL
         // `text` cannot contain NUL bytes, so use a length-prefixed transcript
         // rather than the protocol-style NUL separator used by some hashes.
-        let key = lease_quota_advisory_key(account_subject, audience);
+        let key = lease_quota_advisory_key(account_subject, audience_id);
         // A PostgreSQL `void` result is not SQL NULL. Select a sentinel row
         // from the volatile lock function instead of testing the result with
         // `IS NULL`, which is always false and trips the debug assertion.
@@ -474,7 +474,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         &mut self,
         request_id: Uuid,
         account_subject: &arkret_identifiers::Hash,
-        audience: &str,
+        audience_id: &str,
         lease_id: &str,
         now: DateTime<Utc>,
     ) -> Result<Option<u64>, DatabaseError> {
@@ -484,11 +484,11 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let window = diesel::sql_query(
             "SELECT COUNT(*)::bigint AS count, MIN(occurred_at) AS oldest_at \
              FROM identity_creation_lease_rate_limit_events \
-             WHERE account_subject = $1 AND audience = $2 AND action = 'acquisition' \
+             WHERE account_subject = $1 AND audience_id = $2 AND action = 'acquisition' \
              AND occurred_at > $3",
         )
         .bind::<Text, _>(account_subject.as_str())
-        .bind::<Text, _>(audience)
+        .bind::<Text, _>(audience_id)
         .bind::<Timestamptz, _>(now - Duration::minutes(10))
         .get_result::<RateWindowRow>(self.conn)
         .await?;
@@ -502,7 +502,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         self.insert_quota_event(
             request_id,
             account_subject,
-            audience,
+            audience_id,
             lease_id,
             "acquisition",
         )
@@ -514,7 +514,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         &mut self,
         request_id: Uuid,
         account_subject: &arkret_identifiers::Hash,
-        audience: &str,
+        audience_id: &str,
         lease_id: &str,
         now: DateTime<Utc>,
     ) -> Result<Option<u64>, DatabaseError> {
@@ -538,7 +538,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         if let Some(retry_at) = retry_at {
             return Ok(Some(retry_after_ms(retry_at, now)));
         }
-        self.insert_quota_event(request_id, account_subject, audience, lease_id, "renewal")
+        self.insert_quota_event(request_id, account_subject, audience_id, lease_id, "renewal")
             .await?;
         Ok(None)
     }
@@ -563,18 +563,18 @@ impl<'c> PgAccountHandoffRepository<'c> {
         &mut self,
         request_id: Uuid,
         account_subject: &arkret_identifiers::Hash,
-        audience: &str,
+        audience_id: &str,
         lease_id: &str,
         action: &str,
     ) -> Result<(), DatabaseError> {
         diesel::sql_query(
             "INSERT INTO identity_creation_lease_rate_limit_events \
-             (request_id, account_subject, audience, lease_id, action) \
+             (request_id, account_subject, audience_id, lease_id, action) \
              VALUES ($1, $2, $3, $4, $5) ON CONFLICT (request_id, action) DO NOTHING",
         )
         .bind::<SqlUuid, _>(request_id)
         .bind::<Text, _>(account_subject.as_str())
-        .bind::<Text, _>(audience)
+        .bind::<Text, _>(audience_id)
         .bind::<Text, _>(lease_id)
         .bind::<Text, _>(action)
         .execute(self.conn)
@@ -583,9 +583,9 @@ impl<'c> PgAccountHandoffRepository<'c> {
     }
 }
 
-fn lease_quota_advisory_key(account_subject: &arkret_identifiers::Hash, audience: &str) -> String {
+fn lease_quota_advisory_key(account_subject: &arkret_identifiers::Hash, audience_id: &str) -> String {
     let account_subject = account_subject.as_str();
-    format!("{}:{account_subject}{audience}", account_subject.len())
+    format!("{}:{account_subject}{audience_id}", account_subject.len())
 }
 
 #[derive(QueryableByName)]
@@ -641,7 +641,7 @@ struct HandoffRow {
     #[diesel(sql_type = Nullable<SqlUuid>)]
     browser_session_id: Option<Uuid>,
     #[diesel(sql_type = Text)]
-    audience: String,
+    audience_id: String,
     #[diesel(sql_type = Text)]
     cnf_jkt: String,
     #[diesel(sql_type = Array<Text>)]
@@ -806,7 +806,7 @@ fn handoff_from_row(row: HandoffRow) -> Result<AccountHandoffGrant, DatabaseErro
             .map_err(|_| DatabaseError::invalid_operation())?,
         service_account_id: Ulid::from(row.service_account_id),
         browser_session_id: row.browser_session_id.map(Ulid::from),
-        audience: row.audience,
+        audience_id: row.audience_id,
         cnf_jkt: row.cnf_jkt,
         allowed_operations: arkret_models_identity::ACCOUNT_HANDOFF_ALLOWED_OPERATIONS,
         account_handoff_grant: row.account_handoff_grant,
@@ -822,7 +822,7 @@ struct LeaseRow {
     #[diesel(sql_type = SqlUuid)]
     service_account_id: Uuid,
     #[diesel(sql_type = Text)]
-    audience: String,
+    audience_id: String,
     #[diesel(sql_type = Text)]
     lease_id: String,
     #[diesel(sql_type = Text)]
@@ -908,7 +908,7 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
     };
     Ok(IdentityCreationLeaseRecord {
         service_account_id: Ulid::from(row.service_account_id),
-        audience: row.audience,
+        audience_id: row.audience_id,
         lease_id: row.lease_id,
         holder_jkt: row.holder_jkt,
         fence: u64::try_from(row.fence).map_err(|_| DatabaseError::invalid_operation())?,
@@ -995,9 +995,9 @@ struct ChallengeRow {
     #[diesel(sql_type = Text)]
     dpop_jkt: String,
     #[diesel(sql_type = Text)]
-    audience: arkret_identifiers::DidCoreId,
+    audience_id: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Text)]
-    origin: String,
+    origin_uri: String,
     #[diesel(sql_type = Text)]
     trust_domain: String,
     #[diesel(sql_type = Timestamptz)]
@@ -1041,9 +1041,9 @@ struct DidBindingChallengeRow {
     #[diesel(sql_type = Text)]
     dpop_jkt: String,
     #[diesel(sql_type = Text)]
-    audience: arkret_identifiers::DidCoreId,
+    audience_id: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Text)]
-    origin: String,
+    origin_uri: String,
     #[diesel(sql_type = Text)]
     trust_domain: String,
     #[diesel(sql_type = Timestamptz)]
@@ -1086,8 +1086,8 @@ fn did_binding_challenge_from_row(
             challenge_id: row.challenge_id,
             challenge: row.challenge,
             dpop_jkt: row.dpop_jkt,
-            audience: row.audience,
-            origin: row.origin,
+            audience_id: row.audience_id,
+            origin_uri: row.origin_uri,
             trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)
                 .map_err(|_| DatabaseError::invalid_operation())?,
             issued_at: row.issued_at,
@@ -1119,7 +1119,7 @@ struct AbandonmentChallengeRow {
     #[diesel(sql_type = SqlUuid)]
     service_account_id: Uuid,
     #[diesel(sql_type = Text)]
-    audience: arkret_identifiers::DidCoreId,
+    audience_id: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Text)]
     account_subject: String,
     #[diesel(sql_type = Text)]
@@ -1137,7 +1137,7 @@ struct AbandonmentChallengeRow {
     #[diesel(sql_type = Text)]
     challenge: String,
     #[diesel(sql_type = Text)]
-    origin: String,
+    origin_uri: String,
     #[diesel(sql_type = Text)]
     trust_domain: String,
     #[diesel(sql_type = Timestamptz)]
@@ -1164,7 +1164,7 @@ fn abandonment_challenge_from_row(
             .map_err(|_| DatabaseError::invalid_operation())?,
         issuing_handoff_grant_id: Ulid::from(row.issuing_handoff_grant_id),
         service_account_id: Ulid::from(row.service_account_id),
-        audience: row.audience,
+        audience_id: row.audience_id,
         account_subject: arkret_identifiers::Hash::new(row.account_subject)
             .map_err(|_| DatabaseError::invalid_operation())?,
         holder_jkt: row.holder_jkt,
@@ -1175,7 +1175,7 @@ fn abandonment_challenge_from_row(
         did_version_id: row.did_version_id,
         challenge_id: row.challenge_id,
         challenge: row.challenge,
-        origin: row.origin,
+        origin_uri: row.origin_uri,
         trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)
             .map_err(|_| DatabaseError::invalid_operation())?,
         issued_at: row.issued_at,
@@ -1240,8 +1240,8 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
         lease_fence: u64::try_from(row.lease_fence)
             .map_err(|_| DatabaseError::invalid_operation())?,
         dpop_jkt: row.dpop_jkt,
-        audience: row.audience,
-        origin: row.origin,
+        audience_id: row.audience_id,
+        origin_uri: row.origin_uri,
         trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)
             .map_err(|_| DatabaseError::invalid_operation())?,
         issued_at: row.issued_at,
@@ -1276,8 +1276,8 @@ fn challenge_matches_context(
         && challenge.lease_id == context.lease.lease_id
         && challenge.lease_fence == context.lease.fence
         && challenge.dpop_jkt == context.grant.cnf_jkt
-        && challenge.audience.as_str() == context.grant.audience
-        && challenge.origin == expected.origin
+        && challenge.audience_id.as_str() == context.grant.audience_id
+        && challenge.origin_uri == expected.origin_uri
         && challenge.trust_domain == expected.trust_domain
         && challenge.issued_at == expected.issued_at
         && challenge.expires_at == expected.expires_at
@@ -1564,7 +1564,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
     ) -> Result<Option<AccountHandoffGrant>, Self::Error> {
         let row = diesel::sql_query(
             "SELECT id, request_id, request_digest, service_account_id, browser_session_id, \
-             audience, cnf_jkt, allowed_operations, account_handoff_grant, issued_at, expires_at, \
+             audience_id, cnf_jkt, allowed_operations, account_handoff_grant, issued_at, expires_at, \
              revoked_at, consumed_at FROM account_handoff_grants \
              WHERE account_handoff_grant = $1 AND expires_at > $2 \
              AND revoked_at IS NULL AND consumed_at IS NULL",
@@ -1584,7 +1584,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
     ) -> Result<Option<AccountHandoffGrant>, Self::Error> {
         let row = diesel::sql_query(
             "SELECT id, request_id, request_digest, service_account_id, browser_session_id, \
-             audience, cnf_jkt, allowed_operations, account_handoff_grant, issued_at, expires_at, \
+             audience_id, cnf_jkt, allowed_operations, account_handoff_grant, issued_at, expires_at, \
              revoked_at, consumed_at FROM account_handoff_grants \
              WHERE account_handoff_grant = $1 AND expires_at > $2 AND revoked_at IS NULL",
         )
@@ -1602,7 +1602,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
     ) -> Result<AccountHandoffCreation, Self::Error> {
         diesel::sql_query(
             "INSERT INTO account_handoff_grants \
-             (id, request_id, request_digest, service_account_id, browser_session_id, audience, \
+             (id, request_id, request_digest, service_account_id, browser_session_id, audience_id, \
               cnf_jkt, allowed_operations, account_handoff_grant, issued_at, expires_at) \
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) \
              ON CONFLICT (request_id) DO NOTHING",
@@ -1612,7 +1612,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(input.request_digest.as_str())
         .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
         .bind::<Nullable<SqlUuid>, _>(input.browser_session_id.map(Uuid::from))
-        .bind::<Text, _>(&input.audience)
+        .bind::<Text, _>(&input.audience_id)
         .bind::<Text, _>(&input.cnf_jkt)
         .bind::<Array<Text>, _>(ALLOWED_OPERATIONS.to_vec())
         .bind::<Text, _>(&input.account_handoff_grant)
@@ -1627,7 +1627,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .ok_or_else(DatabaseError::invalid_operation)?;
         if grant.request_digest != input.request_digest
             || grant.service_account_id != input.service_account_id
-            || grant.audience != input.audience
+            || grant.audience_id != input.audience_id
             || grant.cnf_jkt != input.cnf_jkt
         {
             return Ok(AccountHandoffCreation::DuplicateConflict);
@@ -1640,13 +1640,13 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         }
 
         if let Some((principal_id, did)) = self
-            .bound_principal(Uuid::from(input.service_account_id), &input.audience)
+            .bound_principal(Uuid::from(input.service_account_id), &input.audience_id)
             .await?
         {
             let incomplete_lease = self
                 .lease_for_account(
                     Uuid::from(input.service_account_id),
-                    input.audience.as_str(),
+                    input.audience_id.as_str(),
                     false,
                 )
                 .await?
@@ -1668,13 +1668,13 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(AccountHandoffCreation::RiskRejected { grant });
         }
 
-        self.lock_lease_quota(&input.account_subject, input.audience.as_str())
+        self.lock_lease_quota(&input.account_subject, input.audience_id.as_str())
             .await?;
         let server_now = self.server_now().await?;
         let existing_lease = self
             .lease_for_account(
                 Uuid::from(input.service_account_id),
-                input.audience.as_str(),
+                input.audience_id.as_str(),
                 true,
             )
             .await?;
@@ -1714,7 +1714,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             self.consume_acquisition_quota(
                 input.request_id.uuid(),
                 &input.account_subject,
-                input.audience.as_str(),
+                input.audience_id.as_str(),
                 &input.lease_id,
                 server_now,
             )
@@ -1726,7 +1726,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             self.consume_renewal_quota(
                 input.request_id.uuid(),
                 &input.account_subject,
-                &input.audience,
+                &input.audience_id,
                 &lease.lease_id,
                 server_now,
             )
@@ -1742,12 +1742,12 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         if existing_lease.is_none() {
             diesel::sql_query(
                 "INSERT INTO identity_creation_leases \
-                 (service_account_id, audience, lease_id, holder_jkt, fence, expires_at, state, \
+                 (service_account_id, audience_id, lease_id, holder_jkt, fence, expires_at, state, \
                   created_at, updated_at) \
                  VALUES ($1, $2, $3, $4, 1, $5, 'active', $6, $6)",
             )
             .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
-            .bind::<Text, _>(&input.audience)
+            .bind::<Text, _>(&input.audience_id)
             .bind::<Text, _>(&input.lease_id)
             .bind::<Text, _>(&input.cnf_jkt)
             .bind::<Timestamptz, _>(input.lease_expires_at)
@@ -1758,10 +1758,10 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             diesel::sql_query(
                 "UPDATE identity_creation_leases SET lease_id = $3, holder_jkt = $4, \
                  fence = fence + 1, expires_at = $5, updated_at = $6 \
-                 WHERE service_account_id = $1 AND audience = $2",
+                 WHERE service_account_id = $1 AND audience_id = $2",
             )
             .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
-            .bind::<Text, _>(&input.audience)
+            .bind::<Text, _>(&input.audience_id)
             .bind::<Text, _>(&input.lease_id)
             .bind::<Text, _>(&input.cnf_jkt)
             .bind::<Timestamptz, _>(input.lease_expires_at)
@@ -1771,11 +1771,11 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         } else {
             diesel::sql_query(
                 "UPDATE identity_creation_leases SET expires_at = GREATEST(expires_at, $3), \
-                 updated_at = $4 WHERE service_account_id = $1 AND audience = $2 \
+                 updated_at = $4 WHERE service_account_id = $1 AND audience_id = $2 \
                  AND holder_jkt = $5",
             )
             .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
-            .bind::<Text, _>(&input.audience)
+            .bind::<Text, _>(&input.audience_id)
             .bind::<Timestamptz, _>(input.lease_expires_at)
             .bind::<Timestamptz, _>(input.issued_at)
             .bind::<Text, _>(&input.cnf_jkt)
@@ -1783,7 +1783,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .await?;
         }
         let lease = self
-            .lease_for_account(Uuid::from(input.service_account_id), &input.audience, false)
+            .lease_for_account(Uuid::from(input.service_account_id), &input.audience_id, false)
             .await?
             .ok_or_else(DatabaseError::invalid_operation)?;
         Ok(AccountHandoffCreation::Active {
@@ -1801,11 +1801,11 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(AccountHandoffCreation::ExpiredReplay);
         }
         let lease = self
-            .lease_for_account(Uuid::from(grant.service_account_id), &grant.audience, false)
+            .lease_for_account(Uuid::from(grant.service_account_id), &grant.audience_id, false)
             .await?;
         let Some(lease) = lease else {
             return if let Some((principal_id, did)) = self
-                .bound_principal(Uuid::from(grant.service_account_id), &grant.audience)
+                .bound_principal(Uuid::from(grant.service_account_id), &grant.audience_id)
                 .await?
             {
                 Ok(AccountHandoffCreation::Bound {
@@ -1876,7 +1876,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(IdentityBindingChallengeIssue::Replay(existing));
         }
 
-        self.lock_lease_quota(&input.account_subject, input.audience.as_str())
+        self.lock_lease_quota(&input.account_subject, input.audience_id.as_str())
             .await?;
         // A concurrent exact request may have committed while this transaction
         // waited for the quota lock. Re-read before consuming renewal quota or
@@ -1900,7 +1900,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let lease = self
             .lease_for_account(
                 Uuid::from(input.service_account_id),
-                input.audience.as_str(),
+                input.audience_id.as_str(),
                 true,
             )
             .await?;
@@ -1947,7 +1947,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .consume_renewal_quota(
                 input.request_id.uuid(),
                 &input.account_subject,
-                input.audience.as_str(),
+                input.audience_id.as_str(),
                 &input.lease_id,
                 server_now,
             )
@@ -1961,12 +1961,12 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
              reserved_operation_digest = $4, did_operation = $5, \
              state = CASE WHEN state <> 'active' THEN state ELSE 'reserved' END, \
              expires_at = GREATEST(expires_at, $6), updated_at = $7 \
-             WHERE service_account_id = $1 AND audience = $2 AND lease_id = $8 \
+             WHERE service_account_id = $1 AND audience_id = $2 AND lease_id = $8 \
              AND fence = $9 AND holder_jkt = $10 \
              AND state IN ('active', 'reserved', 'did_published', 'pcr_accepted', 'account_bound')",
         )
         .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
-        .bind::<Text, _>(input.audience.as_str())
+        .bind::<Text, _>(input.audience_id.as_str())
         .bind::<Text, _>(reserved.principal_id.as_str())
         .bind::<Text, _>(reserved.operation_digest.as_str())
         .bind::<Jsonb, _>(
@@ -1985,13 +1985,13 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
 
         diesel::sql_query(
             "UPDATE identity_binding_challenges SET replaced_at = $1 \
-             WHERE service_account_id = $2 AND audience = $3 AND lease_id = $4 \
+             WHERE service_account_id = $2 AND audience_id = $3 AND lease_id = $4 \
              AND lease_fence = $5 AND operation_digest = $6 \
              AND consumed_at IS NULL AND replaced_at IS NULL AND expires_at > $1",
         )
         .bind::<Timestamptz, _>(input.issued_at)
         .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
-        .bind::<Text, _>(input.audience.as_str())
+        .bind::<Text, _>(input.audience_id.as_str())
         .bind::<Text, _>(&input.lease_id)
         .bind::<BigInt, _>(
             i64::try_from(input.lease_fence).map_err(|_| DatabaseError::invalid_operation())?,
@@ -2004,7 +2004,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             "INSERT INTO identity_binding_challenges \
              (request_id, request_digest, service_account_id, challenge_id, challenge, purpose, \
               account_subject, principal_id, did, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
-              founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience, origin, \
+              founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience_id, origin_uri, \
               trust_domain, issued_at, expires_at) \
              VALUES ($1, $2, $3, $4, $5, 'account_binding_and_pcr_genesis', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24) \
              ON CONFLICT (request_id) DO NOTHING",
@@ -2028,8 +2028,8 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(&input.lease_id)
         .bind::<BigInt, _>(i64::try_from(input.lease_fence).map_err(|_| DatabaseError::invalid_operation())?)
         .bind::<Text, _>(&input.holder_jkt)
-        .bind::<Text, _>(input.audience.as_str())
-        .bind::<Text, _>(&input.origin)
+        .bind::<Text, _>(input.audience_id.as_str())
+        .bind::<Text, _>(&input.origin_uri)
         .bind::<Text, _>(input.trust_domain.as_str())
         .bind::<Timestamptz, _>(input.issued_at)
         .bind::<Timestamptz, _>(input.expires_at)
@@ -2086,8 +2086,8 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             "INSERT INTO did_binding_challenges \
              (request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
               account_subject, principal_id, did, did_version_id, log_head_digest, \
-              control_key_digest, witness_evidence, challenge_id, challenge, dpop_jkt, audience, \
-              origin, trust_domain, issued_at, expires_at) \
+              control_key_digest, witness_evidence, challenge_id, challenge, dpop_jkt, audience_id, \
+              origin_uri, trust_domain, issued_at, expires_at) \
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) \
              ON CONFLICT (request_id) DO NOTHING",
         )
@@ -2105,8 +2105,8 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(&input.challenge_id)
         .bind::<Text, _>(&input.challenge)
         .bind::<Text, _>(&input.dpop_jkt)
-        .bind::<Text, _>(input.audience.as_str())
-        .bind::<Text, _>(&input.origin)
+        .bind::<Text, _>(input.audience_id.as_str())
+        .bind::<Text, _>(&input.origin_uri)
         .bind::<Text, _>(input.trust_domain.as_str())
         .bind::<Timestamptz, _>(input.issued_at)
         .bind::<Timestamptz, _>(input.expires_at)
@@ -2172,7 +2172,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         if input.issuing_handoff_grant_id != grant.id
             || input.service_account_id != grant.service_account_id
             || input.dpop_jkt != grant.cnf_jkt
-            || input.audience.as_str() != grant.audience
+            || input.audience_id.as_str() != grant.audience_id
         {
             return Ok(PublishedDidRegisterReplay::Stale);
         }
@@ -2254,7 +2254,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             if existing.request_digest != input.request_digest
                 || existing.issuing_handoff_grant_id != input.issuing_handoff_grant_id
                 || existing.service_account_id != input.service_account_id
-                || existing.audience.as_str() != input.audience.as_str()
+                || existing.audience_id.as_str() != input.audience_id.as_str()
                 || existing.holder_jkt != input.holder_jkt
             {
                 return Ok(IdentityAbandonmentChallengeIssue::DuplicateConflict);
@@ -2262,7 +2262,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(IdentityAbandonmentChallengeIssue::Replay(existing));
         }
 
-        self.lock_lease_quota(&input.account_subject, input.audience.as_str())
+        self.lock_lease_quota(&input.account_subject, input.audience_id.as_str())
             .await?;
         if let Some(existing) = self
             .abandonment_challenge_by_request(input.request_id.uuid(), false)
@@ -2271,7 +2271,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             if existing.request_digest != input.request_digest
                 || existing.issuing_handoff_grant_id != input.issuing_handoff_grant_id
                 || existing.service_account_id != input.service_account_id
-                || existing.audience.as_str() != input.audience.as_str()
+                || existing.audience_id.as_str() != input.audience_id.as_str()
                 || existing.holder_jkt != input.holder_jkt
             {
                 return Ok(IdentityAbandonmentChallengeIssue::DuplicateConflict);
@@ -2283,7 +2283,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let Some(lease) = self
             .lease_for_account(
                 Uuid::from(input.service_account_id),
-                input.audience.as_str(),
+                input.audience_id.as_str(),
                 true,
             )
             .await?
@@ -2325,9 +2325,9 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
 
         diesel::sql_query(
             "INSERT INTO identity_abandonment_challenges \
-             (request_id, request_digest, issuing_handoff_grant_id, service_account_id, audience, \
+             (request_id, request_digest, issuing_handoff_grant_id, service_account_id, audience_id, \
               account_subject, holder_jkt, lease_id, lease_fence, principal_id, did_version_id, \
-              challenge_id, challenge, origin, trust_domain, issued_at, expires_at) \
+              challenge_id, challenge, origin_uri, trust_domain, issued_at, expires_at) \
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) \
              ON CONFLICT (request_id) DO NOTHING",
         )
@@ -2335,7 +2335,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(input.request_digest.as_str())
         .bind::<SqlUuid, _>(Uuid::from(input.issuing_handoff_grant_id))
         .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
-        .bind::<Text, _>(input.audience.as_str())
+        .bind::<Text, _>(input.audience_id.as_str())
         .bind::<Text, _>(input.account_subject.as_str())
         .bind::<Text, _>(&input.holder_jkt)
         .bind::<Text, _>(&input.lease_id)
@@ -2346,7 +2346,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(&input.did_version_id)
         .bind::<Text, _>(&input.challenge_id)
         .bind::<Text, _>(&input.challenge)
-        .bind::<Text, _>(&input.origin)
+        .bind::<Text, _>(&input.origin_uri)
         .bind::<Text, _>(input.trust_domain.as_str())
         .bind::<Timestamptz, _>(input.issued_at)
         .bind::<Timestamptz, _>(input.expires_at)
@@ -2368,22 +2368,22 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
     async fn active_identity_abandonment_challenge(
         &mut self,
         service_account_id: Ulid,
-        audience: &arkret_identifiers::DidCoreId,
+        audience_id: &arkret_identifiers::DidCoreId,
         lease_id: &str,
         now: DateTime<Utc>,
     ) -> Result<Option<IdentityAbandonmentChallengeRecord>, Self::Error> {
         diesel::sql_query(
             "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
-             audience, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
-             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
+             audience_id, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
+             did_version_id, challenge_id, challenge, origin_uri, trust_domain, issued_at, expires_at, \
              consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
              FROM identity_abandonment_challenges \
-             WHERE service_account_id = $1 AND audience = $2 AND lease_id = $3 \
+             WHERE service_account_id = $1 AND audience_id = $2 AND lease_id = $3 \
              AND consumed_at IS NULL AND expires_at > $4 \
              ORDER BY issued_at DESC LIMIT 1",
         )
         .bind::<SqlUuid, _>(Uuid::from(service_account_id))
-        .bind::<Text, _>(audience.as_str())
+        .bind::<Text, _>(audience_id.as_str())
         .bind::<Text, _>(lease_id)
         .bind::<Timestamptz, _>(now)
         .get_result::<AbandonmentChallengeRow>(self.conn)
@@ -2404,7 +2404,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         {
             if existing.confirmation_request_digest.as_ref() == Some(&input.request_digest)
                 && existing.service_account_id == input.service_account_id
-                && existing.audience.as_str() == input.audience.as_str()
+                && existing.audience_id.as_str() == input.audience_id.as_str()
                 && existing.holder_jkt == input.holder_jkt
             {
                 return existing
@@ -2429,7 +2429,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             if confirmation_request_id == &input.request_id {
                 if challenge.confirmation_request_digest.as_ref() == Some(&input.request_digest)
                     && challenge.service_account_id == input.service_account_id
-                    && challenge.audience.as_str() == input.audience.as_str()
+                    && challenge.audience_id.as_str() == input.audience_id.as_str()
                     && challenge.holder_jkt == input.holder_jkt
                 {
                     return challenge
@@ -2451,7 +2451,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(IdentityAbandonmentCommit::ChallengeExpired);
         }
         if challenge.service_account_id != input.service_account_id
-            || challenge.audience.as_str() != input.audience.as_str()
+            || challenge.audience_id.as_str() != input.audience_id.as_str()
             || challenge.holder_jkt != input.holder_jkt
             || challenge.challenge != input.challenge
             || challenge.lease_id != input.lease_id
@@ -2465,7 +2465,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let Some(lease) = self
             .lease_for_account(
                 Uuid::from(input.service_account_id),
-                input.audience.as_str(),
+                input.audience_id.as_str(),
                 true,
             )
             .await?
@@ -2544,11 +2544,11 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         self.suppress_reserved_identity_checkpoints(input.service_account_id, &input.lease_id, now)
             .await?;
         let leases = diesel::sql_query(
-            "DELETE FROM identity_creation_leases WHERE service_account_id = $1 AND audience = $2 \
+            "DELETE FROM identity_creation_leases WHERE service_account_id = $1 AND audience_id = $2 \
              AND lease_id = $3 AND fence = $4 AND holder_jkt = $5 AND state = 'did_published'",
         )
         .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
-        .bind::<Text, _>(input.audience.as_str())
+        .bind::<Text, _>(input.audience_id.as_str())
         .bind::<Text, _>(&input.lease_id)
         .bind::<BigInt, _>(
             i64::try_from(input.lease_fence).map_err(|_| DatabaseError::invalid_operation())?,
@@ -2571,7 +2571,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         now: DateTime<Utc>,
     ) -> Result<Option<IdentityCreationRegistrationContext>, Self::Error> {
         let Some(lease) = self
-            .lease_for_account(Uuid::from(grant.service_account_id), &grant.audience, true)
+            .lease_for_account(Uuid::from(grant.service_account_id), &grant.audience_id, true)
             .await?
         else {
             return Ok(None);
@@ -2587,7 +2587,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(None);
         };
         if challenge.service_account_id != grant.service_account_id
-            || challenge.audience.as_str() != grant.audience
+            || challenge.audience_id.as_str() != grant.audience_id
             || challenge.lease_id != lease_id
             || challenge.lease_fence != lease_fence
             || challenge.dpop_jkt != grant.cnf_jkt
@@ -2616,7 +2616,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             // Serialize with the final completion transaction so a concurrent
             // retry cannot observe AccountBound immediately before the
             // Standard grant and exact replay outcome commit.
-            .lease_for_account(Uuid::from(grant.service_account_id), &grant.audience, true)
+            .lease_for_account(Uuid::from(grant.service_account_id), &grant.audience_id, true)
             .await?
         else {
             return Ok(IdentityCreationRegisterReplay::Pending);
@@ -2654,7 +2654,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let Some(lease) = self
             .lease_for_account(
                 Uuid::from(context.grant.service_account_id),
-                &context.grant.audience,
+                &context.grant.audience_id,
                 true,
             )
             .await?
@@ -2733,7 +2733,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let updated = diesel::sql_query(
             "UPDATE identity_creation_leases SET state = 'did_published', registry_receipt = $1, \
              head_event_digest = $2, registration_did_evidence = $3, updated_at = $4 \
-             WHERE service_account_id = $5 AND audience = $6 AND lease_id = $7 AND fence = $8 \
+             WHERE service_account_id = $5 AND audience_id = $6 AND lease_id = $7 AND fence = $8 \
              AND holder_jkt = $9 AND reserved_operation_digest = $10 \
              AND state IN ('reserved', 'did_published')",
         )
@@ -2745,7 +2745,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         )
         .bind::<Timestamptz, _>(now)
         .bind::<SqlUuid, _>(Uuid::from(context.grant.service_account_id))
-        .bind::<Text, _>(&context.grant.audience)
+        .bind::<Text, _>(&context.grant.audience_id)
         .bind::<Text, _>(&context.lease.lease_id)
         .bind::<BigInt, _>(
             i64::try_from(context.lease.fence).map_err(|_| DatabaseError::invalid_operation())?,
@@ -2767,7 +2767,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let Some(lease) = self
             .lease_for_account(
                 Uuid::from(context.grant.service_account_id),
-                &context.grant.audience,
+                &context.grant.audience_id,
                 true,
             )
             .await?
@@ -2816,14 +2816,14 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let updated = diesel::sql_query(
             "UPDATE identity_creation_leases SET state = 'pcr_accepted', \
              pcr_genesis_request_digest = $1, pcr_genesis_receipt = $2, updated_at = $3 \
-             WHERE service_account_id = $4 AND audience = $5 AND lease_id = $6 AND fence = $7 \
+             WHERE service_account_id = $4 AND audience_id = $5 AND lease_id = $6 AND fence = $7 \
              AND holder_jkt = $8 AND state = 'did_published'",
         )
         .bind::<Text, _>(request_digest.as_str())
         .bind::<Jsonb, _>(receipt)
         .bind::<Timestamptz, _>(now)
         .bind::<SqlUuid, _>(Uuid::from(context.grant.service_account_id))
-        .bind::<Text, _>(&context.grant.audience)
+        .bind::<Text, _>(&context.grant.audience_id)
         .bind::<Text, _>(&context.lease.lease_id)
         .bind::<BigInt, _>(
             i64::try_from(context.lease.fence).map_err(|_| DatabaseError::invalid_operation())?,
@@ -2843,7 +2843,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let Some(lease) = self
             .lease_for_account(
                 Uuid::from(context.grant.service_account_id),
-                &context.grant.audience,
+                &context.grant.audience_id,
                 true,
             )
             .await?
@@ -2881,14 +2881,14 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .map_err(|_| DatabaseError::invalid_operation())?;
         let updated = diesel::sql_query(
             "UPDATE identity_creation_leases SET state = 'account_bound', binding_receipt = $1, \
-             updated_at = $2 WHERE service_account_id = $3 AND audience = $4 \
+             updated_at = $2 WHERE service_account_id = $3 AND audience_id = $4 \
              AND lease_id = $5 AND fence = $6 AND holder_jkt = $7 \
              AND reserved_operation_digest = $8 AND state = 'pcr_accepted'",
         )
         .bind::<Jsonb, _>(receipt)
         .bind::<Timestamptz, _>(now)
         .bind::<SqlUuid, _>(Uuid::from(context.grant.service_account_id))
-        .bind::<Text, _>(&context.grant.audience)
+        .bind::<Text, _>(&context.grant.audience_id)
         .bind::<Text, _>(&context.lease.lease_id)
         .bind::<BigInt, _>(
             i64::try_from(context.lease.fence).map_err(|_| DatabaseError::invalid_operation())?,
@@ -2910,7 +2910,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let Some(lease) = self
             .lease_for_account(
                 Uuid::from(context.grant.service_account_id),
-                &context.grant.audience,
+                &context.grant.audience_id,
                 true,
             )
             .await?
@@ -2962,7 +2962,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             "UPDATE identity_creation_leases SET state = 'completed', \
              register_handoff_grant_id = $1, register_challenge_id = $2, \
              register_request_digest = $3, register_outcome = $4, updated_at = $5 \
-             WHERE service_account_id = $6 AND audience = $7 \
+             WHERE service_account_id = $6 AND audience_id = $7 \
              AND lease_id = $8 AND fence = $9 AND holder_jkt = $10 \
              AND reserved_operation_digest = $11 AND state = 'account_bound'",
         )
@@ -2972,7 +2972,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Jsonb, _>(outcome)
         .bind::<Timestamptz, _>(now)
         .bind::<SqlUuid, _>(Uuid::from(context.grant.service_account_id))
-        .bind::<Text, _>(&context.grant.audience)
+        .bind::<Text, _>(&context.grant.audience_id)
         .bind::<Text, _>(&context.lease.lease_id)
         .bind::<BigInt, _>(
             i64::try_from(context.lease.fence).map_err(|_| DatabaseError::invalid_operation())?,
@@ -3038,11 +3038,11 @@ mod tests {
     fn lease_quota_advisory_key_is_postgres_text_safe() {
         let account_subject = arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
             .expect("valid account subject");
-        let audience = "ak:did_core:webvh:QmExample";
+        let audience_id = "ak:did_core:webvh:QmExample";
 
-        let key = lease_quota_advisory_key(&account_subject, audience);
+        let key = lease_quota_advisory_key(&account_subject, audience_id);
 
-        assert_eq!(key, format!("71:{}{audience}", account_subject.as_str(),));
+        assert_eq!(key, format!("71:{}{audience_id}", account_subject.as_str(),));
         assert!(!key.contains('\0'));
     }
 

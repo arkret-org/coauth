@@ -243,7 +243,7 @@ pub fn verified_principal_binding_input(
     let principal_id = arkret_identifiers::DidCoreId::new(principal_id).unwrap();
     let did = arkret_identifiers::Did::new(did).unwrap();
     VerifiedPrincipalDidBindingInput {
-        audience: audience_id.clone(),
+        audience_id: audience_id.clone(),
         principal_id: principal_id.clone(),
         key_log_head: key_log_head.clone(),
         verified_did: did.clone(),
@@ -258,7 +258,7 @@ pub fn verified_principal_binding_input(
         // The accepted service identity is the Principal Server the binding is
         // scoped to; the Account Authority that accepted it is carried by the
         // receipt.
-        accepted_service_id: audience_id,
+        accepted_id: audience_id,
         binding_version: 1,
         binding_frontier_digest: arkret_identifiers::Hash::new(format!(
             "sha256:{}",

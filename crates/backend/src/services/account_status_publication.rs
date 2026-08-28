@@ -25,7 +25,7 @@ pub enum AccountStatusPublicationError {
 }
 
 pub struct AccountStatusPublicationPlan {
-    pub audience: DidCoreId,
+    pub audience_id: DidCoreId,
     pub destination_name: String,
     pub idempotency_key: String,
     pub body: AccountStatusPublicationRequestBody,
@@ -47,7 +47,7 @@ pub async fn author_transition_plan(
     let (destination_name, audience) = principal_server
         .account_status_destination()
         .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
-    if audience != binding.audience {
+    if audience != binding.audience_id {
         return Err(AccountStatusPublicationError::InvalidBody(
             "configured destination does not match the durable binding audience".to_owned(),
         ));
@@ -134,7 +134,7 @@ pub async fn author_transition_plan(
     body.validate_shape()
         .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
     Ok(AccountStatusPublicationPlan {
-        audience,
+        audience_id: audience,
         destination_name,
         idempotency_key,
         body,
@@ -152,7 +152,7 @@ pub fn validate_transition_plan(
         .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
     let record: &AccountStatusRecord = plan.body.publication.record();
     if binding.user_id != user.id
-        || binding.audience != plan.audience
+        || binding.audience_id != plan.audience_id
         || binding.principal_id != record.principal_authority.principal_id
         || binding.principal_authority.principal_server_id
             != record.principal_authority.principal_server_id

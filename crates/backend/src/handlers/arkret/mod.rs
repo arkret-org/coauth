@@ -684,8 +684,8 @@ pub(crate) fn oidc_subject_for_user(_arkret_config: &ArkretConfig, user: &User) 
 pub(crate) struct PrincipalDidBinding {
     pub principal_id: arkret_identifiers::DidCoreId,
     pub did: arkret_identifiers::Did,
-    pub audience: String,
-    pub accepted_service_id: arkret_identifiers::DidCoreId,
+    pub audience_id: String,
+    pub accepted_id: arkret_identifiers::DidCoreId,
 }
 
 pub(crate) async fn principal_did_binding_for_user<R>(
@@ -708,8 +708,8 @@ where
             return Ok(Some(PrincipalDidBinding {
                 principal_id: row.principal_id,
                 did: row.verified_did,
-                accepted_service_id: row.accepted_service_id,
-                audience: audience.to_string(),
+                accepted_id: row.accepted_id,
+                audience_id: audience.to_string(),
             }));
         }
     }
@@ -1206,7 +1206,7 @@ pub async fn debug_issue_dpop_grant(
         grant_id: material.grant_id.to_string(),
         grant_jwt: material.grant_jwt.clone(),
         dpop_jkt: jkt,
-        audience: material.audience.clone(),
+        audience: material.audience_id.clone(),
         scopes: material.scopes.clone(),
         expires_at: material.expires_at.clone(),
         principal_id: principal_id.to_string(),

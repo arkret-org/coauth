@@ -30,19 +30,19 @@ use crate::test_utils::{
 const TEST_ACCOUNT_AUTHORITY_ID: &str = "ak:did_core:webvh:zaccountauthority:account.example";
 
 fn registration_binding_input(
-    audience: impl Into<String>,
+    audience_id: impl Into<String>,
     principal_id: String,
     did: String,
     key_log_head: arkret_identifiers::Hash,
     version_id: &str,
 ) -> VerifiedPrincipalDidBindingInput {
-    let audience = audience.into();
-    let principal_authority = principal_authority(&principal_id, &audience);
-    let audience = arkret_identifiers::DidCoreId::new(audience).unwrap();
+    let audience_id = audience_id.into();
+    let principal_authority = principal_authority(&principal_id, &audience_id);
+    let audience_id = arkret_identifiers::DidCoreId::new(audience_id).unwrap();
     let principal_id = arkret_identifiers::DidCoreId::new(principal_id).unwrap();
     let did = arkret_identifiers::Did::new(did).unwrap();
     VerifiedPrincipalDidBindingInput {
-        audience: audience.clone(),
+        audience_id: audience_id.clone(),
         principal_id: principal_id.clone(),
         key_log_head: key_log_head.clone(),
         verified_did: did.clone(),
@@ -54,7 +54,7 @@ fn registration_binding_input(
             version_id,
             key_log_head,
         ),
-        accepted_service_id: audience,
+        accepted_id: audience_id,
         binding_version: 1,
         binding_frontier_digest: arkret_identifiers::Hash::new(format!(
             "sha256:{}",
@@ -1453,7 +1453,7 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
     let factory = PgRepositoryFactory::new(pool.clone());
     let label = uuid::Uuid::now_v7().simple().to_string();
     let clock = MockClock::default();
-    let audience = "ak:did_core:web:ps.example";
+    let audience_id = "ak:did_core:web:ps.example";
     let mut rng = ChaChaRng::seed_from_u64(74);
 
     let mut repo = factory.create().await.unwrap();
@@ -1473,7 +1473,7 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
             &alice,
             verified_principal_binding_input(
                 TEST_ACCOUNT_AUTHORITY_ID,
-                audience,
+                audience_id,
                 first_did.clone(),
                 first_head,
             ),
@@ -1492,7 +1492,7 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
             &alice,
             verified_principal_binding_input(
                 TEST_ACCOUNT_AUTHORITY_ID,
-                audience,
+                audience_id,
                 second_did.clone(),
                 second_head,
             ),
@@ -1504,10 +1504,10 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
     let mut repo = factory.create().await.unwrap();
     let binding = repo
         .principal_did()
-        .get_for_user_and_audience(&alice, audience)
+        .get_for_user_and_audience(&alice, audience_id)
         .await
         .unwrap()
-        .expect("the original audience binding must remain intact");
+        .expect("the original audience_id binding must remain intact");
     assert_eq!(binding.principal_id.as_str(), first_did);
     assert!(
         repo.principal_did()
@@ -1527,7 +1527,7 @@ async fn principal_binding_refreshes_verified_snapshot_only_within_the_same_core
     let factory = PgRepositoryFactory::new(pool.clone());
     let label = uuid::Uuid::now_v7().simple().to_string();
     let principal_id = format!("ak:did_core:webvh:z{label}");
-    let audience = "ak:did_core:web:principal-server.example";
+    let audience_id = "ak:did_core:web:principal-server.example";
     let clock = MockClock::default();
     let mut rng = ChaChaRng::seed_from_u64(75);
 
@@ -1543,7 +1543,7 @@ async fn principal_binding_refreshes_verified_snapshot_only_within_the_same_core
             &clock,
             &user,
             registration_binding_input(
-                audience,
+                audience_id,
                 principal_id.clone(),
                 format!("did:webvh:z{label}:old.example"),
                 arkret_identifiers::Hash::new(format!("sha256:{}", "1".repeat(64))).unwrap(),
@@ -1562,7 +1562,7 @@ async fn principal_binding_refreshes_verified_snapshot_only_within_the_same_core
             &clock,
             &user,
             registration_binding_input(
-                audience,
+                audience_id,
                 principal_id.clone(),
                 format!("did:webvh:z{label}:new.example"),
                 arkret_identifiers::Hash::new(format!("sha256:{}", "2".repeat(64))).unwrap(),
@@ -1587,7 +1587,7 @@ async fn principal_binding_refreshes_verified_snapshot_only_within_the_same_core
         .unwrap();
     assert!(
         repo.principal_did()
-            .get_for_user_and_audience(&user, audience)
+            .get_for_user_and_audience(&user, audience_id)
             .await
             .unwrap()
             .is_none()

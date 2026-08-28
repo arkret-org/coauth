@@ -848,7 +848,7 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
     assert_eq!(payload.grant_id, grant.grant_id);
     assert_eq!(payload.subject.as_str(), principal_id);
     assert_eq!(
-        payload.audience.as_str(),
+        payload.audience_id.as_str(),
         required_audience_for(&url_builder, &arkret_config)
     );
     assert_eq!(
@@ -1248,7 +1248,7 @@ fn session_grant_introspection_proof(
         kind: SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND.to_owned(),
         session_grant_id: grant.grant_id.to_string(),
         grant_jwt_digest: session_grant_jwt_digest(&material.grant_jwt),
-        audience: arkret_identifiers::DidCoreId::new(grant.audience.clone()).unwrap(),
+        audience_id: arkret_identifiers::DidCoreId::new(grant.audience_id.clone()).unwrap(),
         challenge: challenge.to_owned(),
         issued_at: now,
         expires_at: now + Duration::try_minutes(1).unwrap(),
@@ -1331,7 +1331,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
                 .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
                 .json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
-                    "audience": grant.audience,
+                    "audience_id": grant.audience_id,
                 })),
         )
         .await;
@@ -1347,7 +1347,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     assert_eq!(body["one_time_use_consumed"], false);
     assert_eq!(body["grant"]["id"], grant.grant_id.to_string());
     assert_eq!(body["grant"]["subject"], grant.subject);
-    assert_eq!(body["grant"]["audience"], grant.audience);
+    assert_eq!(body["grant"]["audience_id"], grant.audience_id);
     assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
     assert!(body["grant"].get("grant_jwt").is_none());
     // Server-to-server introspection MUST expose session_public_key so the
@@ -1369,7 +1369,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
                 .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),
-                    "audience": grant.audience,
+                    "audience_id": grant.audience_id,
                 })),
         )
         .await;
@@ -1388,7 +1388,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
                 .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),
-                    "audience": grant.audience,
+                    "audience_id": grant.audience_id,
                     "proof": {
                         "challenge": challenge,
                         "proof_jwt": proof_jwt,
@@ -1521,7 +1521,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
                 .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
                 .json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
-                    "audience": grant.audience,
+                    "audience_id": grant.audience_id,
                 })),
         )
         .await;
@@ -1542,7 +1542,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
                 .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
                 .json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
-                    "audience": grant.audience,
+                    "audience_id": grant.audience_id,
                     "proof": {
                         "challenge": challenge,
                         "proof_jwt": proof_jwt,
@@ -1822,7 +1822,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),
                     "grant_jwt": material.grant_jwt,
-                    "audience": grant.audience,
+                    "audience_id": grant.audience_id,
                 })),
         )
         .await;
@@ -1835,7 +1835,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
         .request(
             Request::post("/_arkret/gate/account/session-grants/introspect")
                 .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
-                .json(serde_json::json!({ "audience": grant.audience })),
+                .json(serde_json::json!({ "audience_id": grant.audience_id })),
         )
         .await;
     response.assert_status(StatusCode::UNPROCESSABLE_ENTITY);
@@ -1877,7 +1877,7 @@ async fn session_grant_http_revoke_updates_followup_introspection() {
                 .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),
-                    "audience": grant.audience,
+                    "audience_id": grant.audience_id,
                 })),
         )
         .await;
@@ -2184,9 +2184,8 @@ fn issue_handle_claim_accepts_organization_handle_claim_kind() {
     let key_store = test_keystore();
 
     let hint = arkret_models_identity::DeliveryBindingHint {
-        recipient_service_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example")
-            .unwrap(),
-        recipient_service_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
+        recipient_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example").unwrap(),
+        recipient_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
         binding_source: arkret_models_identity::HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: [arkret_models_identity::DeliveryMode::Events]
             .into_iter()

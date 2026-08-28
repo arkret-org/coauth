@@ -1418,7 +1418,7 @@ mod tests {
             log_head_digest: operation.log_head_digest().unwrap(),
             control_key_digest: operation.control_key_digest().unwrap(),
             issued_at: "2026-07-15T01:00:00Z".parse().unwrap(),
-            provider_service_id: service_id.clone(),
+            provider_id: service_id.clone(),
             proof: arkret_wire::PayloadProof {
                 kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
                 verification_method: arkret_wire::DidUrl::new(format!("{provider_did}#notary-key"))

@@ -68,7 +68,7 @@ pub struct NewAgentSessionProofReplay {
     /// `sha256:<hex>` digest the proof covered.
     pub request_canonical_digest: String,
     /// Audience the proof asserted.
-    pub audience: String,
+    pub audience_id: String,
     /// Proof `expires_at`.
     pub proof_expires_at: DateTime<Utc>,
     /// Replay-table prune horizon (`proof_expires_at` + grace window).

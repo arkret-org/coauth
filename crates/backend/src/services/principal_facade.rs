@@ -388,13 +388,13 @@ impl ConnectorAdmin for DbConnectorAdmin {
             .peer_signing
             .as_ref()
             .context("erasure-receipt peer signing configuration is unavailable")?;
-        let (source_service_id, source_did) = runtime_peer_identity(&self.arkret_config)?;
-        let destination_service_id =
+        let (source_id, source_did) = runtime_peer_identity(&self.arkret_config)?;
+        let destination_id =
             crate::services::principal_server_trust::effective_audience_shared(target)
                 .context("erasure-receipt destination service identity is unavailable or stale")?;
         let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
-            source_service_id,
-            destination_service_id,
+            source_id,
+            destination_id,
         };
         let client = crate::services::peer_protocol_client::PeerProtocolClient::new(
             Some(&target.endpoint),

@@ -177,7 +177,7 @@ pub async fn account_register_endpoint(
     // transaction. The same service identity is the handoff/session audience,
     // the PCR submission target, and the server pinned by the resulting
     // PrincipalAuthorityKey.
-    let principal_server = principal_server_target(depot, &grant.audience)?;
+    let principal_server = principal_server_target(depot, &grant.audience_id)?;
     let browser_session_id = grant.browser_session_id.ok_or_else(|| {
         failed_precondition("identity creation requires its originating browser session")
     })?;
@@ -382,7 +382,7 @@ pub async fn account_register_endpoint(
             .map_err(|error| failed_precondition(error.to_string()))?;
         outcome
     };
-    if pcr_outcome.receipt.issuer != principal_server.service_id {
+    if pcr_outcome.receipt.issuer_id != principal_server.service_id {
         return Err(failed_precondition(
             "PCR genesis receipt issuer does not match the selected Principal Server",
         ));
@@ -458,7 +458,7 @@ pub async fn account_register_endpoint(
             .ok_or(ArkretRouteError::NotFound)?;
         let existing_binding = repo
             .principal_did()
-            .get_for_user_and_audience(&user, &grant.audience)
+            .get_for_user_and_audience(&user, &grant.audience_id)
             .await?;
         let durable_binding = match existing_binding {
             Some(existing)
@@ -480,7 +480,7 @@ pub async fn account_register_endpoint(
                         &*clock,
                         &user,
                         VerifiedPrincipalDidBindingInput {
-                            audience: principal_server.service_id.clone(),
+                            audience_id: principal_server.service_id.clone(),
                             principal_id: body.principal_id.clone(),
                             key_log_head: head_event_digest,
                             verified_did: body.did.clone(),
@@ -489,7 +489,7 @@ pub async fn account_register_endpoint(
                                 .did_version_id
                                 .clone(),
                             binding_receipt: receipt.clone(),
-                            accepted_service_id: principal_server.service_id.clone(),
+                            accepted_id: principal_server.service_id.clone(),
                             binding_version: 1,
                             binding_frontier_digest: arkret_identifiers::Hash::new(
                                 arkret_canonical::canonical_sha256(&receipt)
@@ -605,7 +605,7 @@ pub async fn account_register_endpoint(
         &key_store,
         &browser_session,
         session_public_key,
-        initial.audience.to_string(),
+        initial.audience_id.to_string(),
         initial.device_id.clone(),
         STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
             .iter()
@@ -626,7 +626,7 @@ pub async fn account_register_endpoint(
         expires_at: material.expires_at_timestamp,
         session_grant_id: material.grant_id.clone(),
         session_public_key: initial.session_public_key.clone(),
-        audience: initial.audience.clone(),
+        audience_id: initial.audience_id.clone(),
         granted_scope: material.scopes.clone(),
         scope_details: None,
     };
@@ -718,8 +718,8 @@ fn validate_registration_transcript(
         || challenge.lease_id != proof.identity_creation_lease_id
         || challenge.lease_fence != proof.lease_fence
         || challenge.dpop_jkt != proof.dpop_jkt
-        || challenge.audience != proof.audience
-        || challenge.origin != proof.origin
+        || challenge.audience_id != proof.audience_id
+        || challenge.origin_uri != proof.origin_uri
         || challenge.trust_domain != proof.trust_domain
         || challenge.issued_at != proof.issued_at
         || challenge.expires_at != proof.expires_at
@@ -845,7 +845,7 @@ fn validate_initial_session_request(
     grant: &coauth_data::account_handoff::AccountHandoffGrant,
 ) -> Result<(), ArkretRouteError> {
     let initial = &registration.initial_session;
-    if initial.audience.as_str() != grant.audience {
+    if initial.audience_id.as_str() != grant.audience_id {
         return Err(failed_precondition(
             "initial SessionGrant audience does not match the account handoff audience",
         ));

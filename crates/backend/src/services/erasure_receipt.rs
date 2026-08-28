@@ -85,7 +85,7 @@ pub async fn verify_erasure_receipt(
         repo,
         did_resolver,
         binding_store,
-        receipt.issuer.as_str(),
+        receipt.issuer_id.as_str(),
         arkret_identity::DidBindingPurpose::Issuer,
         crate::services::did_binding::high_risk_freshness(),
         now,
@@ -98,7 +98,7 @@ pub async fn verify_erasure_receipt(
         return Err(ErasureReceiptVerificationError::NoVerificationMethod);
     }
 
-    let issuer = receipt.issuer.as_str();
+    let issuer = receipt.issuer_id.as_str();
     for proof in &receipt.proofs {
         if proof.payload_digest != expected_digest {
             continue;

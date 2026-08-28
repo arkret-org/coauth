@@ -132,7 +132,7 @@ CREATE TABLE public.agent_session_proof_replay (
     challenge text NOT NULL,
     nonce text NOT NULL,
     request_canonical_digest text NOT NULL,
-    audience text NOT NULL,
+    audience_id text NOT NULL,
     consumed_at timestamp with time zone NOT NULL,
     proof_expires_at timestamp with time zone NOT NULL,
     prune_after timestamp with time zone NOT NULL,
@@ -650,18 +650,18 @@ CREATE TABLE public.principal_did_bindings (
     id uuid NOT NULL,
     principal_did_owner_id uuid NOT NULL,
     user_id uuid NOT NULL,
-    audience text NOT NULL,
+    audience_id text NOT NULL,
     verified_did text NOT NULL,
     verified_version_id text NOT NULL,
     binding_receipt jsonb NOT NULL,
-    accepted_service_id text NOT NULL,
+    accepted_id text NOT NULL,
     binding_version bigint NOT NULL,
     binding_frontier_digest text NOT NULL,
     principal_authority jsonb NOT NULL,
     principal_control_realm_id text NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
-    ,CONSTRAINT principal_did_binding_basis_shape CHECK (audience = accepted_service_id AND audience LIKE 'ak:did_core:%' AND binding_version >= 1 AND binding_frontier_digest ~ '^sha256:[0-9a-f]{64}$'::text AND principal_control_realm_id LIKE 'ak:realm:%')
+    ,CONSTRAINT principal_did_binding_basis_shape CHECK (audience_id = accepted_id AND audience_id LIKE 'ak:did_core:%' AND binding_version >= 1 AND binding_frontier_digest ~ '^sha256:[0-9a-f]{64}$'::text AND principal_control_realm_id LIKE 'ak:realm:%')
     ,CONSTRAINT principal_did_binding_resolution_snapshot_shape CHECK (verified_did ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text AND btrim(verified_version_id) <> ''::text AND jsonb_typeof(binding_receipt) = 'object'::text AND jsonb_typeof(principal_authority) = 'object'::text)
 );
 
@@ -719,7 +719,7 @@ CREATE TABLE public.account_handoff_grants (
     request_digest text NOT NULL,
     service_account_id uuid NOT NULL,
     browser_session_id uuid,
-    audience text NOT NULL,
+    audience_id text NOT NULL,
     cnf_jkt text NOT NULL,
     allowed_operations text[] NOT NULL,
     account_handoff_grant text NOT NULL,
@@ -728,7 +728,7 @@ CREATE TABLE public.account_handoff_grants (
     revoked_at timestamp with time zone,
     consumed_at timestamp with time zone,
     CONSTRAINT account_handoff_grants_request_digest_valid CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT account_handoff_grants_audience_nonempty CHECK ((btrim(audience) <> ''::text)),
+    CONSTRAINT account_handoff_grants_audience_id_nonempty CHECK ((btrim(audience_id) <> ''::text)),
     CONSTRAINT account_handoff_grants_cnf_jkt_valid CHECK ((cnf_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
     CONSTRAINT account_handoff_grants_allowed_operations_closed CHECK ((allowed_operations = ARRAY['ak.gate.account.command.issue_did_binding_challenge.v1'::text, 'ak.gate.account.command.issue_identity_binding_challenge.v1'::text, 'ak.gate.account.command.issue_identity_abandonment_challenge.v1'::text, 'ak.gate.account.command.abandon_identity_creation.v1'::text, 'ak.gate.account.command.register.v1'::text, 'ak.gate.account.command.issue_session_grant.v1'::text, 'ak.gate.account.command.issue_recovery_completion_grant.v1'::text])),
     CONSTRAINT account_handoff_grants_token_nonempty CHECK ((length(account_handoff_grant) >= 32)),
@@ -737,7 +737,7 @@ CREATE TABLE public.account_handoff_grants (
 
 CREATE TABLE public.identity_creation_leases (
     service_account_id uuid NOT NULL,
-    audience text NOT NULL,
+    audience_id text NOT NULL,
     lease_id text NOT NULL,
     holder_jkt text NOT NULL,
     fence bigint NOT NULL,
@@ -758,7 +758,7 @@ CREATE TABLE public.identity_creation_leases (
     register_outcome jsonb,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT identity_creation_leases_audience_nonempty CHECK ((btrim(audience) <> ''::text)),
+    CONSTRAINT identity_creation_leases_audience_id_nonempty CHECK ((btrim(audience_id) <> ''::text)),
     CONSTRAINT identity_creation_leases_lease_id_valid CHECK ((lease_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
     CONSTRAINT identity_creation_leases_holder_jkt_valid CHECK ((holder_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
     CONSTRAINT identity_creation_leases_fence_positive CHECK ((fence >= 1)),
@@ -784,12 +784,12 @@ CREATE TABLE public.identity_creation_lease_rate_limit_events (
     id bigserial NOT NULL,
     request_id uuid NOT NULL,
     account_subject text NOT NULL,
-    audience text NOT NULL,
+    audience_id text NOT NULL,
     lease_id text NOT NULL,
     action text NOT NULL,
     occurred_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT identity_creation_lease_rate_subject_valid CHECK ((account_subject ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT identity_creation_lease_rate_audience_nonempty CHECK ((btrim(audience) <> ''::text)),
+    CONSTRAINT identity_creation_lease_rate_audience_id_nonempty CHECK ((btrim(audience_id) <> ''::text)),
     CONSTRAINT identity_creation_lease_rate_lease_id_valid CHECK ((lease_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
     CONSTRAINT identity_creation_lease_rate_action_closed CHECK ((action = ANY (ARRAY['acquisition'::text, 'renewal'::text])))
 );
@@ -815,8 +815,8 @@ CREATE TABLE public.identity_binding_challenges (
     lease_id text NOT NULL,
     lease_fence bigint NOT NULL,
     dpop_jkt text NOT NULL,
-    audience text NOT NULL,
-    origin text NOT NULL,
+    audience_id text NOT NULL,
+    origin_uri text NOT NULL,
     trust_domain text NOT NULL,
     issued_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
@@ -858,8 +858,8 @@ CREATE TABLE public.did_binding_challenges (
     challenge_id text NOT NULL UNIQUE,
     challenge text NOT NULL,
     dpop_jkt text NOT NULL,
-    audience text NOT NULL,
-    origin text NOT NULL,
+    audience_id text NOT NULL,
+    origin_uri text NOT NULL,
     trust_domain text NOT NULL,
     issued_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
@@ -888,7 +888,7 @@ CREATE TABLE public.identity_abandonment_challenges (
     request_digest text NOT NULL,
     issuing_handoff_grant_id uuid NOT NULL,
     service_account_id uuid NOT NULL,
-    audience text NOT NULL,
+    audience_id text NOT NULL,
     account_subject text NOT NULL,
     holder_jkt text NOT NULL,
     lease_id text NOT NULL,
@@ -897,7 +897,7 @@ CREATE TABLE public.identity_abandonment_challenges (
     did_version_id text NOT NULL,
     challenge_id text NOT NULL UNIQUE,
     challenge text NOT NULL,
-    origin text NOT NULL,
+    origin_uri text NOT NULL,
     trust_domain text NOT NULL,
     issued_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
@@ -1446,13 +1446,13 @@ ALTER TABLE ONLY public.principal_did_bindings
     ADD CONSTRAINT principal_did_bindings_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.principal_did_bindings
-    ADD CONSTRAINT principal_did_bindings_owner_audience_unique UNIQUE (principal_did_owner_id, audience);
+    ADD CONSTRAINT principal_did_bindings_owner_audience_id_unique UNIQUE (principal_did_owner_id, audience_id);
 
 ALTER TABLE ONLY public.principal_did_bindings
-    ADD CONSTRAINT principal_did_bindings_user_audience_unique UNIQUE (user_id, audience);
+    ADD CONSTRAINT principal_did_bindings_user_audience_id_unique UNIQUE (user_id, audience_id);
 
 ALTER TABLE ONLY public.principal_did_bindings
-    ADD CONSTRAINT principal_did_bindings_audience_nonempty CHECK (btrim(audience) <> '');
+    ADD CONSTRAINT principal_did_bindings_audience_id_nonempty CHECK (btrim(audience_id) <> '');
 
 ALTER TABLE ONLY public.principal_did_owners
     ADD CONSTRAINT principal_did_owners_pkey PRIMARY KEY (id);
@@ -1482,7 +1482,7 @@ ALTER TABLE ONLY public.account_handoff_grants
     ADD CONSTRAINT account_handoff_grants_token_unique UNIQUE (account_handoff_grant);
 
 ALTER TABLE ONLY public.identity_creation_leases
-    ADD CONSTRAINT identity_creation_leases_pkey PRIMARY KEY (service_account_id, audience);
+    ADD CONSTRAINT identity_creation_leases_pkey PRIMARY KEY (service_account_id, audience_id);
 
 ALTER TABLE ONLY public.identity_creation_leases
     ADD CONSTRAINT identity_creation_leases_lease_id_unique UNIQUE (lease_id);
@@ -1692,7 +1692,7 @@ CREATE INDEX idx_principal_did_bindings_user_id ON public.principal_did_bindings
 
 CREATE INDEX idx_principal_did_owners_user_id ON public.principal_did_owners USING btree (user_id);
 
-CREATE INDEX idx_account_handoff_grants_account_audience ON public.account_handoff_grants USING btree (service_account_id, audience);
+CREATE INDEX idx_account_handoff_grants_account_audience_id ON public.account_handoff_grants USING btree (service_account_id, audience_id);
 
 CREATE INDEX idx_account_handoff_creation_attempts_retention ON public.account_handoff_creation_attempts USING btree (retained_until);
 
@@ -1700,11 +1700,11 @@ CREATE INDEX idx_account_handoff_grants_expiry ON public.account_handoff_grants 
 
 CREATE INDEX idx_identity_creation_leases_expiry ON public.identity_creation_leases USING btree (expires_at) WHERE (state <> 'completed'::text);
 
-CREATE INDEX idx_identity_creation_lease_rate_acquisition ON public.identity_creation_lease_rate_limit_events USING btree (account_subject, audience, occurred_at DESC) WHERE (action = 'acquisition'::text);
+CREATE INDEX idx_identity_creation_lease_rate_acquisition ON public.identity_creation_lease_rate_limit_events USING btree (account_subject, audience_id, occurred_at DESC) WHERE (action = 'acquisition'::text);
 
 CREATE INDEX idx_identity_creation_lease_rate_renewal ON public.identity_creation_lease_rate_limit_events USING btree (lease_id, occurred_at DESC) WHERE (action = 'renewal'::text);
 
-CREATE INDEX idx_identity_binding_challenges_reservation ON public.identity_binding_challenges USING btree (service_account_id, audience, lease_id, lease_fence, operation_digest);
+CREATE INDEX idx_identity_binding_challenges_reservation ON public.identity_binding_challenges USING btree (service_account_id, audience_id, lease_id, lease_fence, operation_digest);
 
 CREATE INDEX idx_identity_binding_challenges_expiry ON public.identity_binding_challenges USING btree (expires_at) WHERE ((consumed_at IS NULL) AND (replaced_at IS NULL));
 

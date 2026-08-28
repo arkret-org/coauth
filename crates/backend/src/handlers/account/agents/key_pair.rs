@@ -249,7 +249,7 @@ pub async fn post_agent_key_pair(
         &url_builder,
         &arkret_config,
         crate::services::principal_server_trust::shared(),
-        pop.audience.as_str(),
+        pop.audience_id.as_str(),
     ) {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
     }
@@ -312,7 +312,7 @@ pub async fn post_agent_key_pair(
         &body.public_key,
         &body.signing_key_binding,
         &body.pairing_request_id,
-        pop.audience.as_str(),
+        pop.audience_id.as_str(),
         authoritative_key_state,
         now,
     )?;
@@ -366,7 +366,7 @@ pub async fn post_agent_key_pair(
                 public_key: public_key_value.clone(),
                 accountable_principal_id: authorize_event.controller_id.clone(),
                 agent_key_scope,
-                audience: vec![pop.audience.to_string()],
+                audience: vec![pop.audience_id.to_string()],
                 issued_at,
                 expires_at,
                 pairing_request_id: body.pairing_request_id.to_string(),
@@ -406,7 +406,7 @@ pub async fn post_agent_key_pair(
         "agent_id": &agent_id,
         "controller_id": &authorize_event.controller_id,
         "verification_method": &body.verification_method,
-        "audience": &pop.audience,
+        "audience_id": &pop.audience_id,
         "issued_at": issued_at,
         "expires_at": expires_at,
         "superseded_active_keys": superseded_keys,

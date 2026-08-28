@@ -539,9 +539,9 @@ pub async fn verify_principal_server_identity(
     }
 
     // 6. Endpoint binding.
-    let record_base = CanonicalServiceUrl::canonicalize(&record.record.base_url)
+    let record_base = CanonicalServiceUrl::canonicalize(&record.record.base_uri)
         .map_err(|error| TrustVerificationError::EndpointBinding(error.to_string()))?;
-    if record_base.to_string() != record.record.base_url {
+    if record_base.to_string() != record.record.base_uri {
         return Err(TrustVerificationError::EndpointBinding(
             "resolution record base_url is not canonical".to_owned(),
         ));
@@ -549,7 +549,7 @@ pub async fn verify_principal_server_identity(
     if record_base.to_string() != canonical_endpoint {
         return Err(TrustVerificationError::EndpointBinding(format!(
             "resolution record base_url {} does not match the configured endpoint {}",
-            record.record.base_url, canonical_endpoint
+            record.record.base_uri, canonical_endpoint
         )));
     }
     if record.record.current_record_url != record_url.as_str() {
@@ -573,8 +573,8 @@ pub async fn verify_principal_server_identity(
         ));
     }
     let mut http_json_bindings = description.transport_bindings.iter().filter_map(|binding| {
-        if let arkret_models_discovery::TransportBinding::HttpJson { base_url, .. } = binding {
-            Some(base_url)
+        if let arkret_models_discovery::TransportBinding::HttpJson { base_uri, .. } = binding {
+            Some(base_uri)
         } else {
             None
         }
@@ -590,10 +590,10 @@ pub async fn verify_principal_server_identity(
         ));
     }
     let advertised_base = binding.as_str();
-    if advertised_base != record.record.base_url {
+    if advertised_base != record.record.base_uri {
         return Err(TrustVerificationError::EndpointBinding(format!(
             "ServiceDescribe http_json base {advertised_base} does not match the signed record target {}",
-            record.record.base_url
+            record.record.base_uri
         )));
     }
     let route_binding_digest = arkret_models_identity::route_binding_describe_digest(

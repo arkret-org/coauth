@@ -25,12 +25,12 @@ impl<'c> PgPrincipalDidRepository<'c> {
     async fn binding_query_for_user_and_audience(
         &mut self,
         user_id: Uuid,
-        audience: &str,
+        audience_id: &str,
     ) -> Result<Option<PrincipalDidBinding>, DatabaseError> {
         let row = principal_did_bindings::table
             .inner_join(principal_did_owners::table)
             .filter(principal_did_bindings::user_id.eq(user_id))
-            .filter(principal_did_bindings::audience.eq(audience))
+            .filter(principal_did_bindings::audience_id.eq(audience_id))
             .select(PrincipalDidJoinedRow::as_select())
             .first::<PrincipalDidJoinedRow>(self.conn)
             .await
@@ -45,8 +45,8 @@ struct PrincipalDidJoinedRow {
     id: Uuid,
     #[diesel(select_expression = principal_did_bindings::user_id)]
     user_id: Uuid,
-    #[diesel(select_expression = principal_did_bindings::audience)]
-    audience: arkret_identifiers::DidCoreId,
+    #[diesel(select_expression = principal_did_bindings::audience_id)]
+    audience_id: arkret_identifiers::DidCoreId,
     #[diesel(select_expression = principal_did_owners::principal_id)]
     principal_id: arkret_identifiers::DidCoreId,
     #[diesel(select_expression = principal_did_owners::key_log_head)]
@@ -57,8 +57,8 @@ struct PrincipalDidJoinedRow {
     verified_version_id: String,
     #[diesel(select_expression = principal_did_bindings::binding_receipt)]
     binding_receipt: serde_json::Value,
-    #[diesel(select_expression = principal_did_bindings::accepted_service_id)]
-    accepted_service_id: arkret_identifiers::DidCoreId,
+    #[diesel(select_expression = principal_did_bindings::accepted_id)]
+    accepted_id: arkret_identifiers::DidCoreId,
     #[diesel(select_expression = principal_did_bindings::binding_version)]
     binding_version: i64,
     #[diesel(select_expression = principal_did_bindings::binding_frontier_digest)]
@@ -110,7 +110,7 @@ fn binding_from_row(row: PrincipalDidJoinedRow) -> Result<PrincipalDidBinding, D
     Ok(PrincipalDidBinding {
         id,
         user_id: Ulid::from(row.user_id),
-        audience: row.audience,
+        audience_id: row.audience_id,
         principal_id: row.principal_id,
         key_log_head,
         verified_did: arkret_identifiers::Did::new(row.verified_did).map_err(|error| {
@@ -121,7 +121,7 @@ fn binding_from_row(row: PrincipalDidJoinedRow) -> Result<PrincipalDidBinding, D
         })?,
         verified_version_id: row.verified_version_id,
         binding_receipt,
-        accepted_service_id: row.accepted_service_id,
+        accepted_id: row.accepted_id,
         binding_version: u64::try_from(row.binding_version).map_err(|error| {
             DatabaseInconsistencyError::on("principal_did_bindings")
                 .column("binding_version")
@@ -175,11 +175,11 @@ struct NewPrincipalDidBinding {
     id: Uuid,
     principal_did_owner_id: Uuid,
     user_id: Uuid,
-    audience: arkret_identifiers::DidCoreId,
+    audience_id: arkret_identifiers::DidCoreId,
     verified_did: String,
     verified_version_id: String,
     binding_receipt: serde_json::Value,
-    accepted_service_id: arkret_identifiers::DidCoreId,
+    accepted_id: arkret_identifiers::DidCoreId,
     binding_version: i64,
     binding_frontier_digest: String,
     principal_authority: serde_json::Value,
@@ -195,9 +195,9 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
     async fn get_for_user_and_audience(
         &mut self,
         user: &User,
-        audience: &str,
+        audience_id: &str,
     ) -> Result<Option<PrincipalDidBinding>, Self::Error> {
-        self.binding_query_for_user_and_audience(Uuid::from(user.id), audience)
+        self.binding_query_for_user_and_audience(Uuid::from(user.id), audience_id)
             .await
     }
 
@@ -216,12 +216,12 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
     async fn get_by_did_and_audience(
         &mut self,
         did: &str,
-        audience: &str,
+        audience_id: &str,
     ) -> Result<Option<PrincipalDidBinding>, Self::Error> {
         let row = principal_did_bindings::table
             .inner_join(principal_did_owners::table)
             .filter(principal_did_owners::principal_id.eq(did))
-            .filter(principal_did_bindings::audience.eq(audience))
+            .filter(principal_did_bindings::audience_id.eq(audience_id))
             .select(PrincipalDidJoinedRow::as_select())
             .first::<PrincipalDidJoinedRow>(self.conn)
             .await
@@ -237,13 +237,13 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
         input: VerifiedPrincipalDidBindingInput,
     ) -> Result<PrincipalDidBinding, Self::Error> {
         let VerifiedPrincipalDidBindingInput {
-            audience,
+            audience_id,
             principal_id,
             key_log_head,
             verified_did,
             verified_version_id,
             binding_receipt,
-            accepted_service_id,
+            accepted_id,
             binding_version,
             binding_frontier_digest,
             principal_authority,
@@ -263,15 +263,15 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             && binding_receipt.head_event_digest == key_log_head;
         if !resolution_snapshot_is_valid
             || binding_version < 1
-            || accepted_service_id != audience
+            || accepted_id != audience_id
             || principal_authority.principal_id != principal_id
-            || principal_authority.principal_server_id != accepted_service_id
+            || principal_authority.principal_server_id != accepted_id
         {
             return Err(DatabaseError::invalid_operation());
         }
 
         if let Some(binding) = self
-            .binding_query_for_user_and_audience(Uuid::from(user.id), audience.as_str())
+            .binding_query_for_user_and_audience(Uuid::from(user.id), audience_id.as_str())
             .await?
             && (binding.principal_id != principal_id
                 || binding.principal_authority != principal_authority)
@@ -321,12 +321,12 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             id: Uuid::from(new_id(now, rng)),
             principal_did_owner_id: owner.id,
             user_id: Uuid::from(user.id),
-            audience: audience.clone(),
+            audience_id: audience_id.clone(),
             verified_did: verified_did.to_string(),
             verified_version_id: verified_version_id.clone(),
             binding_receipt: serde_json::to_value(&binding_receipt)
                 .map_err(|_| DatabaseError::invalid_operation())?,
-            accepted_service_id: accepted_service_id.clone(),
+            accepted_id: accepted_id.clone(),
             binding_version: i64::try_from(binding_version)
                 .map_err(|_| DatabaseError::invalid_operation())?,
             binding_frontier_digest: binding_frontier_digest.to_string(),
@@ -340,7 +340,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             .values(binding_row)
             .on_conflict((
                 principal_did_bindings::principal_did_owner_id,
-                principal_did_bindings::audience,
+                principal_did_bindings::audience_id,
             ))
             .do_update()
             .set((
@@ -348,7 +348,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
                 principal_did_bindings::verified_version_id.eq(verified_version_id),
                 principal_did_bindings::binding_receipt.eq(serde_json::to_value(&binding_receipt)
                     .map_err(|_| DatabaseError::invalid_operation())?),
-                principal_did_bindings::accepted_service_id.eq(&accepted_service_id),
+                principal_did_bindings::accepted_id.eq(&accepted_id),
                 principal_did_bindings::binding_version.eq(i64::try_from(binding_version)
                     .map_err(|_| DatabaseError::invalid_operation())?),
                 principal_did_bindings::binding_frontier_digest
@@ -364,7 +364,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             .await?;
 
         let binding = self
-            .binding_query_for_user_and_audience(Uuid::from(user.id), audience.as_str())
+            .binding_query_for_user_and_audience(Uuid::from(user.id), audience_id.as_str())
             .await?
             .ok_or_else(DatabaseError::invalid_operation)?;
         if binding.principal_id != principal_id {

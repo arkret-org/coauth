@@ -124,7 +124,7 @@ where
     use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
 
     let request_digest = &proof.request_canonical_digest;
-    let proof_audience = &proof.audience;
+    let proof_audience = &proof.audience_id;
     let issued_at = proof.issued_at;
     let expires_at = proof.expires_at;
     let signature = Some(proof.signature.trim())
@@ -132,7 +132,7 @@ where
         .ok_or(AgentAuthRejection::ProofInvalid)?;
     let verification_method = &proof.verification_method;
     if !agent_runtime_method_matches_endpoint(
-        prior_claims.subject.as_str(),
+        prior_claims.subject_id.as_str(),
         device_id,
         verification_method.as_str(),
     ) {
@@ -146,7 +146,7 @@ where
     {
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
-    if proof_audience.as_str() != prior_claims.audience.as_str()
+    if proof_audience.as_str() != prior_claims.audience_id.as_str()
         || prior_claims.proof_kind
             != Some(arkret_models_identity::SessionGrantProofKind::AgentKeyProof)
     {
@@ -170,7 +170,7 @@ where
     validate_agent_key_authorization_binding(
         &authorization,
         now,
-        prior_claims.subject.as_str(),
+        prior_claims.subject_id.as_str(),
         verification_method.as_str(),
         proof_audience.as_str(),
     )?;
@@ -182,7 +182,7 @@ where
 
     let expected_digest = agent_session_refresh_request_digest(
         prior_grant_jwt,
-        &prior_claims.subject,
+        &prior_claims.subject_id,
         device_id,
         proof_audience,
         verification_method,
@@ -211,12 +211,12 @@ where
             rng,
             clock,
             NewAgentSessionProofReplay {
-                agent_id: prior_claims.subject.to_string(),
+                agent_id: prior_claims.subject_id.to_string(),
                 verification_method: verification_method.to_string(),
                 challenge: request_digest.to_string(),
                 nonce: request_digest.to_string(),
                 request_canonical_digest: request_digest.to_string(),
-                audience: proof_audience.to_string(),
+                audience_id: proof_audience.to_string(),
                 proof_expires_at: expires_at,
                 prune_after: expires_at + AGENT_PROOF_REPLAY_GRACE,
             },
@@ -313,9 +313,9 @@ pub async fn validate_agent_session_proof(
         url_builder,
         arkret_config,
         crate::services::principal_server_trust::shared(),
-        proof.audience.as_str(),
+        proof.audience_id.as_str(),
     ) {
-        tracing::warn!(agent_id, verification_method, audience = %proof.audience, "agent_key_proof rejected: audience is not configured");
+        tracing::warn!(agent_id, verification_method, audience_id = %proof.audience_id, "agent_key_proof rejected: audience is not configured");
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
     if !proof
@@ -367,9 +367,9 @@ pub async fn validate_agent_session_proof(
         now,
         &agent_id,
         verification_method,
-        proof.audience.as_str(),
+        proof.audience_id.as_str(),
     ) {
-        tracing::warn!(agent_id, verification_method, authorization_ref, audience = %proof.audience, "agent_key_proof rejected: authorization binding mismatch");
+        tracing::warn!(agent_id, verification_method, authorization_ref, audience_id = %proof.audience_id, "agent_key_proof rejected: authorization binding mismatch");
         return Err(error.into());
     }
     validate_authoritative_agent_session_evidence(
@@ -381,7 +381,7 @@ pub async fn validate_agent_session_proof(
     // this canonical shape in one owner prevents the session verifier from
     // silently drifting from the request builder.
     let signed_fields = arkret_auth::session_grant::AgentKeyProofSigningInput {
-        audience: proof.audience.clone(),
+        audience_id: proof.audience_id.clone(),
         challenge: proof.challenge.clone(),
         nonce: nonce.to_owned(),
         expires_at,
@@ -427,7 +427,7 @@ pub async fn validate_agent_session_proof(
                 challenge: proof.challenge.clone(),
                 nonce: nonce.to_owned(),
                 request_canonical_digest: proof.request_canonical_digest.as_str().to_owned(),
-                audience: proof.audience.to_string(),
+                audience_id: proof.audience_id.to_string(),
                 proof_expires_at: expires_at,
                 prune_after,
             },

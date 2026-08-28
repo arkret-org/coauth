@@ -386,7 +386,7 @@ struct InsertableProofReplay {
     challenge: String,
     nonce: String,
     request_canonical_digest: String,
-    audience: String,
+    audience_id: String,
     consumed_at: DateTime<Utc>,
     proof_expires_at: DateTime<Utc>,
     prune_after: DateTime<Utc>,
@@ -435,7 +435,7 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
             )
             .map_err(|_| DatabaseError::invalid_operation())?,
             agent_key_scope: params.agent_key_scope,
-            audience: params.audience,
+            audience_id: params.audience_id,
             issued_at: params.issued_at,
             expires_at: params.expires_at,
             pairing_request_id: params.pairing_request_id,

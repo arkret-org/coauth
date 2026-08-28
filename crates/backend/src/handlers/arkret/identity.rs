@@ -230,7 +230,8 @@ pub async fn directory_resolve_handle(
         return Err(directory_resolve_not_found(started_at).await);
     }
     let clock = crate::handlers::make_clock();
-    let handle_claim_audience = directory_handle_claim_audience(&body, &principal_binding.audience);
+    let handle_claim_audience =
+        directory_handle_claim_audience(&body, &principal_binding.audience_id);
     let member_delivery_binding = directory_handle_delivery_binding(&principal_binding)?;
     let claim_material = issue_handle_claim(
         &*clock,
@@ -281,7 +282,7 @@ fn directory_handle_claim_audience(
 fn directory_handle_delivery_binding(
     principal_binding: &PrincipalDidBinding,
 ) -> Result<arkret_models_identity::DeliveryBindingHint, ArkretRouteError> {
-    let recipient_id = principal_binding.accepted_service_id.clone();
+    let recipient_id = principal_binding.accepted_id.clone();
     Ok(arkret_models_identity::DeliveryBindingHint {
         recipient_id,
         recipient_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
