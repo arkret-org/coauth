@@ -274,7 +274,7 @@ pub async fn post_invite_relay(
         let caller_id = arkret::published_principal_id_for_user(&mut repo, &arkret_config, user)
             .await?
             .ok_or(RouteError::Unauthorized)?;
-        if caller_id != params.inviter_id.as_str() {
+        if caller_id != params.inviter_id {
             return Err(RouteError::Unauthorized);
         }
     }

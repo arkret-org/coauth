@@ -16,7 +16,7 @@ use crate::{Pagination, repository_impl};
 /// OAuth provider
 pub struct UpstreamOAuthProviderParams {
     /// The OIDC issuer of the provider
-    pub issuer: Option<String>,
+    pub oidc_issuer_uri: Option<String>,
 
     /// A human-readable name for the provider
     pub human_name: Option<String>,

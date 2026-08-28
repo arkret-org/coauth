@@ -184,7 +184,7 @@ pub async fn post(req: &mut Request, depot: &mut Depot) -> Result<(), RouteError
     let token = verify_signed_jwt(
         &request.logout_token,
         JwtVerificationData {
-            issuer: provider.issuer.as_deref(),
+            issuer: provider.oidc_issuer_uri.as_deref(),
             jwks: &jwks,
             client_id: &provider.client_id,
             signing_algorithm: &provider.id_token_signed_response_alg,

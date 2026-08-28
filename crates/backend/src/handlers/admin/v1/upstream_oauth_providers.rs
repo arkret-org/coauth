@@ -130,7 +130,7 @@ pub async fn list_providers(
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "UpstreamOAuthProviderRequest")]
 pub struct ProviderRequestBody {
-    issuer: Option<String>,
+    oidc_issuer_uri: Option<String>,
     human_name: Option<String>,
     brand_name: Option<String>,
     /// Space-separated OAuth scope, e.g. "openid email profile"
@@ -244,7 +244,7 @@ fn parse_request(
         .map_err(AppError::internal)?;
 
     Ok(UpstreamOAuthProviderParams {
-        issuer: body.issuer,
+        oidc_issuer_uri: body.oidc_issuer_uri,
         human_name: body.human_name,
         brand_name: body.brand_name,
         scope,
@@ -539,7 +539,7 @@ mod tests {
         let mut repo = state.repository().await.unwrap();
 
         let params = UpstreamOAuthProviderParams {
-            issuer: Some("https://accounts.google.com".to_owned()),
+            oidc_issuer_uri: Some("https://accounts.google.com".to_owned()),
             human_name: Some("Google".to_owned()),
             brand_name: Some("google".to_owned()),
             discovery_mode: provider::DiscoveryMode::Oidc,
@@ -607,7 +607,7 @@ mod tests {
             "type": "upstream-oauth-provider",
             "id": "[id-1]",
             "attributes": {
-              "issuer": "https://accounts.google.com",
+              "oidc_issuer_uri": "https://accounts.google.com",
               "human_name": "Google",
               "brand_name": "google",
               "created_at": "[timestamp-1]",
@@ -650,7 +650,7 @@ mod tests {
 
         // Create an enabled provider
         let enabled_params = UpstreamOAuthProviderParams {
-            issuer: Some("https://accounts.google.com".to_owned()),
+            oidc_issuer_uri: Some("https://accounts.google.com".to_owned()),
             human_name: Some("Google".to_owned()),
             brand_name: Some("google".to_owned()),
             discovery_mode: provider::DiscoveryMode::Oidc,
@@ -683,7 +683,7 @@ mod tests {
 
         // Create a disabled provider
         let disabled_params = UpstreamOAuthProviderParams {
-            issuer: Some("https://appleid.apple.com".to_owned()),
+            oidc_issuer_uri: Some("https://appleid.apple.com".to_owned()),
             human_name: Some("Apple ID".to_owned()),
             brand_name: Some("apple".to_owned()),
             discovery_mode: provider::DiscoveryMode::Oidc,
@@ -723,7 +723,7 @@ mod tests {
 
         // Create another enabled provider
         let another_enabled_params = UpstreamOAuthProviderParams {
-            issuer: Some("https://login.microsoftonline.com/common/v2.0".to_owned()),
+            oidc_issuer_uri: Some("https://login.microsoftonline.com/common/v2.0".to_owned()),
             human_name: Some("Microsoft".to_owned()),
             brand_name: Some("microsoft".to_owned()),
             discovery_mode: provider::DiscoveryMode::Oidc,
@@ -788,7 +788,7 @@ mod tests {
               "type": "upstream-oauth-provider",
               "id": "[id-1]",
               "attributes": {
-                "issuer": "https://appleid.apple.com",
+                "oidc_issuer_uri": "https://appleid.apple.com",
                 "human_name": "Apple ID",
                 "brand_name": "apple",
                 "created_at": "[timestamp-1]",
@@ -808,7 +808,7 @@ mod tests {
               "type": "upstream-oauth-provider",
               "id": "[id-2]",
               "attributes": {
-                "issuer": "https://login.microsoftonline.com/common/v2.0",
+                "oidc_issuer_uri": "https://login.microsoftonline.com/common/v2.0",
                 "human_name": "Microsoft",
                 "brand_name": "microsoft",
                 "created_at": "[timestamp-1]",
@@ -828,7 +828,7 @@ mod tests {
               "type": "upstream-oauth-provider",
               "id": "[id-3]",
               "attributes": {
-                "issuer": "https://accounts.google.com",
+                "oidc_issuer_uri": "https://accounts.google.com",
                 "human_name": "Google",
                 "brand_name": "google",
                 "created_at": "[timestamp-1]",
@@ -882,7 +882,7 @@ mod tests {
               "type": "upstream-oauth-provider",
               "id": "[id-1]",
               "attributes": {
-                "issuer": "https://login.microsoftonline.com/common/v2.0",
+                "oidc_issuer_uri": "https://login.microsoftonline.com/common/v2.0",
                 "human_name": "Microsoft",
                 "brand_name": "microsoft",
                 "created_at": "[timestamp-1]",
@@ -902,7 +902,7 @@ mod tests {
               "type": "upstream-oauth-provider",
               "id": "[id-2]",
               "attributes": {
-                "issuer": "https://accounts.google.com",
+                "oidc_issuer_uri": "https://accounts.google.com",
                 "human_name": "Google",
                 "brand_name": "google",
                 "created_at": "[timestamp-1]",
@@ -956,7 +956,7 @@ mod tests {
               "type": "upstream-oauth-provider",
               "id": "[id-1]",
               "attributes": {
-                "issuer": "https://appleid.apple.com",
+                "oidc_issuer_uri": "https://appleid.apple.com",
                 "human_name": "Apple ID",
                 "brand_name": "apple",
                 "created_at": "[timestamp-1]",
@@ -1011,7 +1011,7 @@ mod tests {
               "type": "upstream-oauth-provider",
               "id": "[id-1]",
               "attributes": {
-                "issuer": "https://appleid.apple.com",
+                "oidc_issuer_uri": "https://appleid.apple.com",
                 "human_name": "Apple ID",
                 "brand_name": "apple",
                 "created_at": "[timestamp-1]",
@@ -1031,7 +1031,7 @@ mod tests {
               "type": "upstream-oauth-provider",
               "id": "[id-2]",
               "attributes": {
-                "issuer": "https://login.microsoftonline.com/common/v2.0",
+                "oidc_issuer_uri": "https://login.microsoftonline.com/common/v2.0",
                 "human_name": "Microsoft",
                 "brand_name": "microsoft",
                 "created_at": "[timestamp-1]",
@@ -1079,7 +1079,7 @@ mod tests {
               "type": "upstream-oauth-provider",
               "id": "[id-1]",
               "attributes": {
-                "issuer": "https://accounts.google.com",
+                "oidc_issuer_uri": "https://accounts.google.com",
                 "human_name": "Google",
                 "brand_name": "google",
                 "created_at": "[timestamp-1]",
@@ -1148,7 +1148,7 @@ mod tests {
               "type": "upstream-oauth-provider",
               "id": "[id-1]",
               "attributes": {
-                "issuer": "https://appleid.apple.com",
+                "oidc_issuer_uri": "https://appleid.apple.com",
                 "human_name": "Apple ID",
                 "brand_name": "apple",
                 "created_at": "[timestamp-1]",
@@ -1168,7 +1168,7 @@ mod tests {
               "type": "upstream-oauth-provider",
               "id": "[id-2]",
               "attributes": {
-                "issuer": "https://login.microsoftonline.com/common/v2.0",
+                "oidc_issuer_uri": "https://login.microsoftonline.com/common/v2.0",
                 "human_name": "Microsoft",
                 "brand_name": "microsoft",
                 "created_at": "[timestamp-1]",
@@ -1188,7 +1188,7 @@ mod tests {
               "type": "upstream-oauth-provider",
               "id": "[id-3]",
               "attributes": {
-                "issuer": "https://accounts.google.com",
+                "oidc_issuer_uri": "https://accounts.google.com",
                 "human_name": "Google",
                 "brand_name": "google",
                 "created_at": "[timestamp-1]",
@@ -1249,7 +1249,7 @@ mod tests {
               "type": "upstream-oauth-provider",
               "id": "[id-1]",
               "attributes": {
-                "issuer": "https://login.microsoftonline.com/common/v2.0",
+                "oidc_issuer_uri": "https://login.microsoftonline.com/common/v2.0",
                 "human_name": "Microsoft",
                 "brand_name": "microsoft",
                 "created_at": "[timestamp-1]",
@@ -1269,7 +1269,7 @@ mod tests {
               "type": "upstream-oauth-provider",
               "id": "[id-2]",
               "attributes": {
-                "issuer": "https://accounts.google.com",
+                "oidc_issuer_uri": "https://accounts.google.com",
                 "human_name": "Google",
                 "brand_name": "google",
                 "created_at": "[timestamp-1]",

@@ -217,7 +217,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
         "at_hash".to_owned(),
         "c_hash".to_owned(),
         // Profile claims emitted by /oidc/userinfo.
-        "preferred_username".to_owned(),
+        "handle".to_owned(),
         "name".to_owned(),
         "picture".to_owned(),
         "locale".to_owned(),

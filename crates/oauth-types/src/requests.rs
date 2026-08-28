@@ -809,7 +809,7 @@ pub struct IntrospectionResponse {
 
     /// Arkret extension: stable principal identity associated with the token subject.
     #[serde(rename = "org.arkret.principal_id")]
-    pub arkret_principal_id: Option<String>,
+    pub arkret_principal_id: Option<arkret_identifiers::DidCoreId>,
 
     /// Arkret extension: normalized device identifier associated with the
     /// session, when present.

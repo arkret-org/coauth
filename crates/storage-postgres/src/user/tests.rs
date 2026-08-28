@@ -1185,7 +1185,7 @@ async fn test_user_session() {
             &mut rng,
             &clock,
             UpstreamOAuthProviderParams {
-                issuer: None,
+                oidc_issuer_uri: None,
                 human_name: None,
                 brand_name: None,
                 scope: Scope::from_iter([OPENID]),
@@ -1432,7 +1432,7 @@ async fn principal_did_has_one_global_owner_under_concurrent_binding() {
     let mut repo = factory.create().await.unwrap();
     let binding = repo
         .principal_did()
-        .get_by_did(&principal_id)
+        .get_by_principal_id(&principal_id)
         .await
         .unwrap()
         .expect("winning DID owner must remain queryable");
@@ -1511,7 +1511,7 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
     assert_eq!(binding.principal_id.as_str(), first_did);
     assert!(
         repo.principal_did()
-            .get_by_did(&second_did)
+            .get_by_principal_id(&second_did)
             .await
             .unwrap()
             .is_none()

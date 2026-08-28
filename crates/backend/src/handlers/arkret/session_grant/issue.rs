@@ -1,3 +1,4 @@
+use arkret_identifiers::{DidCoreId, ServiceAccountId};
 use arkret_models_collaboration::session_grant_bodies::{
     AgentSessionGrantRequest, HumanSessionGrantRequest, RecoverySessionGrantRequest,
     SessionGrantOutcome, SessionGrantRequestBody,
@@ -629,10 +630,11 @@ async fn issue_account_handoff_session_grant(
         &browser_session,
         crate::services::dpop::session_public_jwk(&dpop.public_jwk)
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-        handoff_audience.clone(),
+        DidCoreId::new(handoff_audience.clone())
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         device_id.clone(),
         granted_scope,
-        Some(binding.principal_id.as_str()),
+        Some(&binding.principal_id),
         &binding.principal_authority,
         dpop.jkt.clone(),
         device_binding,
@@ -641,6 +643,7 @@ async fn issue_account_handoff_session_grant(
     .map_err(map_session_grant_material_error)?;
     let wire_outcome = SessionGrantOutcome {
         principal_id: binding.principal_id.clone(),
+        service_account_id: material.service_account_id.clone(),
         device_id: Some(device_id),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
@@ -853,16 +856,20 @@ async fn issue_recovery_session_grant(
         &depot.key_store()?,
         crate::services::dpop::session_public_jwk(&dpop.public_jwk)
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-        handoff_audience.clone(),
+        DidCoreId::new(handoff_audience.clone())
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         body.device_id.clone(),
         granted_scope,
-        binding.principal_id.as_str(),
+        &binding.principal_id,
+        ServiceAccountId::new(handoff_service_account_id.to_string())
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         &binding.principal_authority,
         dpop.jkt.clone(),
     )
     .map_err(map_session_grant_material_error)?;
     let wire_outcome = SessionGrantOutcome {
         principal_id: binding.principal_id,
+        service_account_id: material.service_account_id.clone(),
         device_id: Some(body.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
@@ -1085,19 +1092,27 @@ async fn issue_agent_key_proof_session_grant(
     // value so the sub-repo borrow is released before `repo.cancel()`.
     let controller_binding = repo
         .principal_did()
-        .get_by_did_and_audience(&authorization.controller_id, audience_id.as_str())
+        .get_by_principal_id_and_audience(
+            authorization.controller_id.as_str(),
+            audience_id.as_str(),
+        )
+        .await
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                "accountable controller has no local service account binding",
+            )
+        })?;
+    let controller_user_id = controller_binding.user_id;
+    let user = repo
+        .user()
+        .lookup(controller_user_id)
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let controller_blocked = if let Some(binding) = controller_binding {
-        let user = repo
-            .user()
-            .lookup(binding.user_id)
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-        user.is_some_and(|user| user.locked_at.is_some() || user.deactivated_at.is_some())
-    } else {
-        false
-    };
+    let controller_blocked =
+        user.is_none_or(|user| user.locked_at.is_some() || user.deactivated_at.is_some());
     if controller_blocked {
         repo.cancel().await.ok();
         return Err(ArkretRouteError::coded(
@@ -1127,8 +1142,10 @@ async fn issue_agent_key_proof_session_grant(
         &arkret_config,
         &key_store,
         &authorization.agent_id,
+        ServiceAccountId::new(controller_user_id.to_string())
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         &body.device_id,
-        audience_id.to_string(),
+        audience_id,
         authorization.granted_scope.clone(),
         dpop_binding.jkt.clone(),
         session_public_key,
@@ -1141,12 +1158,7 @@ async fn issue_agent_key_proof_session_grant(
     )
     .map_err(map_session_grant_material_error)?;
 
-    let principal_id =
-        arkret_identifiers::DidCoreId::new(authorization.agent_id.clone()).map_err(|e| {
-            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                "agent principal is not a valid DID: {e}"
-            )))
-        })?;
+    let principal_id = authorization.agent_id.clone();
 
     // grant_id / session_public_key / audience_id are SessionGrantOutcome
     // top-level fields (mirroring SessionGrantRefreshOutcome), NOT entries in
@@ -1155,15 +1167,11 @@ async fn issue_agent_key_proof_session_grant(
     // canonical constraint projection are already baked into the minted grant
     // above.
     let grant_id = material.grant_id.clone();
-    let wire_audience =
-        arkret_identifiers::DidCoreId::new(material.audience_id.clone()).map_err(|e| {
-            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                "issued agent grant carried a non-DID audience_id: {e}"
-            )))
-        })?;
+    let wire_audience = material.audience_id.clone();
 
     let wire_outcome = SessionGrantOutcome {
         principal_id,
+        service_account_id: material.service_account_id.clone(),
         device_id: Some(body.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,

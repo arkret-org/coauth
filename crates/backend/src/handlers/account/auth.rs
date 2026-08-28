@@ -63,8 +63,8 @@ pub(crate) async fn extract_dpop_binding_for_kickoff(
         .map_err(|error| DpopError::VerifierUnavailable(error.to_string()))?;
     let now = chrono::Utc::now();
     let htm = req.method().as_str().to_ascii_uppercase();
-    let public_base = url_builder.http_base();
-    let htu = dpop_htu(&public_base, req);
+    let public_base_url = url_builder.http_base();
+    let htu = dpop_htu(&public_base_url, req);
     let result = verifier.verify(&header, &htm, &htu, now, None).await?;
     Ok(Some(DpopSessionBinding {
         proof_jwt: header,

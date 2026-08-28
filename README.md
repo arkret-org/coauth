@@ -138,7 +138,7 @@ coauth config generate > config.yaml
 
 ```yaml
 http:
-  public_base: https://auth.example.com/
+  public_base_url: https://auth.example.com/
 
 database:
   uri: postgresql://coauth:password@localhost/coauth

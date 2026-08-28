@@ -473,7 +473,7 @@ mod test_utils {
 
     pub(crate) fn oidc_provider_params(name: &str) -> UpstreamOAuthProviderParams {
         UpstreamOAuthProviderParams {
-            issuer: Some(format!("https://{name}.example.com")),
+            oidc_issuer_uri: Some(format!("https://{name}.example.com")),
             human_name: Some(name.to_owned()),
             brand_name: Some(name.to_owned()),
             scope: Scope::from_iter([OPENID]),

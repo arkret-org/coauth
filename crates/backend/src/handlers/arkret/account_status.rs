@@ -141,16 +141,16 @@ fn verify_request(
     canonical_body: &[u8],
     public_key: &ed25519_dalek::VerifyingKey,
 ) -> Result<(), ArkretRouteError> {
-    let public_base = depot.url_builder()?.http_base();
-    let authority = public_base
+    let public_base_url = depot.url_builder()?.http_base();
+    let authority = public_base_url
         .host_str()
         .map(|host| {
-            public_base
+            public_base_url
                 .port()
                 .map_or_else(|| host.to_owned(), |port| format!("{host}:{port}"))
         })
         .ok_or_else(not_found)?;
-    let target_uri = public_base
+    let target_uri = public_base_url
         .join(req.uri().path().trim_start_matches('/'))
         .map_err(|_| not_found())?;
     let headers = req.headers().iter().filter_map(|(name, value)| {

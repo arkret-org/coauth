@@ -306,6 +306,7 @@ dependencies = [
  "getrandom 0.4.2",
  "serde",
  "thiserror 2.0.18",
+ "url",
  "uuid",
  "web-time",
 ]
@@ -1835,6 +1836,7 @@ dependencies = [
 name = "coauth-oauth-types"
 version = "0.3.0"
 dependencies = [
+ "arkret-identifiers",
  "assert_matches",
  "base64ct",
  "chrono",

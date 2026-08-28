@@ -137,9 +137,9 @@ struct InviteQuarantineRow {
     #[diesel(sql_type = Timestamptz)]
     created_at: DateTime<Utc>,
     #[diesel(sql_type = Text)]
-    peer_principal_id: String,
+    peer_principal_id: DidCoreId,
     #[diesel(sql_type = Text)]
-    target_holder_principal_id: String,
+    target_holder_principal_id: DidCoreId,
     #[diesel(sql_type = Text)]
     consent_id: String,
     #[diesel(sql_type = Text)]
@@ -158,20 +158,13 @@ struct InviteQuarantineRow {
 
 impl InviteQuarantineRow {
     fn try_into_record(self) -> anyhow::Result<InviteQuarantineRecord> {
-        let status =
-            InviteQuarantineStatus::parse(&self.status).unwrap_or(InviteQuarantineStatus::Pending);
-        let peer_principal_id = DidCoreId::new(self.peer_principal_id).map_err(|error| {
-            anyhow::anyhow!("invalid invite quarantine peer_principal_id: {error}")
-        })?;
-        let target_holder_principal_id =
-            DidCoreId::new(self.target_holder_principal_id).map_err(|error| {
-                anyhow::anyhow!("invalid invite quarantine target_holder_principal_id: {error}")
-            })?;
+        let status = InviteQuarantineStatus::parse(&self.status)
+            .ok_or_else(|| anyhow::anyhow!("invalid invite quarantine status: {}", self.status))?;
         Ok(InviteQuarantineRecord {
             id: self.id,
             created_at: self.created_at,
-            peer_principal_id,
-            target_holder_principal_id,
+            peer_principal_id: self.peer_principal_id,
+            target_holder_principal_id: self.target_holder_principal_id,
             consent_id: self.consent_id,
             scope: self.scope,
             requesting_admin_localpart: self.requesting_admin_localpart,
@@ -422,12 +415,12 @@ mod tests {
     }
 
     #[test]
-    fn row_into_record_falls_back_to_pending_on_unknown_status() {
+    fn row_into_record_rejects_unknown_status() {
         let row = InviteQuarantineRow {
             id: Uuid::now_v7(),
             created_at: Utc::now(),
-            peer_principal_id: "ak:did_core:web:p".into(),
-            target_holder_principal_id: "ak:did_core:web:h".into(),
+            peer_principal_id: "ak:did_core:web:p".parse().unwrap(),
+            target_holder_principal_id: "ak:did_core:web:h".parse().unwrap(),
             consent_id: "c-1".into(),
             scope: "invite".into(),
             requesting_admin_localpart: None,
@@ -436,8 +429,7 @@ mod tests {
             resolved_at: None,
             resolution_note: None,
         };
-        let rec = row.try_into_record().unwrap();
-        assert_eq!(rec.status, InviteQuarantineStatus::Pending);
+        assert!(row.try_into_record().is_err());
     }
 
     #[test]

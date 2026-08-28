@@ -33,7 +33,7 @@ impl<'c> PgUpstreamOAuthProviderRepository<'c> {
 #[diesel(table_name = upstream_oauth_providers)]
 struct ProviderLookup {
     id: Uuid,
-    issuer: Option<String>,
+    oidc_issuer_uri: Option<String>,
     human_name: Option<String>,
     brand_name: Option<String>,
     scope: String,
@@ -211,7 +211,7 @@ impl TryFrom<ProviderLookup> for UpstreamOAuthProvider {
 
         Ok(UpstreamOAuthProvider {
             id,
-            issuer: value.issuer,
+            oidc_issuer_uri: value.oidc_issuer_uri,
             human_name: value.human_name,
             brand_name: value.brand_name,
             scope,
@@ -245,7 +245,7 @@ impl TryFrom<ProviderLookup> for UpstreamOAuthProvider {
 #[diesel(table_name = upstream_oauth_providers)]
 struct NewProvider {
     id: Uuid,
-    issuer: Option<String>,
+    oidc_issuer_uri: Option<String>,
     human_name: Option<String>,
     brand_name: Option<String>,
     scope: String,
@@ -305,7 +305,7 @@ impl UpstreamOAuthProviderRepository for PgUpstreamOAuthProviderRepository<'_> {
         skip_all,
         fields(
             upstream_oauth_provider.id,
-            upstream_oauth_provider.issuer = params.issuer,
+            upstream_oauth_provider.oidc_issuer_uri = params.oidc_issuer_uri,
             upstream_oauth_provider.client_id = %params.client_id,
         ),
         err,
@@ -322,7 +322,7 @@ impl UpstreamOAuthProviderRepository for PgUpstreamOAuthProviderRepository<'_> {
 
         let new_provider = NewProvider {
             id: Uuid::from(id),
-            issuer: params.issuer.clone(),
+            oidc_issuer_uri: params.oidc_issuer_uri.clone(),
             human_name: params.human_name.clone(),
             brand_name: params.brand_name.clone(),
             scope: params.scope.to_string(),
@@ -371,7 +371,7 @@ impl UpstreamOAuthProviderRepository for PgUpstreamOAuthProviderRepository<'_> {
 
         Ok(UpstreamOAuthProvider {
             id,
-            issuer: params.issuer,
+            oidc_issuer_uri: params.oidc_issuer_uri,
             human_name: params.human_name,
             brand_name: params.brand_name,
             scope: params.scope,
@@ -439,7 +439,7 @@ impl UpstreamOAuthProviderRepository for PgUpstreamOAuthProviderRepository<'_> {
         skip_all,
         fields(
             upstream_oauth_provider.id = %id,
-            upstream_oauth_provider.issuer = params.issuer,
+            upstream_oauth_provider.oidc_issuer_uri = params.oidc_issuer_uri,
             upstream_oauth_provider.client_id = %params.client_id,
         ),
         err,
@@ -454,7 +454,7 @@ impl UpstreamOAuthProviderRepository for PgUpstreamOAuthProviderRepository<'_> {
 
         let new_provider = NewProvider {
             id: Uuid::from(id),
-            issuer: params.issuer.clone(),
+            oidc_issuer_uri: params.oidc_issuer_uri.clone(),
             human_name: params.human_name.clone(),
             brand_name: params.brand_name.clone(),
             scope: params.scope.to_string(),
@@ -504,7 +504,7 @@ impl UpstreamOAuthProviderRepository for PgUpstreamOAuthProviderRepository<'_> {
             .on_conflict(upstream_oauth_providers::id)
             .do_update()
             .set((
-                upstream_oauth_providers::issuer.eq(params.issuer.as_deref()),
+                upstream_oauth_providers::oidc_issuer_uri.eq(params.oidc_issuer_uri.as_deref()),
                 upstream_oauth_providers::human_name.eq(params.human_name.as_deref()),
                 upstream_oauth_providers::brand_name.eq(params.brand_name.as_deref()),
                 upstream_oauth_providers::scope.eq(params.scope.to_string()),
@@ -561,7 +561,7 @@ impl UpstreamOAuthProviderRepository for PgUpstreamOAuthProviderRepository<'_> {
 
         Ok(UpstreamOAuthProvider {
             id,
-            issuer: params.issuer,
+            oidc_issuer_uri: params.oidc_issuer_uri,
             human_name: params.human_name,
             brand_name: params.brand_name,
             scope: params.scope,

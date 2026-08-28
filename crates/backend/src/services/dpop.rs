@@ -376,18 +376,18 @@ pub fn dpop_authorization_token(req: &salvo::Request) -> Option<&str> {
 /// request: `<scheme>://<authority><path>`, anchored to the service's
 /// configured public base URL.
 ///
-/// `public_base` is intentionally **required** rather than optional: the
+/// `public_base_url` is intentionally **required** rather than optional: the
 /// `htu` binding is only meaningful when it is derived from a trusted,
 /// server-side source. The previous fallback to the attacker-controlled
 /// `Host` header (with a hard-coded `http://` scheme) is removed so a
 /// caller can never accidentally weaken the binding by omitting the base
 /// — callers must always thread through their `UrlBuilder` public base.
 #[must_use]
-pub fn dpop_htu(public_base: &url::Url, req: &salvo::Request) -> String {
+pub fn dpop_htu(public_base_url: &url::Url, req: &salvo::Request) -> String {
     let path = req.uri().path();
-    let scheme = public_base.scheme();
-    let host = public_base.host_str().unwrap_or("localhost");
-    match public_base.port() {
+    let scheme = public_base_url.scheme();
+    let host = public_base_url.host_str().unwrap_or("localhost");
+    match public_base_url.port() {
         Some(port) => format!("{scheme}://{host}:{port}{path}"),
         None => format!("{scheme}://{host}{path}"),
     }

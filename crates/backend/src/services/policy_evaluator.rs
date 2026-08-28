@@ -588,7 +588,10 @@ mod tests {
             action,
             expires_at: None,
             approval_evidence_ref: None,
-            granted_by: "user:admin".to_owned(),
+            granted_by: arkret_identifiers::DidCoreId::new(
+                "ak:did_core:web:admin.example".to_owned(),
+            )
+            .unwrap(),
             granted_at: Utc::now(),
             revoked_at: None,
             grant_raw_payload_digest: format!("sha256:{}", "a".repeat(64)),

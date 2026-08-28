@@ -184,7 +184,6 @@ fn jwt_payload_value(jwt: &str) -> serde_json::Value {
 
 fn assert_session_grant_jwt_omits_server_identity_metadata(raw_payload: &serde_json::Value) {
     for field in [
-        "service_account_id",
         "principal_id",
         "provenance_anchor",
         "provenanceAnchor",
@@ -200,13 +199,13 @@ fn assert_session_grant_jwt_omits_server_identity_metadata(raw_payload: &serde_j
     }
 }
 
-fn assert_subject_did_occurs_once(raw_payload: &serde_json::Value, subject: &str) {
-    assert_eq!(raw_payload["subject"].as_str(), Some(subject));
+fn assert_subject_id_occurs_once(raw_payload: &serde_json::Value, subject_id: &str) {
+    assert_eq!(raw_payload["subject_id"].as_str(), Some(subject_id));
     let serialized = serde_json::to_string(raw_payload).expect("payload JSON must serialize");
     assert_eq!(
-        serialized.matches(subject).count(),
+        serialized.matches(subject_id).count(),
         1,
-        "session grant JWT must carry the subject DID exactly once"
+        "session grant JWT must carry the subject_id exactly once"
     );
 }
 
@@ -866,7 +865,7 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
     );
     let raw_payload = jwt_payload_value(&grant.grant_jwt);
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
-    assert_subject_did_occurs_once(&raw_payload, payload.subject_id.as_str());
+    assert_subject_id_occurs_once(&raw_payload, payload.subject_id.as_str());
     assert!(raw_payload.get("session_public_key").is_some());
     assert!(raw_payload.get("cnf").is_none());
     assert!(
@@ -895,6 +894,7 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
     let holder_jwk = test_session_public_jwk(&holder_key, "recovery-holder-key");
     let audience = required_audience_for(&url_builder, &arkret_config);
     let principal_id = "ak:did_core:web:alice.example";
+    let principal_core_id = arkret_identifiers::DidCoreId::new(principal_id).unwrap();
     let authority = test_principal_authority(principal_id, &audience);
     let device_id =
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000077")
@@ -905,12 +905,13 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
         &arkret_config,
         &key_store,
         holder_jwk,
-        audience,
+        arkret_identifiers::DidCoreId::new(audience).unwrap(),
         device_id.clone(),
         arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS
             .map(str::to_owned)
             .to_vec(),
-        principal_id,
+        &principal_core_id,
+        arkret_identifiers::ServiceAccountId::new("test-account").unwrap(),
         &authority,
         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
     )
@@ -952,13 +953,17 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
             &arkret_config,
             &key_store,
             test_session_public_jwk(&holder_key, "recovery-holder-key"),
-            required_audience_for(&url_builder, &arkret_config),
+            arkret_identifiers::DidCoreId::new(
+                required_audience_for(&url_builder, &arkret_config,)
+            )
+            .unwrap(),
             arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000077",)
                 .unwrap(),
             arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS
                 .map(str::to_owned)
                 .to_vec(),
-            principal_id,
+            &principal_core_id,
+            arkret_identifiers::ServiceAccountId::new("test-account").unwrap(),
             &authority,
             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
         )
@@ -1043,14 +1048,19 @@ fn session_grant_record_exposes_metadata_without_secrets() {
             "ak:did_core:web:auth.example.com".to_owned(),
         )
         .unwrap(),
-        subject_id: "did:web:auth.example.com:users:01J44Q10GR4AMTFZEEF936DTCP".to_owned(),
+        subject_id: arkret_identifiers::DidCoreId::new(
+            "ak:did_core:web:auth.example.com:users:01J44Q10GR4AMTFZEEF936DTCP",
+        )
+        .unwrap(),
+        service_account_id: arkret_identifiers::ServiceAccountId::new("test-account").unwrap(),
         device_id: Some("device-1".to_owned()),
         applet_id: None,
         effective_scope: None,
         registration_epoch: None,
         service_id: None,
         capability_grant_refs: Vec::new(),
-        audience_id: "https://soland.example.com/api".to_owned(),
+        audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example.com")
+            .unwrap(),
         scope: Scope::from_iter([PRINCIPAL_SERVER_SESSION_BIND_SCOPE.parse().unwrap()]),
         grant_jwt: "header.payload.signature".to_owned(),
         session_id: "test-session".to_owned(),
@@ -1071,7 +1081,7 @@ fn session_grant_record_exposes_metadata_without_secrets() {
 
     let body = serde_json::to_value(SessionGrantRecord::from(grant)).unwrap();
 
-    assert_eq!(body["audience"], "https://soland.example.com/api");
+    assert_eq!(body["audience_id"], "ak:did_core:web:soland.example.com");
     assert_eq!(
         body["scopes"],
         serde_json::json!([PRINCIPAL_SERVER_SESSION_BIND_SCOPE])
@@ -1097,14 +1107,20 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
             "ak:did_core:web:auth.example.com".to_owned(),
         )
         .unwrap(),
-        subject_id: format!("did:web:auth.example.com:users:{}", user.id),
+        subject_id: arkret_identifiers::DidCoreId::new(format!(
+            "ak:did_core:web:auth.example.com:users:{}",
+            user.id
+        ))
+        .unwrap(),
+        service_account_id: arkret_identifiers::ServiceAccountId::new(user.id.to_string()).unwrap(),
         device_id: Some("device-1".to_owned()),
         applet_id: None,
         effective_scope: None,
         registration_epoch: None,
         service_id: None,
         capability_grant_refs: Vec::new(),
-        audience_id: "https://soland.example.com/api".to_owned(),
+        audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example.com")
+            .unwrap(),
         scope: Scope::from_iter([PRINCIPAL_SERVER_SESSION_BIND_SCOPE.parse().unwrap()]),
         grant_jwt: "header.payload.signature".to_owned(),
         session_id: "test-session".to_owned(),
@@ -1128,7 +1144,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
             &grant,
             Some(&user),
             now,
-            Some("https://soland.example.com/api")
+            Some("ak:did_core:web:soland.example.com")
         ),
         SessionGrantIntrospectStatus::Active
     );
@@ -1137,7 +1153,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
             &grant,
             Some(&user),
             now,
-            Some("https://other.example.com/api")
+            Some("ak:did_core:web:other.example.com")
         ),
         SessionGrantIntrospectStatus::AudienceMismatch
     );
@@ -1252,7 +1268,7 @@ fn session_grant_introspection_proof(
         kind: SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND.to_owned(),
         session_grant_id: grant.grant_id.to_string(),
         grant_jwt_digest: session_grant_jwt_digest(&material.grant_jwt),
-        audience_id: arkret_identifiers::DidCoreId::new(grant.audience_id.clone()).unwrap(),
+        audience_id: grant.audience_id.clone(),
         challenge: challenge.to_owned(),
         issued_at: now,
         expires_at: now + Duration::try_minutes(1).unwrap(),
@@ -1350,8 +1366,8 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     // the same grant still sees it active.
     assert_eq!(body["one_time_use_consumed"], false);
     assert_eq!(body["grant"]["id"], grant.grant_id.to_string());
-    assert_eq!(body["grant"]["subject_id"], grant.subject_id);
-    assert_eq!(body["grant"]["audience_id"], grant.audience_id);
+    assert_eq!(body["grant"]["subject_id"], grant.subject_id.as_str());
+    assert_eq!(body["grant"]["audience_id"], grant.audience_id.as_str());
     assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
     assert!(body["grant"].get("grant_jwt").is_none());
     // Server-to-server introspection MUST expose session_public_key so the
@@ -1412,7 +1428,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
                 .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),
-                    "audience": "ak:did_core:web:other.example.com",
+                    "audience_id": "ak:did_core:web:other.example.com",
                 })),
         )
         .await;
@@ -1468,9 +1484,13 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         "test-ed25519",
     )
     .unwrap();
-    let principal_id = format!("ak:did_core:web:auth.example.com:users:{}", user.id);
+    let principal_id = arkret_identifiers::DidCoreId::new(format!(
+        "ak:did_core:web:auth.example.com:users:{}",
+        user.id
+    ))
+    .unwrap();
     let audience = required_audience_for(&state.url_builder, &grant_config);
-    let principal_authority = test_principal_authority(&principal_id, &audience);
+    let principal_authority = test_principal_authority(principal_id.as_str(), &audience);
     let material = issue_session_grant_for_audience(
         &issuance_seed,
         &grant_clock,
@@ -1478,11 +1498,11 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         &state.key_store,
         &browser_session,
         test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
-        audience,
+        arkret_identifiers::DidCoreId::new(audience).unwrap(),
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
             .unwrap(),
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
-        Some(principal_id.as_str()),
+        Some(&principal_id),
         &principal_authority,
         bound_jkt.clone(),
         arkret_models_identity::SessionGrantDeviceBinding {
@@ -1629,7 +1649,8 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     // Both the agent subject and the audience are core DIDs on the wire (the
     // grant claims are typed `DidCoreId`), and the audience must be the
     // Principal Server whose static introspection bearer is configured above.
-    let audience = "ak:did_core:web:session-grant-static.test".to_owned();
+    let audience =
+        arkret_identifiers::DidCoreId::new("ak:did_core:web:session-grant-static.test").unwrap();
     // Grant liveness is evaluated against the wall clock the handlers read.
     let now = chrono::Utc::now();
     // The issuing authorization ref rides the signed payload's
@@ -1663,7 +1684,8 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         &issuance_seed,
         &state.arkret_config,
         &state.key_store,
-        "ak:did_core:web:agent.example",
+        &arkret_identifiers::DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
+        arkret_identifiers::ServiceAccountId::new("test-account").unwrap(),
         &arkret_identifiers::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000005")
             .unwrap(),
         audience.clone(),
@@ -1680,10 +1702,10 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     let raw_payload = jwt_payload_value(&material.grant_jwt);
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
     // Unlike a human grant, an agent grant names the agent twice by contract:
-    // once as the credential `subject` and once inside the agent-runtime
+    // once as the credential `subject_id` and once inside the agent-runtime
     // holder binding, which is what binds the runtime key to it.
     assert_eq!(
-        raw_payload["subject"].as_str(),
+        raw_payload["subject_id"].as_str(),
         Some("ak:did_core:web:agent.example")
     );
     assert_eq!(
@@ -1718,13 +1740,16 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
                     "crv": "Ed25519",
                     "x": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                 }),
-                accountable_principal_id: "ak:did_core:web:alice.example".to_owned(),
+                accountable_principal_id: arkret_identifiers::DidCoreId::new(
+                    "ak:did_core:web:alice.example",
+                )
+                .unwrap(),
                 agent_key_scope: serde_json::json!({
                     "actions": ["ak.agent.action:message.send"],
                     "resources": [],
                 })
                 .to_string(),
-                audience: vec![audience.clone()],
+                audience: vec![audience.to_string()],
                 issued_at: now,
                 expires_at: None,
                 pairing_request_id: "agent-pairing-request".to_owned(),
@@ -1762,7 +1787,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
                 .bearer(bearer)
                 .json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
-                    "audience": audience,
+                    "audience_id": audience,
                     "proof": {
                         "challenge": challenge,
                         "proof_jwt": proof_jwt,
@@ -1776,7 +1801,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     assert_eq!(body["active"], true, "{body}");
     assert_eq!(body["status"], "active");
     assert_eq!(body["proof_required"], false);
-    assert_eq!(body["grant"]["subject"], "ak:did_core:web:agent.example");
+    assert_eq!(body["grant"]["subject_id"], "ak:did_core:web:agent.example");
     assert_eq!(
         body["grant"]["device_id"],
         "ak:device:0196419b-0000-7000-8000-000000000005"

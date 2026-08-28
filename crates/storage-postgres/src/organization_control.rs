@@ -1,6 +1,7 @@
 //! PostgreSQL implementation of the organization principal control +
 //! organization delegation repository.
 
+use arkret_identifiers::{Did, DidCoreId};
 use arkret_models_collaboration::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
 };
@@ -46,7 +47,7 @@ struct ControlRow {
     pcr_frontier_digest: Option<String>,
     bootstrap_authorization: String,
     bootstrap_delegation_ref: Option<String>,
-    executed_by: Option<String>,
+    executed_by: Option<DidCoreId>,
     bootstrap_proof_digest: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -77,9 +78,14 @@ impl TryFrom<ControlRow> for OrganizationPrincipalControl {
                     .column("control_stream_ref")
                     .row(id)
             })?;
+        let organization_did = Did::new(value.organization_did).map_err(|_| {
+            DatabaseInconsistencyError::on("organization_principal_controls")
+                .column("organization_did")
+                .row(id)
+        })?;
         Ok(Self {
             id: id.to_string(),
-            organization_did: value.organization_did,
+            organization_did,
             principal_control_realm_id: principal_control_realm_id.to_string(),
             control_stream_ref: control_stream_ref.to_string(),
             pcr_frontier_digest: value.pcr_frontier_digest,
@@ -103,7 +109,7 @@ struct InsertableControl {
     pcr_frontier_digest: Option<String>,
     bootstrap_authorization: String,
     bootstrap_delegation_ref: Option<String>,
-    executed_by: Option<String>,
+    executed_by: Option<DidCoreId>,
     bootstrap_proof_digest: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -125,7 +131,7 @@ struct DelegationRow {
     status: String,
     valid_from: DateTime<Utc>,
     valid_until: Option<DateTime<Utc>>,
-    created_by: String,
+    created_by: DidCoreId,
     revoked_at: Option<DateTime<Utc>>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -155,11 +161,14 @@ impl TryFrom<DelegationRow> for OrganizationDelegation {
             .iter()
             .map(|raw| parse_control_scope(raw).ok_or_else(|| on_err("covered_control_scopes")))
             .collect::<Result<Vec<_>, _>>()?;
+        let organization_did =
+            Did::new(value.organization_did).map_err(|_| on_err("organization_did"))?;
+        let delegate_did = Did::new(value.delegate_did).map_err(|_| on_err("delegate_did"))?;
         Ok(Self {
             id: id.to_string(),
             delegation_ref: value.delegation_ref,
-            organization_did: value.organization_did,
-            delegate_did: value.delegate_did,
+            organization_did,
+            delegate_did,
             issuer_role,
             purposes: value.purposes,
             covered_relationships,
@@ -189,7 +198,7 @@ struct InsertableDelegation {
     status: String,
     valid_from: DateTime<Utc>,
     valid_until: Option<DateTime<Utc>>,
-    created_by: String,
+    created_by: DidCoreId,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -253,12 +262,13 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
             .map_err(|_| DatabaseError::invalid_operation())?;
         let principal_control_realm_id =
             arkret_identifiers::RealmId::from_event_id(&create_event_id);
+        let organization_did = params.organization_did;
         if supplied_realm_id != principal_control_realm_id {
             return Err(DatabaseError::invalid_operation());
         }
         let row = InsertableControl {
             id: Uuid::from(id),
-            organization_did: params.organization_did,
+            organization_did: organization_did.as_str().to_owned(),
             principal_control_realm_id: principal_control_realm_id.to_string(),
             control_stream_ref: create_event_id.to_string(),
             pcr_frontier_digest: params.pcr_frontier_digest,
@@ -277,7 +287,7 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
 
         Ok(OrganizationPrincipalControl {
             id: id.to_string(),
-            organization_did: row.organization_did,
+            organization_did,
             principal_control_realm_id: row.principal_control_realm_id,
             control_stream_ref: row.control_stream_ref,
             pcr_frontier_digest: row.pcr_frontier_digest,
@@ -343,11 +353,13 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
     ) -> Result<OrganizationDelegation, Self::Error> {
         let now = clock.now();
         let id = new_id(now, rng);
+        let organization_did = params.organization_did;
+        let delegate_did = params.delegate_did;
         let row = InsertableDelegation {
             id: Uuid::from(id),
             delegation_ref: params.delegation_ref,
-            organization_did: params.organization_did,
-            delegate_did: params.delegate_did,
+            organization_did: organization_did.as_str().to_owned(),
+            delegate_did: delegate_did.as_str().to_owned(),
             issuer_role: issuer_role_str(params.issuer_role),
             purposes: params.purposes,
             covered_relationships: params
@@ -378,8 +390,8 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
         Ok(OrganizationDelegation {
             id: id.to_string(),
             delegation_ref: row.delegation_ref,
-            organization_did: row.organization_did,
-            delegate_did: row.delegate_did,
+            organization_did,
+            delegate_did,
             issuer_role: params.issuer_role,
             purposes: row.purposes,
             covered_relationships: params.covered_relationships,
@@ -504,7 +516,7 @@ mod tests {
         )
         .unwrap();
         NewOrganizationPrincipalControl {
-            organization_did: did.to_owned(),
+            organization_did: Did::new(did.to_owned()).unwrap(),
             principal_control_realm_id: arkret_identifiers::RealmId::from_event_id(
                 &create_event_id,
             )
@@ -513,7 +525,7 @@ mod tests {
             pcr_frontier_digest: Some(format!("sha256:{}", "ab".repeat(32))),
             bootstrap_authorization: OrganizationBootstrapAuthorization::DidControllerProof,
             bootstrap_delegation_ref: None,
-            executed_by: Some("did:web:admin.example".to_owned()),
+            executed_by: Some(DidCoreId::new("ak:did_core:web:admin.example".to_owned()).unwrap()),
             bootstrap_proof_digest: Some("sha256:deadbeef".to_owned()),
         }
     }
@@ -525,15 +537,15 @@ mod tests {
     ) -> NewOrganizationDelegation {
         NewOrganizationDelegation {
             delegation_ref: reference.to_owned(),
-            organization_did: org.to_owned(),
-            delegate_did: "did:web:server.acme.example".to_owned(),
+            organization_did: Did::new(org.to_owned()).unwrap(),
+            delegate_did: Did::new("did:web:server.acme.example".to_owned()).unwrap(),
             issuer_role: RealmOrganizationIssuerRole::GovernanceService,
             purposes: vec!["principal_control_realm_bootstrap".to_owned()],
             covered_relationships: vec![RealmOrganizationRelationship::Owner],
             covered_control_scopes: vec![RealmOrganizationControlScope::RealmAdmin],
             valid_from,
             valid_until: None,
-            created_by: "did:web:admin.example".to_owned(),
+            created_by: DidCoreId::new("ak:did_core:web:admin.example".to_owned()).unwrap(),
         }
     }
 
@@ -566,10 +578,10 @@ mod tests {
             .await
             .unwrap()
             .expect("control persisted");
-        assert_eq!(fetched.organization_did, did);
+        assert_eq!(fetched.organization_did.as_str(), did);
         assert_eq!(
-            fetched.executed_by.as_deref(),
-            Some("did:web:admin.example")
+            fetched.executed_by.as_ref().map(DidCoreId::as_str),
+            Some("ak:did_core:web:admin.example")
         );
 
         let resolved = repo

@@ -221,7 +221,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
             "SELECT request_id, request_digest, service_account_id, challenge_id, challenge, \
              purpose, account_subject, principal_id, did, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
              founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience_id, \
-             origin_uri, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
+             origin, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
              FROM identity_binding_challenges WHERE request_id = $1",
         )
         .bind::<SqlUuid, _>(request_id)
@@ -241,7 +241,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
             "SELECT request_id, request_digest, service_account_id, challenge_id, challenge, \
              purpose, account_subject, principal_id, did, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
              founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience_id, \
-             origin_uri, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
+             origin, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
              FROM identity_binding_challenges WHERE challenge_id = $1{suffix}"
         );
         let row = diesel::sql_query(query)
@@ -260,7 +260,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
             "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
              account_subject, principal_id, did, did_version_id, log_head_digest, \
              control_key_digest, witness_evidence, challenge_id, challenge, dpop_jkt, audience_id, \
-             origin_uri, trust_domain, issued_at, expires_at, consumed_at, register_request_digest, \
+             origin, trust_domain, issued_at, expires_at, consumed_at, register_request_digest, \
              register_outcome FROM did_binding_challenges WHERE request_id = $1",
         )
         .bind::<SqlUuid, _>(request_id)
@@ -281,7 +281,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
             "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
              account_subject, principal_id, did, did_version_id, log_head_digest, \
              control_key_digest, witness_evidence, challenge_id, challenge, dpop_jkt, audience_id, \
-             origin_uri, trust_domain, issued_at, expires_at, consumed_at, register_request_digest, \
+             origin, trust_domain, issued_at, expires_at, consumed_at, register_request_digest, \
              register_outcome FROM did_binding_challenges WHERE challenge_id = $1{suffix}"
         );
         diesel::sql_query(query)
@@ -302,7 +302,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let query = format!(
             "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
              audience_id, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
-             did_version_id, challenge_id, challenge, origin_uri, trust_domain, issued_at, expires_at, \
+             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
              consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
              FROM identity_abandonment_challenges WHERE request_id = $1{suffix}"
         );
@@ -324,7 +324,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let query = format!(
             "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
              audience_id, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
-             did_version_id, challenge_id, challenge, origin_uri, trust_domain, issued_at, expires_at, \
+             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
              consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
              FROM identity_abandonment_challenges WHERE challenge_id = $1{suffix}"
         );
@@ -346,7 +346,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let query = format!(
             "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
              audience_id, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
-             did_version_id, challenge_id, challenge, origin_uri, trust_domain, issued_at, expires_at, \
+             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
              consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
              FROM identity_abandonment_challenges WHERE confirmation_request_id = $1{suffix}"
         );
@@ -1006,7 +1006,7 @@ struct ChallengeRow {
     #[diesel(sql_type = Text)]
     audience_id: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Text)]
-    origin_uri: String,
+    origin: arkret_identifiers::WebOrigin,
     #[diesel(sql_type = Text)]
     trust_domain: String,
     #[diesel(sql_type = Timestamptz)]
@@ -1052,7 +1052,7 @@ struct DidBindingChallengeRow {
     #[diesel(sql_type = Text)]
     audience_id: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Text)]
-    origin_uri: String,
+    origin: arkret_identifiers::WebOrigin,
     #[diesel(sql_type = Text)]
     trust_domain: String,
     #[diesel(sql_type = Timestamptz)]
@@ -1096,7 +1096,7 @@ fn did_binding_challenge_from_row(
             challenge: row.challenge,
             dpop_jkt: row.dpop_jkt,
             audience_id: row.audience_id,
-            origin_uri: row.origin_uri,
+            origin: row.origin,
             trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)
                 .map_err(|_| DatabaseError::invalid_operation())?,
             issued_at: row.issued_at,
@@ -1146,7 +1146,7 @@ struct AbandonmentChallengeRow {
     #[diesel(sql_type = Text)]
     challenge: String,
     #[diesel(sql_type = Text)]
-    origin_uri: String,
+    origin: arkret_identifiers::WebOrigin,
     #[diesel(sql_type = Text)]
     trust_domain: String,
     #[diesel(sql_type = Timestamptz)]
@@ -1184,7 +1184,7 @@ fn abandonment_challenge_from_row(
         did_version_id: row.did_version_id,
         challenge_id: row.challenge_id,
         challenge: row.challenge,
-        origin_uri: row.origin_uri,
+        origin: row.origin,
         trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)
             .map_err(|_| DatabaseError::invalid_operation())?,
         issued_at: row.issued_at,
@@ -1250,7 +1250,7 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
             .map_err(|_| DatabaseError::invalid_operation())?,
         dpop_jkt: row.dpop_jkt,
         audience_id: row.audience_id,
-        origin_uri: row.origin_uri,
+        origin: row.origin,
         trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)
             .map_err(|_| DatabaseError::invalid_operation())?,
         issued_at: row.issued_at,
@@ -1286,7 +1286,7 @@ fn challenge_matches_context(
         && challenge.lease_fence == context.lease.fence
         && challenge.dpop_jkt == context.grant.cnf_jkt
         && challenge.audience_id.as_str() == context.grant.audience_id
-        && challenge.origin_uri == expected.origin_uri
+        && challenge.origin == expected.origin
         && challenge.trust_domain == expected.trust_domain
         && challenge.issued_at == expected.issued_at
         && challenge.expires_at == expected.expires_at
@@ -2021,7 +2021,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             "INSERT INTO identity_binding_challenges \
              (request_id, request_digest, service_account_id, challenge_id, challenge, purpose, \
               account_subject, principal_id, did, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
-              founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience_id, origin_uri, \
+              founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience_id, origin, \
               trust_domain, issued_at, expires_at) \
              VALUES ($1, $2, $3, $4, $5, 'account_binding_and_pcr_genesis', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24) \
              ON CONFLICT (request_id) DO NOTHING",
@@ -2046,7 +2046,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<BigInt, _>(i64::try_from(input.lease_fence).map_err(|_| DatabaseError::invalid_operation())?)
         .bind::<Text, _>(&input.holder_jkt)
         .bind::<Text, _>(input.audience_id.as_str())
-        .bind::<Text, _>(&input.origin_uri)
+        .bind::<Text, _>(&input.origin)
         .bind::<Text, _>(input.trust_domain.as_str())
         .bind::<Timestamptz, _>(input.issued_at)
         .bind::<Timestamptz, _>(input.expires_at)
@@ -2104,7 +2104,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
              (request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
               account_subject, principal_id, did, did_version_id, log_head_digest, \
               control_key_digest, witness_evidence, challenge_id, challenge, dpop_jkt, audience_id, \
-              origin_uri, trust_domain, issued_at, expires_at) \
+              origin, trust_domain, issued_at, expires_at) \
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) \
              ON CONFLICT (request_id) DO NOTHING",
         )
@@ -2123,7 +2123,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(&input.challenge)
         .bind::<Text, _>(&input.dpop_jkt)
         .bind::<Text, _>(input.audience_id.as_str())
-        .bind::<Text, _>(&input.origin_uri)
+        .bind::<Text, _>(&input.origin)
         .bind::<Text, _>(input.trust_domain.as_str())
         .bind::<Timestamptz, _>(input.issued_at)
         .bind::<Timestamptz, _>(input.expires_at)
@@ -2344,7 +2344,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             "INSERT INTO identity_abandonment_challenges \
              (request_id, request_digest, issuing_handoff_grant_id, service_account_id, audience_id, \
               account_subject, holder_jkt, lease_id, lease_fence, principal_id, did_version_id, \
-              challenge_id, challenge, origin_uri, trust_domain, issued_at, expires_at) \
+              challenge_id, challenge, origin, trust_domain, issued_at, expires_at) \
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) \
              ON CONFLICT (request_id) DO NOTHING",
         )
@@ -2363,7 +2363,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(&input.did_version_id)
         .bind::<Text, _>(&input.challenge_id)
         .bind::<Text, _>(&input.challenge)
-        .bind::<Text, _>(&input.origin_uri)
+        .bind::<Text, _>(&input.origin)
         .bind::<Text, _>(input.trust_domain.as_str())
         .bind::<Timestamptz, _>(input.issued_at)
         .bind::<Timestamptz, _>(input.expires_at)
@@ -2392,7 +2392,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         diesel::sql_query(
             "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
              audience_id, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
-             did_version_id, challenge_id, challenge, origin_uri, trust_domain, issued_at, expires_at, \
+             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
              consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
              FROM identity_abandonment_challenges \
              WHERE service_account_id = $1 AND audience_id = $2 AND lease_id = $3 \

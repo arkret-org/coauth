@@ -1,11 +1,11 @@
 //! Durable storage for risk-action proposals.
 //!
 //! Persists proposal records to the `risk_action_proposals` table. Approval
-//! proofs (admin DID + detached JWS approval proof + recorded-at timestamp)
+//! proofs (admin id + detached JWS approval proof + recorded-at timestamp)
 //! are stored as a JSON array in the `approval_proofs` column. The HTTP
 //! handler verifies each JWS against the approver DID before calling this
 //! service. High-risk actions require `ArkretConfig::high_risk_threshold`
-//! distinct admin DIDs to approve before the proposal transitions to
+//! distinct admin identities to approve before the proposal transitions to
 //! `approved`.
 
 use std::sync::Arc;
@@ -60,8 +60,8 @@ impl ProposalState {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApprovalProof {
-    /// Admin DID that signed the approval.
-    pub admin_did: String,
+    /// Stable admin identity that signed the approval.
+    pub admin_id: arkret_identifiers::DidCoreId,
     /// Detached approval JWS. The admin handler validates it before storage.
     pub signature: String,
     /// Free-form approval note for audit.
@@ -76,7 +76,7 @@ pub struct RiskActionProposalRecord {
     pub id: Ulid,
     pub account_id: Ulid,
     pub action: String,
-    pub proposer_did: String,
+    pub proposer_id: arkret_identifiers::DidCoreId,
     pub reason: String,
     pub ticket: Option<String>,
     pub state: ProposalState,
@@ -93,7 +93,7 @@ pub struct RiskActionProposalRecord {
 pub struct CreateProposal {
     pub account_id: Ulid,
     pub action: String,
-    pub proposer_did: String,
+    pub proposer_id: arkret_identifiers::DidCoreId,
     pub reason: String,
     pub ticket: Option<String>,
     pub required_approvals: u32,
@@ -180,7 +180,7 @@ struct ProposalRow {
     #[diesel(sql_type = Text)]
     action: String,
     #[diesel(sql_type = Text)]
-    proposer_did: String,
+    proposer_id: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Text)]
     reason: String,
     #[diesel(sql_type = Nullable<Text>)]
@@ -204,14 +204,14 @@ struct ProposalRow {
 }
 
 impl ProposalRow {
-    fn into_record(self) -> RiskActionProposalRecord {
-        let approvals: Vec<ApprovalProof> =
-            serde_json::from_value(self.approval_proofs).unwrap_or_default();
-        RiskActionProposalRecord {
+    fn try_into_record(self) -> Result<RiskActionProposalRecord, RiskActionProposalsError> {
+        let approvals: Vec<ApprovalProof> = serde_json::from_value(self.approval_proofs)
+            .map_err(|error| RiskActionProposalsError::Storage(error.into()))?;
+        Ok(RiskActionProposalRecord {
             id: Ulid::from(self.id),
             account_id: Ulid::from(self.account_id),
             action: self.action,
-            proposer_did: self.proposer_did,
+            proposer_id: self.proposer_id,
             reason: self.reason,
             ticket: self.ticket,
             state: ProposalState::parse(&self.state).unwrap_or(ProposalState::Draft),
@@ -222,7 +222,7 @@ impl ProposalRow {
             approved_at: self.approved_at,
             executed_at: self.executed_at,
             cancelled_at: self.cancelled_at,
-        }
+        })
     }
 }
 
@@ -248,13 +248,13 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         let row = diesel::sql_query(
             r"
             INSERT INTO risk_action_proposals (
-                id, account_id, action, proposer_did, reason, ticket,
+                id, account_id, action, proposer_id, reason, ticket,
                 state, approval_proofs, required_approvals,
                 created_at, updated_at
             )
             VALUES ($1, $2, $3, $4, $5, $6, 'draft', '[]'::jsonb, $7, $8, $8)
             RETURNING
-                id, account_id, action, proposer_did, reason, ticket,
+                id, account_id, action, proposer_id, reason, ticket,
                 state, approval_proofs, required_approvals,
                 created_at, updated_at, approved_at, executed_at, cancelled_at
             ",
@@ -262,7 +262,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         .bind::<DieselUuid, _>(id)
         .bind::<DieselUuid, _>(Uuid::from(input.account_id))
         .bind::<Text, _>(input.action)
-        .bind::<Text, _>(input.proposer_did)
+        .bind::<Text, _>(input.proposer_id)
         .bind::<Text, _>(input.reason)
         .bind::<Nullable<Text>, _>(input.ticket)
         .bind::<Int4, _>(required)
@@ -271,7 +271,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         .await
         .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
 
-        Ok(row.into_record())
+        row.try_into_record()
     }
 
     async fn get(
@@ -285,7 +285,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
             .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
         let row = diesel::sql_query(
             r"
-            SELECT id, account_id, action, proposer_did, reason, ticket,
+            SELECT id, account_id, action, proposer_id, reason, ticket,
                    state, approval_proofs, required_approvals,
                    created_at, updated_at, approved_at, executed_at, cancelled_at
             FROM risk_action_proposals
@@ -296,7 +296,10 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         .get_results::<ProposalRow>(&mut *conn)
         .await
         .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
-        Ok(row.into_iter().next().map(ProposalRow::into_record))
+        row.into_iter()
+            .next()
+            .map(ProposalRow::try_into_record)
+            .transpose()
     }
 
     async fn list_for_account(
@@ -310,7 +313,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
             .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
         let rows = diesel::sql_query(
             r"
-            SELECT id, account_id, action, proposer_did, reason, ticket,
+            SELECT id, account_id, action, proposer_id, reason, ticket,
                    state, approval_proofs, required_approvals,
                    created_at, updated_at, approved_at, executed_at, cancelled_at
             FROM risk_action_proposals
@@ -323,7 +326,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         .get_results::<ProposalRow>(&mut *conn)
         .await
         .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
-        Ok(rows.into_iter().map(ProposalRow::into_record).collect())
+        rows.into_iter().map(ProposalRow::try_into_record).collect()
     }
 
     async fn approve(
@@ -343,9 +346,11 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         if existing
             .approval_proofs
             .iter()
-            .any(|p| p.admin_did == proof.admin_did)
+            .any(|p| p.admin_id == proof.admin_id)
         {
-            return Err(RiskActionProposalsError::DuplicateApproval(proof.admin_did));
+            return Err(RiskActionProposalsError::DuplicateApproval(
+                proof.admin_id.to_string(),
+            ));
         }
 
         let mut proofs = existing.approval_proofs.clone();
@@ -377,7 +382,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
                 updated_at = $5
             WHERE id = $1
             RETURNING
-                id, account_id, action, proposer_did, reason, ticket,
+                id, account_id, action, proposer_id, reason, ticket,
                 state, approval_proofs, required_approvals,
                 created_at, updated_at, approved_at, executed_at, cancelled_at
             ",
@@ -390,7 +395,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         .get_result::<ProposalRow>(&mut *conn)
         .await
         .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
-        Ok(row.into_record())
+        row.try_into_record()
     }
 
     async fn mark_executed(
@@ -418,7 +423,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
                 updated_at = $2
             WHERE id = $1 AND state = 'approved'
             RETURNING
-                id, account_id, action, proposer_did, reason, ticket,
+                id, account_id, action, proposer_id, reason, ticket,
                 state, approval_proofs, required_approvals,
                 created_at, updated_at, approved_at, executed_at, cancelled_at
             ",
@@ -431,7 +436,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
 
         if let Some(row) = updated {
-            return Ok(row.into_record());
+            return row.try_into_record();
         }
 
         // Lost the race (or never eligible). Re-read the committed row to
@@ -489,7 +494,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
                 updated_at = $2
             WHERE id = $1
             RETURNING
-                id, account_id, action, proposer_did, reason, ticket,
+                id, account_id, action, proposer_id, reason, ticket,
                 state, approval_proofs, required_approvals,
                 created_at, updated_at, approved_at, executed_at, cancelled_at
             ",
@@ -499,7 +504,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         .get_result::<ProposalRow>(&mut *conn)
         .await
         .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
-        Ok(row.into_record())
+        row.try_into_record()
     }
 }
 

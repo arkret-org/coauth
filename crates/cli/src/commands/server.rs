@@ -112,7 +112,7 @@ impl Options {
             .await
             .context("could not import keys from config")?;
         let cookie_manager = CookieManager::derive_from(
-            config.http.public_base.clone(),
+            config.http.public_base_url.clone(),
             &config.secrets.encryption().await?,
         );
 
@@ -131,7 +131,7 @@ impl Options {
         .await?;
 
         let url_builder = UrlBuilder::new(
-            config.http.public_base.clone(),
+            config.http.public_base_url.clone(),
             config.http.issuer.clone(),
             None,
         );
@@ -161,13 +161,13 @@ impl Options {
         let arkret_config = config.arkret.clone();
         let http_client = coauth_backend::reqwest_client_for_server(
             &arkret_config,
-            &config.http.public_base,
+            &config.http.public_base_url,
             config.http.issuer.as_ref(),
         );
         coauth_backend::services::service_identity::initialize_and_spawn(
             PgRepositoryFactory::new(pool.clone()),
             &arkret_config,
-            &config.http.public_base,
+            &config.http.public_base_url,
             &key_store,
             http_client.clone(),
         )

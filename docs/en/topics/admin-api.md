@@ -78,7 +78,7 @@ schema, backend response, and Rust consumers share one source of truth.
     "approve_request": {
       "action": "lock",
       "ticket": "INC-2026-0504",
-      "approved_by": "did:webvh:zadmin:admin.example:accounts:01arz3ndektsv4rrffq69g5fav",
+      "approved_by": "ak:did_core:webvh:zadmin",
       "approval_note": "approved for controlled execution",
       "approval_proof_jws": "protected..signature"
     },
@@ -103,7 +103,7 @@ curl -X POST \
 curl -X POST \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"action":"lock","ticket":"INC-2026-0504","approved_by":"did:webvh:zadmin:admin.example:accounts:01arz3ndektsv4rrffq69g5fav","approval_note":"approved for controlled execution","approval_proof_jws":"protected..signature"}' \
+  -d '{"action":"lock","ticket":"INC-2026-0504","approved_by":"ak:did_core:webvh:zadmin","approval_note":"approved for controlled execution","approval_proof_jws":"protected..signature"}' \
   "https://auth.example.com/_coauth/admin/accounts/$ACCOUNT_ID/risk-action/$PROPOSAL_ID/approve"
 
 curl -X POST \

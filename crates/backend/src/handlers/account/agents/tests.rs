@@ -2,6 +2,7 @@
 #[allow(clippy::items_after_test_module)]
 mod agent_auth_error_matrix_tests {
     use arkret_auth::session_grant::AgentKeyProofSigningInput;
+    use arkret_identifiers::DidCoreId;
     use chrono::Utc;
 
     fn derive_ed25519_from_seed(seed: &[u8; 32]) -> ed25519_dalek::SigningKey {
@@ -146,14 +147,14 @@ mod agent_auth_error_matrix_tests {
         assert_eq!(left, right);
         assert_eq!(
             accountability_capabilities_digest(
-                "did:web:agent.example",
-                "did:web:controller.example",
+                &DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
+                &DidCoreId::new("ak:did_core:web:controller.example").unwrap(),
                 &left,
             )
             .unwrap(),
             accountability_capabilities_digest(
-                "did:web:agent.example",
-                "did:web:controller.example",
+                &DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
+                &DidCoreId::new("ak:did_core:web:controller.example").unwrap(),
                 &right,
             )
             .unwrap()

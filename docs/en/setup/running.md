@@ -31,8 +31,8 @@ The service can be configured to have multiple HTTP listeners, serving different
 See the [`http.listeners`](../reference/configuration.md#http) configuration section for more information.
 
 The service needs to be aware of the public URL it is served on, regardless of the HTTP listeners configuration.
-This is done using the [`http.public_base`](../reference/configuration.md#http) configuration option.
-By default, the OIDC issuer advertised by the `/.well-known/openid-configuration` endpoint will be the same as the `public_base` URL, but can be configured to be different.
+This is done using the [`http.public_base_url`](../reference/configuration.md#http) configuration option.
+By default, the OIDC issuer advertised by the `/.well-known/openid-configuration` endpoint will be the same as the `public_base_url` URL, but can be configured to be different.
 
 ## Tweak the remaining configuration
 

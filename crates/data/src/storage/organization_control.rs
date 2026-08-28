@@ -1,6 +1,6 @@
 //! Organization principal control + organization delegation repository.
 
-use arkret_identifiers::{EventId, Hash};
+use arkret_identifiers::{Did, DidCoreId, EventId, Hash};
 use arkret_models_collaboration::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
 };
@@ -22,7 +22,7 @@ use crate::repository_impl;
 #[derive(Debug, Clone)]
 pub struct NewOrganizationPrincipalControl {
     /// Organization principal DID this control row governs.
-    pub organization_did: String,
+    pub organization_did: Did,
     /// Event-derived Realm id of the accepted PCR create Event named by
     /// `control_stream_ref`. Storage rejects a missing or mismatched pair.
     pub principal_control_realm_id: String,
@@ -38,7 +38,7 @@ pub struct NewOrganizationPrincipalControl {
     pub bootstrap_delegation_ref: Option<String>,
     /// Human admin / service principal that executed the bootstrap (executor
     /// identity only — never the organization principal).
-    pub executed_by: Option<String>,
+    pub executed_by: Option<DidCoreId>,
     /// Digest of the verified bootstrap proof transcript.
     pub bootstrap_proof_digest: Option<String>,
 }
@@ -63,9 +63,9 @@ pub struct NewOrganizationDelegation {
     /// Stable delegation reference (unique).
     pub delegation_ref: String,
     /// Organization principal DID that granted the delegation.
-    pub organization_did: String,
+    pub organization_did: Did,
     /// DID the delegation is granted to (the delegate).
-    pub delegate_did: String,
+    pub delegate_did: Did,
     /// Issuer role the delegate may act under.
     pub issuer_role: RealmOrganizationIssuerRole,
     /// Delegation purposes (e.g. `principal_control_realm_bootstrap`).
@@ -79,7 +79,7 @@ pub struct NewOrganizationDelegation {
     /// Optional end of the delegation validity window.
     pub valid_until: Option<DateTime<Utc>>,
     /// Admin / service principal that recorded the delegation.
-    pub created_by: String,
+    pub created_by: DidCoreId,
 }
 
 /// Repository for organization principal control state and delegations.

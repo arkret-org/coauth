@@ -323,10 +323,10 @@ pub fn reqwest_client_for_arkret(config: &coauth_config::ArkretConfig) -> reqwes
 #[must_use]
 pub fn reqwest_client_for_server(
     config: &coauth_config::ArkretConfig,
-    public_base: &url::Url,
+    public_base_url: &url::Url,
     issuer: Option<&url::Url>,
 ) -> reqwest::Client {
-    let trusted_hosts = server_trusted_loopback_https_hosts(config, public_base, issuer);
+    let trusted_hosts = server_trusted_loopback_https_hosts(config, public_base_url, issuer);
     reqwest_client_builder(insecure_loopback_http_enabled(), &trusted_hosts)
         .build()
         .expect("failed to create server HTTP client")
@@ -334,11 +334,11 @@ pub fn reqwest_client_for_server(
 
 fn server_trusted_loopback_https_hosts(
     config: &coauth_config::ArkretConfig,
-    public_base: &url::Url,
+    public_base_url: &url::Url,
     issuer: Option<&url::Url>,
 ) -> Vec<String> {
     let mut hosts = config.trusted_outbound_hosts();
-    for origin in std::iter::once(public_base).chain(issuer) {
+    for origin in std::iter::once(public_base_url).chain(issuer) {
         let Some(host) = origin.host_str() else {
             continue;
         };
@@ -832,8 +832,8 @@ mod tests {
     #[test]
     fn server_self_issuer_is_an_exact_loopback_https_trust_anchor() {
         let config = coauth_config::ArkretConfig::default();
-        let public_base = url::Url::parse("https://auth.local.host/").unwrap();
-        let trusted_hosts = server_trusted_loopback_https_hosts(&config, &public_base, None);
+        let public_base_url = url::Url::parse("https://auth.local.host/").unwrap();
+        let trusted_hosts = server_trusted_loopback_https_hosts(&config, &public_base_url, None);
         let guard = egress_guard(false, &trusted_hosts);
         let loopback = [addr("127.0.0.1:443")];
 

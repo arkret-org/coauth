@@ -181,7 +181,7 @@ async fn load_context(figment: &Figment, name: &str) -> anyhow::Result<CommandCo
     let pool = diesel_pool_from_config(&config.database).await?;
     let http_client = coauth_backend::reqwest_client_for_server(
         &config.arkret,
-        &config.http.public_base,
+        &config.http.public_base_url,
         config.http.issuer.as_ref(),
     );
     Ok(CommandContext {

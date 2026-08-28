@@ -16,6 +16,7 @@
 //! in the `handle` column — see migration
 //! `20260527000200_handle_canonicalize_rename`.
 
+use arkret_identifiers::DidCoreId;
 use async_trait::async_trait;
 use coauth_data::Clock;
 use coauth_data::audit::HandleAuditEvent;
@@ -34,7 +35,7 @@ pub struct NewHandleAuditEvent {
     handle_aliases: Vec<String>,
     old_did: Option<String>,
     new_did: Option<String>,
-    issuer_id: Option<String>,
+    issuer_id: Option<DidCoreId>,
     audience: Option<String>,
     details: Value,
     actor_id: Option<Ulid>,
@@ -121,8 +122,8 @@ impl NewHandleAuditEvent {
 
     /// Borrow the issuer service DID.
     #[must_use]
-    pub fn issuer_id(&self) -> Option<&str> {
-        self.issuer_id.as_deref()
+    pub fn issuer_id(&self) -> Option<&DidCoreId> {
+        self.issuer_id.as_ref()
     }
 
     /// Borrow the audience.

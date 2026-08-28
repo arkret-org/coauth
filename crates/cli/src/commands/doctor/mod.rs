@@ -24,16 +24,16 @@ impl Options {
         let config = RootConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
 
         let http = coauth_backend::reqwest_client();
-        let public_base = &config.http.public_base;
+        let public_base_url = &config.http.public_base_url;
         let resolved_issuer = config
             .http
             .issuer
             .as_ref()
-            .map_or_else(|| public_base.as_str(), url::Url::as_str);
+            .map_or_else(|| public_base_url.as_str(), url::Url::as_str);
 
         if !resolved_issuer.starts_with("https://") {
             warn!(
-                "The issuer (`http.issuer`/`http.public_base`) is not an HTTPS URL. \
+                "The issuer (`http.issuer`/`http.public_base_url`) is not an HTTPS URL. \
                  Some clients will refuse to use it."
             );
         }
@@ -61,15 +61,15 @@ impl Options {
             }
         }
 
-        check_openid_discovery(&http, public_base, resolved_issuer).await;
-        check_arkret_server_describe(&http, public_base).await;
+        check_openid_discovery(&http, public_base_url, resolved_issuer).await;
+        check_arkret_server_describe(&http, public_base_url).await;
 
         Ok(ExitCode::SUCCESS)
     }
 }
 
-async fn check_openid_discovery(http: &reqwest::Client, public_base: &Url, issuer: &str) {
-    let url = match public_base.join("/.well-known/openid-configuration") {
+async fn check_openid_discovery(http: &reqwest::Client, public_base_url: &Url, issuer: &str) {
+    let url = match public_base_url.join("/.well-known/openid-configuration") {
         Ok(url) => url,
         Err(error) => {
             error!(%error, "Unable to construct OpenID discovery URL");
@@ -120,8 +120,8 @@ async fn check_openid_discovery(http: &reqwest::Client, public_base: &Url, issue
     }
 }
 
-async fn check_arkret_server_describe(http: &reqwest::Client, public_base: &Url) {
-    let url = match public_base.join("/_arkret/describe") {
+async fn check_arkret_server_describe(http: &reqwest::Client, public_base_url: &Url) {
+    let url = match public_base_url.join("/_arkret/describe") {
         Ok(url) => url,
         Err(error) => {
             error!(%error, "Unable to construct Arkret server description URL");

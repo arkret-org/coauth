@@ -47,7 +47,7 @@ impl From<RecoveryCompletionGrantIssuanceRow> for RecoveryCompletionGrantIssuanc
             transaction_id: value.transaction_id,
             transaction_request_digest: value.transaction_request_digest,
             service_account_id: value.service_account_id.into(),
-            principal_id: value.principal_id.into_string(),
+            principal_id: value.principal_id,
             device_id: value.device_id,
             device_authorization_event_id: value.device_authorization_event_id,
             result_model_generation_ref: value.result_model_generation_ref,
@@ -105,8 +105,7 @@ impl RecoveryAuthorityRepository for PgRecoveryAuthorityRepository<'_> {
             transaction_id: params.transaction_id,
             transaction_request_digest: params.transaction_request_digest,
             service_account_id: params.service_account_id.into(),
-            principal_id: arkret_identifiers::DidCoreId::new(params.principal_id)
-                .map_err(|_| DatabaseError::invalid_operation())?,
+            principal_id: params.principal_id,
             device_id: params.device_id,
             device_authorization_event_id: params.device_authorization_event_id,
             result_model_generation_ref: params.result_model_generation_ref,

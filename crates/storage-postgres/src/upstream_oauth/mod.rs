@@ -51,7 +51,7 @@ mod tests {
                 &mut rng,
                 &clock,
                 UpstreamOAuthProviderParams {
-                    issuer: Some("https://example.com/".to_owned()),
+                    oidc_issuer_uri: Some("https://example.com/".to_owned()),
                     human_name: None,
                     brand_name: None,
                     scope: Scope::from_iter([OPENID]),
@@ -87,13 +87,19 @@ mod tests {
             .await
             .unwrap()
             .expect("provider to be found in the database");
-        assert_eq!(provider.issuer.as_deref(), Some("https://example.com/"));
+        assert_eq!(
+            provider.oidc_issuer_uri.as_deref(),
+            Some("https://example.com/")
+        );
         assert_eq!(provider.client_id, "client-id");
 
         // It should be in the list of all providers
         let providers = repo.upstream_oauth_provider().all_enabled().await.unwrap();
         assert_eq!(providers.len(), 1);
-        assert_eq!(providers[0].issuer.as_deref(), Some("https://example.com/"));
+        assert_eq!(
+            providers[0].oidc_issuer_uri.as_deref(),
+            Some("https://example.com/")
+        );
         assert_eq!(providers[0].client_id, "client-id");
 
         // Start a session
@@ -337,7 +343,7 @@ mod tests {
                     &mut rng,
                     &clock,
                     UpstreamOAuthProviderParams {
-                        issuer: None,
+                        oidc_issuer_uri: None,
                         human_name: None,
                         brand_name: None,
                         scope: scope.clone(),
@@ -482,7 +488,7 @@ mod tests {
                 &mut rng,
                 &clock,
                 UpstreamOAuthProviderParams {
-                    issuer: Some("https://example.com/".to_owned()),
+                    oidc_issuer_uri: Some("https://example.com/".to_owned()),
                     human_name: None,
                     brand_name: None,
                     scope,
@@ -698,7 +704,7 @@ mod tests {
                 &mut rng,
                 &clock,
                 UpstreamOAuthProviderParams {
-                    issuer: Some("https://example.com/".to_owned()),
+                    oidc_issuer_uri: Some("https://example.com/".to_owned()),
                     human_name: Some("Example".to_owned()),
                     brand_name: Some("Example".to_owned()),
                     scope: Scope::from_iter([OPENID]),

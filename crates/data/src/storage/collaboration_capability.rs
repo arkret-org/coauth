@@ -1,5 +1,6 @@
 //! Collaboration capability grant repository.
 
+use arkret_identifiers::DidCoreId;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::Clock;
@@ -26,7 +27,7 @@ pub struct NewCollaborationCapabilityGrant {
     /// Approval evidence binding for high-risk actions.
     pub approval_evidence_ref: Option<String>,
     /// Admin/service actor that created the grant.
-    pub granted_by: String,
+    pub granted_by: DidCoreId,
     /// Canonical digest of the queued fan-out payload.
     pub grant_raw_payload_digest: String,
     /// Idempotency key used for soland fan-out.

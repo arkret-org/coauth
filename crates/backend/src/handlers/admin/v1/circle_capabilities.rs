@@ -108,14 +108,20 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
         None
     };
 
-    let actor_id = call_context
-        .user
-        .as_ref()
-        .map_or_else(|| "service".to_owned(), |u| format!("user:{}", u.id));
-
     canonicalize_circle_ids(&mut body.allowed_circle_ids);
     let mut rng = make_rng();
     let mut repo = call_context.repo;
+    let arkret_config = depot.arkret_config()?;
+    let granted_by = match call_context.user.as_ref() {
+        Some(user) => crate::handlers::arkret::published_principal_id_for_user(
+            &mut repo,
+            &arkret_config,
+            user,
+        )
+        .await?
+        .ok_or_else(|| AppError::conflict("admin account has no published principal_id"))?,
+        None => crate::handlers::arkret::service_id_for(&arkret_config),
+    };
 
     // REL-03: consume the approved proposal *before* persisting the grant.
     // `mark_executed` claims execution rights (`approved -> executed`); a
@@ -144,7 +150,7 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
                 realm_id: body.realm_id,
                 action: body.action,
                 allowed_circle_ids: body.allowed_circle_ids,
-                granted_by: actor_id,
+                granted_by,
             },
         )
         .await?;

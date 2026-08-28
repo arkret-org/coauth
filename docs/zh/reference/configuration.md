@@ -15,7 +15,7 @@ coauth config generate > config.yaml
 
 ```yaml
 http:
-  public_base: https://auth.example.com/
+  public_base_url: https://auth.example.com/
   issuer: https://auth.example.com/
   listeners:
     - name: web

@@ -7,6 +7,7 @@
 //! sodmin can render the full organization control state from these DTOs
 //! without touching the database or parsing any product-private fields.
 
+use arkret_identifiers::{Did, DidCoreId};
 use arkret_models_collaboration::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
     RealmOrganizationStatus,
@@ -22,7 +23,9 @@ use serde::{Deserialize, Serialize};
 )]
 pub struct OrganizationPrincipalControl {
     pub id: String,
-    pub organization_did: String,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub organization_did: Did,
     pub principal_control_realm_id: String,
     pub control_stream_ref: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -31,7 +34,9 @@ pub struct OrganizationPrincipalControl {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bootstrap_delegation_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub executed_by: Option<String>,
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = Option<String>)))]
+    pub executed_by: Option<DidCoreId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bootstrap_proof_digest: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -64,8 +69,12 @@ impl From<coauth_data_model::OrganizationPrincipalControl> for OrganizationPrinc
 pub struct OrganizationDelegation {
     pub id: String,
     pub delegation_ref: String,
-    pub organization_did: String,
-    pub delegate_did: String,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub organization_did: Did,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub delegate_did: Did,
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
     pub issuer_role: RealmOrganizationIssuerRole,
@@ -83,7 +92,9 @@ pub struct OrganizationDelegation {
     pub valid_from: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub valid_until: Option<DateTime<Utc>>,
-    pub created_by: String,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub created_by: DidCoreId,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -136,7 +147,9 @@ pub enum BootstrapAuthorizationInput {
 )]
 pub struct BootstrapOrganizationRequest {
     /// Organization principal DID being bootstrapped.
-    pub organization_did: String,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub organization_did: Did,
     /// Event-derived Principal Control Realm id. It must equal a retype of
     /// `control_stream_ref` at bootstrap.
     pub principal_control_realm_id: String,
@@ -160,7 +173,9 @@ pub struct RecordOrganizationDelegationRequest {
     /// Object ref clients put into `authorization.delegation_ref`.
     pub delegation_ref: String,
     /// The delegated principal (Account Authority / governance service DID).
-    pub delegate_did: String,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub delegate_did: Did,
     /// Issuer role the delegate may act as.
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]

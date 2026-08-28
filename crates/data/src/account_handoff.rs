@@ -1,5 +1,6 @@
 //! Durable state for canonical account handoff and first-principal binding.
 
+use arkret_identifiers::WebOrigin;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -332,7 +333,7 @@ pub struct IdentityBindingChallengeInput {
     pub initial_session_request_digest: arkret_identifiers::Hash,
     pub challenge_id: String,
     pub challenge: String,
-    pub origin_uri: String,
+    pub origin: WebOrigin,
     pub trust_domain: arkret_identifiers::TrustDomainId,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -362,7 +363,7 @@ pub struct IdentityBindingChallengeRecord {
     pub lease_fence: u64,
     pub dpop_jkt: String,
     pub audience_id: arkret_identifiers::DidCoreId,
-    pub origin_uri: String,
+    pub origin: WebOrigin,
     pub trust_domain: arkret_identifiers::TrustDomainId,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -393,7 +394,7 @@ impl IdentityBindingChallengeRecord {
             lease_fence: self.lease_fence,
             dpop_jkt: self.dpop_jkt.clone(),
             audience_id: self.audience_id.clone(),
-            origin_uri: self.origin_uri.clone(),
+            origin: self.origin.clone(),
             trust_domain: self.trust_domain.clone(),
             issued_at: self.issued_at,
             expires_at: self.expires_at,
@@ -430,7 +431,7 @@ pub struct DidBindingChallengeInput {
     pub challenge: String,
     pub dpop_jkt: String,
     pub audience_id: arkret_identifiers::DidCoreId,
-    pub origin_uri: String,
+    pub origin: WebOrigin,
     pub trust_domain: arkret_identifiers::TrustDomainId,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -462,7 +463,7 @@ impl DidBindingChallengeRecord {
             witness_evidence: input.witness_evidence.clone(),
             dpop_jkt: input.dpop_jkt.clone(),
             audience_id: input.audience_id.clone(),
-            origin_uri: input.origin_uri.clone(),
+            origin: input.origin.clone(),
             trust_domain: input.trust_domain.clone(),
             issued_at: input.issued_at,
             expires_at: input.expires_at,
@@ -519,7 +520,7 @@ pub struct IdentityAbandonmentChallengeInput {
     pub did_version_id: String,
     pub challenge_id: String,
     pub challenge: String,
-    pub origin_uri: String,
+    pub origin: WebOrigin,
     pub trust_domain: arkret_identifiers::TrustDomainId,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -540,7 +541,7 @@ pub struct IdentityAbandonmentChallengeRecord {
     pub did_version_id: String,
     pub challenge_id: String,
     pub challenge: String,
-    pub origin_uri: String,
+    pub origin: WebOrigin,
     pub trust_domain: arkret_identifiers::TrustDomainId,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -567,7 +568,7 @@ impl IdentityAbandonmentChallengeRecord {
                 arkret_models_identity::IDENTITY_ABANDONMENT_CONSEQUENCE_DISCLOSURE,
             dpop_jkt: self.holder_jkt.clone(),
             audience_id: self.audience_id.clone(),
-            origin_uri: self.origin_uri.clone(),
+            origin: self.origin.clone(),
             trust_domain: self.trust_domain.clone(),
             issued_at: self.issued_at,
             expires_at: self.expires_at,

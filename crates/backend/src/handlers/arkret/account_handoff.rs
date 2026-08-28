@@ -126,7 +126,9 @@ pub async fn issue_did_binding_challenge(
     let trust_domain =
         arkret_identifiers::TrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
             .map_err(|error| failed_precondition(error.to_string()))?;
-    let origin = url_builder.http_base().origin().ascii_serialization();
+    let origin =
+        arkret_identifiers::WebOrigin::new(url_builder.http_base().origin().ascii_serialization())
+            .map_err(|error| failed_precondition(error.to_string()))?;
     let now = make_clock().now();
     let mut rng = make_rng();
     let issue = repo
@@ -147,7 +149,7 @@ pub async fn issue_did_binding_challenge(
             challenge: random_opaque(&mut *rng, 32),
             dpop_jkt: grant.cnf_jkt,
             audience_id: audience,
-            origin_uri: origin,
+            origin,
             trust_domain,
             issued_at: now,
             expires_at: now + IDENTITY_BINDING_CHALLENGE_TTL,
@@ -873,11 +875,14 @@ pub async fn issue_identity_binding_challenge(
         .map_err(|error| failed_precondition(error.to_string()))?;
     let audience = arkret_identifiers::DidCoreId::new(grant.audience_id.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
-    let origin = depot
-        .url_builder()?
-        .http_base()
-        .origin()
-        .ascii_serialization();
+    let origin = arkret_identifiers::WebOrigin::new(
+        depot
+            .url_builder()?
+            .http_base()
+            .origin()
+            .ascii_serialization(),
+    )
+    .map_err(|error| failed_precondition(error.to_string()))?;
     let clock = make_clock();
     let now = clock.now();
     let mut rng = make_rng();
@@ -906,7 +911,7 @@ pub async fn issue_identity_binding_challenge(
             initial_session_request_digest: body.initial_session_request_digest,
             challenge_id: random_opaque(&mut *rng, 24),
             challenge: random_opaque(&mut *rng, 32),
-            origin_uri: origin,
+            origin,
             trust_domain,
             issued_at: now,
             expires_at: now + IDENTITY_BINDING_CHALLENGE_TTL,
@@ -985,7 +990,9 @@ pub async fn issue_identity_abandonment_challenge(
             .map_err(|error| failed_precondition(error.to_string()))?;
     let audience = arkret_identifiers::DidCoreId::new(grant.audience_id.clone())
         .map_err(|error| failed_precondition(error.to_string()))?;
-    let origin = url_builder.http_base().origin().ascii_serialization();
+    let origin =
+        arkret_identifiers::WebOrigin::new(url_builder.http_base().origin().ascii_serialization())
+            .map_err(|error| failed_precondition(error.to_string()))?;
     let now = make_clock().now();
     let mut rng = make_rng();
     let mut repo = depot.repo().await?;
@@ -1005,7 +1012,7 @@ pub async fn issue_identity_abandonment_challenge(
             did_version_id: body.did_version_id,
             challenge_id: random_opaque(&mut *rng, 24),
             challenge: random_opaque(&mut *rng, 32),
-            origin_uri: origin,
+            origin,
             trust_domain,
             issued_at: now,
             expires_at: now + IDENTITY_ABANDONMENT_CHALLENGE_TTL,

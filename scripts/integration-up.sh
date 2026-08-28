@@ -78,7 +78,7 @@ if [[ ! -f "${GENERATED_CONFIG}" ]] || [[ "${REGENERATE_CONFIG:-0}" == "1" ]]; t
     # Patch the generated config so it points at the compose-internal
     # postgres, binds the http listener to 0.0.0.0:7080, exposes /health
     # on the SAME listener (so host-side `127.0.0.1:57080/health` works),
-    # and uses the in-cluster service name for issuer/public_base.
+    # and uses the in-cluster service name for issuer/public_base_url.
     # Generated keys + secrets are preserved verbatim.
     #
     # The default config-generate output produces TWO listeners — `web`
@@ -104,7 +104,7 @@ src = re.sub(
     src, count=1, flags=re.MULTILINE,
 )
 
-# 2. http.public_base + http.issuer → host-visible loopback URL.
+# 2. http.public_base_url + http.issuer → host-visible loopback URL.
 #    We use the host-published port (57080) so the issuer claim in the
 #    discovery doc matches what host-side OIDC conformance + e2e see;
 #    if we used `http://coauth:7080/` instead, conformance would reject
@@ -112,7 +112,7 @@ src = re.sub(
 #    fetched. Compose's container-to-container DNS still works for the
 #    `database.uri` field below.
 src = re.sub(
-    r'^(\s*public_base:).*$',
+    r'^(\s*public_base_url:).*$',
     r'\1 http://127.0.0.1:57080/',
     src, count=1, flags=re.MULTILINE,
 )

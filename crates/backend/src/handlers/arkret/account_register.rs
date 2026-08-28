@@ -605,13 +605,13 @@ pub async fn account_register_endpoint(
         &key_store,
         &browser_session,
         session_public_key,
-        initial.audience_id.to_string(),
+        initial.audience_id.clone(),
         initial.device_id.clone(),
         STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
             .iter()
             .map(|operation| operation.as_str().to_owned())
             .collect(),
-        Some(body.principal_id.as_str()),
+        Some(&body.principal_id),
         &principal_authority,
         grant.cnf_jkt.clone(),
         device_binding,
@@ -621,6 +621,7 @@ pub async fn account_register_endpoint(
     persist_session_grant(&mut repo, &mut *rng, &*clock, &browser_session, &material).await?;
     let session_grant_outcome = SessionGrantOutcome {
         principal_id: body.principal_id.clone(),
+        service_account_id: material.service_account_id.clone(),
         device_id: Some(initial.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
@@ -719,7 +720,7 @@ fn validate_registration_transcript(
         || challenge.lease_fence != proof.lease_fence
         || challenge.dpop_jkt != proof.dpop_jkt
         || challenge.audience_id != proof.audience_id
-        || challenge.origin_uri != proof.origin_uri
+        || challenge.origin != proof.origin
         || challenge.trust_domain != proof.trust_domain
         || challenge.issued_at != proof.issued_at
         || challenge.expires_at != proof.expires_at

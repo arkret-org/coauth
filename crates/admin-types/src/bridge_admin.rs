@@ -132,8 +132,7 @@ pub struct AdminBridgeRiskActionExamples {
 
 /// Example shape for the proposal request body.
 ///
-/// `approved_by` is `Option<String>` to mirror the backend's
-/// `Option<&'static str>` — the proposal-stage payload may legitimately
+/// `approved_by` is optional because the proposal-stage payload may
 /// omit the approver (it is filled in at the approve stage).
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[cfg_attr(
@@ -232,7 +231,7 @@ pub fn admin_bridge_risk_action_approval_example() -> AdminBridgeRiskActionAppro
     AdminBridgeRiskActionApprovalExample {
         action: "lock".to_owned(),
         ticket: "INC-2026-0504".to_owned(),
-        approved_by: "did:web:admin.example".to_owned(),
+        approved_by: "ak:did_core:web:admin.example".to_owned(),
         approval_note: "approved for controlled execution".to_owned(),
         approval_proof_jws: "protected..signature".to_owned(),
     }
@@ -269,7 +268,7 @@ mod tests {
         assert_eq!(d.risk_action_examples.proposal_request.approved_by, None);
         assert_eq!(
             d.risk_action_examples.approve_request.approved_by,
-            "did:web:admin.example"
+            "ak:did_core:web:admin.example"
         );
         assert_eq!(
             d.risk_action_examples.execute_request.execution_note,
@@ -295,10 +294,10 @@ mod tests {
             action: "lock".into(),
             reason: "x".into(),
             ticket: "T".into(),
-            approved_by: Some("did:web:a".into()),
+            approved_by: Some("ak:did_core:web:a".into()),
         };
         let s = serde_json::to_string(&p).unwrap();
-        assert!(s.contains("\"approved_by\":\"did:web:a\""));
+        assert!(s.contains("\"approved_by\":\"ak:did_core:web:a\""));
     }
 
     #[test]

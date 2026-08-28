@@ -35,7 +35,8 @@ enum ViewerData {
 struct ViewerUser {
     id: String,
     username: String,
-    principal_id: String,
+    #[salvo(schema(value_type = String))]
+    principal_id: arkret_identifiers::DidCoreId,
     handle: String,
     can_request_admin: bool,
     has_password: bool,

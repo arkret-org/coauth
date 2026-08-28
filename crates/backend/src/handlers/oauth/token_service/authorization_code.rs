@@ -401,7 +401,9 @@ pub async fn exchange_authorization_code(
                 clock,
                 url_builder,
                 &subject_did,
-                principal_id.as_deref(),
+                principal_id
+                    .as_ref()
+                    .map(arkret_identifiers::DidCoreId::as_str),
                 key_store,
                 client,
                 Some(&authz_grant),

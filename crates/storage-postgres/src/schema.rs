@@ -369,7 +369,7 @@ diesel::table! {
         id -> Uuid,
         account_id -> Uuid,
         action -> Text,
-        proposer_did -> Text,
+        proposer_id -> Text,
         reason -> Text,
         ticket -> Nullable<Text>,
         state -> Text,
@@ -727,6 +727,7 @@ diesel::table! {
         user_session_id -> Nullable<Uuid>,
         issuer_id -> Text,
         subject_id -> Text,
+        service_account_id -> Text,
         device_id -> Nullable<Text>,
         applet_id -> Nullable<Text>,
         effective_scope -> Nullable<Jsonb>,
@@ -755,7 +756,7 @@ diesel::table! {
 diesel::table! {
     upstream_oauth_providers (id) {
         id -> Uuid,
-        issuer -> Nullable<Text>,
+        oidc_issuer_uri -> Nullable<Text>,
         scope -> Text,
         client_id -> Text,
         encrypted_client_secret -> Nullable<Text>,

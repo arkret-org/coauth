@@ -134,7 +134,7 @@ impl_resource!(
 pub struct UpstreamOAuthProvider {
     #[serde(skip)]
     pub id: String,
-    pub issuer: Option<String>,
+    pub oidc_issuer_uri: Option<String>,
     pub human_name: Option<String>,
     pub brand_name: Option<String>,
     pub created_at: DateTime<Utc>,

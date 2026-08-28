@@ -1,4 +1,4 @@
-use arkret_identifiers::{DidCoreId, SessionGrantId};
+use arkret_identifiers::{DidCoreId, ServiceAccountId, SessionGrantId};
 use arkret_models_identity::SessionGrantIssuanceNonce;
 use chrono::{DateTime, Utc};
 use coauth_data::SessionGrant;
@@ -15,9 +15,10 @@ pub struct SessionGrantMaterial {
     pub expires_at_timestamp: DateTime<Utc>,
     pub not_before_timestamp: DateTime<Utc>,
     pub issuer_id: DidCoreId,
-    pub subject_id: String,
+    pub subject_id: DidCoreId,
+    pub service_account_id: ServiceAccountId,
     pub device_id: Option<String>,
-    pub audience_id: String,
+    pub audience_id: DidCoreId,
     pub scopes: Vec<String>,
     /// RFC 7638 JWK SHA-256 thumbprint (base64url) of the DPoP proof the
     /// grant is bound to, when issuance happened on a request that
@@ -121,7 +122,7 @@ impl SessionGrantIssuanceSeed {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SessionGrantTarget {
-    pub audience_id: String,
+    pub audience_id: DidCoreId,
     pub principal_server_name: Option<String>,
     pub principal_server_endpoint: Option<String>,
 }
@@ -132,9 +133,9 @@ pub(crate) struct SessionGrantRecord {
     grant_id: SessionGrantId,
     browser_session_id: Option<String>,
     issuer_id: DidCoreId,
-    subject_id: String,
+    subject_id: DidCoreId,
     device_id: Option<String>,
-    audience_id: String,
+    audience_id: DidCoreId,
     scopes: Vec<String>,
     #[serde(serialize_with = "arkret_canonical::serialize_canonical_timestamp")]
     created_at: DateTime<Utc>,

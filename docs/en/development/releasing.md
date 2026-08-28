@@ -115,7 +115,7 @@ jq -n \
   --arg image "coauth-${SHORT_SHA}.oci.tar" \
   --arg image_sha "${IMAGE_SHA}" \
   --arg git_sha "${GIT_SHA}" \
-  --arg source_uri "${SOURCE_URI}" \
+  --arg source_url "${SOURCE_URI}" \
   --arg platform "${PLATFORM}" \
   --arg started "${BUILD_STARTED}" \
   '{
@@ -132,7 +132,7 @@ jq -n \
         "buildType": "https://github.com/arkret-org/coauth/local-container-build/v1",
         "externalParameters": {
           "gitCommit": $git_sha,
-          "gitRemote": $source_uri,
+          "gitRemote": $source_url,
           "platform": $platform
         },
         "internalParameters": {}

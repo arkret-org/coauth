@@ -278,13 +278,13 @@ pub async fn issue_recovery_completion_grant_endpoint(
         &key_store,
         &browser_session,
         session_public_key,
-        initial.audience_id.to_string(),
+        initial.audience_id.clone(),
         initial.device_id.clone(),
         STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
             .iter()
             .map(|operation| operation.as_str().to_owned())
             .collect(),
-        Some(receipt.principal_id.as_str()),
+        Some(&receipt.principal_id),
         &principal_authority,
         handoff.cnf_jkt.clone(),
         device_binding,
@@ -293,6 +293,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let wire_grant = SessionGrantOutcome {
         principal_id: receipt.principal_id.clone(),
+        service_account_id: material.service_account_id.clone(),
         device_id: Some(initial.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
@@ -368,7 +369,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             transaction_id: request.transaction_id.to_string(),
             transaction_request_digest: request.transaction_request_digest.to_string(),
             service_account_id: handoff.service_account_id,
-            principal_id: receipt.principal_id.to_string(),
+            principal_id: receipt.principal_id.clone(),
             device_id: initial.device_id.to_string(),
             device_authorization_event_id: request.device_authorization_event_id.to_string(),
             result_model_generation_ref: generation,
@@ -465,7 +466,7 @@ async fn verify_account_principal_binding(
 ) -> Result<arkret_wire::PrincipalAuthorityKey, ArkretRouteError> {
     let binding = repo
         .principal_did()
-        .get_by_did_and_audience(principal_id, audience)
+        .get_by_principal_id_and_audience(principal_id, audience)
         .await?
         .ok_or_else(|| {
             failed_precondition("principal is not bound to an account at this audience")

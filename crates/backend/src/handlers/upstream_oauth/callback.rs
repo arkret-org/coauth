@@ -790,7 +790,7 @@ pub async fn handler(
                     &jwks_uri,
                     &mut current_jwks,
                     id_token,
-                    provider.issuer.as_deref(),
+                    provider.oidc_issuer_uri.as_deref(),
                     &provider.id_token_signed_response_alg,
                     &provider.client_id,
                     clock.now(),
@@ -856,7 +856,7 @@ pub async fn handler(
                             lazy_metadata.userinfo_endpoint().await?,
                             token_response.access_token.as_str(),
                             Some(JwtVerificationData {
-                                issuer: provider.issuer.as_deref(),
+                                issuer: provider.oidc_issuer_uri.as_deref(),
                                 jwks: &jwks,
                                 signing_algorithm,
                                 client_id: &provider.client_id,

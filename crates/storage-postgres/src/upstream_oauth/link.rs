@@ -104,7 +104,7 @@ impl UpstreamOAuthLinkRepository for PgUpstreamOAuthLinkRepository<'_> {
         fields(
             upstream_oauth_link.subject = subject,
             %upstream_oauth_provider.id,
-            upstream_oauth_provider.issuer = upstream_oauth_provider.issuer,
+            upstream_oauth_provider.oidc_issuer_uri = upstream_oauth_provider.oidc_issuer_uri,
             %upstream_oauth_provider.client_id,
         ),
         err,
@@ -137,7 +137,7 @@ impl UpstreamOAuthLinkRepository for PgUpstreamOAuthLinkRepository<'_> {
             upstream_oauth_link.subject = subject,
             upstream_oauth_link.human_account_name = human_account_name,
             %upstream_oauth_provider.id,
-            upstream_oauth_provider.issuer = upstream_oauth_provider.issuer,
+            upstream_oauth_provider.oidc_issuer_uri = upstream_oauth_provider.oidc_issuer_uri,
             %upstream_oauth_provider.client_id,
         ),
         err,

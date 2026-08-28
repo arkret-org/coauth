@@ -57,7 +57,7 @@ A minimal `config.yaml` to pair with this stack:
 
 ```yaml
 http:
-  public_base: http://localhost:7080/
+  public_base_url: http://localhost:7080/
   listeners:
     - name: public
       resources: [discovery, human, oauth, rest_api, assets]

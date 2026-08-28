@@ -38,7 +38,9 @@ pub struct CircleCapabilityGrant {
     pub action: CapabilityActionId,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allowed_circle_ids: Vec<String>,
-    pub granted_by: String,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub granted_by: arkret_identifiers::DidCoreId,
     pub granted_at: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revoked_at: Option<DateTime<Utc>>,

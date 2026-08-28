@@ -187,7 +187,8 @@ fn grant_is_agent_delegated_to_controller(grant: &SessionGrant, controller_id: &
 }
 
 fn grant_is_owned_by_current_principal(grant: &SessionGrant, principal_id: &str) -> bool {
-    grant.subject_id == principal_id || grant_is_agent_delegated_to_controller(grant, principal_id)
+    grant.subject_id.as_str() == principal_id
+        || grant_is_agent_delegated_to_controller(grant, principal_id)
 }
 
 fn validate_lifecycle_proof_kind(proof_kind: &str) -> Result<(), ArkretRouteError> {
@@ -242,7 +243,7 @@ async fn verify_cross_session_lifecycle_proof(
     validate_lifecycle_proof_kind(&proof.proof_kind)?;
     validate_lifecycle_proof_window(proof.issued_at, proof.expires_at, now)?;
 
-    if proof.audience_id.as_str() != current_grant.audience_id {
+    if proof.audience_id != current_grant.audience_id {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
@@ -250,13 +251,7 @@ async fn verify_cross_session_lifecycle_proof(
         ));
     }
 
-    let actor_id = DidCoreId::new(current_grant.subject_id.clone()).map_err(|error| {
-        ArkretRouteError::coded(
-            StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::PARAM_INVALID,
-            format!("current session grant subject_id is not a DID: {error}"),
-        )
-    })?;
+    let actor_id = current_grant.subject_id.clone();
     let expected_digest = AccountLifecycleProof::session_revoke_request_digest(
         &actor_id,
         service_id,
@@ -288,7 +283,10 @@ async fn verify_cross_session_lifecycle_proof(
     // response into authority for an already-issued grant.
     let principal_binding = repo
         .principal_did()
-        .get_by_did_and_audience(&current_grant.subject_id, &current_grant.audience_id)
+        .get_by_principal_id_and_audience(
+            current_grant.subject_id.as_str(),
+            current_grant.audience_id.as_str(),
+        )
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .ok_or_else(|| lifecycle_proof_invalid("accepted principal binding is missing"))?;
@@ -338,7 +336,7 @@ async fn verify_cross_session_lifecycle_proof(
         .map_err(|error| {
         lifecycle_proof_invalid(format!("verification method projection failed: {error}"))
     })?;
-    if verification_principal_id.as_str() != current_grant.subject_id {
+    if verification_principal_id != current_grant.subject_id {
         return Err(lifecycle_proof_invalid(
             "lifecycle proof verification_method principal does not match the current session grant subject_id",
         ));
@@ -398,7 +396,7 @@ pub async fn revoke_session_grant_endpoint(
         .ok_or_else(session_grant_not_found)?;
     if presented_claims.grant_id != current_grant.grant_id
         || presented_claims.issuer_id != current_grant.issuer_id
-        || presented_claims.subject_id.as_str() != current_grant.subject_id
+        || presented_claims.subject_id != current_grant.subject_id
     {
         repo.cancel().await.ok();
         return Err(lifecycle_proof_invalid(
@@ -476,7 +474,9 @@ pub async fn revoke_session_grant_endpoint(
                 .lookup_by_grant_id(target_session_grant_id)
                 .await
                 .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
-                .filter(|grant| grant_is_owned_by_current_principal(grant, &current_principal_id))
+                .filter(|grant| {
+                    grant_is_owned_by_current_principal(grant, current_principal_id.as_str())
+                })
                 .ok_or_else(session_grant_not_found)?;
             Some(target.grant_id)
         }
@@ -786,9 +786,10 @@ mod tests {
             &issuance_seed,
             &personal_did_web_config(),
             &test_keystore(),
-            "ak:did_core:web:agent.example",
+            &DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
+            arkret_identifiers::ServiceAccountId::new("test-account").unwrap(),
             &DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000006").unwrap(),
-            "ak:did_core:web:soland.example".to_owned(),
+            DidCoreId::new("ak:did_core:web:soland.example").unwrap(),
             vec!["ak.self.events.stream.subscribe.v1".to_owned()],
             "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_owned(),
             session_public_key,
@@ -817,6 +818,7 @@ mod tests {
             browser_session_id: None,
             issuer_id: material.issuer_id,
             subject_id: material.subject_id,
+            service_account_id: material.service_account_id,
             device_id: material.device_id,
             applet_id: None,
             effective_scope: None,

@@ -5,7 +5,7 @@ use arkret_models_collaboration::account_lifecycle::{
     AccountStatusPublicationRequestBody, AccountStatusRecord, UnsignedAccountStatusRecord,
 };
 use arkret_models_collaboration::objects::account_status::AccountStatus;
-use arkret_wire::{DidCoreId, Hash, NonEmptyString, SchemaId};
+use arkret_wire::{DidCoreId, Hash, SchemaId, ServiceAccountId};
 use coauth_data::queue::{AccountStatusPublicationJob, QueueJobRepositoryExt as _};
 use coauth_data::{
     AccountStatusAppendOutcome, BoxRepository, Clock, PrincipalDidBinding, RepositoryAccess as _,
@@ -59,8 +59,8 @@ pub async fn author_transition_plan(
             "runtime service identity does not match the accepted account authority".to_owned(),
         ));
     }
-    let account_id = NonEmptyString::new(user.id.to_string())
-        .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_owned()))?;
+    let account_id = ServiceAccountId::new(user.id.to_string())
+        .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
     let current = repo
         .account_status_ledger()
         .current(account_authority_id.as_str(), account_id.as_str())

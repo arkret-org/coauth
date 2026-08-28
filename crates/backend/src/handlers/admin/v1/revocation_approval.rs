@@ -17,6 +17,7 @@
 //! silently accepted and only its presence logged.
 
 use arkret_canonical::canonical_json_bytes;
+use arkret_identifiers::Did;
 use serde::Serialize;
 
 use crate::AppError;
@@ -45,7 +46,7 @@ struct RevocationApprovalTranscript<'a> {
     /// Operator-supplied reason, bound into the signed transcript.
     reason: &'a str,
     /// Authenticated admin DID the proof is anchored to.
-    approved_by: &'a str,
+    approved_by: &'a Did,
 }
 
 /// Verify an optional admin revocation `approval_proof` against the
@@ -115,7 +116,7 @@ pub(super) async fn verify_revocation_approval_proof(
         repo,
         did_resolver.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),
-        &approved_by,
+        approved_by.as_str(),
         arkret_identity::DidBindingPurpose::AdminAction,
         crate::services::did_binding::high_risk_freshness(),
         crate::handlers::make_clock().now(),

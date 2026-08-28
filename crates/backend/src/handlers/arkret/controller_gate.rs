@@ -74,7 +74,7 @@ pub async fn issue_controller_gate_attestation(
         .await?;
     let binding = repo
         .principal_did()
-        .get_by_did_and_audience(
+        .get_by_principal_id_and_audience(
             request.principal_id.as_str(),
             request.agent_authority_id.as_str(),
         )
@@ -220,12 +220,12 @@ async fn authenticate_agent_authority_request(
 ) -> Result<(), ArkretRouteError> {
     let config = depot.arkret_config()?;
     request
-        .agent_authority_service_resolution
+        .agent_authority_resolution
         .validate_shape(&request.agent_authority_id, now)
         .map_err(|_| not_found())?;
 
     let did = &request
-        .agent_authority_service_resolution
+        .agent_authority_resolution
         .service_resolution_record
         .record
         .did;
@@ -245,16 +245,13 @@ async fn authenticate_agent_authority_request(
     .await
     .map_err(|_| not_found())?;
     let resolved_document = serde_json::to_value(&resolved.document).map_err(|_| not_found())?;
-    let carried_document = serde_json::to_value(
-        &request
-            .agent_authority_service_resolution
-            .normalized_did_document,
-    )
-    .map_err(|_| not_found())?;
+    let carried_document =
+        serde_json::to_value(&request.agent_authority_resolution.normalized_did_document)
+            .map_err(|_| not_found())?;
     let resolved_evidence = resolved.accepted.evidence_receipt();
     let carried_evidence = serde_json::to_value(
         request
-            .agent_authority_service_resolution
+            .agent_authority_resolution
             .method_history_evidence
             .evidence(),
     )
@@ -267,7 +264,7 @@ async fn authenticate_agent_authority_request(
         return Err(not_found());
     }
 
-    let resolution = &request.agent_authority_service_resolution;
+    let resolution = &request.agent_authority_resolution;
     arkret_signatures::service_resolution::verify_authenticated_service_resolution(
         resolution,
         &request.agent_authority_id,
@@ -316,15 +313,15 @@ async fn authenticate_agent_authority_request(
     {
         return Err(not_found());
     }
-    let public_base = depot.url_builder()?.http_base();
-    let authority = public_base
+    let public_base_url = depot.url_builder()?.http_base();
+    let authority = public_base_url
         .host_str()
-        .map(|host| match public_base.port() {
+        .map(|host| match public_base_url.port() {
             Some(port) => format!("{host}:{port}"),
             None => host.to_owned(),
         })
         .ok_or_else(not_found)?;
-    let target_uri = public_base
+    let target_uri = public_base_url
         .join(req.uri().path().trim_start_matches('/'))
         .map_err(|_| not_found())?;
     let headers = req.headers().iter().filter_map(|(name, value)| {

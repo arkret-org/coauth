@@ -1,5 +1,6 @@
 //! PostgreSQL implementation of the Circle capability grant repository.
 
+use arkret_identifiers::DidCoreId;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::circle_capability::{
@@ -37,7 +38,7 @@ struct CircleCapabilityGrantRow {
     realm_id: String,
     action: String,
     allowed_circle_ids: Vec<String>,
-    granted_by: String,
+    granted_by: DidCoreId,
     granted_at: DateTime<Utc>,
     revoked_at: Option<DateTime<Utc>>,
 }
@@ -80,7 +81,7 @@ struct InsertableCircleCapabilityGrant {
     realm_id: String,
     action: String,
     allowed_circle_ids: Vec<String>,
-    granted_by: String,
+    granted_by: DidCoreId,
     granted_at: DateTime<Utc>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -204,7 +205,7 @@ mod tests {
             allowed_circle_ids: vec![
                 arkret_identifiers::CircleId::from_event_id(&event_id).to_string(),
             ],
-            granted_by: "did:web:admin.example".to_owned(),
+            granted_by: DidCoreId::new("ak:did_core:web:admin.example".to_owned()).unwrap(),
         }
     }
 

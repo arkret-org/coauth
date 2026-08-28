@@ -32,7 +32,7 @@ pub struct OidcUserinfoClaims {
     pub preferred_username: Option<String>,
     #[serde(rename = "org.arkret.principal_id")]
     #[serde(default)]
-    pub principal_id: Option<String>,
+    pub principal_id: Option<arkret_identifiers::DidCoreId>,
     #[serde(rename = "org.arkret.session_id")]
     #[serde(default)]
     pub session_id: Option<String>,
@@ -169,7 +169,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
             .filter(|provider| provider.client_id == client_id)
             .find(|provider| {
                 provider
-                    .issuer
+                    .oidc_issuer_uri
                     .as_deref()
                     .and_then(|issuer| issuer.parse::<Url>().ok())
                     .is_some_and(|provider_issuer| &provider_issuer == issuer)
@@ -223,7 +223,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
             }
             UpstreamOidcExchangeMode::Federated { provider } => {
                 let provider_issuer = provider
-                    .issuer
+                    .oidc_issuer_uri
                     .as_deref()
                     .ok_or_else(|| "federated upstream provider is missing issuer".to_owned())?;
                 if discovered_metadata.issuer() != provider_issuer {
@@ -338,7 +338,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
             )
         })?;
         Ok(UpstreamOidcSessionGrantTarget {
-            audience: grant_target.audience_id,
+            audience: grant_target.audience_id.to_string(),
             principal_server_name: grant_target.principal_server_name,
             principal_server_endpoint: grant_target.principal_server_endpoint,
         })

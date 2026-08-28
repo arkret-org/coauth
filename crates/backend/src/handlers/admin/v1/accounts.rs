@@ -14,7 +14,7 @@ pub mod update;
 #[cfg(test)]
 mod api_tests;
 
-use arkret_identifiers::{Did, project_did_to_core_id};
+use arkret_identifiers::project_did_to_core_id;
 use coauth_admin_types::{
     AdminAccountAttributes, AdminAccountClaimRecord as AccountClaimRecord,
     AdminAccountClaimsOutcome as AccountClaimsOutcome, AdminAccountStatus as AccountStatus,
@@ -84,19 +84,11 @@ impl AccountRecord {
             primary_did_for_user(&mut repo, &user, &arkret_config, did_resolver.as_ref())
                 .await?
                 .map(|did| {
-                    Did::new(did)
-                        .map_err(|error| {
-                            AppError::internal(std::io::Error::other(format!(
-                                "stored primary DID is invalid: {error}"
-                            )))
-                        })
-                        .and_then(|did| {
-                            project_did_to_core_id(&did).map_err(|error| {
-                                AppError::internal(std::io::Error::other(format!(
-                                    "stored primary DID cannot project to a principal id: {error}"
-                                )))
-                            })
-                        })
+                    project_did_to_core_id(&did).map_err(|error| {
+                        AppError::internal(std::io::Error::other(format!(
+                            "stored primary DID cannot project to a principal id: {error}"
+                        )))
+                    })
                 })
                 .transpose()?;
         let principal_ids = primary_principal_id.iter().cloned().collect();
@@ -1033,20 +1025,20 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
         assert_eq!(body["approval_state"], "draft");
-        let authenticated_admin_did = body["approved_by"].as_str().unwrap().to_owned();
+        let authenticated_admin_id = body["approved_by"].as_str().unwrap().to_owned();
 
         let persisted = proposals.get(proposal_ulid).await.unwrap().unwrap();
         assert_eq!(persisted.required_approvals, 2);
         assert_eq!(persisted.state.as_str(), "draft");
         assert_eq!(persisted.approval_proofs.len(), 1);
         assert_eq!(
-            persisted.approval_proofs[0].admin_did,
-            authenticated_admin_did
+            persisted.approval_proofs[0].admin_id.as_str(),
+            authenticated_admin_id
         );
 
         for forged_approved_by in [
-            "did:web:forged-admin-one.example",
-            "did:web:forged-admin-two.example",
+            "ak:did_core:web:forged-admin-one.example",
+            "ak:did_core:web:forged-admin-two.example",
         ] {
             let response = state
                 .request(
@@ -1070,8 +1062,8 @@ mod tests {
             assert_eq!(persisted.state.as_str(), "draft");
             assert_eq!(persisted.approval_proofs.len(), 1);
             assert_eq!(
-                persisted.approval_proofs[0].admin_did,
-                authenticated_admin_did
+                persisted.approval_proofs[0].admin_id.as_str(),
+                authenticated_admin_id
             );
         }
 
@@ -1179,7 +1171,7 @@ mod tests {
         let mut repo = state.repository().await.unwrap();
         let binding = repo
             .principal_did()
-            .get_by_did(admin_did)
+            .get_by_principal_id(admin_did)
             .await
             .unwrap()
             .expect("admin principal binding should be seeded");

@@ -230,7 +230,8 @@ CREATE TABLE public.recovery_completion_grant_issuances (
     canonical_request bytea NOT NULL,
     session_grant_operation_id uuid NOT NULL,
     canonical_outcome bytea NOT NULL,
-    issued_at timestamp with time zone NOT NULL
+    issued_at timestamp with time zone NOT NULL,
+    CONSTRAINT recovery_completion_grant_issuances_principal_core_valid CHECK (principal_id ~ '^ak:did_core:[a-z0-9]+:[^[:space:]/?#]+$')
 );
 
 CREATE TABLE public.admin_operation_logs (
@@ -563,6 +564,7 @@ CREATE TABLE public.oauth_session_grants (
     user_session_id uuid,
     issuer_id text NOT NULL,
     subject_id text NOT NULL,
+    service_account_id text NOT NULL,
     device_id text,
     applet_id text,
     effective_scope jsonb,
@@ -588,6 +590,7 @@ CREATE TABLE public.oauth_session_grants (
     ,CONSTRAINT oauth_session_grants_issuance_digest_valid CHECK ((octet_length(issuance_digest) = 32) AND (substring(grant_id from 2 for 32) = issuance_digest))
     ,CONSTRAINT oauth_session_grants_nonce_valid CHECK ((issuance_nonce ~ '^[A-Za-z0-9_-]{43}$'::text))
     ,CONSTRAINT oauth_session_grants_session_id_nonempty CHECK ((btrim(session_id) <> ''::text))
+    ,CONSTRAINT oauth_session_grants_service_account_id_valid CHECK ((btrim(service_account_id) <> ''::text) AND (length(service_account_id) <= 255) AND (service_account_id !~ '^(ak|did):'::text))
     ,CONSTRAINT oauth_session_grants_signing_key_id_nonempty CHECK ((btrim(signing_key_id) <> ''::text))
     ,CONSTRAINT oauth_session_grants_lifecycle_valid CHECK ((lifecycle_state = ANY (ARRAY['active'::text, 'revoked'::text, 'superseded'::text])) AND (((lifecycle_state = 'active'::text) AND (revoked_at IS NULL) AND (superseded_at IS NULL) AND (successor_grant_id IS NULL)) OR ((lifecycle_state = 'revoked'::text) AND (revoked_at IS NOT NULL) AND (superseded_at IS NULL) AND (successor_grant_id IS NULL)) OR ((lifecycle_state = 'superseded'::text) AND (revoked_at IS NULL) AND (superseded_at IS NOT NULL) AND (successor_grant_id IS NOT NULL))))
     ,CONSTRAINT oauth_session_grants_successor_id_valid CHECK (((successor_grant_id IS NULL) OR ((octet_length(successor_grant_id) = 33) AND (get_byte(successor_grant_id, 0) = 1))))
@@ -679,6 +682,7 @@ CREATE TABLE public.controller_gate_attestation_issuances (
     retained_until timestamp with time zone NOT NULL,
     created_at timestamp with time zone NOT NULL,
     committed_at timestamp with time zone,
+    CONSTRAINT controller_gate_principal_core_valid CHECK (principal_id ~ '^ak:did_core:[a-z0-9]+:[^[:space:]/?#]+$'),
     CONSTRAINT controller_gate_intent_digest_valid CHECK (canonical_intent_digest ~ '^sha256:[0-9a-f]{64}$'),
     CONSTRAINT controller_gate_outcome_shape CHECK ((canonical_outcome IS NULL AND outcome_digest IS NULL AND attestation_expires_at IS NULL AND committed_at IS NULL) OR (canonical_outcome IS NOT NULL AND outcome_digest ~ '^sha256:[0-9a-f]{64}$' AND attestation_expires_at IS NOT NULL AND committed_at IS NOT NULL)),
     CONSTRAINT controller_gate_retention_valid CHECK (retained_until > created_at)
@@ -816,7 +820,7 @@ CREATE TABLE public.identity_binding_challenges (
     lease_fence bigint NOT NULL,
     dpop_jkt text NOT NULL,
     audience_id text NOT NULL,
-    origin_uri text NOT NULL,
+    origin text NOT NULL,
     trust_domain text NOT NULL,
     issued_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
@@ -859,7 +863,7 @@ CREATE TABLE public.did_binding_challenges (
     challenge text NOT NULL,
     dpop_jkt text NOT NULL,
     audience_id text NOT NULL,
-    origin_uri text NOT NULL,
+    origin text NOT NULL,
     trust_domain text NOT NULL,
     issued_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
@@ -897,7 +901,7 @@ CREATE TABLE public.identity_abandonment_challenges (
     did_version_id text NOT NULL,
     challenge_id text NOT NULL UNIQUE,
     challenge text NOT NULL,
-    origin_uri text NOT NULL,
+    origin text NOT NULL,
     trust_domain text NOT NULL,
     issued_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
@@ -905,6 +909,7 @@ CREATE TABLE public.identity_abandonment_challenges (
     confirmation_request_id uuid UNIQUE,
     confirmation_request_digest text,
     outcome jsonb,
+    CONSTRAINT identity_abandonment_principal_core_valid CHECK ((principal_id ~ '^ak:did_core:[a-z0-9]+:[^[:space:]/?#]+$'::text)),
     CONSTRAINT identity_abandonment_request_digest_valid CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT identity_abandonment_account_subject_valid CHECK ((account_subject ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT identity_abandonment_holder_jkt_valid CHECK ((holder_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
@@ -925,6 +930,7 @@ CREATE TABLE public.identity_orphan_anchor_tombstones (
     account_subject text NOT NULL,
     abandonment_request_id uuid NOT NULL UNIQUE,
     abandoned_at timestamp with time zone NOT NULL,
+    CONSTRAINT identity_orphan_anchor_principal_core_valid CHECK ((principal_id ~ '^ak:did_core:[a-z0-9]+:[^[:space:]/?#]+$'::text)),
     CONSTRAINT identity_orphan_anchor_version_nonempty CHECK ((btrim(did_version_id) <> ''::text)),
     CONSTRAINT identity_orphan_anchor_account_subject_valid CHECK ((account_subject ~ '^sha256:[0-9a-f]{64}$'::text))
 );
@@ -971,7 +977,7 @@ CREATE TABLE public.risk_action_proposals (
     id uuid NOT NULL,
     account_id uuid NOT NULL,
     action text NOT NULL,
-    proposer_did text NOT NULL,
+    proposer_id text NOT NULL,
     reason text NOT NULL,
     ticket text,
     state text DEFAULT 'draft'::text NOT NULL,
@@ -983,7 +989,7 @@ CREATE TABLE public.risk_action_proposals (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT risk_action_proposals_action_non_empty CHECK ((btrim(action) <> ''::text)),
-    CONSTRAINT risk_action_proposals_proposer_did_non_empty CHECK ((btrim(proposer_did) <> ''::text)),
+    CONSTRAINT risk_action_proposals_proposer_id_format CHECK ((proposer_id ~ '^ak:did_core:[A-Za-z0-9._:%-]+$'::text)),
     CONSTRAINT risk_action_proposals_reason_non_empty CHECK ((btrim(reason) <> ''::text)),
     CONSTRAINT risk_action_proposals_required_approvals_positive CHECK ((required_approvals >= 1)),
     CONSTRAINT risk_action_proposals_state_valid CHECK ((state = ANY (ARRAY['draft'::text, 'approved'::text, 'executed'::text, 'cancelled'::text, 'rejected'::text])))
@@ -1065,7 +1071,7 @@ CREATE TABLE public.upstream_oauth_links (
 
 CREATE TABLE public.upstream_oauth_providers (
     id uuid NOT NULL,
-    issuer text,
+    oidc_issuer_uri text,
     scope text NOT NULL,
     client_id text NOT NULL,
     encrypted_client_secret text,

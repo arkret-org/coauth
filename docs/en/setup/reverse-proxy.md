@@ -8,7 +8,7 @@ In those configuration, the service should be configured to listen on `localhost
 
 ```yaml
 http:
-  public_base: https://auth.example.com/
+  public_base_url: https://auth.example.com/
   listeners:
     - name: web
       resources:

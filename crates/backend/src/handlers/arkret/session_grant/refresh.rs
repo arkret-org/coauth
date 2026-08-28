@@ -1,4 +1,4 @@
-use arkret_identifiers::{DeviceId, DidCoreId};
+use arkret_identifiers::{DeviceId, ServiceAccountId};
 use arkret_models_collaboration::session_grant_bodies::{
     HumanSessionGrantRefreshRequest, SessionGrantRefreshOutcome, SessionGrantRefreshRequestBody,
     session_grant_refresh_request_digest,
@@ -86,7 +86,7 @@ fn validate_human_refresh_before_reservation(
             "accepted-device refresh proof does not bind the predecessor, principal, device and holder key",
         ));
     }
-    if proof.audience_id.as_str() != prior_grant.audience_id {
+    if proof.audience_id != prior_grant.audience_id {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
@@ -98,8 +98,7 @@ fn validate_human_refresh_before_reservation(
             "accepted-device refresh proof is outside its validity window",
         ));
     }
-    let audience_id = DidCoreId::new(prior_grant.audience_id.clone())
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let audience_id = prior_grant.audience_id.clone();
     let expected_digest = session_grant_refresh_request_digest(
         &body.grant_jwt,
         &prior_grant.grant_id,
@@ -246,8 +245,8 @@ pub async fn refresh_session_grant(
     //    access token (so `ath` MUST match).
     let now = clock.now();
     let htm = req.method().as_str().to_ascii_uppercase();
-    let public_base = url_builder.http_base();
-    let htu = dpop_htu(&public_base, req);
+    let public_base_url = url_builder.http_base();
+    let htu = dpop_htu(&public_base_url, req);
     let verification =
         DpopVerifier::verify_without_replay(&dpop_header, &htm, &htu, now, Some(grant_jwt))
             .map_err(|error| {
@@ -294,7 +293,7 @@ pub async fn refresh_session_grant(
     // an exact retry is allowed to replay the already-minted successor after
     // the predecessor has become superseded.
     if let Some(requested) = requested_audience
-        && requested.as_str() != prior_grant.audience_id
+        && requested != &prior_grant.audience_id
     {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
@@ -556,22 +555,27 @@ pub async fn refresh_session_grant(
 
         let controller_binding = repo
             .principal_did()
-            .get_by_did_and_audience(
-                &authorization.accountable_principal_id,
+            .get_by_principal_id_and_audience(
+                authorization.accountable_principal_id.as_str(),
                 prior_grant.audience_id.as_str(),
             )
             .await
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+            .ok_or_else(|| {
+                ArkretRouteError::coded(
+                    StatusCode::UNAUTHORIZED,
+                    arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                    "accountable controller has no local service account binding",
+                )
+            })?;
+        let controller_user_id = controller_binding.user_id;
+        let user = repo
+            .user()
+            .lookup(controller_user_id)
+            .await
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-        let controller_blocked = if let Some(binding) = controller_binding {
-            let user = repo
-                .user()
-                .lookup(binding.user_id)
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-            user.is_some_and(|user| user.locked_at.is_some() || user.deactivated_at.is_some())
-        } else {
-            false
-        };
+        let controller_blocked =
+            user.is_none_or(|user| user.locked_at.is_some() || user.deactivated_at.is_some());
         if controller_blocked {
             repo.cancel().await.ok();
             return Err(ArkretRouteError::coded(
@@ -597,7 +601,9 @@ pub async fn refresh_session_grant(
             &issuance_seed,
             &arkret_config,
             &key_store,
-            prior_payload.subject_id.as_str(),
+            &prior_payload.subject_id,
+            ServiceAccountId::new(controller_user_id.to_string())
+                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
             &device_id,
             prior_grant.audience_id.clone(),
             scopes,
@@ -617,13 +623,10 @@ pub async fn refresh_session_grant(
             issuance_seed.expires_at,
         )
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-        let audience_id = DidCoreId::new(new_material.audience_id.clone()).map_err(|error| {
-            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                "refreshed Agent grant carried an invalid service core_id audience_id: {error}"
-            )))
-        })?;
+        let audience_id = new_material.audience_id.clone();
         let outcome = SessionGrantRefreshOutcome {
             session_grant_id: new_material.grant_id.clone(),
+            service_account_id: new_material.service_account_id.clone(),
             grant_jwt: new_material.grant_jwt.clone(),
             session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
                 &new_material.session_public_key,
@@ -814,7 +817,10 @@ pub async fn refresh_session_grant(
     // client-supplied audience_id; reject an explicit mismatch defensively.
     let principal_binding = repo
         .principal_did()
-        .get_by_did_and_audience(&prior_grant.subject_id, &prior_grant.audience_id)
+        .get_by_principal_id_and_audience(
+            prior_grant.subject_id.as_str(),
+            prior_grant.audience_id.as_str(),
+        )
         .await?
         .ok_or_else(|| refresh_proof_invalid("session grant principal authority is unavailable"))?;
     principal_binding
@@ -891,14 +897,11 @@ pub async fn refresh_session_grant(
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
-    let response_audience = DidCoreId::new(new_material.audience_id.clone()).map_err(|error| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "refreshed grant carried an invalid service core_id audience_id: {error}"
-        )))
-    })?;
+    let response_audience = new_material.audience_id.clone();
 
     let outcome = SessionGrantRefreshOutcome {
         session_grant_id: new_material.grant_id.clone(),
+        service_account_id: new_material.service_account_id.clone(),
         grant_jwt: new_material.grant_jwt.clone(),
         session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
             &new_material.session_public_key,

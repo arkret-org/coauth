@@ -16,7 +16,7 @@ sections you override and remove the untouched defaults.
 
 ## Sections you will almost always edit
 
-- `http.public_base`
+- `http.public_base_url`
 - `database`
 - `arkret.principal_servers`
 - `arkret.identity_registry`

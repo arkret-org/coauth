@@ -1086,7 +1086,7 @@ mod tests {
                 &mut rng,
                 &clock,
                 UpstreamOAuthProviderParams {
-                    issuer: Some("https://example.com/".to_owned()),
+                    oidc_issuer_uri: Some("https://example.com/".to_owned()),
                     human_name: Some("Example Ltd.".to_owned()),
                     brand_name: None,
                     scope: Scope::from_iter([coauth_oauth_types::scope::OPENID]),

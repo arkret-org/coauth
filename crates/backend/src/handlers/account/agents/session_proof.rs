@@ -80,10 +80,10 @@ const AGENT_CONTENT_SCOPE_ACTIONS: &[&str] = &[
 /// Outcome of validating an `agent_key_proof` session-grant request.
 pub struct AgentSessionAuthorization {
     /// Agent principal DID the proof authenticated.
-    pub agent_id: String,
+    pub agent_id: arkret_identifiers::DidCoreId,
     /// Controller principal DID accountable for the agent (spec
     /// `controller_id`, e.g. agent_pause/resume/deactivate payloads).
-    pub controller_id: String,
+    pub controller_id: arkret_identifiers::DidCoreId,
     /// Effective granted scope. Service-surface tokens are intersected with the
     /// authorized key scope and policy/resource constraints; content capability
     /// tokens are additionally intersected with active capability grants.
@@ -279,12 +279,12 @@ pub async fn validate_agent_session_proof(
     let now = clock.now();
     let proof = &body.proof;
 
-    let agent_id = body.principal_id.as_str().to_owned();
+    let agent_id = body.principal_id.as_str();
 
     // `proof.verification_method` MUST be present and its DID part MUST equal
     // the agent principal (AUTH-1, fail closed before crypto).
     let verification_method = proof.verification_method.as_str();
-    if let Err(error) = enforce_verification_method_binding(verification_method, &agent_id) {
+    if let Err(error) = enforce_verification_method_binding(verification_method, agent_id) {
         tracing::warn!(
             agent_id,
             verification_method,
@@ -293,7 +293,7 @@ pub async fn validate_agent_session_proof(
         return Err(error.into());
     }
     let device_id = &body.device_id;
-    if !agent_runtime_method_matches_endpoint(&agent_id, device_id, verification_method) {
+    if !agent_runtime_method_matches_endpoint(agent_id, device_id, verification_method) {
         tracing::warn!(
             agent_id,
             verification_method,
@@ -365,7 +365,7 @@ pub async fn validate_agent_session_proof(
     if let Err(error) = validate_agent_key_authorization_binding(
         &authorization,
         now,
-        &agent_id,
+        agent_id,
         verification_method,
         proof.audience_id.as_str(),
     ) {
@@ -422,7 +422,7 @@ pub async fn validate_agent_session_proof(
             rng,
             clock,
             NewAgentSessionProofReplay {
-                agent_id: agent_id.clone(),
+                agent_id: agent_id.to_owned(),
                 verification_method: verification_method.to_owned(),
                 challenge: proof.challenge.clone(),
                 nonce: nonce.to_owned(),
@@ -594,7 +594,7 @@ pub async fn validate_agent_session_proof(
             realm_ids: wire_realm_ids,
             strand_ids: wire_strand_ids,
             track_names: effective_scope.allowed_tracks.clone(),
-            participation: scope_request.participation.clone(),
+            agent_participation_entries: scope_request.participation.clone(),
         };
 
     // TTL: cap to the spec ceiling (≤ 15 min), never wider than the
@@ -607,7 +607,7 @@ pub async fn validate_agent_session_proof(
     };
 
     Ok(AgentSessionAuthorization {
-        agent_id,
+        agent_id: body.principal_id.clone(),
         controller_id,
         granted_scope: effective_scope.granted_scope,
         scope_details,
@@ -678,7 +678,7 @@ fn validate_authoritative_agent_session_evidence(
         .ok_or(AgentAuthRejection::PolicyUnavailable)?;
     if view.agent.agent_id.as_str() != authorization.agent_id
         || key_state.agent_id.as_str() != authorization.agent_id
-        || key_state.controller_id.as_str() != authorization.accountable_principal_id
+        || key_state.controller_id.as_str() != authorization.accountable_principal_id.as_str()
         || !key_state.active_authorizations.iter().any(|active| {
             active.authorized_event_ref.as_str() == authorization.authorized_event_id
                 && active.verification_method.as_str() == authorization.verification_method
@@ -703,7 +703,7 @@ fn validate_authoritative_agent_session_evidence(
         || paired_request.authorize_event.event.event_id.as_str()
             != authorization.authorized_event_id
         || disclosure.agent_id.as_str() != authorization.agent_id
-        || disclosure.controller_id.as_str() != authorization.accountable_principal_id
+        || disclosure.controller_id.as_str() != authorization.accountable_principal_id.as_str()
         || disclosure.requested_scope != key_state.requested_scope
     {
         return Err(AgentAuthRejection::AgentRequestedScopeCommitmentInvalid);
@@ -1671,7 +1671,10 @@ mod tests {
                 "controller": "did:web:agent.example",
                 "publicKeyMultibase": "z6MksG8zH7ZkUVGqdnqQWUV7s6jVMrptHToH6aQahJ2HWaW1",
             }),
-            accountable_principal_id: "ak:did_core:web:controller.example".to_owned(),
+            accountable_principal_id: arkret_identifiers::DidCoreId::new(
+                "ak:did_core:web:controller.example",
+            )
+            .unwrap(),
             agent_key_scope: canonical_agent_key_scope(),
             audience: vec!["https://arkret.example/_arkret".to_owned()],
             issued_at: now,

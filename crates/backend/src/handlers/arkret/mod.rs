@@ -721,13 +721,13 @@ pub(crate) async fn principal_id_for_user<R>(
     repo: &mut R,
     arkret_config: &ArkretConfig,
     user: &User,
-) -> Result<Option<String>, R::Error>
+) -> Result<Option<arkret_identifiers::DidCoreId>, R::Error>
 where
     R: RepositoryAccess,
 {
     Ok(principal_did_binding_for_user(repo, arkret_config, user)
         .await?
-        .map(|binding| binding.principal_id.to_string()))
+        .map(|binding| binding.principal_id))
 }
 
 /// Persisted stable principal identity that is allowed to leave the Account Authority.
@@ -735,7 +735,7 @@ pub(crate) async fn published_principal_id_for_user<R>(
     repo: &mut R,
     arkret_config: &ArkretConfig,
     user: &User,
-) -> Result<Option<String>, R::Error>
+) -> Result<Option<arkret_identifiers::DidCoreId>, R::Error>
 where
     R: RepositoryAccess,
 {
@@ -888,7 +888,7 @@ pub(crate) fn password_login_session_grant_target(
             })
         {
             return Ok(SessionGrantTarget {
-                audience_id: effective.to_string(),
+                audience_id: effective,
                 principal_server_name: Some(server.name.clone()),
                 principal_server_endpoint: Some(server.endpoint.to_string()),
             });
@@ -912,8 +912,7 @@ pub(crate) fn password_login_session_grant_target(
         // rather than minting a grant with an audience that cannot be bound.
         [server] => Ok(SessionGrantTarget {
             audience_id: effective_audience(server, resolved)
-                .ok_or(SessionGrantTargetError::UnknownAudience)?
-                .to_string(),
+                .ok_or(SessionGrantTargetError::UnknownAudience)?,
             principal_server_name: Some(server.name.clone()),
             principal_server_endpoint: Some(server.endpoint.to_string()),
         }),
@@ -963,7 +962,7 @@ pub struct DebugIssueDpopGrantRequestBody {
     pub device_id: String,
     pub dpop_jwk: serde_json::Value,
     #[serde(default)]
-    pub audience: Option<String>,
+    pub audience_id: Option<arkret_identifiers::DidCoreId>,
     #[serde(default)]
     pub scopes: Option<Vec<String>>,
 }
@@ -973,11 +972,11 @@ pub struct DebugIssueDpopGrantOutcome {
     pub grant_id: String,
     pub grant_jwt: String,
     pub dpop_jkt: String,
-    pub audience: String,
+    pub audience_id: arkret_identifiers::DidCoreId,
     pub scopes: Vec<String>,
     pub expires_at: String,
     /// Verified principal DID this grant is bound to.
-    pub principal_id: String,
+    pub principal_id: arkret_identifiers::DidCoreId,
 }
 
 /// Byte-preserving response used by the live issuer-ledger fault seam.
@@ -1045,14 +1044,23 @@ pub async fn debug_issue_dpop_grant(
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
 
-    let audience = body
-        .audience
+    let audience_id = body
+        .audience_id
         .clone()
-        .unwrap_or_else(|| required_audience_for(&url_builder, &arkret_config));
+        .map_or_else(
+            || {
+                arkret_identifiers::DidCoreId::new(required_audience_for(
+                    &url_builder,
+                    &arkret_config,
+                ))
+            },
+            Ok,
+        )
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
     let mut repo = depot.repo().await?;
     let binding = repo
         .principal_did()
-        .get_by_did_and_audience(body.actor_id.trim(), &audience)
+        .get_by_principal_id_and_audience(body.actor_id.trim(), audience_id.as_str())
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .ok_or_else(|| {
@@ -1183,11 +1191,11 @@ pub async fn debug_issue_dpop_grant(
         &key_store,
         &browser_session,
         public_jwk,
-        audience,
+        audience_id,
         arkret_identifiers::DeviceId::new(body.device_id.clone())
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         scopes,
-        Some(principal_id.as_str()),
+        Some(&principal_id),
         &principal_authority,
         jkt.clone(),
         arkret_models_identity::SessionGrantDeviceBinding {
@@ -1206,10 +1214,10 @@ pub async fn debug_issue_dpop_grant(
         grant_id: material.grant_id.to_string(),
         grant_jwt: material.grant_jwt.clone(),
         dpop_jkt: jkt,
-        audience: material.audience_id.clone(),
+        audience_id: material.audience_id.clone(),
         scopes: material.scopes.clone(),
         expires_at: material.expires_at.clone(),
-        principal_id: principal_id.to_string(),
+        principal_id,
     };
     let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;

@@ -1,5 +1,6 @@
 //! PostgreSQL implementation of the accountability grant repository.
 
+use arkret_identifiers::DidCoreId;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::accountability::{
@@ -63,22 +64,26 @@ mod tests {
         )
     }
 
-    fn agent_id(label: &str) -> String {
-        format!("ak:did_core:web:{label}-agent.example")
+    fn core_id(value: impl Into<String>) -> DidCoreId {
+        DidCoreId::new(value.into()).expect("valid DidCoreId fixture")
+    }
+
+    fn agent_id(label: &str) -> DidCoreId {
+        core_id(format!("ak:did_core:web:{label}-agent.example"))
     }
 
     fn sample_new(
         rng: &mut impl RngCore,
         clock: &dyn Clock,
         label: &str,
-        agent: &str,
-        controller: &str,
+        agent: &DidCoreId,
+        controller: &DidCoreId,
     ) -> NewAccountabilityGrant {
         let now = clock.now();
         NewAccountabilityGrant {
             accountability_grant_id: grant_id(rng, clock),
-            agent_id: agent.to_owned(),
-            controller_id: controller.to_owned(),
+            agent_id: agent.clone(),
+            controller_id: controller.clone(),
             capabilities: vec!["ak.self.agent.command.provision.v1".to_owned()],
             capabilities_digest: digest(label),
             reason: Some("test grant".to_owned()),
@@ -109,7 +114,7 @@ mod tests {
         let mut rng = ChaChaRng::seed_from_u64(42);
         let label = unique_label("duplicate");
         let agent = agent_id(&label);
-        let controller = format!("ak:did_core:web:{label}.example");
+        let controller = core_id(format!("ak:did_core:web:{label}.example"));
 
         let grant = sample_new(&mut rng, &clock, &label, &agent, &controller);
         repo.accountability_grant()
@@ -142,7 +147,7 @@ mod tests {
         let mut rng = ChaChaRng::seed_from_u64(43);
         let label = unique_label("fanout");
         let agent = agent_id(&label);
-        let controller = format!("ak:did_core:web:{label}.example");
+        let controller = core_id(format!("ak:did_core:web:{label}.example"));
         let grant_input = sample_new(&mut rng, &clock, &label, &agent, &controller);
         let grant = repo
             .accountability_grant()
@@ -198,7 +203,7 @@ mod tests {
         let mut rng = ChaChaRng::seed_from_u64(45);
         let label = unique_label("durable");
         let agent = agent_id(&label);
-        let controller = format!("ak:did_core:web:{label}.example");
+        let controller = core_id(format!("ak:did_core:web:{label}.example"));
 
         let mut repo = factory.create().await.unwrap();
         let grant_input = sample_new(&mut rng, &clock, &label, &agent, &controller);
@@ -246,10 +251,10 @@ mod tests {
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(44);
         let label = unique_label("revocation");
-        let controller = format!("ak:did_core:web:{label}.example");
-        let other_controller = format!("ak:did_core:web:{label}-other.example");
-        let agent_one = format!("ak:did_core:web:{label}-agent-one.example");
-        let agent_two = format!("ak:did_core:web:{label}-agent-two.example");
+        let controller = core_id(format!("ak:did_core:web:{label}.example"));
+        let other_controller = core_id(format!("ak:did_core:web:{label}-other.example"));
+        let agent_one = core_id(format!("ak:did_core:web:{label}-agent-one.example"));
+        let agent_two = core_id(format!("ak:did_core:web:{label}-agent-two.example"));
 
         let grant_one_input = sample_new(
             &mut rng,
@@ -341,8 +346,8 @@ mod tests {
 struct AccountabilityGrantRow {
     id: Uuid,
     accountability_grant_id: String,
-    agent_id: String,
-    controller_id: String,
+    agent_id: DidCoreId,
+    controller_id: DidCoreId,
     capabilities: Vec<String>,
     capabilities_digest: String,
     reason: Option<String>,
@@ -401,8 +406,8 @@ impl TryFrom<AccountabilityGrantRow> for AccountabilityGrant {
 struct InsertableAccountabilityGrant {
     id: Uuid,
     accountability_grant_id: String,
-    agent_id: String,
-    controller_id: String,
+    agent_id: DidCoreId,
+    controller_id: DidCoreId,
     capabilities: Vec<String>,
     capabilities_digest: String,
     reason: Option<String>,
@@ -423,7 +428,7 @@ struct InsertableAccountabilityGrant {
 struct SubjectRevocationRow {
     id: Uuid,
     subject_kind: String,
-    subject_id: String,
+    subject_id: DidCoreId,
     reason: String,
     revoked_at: DateTime<Utc>,
     created_at: DateTime<Utc>,
@@ -459,7 +464,7 @@ impl TryFrom<SubjectRevocationRow> for AccountabilitySubjectRevocation {
 struct InsertableSubjectRevocation {
     id: Uuid,
     subject_kind: String,
-    subject_id: String,
+    subject_id: DidCoreId,
     reason: String,
     revoked_at: DateTime<Utc>,
     created_at: DateTime<Utc>,
@@ -557,8 +562,8 @@ impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
     )]
     async fn find_active_by_fingerprint(
         &mut self,
-        agent_id: &str,
-        controller_id: &str,
+        agent_id: &DidCoreId,
+        controller_id: &DidCoreId,
         capabilities_digest: &str,
     ) -> Result<Option<AccountabilityGrant>, Self::Error> {
         accountability_grants::table
@@ -583,7 +588,7 @@ impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
     async fn list_active_for_subject(
         &mut self,
         subject_kind: AccountabilitySubjectKind,
-        subject_id: &str,
+        subject_id: &DidCoreId,
     ) -> Result<Vec<AccountabilityGrant>, Self::Error> {
         let mut query = accountability_grants::table
             .filter(accountability_grants::revoked_at.is_null())
@@ -614,7 +619,7 @@ impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
         &mut self,
         clock: &dyn Clock,
         subject_kind: AccountabilitySubjectKind,
-        subject_id: &str,
+        subject_id: &DidCoreId,
         reason: &str,
     ) -> Result<usize, Self::Error> {
         let now = clock.now();
@@ -652,7 +657,7 @@ impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
         subject_kind: AccountabilitySubjectKind,
-        subject_id: &str,
+        subject_id: &DidCoreId,
         reason: &str,
     ) -> Result<AccountabilitySubjectRevocation, Self::Error> {
         let now = clock.now();
@@ -660,7 +665,7 @@ impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
         let row = InsertableSubjectRevocation {
             id: Uuid::from(id),
             subject_kind: subject_kind.to_string(),
-            subject_id: subject_id.to_owned(),
+            subject_id: subject_id.clone(),
             reason: reason.to_owned(),
             revoked_at: now,
             created_at: now,
@@ -696,7 +701,7 @@ impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
     async fn subject_revoked(
         &mut self,
         subject_kind: AccountabilitySubjectKind,
-        subject_id: &str,
+        subject_id: &DidCoreId,
     ) -> Result<bool, Self::Error> {
         let count: i64 = accountability_subject_revocations::table
             .filter(accountability_subject_revocations::subject_kind.eq(subject_kind.to_string()))

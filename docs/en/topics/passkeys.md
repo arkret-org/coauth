@@ -63,7 +63,7 @@ configure a wildcard credentialed CORS policy in front of these routes.
 Before enabling Passkeys in production, verify all of the following:
 
 - the browser-facing URL uses HTTPS (only literal `localhost` development may
-  use HTTP), remains stable, and exactly matches `http.public_base`;
+  use HTTP), remains stable, and exactly matches `http.public_base_url`;
 - the public hostname is the intended RP ID and is not an IP literal;
 - the reverse proxy preserves the configured external scheme and host, accepts
   Passkey account routes only from the same browser origin, and does not replace

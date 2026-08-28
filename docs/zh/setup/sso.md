@@ -11,42 +11,42 @@ coauth 支持把外部身份提供商接入为 upstream，用于登录、注册�
 
 ## 先确定 callback URL
 
-上游提供商后台里要登记的回调地址，不是手写一个固定模板，而是由 **`http.public_base` + provider `id`** 计算出来的。
+上游提供商后台里要登记的回调地址，不是手写一个固定模板，而是由 **`http.public_base_url` + provider `id`** 计算出来的。
 
 格式是：
 
 ```text
-<http.public_base>/upstream/callback/<provider-id>
+<http.public_base_url>/upstream/callback/<provider-id>
 ```
 
 其中：
 
-- `http.public_base` 必须是外部用户和第三方提供商都能访问到的公网地址
+- `http.public_base_url` 必须是外部用户和第三方提供商都能访问到的公网地址
 - `<provider-id>` 就是 `upstream_oauth.providers[].id`，必须和配置文件里的值完全一致
-- 如果 `http.public_base` 带有路径前缀，这个前缀也必须保留在 callback URL 里
+- 如果 `http.public_base_url` 带有路径前缀，这个前缀也必须保留在 callback URL 里
 
 例如：
 
-- `http.public_base: https://auth.example.com/`
+- `http.public_base_url: https://auth.example.com/`
   callback URL: `https://auth.example.com/upstream/callback/01JABCDEF0123456789ABCDEFG`
-- `http.public_base: https://example.com/coauth/`
+- `http.public_base_url: https://example.com/coauth/`
   callback URL: `https://example.com/coauth/upstream/callback/01JABCDEF0123456789ABCDEFG`
 
 如果 provider 支持 OpenID Connect Back-Channel Logout，对应地址是：
 
 ```text
-<http.public_base>/upstream/backchannel-logout/<provider-id>
+<http.public_base_url>/upstream/backchannel-logout/<provider-id>
 ```
 
 注意这几个常见误区：
 
 - 在 Google / GitHub 后台登记的是 `/upstream/callback/<provider-id>`，不是 `/upstream/authorize/<provider-id>`
 - callback URL 必须和 provider 后台登记的值完全一致，域名、协议、端口、路径前缀都不能错
-- 不要把内网地址、容器内部地址或 `localhost` 当作 `http.public_base`，除非第三方平台真的能访问它
+- 不要把内网地址、容器内部地址或 `localhost` 当作 `http.public_base_url`，除非第三方平台真的能访问它
 
 ## 通用配置步骤
 
-1. 先确定 `http.public_base`
+1. 先确定 `http.public_base_url`
 2. 为每个 upstream 生成一个唯一 `id`，格式必须是 ULID
 3. 用这个 `id` 计算 callback URL，并登记到 Google / GitHub / 其他 provider 后台
 4. 把 provider 的 `client_id`、`client_secret` 和必要端点写进 `upstream_oauth.providers`
@@ -184,10 +184,10 @@ upstream_oauth:
 
 GitLab、Keycloak、Authentik、Azure AD 等标准 OIDC 提供商，原则上都遵循同一套规则：
 
-- callback URL 一律是 `<http.public_base>/upstream/callback/<provider-id>`
+- callback URL 一律是 `<http.public_base_url>/upstream/callback/<provider-id>`
 - `issuer` 必须精确匹配 provider 公布的 issuer
 - 大多数情况下使用 `scope: "openid profile email"`
-- 如果 provider 支持 backchannel logout，可额外登记 `<http.public_base>/upstream/backchannel-logout/<provider-id>`
+- 如果 provider 支持 backchannel logout，可额外登记 `<http.public_base_url>/upstream/backchannel-logout/<provider-id>`
 
 这些 provider 的更完整英文示例可以参考英文文档：[docs/en/setup/sso.md](../../en/setup/sso.md)
 
@@ -221,7 +221,7 @@ GitLab、Keycloak、Authentik、Azure AD 等标准 OIDC 提供商，原则上都
 
 ## 故障排查
 
-- 登录按钮点了后跳转错误：优先检查 provider 后台登记的 callback URL 是否和 `http.public_base` 实际推导出来的地址完全一致
+- 登录按钮点了后跳转错误：优先检查 provider 后台登记的 callback URL 是否和 `http.public_base_url` 实际推导出来的地址完全一致
 - Google 返回 `redirect_uri_mismatch`：通常是 callback URL 少了路径前缀、端口不一致，或 `<provider-id>` 填错
 - GitHub 回调后 400：通常是 `discovery_mode` 没关，或者 `subject` 仍然在用默认的 `{{ user.sub }}`
 - OIDC discovery 失败：检查 `issuer` 是否和 provider 元数据里的 `issuer` 精确一致

@@ -2,6 +2,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use arkret_identifiers::Did;
 use async_trait::async_trait;
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, RepositoryAccess, UrlBuilder, User};
@@ -223,8 +224,8 @@ fn verified_webvh_document_at(
 
 #[async_trait]
 pub trait DidResolverService: Send + Sync {
-    fn service_id(&self, arkret_config: &ArkretConfig) -> String;
-    fn issuer_did(&self, arkret_config: &ArkretConfig) -> String;
+    fn service_id(&self, arkret_config: &ArkretConfig) -> arkret_identifiers::DidCoreId;
+    fn issuer_did(&self, arkret_config: &ArkretConfig) -> Did;
     /// The resolver egress posture injected at startup. Shared by every fetch
     /// path — including the free-function historical service-document
     /// verifier — so no path falls back to process-wide environment state.
@@ -237,7 +238,7 @@ pub trait DidResolverService: Send + Sync {
         repo: &mut BoxRepository,
         arkret_config: &ArkretConfig,
         user: &User,
-    ) -> Result<String, SessionGrantError>;
+    ) -> Result<Did, SessionGrantError>;
     fn delegated_resolver(&self, arkret_config: &ArkretConfig) -> Option<String>;
     fn proof_required_for_pairwise(&self, arkret_config: &ArkretConfig) -> bool;
 
@@ -277,12 +278,12 @@ pub struct DefaultDidResolverService {
 
 #[async_trait]
 impl DidResolverService for DefaultDidResolverService {
-    fn service_id(&self, arkret_config: &ArkretConfig) -> String {
-        service_id_for(arkret_config).to_string()
+    fn service_id(&self, arkret_config: &ArkretConfig) -> arkret_identifiers::DidCoreId {
+        service_id_for(arkret_config)
     }
 
-    fn issuer_did(&self, arkret_config: &ArkretConfig) -> String {
-        issuer_did_for(arkret_config).to_string()
+    fn issuer_did(&self, arkret_config: &ArkretConfig) -> Did {
+        issuer_did_for(arkret_config)
     }
 
     fn resolver_egress_policy(&self) -> &ResolverEgressPolicy {
@@ -294,7 +295,7 @@ impl DidResolverService for DefaultDidResolverService {
         repo: &mut BoxRepository,
         arkret_config: &ArkretConfig,
         user: &User,
-    ) -> Result<String, SessionGrantError> {
+    ) -> Result<Did, SessionGrantError> {
         for server in &arkret_config.principal_servers {
             let Some(audience) =
                 crate::services::principal_server_trust::effective_audience_shared(server)
@@ -307,7 +308,7 @@ impl DidResolverService for DefaultDidResolverService {
                 .await
                 .map_err(|error| SessionGrantError::Other(error.into()))?
             {
-                return Ok(binding.verified_did.to_string());
+                return Ok(binding.verified_did);
             }
         }
         Err(SessionGrantError::PrincipalUnknown)

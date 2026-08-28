@@ -99,7 +99,7 @@ fn organization_controller_bootstrap_transcript_bytes(
 ) -> Result<Vec<u8>, AppError> {
     canonical_json_bytes(&OrganizationControllerBootstrapTranscript {
         kind: "org.arkret.coauth.organization_pcr.bootstrap.v1",
-        organization_did: &body.organization_did,
+        organization_did: body.organization_did.as_str(),
         principal_control_realm_id: &body.principal_control_realm_id,
         control_stream_ref: &body.control_stream_ref,
         pcr_frontier_digest: body.pcr_frontier_digest.as_deref(),
@@ -138,7 +138,7 @@ async fn verify_organization_controller_proof(
         repo,
         did_resolver.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),
-        &body.organization_did,
+        body.organization_did.as_str(),
         arkret_identity::DidBindingPurpose::OrganizationRegistry,
         crate::services::did_binding::high_risk_freshness(),
         crate::handlers::make_clock().now(),
@@ -158,7 +158,7 @@ async fn verify_organization_controller_proof(
         .iter()
         .find(|method| method.id == verification_method)
         .ok_or_else(|| AppError::bad_request("controller proof verification method not found"))?;
-    if method.controller != body.organization_did {
+    if method.controller != body.organization_did.as_str() {
         return Err(AppError::bad_request(
             "controller proof verification method is not controlled by the organization DID",
         ));
@@ -187,7 +187,6 @@ pub async fn bootstrap_handler(
         .await
         .map_err(|e| AppError::bad_request(format!("invalid bootstrap body: {e}")))?;
     // Validate the organization DID shape up front.
-    parse_did(&body.organization_did)?;
     let create_event_id = parse_control_stream_ref(&body.control_stream_ref)?;
     parse_frontier_digest(body.pcr_frontier_digest.as_deref())?;
     let supplied_realm_id = RealmId::new(body.principal_control_realm_id.clone())
@@ -200,22 +199,31 @@ pub async fn bootstrap_handler(
 
     let call_context = extract_call_context(req, depot).await?;
     // The authenticated admin / service principal is only the executor.
-    let executed_by = call_context
-        .user
-        .as_ref()
-        .map(|user| format!("user:{}", user.id));
+    let arkret_config = depot.arkret_config()?;
     let has_admin_session = call_context.session.user_id().is_some()
         || matches!(
             call_context.session,
             crate::handlers::admin::call_context::CallerSession::PersonalSession(_)
         );
     let mut repo = call_context.repo;
+    let executed_by = match call_context.user.as_ref() {
+        Some(user) => Some(
+            crate::handlers::arkret::published_principal_id_for_user(
+                &mut repo,
+                &arkret_config,
+                user,
+            )
+            .await?
+            .ok_or_else(|| AppError::conflict("admin account has no published principal_id"))?,
+        ),
+        None => None,
+    };
     let clock = call_context.clock;
     let now = clock.now();
 
     if repo
         .organization_control()
-        .get_control_by_did(&body.organization_did)
+        .get_control_by_did(body.organization_did.as_str())
         .await?
         .is_some()
     {
@@ -339,18 +347,25 @@ pub async fn record_delegation_handler(
     org_did: PathParam<String>,
 ) -> JsonResult<OrganizationDelegation> {
     let organization_did = org_did.into_inner();
-    parse_did(&organization_did)?;
+    let organization_did = parse_did(&organization_did)?;
     let body: RecordOrganizationDelegationRequest = req
         .parse_json()
         .await
         .map_err(|e| AppError::bad_request(format!("invalid delegation body: {e}")))?;
 
     let call_context = extract_call_context(req, depot).await?;
-    let created_by = call_context
-        .user
-        .as_ref()
-        .map_or_else(|| "service".to_owned(), |user| format!("user:{}", user.id));
+    let arkret_config = depot.arkret_config()?;
     let mut repo = call_context.repo;
+    let created_by = match call_context.user.as_ref() {
+        Some(user) => crate::handlers::arkret::published_principal_id_for_user(
+            &mut repo,
+            &arkret_config,
+            user,
+        )
+        .await?
+        .ok_or_else(|| AppError::conflict("admin account has no published principal_id"))?,
+        None => crate::handlers::arkret::service_id_for(&arkret_config),
+    };
     let clock = call_context.clock;
     let valid_from = body.valid_from.unwrap_or_else(|| clock.now());
 
@@ -546,9 +561,7 @@ pub async fn issue_statement_handler(
         .map_err(|e| AppError::bad_request(format!("invalid organization DID: {e}")))?;
     let issuer = match (&body.delegation_ref, &delegation) {
         (Some(_), Some(delegation)) => {
-            let did = Did::new(delegation.delegate_did.clone())
-                .map_err(|e| AppError::bad_request(format!("invalid delegate DID: {e}")))?;
-            arkret_identifiers::project_did_to_core_id(&did)
+            arkret_identifiers::project_did_to_core_id(&delegation.delegate_did)
                 .map_err(|e| AppError::bad_request(format!("invalid delegate DID: {e}")))?
         }
         _ => organization_id.clone(),
@@ -572,7 +585,7 @@ pub async fn issue_statement_handler(
         revokes_statement_id: body.revokes_statement_id,
         realm_frontier_digest,
         organization_policy_ref: body.organization_policy_ref,
-        issuer,
+        issuer_id: issuer,
         issuer_role: body.issuer_role,
         delegation_ref: body.delegation_ref.clone(),
         executed_by,
@@ -604,7 +617,7 @@ mod tests {
 
     fn bootstrap_request(organization_did: &str) -> BootstrapOrganizationRequest {
         BootstrapOrganizationRequest {
-            organization_did: organization_did.to_owned(),
+            organization_did: Did::new(organization_did.to_owned()).unwrap(),
             principal_control_realm_id: "ak:realm:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG"
                 .to_owned(),
             control_stream_ref: "ak:event:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG".to_owned(),

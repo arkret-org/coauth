@@ -364,7 +364,10 @@ pub async fn post_agent_key_pair(
                 key_id: key_id.clone(),
                 verification_method: body.verification_method.to_string(),
                 public_key: public_key_value.clone(),
-                accountable_principal_id: authorize_event.controller_id.clone(),
+                accountable_principal_id: arkret_identifiers::DidCoreId::new(
+                    authorize_event.controller_id.clone(),
+                )
+                .map_err(|err| AppError::internal_box(Box::new(err)))?,
                 agent_key_scope,
                 audience: vec![pop.audience_id.to_string()],
                 issued_at,
@@ -673,14 +676,7 @@ fn validate_controller_authorize_event(
     let approved_by_matches_controller = approval
         .approved_by
         .as_ref()
-        .map(|approved_by| {
-            parse_actor_id(
-                approved_by.as_str(),
-                "authorize_event.event.payload.approval_evidence.approved_by",
-            )
-            .map(|approved_by| approved_by.as_str() == controller_id)
-        })
-        .transpose()?
+        .map(|approved_by| approved_by.as_str() == controller_id)
         .unwrap_or(false);
     if !approved_by_matches_controller {
         return Err(AppError::forbidden(

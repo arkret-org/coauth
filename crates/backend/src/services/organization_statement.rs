@@ -35,7 +35,7 @@ use arkret_policy::{
     verify_realm_organization_statement,
 };
 use arkret_wire::{
-    Did, DidCoreId, DidUrl, Hash, NonEmptyString, ObjectRef, RealmId, project_did_to_core_id,
+    DidCoreId, DidUrl, Hash, NonEmptyString, ObjectRef, RealmId, project_did_to_core_id,
 };
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::organization_control::OrganizationDelegation;
@@ -82,7 +82,7 @@ pub struct OrganizationStatementRequest {
     pub revokes_statement_id: Option<String>,
     pub realm_frontier_digest: Option<Hash>,
     pub organization_policy_ref: Option<String>,
-    pub issuer: DidCoreId,
+    pub issuer_id: DidCoreId,
     pub issuer_role: RealmOrganizationIssuerRole,
     /// REQUIRED for delegated issuer roles; MUST be absent otherwise. This is
     /// the same ref the [`RepositoryDelegationResolver`] resolves.
@@ -148,7 +148,7 @@ where
         realm_frontier_digest: request.realm_frontier_digest,
         organization_policy_ref: request.organization_policy_ref,
         authorization: RealmOrganizationAuthorization {
-            issuer_id: request.issuer,
+            issuer_id: request.issuer_id,
             issuer_role: request.issuer_role,
             verification_method,
             delegation_ref: request.delegation_ref,
@@ -221,9 +221,7 @@ impl RealmOrganizationDelegationResolver for RepositoryDelegationResolver {
         };
         // Fail closed when the loaded row does not match the requested ref or
         // is anchored to a different organization.
-        let projected_organization_id = Did::new(delegation.organization_did.clone())
-            .ok()
-            .and_then(|did| project_did_to_core_id(&did).ok());
+        let projected_organization_id = project_did_to_core_id(&delegation.organization_did).ok();
         if &delegation.delegation_ref != delegation_ref
             || projected_organization_id.as_ref() != Some(organization_id)
         {
@@ -246,6 +244,7 @@ pub fn offline_resolver() -> NoDelegationResolver {
 
 #[cfg(test)]
 mod tests {
+    use arkret_wire::Did;
     use chrono::{TimeZone, Utc};
     use coauth_data::organization_control::OrganizationDelegationStatus;
 
@@ -289,7 +288,7 @@ mod tests {
             revokes_statement_id: None,
             realm_frontier_digest: None,
             organization_policy_ref: None,
-            issuer: organization_id(),
+            issuer_id: organization_id(),
             issuer_role: RealmOrganizationIssuerRole::OrganizationPrincipalId,
             delegation_ref: None,
             executed_by: None,
@@ -300,8 +299,8 @@ mod tests {
         OrganizationDelegation {
             id: "01J0".to_owned(),
             delegation_ref: reference.to_owned(),
-            organization_did: "did:webvh:example.test:org.example".to_owned(),
-            delegate_did: "did:web:server.acme.example".to_owned(),
+            organization_did: Did::new("did:webvh:example.test:org.example".to_owned()).unwrap(),
+            delegate_did: Did::new("did:web:server.acme.example".to_owned()).unwrap(),
             issuer_role: RealmOrganizationIssuerRole::GovernanceService,
             purposes: vec!["principal_control_realm_bootstrap".to_owned()],
             covered_relationships: vec![RealmOrganizationRelationship::Owner],
@@ -309,7 +308,7 @@ mod tests {
             status: OrganizationDelegationStatus::Active,
             valid_from: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
             valid_until: None,
-            created_by: "did:web:admin.example".to_owned(),
+            created_by: DidCoreId::new("ak:did_core:web:admin.example".to_owned()).unwrap(),
             created_at: now(),
             updated_at: now(),
             revoked_at: None,
@@ -399,7 +398,7 @@ mod tests {
         request.issuer_role = RealmOrganizationIssuerRole::GovernanceService;
         request.delegation_ref = Some(reference.to_owned());
         let mut delegation = live_delegation(reference);
-        delegation.organization_did = "did:web:other.example".to_owned();
+        delegation.organization_did = Did::new("did:web:other.example".to_owned()).unwrap();
         let resolver = RepositoryDelegationResolver::new(Some(delegation), now());
         let err = issue_organization_statement(
             &keystore(),

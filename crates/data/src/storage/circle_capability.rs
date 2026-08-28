@@ -1,5 +1,6 @@
 //! Circle capability grant repository.
 
+use arkret_identifiers::DidCoreId;
 use async_trait::async_trait;
 use coauth_data::Clock;
 use coauth_data::circle_capability::{CapabilityActionId, CircleCapabilityGrant};
@@ -19,7 +20,7 @@ pub struct NewCircleCapabilityGrant {
     /// Canonical sorted/deduplicated Circle IDs allowed by the grant.
     pub allowed_circle_ids: Vec<String>,
     /// Admin/service actor that created the grant.
-    pub granted_by: String,
+    pub granted_by: DidCoreId,
 }
 
 /// Repository for durable Circle capability grants.

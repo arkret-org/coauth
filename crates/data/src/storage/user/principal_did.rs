@@ -49,13 +49,16 @@ pub trait PrincipalDidRepository: Send + Sync {
         audience_id: &str,
     ) -> Result<Option<PrincipalDidBinding>, Self::Error>;
 
-    /// Fetch a binding by its principal DID.
-    async fn get_by_did(&mut self, did: &str) -> Result<Option<PrincipalDidBinding>, Self::Error>;
-
-    /// Fetch a binding by principal DID and Principal Server audience_id.
-    async fn get_by_did_and_audience(
+    /// Fetch a binding by its stable principal core id.
+    async fn get_by_principal_id(
         &mut self,
-        did: &str,
+        principal_id: &str,
+    ) -> Result<Option<PrincipalDidBinding>, Self::Error>;
+
+    /// Fetch a binding by stable principal core id and Principal Server audience_id.
+    async fn get_by_principal_id_and_audience(
+        &mut self,
+        principal_id: &str,
         audience_id: &str,
     ) -> Result<Option<PrincipalDidBinding>, Self::Error>;
 
@@ -85,13 +88,13 @@ repository_impl!(PrincipalDidRepository:
         user: &User,
         audience_id: &str,
     ) -> Result<Option<PrincipalDidBinding>, Self::Error>;
-    async fn get_by_did(
+    async fn get_by_principal_id(
         &mut self,
-        did: &str,
+        principal_id: &str,
     ) -> Result<Option<PrincipalDidBinding>, Self::Error>;
-    async fn get_by_did_and_audience(
+    async fn get_by_principal_id_and_audience(
         &mut self,
-        did: &str,
+        principal_id: &str,
         audience_id: &str,
     ) -> Result<Option<PrincipalDidBinding>, Self::Error>;
     async fn add_verified(

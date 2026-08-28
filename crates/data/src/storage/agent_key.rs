@@ -23,7 +23,7 @@ pub struct NewAgentKeyAuthorization {
     /// Spec `PublicKey` JSON object submitted at pairing.
     pub public_key: serde_json::Value,
     /// Controller DID accountable for the agent.
-    pub accountable_principal_id: String,
+    pub accountable_principal_id: arkret_identifiers::DidCoreId,
     /// Authorized key scope tier.
     pub agent_key_scope: String,
     /// Audience values the key proof must match.

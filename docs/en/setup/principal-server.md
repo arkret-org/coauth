@@ -66,7 +66,7 @@ two places:
 
 - the verified record in the local `service_identity` table;
 - the stable mapping the Provider keeps for the registration key
-  `{service_kind: auth_server, public_base}`.
+  `{service_kind: auth_server, public_base_url}`.
 
 Coauth's own `service_id` is never written into configuration.
 `embedded_webvh_registration_bearer` is only the deployment-level transport
@@ -86,7 +86,7 @@ state:
 2. derive the `did.jsonl` URL from that DID and verify the Provider's method-native history
    completely (SCID derivation, entry hash chain, every entry proof and the rotation
    authorization), requiring the verified head to be the version describe advertises;
-3. require `project(did)` to equal the receipt's `provider_service_id`, and the bare controller
+3. require `project(did)` to equal the receipt's `provider_id`, and the bare controller
    DID of the receipt's `verification_method` to equal that `did` verbatim;
 4. require that method to be an `assertionMethod` of the Provider DID Document that was effective at
    the receipt's `issued_at`;

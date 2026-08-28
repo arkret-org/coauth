@@ -58,7 +58,7 @@ coauth 是 A 类服务：它自行生成并持有自身 service DID 的签名私
 身份来源只有两个：
 
 - 本地 `service_identity` 表中已验证的记录；
-- Provider 上按注册键 `{service_kind: auth_server, public_base}` 建立的稳定 mapping。
+- Provider 上按注册键 `{service_kind: auth_server, public_base_url}` 建立的稳定 mapping。
 
 配置里**不写** coauth 自己的 `service_id`。`embedded_webvh_registration_bearer`
 只是访问 Provider 的部署级传输凭据，不构成身份；真正的控制权在 key backend 里
@@ -73,7 +73,7 @@ coauth 在写入任何本地状态之前先完整验证它的 Provider 证明：
    `principal_servers[].service_id` pin 时，describe 声明的 `service_id` 必须逐字等于该 pin；
 2. 从该 DID 自身派生 `did.jsonl` 地址，完整验证 Provider 的方法原生历史（SCID 派生、条目哈希链、
    每条条目的签名与轮换授权），并要求验证出的 head 等于 describe 声明的版本；
-3. 要求 `project(did)` 等于 receipt 里的 `provider_service_id`，且 receipt
+3. 要求 `project(did)` 等于 receipt 里的 `provider_id`，且 receipt
    `verification_method` 的裸 controller DID 逐字等于该 `did`；
 4. 要求该 method 在 receipt `issued_at` 时点属于 Provider DID Document 的 `assertionMethod`；
 5. 实际验证 receipt 的 Ed25519 detached JWS。

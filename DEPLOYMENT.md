@@ -24,7 +24,7 @@ http:
     resources: [discovery, human, oauth, restapi, assets, health]
     binds:
     - address: "0.0.0.0:8080"
-  public_base: https://auth.acme.example/
+  public_base_url: https://auth.acme.example/
   issuer: https://auth.acme.example/
 database:
   uri: ${COAUTH_DATABASE_URI}

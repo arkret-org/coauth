@@ -154,7 +154,7 @@ impl StoredIdentityLoad {
 pub async fn initialize_and_spawn(
     repository_factory: PgRepositoryFactory,
     arkret_config: &ArkretConfig,
-    public_base: &Url,
+    public_base_url: &Url,
     key_store: &Keystore,
     http: reqwest::Client,
 ) -> anyhow::Result<()> {
@@ -168,7 +168,7 @@ pub async fn initialize_and_spawn(
     };
     let registration_key = ServiceRegistrationKey::new(
         ServiceKind::AuthServer,
-        CanonicalServiceUrl::canonicalize(public_base.as_str())
+        CanonicalServiceUrl::canonicalize(public_base_url.as_str())
             .map_err(|error| anyhow::anyhow!(error.to_string()))?,
     )
     .map_err(|error| anyhow::anyhow!(error.to_string()))?;
@@ -495,7 +495,7 @@ fn service_registration_request(
 
 /// Bounded opaque correlation string for a single ensure attempt. It only
 /// relates audit records for that attempt: registration identity is the
-/// canonical `(service_kind, public_base)` key, and the sole idempotency
+/// canonical `(service_kind, public_base_url)` key, and the sole idempotency
 /// authority is the operation registry's `idempotency_mechanism=object_id`,
 /// so this value MUST NOT be derived from the registration key.
 fn ensure_attempt_correlation_id() -> String {
@@ -995,7 +995,7 @@ fn decode_stored_identity(value: Value) -> StoredIdentityLoad {
     match serde_json::from_value::<DidCoreIdentityBundle>(value) {
         Ok(bundle) => match bundle.validate() {
             Ok(()) => StoredIdentityLoad::Loaded(Box::new(StoredIdentityRecord {
-                inception_operation: bundle.webvh_history[0].clone(),
+                inception_operation: bundle.webvh_history_entries[0].clone(),
                 identity: bundle.identity,
             })),
             Err(error) => StoredIdentityLoad::Invalid(error.to_string()),
@@ -1012,8 +1012,8 @@ async fn save_stored(
     let persisted = DidCoreIdentityBundle {
         schema: DidCoreIdentityBundle::SCHEMA.to_owned(),
         identity: identity.clone(),
-        webvh_history: vec![inception_operation],
-        receipt_chain: vec![identity.registration_receipt.clone()],
+        webvh_history_entries: vec![inception_operation],
+        receipt_chains: vec![identity.registration_receipt.clone()],
         exported_at: arkret_canonical::normalize_timestamp_canonical(Utc::now()),
     };
     persisted

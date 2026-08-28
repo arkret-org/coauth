@@ -192,7 +192,7 @@ impl UpstreamOAuthSessionRepository for PgUpstreamOAuthSessionRepository<'_> {
         skip_all,
         fields(
             %upstream_oauth_provider.id,
-            upstream_oauth_provider.issuer = upstream_oauth_provider.issuer,
+            upstream_oauth_provider.oidc_issuer_uri = upstream_oauth_provider.oidc_issuer_uri,
             %upstream_oauth_provider.client_id,
             upstream_oauth_authorization_session.id,
         ),

@@ -329,7 +329,7 @@ pub async fn config_sync(
                     clock,
                     provider.id,
                     UpstreamOAuthProviderParams {
-                        issuer: provider.issuer,
+                        oidc_issuer_uri: provider.issuer,
                         human_name: provider.human_name,
                         brand_name: provider.brand_name,
                         scope: provider.scope.parse()?,

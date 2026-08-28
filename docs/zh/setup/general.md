@@ -14,7 +14,7 @@ coauth config generate > config.yaml
 
 ## 几乎一定会改的配置段
 
-- `http.public_base`
+- `http.public_base_url`
 - `database`
 - `arkret.principal_servers`
 - `arkret.identity_registry`

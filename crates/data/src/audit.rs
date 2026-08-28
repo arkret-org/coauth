@@ -1,3 +1,4 @@
+use arkret_identifiers::DidCoreId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -128,7 +129,7 @@ pub struct HandleAuditEvent {
     /// New DID the handle resolves to as of this event.
     pub new_did: Option<String>,
     /// Issuer service DID that signed the affected claim, if any.
-    pub issuer_id: Option<String>,
+    pub issuer_id: Option<DidCoreId>,
     /// Audience the affected claim was bound to.
     pub audience: Option<String>,
     /// `sha256:<hex>` digest of the canonical-JSON form of the emitted

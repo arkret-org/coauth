@@ -198,7 +198,7 @@ mod tests {
         AccountStatusPublicationRequestBody, AccountStatusRecord, UnsignedAccountStatusRecord,
     };
     use arkret_models_collaboration::objects::account_status::AccountStatus;
-    use arkret_wire::{DidCoreId, DidUrl, Hash, NonEmptyString, SchemaId};
+    use arkret_wire::{DidCoreId, DidUrl, Hash, SchemaId};
     use coauth_data::audit::{AdminOperation, AdminOperationFilter, NewAdminOperationLog};
     use coauth_data::queue::{AccountStatusPublicationJob, QueueJobRepositoryExt as _};
     use coauth_data::user::UserRepository as _;
@@ -229,7 +229,7 @@ mod tests {
         let unsigned = UnsignedAccountStatusRecord {
             schema: SchemaId::ACCOUNT_STATUS_RECORD_V1.to_owned(),
             account_authority_id: authority,
-            account_id: NonEmptyString::new(account_id.to_string()).unwrap(),
+            account_id: arkret_identifiers::ServiceAccountId::new(account_id.to_string()).unwrap(),
             principal_authority: AccountStatusPrincipalAuthority {
                 principal_id: DidCoreId::new("ak:did_core:webvh:zrollbackprincipal").unwrap(),
                 principal_server_id: DidCoreId::new("ak:did_core:webvh:zrollbackserver").unwrap(),

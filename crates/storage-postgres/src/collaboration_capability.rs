@@ -1,5 +1,6 @@
 //! PostgreSQL implementation of the collaboration capability grant repository.
 
+use arkret_identifiers::DidCoreId;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::collaboration_capability::{
@@ -42,7 +43,7 @@ struct CollaborationCapabilityGrantRow {
     action: String,
     expires_at: Option<DateTime<Utc>>,
     approval_evidence_ref: Option<String>,
-    granted_by: String,
+    granted_by: DidCoreId,
     granted_at: DateTime<Utc>,
     revoked_at: Option<DateTime<Utc>>,
     grant_raw_payload_digest: String,
@@ -99,7 +100,7 @@ struct InsertableCollaborationCapabilityGrant {
     action: String,
     expires_at: Option<DateTime<Utc>>,
     approval_evidence_ref: Option<String>,
-    granted_by: String,
+    granted_by: DidCoreId,
     granted_at: DateTime<Utc>,
     grant_raw_payload_digest: String,
     grant_fanout_idempotency_key: String,
@@ -270,7 +271,7 @@ mod tests {
             action: CapabilityActionId::PinAdd,
             expires_at: None,
             approval_evidence_ref: None,
-            granted_by: "did:web:admin.example".to_owned(),
+            granted_by: DidCoreId::new("ak:did_core:web:admin.example".to_owned()).unwrap(),
             grant_raw_payload_digest: format!("sha256:{}", "a".repeat(64)),
             grant_fanout_idempotency_key: format!("coauth:collaboration_capability_grant:{label}"),
         }

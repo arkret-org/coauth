@@ -1,3 +1,4 @@
+use arkret_identifiers::DidCoreId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -12,9 +13,9 @@ pub struct AccountabilityGrant {
     /// Coauth-local row handle: `ak:local_ref:accountability_grant:<uuid7>`.
     pub accountability_grant_id: String,
     /// Agent principal id covered by this grant.
-    pub agent_id: String,
+    pub agent_id: DidCoreId,
     /// Controller DID that accepted accountability for the grant.
-    pub controller_id: String,
+    pub controller_id: DidCoreId,
     /// Canonical capability/action set.
     pub capabilities: Vec<String>,
     /// Deterministic digest of controller, agent, and canonical capabilities.
@@ -147,7 +148,7 @@ pub struct AccountabilitySubjectRevocation {
     /// Subject kind.
     pub subject_kind: AccountabilitySubjectKind,
     /// Subject id.
-    pub subject_id: String,
+    pub subject_id: DidCoreId,
     /// Revocation reason.
     pub reason: String,
     /// Timestamp when the subject was revoked.

@@ -9,6 +9,7 @@
 //! so that `sodmin` can build the same struct it serializes against the
 //! one the backend deserializes.
 
+use arkret_identifiers::DidCoreId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -38,7 +39,9 @@ pub struct AccountRiskActionProposalRequestBody {
     /// Optional approver identifier. Leave empty while the request is still a
     /// draft proposal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approved_by: Option<String>,
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = Option<String>)))]
+    pub approved_by: Option<DidCoreId>,
 }
 
 /// Approve a previously staged risk-action proposal.
@@ -58,9 +61,11 @@ pub struct AccountRiskActionApprovalRequestBody {
     pub ticket: Option<String>,
 
     /// Optional approver identifier. If present, the backend requires it to
-    /// match the authenticated caller's admin DID.
+    /// match the authenticated caller's stable admin identity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approved_by: Option<String>,
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = Option<String>)))]
+    pub approved_by: Option<DidCoreId>,
 
     /// Human approval note for the audit trail.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -131,7 +136,9 @@ pub struct AccountRiskActionProposalOutcome {
 
     /// Optional approver identifier.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approved_by: Option<String>,
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = Option<String>)))]
+    pub approved_by: Option<DidCoreId>,
 
     /// When the proposal was requested.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -139,7 +146,9 @@ pub struct AccountRiskActionProposalOutcome {
 
     /// Admin identifier that submitted the proposal, if available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub requested_by: Option<String>,
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = Option<String>)))]
+    pub requested_by: Option<DidCoreId>,
 
     /// Admin handle that submitted the proposal, if available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -220,7 +229,9 @@ pub struct AccountRiskActionApprovalOutcome {
 
     /// Admin identifier that approved the proposal, if available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approved_by: Option<String>,
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = Option<String>)))]
+    pub approved_by: Option<DidCoreId>,
 
     /// Admin handle that approved the proposal, if available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -296,7 +307,9 @@ pub struct AccountRiskActionCurrentOutcome {
 
     /// Admin identifier associated with the latest state record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub recorded_by: Option<String>,
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = Option<String>)))]
+    pub recorded_by: Option<DidCoreId>,
 
     /// Admin handle associated with the latest state record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -382,7 +395,9 @@ pub struct AccountRiskActionTransitionRecord {
 
     /// Admin identifier associated with the transition.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub recorded_by: Option<String>,
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = Option<String>)))]
+    pub recorded_by: Option<DidCoreId>,
 
     /// Admin handle associated with the transition.
     #[serde(default, skip_serializing_if = "Option::is_none")]

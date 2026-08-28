@@ -395,7 +395,7 @@ pub fn site_config_from_config(
 
     Ok(SiteConfig {
         access_token_ttl: experimental_config.access_token_ttl,
-        server_name: server_name_from_public_base(&http_config.public_base),
+        server_name: server_name_from_public_base(&http_config.public_base_url),
         policy_uri: branding_config.policy_uri.clone(),
         tos_uri: branding_config.tos_uri.clone(),
         imprint: branding_config.imprint.clone(),
@@ -432,9 +432,9 @@ pub fn site_config_from_config(
     })
 }
 
-fn server_name_from_public_base(public_base: &url::Url) -> String {
-    let host = public_base.host_str().unwrap_or("localhost");
-    match public_base.port() {
+fn server_name_from_public_base(public_base_url: &url::Url) -> String {
+    let host = public_base_url.host_str().unwrap_or("localhost");
+    match public_base_url.port() {
         Some(port) => format!("{host}:{port}"),
         None => host.to_owned(),
     }

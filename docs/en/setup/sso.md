@@ -19,13 +19,13 @@ Removals need to be applied using the [`coauth config sync --prune`](../referenc
 The general configuration usually goes as follows:
 
  - determine a unique `id` for the provider, which will be used as stable identifier between the configuration file and the database. This `id` must be a ULID, and can be generated using online tools like <https://www.ulidtools.com>
- - determine the exact external `http.public_base` value used by coauth. The provider callback URL is derived from it, so it must be the public URL visible to both end users and the upstream provider
+ - determine the exact external `http.public_base_url` value used by coauth. The provider callback URL is derived from it, so it must be the public URL visible to both end users and the upstream provider
  - create an OAuth/OIDC client on the provider's side, using the following parameters:
-   - `redirect_uri`: `<http.public_base>/upstream/callback/<id>`
+   - `redirect_uri`: `<http.public_base_url>/upstream/callback/<id>`
    - `response_type`: `code`
    - `response_mode`: `query`
    - `grant_type`: `authorization_code`
-   - (optional) `backchannel_logout_uri`: `<http.public_base>/upstream/backchannel-logout/<id>`
+   - (optional) `backchannel_logout_uri`: `<http.public_base_url>/upstream/backchannel-logout/<id>`
  - fill the `upstream_oauth` section of the configuration file with the following parameters:
    - `providers`:
      - `id`: the previously generated ULID
@@ -38,10 +38,10 @@ The general configuration usually goes as follows:
 Important details about callback URLs:
 
  - the path is always `/upstream/callback/<id>`, where `<id>` is the provider `id` from the config
- - if `http.public_base` includes a path prefix, that prefix is part of the callback URL
+ - if `http.public_base_url` includes a path prefix, that prefix is part of the callback URL
  - do not register `/upstream/authorize/<id>` on the provider side; that is coauth's own redirect entrypoint, not the provider callback
 
-For example, if `http.public_base` is `https://example.com/coauth/` and the provider ID is `01JABCDEF0123456789ABCDEFG`, the callback URL to register upstream is `https://example.com/coauth/upstream/callback/01JABCDEF0123456789ABCDEFG`.
+For example, if `http.public_base_url` is `https://example.com/coauth/` and the provider ID is `01JABCDEF0123456789ABCDEFG`, the callback URL to register upstream is `https://example.com/coauth/upstream/callback/01JABCDEF0123456789ABCDEFG`.
 
 ## User attributes mapping
 
@@ -117,7 +117,7 @@ If there is only one upstream provider configured and the local password databas
 The service supports receiving [OpenID Connect Back-Channel Logout](https://openid.net/specs/openid-connect-backchannel-1_0.html) requests.
 Those are notifications from the upstream provider that the user has logged out of the provider.
 
-The backchannel logout URI must be configured in the provider as `<http.public_base>/upstream/backchannel-logout/<id>`, where `<id>` is the `id` of the provider.
+The backchannel logout URI must be configured in the provider as `<http.public_base_url>/upstream/backchannel-logout/<id>`, where `<id>` is the `id` of the provider.
 
 By default, the authentication service will not perform any action when receiving a backchannel logout request.
 The [`on_backchannel_logout`](../reference/configuration.md#upstream_oauth) option can be used to configure what to do when receiving a backchannel logout request.
@@ -135,7 +135,7 @@ Concretely, this means that if QR-code login is used to log in on a phone from a
 
 This section contains sample configurations for popular OIDC providers.
 
-Unless noted otherwise, any sample callback URL written as `https://<auth-service-domain>/upstream/callback/<id>` should be read as `<http.public_base>/upstream/callback/<id>`. If `http.public_base` contains a path prefix, include that prefix in the registered callback URL.
+Unless noted otherwise, any sample callback URL written as `https://<auth-service-domain>/upstream/callback/<id>` should be read as `<http.public_base_url>/upstream/callback/<id>`. If `http.public_base_url` contains a path prefix, include that prefix in the registered callback URL.
 
 ### Apple
 
@@ -349,7 +349,7 @@ It will use the `fetch_userinfo` option with a manual `userinfo_endpoint` to fet
 
 1. Create a [new application](https://github.com/settings/applications/new).
 2. Fill in the form with an application name and homepage URL.
-3. Use the following Authorization callback URL: `<http.public_base>/upstream/callback/<id>`
+3. Use the following Authorization callback URL: `<http.public_base_url>/upstream/callback/<id>`
 4. Retrieve the Client ID
 5. Generate a Client Secret and copy it
 
@@ -398,7 +398,7 @@ Notes:
 
 1. Set up a project in the Google API Console (see [documentation](https://developers.google.com/identity/protocols/oauth/openid-connect#appsetup))
 2. Add an "OAuth Client ID" for a Web Application under ["Credentials"](https://console.developers.google.com/apis/credentials)
-3. Add the following "Authorized redirect URI": `<http.public_base>/upstream/callback/<id>`
+3. Add the following "Authorized redirect URI": `<http.public_base_url>/upstream/callback/<id>`
 
 Authentication service configuration:
 

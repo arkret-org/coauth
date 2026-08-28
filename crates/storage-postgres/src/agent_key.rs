@@ -64,7 +64,7 @@ mod tests {
             challenge: format!("challenge-{label}"),
             nonce: format!("nonce-{label}"),
             request_canonical_digest: format!("sha256:{}", "1".repeat(64)),
-            audience: "https://arkret.example/_arkret".to_owned(),
+            audience_id: "ak:did_core:web:arkret.example".to_owned(),
             proof_expires_at: now + chrono::Duration::minutes(5),
             prune_after: now + chrono::Duration::minutes(10),
         }
@@ -82,7 +82,10 @@ mod tests {
             key_id: "runtime-key-1".to_owned(),
             verification_method: format!("did:web:{label}-agent.example#runtime-key-1"),
             public_key: serde_json::json!({ "kty": "OKP", "key": "fixture" }),
-            accountable_principal_id: format!("ak:did_core:web:{label}-controller.example"),
+            accountable_principal_id: arkret_identifiers::DidCoreId::new(format!(
+                "ak:did_core:web:{label}-controller.example"
+            ))
+            .unwrap(),
             agent_key_scope: r#"{"actions":["ak.self.events.stream.subscribe.v1"],"resources":[]}"#
                 .to_owned(),
             audience: vec!["did:web:soland.test".to_owned()],
@@ -326,7 +329,7 @@ impl TryFrom<AgentKeyAuthorizationRow> for AgentKeyAuthorization {
             key_id: value.key_id,
             verification_method: value.verification_method,
             public_key: value.public_key,
-            accountable_principal_id: value.accountable_principal_id.into_string(),
+            accountable_principal_id: value.accountable_principal_id,
             agent_key_scope: value.agent_key_scope,
             audience: value.audience,
             issued_at: value.issued_at,
@@ -430,10 +433,7 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
             key_id: params.key_id,
             verification_method: params.verification_method,
             public_key: params.public_key,
-            accountable_principal_id: arkret_identifiers::DidCoreId::new(
-                params.accountable_principal_id,
-            )
-            .map_err(|_| DatabaseError::invalid_operation())?,
+            accountable_principal_id: params.accountable_principal_id,
             agent_key_scope: params.agent_key_scope,
             audience: params.audience,
             issued_at: params.issued_at,
@@ -463,7 +463,7 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
             key_id: row.key_id,
             verification_method: row.verification_method,
             public_key: row.public_key,
-            accountable_principal_id: row.accountable_principal_id.into_string(),
+            accountable_principal_id: row.accountable_principal_id,
             agent_key_scope: row.agent_key_scope,
             audience: row.audience,
             issued_at: row.issued_at,

@@ -64,13 +64,13 @@ struct GenerateOptions {
     #[clap(long)]
     dev: bool,
 
-    /// Override http.public_base and http.issuer in the generated config
+    /// Override http.public_base_url and http.issuer in the generated config
     #[clap(long)]
-    public_base: Option<Url>,
+    public_base_url: Option<Url>,
 
     /// Override database.uri in the generated config
     #[clap(long)]
-    database_uri: Option<String>,
+    database_url: Option<String>,
 }
 
 impl Options {
@@ -158,16 +158,16 @@ fn apply_generated_config_options(
     if options.dev {
         config.database.uri = Some(
             options
-                .database_uri
+                .database_url
                 .clone()
                 .unwrap_or_else(|| DEV_DATABASE_URI.to_owned()),
         );
-        let public_base = options
-            .public_base
+        let public_base_url = options
+            .public_base_url
             .clone()
             .unwrap_or_else(|| DEV_PUBLIC_BASE.parse().expect("valid dev public base"));
-        config.http.public_base = public_base.clone();
-        config.http.issuer = Some(public_base);
+        config.http.public_base_url = public_base_url.clone();
+        config.http.issuer = Some(public_base_url);
         config.arkret.principal_servers = vec![PrincipalServerConfig {
             name: "soland-dev".to_owned(),
             endpoint: DEV_SOLAND_URL.parse().expect("valid dev soland URL"),
@@ -184,12 +184,12 @@ fn apply_generated_config_options(
             proof_required_for_pairwise: false,
         });
     } else {
-        if let Some(public_base) = options.public_base.clone() {
-            config.http.public_base = public_base.clone();
-            config.http.issuer = Some(public_base);
+        if let Some(public_base_url) = options.public_base_url.clone() {
+            config.http.public_base_url = public_base_url.clone();
+            config.http.issuer = Some(public_base_url);
         }
-        if let Some(database_uri) = options.database_uri.clone() {
-            config.database.uri = Some(database_uri);
+        if let Some(database_url) = options.database_url.clone() {
+            config.database.uri = Some(database_url);
         }
     }
 
@@ -218,8 +218,8 @@ mod tests {
         let options = GenerateOptions {
             output: None,
             dev: true,
-            public_base: None,
-            database_uri: None,
+            public_base_url: None,
+            database_url: None,
         };
 
         apply_generated_config_options(&mut config, &options)

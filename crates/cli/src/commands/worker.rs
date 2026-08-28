@@ -33,7 +33,7 @@ impl Options {
         let db_url = database_url_from_config(&app_cfg.database)?;
 
         let urls = UrlBuilder::new(
-            app_cfg.http.public_base.clone(),
+            app_cfg.http.public_base_url.clone(),
             app_cfg.http.issuer.clone(),
             None,
         );
@@ -73,7 +73,7 @@ impl Options {
         coauth_backend::services::service_identity::initialize_and_spawn(
             PgRepositoryFactory::new(db_pool.clone()),
             &app_cfg.arkret,
-            &app_cfg.http.public_base,
+            &app_cfg.http.public_base_url,
             &key_store,
             arkret_http_client.clone(),
         )

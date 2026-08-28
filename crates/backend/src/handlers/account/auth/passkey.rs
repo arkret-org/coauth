@@ -167,7 +167,7 @@ fn parse_credential_path(req: &Request) -> Result<Ulid, AppError> {
 }
 
 fn passkey_request_is_same_origin(
-    public_base: &url::Url,
+    public_base_url: &url::Url,
     origin: Option<&str>,
     fetch_site: Option<&str>,
 ) -> bool {
@@ -178,7 +178,7 @@ fn passkey_request_is_same_origin(
     }
 
     origin.is_none_or(|value| {
-        url::Url::parse(value).is_ok_and(|candidate| candidate.origin() == public_base.origin())
+        url::Url::parse(value).is_ok_and(|candidate| candidate.origin() == public_base_url.origin())
     })
 }
 
@@ -191,8 +191,8 @@ fn enforce_passkey_same_origin(req: &Request, depot: &Depot) -> Result<(), AppEr
         .headers()
         .get("sec-fetch-site")
         .and_then(|value| value.to_str().ok());
-    let public_base = depot.url_builder().map_err(AppError::from)?.http_base();
-    if !passkey_request_is_same_origin(&public_base, origin, fetch_site) {
+    let public_base_url = depot.url_builder().map_err(AppError::from)?.http_base();
+    if !passkey_request_is_same_origin(&public_base_url, origin, fetch_site) {
         return Err(AppError::forbidden("passkey_same_origin_required"));
     }
     Ok(())
@@ -548,31 +548,31 @@ mod tests {
 
     #[test]
     fn passkey_origin_policy_accepts_only_same_origin_browser_requests() {
-        let public_base = url::Url::parse("https://auth.example.com/coauth/").unwrap();
+        let public_base_url = url::Url::parse("https://auth.example.com/coauth/").unwrap();
 
         assert!(passkey_request_is_same_origin(
-            &public_base,
+            &public_base_url,
             Some("https://auth.example.com"),
             Some("same-origin"),
         ));
-        assert!(passkey_request_is_same_origin(&public_base, None, None));
+        assert!(passkey_request_is_same_origin(&public_base_url, None, None));
         assert!(passkey_request_is_same_origin(
-            &public_base,
+            &public_base_url,
             None,
             Some("none"),
         ));
         assert!(!passkey_request_is_same_origin(
-            &public_base,
+            &public_base_url,
             Some("https://evil.example"),
             Some("cross-site"),
         ));
         assert!(!passkey_request_is_same_origin(
-            &public_base,
+            &public_base_url,
             Some("https://other.example.com"),
             Some("same-site"),
         ));
         assert!(!passkey_request_is_same_origin(
-            &public_base,
+            &public_base_url,
             Some("null"),
             None,
         ));

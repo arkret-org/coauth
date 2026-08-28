@@ -20,10 +20,9 @@ use crate::salvo_utils::user_authorization::{AuthorizationVerificationError, Use
 #[derive(Serialize)]
 struct UserInfo {
     sub: String,
-    username: String,
-    preferred_username: String,
+    handle: String,
     #[serde(rename = "org.arkret.principal_id")]
-    principal_id: Option<String>,
+    principal_id: Option<arkret_identifiers::DidCoreId>,
     #[serde(rename = "org.arkret.device_id")]
     #[serde(skip_serializing_if = "Option::is_none")]
     device_id: Option<String>,
@@ -175,11 +174,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
 
     let user_info = UserInfo {
         sub: subject_did.clone(),
-        username: user.localpart.clone(),
-        // OIDC `preferred_username` keeps the human-readable `local@host`
-        // display form (spec 7157ee8 retires the URI form but the display
-        // shape stays for OIDC client compatibility).
-        preferred_username: arkret::user_handle_display(&url_builder, &user),
+        handle: arkret::user_handle(&url_builder, &user),
         principal_id,
         device_id: arkret::primary_device_id(&session.scope),
         session_id: session.id.to_string(),
@@ -218,5 +213,29 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
         Ok(UserinfoOutcome::Jwt(token.into_string()))
     } else {
         Ok(UserinfoOutcome::Json(user_info))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UserInfo;
+
+    #[test]
+    fn userinfo_serializes_canonical_handle_without_legacy_username_claims() {
+        let value = serde_json::to_value(UserInfo {
+            sub: "ak:did_core:webvh:z6mkfixture".to_owned(),
+            handle: "alice:auth.example.com".to_owned(),
+            principal_id: None,
+            device_id: None,
+            session_id: "session-1".to_owned(),
+            name: None,
+            picture: None,
+            locale: None,
+        })
+        .unwrap();
+
+        assert_eq!(value["handle"], "alice:auth.example.com");
+        assert!(value.get("username").is_none());
+        assert!(value.get("preferred_username").is_none());
     }
 }

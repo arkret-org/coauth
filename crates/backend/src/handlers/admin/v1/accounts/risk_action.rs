@@ -229,7 +229,7 @@ fn map_risk_action_proposals_error(error: RiskActionProposalsError) -> AppError 
 /// resolution input.
 struct AdminActorIdentity {
     /// Stable principal core id (`approved_by` on the wire and in storage).
-    principal_id: String,
+    principal_id: arkret_identifiers::DidCoreId,
     /// Complete DID from the same accepted binding row; authority resolution
     /// MUST resolve this, never the bare core id (`authority_document` keys on
     /// `Did`).
@@ -261,7 +261,7 @@ async fn admin_actor_identity(
         ));
     }
     Ok(AdminActorIdentity {
-        principal_id: binding.principal_id.to_string(),
+        principal_id: binding.principal_id,
         verified_did: binding.did.to_string(),
     })
 }
@@ -279,7 +279,7 @@ fn bind_approval_admin_did(
 
     if request_approved_by != caller_admin_did {
         return Err(AppError::bad_request(
-            "approved_by must match the authenticated admin DID",
+            "approved_by must match the authenticated admin id",
         ));
     }
 
@@ -321,7 +321,7 @@ pub(crate) struct RiskActionApprovalTranscript {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ticket: Option<String>,
     pub approval_note: String,
-    pub approved_by: String,
+    pub approved_by: arkret_identifiers::DidCoreId,
 }
 
 pub(crate) fn risk_action_approval_transcript(
@@ -339,7 +339,8 @@ pub(crate) fn risk_action_approval_transcript(
         action: action.to_owned(),
         ticket: ticket.map(str::to_owned),
         approval_note: approval_note.to_owned(),
-        approved_by: approved_by.to_owned(),
+        approved_by: arkret_identifiers::DidCoreId::new(approved_by.to_owned())
+            .expect("authenticated admin id was validated before transcript construction"),
     }
 }
 
@@ -481,7 +482,6 @@ pub async fn propose(
         ..
     } = extract_call_context(req, depot).await?;
     let requested_at = clock.now();
-    let requested_by = admin_user.as_ref().map(|user| user.id.to_string());
     let requested_by_handle = admin_user.as_ref().map(|user| user.localpart.clone());
     let id = extract_ulid_param(req)?;
     let account = repo
@@ -489,14 +489,15 @@ pub async fn propose(
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
-    let proposer_did = admin_actor_identity(&mut repo, admin_user.as_ref(), &arkret_config)
+    let proposer_id = admin_actor_identity(&mut repo, admin_user.as_ref(), &arkret_config)
         .await?
         .principal_id;
+    let requested_by = Some(proposer_id.clone());
     let proposal = risk_action_proposals
         .create(CreateProposal {
             account_id: account.id,
             action: params.action.clone(),
-            proposer_did,
+            proposer_id,
             reason: params.reason.clone().unwrap_or_default(),
             ticket: params.ticket.clone(),
             required_approvals: required_approvals_for(
@@ -631,8 +632,11 @@ pub async fn approve(
     let caller_identity =
         admin_actor_identity(&mut repo, admin_user.as_ref(), &arkret_config).await?;
     let approved_by = bind_approval_admin_did(
-        caller_identity.principal_id.clone(),
-        params.approved_by.as_deref(),
+        caller_identity.principal_id.to_string(),
+        params
+            .approved_by
+            .as_ref()
+            .map(arkret_identifiers::DidCoreId::as_str),
     )?;
     let approval_note = params.approval_note.as_deref().unwrap_or_default();
     let verification_method = verify_approval_proof_jws(
@@ -657,7 +661,8 @@ pub async fn approve(
         .approve(
             proposal_ulid,
             ApprovalProof {
-                admin_did: approved_by.clone(),
+                admin_id: arkret_identifiers::DidCoreId::new(approved_by.clone())
+                    .map_err(|error| AppError::bad_request(error.to_string()))?,
                 signature: params.approval_proof_jws.clone(),
                 note: params.approval_note.clone(),
                 recorded_at: approved_at,
@@ -717,7 +722,10 @@ pub async fn approve(
         state_revision,
         transition_kind,
         approved_at: approved.approved_at.or(Some(approved_at)),
-        approved_by: Some(approved_by),
+        approved_by: Some(
+            arkret_identifiers::DidCoreId::new(approved_by)
+                .map_err(|error| AppError::bad_request(error.to_string()))?,
+        ),
         approved_by_handle: admin_user.as_ref().map(|user| user.localpart.clone()),
         approval_note: params.approval_note,
         allowed_next_transitions,
@@ -732,7 +740,7 @@ mod tests {
 
     #[test]
     fn approval_admin_did_is_bound_to_authenticated_caller() {
-        let caller = "did:web:coauth.invalid:accounts:admin";
+        let caller = "ak:did_core:web:coauth.invalid:accounts:admin";
 
         assert_eq!(
             bind_approval_admin_did(caller.to_owned(), None).unwrap(),
@@ -745,12 +753,15 @@ mod tests {
         assert_eq!(
             bind_approval_admin_did(
                 caller.to_owned(),
-                Some("  did:web:coauth.invalid:accounts:admin  ")
+                Some("  ak:did_core:web:coauth.invalid:accounts:admin  ")
             )
             .unwrap(),
             caller
         );
-        assert!(bind_approval_admin_did(caller.to_owned(), Some("did:web:forged-admin")).is_err());
+        assert!(
+            bind_approval_admin_did(caller.to_owned(), Some("ak:did_core:web:forged-admin"))
+                .is_err()
+        );
     }
 
     #[test]
@@ -762,7 +773,7 @@ mod tests {
             "erase",
             Some("INC-9"),
             "approved with incident note",
-            "did:web:admin.example",
+            "ak:did_core:web:admin.example",
         );
 
         assert_eq!(transcript.proposal_id, "01H00000000000000000000000");
@@ -770,7 +781,10 @@ mod tests {
         assert_eq!(transcript.action, "erase");
         assert_eq!(transcript.ticket.as_deref(), Some("INC-9"));
         assert_eq!(transcript.approval_note, "approved with incident note");
-        assert_eq!(transcript.approved_by, "did:web:admin.example");
+        assert_eq!(
+            transcript.approved_by.as_str(),
+            "ak:did_core:web:admin.example"
+        );
     }
 }
 
@@ -815,6 +829,9 @@ pub async fn execute(
         service_did: &service_did,
         fail_closed: arkret_config.audit_signature_fail_closed,
     };
+    let executed_by = admin_actor_identity(&mut repo, admin_user.as_ref(), &arkret_config)
+        .await?
+        .principal_id;
     let executed_at = clock.now();
     let id = extract_ulid_param(req)?;
     let proposal_id = req
@@ -899,7 +916,7 @@ pub async fn execute(
             "principal_erase": principal_erase,
             "sessions_terminated": sessions_terminated,
             "ticket": params.ticket,
-            "executed_by": admin_user.as_ref().map(|user| user.id.to_string()),
+            "executed_by": executed_by,
             "executed_by_handle": admin_user.as_ref().map(|user| user.localpart.as_str()),
             "execution_note": params.execution_note,
             "allowed_next_transitions": allowed_next_transitions.clone(),
@@ -960,7 +977,7 @@ pub async fn list_history(
         .into_iter()
         .filter(|log| is_account_risk_action_log(log, id))
         .map(|log| risk_action_transition_record(id, &log))
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(Json(AccountRiskActionHistoryOutcome { data }))
 }
@@ -992,10 +1009,11 @@ pub async fn get_current(
 
     repo.cancel().await?;
 
-    let current = logs
+    let current = if let Some(log) = logs
         .into_iter()
         .find(|log| is_account_risk_action_log(log, id))
-        .map(|log| AccountRiskActionCurrentOutcome {
+    {
+        AccountRiskActionCurrentOutcome {
             account_id: id.to_string(),
             state_record_id: risk_action_detail_string(&log.details, "state_record_id"),
             proposal_id: risk_action_detail_string(&log.details, "proposal_id"),
@@ -1012,14 +1030,13 @@ pub async fn get_current(
             ),
             ticket: risk_action_detail_string(&log.details, "ticket"),
             recorded_at: Some(log.created_at),
-            recorded_by: risk_action_detail_string(&log.details, "requested_by")
-                .or_else(|| risk_action_detail_string(&log.details, "approved_by"))
-                .or_else(|| risk_action_detail_string(&log.details, "executed_by")),
+            recorded_by: risk_action_recorded_by(&log.details)?,
             recorded_by_handle: risk_action_detail_string(&log.details, "requested_by_handle")
                 .or_else(|| risk_action_detail_string(&log.details, "approved_by_handle"))
                 .or_else(|| risk_action_detail_string(&log.details, "executed_by_handle")),
-        })
-        .unwrap_or(AccountRiskActionCurrentOutcome {
+        }
+    } else {
+        AccountRiskActionCurrentOutcome {
             account_id: id.to_string(),
             state_record_id: None,
             proposal_id: None,
@@ -1034,7 +1051,8 @@ pub async fn get_current(
             recorded_at: None,
             recorded_by: None,
             recorded_by_handle: None,
-        });
+        }
+    };
 
     Ok(Json(SingleOutcome::new_canonical(current)))
 }
@@ -1067,8 +1085,8 @@ fn risk_action_operation_name(operation: &coauth_data::audit::AdminOperation) ->
 fn risk_action_transition_record(
     account_id: Ulid,
     log: &coauth_data::audit::AdminOperationLog,
-) -> AccountRiskActionTransitionRecord {
-    AccountRiskActionTransitionRecord {
+) -> Result<AccountRiskActionTransitionRecord, AppError> {
+    Ok(AccountRiskActionTransitionRecord {
         account_id: account_id.to_string(),
         state_record_id: risk_action_detail_string(&log.details, "state_record_id"),
         proposal_id: risk_action_detail_string(&log.details, "proposal_id"),
@@ -1081,15 +1099,28 @@ fn risk_action_transition_record(
         state_revision: risk_action_detail_u64(&log.details, "state_revision"),
         ticket: risk_action_detail_string(&log.details, "ticket"),
         recorded_at: Some(log.created_at),
-        recorded_by: risk_action_detail_string(&log.details, "requested_by")
-            .or_else(|| risk_action_detail_string(&log.details, "approved_by"))
-            .or_else(|| risk_action_detail_string(&log.details, "executed_by")),
+        recorded_by: risk_action_recorded_by(&log.details)?,
         recorded_by_handle: risk_action_detail_string(&log.details, "requested_by_handle")
             .or_else(|| risk_action_detail_string(&log.details, "approved_by_handle"))
             .or_else(|| risk_action_detail_string(&log.details, "executed_by_handle")),
         approval_note: risk_action_detail_string(&log.details, "approval_note"),
         execution_note: risk_action_detail_string(&log.details, "execution_note"),
-    }
+    })
+}
+
+fn risk_action_recorded_by(
+    details: &serde_json::Value,
+) -> Result<Option<arkret_identifiers::DidCoreId>, AppError> {
+    risk_action_detail_string(details, "requested_by")
+        .or_else(|| risk_action_detail_string(details, "approved_by"))
+        .or_else(|| risk_action_detail_string(details, "executed_by"))
+        .map(arkret_identifiers::DidCoreId::new)
+        .transpose()
+        .map_err(|error| {
+            AppError::internal(std::io::Error::other(format!(
+                "stored risk-action actor id is invalid: {error}"
+            )))
+        })
 }
 
 fn risk_action_detail_string(details: &serde_json::Value, field: &str) -> Option<String> {

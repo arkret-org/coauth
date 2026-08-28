@@ -201,10 +201,13 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             .await
     }
 
-    async fn get_by_did(&mut self, did: &str) -> Result<Option<PrincipalDidBinding>, Self::Error> {
+    async fn get_by_principal_id(
+        &mut self,
+        principal_id: &str,
+    ) -> Result<Option<PrincipalDidBinding>, Self::Error> {
         let row = principal_did_bindings::table
             .inner_join(principal_did_owners::table)
-            .filter(principal_did_owners::principal_id.eq(did))
+            .filter(principal_did_owners::principal_id.eq(principal_id))
             .order(principal_did_bindings::created_at.asc())
             .select(PrincipalDidJoinedRow::as_select())
             .first::<PrincipalDidJoinedRow>(self.conn)
@@ -213,14 +216,14 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
         row.map(binding_from_row).transpose()
     }
 
-    async fn get_by_did_and_audience(
+    async fn get_by_principal_id_and_audience(
         &mut self,
-        did: &str,
+        principal_id: &str,
         audience_id: &str,
     ) -> Result<Option<PrincipalDidBinding>, Self::Error> {
         let row = principal_did_bindings::table
             .inner_join(principal_did_owners::table)
-            .filter(principal_did_owners::principal_id.eq(did))
+            .filter(principal_did_owners::principal_id.eq(principal_id))
             .filter(principal_did_bindings::audience_id.eq(audience_id))
             .select(PrincipalDidJoinedRow::as_select())
             .first::<PrincipalDidJoinedRow>(self.conn)

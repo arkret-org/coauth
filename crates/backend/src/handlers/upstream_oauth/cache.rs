@@ -62,7 +62,7 @@ impl<'a> LazyProviderInfos<'a> {
             }
         };
 
-        let Some(issuer) = &self.provider.issuer else {
+        let Some(issuer) = &self.provider.oidc_issuer_uri else {
             return Err(DiscoveryError::MissingIssuer);
         };
 
@@ -209,7 +209,7 @@ impl MetadataCache {
                 provider::DiscoveryMode::Disabled => continue,
             };
 
-            let Some(issuer) = &provider.issuer else {
+            let Some(issuer) = &provider.oidc_issuer_uri else {
                 tracing::error!(%provider.id, "Provider doesn't have an issuer set, but discovery is enabled!");
                 continue;
             };
@@ -429,7 +429,7 @@ mod tests {
         let clock = MockClock::default();
         let provider = UpstreamOAuthProvider {
             id: Ulid::nil(),
-            issuer: Some(mock_server.uri()),
+            oidc_issuer_uri: Some(mock_server.uri()),
             human_name: Some("Example Ltd.".to_owned()),
             brand_name: None,
             discovery_mode: provider::DiscoveryMode::Insecure,

@@ -311,9 +311,9 @@ pub struct HttpConfig {
     pub trusted_proxies: Vec<IpNetwork>,
 
     /// Externally reachable base URL of the authentication service
-    pub public_base: Url,
+    pub public_base_url: Url,
 
-    /// OIDC issuer identifier. Falls back to `public_base` when omitted.
+    /// OIDC issuer identifier. Falls back to `public_base_url` when omitted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub issuer: Option<Url>,
 
@@ -447,7 +447,7 @@ impl Default for HttpConfig {
             ],
             trusted_proxies: rfc_private_networks(),
             issuer: Some(base.clone()),
-            public_base: base,
+            public_base_url: base,
             max_body_bytes: default_max_body_bytes(),
             request_timeout_seconds: default_request_timeout_seconds(),
             shutdown_grace_seconds: default_shutdown_grace_seconds(),

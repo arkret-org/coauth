@@ -20,7 +20,7 @@ http:
   - 127.0.0.1/8
   - fd00::/8
   - ::1/128
-  public_base: https://auth.local.host/
+  public_base_url: https://auth.local.host/
   issuer: https://auth.local.host/
   csp_html: "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'"
 clients:

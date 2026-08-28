@@ -1,5 +1,6 @@
 //! PostgreSQL implementation of the append-only [`HandleAuditRepository`].
 
+use arkret_identifiers::DidCoreId;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::audit::{
@@ -42,7 +43,7 @@ struct HandleAuditRow {
     handle_aliases: Vec<String>,
     old_did: Option<String>,
     new_did: Option<String>,
-    issuer_id: Option<String>,
+    issuer_id: Option<DidCoreId>,
     audience: Option<String>,
     claim_digest: Option<String>,
     details: serde_json::Value,
@@ -84,7 +85,7 @@ struct InsertableHandleAudit {
     handle_aliases: Vec<String>,
     old_did: Option<String>,
     new_did: Option<String>,
-    issuer_id: Option<String>,
+    issuer_id: Option<DidCoreId>,
     audience: Option<String>,
     claim_digest: Option<String>,
     details: serde_json::Value,
@@ -142,7 +143,7 @@ impl HandleAuditRepository for PgHandleAuditRepository<'_> {
             handle_aliases: params.handle_aliases().to_vec(),
             old_did: params.old_did().map(ToOwned::to_owned),
             new_did: params.new_did().map(ToOwned::to_owned),
-            issuer_id: params.issuer_id().map(ToOwned::to_owned),
+            issuer_id: params.issuer_id().cloned(),
             audience: params.audience().map(ToOwned::to_owned),
             claim_digest: None,
             details: params.details().clone(),

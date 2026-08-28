@@ -16,7 +16,7 @@ use crate::handlers::arkret::*;
 
 fn introspection_grant_record(
     grant: &SessionGrant,
-    browser_session: Option<&BrowserSession>,
+    _browser_session: Option<&BrowserSession>,
 ) -> Result<SessionGrantIntrospectGrant, ArkretRouteError> {
     // The thumbprint is derived from the signed session_public_key; it is not
     // duplicated as an independently authorable claim or database column.
@@ -36,10 +36,7 @@ fn introspection_grant_record(
                 "stored session public key is invalid: {error}"
             )))
         })?;
-    let service_account_id = browser_session
-        .map(|session| session.user.id.to_string())
-        .or_else(|| grant.browser_session_id.map(|id| id.to_string()))
-        .unwrap_or_else(|| grant.subject_id.clone());
+    let service_account_id = grant.service_account_id.clone();
     let revocation_ref = grant.browser_session_id.map_or_else(
         || format!("org.arkret.coauth.session_grant:{}", grant.grant_id),
         |id| format!("org.arkret.coauth.browser_session:{id}"),
@@ -54,15 +51,11 @@ fn introspection_grant_record(
                 "stored session grant device_id is invalid: {error}"
             )))
         })?;
-    let audience_id = DidCoreId::new(grant.audience_id.clone()).map_err(|error| {
-        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "stored session grant audience_id is not a service core_id: {error}"
-        )))
-    })?;
+    let audience_id = grant.audience_id.clone();
 
     Ok(SessionGrantIntrospectGrant {
         id: grant.grant_id.clone(),
-        issuer_id: grant.issuer_id.to_string(),
+        issuer_id: grant.issuer_id.clone(),
         subject_id: parsed_payload.subject_id,
         service_account_id,
         device_id,
@@ -92,7 +85,7 @@ pub(crate) fn introspection_status(
     now: DateTime<Utc>,
     audience_id: Option<&str>,
 ) -> SessionGrantIntrospectStatus {
-    if audience_id.is_some_and(|audience_id| audience_id != grant.audience_id) {
+    if audience_id.is_some_and(|audience_id| audience_id != grant.audience_id.as_str()) {
         return SessionGrantIntrospectStatus::AudienceMismatch;
     }
 
@@ -153,7 +146,7 @@ fn verify_session_grant_introspection_proof(
     if claims.kind != SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND
         || claims.session_grant_id != grant.grant_id.to_string()
         || claims.grant_jwt_digest != session_grant_jwt_digest(&grant.grant_jwt)
-        || claims.audience_id.as_str() != grant.audience_id
+        || claims.audience_id != grant.audience_id
         || claims.challenge != proof.challenge
         || claims.expires_at <= now
         || claims.issued_at > now + max_future_skew
@@ -231,7 +224,7 @@ pub async fn introspect_session_grant(
     if let Some(allowed) = caller.allowed_audiences.as_deref()
         && !allowed
             .iter()
-            .any(|audience_id| audience_id == &grant.audience_id)
+            .any(|audience_id| audience_id == grant.audience_id.as_str())
     {
         repo.cancel()
             .await
@@ -257,7 +250,7 @@ pub async fn introspect_session_grant(
     let bound_user_id = if browser_session.is_none() {
         let mut principal_ids = repo.principal_did();
         principal_ids
-            .get_by_did_and_audience(&grant.subject_id, &grant.audience_id)
+            .get_by_principal_id_and_audience(grant.subject_id.as_str(), grant.audience_id.as_str())
             .await
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
             .map(|binding| binding.user_id)
@@ -339,7 +332,7 @@ pub async fn introspect_session_grant(
                 crate::handlers::account::agents::enforce_authoritative_agent_lifecycle(
                     &http_client,
                     &arkret_config,
-                    &grant.subject_id,
+                    grant.subject_id.as_str(),
                 )
                 .await
                 .is_ok();

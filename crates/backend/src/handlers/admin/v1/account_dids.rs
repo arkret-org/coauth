@@ -1,5 +1,6 @@
 //! Account DID binding administration endpoints.
 
+use arkret_identifiers::Did;
 use coauth_admin_types::{
     AdminAccountDidBinding as AccountDidBinding,
     AdminAccountDidBindingsMeta as AccountDidBindingsMeta,
@@ -472,6 +473,11 @@ pub async fn remove_account_did(
     repo.principal_did()
         .remove_for_user_and_core(&user, &did)
         .await?;
+    let controller_id = arkret_identifiers::project_did_to_core_id(
+        &arkret_identifiers::Did::new(did.clone())
+            .map_err(|error| AppError::bad_request(format!("did_invalid: {error}")))?,
+    )
+    .map_err(|error| AppError::bad_request(format!("did_invalid: {error}")))?;
     // AKP-0008 controller lifecycle cascade
     // (`accountability-grant.schema.json`): a revoked controller DID can no
     // longer carry accountability, so every grant it issued moves to
@@ -482,7 +488,7 @@ pub async fn remove_account_did(
         .revoke_for_subject(
             &clock,
             AccountabilitySubjectKind::ControllerId,
-            &did,
+            &controller_id,
             DID_BINDING_REVOKED_OPERATION,
         )
         .await?;
@@ -491,7 +497,7 @@ pub async fn remove_account_did(
             &mut rng,
             &clock,
             AccountabilitySubjectKind::ControllerId,
-            &did,
+            &controller_id,
             DID_BINDING_REVOKED_OPERATION,
         )
         .await?;
@@ -597,7 +603,7 @@ pub(crate) async fn primary_did_for_user(
     user: &User,
     arkret_config: &ArkretConfig,
     did_resolver: &dyn DidResolverService,
-) -> Result<Option<String>, AppError> {
+) -> Result<Option<Did>, AppError> {
     match did_resolver
         .primary_did_for_user(repo, arkret_config, user)
         .await
@@ -639,7 +645,7 @@ async fn binding_records_for_user(
     Ok(vec![AccountDidBinding {
         id: format!("acctdid-{}", binding_slug(&user.id.to_string())),
         account_id: user.id.to_string(),
-        did: primary_did,
+        did: primary_did.to_string(),
         kind: DidBindingKind::Primary,
         state,
         primary: true,

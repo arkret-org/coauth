@@ -37,7 +37,7 @@ impl std::fmt::Display for HumanReadable<&UpstreamOAuthProvider> {
         let provider = self.0;
         if let Some(human_name) = &provider.human_name {
             write!(f, "{} ({})", human_name, provider.id)
-        } else if let Some(issuer) = &provider.issuer {
+        } else if let Some(issuer) = &provider.oidc_issuer_uri {
             write!(f, "{} ({})", issuer, provider.id)
         } else {
             write!(f, "{}", provider.id)

@@ -1,4 +1,4 @@
-use arkret_identifiers::{DidCoreId, SessionGrantId};
+use arkret_identifiers::{DidCoreId, ServiceAccountId, SessionGrantId};
 use arkret_models_identity::SessionGrantProofKind;
 use chrono::{DateTime, Utc};
 use coauth_oauth_types::scope::Scope;
@@ -65,11 +65,11 @@ pub enum SessionGrantRevokeTarget {
         grant_id: SessionGrantId,
     },
     Device {
-        subject_id: String,
+        subject_id: DidCoreId,
         device_id: String,
     },
     AllForSubject {
-        subject_id: String,
+        subject_id: DidCoreId,
     },
 }
 
@@ -147,14 +147,15 @@ pub struct SessionGrant {
     pub grant_id: SessionGrantId,
     pub browser_session_id: Option<Ulid>,
     pub issuer_id: DidCoreId,
-    pub subject_id: String,
+    pub subject_id: DidCoreId,
+    pub service_account_id: ServiceAccountId,
     pub device_id: Option<String>,
     pub applet_id: Option<String>,
     pub effective_scope: Option<Value>,
     pub registration_epoch: Option<String>,
-    pub service_id: Option<String>,
+    pub service_id: Option<DidCoreId>,
     pub capability_grant_refs: Vec<String>,
-    pub audience_id: String,
+    pub audience_id: DidCoreId,
     pub scope: Scope,
     pub grant_jwt: String,
     pub session_id: String,

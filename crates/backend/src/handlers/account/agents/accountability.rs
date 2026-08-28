@@ -17,7 +17,7 @@
 
 use std::collections::BTreeSet;
 
-use arkret_wire::CapabilityActionId;
+use arkret_wire::{CapabilityActionId, DidCoreId};
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
 use coauth_data::RepositoryAccess;
@@ -35,7 +35,6 @@ use crate::handlers::account::{DepotExt, make_clock, make_rng};
 use crate::handlers::admin::CreatedJson;
 use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
 use crate::handlers::arkret::{issuer_did_for, service_id_for};
-use crate::services::did_binding_proof::normalize_did_for_binding;
 use crate::{AppError, CreatedJsonResult};
 
 const ACCOUNTABILITY_GRANT_FANOUT_QUEUE: &str = "soland-accountability-grant-fanout";
@@ -64,10 +63,10 @@ fn is_registered_agent_capability(action: &str) -> bool {
 /// Request body for `POST /_coauth/self/agents/{id}/accountability-grant`.
 #[derive(Deserialize, JsonSchema, ToSchema)]
 pub struct AccountabilityGrantRequestBody {
-    /// DID of the controller (account holder) issuing the grant. MUST
-    /// round-trip through the SDK `Did::new` validator (Round-4 regex
-    /// `^did:[a-z0-9]+:[^\s]+$`).
-    pub controller_id: String,
+    /// Stable Arkret id of the controller issuing the grant.
+    #[schemars(with = "String")]
+    #[salvo(schema(value_type = String))]
+    pub controller_id: DidCoreId,
 
     /// Capability actions covered by the grant. Each entry must be a
     /// registered `ak.agent.*` action from `capability-action-registry.json`;
@@ -102,10 +101,14 @@ pub struct AccountabilityGrantOutcome {
     /// Agent principal DID this grant authorizes capability actions on.
     /// The {id} URL segment is percent-decoded by the router and canonicalized
     /// into this DID-as-id field.
-    pub agent_id: String,
+    #[schemars(with = "String")]
+    #[salvo(schema(value_type = String))]
+    pub agent_id: DidCoreId,
 
     /// Controller DID this grant attributes accountability to.
-    pub controller_id: String,
+    #[schemars(with = "String")]
+    #[salvo(schema(value_type = String))]
+    pub controller_id: DidCoreId,
 
     /// Capability actions covered by this grant.
     pub capabilities: Vec<String>,
@@ -140,7 +143,7 @@ pub async fn post_accountability_grant(
     let agent_principal_raw = req
         .param::<String>("id")
         .ok_or_else(|| AppError::bad_request("missing agent principal id"))?;
-    let agent_id = normalize_did_for_binding(agent_principal_raw.trim())
+    let agent_id = DidCoreId::new(agent_principal_raw.trim().to_owned())
         .map_err(|error| AppError::bad_request(format!("agent_id invalid: {error}")))?;
 
     // soland / sodmin only — reject browser sessions and end-user bearers.
@@ -152,8 +155,7 @@ pub async fn post_accountability_grant(
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
 
-    let controller_id = normalize_did_for_binding(&body.controller_id)
-        .map_err(|error| AppError::bad_request(format!("controller_id invalid: {error}")))?;
+    let controller_id = body.controller_id;
 
     let capabilities = normalize_capabilities(body.capabilities)?;
 
@@ -322,14 +324,14 @@ pub(super) fn normalize_capabilities(capabilities: Vec<String>) -> Result<Vec<St
 #[derive(Serialize)]
 struct CapabilityDigestInput<'a> {
     kind: &'a str,
-    agent_id: &'a str,
-    controller_id: &'a str,
+    agent_id: &'a DidCoreId,
+    controller_id: &'a DidCoreId,
     capabilities: &'a [String],
 }
 
 pub(super) fn accountability_capabilities_digest(
-    agent_id: &str,
-    controller_id: &str,
+    agent_id: &DidCoreId,
+    controller_id: &DidCoreId,
     capabilities: &[String],
 ) -> Result<String, AppError> {
     canonical_digest(&CapabilityDigestInput {

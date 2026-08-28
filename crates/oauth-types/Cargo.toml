@@ -20,6 +20,7 @@ workspace = true
 
 # Workspace crates
 base64ct = {workspace = true}
+arkret-identifiers = {workspace = true}
 chrono = {workspace = true}
 coauth-iana = {workspace = true}
 coauth-jose = {workspace = true}

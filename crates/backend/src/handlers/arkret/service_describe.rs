@@ -253,7 +253,7 @@ fn build_verified_profile_descriptors(
 /// creates the AccountHandoff that later authenticates session issuance. When the
 /// deployment fronts principal servers, it also publishes the
 /// `account_authority` block so clients derive every `/_arkret/gate/account/*`
-/// request from `gate_account_base`.
+/// request from `gate_account_base_url`.
 ///
 /// Proprietary fields with no first-class slot on `AuthMetadata` are inserted
 /// into `extra` so they keep serializing at the top level of the
@@ -264,11 +264,12 @@ fn build_auth_metadata(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -
     let issuer = url_builder.oidc_issuer().to_string();
     let openid_configuration = url_builder.oidc_discovery().to_string();
     let admin_audience = required_audience_for(url_builder, arkret_config);
-    let gate_account_base = url_builder
+    let gate_account_base_url = url_builder
         .absolute_url("/_arkret/gate/account")
         .to_string();
-    let origin = url_builder.http_base().to_string();
-    let origin = origin.strip_suffix('/').unwrap_or(&origin).to_owned();
+    let origin =
+        arkret_identifiers::WebOrigin::new(url_builder.http_base().origin().ascii_serialization())
+            .expect("configured HTTP base must have a canonical Web Origin");
     let mut extra = std::collections::BTreeMap::new();
     extra.insert(
         "issuer_did".to_owned(),
@@ -305,14 +306,14 @@ fn build_auth_metadata(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -
 
     AuthMetadata {
         account_authority: Some(AccountAuthority {
-            origin_uri: origin,
-            gate_account_base,
+            origin,
+            gate_account_base_url,
         }),
         methods: vec![AuthMethod {
             method: AuthMethodKind::Oidc,
             issuer_uri: Some(issuer.clone()),
             provider_uri: None,
-            openid_configuration_uri: Some(openid_configuration.clone()),
+            openid_configuration_url: Some(openid_configuration.clone()),
             client_id: None,
             scopes: vec!["openid".to_owned(), "profile".to_owned()],
             grant_exchange: AuthGrantExchange {
@@ -488,7 +489,7 @@ pub(crate) fn service_describe_response(
             .map(|value| (*value).to_owned())
             .collect(),
         transport_bindings: vec![TransportBinding::HttpJson {
-            base_uri: url_builder.http_base().to_string(),
+            base_url: url_builder.http_base().to_string(),
             extension_profile_required: (),
         }],
         supported_features: Vec::new(),

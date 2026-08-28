@@ -44,7 +44,7 @@ ceremony 只能消费一次。应保持 Coauth CSP，不在登录页和安全中
 生产启用 Passkey 前必须逐项确认：
 
 - 浏览器可见 URL 使用 HTTPS（仅字面量 `localhost` 开发环境可使用 HTTP）、
-  保持稳定，并与 `http.public_base` 完全一致；
+  保持稳定，并与 `http.public_base_url` 完全一致；
 - 公开主机名就是预期 RP ID，且不是 IP 字面量；
 - 反向代理保持配置的外部 scheme/host，只允许同源浏览器访问 Passkey 账号
   路由，并且不以更弱的值覆盖 Coauth CSP 或 cookie 属性；

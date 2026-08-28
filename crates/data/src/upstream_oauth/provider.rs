@@ -329,8 +329,8 @@ impl std::str::FromStr for ProviderSource {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UpstreamOAuthProvider {
     pub id: Ulid,
-    /// coauth extension: `issuer` is Optional (for non-OIDC providers)
-    pub issuer: Option<String>,
+    /// Normalized OIDC issuer URI. Absent for non-OIDC providers.
+    pub oidc_issuer_uri: Option<String>,
     pub human_name: Option<String>,
     pub brand_name: Option<String>,
     pub discovery_mode: DiscoveryMode,

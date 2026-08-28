@@ -122,7 +122,7 @@ pub fn to_upstream_oauth_provider(
 ) -> UpstreamOAuthProvider {
     UpstreamOAuthProvider {
         id: provider.id.to_string(),
-        issuer: provider.issuer,
+        oidc_issuer_uri: provider.oidc_issuer_uri,
         human_name: provider.human_name,
         brand_name: provider.brand_name,
         created_at: provider.created_at,

@@ -3,6 +3,7 @@
 //! (issue / refresh / introspect / logout live in `handlers::arkret`); they
 //! reuse the protocol module's caller authorization plumbing only.
 
+use arkret_identifiers::DidCoreId;
 use coauth_data::Pagination;
 use coauth_data::oauth::SessionGrantFilter;
 use salvo::prelude::*;
@@ -30,7 +31,11 @@ pub async fn list_session_grants(
     depot: &Depot,
 ) -> Result<Json<SessionGrantListOutcome>, ArkretRouteError> {
     let clock = crate::handlers::make_clock();
-    let subject = req.query::<String>("subject");
+    let subject = req
+        .query::<String>("subject")
+        .map(DidCoreId::new)
+        .transpose()
+        .map_err(|error| ArkretRouteError::BadRequest(format!("invalid subject_id: {error}")))?;
     let device_id = req.query::<String>("device_id");
     let requested_audience = req.query::<String>("audience");
 
@@ -39,11 +44,15 @@ pub async fn list_session_grants(
     // SEC-SG-ENUM: a Principal Server caller may not enumerate session-grant
     // metadata across arbitrary subjects/audiences. Pin the query to the
     // caller's own audience; an admin caller stays unrestricted.
-    let audience = caller.resolve_read_audience(requested_audience.as_deref())?;
+    let audience = caller
+        .resolve_read_audience(requested_audience.as_deref())?
+        .map(DidCoreId::new)
+        .transpose()
+        .map_err(|error| ArkretRouteError::BadRequest(format!("invalid audience_id: {error}")))?;
 
     let mut filter = SessionGrantFilter::new();
 
-    if let Some(subject) = subject.as_deref() {
+    if let Some(subject) = subject.as_ref() {
         filter = filter.for_subject(subject);
     }
 
@@ -51,7 +60,7 @@ pub async fn list_session_grants(
         filter = filter.for_device(device_id);
     }
 
-    if let Some(audience) = audience.as_deref() {
+    if let Some(audience) = audience.as_ref() {
         filter = filter.for_audience(audience);
     }
 

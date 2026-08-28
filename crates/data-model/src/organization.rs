@@ -1,6 +1,7 @@
 use arkret_models_collaboration::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
 };
+use arkret_wire::{Did, DidCoreId};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -43,7 +44,9 @@ impl OrganizationBootstrapAuthorization {
 )]
 pub struct OrganizationPrincipalControl {
     pub id: String,
-    pub organization_did: String,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub organization_did: Did,
     pub principal_control_realm_id: String,
     /// Current organization control-stream head. Bootstrap seeds it with the
     /// accepted PCR create Event and rotation replaces it wholesale, so there
@@ -55,7 +58,9 @@ pub struct OrganizationPrincipalControl {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bootstrap_delegation_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub executed_by: Option<String>,
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = Option<String>)))]
+    pub executed_by: Option<DidCoreId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bootstrap_proof_digest: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -100,8 +105,12 @@ impl OrganizationDelegationStatus {
 pub struct OrganizationDelegation {
     pub id: String,
     pub delegation_ref: String,
-    pub organization_did: String,
-    pub delegate_did: String,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub organization_did: Did,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub delegate_did: Did,
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
     pub issuer_role: RealmOrganizationIssuerRole,
@@ -119,7 +128,9 @@ pub struct OrganizationDelegation {
     pub valid_from: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub valid_until: Option<DateTime<Utc>>,
-    pub created_by: String,
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub created_by: DidCoreId,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

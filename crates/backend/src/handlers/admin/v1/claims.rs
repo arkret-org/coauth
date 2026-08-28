@@ -178,7 +178,7 @@ pub async fn issue_claim(req: &mut Request, depot: &Depot) -> CreatedJsonResult<
     } else {
         let arkret_config = depot.arkret_config()?;
         let did_resolver = depot.did_resolver_service()?;
-        did_resolver.issuer_did(&arkret_config)
+        did_resolver.issuer_did(&arkret_config).to_string()
     };
 
     let claim_service = depot.account_claims_service()?;
@@ -353,7 +353,7 @@ async fn derive_account_id_from_subject(
     let bound_user_id = {
         let mut principal_ids = repo.principal_did();
         principal_ids
-            .get_by_did(subject)
+            .get_by_principal_id(subject)
             .await?
             .map(|binding| binding.user_id)
     };

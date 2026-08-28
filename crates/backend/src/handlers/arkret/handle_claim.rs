@@ -95,6 +95,7 @@ pub(crate) fn issue_handle_claim(
         handle_aliases: aliases.clone(),
         subject_id: Some(subject),
         issuer_id: Some(issuer_id),
+        vouching_id: None,
         binding_state: Some(HandleBindingState::Verified),
         claim_kind: Some(claim_kind),
         visibility: None,
