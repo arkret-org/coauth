@@ -73,7 +73,6 @@ pub(crate) fn issue_handle_claim(
     let issuer_did = issuer_did_for(arkret_config);
     let subject = arkret_identifiers::DidCoreId::new(subject_id.to_owned())?;
     ensure_subject_is_principal_core_id(subject.as_str())?;
-    let issuer_service = issuer_id.clone();
 
     // Spec 7157ee8 §3.1 — canonical handle wire form is
     // `<localpart>:<domain>`.
@@ -94,9 +93,8 @@ pub(crate) fn issue_handle_claim(
         schema: arkret_wire::SchemaId::HANDLE_CLAIM_V1.to_owned(),
         handle: Some(handle),
         handle_aliases: aliases.clone(),
-        subject: Some(subject),
-        issuer: Some(issuer_id),
-        issuer_id: Some(issuer_service),
+        subject_id: Some(subject),
+        issuer_id: Some(issuer_id),
         binding_state: Some(HandleBindingState::Verified),
         claim_kind: Some(claim_kind),
         visibility: None,

@@ -305,14 +305,14 @@ fn build_auth_metadata(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -
 
     AuthMetadata {
         account_authority: Some(AccountAuthority {
-            origin,
+            origin_uri: origin,
             gate_account_base,
         }),
         methods: vec![AuthMethod {
             method: AuthMethodKind::Oidc,
-            issuer: Some(issuer.clone()),
-            provider: None,
-            openid_configuration: Some(openid_configuration.clone()),
+            issuer_uri: Some(issuer.clone()),
+            provider_uri: None,
+            openid_configuration_uri: Some(openid_configuration.clone()),
             client_id: None,
             scopes: vec!["openid".to_owned(), "profile".to_owned()],
             grant_exchange: AuthGrantExchange {
@@ -488,7 +488,7 @@ pub(crate) fn service_describe_response(
             .map(|value| (*value).to_owned())
             .collect(),
         transport_bindings: vec![TransportBinding::HttpJson {
-            base_url: url_builder.http_base().to_string(),
+            base_uri: url_builder.http_base().to_string(),
             extension_profile_required: (),
         }],
         supported_features: Vec::new(),

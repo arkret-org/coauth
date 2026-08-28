@@ -846,7 +846,7 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
     let payload = jwt.payload();
     assert_eq!(payload.kind, "ak.session.grant");
     assert_eq!(payload.grant_id, grant.grant_id);
-    assert_eq!(payload.subject.as_str(), principal_id);
+    assert_eq!(payload.subject_id.as_str(), principal_id);
     assert_eq!(
         payload.audience_id.as_str(),
         required_audience_for(&url_builder, &arkret_config)
@@ -866,7 +866,7 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
     );
     let raw_payload = jwt_payload_value(&grant.grant_jwt);
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
-    assert_subject_did_occurs_once(&raw_payload, payload.subject.as_str());
+    assert_subject_did_occurs_once(&raw_payload, payload.subject_id.as_str());
     assert!(raw_payload.get("session_public_key").is_some());
     assert!(raw_payload.get("cnf").is_none());
     assert!(
@@ -1039,16 +1039,16 @@ fn session_grant_record_exposes_metadata_without_secrets() {
         )
         .unwrap(),
         browser_session_id: Some(Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap()),
-        issuer: arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example.com".to_owned())
+        issuer_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example.com".to_owned())
             .unwrap(),
-        subject: "did:web:auth.example.com:users:01J44Q10GR4AMTFZEEF936DTCP".to_owned(),
+        subject_id: "did:web:auth.example.com:users:01J44Q10GR4AMTFZEEF936DTCP".to_owned(),
         device_id: Some("device-1".to_owned()),
         applet_id: None,
         effective_scope: None,
         registration_epoch: None,
         service_id: None,
         capability_grant_refs: Vec::new(),
-        audience: "https://soland.example.com/api".to_owned(),
+        audience_id: "https://soland.example.com/api".to_owned(),
         scope: Scope::from_iter([PRINCIPAL_SERVER_SESSION_BIND_SCOPE.parse().unwrap()]),
         grant_jwt: "header.payload.signature".to_owned(),
         session_id: "test-session".to_owned(),
@@ -1091,16 +1091,16 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
         )
         .unwrap(),
         browser_session_id: Some(Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap()),
-        issuer: arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example.com".to_owned())
+        issuer_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example.com".to_owned())
             .unwrap(),
-        subject: format!("did:web:auth.example.com:users:{}", user.id),
+        subject_id: format!("did:web:auth.example.com:users:{}", user.id),
         device_id: Some("device-1".to_owned()),
         applet_id: None,
         effective_scope: None,
         registration_epoch: None,
         service_id: None,
         capability_grant_refs: Vec::new(),
-        audience: "https://soland.example.com/api".to_owned(),
+        audience_id: "https://soland.example.com/api".to_owned(),
         scope: Scope::from_iter([PRINCIPAL_SERVER_SESSION_BIND_SCOPE.parse().unwrap()]),
         grant_jwt: "header.payload.signature".to_owned(),
         session_id: "test-session".to_owned(),
@@ -1346,7 +1346,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     // the same grant still sees it active.
     assert_eq!(body["one_time_use_consumed"], false);
     assert_eq!(body["grant"]["id"], grant.grant_id.to_string());
-    assert_eq!(body["grant"]["subject"], grant.subject);
+    assert_eq!(body["grant"]["subject_id"], grant.subject_id);
     assert_eq!(body["grant"]["audience_id"], grant.audience_id);
     assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
     assert!(body["grant"].get("grant_jwt").is_none());
@@ -2106,7 +2106,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     assert_eq!(
         material
             .payload
-            .subject
+            .subject_id
             .as_ref()
             .map(arkret_identifiers::DidCoreId::as_str),
         Some(subject_id)

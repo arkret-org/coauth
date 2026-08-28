@@ -888,7 +888,7 @@ pub(crate) fn password_login_session_grant_target(
             })
         {
             return Ok(SessionGrantTarget {
-                audience: effective.to_string(),
+                audience_id: effective.to_string(),
                 principal_server_name: Some(server.name.clone()),
                 principal_server_endpoint: Some(server.endpoint.to_string()),
             });
@@ -911,7 +911,7 @@ pub(crate) fn password_login_session_grant_target(
         // `services::principal_server_trust`: startup may reject briefly
         // rather than minting a grant with an audience that cannot be bound.
         [server] => Ok(SessionGrantTarget {
-            audience: effective_audience(server, resolved)
+            audience_id: effective_audience(server, resolved)
                 .ok_or(SessionGrantTargetError::UnknownAudience)?
                 .to_string(),
             principal_server_name: Some(server.name.clone()),

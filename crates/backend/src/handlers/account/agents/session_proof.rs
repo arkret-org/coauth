@@ -2377,7 +2377,7 @@ mod tests {
                     "0".repeat(64)
                 ))
                 .unwrap(),
-                audience: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example")
+                audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example")
                     .unwrap(),
                 expires_at: chrono::Utc::now() + chrono::Duration::minutes(5),
                 signature: "sig-a".to_owned(),

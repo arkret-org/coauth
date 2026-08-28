@@ -276,7 +276,7 @@ fn directory_handle_claim_audience(
     body.audience
         .clone()
         .or_else(|| body.realm_id.as_ref().map(ToString::to_string))
-        .or_else(|| body.requester.as_ref().map(ToString::to_string))
+        .or_else(|| body.requester_id.as_ref().map(ToString::to_string))
         .unwrap_or_else(|| principal_audience.to_owned())
 }
 
@@ -345,7 +345,7 @@ fn directory_resolve_request_has_disclosure_gate(body: &DirectoryResolveHandleRe
 
     intent_allowed
         && body.expected_principal_id.is_some()
-        && body.requester.is_some()
+        && body.requester_id.is_some()
         && challenge_present
         && !body.proofs.is_empty()
 }
