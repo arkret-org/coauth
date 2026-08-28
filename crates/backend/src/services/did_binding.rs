@@ -57,7 +57,7 @@
 
 use std::sync::Arc;
 
-use arkret_identifiers::{DidFullId, Hash, TrustDomainId};
+use arkret_identifiers::{Did, Hash, TrustDomainId};
 use arkret_identity::{
     AcceptedDidBinding, BindingInvalidation, DidBindingPurpose, DidBindingStatus, EvidenceReceipt,
     FreshnessProfile, FreshnessRequirement, LimitedTrust, MethodEvidence, ResolverFailMode,
@@ -332,7 +332,7 @@ pub enum DidBindingError {
 ///
 /// | `DidResolutionIdentityFactRejection` | `DidBindingStatus` | why |
 /// | --- | --- | --- |
-/// | *(none)* | `Active` | full identity fact |
+/// | *(none)* | `Active` | authority-grade DID fact |
 /// | `CacheOnlyDegraded` | `Stale` | the evidence is genuine but the resolver served it from cache while degraded; §5 lets an ordinary read consume a stale binding, and an authority path with `require_fresh` still rejects it |
 /// | `DegradedResolverState` | `Stale` | same shape: real evidence, degraded availability |
 /// | `WebvhCacheTooStale` | `Stale` | literally an age problem; `Stale` is the status §5 names for it |
@@ -561,7 +561,7 @@ impl CoauthBindingRequest<'_> {
     /// `BindingResolveRequest::key`.
     pub fn key(&self) -> Result<VerifiedDidBindingKey, DidBindingError> {
         Ok(VerifiedDidBindingKey {
-            did: DidFullId::new(self.did.to_owned())
+            did: Did::new(self.did.to_owned())
                 .map_err(|error| DidBindingError::Document(error.to_string()))?,
             trust_domain: self.trust_domain.clone(),
             purpose: self.purpose,
@@ -877,7 +877,7 @@ pub async fn ordinary_read_document(
     now: DateTime<Utc>,
 ) -> Result<AuthorityDocument, DidBindingError> {
     let key = VerifiedDidBindingKey {
-        did: DidFullId::new(did.to_owned())
+        did: Did::new(did.to_owned())
             .map_err(|error| DidBindingError::Document(error.to_string()))?,
         trust_domain: trust_domain_id(url_builder, arkret_config)?,
         purpose,
@@ -998,7 +998,7 @@ pub fn mirrored_acceptance(
 pub async fn invalidate_did_bindings(
     repo: &mut BoxRepository,
     store: &DurableVerifiedDidBindingStore,
-    did: &DidFullId,
+    did: &Did,
 ) -> Result<usize, DidBindingError> {
     store
         .invalidate_durable(repo, &BindingInvalidation::for_did(did.clone()))

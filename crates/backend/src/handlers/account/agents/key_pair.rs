@@ -799,11 +799,11 @@ fn parse_actor_id(actor_id: &str, field: &str) -> Result<arkret_identifiers::Did
 fn verification_method_controller_actor_id(
     verification_method: &str,
 ) -> Option<arkret_identifiers::DidCoreId> {
-    let full_id = arkret_identifiers::DidFullId::new(
+    let did = arkret_identifiers::Did::new(
         verification_method_controller(verification_method).to_owned(),
     )
     .ok()?;
-    arkret_identifiers::project_full_id_to_core_id(&full_id).ok()
+    arkret_identifiers::project_did_to_core_id(&did).ok()
 }
 
 async fn commit_and_mark_agent_key_authorization(

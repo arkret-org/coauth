@@ -136,11 +136,11 @@ pub fn principal_binding_test_material(label: &str) -> (String, arkret_identifie
 ///
 /// # Panics
 ///
-/// Panics when `full_id` is not a complete DID this profile can project.
+/// Panics when `did` is not a complete DID this profile can project.
 #[must_use]
-pub fn account_authority_core_id(full_id: &str) -> arkret_identifiers::DidCoreId {
-    arkret_identifiers::project_full_id_to_core_id(
-        &arkret_identifiers::DidFullId::new(full_id.to_owned()).unwrap(),
+pub fn account_authority_core_id(did: &str) -> arkret_identifiers::DidCoreId {
+    arkret_identifiers::project_did_to_core_id(
+        &arkret_identifiers::Did::new(did.to_owned()).unwrap(),
     )
     .unwrap()
 }
@@ -173,9 +173,9 @@ pub fn principal_control_realm_id() -> arkret_identifiers::RealmId {
 /// Panics when the fixture inputs do not produce a shape-valid receipt.
 #[must_use]
 pub fn account_binding_receipt(
-    account_authority_full_id: &str,
+    account_authority_did: &str,
     principal_id: arkret_identifiers::DidCoreId,
-    full_id: arkret_identifiers::DidFullId,
+    did: arkret_identifiers::Did,
     version_id: &str,
     head_event_digest: arkret_identifiers::Hash,
 ) -> arkret_models_identity::AccountBindingReceipt {
@@ -185,11 +185,11 @@ pub fn account_binding_receipt(
     let mut receipt = arkret_models_identity::AccountBindingReceipt {
         binding_state: arkret_models_identity::AccountBindingState::Bound,
         binding_kind: arkret_models_identity::AccountBindingKind::IdentityCreation,
-        account_authority_id: account_authority_core_id(account_authority_full_id),
+        account_authority_id: account_authority_core_id(account_authority_did),
         account_subject: arkret_identifiers::Hash::new(format!("sha256:{}", "1".repeat(64)))
             .unwrap(),
         principal_id,
-        full_id,
+        did,
         did_version_id: version_id.to_owned(),
         control_key_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "2".repeat(64)))
             .unwrap(),
@@ -204,7 +204,7 @@ pub fn account_binding_receipt(
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
             // The receipt proof controller MUST be the account authority.
             verification_method: arkret_wire::DidUrl::new(format!(
-                "{account_authority_full_id}#service-key"
+                "{account_authority_did}#service-key"
             ))
             .unwrap(),
             payload_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
@@ -228,7 +228,7 @@ pub fn account_binding_receipt(
 /// Panics when `principal_id` is not a `ak:did_core:webvh:` core DID.
 #[must_use]
 pub fn verified_principal_binding_input(
-    account_authority_full_id: &str,
+    account_authority_did: &str,
     audience: impl Into<String>,
     principal_id: String,
     key_log_head: arkret_identifiers::Hash,
@@ -237,21 +237,21 @@ pub fn verified_principal_binding_input(
     let method_specific_id = principal_id
         .strip_prefix("ak:did_core:webvh:")
         .expect("webvh test principal core");
-    let full_id = format!("did:webvh:{method_specific_id}:fixture.example");
+    let did = format!("did:webvh:{method_specific_id}:fixture.example");
     let principal_authority = principal_authority(&principal_id, &audience);
     let audience_id = arkret_identifiers::DidCoreId::new(audience).unwrap();
     let principal_id = arkret_identifiers::DidCoreId::new(principal_id).unwrap();
-    let full_id = arkret_identifiers::DidFullId::new(full_id).unwrap();
+    let did = arkret_identifiers::Did::new(did).unwrap();
     VerifiedPrincipalDidBindingInput {
         audience: audience_id.clone(),
         principal_id: principal_id.clone(),
         key_log_head: key_log_head.clone(),
-        verified_full_id: full_id.clone(),
+        verified_did: did.clone(),
         verified_version_id: "1-fixture".to_owned(),
         binding_receipt: account_binding_receipt(
-            account_authority_full_id,
+            account_authority_did,
             principal_id,
-            full_id,
+            did,
             "1-fixture",
             key_log_head,
         ),

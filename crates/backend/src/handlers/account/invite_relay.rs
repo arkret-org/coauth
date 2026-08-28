@@ -14,7 +14,7 @@
 //! ## Strand
 //!
 //! 1. The inviter signs an invite payload (out of band) and POSTs it to `POST
-//!    /_coauth/self/account/invites/relay` along with `(target_principal_url, target_holder_did,
+//!    /_coauth/self/account/invites/relay` along with `(target_principal_url, target_holder_principal_id,
 //!    consent_id, scope)`.
 //! 2. Coauth queries the target's consent cell via `consent_cell_query::query_consent_cell`.
 //! 3. Coauth runs `evaluate_invite_gate(...)` to translate the lookup + `consent_required` policy
@@ -57,9 +57,9 @@ pub struct InviteRelayRequestBody {
     /// browser-session cookie / OAuth bearer (`post_invite_relay` runs
     /// `extract_session_info` + `get_requester`): a non-admin caller may
     /// only relay for their own published principal DID, while an admin
-    /// session may relay on behalf of any `inviter_did`. The value is never
+    /// session may relay on behalf of any `inviter_id`. The value is never
     /// trusted as authentication on its own.
-    pub inviter_did: String,
+    pub inviter_id: String,
 
     /// Base URL of the target's `server_name` (`soland`).
     ///
@@ -71,8 +71,8 @@ pub struct InviteRelayRequestBody {
     pub target_principal_url: Option<Url>,
 
     /// DID of the holder whose cell we're consulting. Embedded in the
-    /// `X-Arkret-Holder-DidFullId` header on the soland query.
-    pub target_holder_did: String,
+    /// `X-Arkret-Holder-Did` header on the soland query.
+    pub target_holder_principal_id: String,
 
     /// Consent-cell identifier per spec §6.
     pub consent_id: String,
@@ -170,9 +170,9 @@ pub fn relay_outcome_to_response(outcome: &RelayOutcome) -> (StatusCode, InviteR
 /// decisions are reported via `Ok(RelayOutcome::*)`.
 pub async fn relay_invite_with(
     target_principal_url: Option<&Url>,
-    target_holder_did: &str,
+    target_holder_principal_id: &str,
     consent_id: &str,
-    peer_did: &str,
+    peer_principal_id: &str,
     scope: ConsentScope,
     consent_required: bool,
     peer_protocol_client: Option<&PeerProtocolClient<'_>>,
@@ -187,18 +187,18 @@ pub async fn relay_invite_with(
 
     let lookup = query_consent_cell(
         Some(principal_url),
-        target_holder_did,
+        target_holder_principal_id,
         consent_id,
-        peer_did,
+        peer_principal_id,
         scope,
         http_client,
     )
     .await;
 
-    let decision = evaluate_invite_gate(&lookup, peer_did, scope, consent_required);
+    let decision = evaluate_invite_gate(&lookup, peer_principal_id, scope, consent_required);
     debug!(
         ?decision,
-        consent_id, peer_did, scope = %scope, "invite-relay gate decision"
+        consent_id, peer_principal_id, scope = %scope, "invite-relay gate decision"
     );
 
     match decision {
@@ -241,8 +241,8 @@ pub async fn post_invite_relay(
         .await
         .map_err(|_| RouteError::BadRequest("invalid_request_body".into()))?;
 
-    if params.inviter_did.is_empty()
-        || params.target_holder_did.is_empty()
+    if params.inviter_id.is_empty()
+        || params.target_holder_principal_id.is_empty()
         || params.consent_id.is_empty()
     {
         return Err(RouteError::BadRequest("missing_required_fields".into()));
@@ -271,13 +271,13 @@ pub async fn post_invite_relay(
 
     // A non-admin session may only relay invites for its own published
     // principal DID. An admin session (OAuth scope) may relay on behalf of
-    // any `inviter_did`. The body-supplied `inviter_did` is otherwise never
+    // any `inviter_id`. The body-supplied `inviter_id` is otherwise never
     // trusted as authentication.
     if !requester.is_admin() {
-        let caller_did = arkret::published_principal_did_for_user(&mut repo, &arkret_config, user)
+        let caller_id = arkret::published_principal_id_for_user(&mut repo, &arkret_config, user)
             .await?
             .ok_or(RouteError::Unauthorized)?;
-        if caller_did != params.inviter_did {
+        if caller_id != params.inviter_id {
             return Err(RouteError::Unauthorized);
         }
     }
@@ -311,7 +311,7 @@ pub async fn post_invite_relay(
         delivery
             .validate_minimal()
             .map_err(|error| RouteError::BadRequest(format!("invalid_invite_delivery: {error}")))?;
-        if delivery.invite_address.subject_id.as_str() != params.target_holder_did {
+        if delivery.invite_address.subject_id.as_str() != params.target_holder_principal_id {
             return Err(RouteError::BadRequest(
                 "invite_delivery_subject_mismatch".to_owned(),
             ));
@@ -348,9 +348,9 @@ pub async fn post_invite_relay(
 
     let outcome = relay_invite_with(
         principal_url.as_ref(),
-        &params.target_holder_did,
+        &params.target_holder_principal_id,
         &params.consent_id,
-        &params.inviter_did,
+        &params.inviter_id,
         params.scope,
         params.consent_required,
         peer_client.as_ref(),
@@ -393,8 +393,8 @@ mod tests {
         }
     }
 
-    fn source_full_id() -> arkret_identifiers::DidFullId {
-        arkret_identifiers::DidFullId::new("did:web:auth.example".to_owned()).unwrap()
+    fn source_did() -> arkret_identifiers::Did {
+        arkret_identifiers::Did::new("did:web:auth.example".to_owned()).unwrap()
     }
 
     fn trust_domain() -> arkret_identifiers::TrustDomainId {
@@ -514,7 +514,7 @@ mod tests {
             Some(&base),
             &client,
             &keystore,
-            source_full_id(),
+            source_did(),
             peer_identity(),
             trust_domain(),
             trust_domain(),
@@ -683,7 +683,7 @@ mod tests {
             Some(&base),
             &client,
             &keystore,
-            source_full_id(),
+            source_did(),
             peer_identity(),
             trust_domain(),
             trust_domain(),

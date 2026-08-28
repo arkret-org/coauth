@@ -155,8 +155,6 @@ impl LoginOutcome {
 pub struct ViewerInfo {
     pub id: String,
     pub handle: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub did: Option<String>,
     pub federated_handle: String,
     pub principal_id: String,
     #[serde(default)]
@@ -387,14 +385,13 @@ mod tests {
                 "password_login_session_grants_disabled; use the OIDC/passkey bridge"
             ]
         }))
-        .expect("password login response decodes without viewer.did");
+        .expect("password login response decodes");
 
         assert_eq!(outcome.status, "success");
         assert_eq!(
             outcome.viewer.as_ref().expect("viewer").handle.as_str(),
             "alice"
         );
-        assert_eq!(outcome.viewer.as_ref().expect("viewer").did, None);
         assert!(outcome.session_grant.is_none());
         assert_eq!(outcome.warnings.len(), 1);
     }

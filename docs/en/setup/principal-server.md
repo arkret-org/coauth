@@ -86,8 +86,8 @@ state:
 2. derive the `did.jsonl` URL from that DID and verify the Provider's method-native history
    completely (SCID derivation, entry hash chain, every entry proof and the rotation
    authorization), requiring the verified head to be the version describe advertises;
-3. require `project(full_id)` to equal the receipt's `provider_service_id`, and the bare controller
-   DID of the receipt's `verification_method` to equal that `full_id` verbatim;
+3. require `project(did)` to equal the receipt's `provider_service_id`, and the bare controller
+   DID of the receipt's `verification_method` to equal that `did` verbatim;
 4. require that method to be an `assertionMethod` of the Provider DID Document that was effective at
    the receipt's `issued_at`;
 5. verify the receipt's Ed25519 detached JWS.

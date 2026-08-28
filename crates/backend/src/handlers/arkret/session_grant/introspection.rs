@@ -253,8 +253,8 @@ pub async fn introspect_session_grant(
     };
 
     let bound_user_id = if browser_session.is_none() {
-        let mut principal_dids = repo.principal_did();
-        principal_dids
+        let mut principal_ids = repo.principal_did();
+        principal_ids
             .get_by_did_and_audience(&grant.subject, &grant.audience)
             .await
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?

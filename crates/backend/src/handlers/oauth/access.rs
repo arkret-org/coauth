@@ -230,7 +230,7 @@ pub async fn accept_authorization_consent(
             .await?;
         let subject_did =
             crate::handlers::arkret::oidc_subject_for_user(arkret_config, &browser_session.user);
-        let principal_did = crate::handlers::arkret::published_principal_did_for_user(
+        let principal_id = crate::handlers::arkret::published_principal_id_for_user(
             &mut repo,
             arkret_config,
             &browser_session.user,
@@ -243,7 +243,7 @@ pub async fn accept_authorization_consent(
                 clock,
                 url_builder,
                 &subject_did,
-                principal_did.as_deref(),
+                principal_id.as_deref(),
                 key_store,
                 &client,
                 Some(&grant),

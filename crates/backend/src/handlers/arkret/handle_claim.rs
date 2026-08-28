@@ -70,7 +70,7 @@ pub(crate) fn issue_handle_claim(
     use crate::services::handle_subject_validator::ensure_subject_is_principal_core_id;
 
     let issuer_service_id = service_id_for(arkret_config);
-    let issuer_full_id = issuer_did_for(arkret_config);
+    let issuer_did = issuer_did_for(arkret_config);
     let subject = arkret_identifiers::DidCoreId::new(subject_id.to_owned())?;
     ensure_subject_is_principal_core_id(subject.as_str())?;
     let issuer_service = issuer_service_id.clone();
@@ -121,7 +121,7 @@ pub(crate) fn issue_handle_claim(
     let (alg, key) = crate::services::preferred_service_signing_key(key_store)
         .ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
-    let verification_method = did_url_for_handle_claim(format!("{issuer_full_id}#{key_id}"))?;
+    let verification_method = did_url_for_handle_claim(format!("{issuer_did}#{key_id}"))?;
     let proof_payload_digest = hash_for_handle_claim(claim_digest.clone())?;
 
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());

@@ -12,7 +12,7 @@ pub struct ScheduleStatus {
     pub schedule_name: String,
     /// When the schedule was last run
     pub last_scheduled_at: Option<DateTime<Utc>>,
-    /// DidFullId the last job on this schedule finish? (successfully or not)
+    /// Did the last job on this schedule finish? (successfully or not)
     pub last_scheduled_job_completed: Option<bool>,
 }
 

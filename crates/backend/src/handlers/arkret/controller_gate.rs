@@ -116,7 +116,7 @@ pub async fn issue_controller_gate_attestation(
     }
 
     let (status, eligibility) = controller_status(user.status);
-    let authority_full_id = super::issuer_did_for(&depot.arkret_config()?);
+    let authority_did = super::issuer_did_for(&depot.arkret_config()?);
     let authority_service_id = service_id_for(&depot.arkret_config()?);
     let key_store = depot.key_store()?;
     let signing_jwk = key_store
@@ -162,7 +162,7 @@ pub async fn issue_controller_gate_attestation(
         basis,
         basis_digest,
         authority_service_id,
-        verification_method: DidUrl::new(format!("{authority_full_id}#{signing_key_id}"))
+        verification_method: DidUrl::new(format!("{authority_did}#{signing_key_id}"))
             .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?,
         issued_at: now,
         expires_at,
@@ -224,11 +224,11 @@ async fn authenticate_agent_authority_request(
         .validate_shape(&request.agent_authority_service_id, now)
         .map_err(|_| not_found())?;
 
-    let full_id = &request
+    let did = &request
         .agent_authority_service_resolution
         .service_resolution_record
         .record
-        .full_id;
+        .did;
     let resolved = crate::services::did_binding::authority_document(
         &depot.http_client()?,
         &depot.url_builder()?,
@@ -237,7 +237,7 @@ async fn authenticate_agent_authority_request(
         repo,
         depot.did_resolver_service()?.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),
-        full_id.as_str(),
+        did.as_str(),
         arkret_identity::DidBindingPurpose::Controller,
         crate::services::did_binding::controller_freshness(),
         now,
@@ -287,7 +287,7 @@ async fn authenticate_agent_authority_request(
         .split_once('#')
         .map(|(controller, _)| controller)
         .ok_or_else(not_found)?;
-    if key_controller != full_id.as_str() {
+    if key_controller != did.as_str() {
         return Err(not_found());
     }
     let resolved_key = arkret_identity::resolve_verification_method_key_from_document(

@@ -1150,7 +1150,7 @@ mod tests {
     /// principal binding into the durable verified-DID-binding store.
     ///
     /// The approve step resolves the admin's authority document through the
-    /// `verified_full_id` retained on that binding. Tests configure no
+    /// `verified_did` retained on that binding. Tests configure no
     /// delegated resolver, so the acceptance must already be durable — the §4
     /// "binding hit, zero resolver calls" path — or the high-risk freshness
     /// gate fails closed.
@@ -1164,7 +1164,7 @@ mod tests {
             .await
             .unwrap()
             .expect("admin principal binding should be seeded");
-        let full_id = binding.verified_full_id.to_string();
+        let did = binding.verified_did.to_string();
 
         // The approval proof is signed by the test keystore's Ed25519 key
         // under `kid = {admin core id}#key-1`, so the pinned document must
@@ -1178,12 +1178,12 @@ mod tests {
             .clone();
         let resolution = crate::services::did_resolver::DidResolution {
             document: crate::handlers::arkret::DidDocument {
-                id: full_id.clone(),
+                id: did.clone(),
                 also_known_as: Vec::new(),
                 verification_method: vec![crate::handlers::arkret::VerificationMethod {
                     id: format!("{admin_did}#key-1"),
                     kind: "JsonWebKey2020".to_owned(),
-                    controller: full_id.clone(),
+                    controller: did.clone(),
                     public_key_jwk: Some(public_jwk),
                     public_key_multibase: None,
                 }],

@@ -31,7 +31,7 @@ pub enum DidBindingProofError {
 }
 
 pub fn normalize_did_for_binding(did: &str) -> Result<String, DidBindingProofError> {
-    let parsed = arkret_identifiers::DidFullId::new(did.trim().to_owned())
+    let parsed = arkret_identifiers::Did::new(did.trim().to_owned())
         .map_err(|error| DidBindingProofError::InvalidDid(error.to_string()))?;
     if parsed.as_str().starts_with("did:uuid:") {
         return Err(DidBindingProofError::InvalidDid(
@@ -69,7 +69,7 @@ pub fn validate_account_registration_control_proof(
         || proof.request_canonical_digest != stored.request_digest
         || proof.account_subject != stored.account_subject
         || proof.principal_id != stored.principal_id
-        || proof.full_id != stored.full_id
+        || proof.did != stored.did
         || proof.did_version_id != stored.did_version_id
         || proof.log_head_digest != stored.log_head_digest
         || proof.control_key_digest != stored.control_key_digest
@@ -104,7 +104,7 @@ pub fn validate_account_registration_control_proof(
     if version_id.as_str() != proof.did_version_id
         || log_head_digest != &proof.log_head_digest
         || control_key_digest != &proof.control_key_digest
-        || resolution.document.id != proof.full_id.as_str()
+        || resolution.document.id != proof.did.as_str()
     {
         return Err(DidBindingProofError::ResolutionPinsMismatch);
     }
@@ -284,10 +284,9 @@ mod tests {
     ) {
         let account_id = coauth_data::Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap();
         let grant_id = coauth_data::Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap();
-        let full_id =
-            arkret_identifiers::DidFullId::new("did:webvh:QmTest:alice.example".to_owned())
-                .unwrap();
-        let principal_id = arkret_identifiers::project_full_id_to_core_id(&full_id).unwrap();
+        let did =
+            arkret_identifiers::Did::new("did:webvh:QmTest:alice.example".to_owned()).unwrap();
+        let principal_id = arkret_identifiers::project_did_to_core_id(&did).unwrap();
         let audience =
             arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap();
         let trust_domain =
@@ -308,7 +307,7 @@ mod tests {
         ))
         .unwrap();
         let verification_method =
-            arkret_wire::DidUrl::new(format!("{}#update-key", full_id.as_str())).unwrap();
+            arkret_wire::DidUrl::new(format!("{}#update-key", did.as_str())).unwrap();
         let mut proof = arkret_models_identity::AccountRegistrationControlProof {
             proof_kind:
                 arkret_models_identity::AccountRegistrationControlProofKind::DidBoundSignature,
@@ -318,7 +317,7 @@ mod tests {
             request_canonical_digest: request_digest.clone(),
             account_subject: account_subject.clone(),
             principal_id: principal_id.clone(),
-            full_id: full_id.clone(),
+            did: did.clone(),
             did_version_id: "2-QmHead".to_owned(),
             log_head_digest: log_head_digest.clone(),
             control_key_digest: control_key_digest.clone(),
@@ -348,7 +347,7 @@ mod tests {
                 service_account_id: account_id,
                 account_subject: account_subject.clone(),
                 principal_id,
-                full_id: full_id.clone(),
+                did: did.clone(),
                 did_version_id: proof.did_version_id.clone(),
                 log_head_digest: log_head_digest.clone(),
                 control_key_digest: control_key_digest.clone(),
@@ -369,13 +368,13 @@ mod tests {
         let public_key = Base64UrlUnpadded::encode_string(signing_key.verifying_key().as_bytes());
         let resolution = DidResolution {
             document: crate::handlers::arkret::DidDocument {
-                id: full_id.to_string(),
+                id: did.to_string(),
                 also_known_as: Vec::new(),
                 verification_method: vec![
                     serde_json::from_value(serde_json::json!({
                         "id": verification_method,
                         "type": "JsonWebKey2020",
-                        "controller": full_id,
+                        "controller": did,
                         "publicKeyJwk": {"kty": "OKP", "crv": "Ed25519", "x": public_key}
                     }))
                     .unwrap(),

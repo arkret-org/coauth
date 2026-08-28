@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use arkret_identifiers::{DidCoreId, DidFullId, project_full_id_to_core_id};
+use arkret_identifiers::{Did, DidCoreId, project_did_to_core_id};
 use arkret_identity::service_identity::{
     DidCoreIdentityDiagnostic, DidCoreIdentityKeyRef, DidCoreIdentityState, LocalDidCoreIdentity,
 };
@@ -143,12 +143,10 @@ impl RuntimeServiceIdentity {
             .map(|identity| identity.service_id.clone())
     }
 
-    /// Returns the current complete service DID when the state carries an identity.
+    /// Returns the current service DID when the state carries an identity.
     #[must_use]
-    pub fn full_id(&self) -> Option<DidFullId> {
-        self.state()
-            .identity()
-            .map(|identity| identity.full_id.clone())
+    pub fn did(&self) -> Option<Did> {
+        self.state().identity().map(|identity| identity.did.clone())
     }
 
     /// Returns whether normal request handling may proceed.
@@ -160,15 +158,15 @@ impl RuntimeServiceIdentity {
     #[doc(hidden)]
     #[must_use]
     pub fn fixture(service_id: &str) -> Self {
-        let full_id = DidFullId::new(service_id.to_owned()).expect("fixture service DID");
-        let service_id = project_full_id_to_core_id(&full_id).expect("fixture service DID adapter");
+        let did = Did::new(service_id.to_owned()).expect("fixture service DID");
+        let service_id = project_did_to_core_id(&did).expect("fixture service DID adapter");
         let signing_key_ref =
             DidCoreIdentityKeyRef::new("fixture:coauth:signing").expect("fixture key ref");
         let handle = Self::default();
         handle.store(DidCoreIdentityState::Ready {
             identity: LocalDidCoreIdentity {
                 service_id,
-                full_id,
+                did,
                 registration_key: ServiceRegistrationKey::new(
                     ServiceKind::AuthServer,
                     CanonicalServiceUrl::canonicalize("https://auth.test/")

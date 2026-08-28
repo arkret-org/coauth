@@ -25,7 +25,7 @@
 use arkret_models_collaboration::account_lifecycle::{
     ConsentCellView, ConsentState as SdkConsentState,
 };
-use arkret_wire::ConsentScope;
+use arkret_wire::{ConsentScope, DidCoreId};
 use tracing::{debug, warn};
 use url::Url;
 
@@ -61,18 +61,18 @@ pub struct ConsentState {
 ///
 /// * `principal_server_url` — base URL of the holder's soland deployment. `None` means soland is
 ///   not wired into this coauth instance and the gate degrades to `ConsentLookup::Unknown`.
-/// * `holder_did` — the cell-owner DID; embedded in the request path so soland can route the read
+/// * `holder_principal_id` — the cell-owner stable principal id; embedded in the request path so soland can route the read
 ///   to the right principal control Realm.
 /// * `consent_id` — the consent-cell identifier per spec §6.
-/// * `peer_did` / `scope` — the standard self consent resource key. The helper also probes
+/// * `peer_principal_id` / `scope` — the standard self consent resource key. The helper also probes
 ///   `scope=any` when `scope` is more specific, preserving the invite-gate wildcard semantics.
 /// * `http_client` — caller-provided client so tests can inject a wiremock server and production
 ///   callers can share the global pool.
 pub async fn query_consent_cell(
     principal_server_url: Option<&Url>,
-    holder_did: &str,
+    holder_principal_id: &DidCoreId,
     consent_id: &str,
-    peer_did: &str,
+    peer_principal_id: &DidCoreId,
     scope: ConsentScope,
     http_client: &reqwest::Client,
 ) -> ConsentLookup {
@@ -92,15 +92,15 @@ pub async fn query_consent_cell(
     }
 
     for candidate_scope in scopes {
-        match query_consent_cell_scope(base, holder_did, peer_did, candidate_scope, http_client)
+        match query_consent_cell_scope(base, holder_principal_id, peer_principal_id, candidate_scope, http_client)
             .await
         {
             ConsentScopeLookup::Active { cell_id } => {
-                let tag = format!("peer={peer_did};scope={candidate_scope}");
+                let tag = format!("peer={peer_principal_id};scope={candidate_scope}");
                 debug!(
                     %cell_id,
                     consent_id,
-                    peer_did,
+                    peer_principal_id,
                     scope = %candidate_scope,
                     "consent cell query: active"
                 );
@@ -115,7 +115,7 @@ pub async fn query_consent_cell(
                     %cell_id,
                     ?state,
                     consent_id,
-                    peer_did,
+                    peer_principal_id,
                     scope = %candidate_scope,
                     "consent cell query: inactive"
                 );
@@ -156,26 +156,26 @@ enum ConsentScopeLookup {
 
 async fn query_consent_cell_scope(
     base: &Url,
-    holder_did: &str,
-    peer_did: &str,
+    holder_principal_id: &DidCoreId,
+    peer_principal_id: &DidCoreId,
     scope: ConsentScope,
     http_client: &reqwest::Client,
 ) -> ConsentScopeLookup {
     let path = format!(
         "_arkret/self/consent/cells/{}",
-        urlencoding::encode_path(holder_did)
+        urlencoding::encode_path(holder_principal_id.as_str())
     );
     let mut url = match base.join(&path) {
         Ok(u) => u,
         Err(error) => {
-            warn!(?error, holder_did, "failed to build consent-cell URL");
+            warn!(?error, holder_principal_id, "failed to build consent-cell URL");
             return ConsentScopeLookup::Unknown {
                 reason: "invalid_principal_server_url",
             };
         }
     };
     url.query_pairs_mut()
-        .append_pair("peer", peer_did)
+        .append_pair("peer", peer_principal_id.as_str())
         .append_pair("consent_scope", scope.as_str());
 
     let response = match outbound_http::send_with_policy(
@@ -220,8 +220,8 @@ async fn query_consent_cell_scope(
         }
     };
 
-    if parsed.holder_principal_id.as_str() != holder_did
-        || parsed.peer_principal_id.as_str() != peer_did
+    if parsed.holder_principal_id != *holder_principal_id
+        || parsed.peer_principal_id != *peer_principal_id
         || parsed.consent_scope != scope
     {
         warn!(
@@ -229,8 +229,8 @@ async fn query_consent_cell_scope(
             response_holder = parsed.holder_principal_id.as_str(),
             response_peer = parsed.peer_principal_id.as_str(),
             response_scope = parsed.consent_scope.as_str(),
-            holder_did,
-            peer_did,
+            holder_principal_id,
+            peer_principal_id,
             scope = %scope,
             "consent cell query: response key mismatch"
         );
@@ -252,7 +252,7 @@ async fn query_consent_cell_scope(
 }
 
 /// Decide whether an invite should pass the consent gate, given a cell
-/// lookup result and the requested `(peer_did, scope)` pair.
+/// lookup result and the requested `(peer_principal_id, scope)` pair.
 ///
 /// `consent_required` mirrors the principal control Realm's
 /// the `ak.realm.policy_bundle` payload path `preauth.consent_required` toggle. When `true`
@@ -276,15 +276,15 @@ pub enum InviteGateDecision {
 #[must_use]
 pub fn evaluate_invite_gate(
     lookup: &ConsentLookup,
-    peer_did: &str,
+    peer_principal_id: &DidCoreId,
     scope: ConsentScope,
     consent_required: bool,
 ) -> InviteGateDecision {
     match lookup {
         ConsentLookup::Known(state) if state.granted => {
             // Spec §6.1: tag matches `peer=requester, scope=invite|any`.
-            let want_scoped = format!("peer={peer_did};scope={scope}");
-            let want_any = format!("peer={peer_did};scope=any");
+            let want_scoped = format!("peer={peer_principal_id};scope={scope}");
+            let want_any = format!("peer={peer_principal_id};scope=any");
             if state
                 .tags
                 .iter()

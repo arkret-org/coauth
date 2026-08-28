@@ -92,7 +92,7 @@ pub struct OrganizationStatementRequest {
 
 /// Issue a signed `ak.realm.organization` statement.
 ///
-/// `service_id` is the coauth service DID used to construct the
+/// `service_did` is the coauth service DID used to construct the
 /// `verification_method` DID-URL. `now` and `resolver` feed the SDK
 /// self-verification step. The returned payload is structurally + semantically
 /// valid per the SDK verifier; the cryptographic signature in
@@ -100,7 +100,7 @@ pub struct OrganizationStatementRequest {
 /// transcript.
 pub fn issue_organization_statement<R>(
     key_store: &Keystore,
-    service_id: &str,
+    service_did: &str,
     request: OrganizationStatementRequest,
     now: chrono::DateTime<chrono::Utc>,
     resolver: &R,
@@ -124,7 +124,7 @@ where
     let (alg, key) = crate::services::preferred_service_signing_key(key_store)
         .ok_or(OrganizationStatementError::NoSigningKey)?;
     let key_id = key.kid().ok_or(OrganizationStatementError::NoSigningKey)?;
-    let verification_method = DidUrl::new(format!("{service_id}#{key_id}"))
+    let verification_method = DidUrl::new(format!("{service_did}#{key_id}"))
         .map_err(|error| OrganizationStatementError::Canonical(error.to_owned()))?;
 
     // Build the statement with a placeholder proof. The canonical signing bytes
@@ -250,7 +250,7 @@ mod tests {
         RealmId::new("ak:realm:AXXwKm5bWs7Plj3J5iRyqGeeNU99_oZCMnjtWom6sFeR").unwrap()
     }
 
-    fn org_did() -> DidCoreId {
+    fn organization_id() -> DidCoreId {
         DidCoreId::new("ak:did_core:webvh:example.test".to_owned()).unwrap()
     }
 
@@ -273,7 +273,7 @@ mod tests {
         OrganizationStatementRequest {
             statement_id: "org-stmt-1".to_owned(),
             realm_id: realm_id(),
-            organization_id: org_did(),
+            organization_id: organization_id(),
             relationship: RealmOrganizationRelationship::Owner,
             status: RealmOrganizationStatus::Active,
             control_scopes: vec![RealmOrganizationControlScope::RealmAdmin],
@@ -284,7 +284,7 @@ mod tests {
             revokes_statement_id: None,
             realm_frontier_digest: None,
             organization_policy_ref: None,
-            issuer: org_did(),
+            issuer: organization_id(),
             issuer_role: RealmOrganizationIssuerRole::OrganizationPrincipalId,
             delegation_ref: None,
             executed_by: None,
@@ -295,7 +295,7 @@ mod tests {
         OrganizationDelegation {
             id: "01J0".to_owned(),
             delegation_ref: reference.to_owned(),
-            organization_did: org_did().as_str().to_owned(),
+            organization_did: "did:webvh:example.test".to_owned(),
             delegate_did: "did:web:server.acme.example".to_owned(),
             issuer_role: RealmOrganizationIssuerRole::GovernanceService,
             purposes: vec!["principal_control_realm_bootstrap".to_owned()],

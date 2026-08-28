@@ -25,6 +25,6 @@
 
 ## DID 解析
 
-`DidFullId` 拒绝 method 名段不落在 `^did:[a-z0-9]+:[^\s]+$` 内的标识
+`Did` 拒绝 method 名段不落在 `^did:[a-z0-9]+:[^\s]+$` 内的标识
 符。同一形态也作为数据库 `CHECK` 约束加在每个存储 DID 的列上，因此
 绕过 handler 的值仍然无法落库。

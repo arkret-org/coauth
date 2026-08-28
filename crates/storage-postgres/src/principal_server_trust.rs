@@ -38,7 +38,7 @@ struct EnrollmentRow {
     name: String,
     canonical_endpoint: String,
     service_id: String,
-    full_id: String,
+    did: String,
     method_history_head: String,
     version_id: String,
     resolution_record_digest: String,
@@ -56,9 +56,9 @@ impl TryFrom<EnrollmentRow> for PrincipalServerTrustEnrollment {
                 .column("service_id")
                 .source(error)
         })?;
-        let full_id = arkret_identifiers::DidFullId::new(value.full_id).map_err(|error| {
+        let did = arkret_identifiers::Did::new(value.did).map_err(|error| {
             DatabaseInconsistencyError::on("principal_server_trust_enrollments")
-                .column("full_id")
+                .column("did")
                 .source(error)
         })?;
         let source = PrincipalServerTrustSource::from_stored(&value.source).ok_or_else(|| {
@@ -68,7 +68,7 @@ impl TryFrom<EnrollmentRow> for PrincipalServerTrustEnrollment {
             name: value.name,
             canonical_endpoint: value.canonical_endpoint,
             service_id,
-            full_id,
+            did,
             method_history_head: value.method_history_head,
             version_id: value.version_id,
             resolution_record_digest: value.resolution_record_digest,
@@ -86,7 +86,7 @@ struct NewEnrollmentRow {
     canonical_endpoint: String,
     service_id: String,
     service_kind: String,
-    full_id: String,
+    did: String,
     method_history_head: String,
     version_id: String,
     resolution_record_digest: String,
@@ -100,7 +100,7 @@ struct NewEnrollmentRow {
 struct EnrollmentReplacement {
     canonical_endpoint: String,
     service_id: String,
-    full_id: String,
+    did: String,
     method_history_head: String,
     version_id: String,
     resolution_record_digest: String,
@@ -115,7 +115,7 @@ impl NewEnrollmentRow {
             canonical_endpoint: params.canonical_endpoint.clone(),
             service_id: params.service_id.to_string(),
             service_kind: "principal_server".to_owned(),
-            full_id: params.full_id.to_string(),
+            did: params.did.to_string(),
             method_history_head: params.method_history_head.clone(),
             version_id: params.version_id.clone(),
             resolution_record_digest: params.resolution_record_digest.clone(),
@@ -244,7 +244,7 @@ impl PrincipalServerTrustRepository for PgPrincipalServerTrustRepository<'_> {
             name: params.name,
             canonical_endpoint: params.canonical_endpoint,
             service_id: params.service_id,
-            full_id: params.full_id,
+            did: params.did,
             method_history_head: params.method_history_head,
             version_id: params.version_id,
             resolution_record_digest: params.resolution_record_digest,
@@ -265,7 +265,7 @@ impl PrincipalServerTrustRepository for PgPrincipalServerTrustRepository<'_> {
         let changes = EnrollmentReplacement {
             canonical_endpoint: params.canonical_endpoint.clone(),
             service_id: params.service_id.to_string(),
-            full_id: params.full_id.to_string(),
+            did: params.did.to_string(),
             method_history_head: params.method_history_head.clone(),
             version_id: params.version_id.clone(),
             resolution_record_digest: params.resolution_record_digest.clone(),
@@ -392,10 +392,8 @@ mod tests {
             canonical_endpoint: format!("https://{name}.example/"),
             service_id: arkret_identifiers::DidCoreId::new(service_id.to_owned())
                 .expect("valid service core id"),
-            full_id: arkret_identifiers::DidFullId::new(
-                "did:webvh:QmFixture:soland.example".to_owned(),
-            )
-            .expect("valid full id"),
+            did: arkret_identifiers::Did::new("did:webvh:QmFixture:soland.example".to_owned())
+                .expect("valid DID"),
             method_history_head: "sha256:aa".to_owned(),
             version_id: "1-bb".to_owned(),
             resolution_record_digest: "sha256:cc".to_owned(),

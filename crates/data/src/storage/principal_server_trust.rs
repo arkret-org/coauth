@@ -98,8 +98,8 @@ pub struct PrincipalServerTrustEnrollment {
     pub canonical_endpoint: String,
     /// Accepted stable service core id (the authorization pin).
     pub service_id: arkret_identifiers::DidCoreId,
-    /// Complete service DID verified during enrollment.
-    pub full_id: arkret_identifiers::DidFullId,
+    /// Service DID verified during enrollment.
+    pub did: arkret_identifiers::Did,
     /// Verified WebVH method-history head (anti-rollback floor).
     pub method_history_head: String,
     /// Verified WebVH version id (anti-rollback floor).
@@ -123,8 +123,8 @@ pub struct NewPrincipalServerTrustEnrollment {
     pub canonical_endpoint: String,
     /// Accepted stable service core id (the authorization pin).
     pub service_id: arkret_identifiers::DidCoreId,
-    /// Complete service DID verified during enrollment.
-    pub full_id: arkret_identifiers::DidFullId,
+    /// Service DID verified during enrollment.
+    pub did: arkret_identifiers::Did,
     /// Verified WebVH method-history head (anti-rollback floor).
     pub method_history_head: String,
     /// Verified WebVH version id (anti-rollback floor).

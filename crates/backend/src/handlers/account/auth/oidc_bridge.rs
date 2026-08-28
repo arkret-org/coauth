@@ -13,7 +13,7 @@
 // `coauth_admin_types::integration_manifest_admin` so the sodmin admin SPA
 // decodes them through the same typed shape. The `integration_describe`
 // endpoint below returns the shared `IntegrationManifest` directly.
-use arkret_identifiers::{DeviceId, DidCoreId, DidFullId};
+use arkret_identifiers::{DeviceId, Did, DidCoreId};
 use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
 };
@@ -125,7 +125,7 @@ fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url
 
 fn soland_account_localparts_endpoint(
     principal_endpoint: &str,
-    principal_did: &str,
+    principal_id: &str,
 ) -> Result<url::Url, String> {
     let mut endpoint = url::Url::parse(principal_endpoint)
         .map_err(|error| format!("invalid principal server endpoint: {error}"))?;
@@ -137,7 +137,7 @@ fn soland_account_localparts_endpoint(
         .clear()
         .push("_soland")
         .push("accounts")
-        .push(principal_did)
+        .push(principal_id)
         .push("localparts");
     Ok(endpoint)
 }
@@ -149,7 +149,7 @@ fn soland_account_register_body(
 ) -> Result<soland_contracts::AccountProjectionRequestBody, String> {
     Ok(soland_contracts::AccountProjectionRequestBody {
         principal_id: principal.principal_id.clone(),
-        full_id: principal.full_id.clone(),
+        did: principal.did.clone(),
         display_name: display_name.map(ToOwned::to_owned),
         device_id: device_id
             .map(|value| {
@@ -235,7 +235,7 @@ fn soland_account_localpart_failure(status: reqwest::StatusCode, body: &str) -> 
 #[derive(Clone, Debug)]
 pub(crate) struct VerifiedPrincipalIdentity {
     pub principal_id: DidCoreId,
-    pub full_id: DidFullId,
+    pub did: Did,
 }
 
 pub(crate) async fn ensure_soland_account_registered(
@@ -1358,7 +1358,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             },
             IntegrationManifestDependency {
                 service: "public_did_resolver".to_owned(),
-                purpose: "principal_did_resolution".to_owned(),
+                purpose: "principal_id_resolution".to_owned(),
                 required_contract: "did_method_resolution".to_owned(),
                 discovery_path: "deployment-configured identity_registry.resolver".to_owned(),
                 mode: "remote_public_resolver".to_owned(),
@@ -1403,7 +1403,7 @@ mod tests {
     use super::*;
 
     const TEST_PRINCIPAL_ID: &str = "ak:did_core:webvh:scid:local.host";
-    const TEST_PRINCIPAL_FULL_ID: &str = "did:webvh:scid:local.host:webvh:01k";
+    const TEST_PRINCIPAL_DID: &str = "did:webvh:scid:local.host:webvh:01k";
     const TEST_DEVICE_ID: &str = "ak:device:01964137-0000-7000-8000-000000000001";
     const TEST_OPERATION_BEARER: &str = "account-operation-secret";
     const ACCOUNT_REGISTER_PATH: &str = soland_contracts::ACCOUNT_PROJECTION_PATH;
@@ -1412,7 +1412,7 @@ mod tests {
         let principal_id = DidCoreId::new(TEST_PRINCIPAL_ID).unwrap();
         VerifiedPrincipalIdentity {
             principal_id,
-            full_id: DidFullId::new(TEST_PRINCIPAL_FULL_ID).unwrap(),
+            did: Did::new(TEST_PRINCIPAL_DID).unwrap(),
         }
     }
 
@@ -1467,7 +1467,7 @@ mod tests {
     }
 
     #[test]
-    fn soland_account_localparts_endpoint_encodes_principal_did_segment() {
+    fn soland_account_localparts_endpoint_encodes_principal_id_segment() {
         let endpoint =
             soland_account_localparts_endpoint("https://local.host/base/path", TEST_PRINCIPAL_ID)
                 .unwrap();

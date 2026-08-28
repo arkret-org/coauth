@@ -90,7 +90,7 @@ pub(super) async fn verify_revocation_approval_proof(
     let approved_by = did_resolver
         .primary_did_for_user(repo, &arkret_config, admin_user)
         .await
-        .map_err(|error| AppError::bad_request(format!("principal_did_policy: {error}")))?;
+        .map_err(|error| AppError::bad_request(format!("principal_id_policy: {error}")))?;
 
     let transcript = RevocationApprovalTranscript {
         kind: "org.arkret.coauth.admin_revocation.approval.v1",

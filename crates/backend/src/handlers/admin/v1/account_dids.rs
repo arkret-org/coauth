@@ -127,7 +127,7 @@ pub async fn add_account_did(
     enforce_captcha(req, depot, body.captcha_token.as_deref()).await?;
 
     // Phase P2 (B-D): all DID binding writes round-trip through the SDK
-    // `DidFullId::new` validator (Round-4 regex `^did:[a-z0-9]+:[^\s]+$`). Reject
+    // `Did::new` validator (Round-4 regex `^did:[a-z0-9]+:[^\s]+$`). Reject
     // malformed DIDs BEFORE invoking the resolver chain so network I/O
     // never fires on a non-canonical value.
     let did = normalize_did_for_binding(&body.did)
@@ -188,10 +188,10 @@ pub async fn add_account_did(
     let account_subject = crate::handlers::arkret::account_subject(&expected_audience, account.id)
         .map_err(|error| AppError::bad_request(format!("control_proof_invalid: {error}")))?;
     enforce_same_core_primary_refresh(&current_bindings, &did, body.make_primary.unwrap_or(false))?;
-    if body.control_proof.full_id.as_str() != did {
+    if body.control_proof.did.as_str() != did {
         repo.cancel().await?;
         return Err(AppError::bad_request(
-            "control_proof_invalid: proof full_id does not match the requested DID",
+            "control_proof_invalid: proof did does not match the requested DID",
         ));
     }
     let resolution = did_resolver
@@ -334,7 +334,7 @@ fn map_did_binding_proof_error(error: DidBindingProofError) -> AppError {
             AppError::bad_request(format!("control_proof_invalid: {error}"))
         }
         DidBindingProofError::Binding(inner) => {
-            AppError::bad_request(format!("did_resolver_not_full_identity_fact: {inner}"))
+            AppError::bad_request(format!("did_resolver_not_authority_grade: {inner}"))
         }
     }
 }
@@ -353,18 +353,16 @@ fn enforce_same_core_primary_refresh(
     else {
         return Ok(());
     };
-    let current_full =
-        arkret_identifiers::DidFullId::new(current_primary.did.clone()).map_err(|error| {
-            AppError::bad_request(format!("current_primary_full_id_invalid: {error}"))
-        })?;
-    let next_full = arkret_identifiers::DidFullId::new(new_did.to_owned())
-        .map_err(|error| AppError::bad_request(format!("full_id_invalid: {error}")))?;
+    let current_full = arkret_identifiers::Did::new(current_primary.did.clone())
+        .map_err(|error| AppError::bad_request(format!("current_primary_did_invalid: {error}")))?;
+    let next_full = arkret_identifiers::Did::new(new_did.to_owned())
+        .map_err(|error| AppError::bad_request(format!("did_invalid: {error}")))?;
     let current_core =
-        arkret_identifiers::project_full_id_to_core_id(&current_full).map_err(|error| {
+        arkret_identifiers::project_did_to_core_id(&current_full).map_err(|error| {
             AppError::bad_request(format!("current_primary_projection_failed: {error}"))
         })?;
-    let next_core = arkret_identifiers::project_full_id_to_core_id(&next_full)
-        .map_err(|error| AppError::bad_request(format!("full_id_projection_failed: {error}")))?;
+    let next_core = arkret_identifiers::project_did_to_core_id(&next_full)
+        .map_err(|error| AppError::bad_request(format!("did_projection_failed: {error}")))?;
     if current_core != next_core {
         return Err(AppError::conflict(
             "principal_core_changed: a different core_id is a new principal and cannot replace the current primary binding",
@@ -607,7 +605,7 @@ pub(crate) async fn primary_did_for_user(
         Ok(did) => Ok(Some(did)),
         Err(crate::handlers::arkret::SessionGrantError::PrincipalUnknown) => Ok(None),
         Err(error) => Err(AppError::bad_request(format!(
-            "principal_did_policy: {error}"
+            "principal_id_policy: {error}"
         ))),
     }
 }

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
-use arkret_identifiers::DidFullId;
+use arkret_identifiers::Did;
 use arkret_identity::DidBindingPurpose;
 use arkret_models_discovery::{
     DirectoryHandleResolutionOutcome, DirectoryResolveHandleRequestBody, ServiceDescribe,
@@ -217,7 +217,7 @@ pub async fn directory_resolve_handle(
         &arkret_config,
         &mut repo,
         binding_store.as_ref(),
-        principal_binding.full_id.as_str(),
+        principal_binding.did.as_str(),
         DidBindingPurpose::Principal,
         crate::handlers::make_clock().now(),
     )
@@ -348,8 +348,8 @@ fn directory_resolve_request_has_disclosure_gate(body: &DirectoryResolveHandleRe
         && !body.proofs.is_empty()
 }
 
-fn parse_did_field(field: &str, value: String) -> Result<DidFullId, ArkretRouteError> {
-    DidFullId::new(value)
+fn parse_did_field(field: &str, value: String) -> Result<Did, ArkretRouteError> {
+    Did::new(value)
         .map_err(|error| ArkretRouteError::BadRequest(format!("invalid {field}: {error}")))
 }
 

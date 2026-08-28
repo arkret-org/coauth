@@ -16,7 +16,7 @@ pub struct VerifiedPrincipalDidBindingInput {
     /// Verified head of the principal DID's WebVH history.
     pub key_log_head: arkret_identifiers::Hash,
     /// Complete DID independently verified when this private binding was accepted.
-    pub verified_full_id: arkret_identifiers::DidFullId,
+    pub verified_did: arkret_identifiers::Did,
     /// Adapter-defined version identifier pinned at verification time.
     pub verified_version_id: String,
     /// Canonical Account Authority binding receipt retained for exact replay
@@ -71,7 +71,7 @@ pub trait PrincipalDidRepository: Send + Sync {
 
     /// Remove every audience binding for this account and stable principal
     /// core. Revocation is deliberately core-only: callers do not select a
-    /// stale `full_id` to decide which binding is revoked.
+    /// stale `did` to decide which binding is revoked.
     async fn remove_for_user_and_core(
         &mut self,
         user: &User,

@@ -49,13 +49,13 @@ pub async fn resolve_account_status(
         .and_then(|value| parse_signature_input(value).ok())
         .ok_or_else(not_found)?;
     let key_id = DidUrl::new(signature_input.key_id.clone()).map_err(|_| not_found())?;
-    let source_full_id = key_id
+    let source_did = key_id
         .as_str()
         .rsplit_once('#')
         .map(|(controller, _)| controller)
         .ok_or_else(not_found)?;
-    let projected = arkret_wire::project_full_id_to_core_id(
-        &arkret_wire::DidFullId::new(source_full_id.to_owned()).map_err(|_| not_found())?,
+    let projected = arkret_wire::project_did_to_core_id(
+        &arkret_wire::Did::new(source_did.to_owned()).map_err(|_| not_found())?,
     )
     .map_err(|_| not_found())?;
     if projected.as_str() != source_service_id {
@@ -71,7 +71,7 @@ pub async fn resolve_account_status(
         &mut repo,
         depot.did_resolver_service()?.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),
-        source_full_id,
+        source_did,
         DidBindingPurpose::Service,
         did_binding::high_risk_freshness(),
         crate::handlers::make_clock().now(),

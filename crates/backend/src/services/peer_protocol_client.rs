@@ -25,7 +25,7 @@ use arkret_signatures::http_signature::{
     format_signature_header, parse_signature_input,
 };
 use arkret_wire::{
-    DeviceRevocationGateCheckOutcome, DeviceRevocationGateCheckRequestBody, DidFullId,
+    DeviceRevocationGateCheckOutcome, DeviceRevocationGateCheckRequestBody, Did,
     HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN,
     PATH_PEER_DEVICE_REVOCATIONS_CHECK, ServiceOperationId,
 };
@@ -66,7 +66,7 @@ pub struct PeerProtocolClient<'a> {
     base_url: &'a Url,
     http_client: &'a reqwest::Client,
     keystore: &'a Keystore,
-    source_full_id: DidFullId,
+    source_did: Did,
     identity: KeyPackagesClaimServiceBinding,
     source_trust_domain: arkret_identifiers::TrustDomainId,
     destination_trust_domain: arkret_identifiers::TrustDomainId,
@@ -77,7 +77,7 @@ impl<'a> PeerProtocolClient<'a> {
         base_url: Option<&'a Url>,
         http_client: &'a reqwest::Client,
         keystore: &'a Keystore,
-        source_full_id: DidFullId,
+        source_did: Did,
         identity: KeyPackagesClaimServiceBinding,
         source_trust_domain: arkret_identifiers::TrustDomainId,
         destination_trust_domain: arkret_identifiers::TrustDomainId,
@@ -85,18 +85,18 @@ impl<'a> PeerProtocolClient<'a> {
         let Some(base_url) = base_url else {
             return Err(PeerProtocolClientError::BaseUrlNotConfigured);
         };
-        let projected = arkret_identifiers::project_full_id_to_core_id(&source_full_id)
+        let projected = arkret_identifiers::project_did_to_core_id(&source_did)
             .map_err(|error| PeerProtocolClientError::InvalidUrl(error.to_string()))?;
         if projected.as_str() != identity.source_service_id.as_str() {
             return Err(PeerProtocolClientError::InvalidUrl(
-                "source service full_id does not project to Source-Service-ID".to_owned(),
+                "source service did does not project to Source-Service-ID".to_owned(),
             ));
         }
         Ok(Self {
             base_url,
             http_client,
             keystore,
-            source_full_id,
+            source_did,
             identity,
             source_trust_domain,
             destination_trust_domain,
@@ -373,7 +373,7 @@ impl<'a> PeerProtocolClient<'a> {
             .join(" ");
         let signature_input_header = format!(
             "{SIGNATURE_LABEL}=({covered_wire});created={created};expires={expires};keyid=\"{}#{}\";alg=\"ed25519\"",
-            self.source_full_id,
+            self.source_did,
             super::service_identity::SERVICE_IDENTITY_VERIFICATION_METHOD_FRAGMENT
         );
         let signature_input = parse_signature_input(&signature_input_header)
@@ -478,8 +478,8 @@ mod tests {
         }
     }
 
-    fn source_full_id() -> arkret_identifiers::DidFullId {
-        arkret_identifiers::DidFullId::new("did:web:auth.example".to_owned()).unwrap()
+    fn source_did() -> arkret_identifiers::Did {
+        arkret_identifiers::Did::new("did:web:auth.example".to_owned()).unwrap()
     }
 
     fn trust_domain() -> arkret_identifiers::TrustDomainId {
@@ -496,7 +496,7 @@ mod tests {
             Some(&base),
             &client,
             &keystore,
-            source_full_id(),
+            source_did(),
             identity,
             trust_domain(),
             trust_domain(),
@@ -590,7 +590,7 @@ mod tests {
             Some(&base),
             &client,
             &keystore,
-            source_full_id(),
+            source_did(),
             identity,
             trust_domain(),
             trust_domain(),
@@ -628,7 +628,7 @@ mod tests {
             Some(&base),
             &client,
             &keystore,
-            source_full_id(),
+            source_did(),
             identity,
             trust_domain(),
             trust_domain(),

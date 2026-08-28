@@ -190,10 +190,10 @@ impl<'c> PgAccountHandoffRepository<'c> {
         &mut self,
         service_account_id: Uuid,
         audience: &str,
-    ) -> Result<Option<(arkret_identifiers::DidCoreId, arkret_identifiers::DidFullId)>, DatabaseError>
+    ) -> Result<Option<(arkret_identifiers::DidCoreId, arkret_identifiers::Did)>, DatabaseError>
     {
         let row = diesel::sql_query(
-            "SELECT owners.principal_id, bindings.verified_full_id \
+            "SELECT owners.principal_id, bindings.verified_did \
              FROM principal_did_bindings bindings \
              JOIN principal_did_owners owners ON owners.id = bindings.principal_did_owner_id \
              WHERE bindings.user_id = $1 AND bindings.audience = $2",
@@ -207,7 +207,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
             Ok((
                 arkret_identifiers::DidCoreId::new(row.principal_id)
                     .map_err(|_| DatabaseError::invalid_operation())?,
-                arkret_identifiers::DidFullId::new(row.verified_full_id)
+                arkret_identifiers::Did::new(row.verified_did)
                     .map_err(|_| DatabaseError::invalid_operation())?,
             ))
         })
@@ -220,7 +220,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
     ) -> Result<Option<IdentityBindingChallengeRecord>, DatabaseError> {
         let row = diesel::sql_query(
             "SELECT request_id, request_digest, service_account_id, challenge_id, challenge, \
-             purpose, account_subject, principal_id, full_id, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
+             purpose, account_subject, principal_id, did, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
              founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience, \
              origin, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
              FROM identity_binding_challenges WHERE request_id = $1",
@@ -240,7 +240,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let suffix = if for_update { " FOR UPDATE" } else { "" };
         let query = format!(
             "SELECT request_id, request_digest, service_account_id, challenge_id, challenge, \
-             purpose, account_subject, principal_id, full_id, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
+             purpose, account_subject, principal_id, did, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
              founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience, \
              origin, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
              FROM identity_binding_challenges WHERE challenge_id = $1{suffix}"
@@ -259,7 +259,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
     ) -> Result<Option<DidBindingChallengeRecord>, DatabaseError> {
         diesel::sql_query(
             "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
-             account_subject, principal_id, full_id, did_version_id, log_head_digest, \
+             account_subject, principal_id, did, did_version_id, log_head_digest, \
              control_key_digest, witness_evidence, challenge_id, challenge, dpop_jkt, audience, \
              origin, trust_domain, issued_at, expires_at, consumed_at, register_request_digest, \
              register_outcome FROM did_binding_challenges WHERE request_id = $1",
@@ -280,7 +280,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let suffix = if for_update { " FOR UPDATE" } else { "" };
         let query = format!(
             "SELECT request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
-             account_subject, principal_id, full_id, did_version_id, log_head_digest, \
+             account_subject, principal_id, did, did_version_id, log_head_digest, \
              control_key_digest, witness_evidence, challenge_id, challenge, dpop_jkt, audience, \
              origin, trust_domain, issued_at, expires_at, consumed_at, register_request_digest, \
              register_outcome FROM did_binding_challenges WHERE challenge_id = $1{suffix}"
@@ -626,7 +626,7 @@ struct PrincipalRow {
     #[diesel(sql_type = Text)]
     principal_id: String,
     #[diesel(sql_type = Text)]
-    verified_full_id: String,
+    verified_did: String,
 }
 
 #[derive(QueryableByName)]
@@ -976,7 +976,7 @@ struct ChallengeRow {
     #[diesel(sql_type = Text)]
     principal_id: String,
     #[diesel(sql_type = Text)]
-    full_id: String,
+    did: String,
     #[diesel(sql_type = Text)]
     operation_digest: String,
     #[diesel(sql_type = Text)]
@@ -1030,7 +1030,7 @@ struct DidBindingChallengeRow {
     #[diesel(sql_type = Text)]
     principal_id: String,
     #[diesel(sql_type = Text)]
-    full_id: String,
+    did: String,
     #[diesel(sql_type = Text)]
     did_version_id: String,
     #[diesel(sql_type = Text)]
@@ -1081,7 +1081,7 @@ fn did_binding_challenge_from_row(
                 .map_err(|_| DatabaseError::invalid_operation())?,
             principal_id: arkret_identifiers::DidCoreId::new(row.principal_id)
                 .map_err(|_| DatabaseError::invalid_operation())?,
-            full_id: arkret_identifiers::DidFullId::new(row.full_id)
+            did: arkret_identifiers::Did::new(row.did)
                 .map_err(|_| DatabaseError::invalid_operation())?,
             did_version_id: row.did_version_id,
             log_head_digest: arkret_identifiers::Hash::new(row.log_head_digest)
@@ -1225,7 +1225,7 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
             .map_err(|_| DatabaseError::invalid_operation())?,
         principal_id: arkret_identifiers::DidCoreId::new(row.principal_id)
             .map_err(|_| DatabaseError::invalid_operation())?,
-        full_id: arkret_identifiers::DidFullId::new(row.full_id)
+        did: arkret_identifiers::Did::new(row.did)
             .map_err(|_| DatabaseError::invalid_operation())?,
         operation_digest: arkret_identifiers::Hash::new(row.operation_digest)
             .map_err(|_| DatabaseError::invalid_operation())?,
@@ -1275,7 +1275,7 @@ fn challenge_matches_context(
         && challenge.purpose == expected.purpose
         && challenge.account_subject == expected.account_subject
         && challenge.principal_id == expected.principal_id
-        && challenge.full_id == expected.full_id
+        && challenge.did == expected.did
         && challenge.operation_digest == expected.operation_digest
         && challenge.did_version_id == expected.did_version_id
         && challenge.log_head_digest == expected.log_head_digest
@@ -1650,7 +1650,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(AccountHandoffCreation::ExpiredReplay);
         }
 
-        if let Some((principal_id, full_id)) = self
+        if let Some((principal_id, did)) = self
             .bound_principal(Uuid::from(input.service_account_id), &input.audience)
             .await?
         {
@@ -1666,7 +1666,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
                 return Ok(AccountHandoffCreation::Bound {
                     grant,
                     principal_id,
-                    full_id,
+                    did,
                 });
             }
         }
@@ -1698,7 +1698,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
                 return Ok(AccountHandoffCreation::Bound {
                     grant,
                     principal_id: reserved.principal_id.clone(),
-                    full_id: reserved.full_id.clone(),
+                    did: reserved.did.clone(),
                 });
             }
             if lease.expires_at > input.issued_at && lease.holder_jkt != input.cnf_jkt {
@@ -1815,14 +1815,14 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .lease_for_account(Uuid::from(grant.service_account_id), &grant.audience, false)
             .await?;
         let Some(lease) = lease else {
-            return if let Some((principal_id, full_id)) = self
+            return if let Some((principal_id, did)) = self
                 .bound_principal(Uuid::from(grant.service_account_id), &grant.audience)
                 .await?
             {
                 Ok(AccountHandoffCreation::Bound {
                     grant: grant.clone(),
                     principal_id,
-                    full_id,
+                    did,
                 })
             } else {
                 Ok(AccountHandoffCreation::ExpiredReplay)
@@ -1836,7 +1836,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(AccountHandoffCreation::Bound {
                 grant: grant.clone(),
                 principal_id: reserved.principal_id.clone(),
-                full_id: reserved.full_id.clone(),
+                did: reserved.did.clone(),
             });
         }
         if lease.expires_at <= now {
@@ -2014,7 +2014,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         diesel::sql_query(
             "INSERT INTO identity_binding_challenges \
              (request_id, request_digest, service_account_id, challenge_id, challenge, purpose, \
-              account_subject, principal_id, full_id, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
+              account_subject, principal_id, did, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
               founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience, origin, \
               trust_domain, issued_at, expires_at) \
              VALUES ($1, $2, $3, $4, $5, 'account_binding_and_pcr_genesis', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24) \
@@ -2027,7 +2027,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(&input.challenge)
         .bind::<Text, _>(input.account_subject.as_str())
         .bind::<Text, _>(reserved.principal_id.as_str())
-        .bind::<Text, _>(input.full_id.as_str())
+        .bind::<Text, _>(input.did.as_str())
         .bind::<Text, _>(input.operation_digest.as_str())
         .bind::<Text, _>(&input.did_version_id)
         .bind::<Text, _>(input.log_head_digest.as_str())
@@ -2096,7 +2096,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         diesel::sql_query(
             "INSERT INTO did_binding_challenges \
              (request_id, request_digest, issuing_handoff_grant_id, service_account_id, \
-              account_subject, principal_id, full_id, did_version_id, log_head_digest, \
+              account_subject, principal_id, did, did_version_id, log_head_digest, \
               control_key_digest, witness_evidence, challenge_id, challenge, dpop_jkt, audience, \
               origin, trust_domain, issued_at, expires_at) \
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) \
@@ -2108,7 +2108,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<SqlUuid, _>(Uuid::from(input.service_account_id))
         .bind::<Text, _>(input.account_subject.as_str())
         .bind::<Text, _>(input.principal_id.as_str())
-        .bind::<Text, _>(input.full_id.as_str())
+        .bind::<Text, _>(input.did.as_str())
         .bind::<Text, _>(&input.did_version_id)
         .bind::<Text, _>(input.log_head_digest.as_str())
         .bind::<Text, _>(input.control_key_digest.as_str())
@@ -2323,8 +2323,8 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(IdentityAbandonmentChallengeIssue::CheckpointMismatch);
         };
         // The abandonment transcript pins the stable projected principal id,
-        // not the method-specific full id.  For did:webvh those are distinct
-        // strings, so comparing `full_id` here rejects every valid reserved
+        // not the method-specific DID.  For did:webvh those are distinct
+        // strings, so comparing `did` here rejects every valid reserved
         // principal even though the lease carries the matching projection.
         if !reserved_identity_matches_abandonment_checkpoint(
             reserved,
@@ -3058,14 +3058,13 @@ mod tests {
     }
 
     #[test]
-    fn abandonment_checkpoint_matches_projected_principal_not_full_id() {
-        let full_id = arkret_identifiers::DidFullId::new(
-            "did:webvh:zQ3shExampleScid:alice.example:webvh:user",
-        )
-        .expect("valid full id");
-        let principal_id = arkret_identifiers::project_full_id_to_core_id(&full_id)
-            .expect("projected principal id");
-        assert_ne!(full_id.as_str(), principal_id.as_str());
+    fn abandonment_checkpoint_matches_projected_principal_not_did() {
+        let did =
+            arkret_identifiers::Did::new("did:webvh:zQ3shExampleScid:alice.example:webvh:user")
+                .expect("valid DID");
+        let principal_id =
+            arkret_identifiers::project_did_to_core_id(&did).expect("projected principal id");
+        assert_ne!(did.as_str(), principal_id.as_str());
 
         let mut operation = BTreeMap::new();
         operation.insert(
@@ -3074,11 +3073,11 @@ mod tests {
         );
         let reserved = arkret_models_identity::ReservedIdentityCreation {
             principal_id: principal_id.clone(),
-            full_id,
+            did,
             operation_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
                 .expect("digest"),
             did_operation: arkret_models_identity::DidOperationSubmitRequestBody {
-                did: arkret_identifiers::DidFullId::new(
+                did: arkret_identifiers::Did::new(
                     "did:webvh:zQ3shExampleScid:alice.example:webvh:user",
                 )
                 .expect("operation did"),

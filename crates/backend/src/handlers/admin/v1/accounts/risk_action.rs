@@ -225,15 +225,15 @@ fn map_risk_action_proposals_error(error: RiskActionProposalsError) -> AppError 
 
 /// The acting admin's identity as recorded by the same accepted principal
 /// binding: the stable core id carried by approval transcripts and persisted
-/// proposals, plus the binding's `verified_full_id` used as the authority
+/// proposals, plus the binding's `verified_did` used as the authority
 /// resolution input.
 struct AdminActorIdentity {
     /// Stable principal core id (`approved_by` on the wire and in storage).
     principal_id: String,
     /// Complete DID from the same accepted binding row; authority resolution
     /// MUST resolve this, never the bare core id (`authority_document` keys on
-    /// `DidFullId`).
-    verified_full_id: String,
+    /// `Did`).
+    verified_did: String,
 }
 
 async fn admin_actor_identity(
@@ -247,22 +247,22 @@ async fn admin_actor_identity(
     let binding =
         crate::handlers::arkret::principal_did_binding_for_user(repo, arkret_config, admin_user)
             .await
-            .map_err(|error| AppError::bad_request(format!("principal_did_policy: {error}")))?
+            .map_err(|error| AppError::bad_request(format!("principal_id_policy: {error}")))?
             .ok_or_else(|| {
-                AppError::bad_request("principal_did_policy: principal unknown".to_owned())
+                AppError::bad_request("principal_id_policy: principal unknown".to_owned())
             })?;
-    // Fail closed when the accepted binding's retained full id no longer
+    // Fail closed when the accepted binding's retained DID no longer
     // projects to the core id the approval transcript will carry.
-    let projected = arkret_identifiers::project_full_id_to_core_id(&binding.full_id)
-        .map_err(|error| AppError::bad_request(format!("principal_did_policy: {error}")))?;
+    let projected = arkret_identifiers::project_did_to_core_id(&binding.did)
+        .map_err(|error| AppError::bad_request(format!("principal_id_policy: {error}")))?;
     if projected != binding.principal_id {
         return Err(AppError::bad_request(
-            "principal_did_policy: accepted binding full id does not project to its principal core id",
+            "principal_id_policy: accepted binding DID does not project to its principal core id",
         ));
     }
     Ok(AdminActorIdentity {
         principal_id: binding.principal_id.to_string(),
-        verified_full_id: binding.full_id.to_string(),
+        verified_did: binding.did.to_string(),
     })
 }
 
@@ -401,7 +401,7 @@ async fn verify_approval_proof_jws(
     //
     // The transcript and the persisted approval carry the principal core id
     // (`approved_by`), but authority resolution keys on a complete DID: it
-    // resolves `authority_did` — the `verified_full_id` retained on the same
+    // resolves `authority_did` — the `verified_did` retained on the same
     // accepted binding, already projection-checked against `approved_by`.
     let resolution = crate::services::did_binding::authority_document(
         http_client,
@@ -644,7 +644,7 @@ pub async fn approve(
         did_resolver.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),
         &params.approval_proof_jws,
-        &caller_identity.verified_full_id,
+        &caller_identity.verified_did,
         &proposal_id,
         account.id,
         &params.action,

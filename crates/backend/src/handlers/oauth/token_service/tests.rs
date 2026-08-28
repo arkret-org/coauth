@@ -109,7 +109,7 @@ fn confidential_authorization_code_clients_do_not_require_pkce() {
 }
 
 #[tokio::test]
-async fn authorization_code_openid_exchange_does_not_require_principal_did_row() {
+async fn authorization_code_openid_exchange_does_not_require_principal_id_row() {
     let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
         return;
     };

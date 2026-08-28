@@ -102,14 +102,14 @@ fn default_principal_server(
 /// signing must never freeze an empty (or stale) identity at process startup.
 fn runtime_peer_identity(
     arkret_config: &ArkretConfig,
-) -> Result<(arkret_identifiers::DidCoreId, arkret_identifiers::DidFullId), anyhow::Error> {
+) -> Result<(arkret_identifiers::DidCoreId, arkret_identifiers::Did), anyhow::Error> {
     let state = arkret_config.runtime_service_identity.state();
     let identity = state.identity().ok_or_else(|| {
         anyhow::anyhow!(
             "account-status peer signing identity is unavailable while the runtime service identity is {state:?}"
         )
     })?;
-    Ok((identity.service_id.clone(), identity.full_id.clone()))
+    Ok((identity.service_id.clone(), identity.did.clone()))
 }
 
 pub(crate) async fn commit_agent_key_pair_to_principal_server(
@@ -329,7 +329,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
             .peer_signing
             .as_ref()
             .context("account-status peer signing configuration is unavailable")?;
-        let (source_service_id, source_full_id) = runtime_peer_identity(&self.arkret_config)?;
+        let (source_service_id, source_did) = runtime_peer_identity(&self.arkret_config)?;
         let destination_service_id =
             crate::services::principal_server_trust::effective_audience_shared(target)
                 .context("account-status destination service identity is unavailable or stale")?;
@@ -341,7 +341,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
             Some(&target.endpoint),
             &self.http_client,
             &signing.keystore,
-            source_full_id,
+            source_did,
             identity,
             signing.source_trust_domain.clone(),
             signing.source_trust_domain.clone(),
@@ -388,7 +388,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
             .peer_signing
             .as_ref()
             .context("erasure-receipt peer signing configuration is unavailable")?;
-        let (source_service_id, source_full_id) = runtime_peer_identity(&self.arkret_config)?;
+        let (source_service_id, source_did) = runtime_peer_identity(&self.arkret_config)?;
         let destination_service_id =
             crate::services::principal_server_trust::effective_audience_shared(target)
                 .context("erasure-receipt destination service identity is unavailable or stale")?;
@@ -400,7 +400,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
             Some(&target.endpoint),
             &self.http_client,
             &signing.keystore,
-            source_full_id,
+            source_did,
             identity,
             signing.source_trust_domain.clone(),
             signing.source_trust_domain.clone(),
@@ -588,11 +588,11 @@ mod tests {
         .state();
 
         shared.store(ready);
-        let (service_id, full_id) = runtime_peer_identity(&config).expect("identity became ready");
+        let (service_id, did) = runtime_peer_identity(&config).expect("identity became ready");
 
         assert_eq!(service_id.as_str(), "ak:did_core:webvh:QmService");
         assert_eq!(
-            full_id.as_str(),
+            did.as_str(),
             "did:webvh:QmService:auth.example:webvh:service"
         );
     }

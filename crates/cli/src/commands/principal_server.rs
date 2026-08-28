@@ -108,7 +108,7 @@ impl TrustOptions {
                     "name": outcome.enrollment.name,
                     "canonical_endpoint": outcome.enrollment.canonical_endpoint,
                     "service_id": outcome.enrollment.service_id.as_str(),
-                    "full_id": outcome.enrollment.full_id.as_str(),
+                    "did": outcome.enrollment.did.as_str(),
                     "method_history_head": outcome.enrollment.method_history_head,
                     "version_id": outcome.enrollment.version_id,
                     "resolution_record_digest": outcome.enrollment.resolution_record_digest,

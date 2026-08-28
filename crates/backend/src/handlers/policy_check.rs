@@ -193,7 +193,7 @@ pub(crate) async fn build_policy_check_response(
     // Policy server identity: coauth's own service DID (signs the
     // response with its preferred signing key).
     let policy_server_id = arkret::service_id_for(arkret_config);
-    let policy_server_full_id = arkret::issuer_did_for(arkret_config);
+    let policy_server_did = arkret::issuer_did_for(arkret_config);
 
     // Step 1 — frontier. On any frontier error we fall back to the
     // "unknown frontier" sentinel and let the evaluator produce a
@@ -302,7 +302,7 @@ pub(crate) async fn build_policy_check_response(
         next_retry_at: decision.next_retry_at,
         obligations: obligations_wire,
     };
-    let signer = PolicySigner::new(key_store, policy_server_full_id.to_string());
+    let signer = PolicySigner::new(key_store, policy_server_did.to_string());
     outcome.signature = match signer.sign_decision(&outcome) {
         Ok(sig) => sig,
         Err(e) => {

@@ -292,7 +292,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
 
             if !session_grants_enabled || !client_requested_session_grant {
                 let mut viewer_repo = depot.repo().await?;
-                let viewer_did = arkret::published_principal_did_for_user(
+                let viewer_id = arkret::published_principal_id_for_user(
                     &mut viewer_repo,
                     &arkret_config,
                     &user,
@@ -305,7 +305,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                         Some(ViewerInfo {
                             id: NodeType::User.serialize(user.id),
                             handle: user.localpart.clone(),
-                            did: viewer_did,
+                            did: viewer_id,
                             federated_handle: arkret::user_handle(&url_builder, &user),
                             principal_id: principal_server.principal_id(&user.localpart),
                             display_name,

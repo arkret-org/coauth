@@ -93,15 +93,15 @@ pub async fn issue_did_binding_challenge(
             &arkret_config,
             &key_store,
             &mut repo,
-            body.full_id.as_str(),
+            body.did.as_str(),
         )
         .await
         .map_err(|error| {
             failed_precondition(format!("published DID resolution failed: {error}"))
         })?;
-    if resolution.document.id != body.full_id.as_str() {
+    if resolution.document.id != body.did.as_str() {
         return Err(failed_precondition(
-            "resolved DID document does not match the requested full_id",
+            "resolved DID document does not match the requested did",
         ));
     }
     let (did_version_id, log_head_digest, control_key_digest) =
@@ -138,7 +138,7 @@ pub async fn issue_did_binding_challenge(
             service_account_id: grant.service_account_id,
             account_subject,
             principal_id: body.principal_id,
-            full_id: body.full_id,
+            did: body.did,
             did_version_id,
             log_head_digest,
             control_key_digest,
@@ -854,11 +854,11 @@ pub async fn issue_identity_binding_challenge(
     let validated =
         arkret_signatures::webvh::validate_principal_inception_operation(&body.did_operation)
             .map_err(|error| failed_precondition(error.to_string()))?;
-    let principal_id = arkret_identifiers::project_full_id_to_core_id(&body.full_id)
+    let principal_id = arkret_identifiers::project_did_to_core_id(&body.did)
         .map_err(|error| failed_precondition(error.to_string()))?;
-    if body.full_id != body.did_operation.did || validated.principal_id != principal_id {
+    if body.did != body.did_operation.did || validated.principal_id != principal_id {
         return Err(failed_precondition(
-            "identity creation full_id/core projection does not match the inception operation",
+            "identity creation did/core projection does not match the inception operation",
         ));
     }
 
@@ -894,7 +894,7 @@ pub async fn issue_identity_binding_challenge(
             holder_jkt: grant.cnf_jkt.clone(),
             did_operation: body.did_operation,
             principal_id,
-            full_id: body.full_id,
+            did: body.did,
             operation_digest: validated.operation_digest,
             account_subject,
             did_version_id: validated.did_version_id,
@@ -1369,14 +1369,8 @@ fn creation_binding(
         AccountHandoffCreation::Bound {
             grant,
             principal_id,
-            full_id,
-        } => (
-            grant,
-            AccountHandoffBinding::Bound {
-                principal_id,
-                full_id,
-            },
-        ),
+            did,
+        } => (grant, AccountHandoffBinding::Bound { principal_id, did }),
         AccountHandoffCreation::RateLimited { retry_after_ms, .. } => {
             return Err(ArkretRouteError::rate_limited(
                 format!("identity-creation lease is rate limited; retry after {retry_after_ms} ms"),

@@ -47,7 +47,7 @@ Per the R3.2 issuer hardening:
 - coauth emits the subject as a canonical `DidCoreId` (`ak:did_core:...`).
   Principal role and authority are established by the audience-specific,
   registration-time binding; the core-id bytes alone do not prove a role.
-  Retired role-prefixed ids and bare full DIDs are rejected
+  Retired role-prefixed ids and DIDs are rejected
   (reason `handle_claim_subject_not_principal_did`).
 
 ### Optional org-operator audit API

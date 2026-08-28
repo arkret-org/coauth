@@ -72,11 +72,11 @@ impl InviteQuarantineStatus {
 pub struct InviteQuarantineRecord {
     pub id: Uuid,
     pub created_at: DateTime<Utc>,
-    pub peer_did: String,
-    pub target_holder_did: String,
+    pub peer_principal_id: String,
+    pub target_holder_principal_id: String,
     pub consent_id: String,
     pub scope: String,
-    pub requesting_admin_did: Option<String>,
+    pub requesting_admin_localpart: Option<String>,
     /// Original quarantined invite document. Its shape is independent of the
     /// quarantine lifecycle `status` and is never dispatched by that status.
     pub payload: Value,
@@ -90,11 +90,11 @@ pub struct InviteQuarantineRecord {
 /// `batch_invite`, which has not minted any tokens yet at the gate point).
 #[derive(Clone, Debug)]
 pub struct EnqueueInviteQuarantine {
-    pub peer_did: String,
-    pub target_holder_did: String,
+    pub peer_principal_id: String,
+    pub target_holder_principal_id: String,
     pub consent_id: String,
     pub scope: String,
-    pub requesting_admin_did: Option<String>,
+    pub requesting_admin_localpart: Option<String>,
     pub payload: Value,
 }
 
@@ -136,15 +136,15 @@ struct InviteQuarantineRow {
     #[diesel(sql_type = Timestamptz)]
     created_at: DateTime<Utc>,
     #[diesel(sql_type = Text)]
-    peer_did: String,
+    peer_principal_id: String,
     #[diesel(sql_type = Text)]
-    target_holder_did: String,
+    target_holder_principal_id: String,
     #[diesel(sql_type = Text)]
     consent_id: String,
     #[diesel(sql_type = Text)]
     scope: String,
     #[diesel(sql_type = Nullable<Text>)]
-    requesting_admin_did: Option<String>,
+    requesting_admin_localpart: Option<String>,
     #[diesel(sql_type = Jsonb)]
     payload: Value,
     #[diesel(sql_type = Text)]
@@ -162,11 +162,11 @@ impl InviteQuarantineRow {
         InviteQuarantineRecord {
             id: self.id,
             created_at: self.created_at,
-            peer_did: self.peer_did,
-            target_holder_did: self.target_holder_did,
+            peer_principal_id: self.peer_principal_id,
+            target_holder_principal_id: self.target_holder_principal_id,
             consent_id: self.consent_id,
             scope: self.scope,
-            requesting_admin_did: self.requesting_admin_did,
+            requesting_admin_localpart: self.requesting_admin_localpart,
             payload: self.payload,
             status,
             resolved_at: self.resolved_at,
@@ -194,11 +194,11 @@ impl PgInviteQuarantineService {
             r"
             INSERT INTO invite_quarantine_queue (
                 id,
-                peer_did,
-                target_holder_did,
+                peer_principal_id,
+                target_holder_principal_id,
                 consent_id,
                 scope,
-                requesting_admin_did,
+                requesting_admin_localpart,
                 payload,
                 status
             )
@@ -206,11 +206,11 @@ impl PgInviteQuarantineService {
             RETURNING
                 id,
                 created_at,
-                peer_did,
-                target_holder_did,
+                peer_principal_id,
+                target_holder_principal_id,
                 consent_id,
                 scope,
-                requesting_admin_did,
+                requesting_admin_localpart,
                 payload,
                 status,
                 resolved_at,
@@ -218,11 +218,11 @@ impl PgInviteQuarantineService {
             ",
         )
         .bind::<DieselUuid, _>(id)
-        .bind::<Text, _>(input.peer_did)
-        .bind::<Text, _>(input.target_holder_did)
+        .bind::<Text, _>(input.peer_principal_id)
+        .bind::<Text, _>(input.target_holder_principal_id)
         .bind::<Text, _>(input.consent_id)
         .bind::<Text, _>(input.scope)
-        .bind::<Nullable<Text>, _>(input.requesting_admin_did)
+        .bind::<Nullable<Text>, _>(input.requesting_admin_localpart)
         .bind::<Jsonb, _>(input.payload)
         .get_results::<InviteQuarantineRow>(&mut *conn)
         .await?;
@@ -241,11 +241,11 @@ impl PgInviteQuarantineService {
             SELECT
                 id,
                 created_at,
-                peer_did,
-                target_holder_did,
+                peer_principal_id,
+                target_holder_principal_id,
                 consent_id,
                 scope,
-                requesting_admin_did,
+                requesting_admin_localpart,
                 payload,
                 status,
                 resolved_at,
@@ -273,11 +273,11 @@ impl PgInviteQuarantineService {
             SELECT
                 id,
                 created_at,
-                peer_did,
-                target_holder_did,
+                peer_principal_id,
+                target_holder_principal_id,
                 consent_id,
                 scope,
-                requesting_admin_did,
+                requesting_admin_localpart,
                 payload,
                 status,
                 resolved_at,
@@ -317,11 +317,11 @@ impl PgInviteQuarantineService {
             RETURNING
                 id,
                 created_at,
-                peer_did,
-                target_holder_did,
+                peer_principal_id,
+                target_holder_principal_id,
                 consent_id,
                 scope,
-                requesting_admin_did,
+                requesting_admin_localpart,
                 payload,
                 status,
                 resolved_at,
@@ -418,11 +418,11 @@ mod tests {
         let row = InviteQuarantineRow {
             id: Uuid::now_v7(),
             created_at: Utc::now(),
-            peer_did: "did:web:p".into(),
-            target_holder_did: "did:web:h".into(),
+            peer_principal_id: "did:web:p".into(),
+            target_holder_principal_id: "did:web:h".into(),
             consent_id: "c-1".into(),
             scope: "invite".into(),
-            requesting_admin_did: None,
+            requesting_admin_localpart: None,
             payload: serde_json::json!({}),
             status: "totally-bogus".into(),
             resolved_at: None,
@@ -435,11 +435,11 @@ mod tests {
     #[test]
     fn enqueue_dto_carries_payload() {
         let dto = EnqueueInviteQuarantine {
-            peer_did: "did:web:peer".into(),
-            target_holder_did: "did:web:holder".into(),
+            peer_principal_id: "did:web:peer".into(),
+            target_holder_principal_id: "did:web:holder".into(),
             consent_id: "c-1".into(),
             scope: "invite".into(),
-            requesting_admin_did: Some("did:web:admin".into()),
+            requesting_admin_localpart: Some("did:web:admin".into()),
             payload: serde_json::json!({"reason": "missing-grant"}),
         };
         assert_eq!(dto.scope, "invite");

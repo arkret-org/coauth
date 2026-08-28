@@ -141,7 +141,7 @@ const DID_WEBVH_LOG_MAX_BYTES: usize = DID_DOCUMENT_MAX_BYTES * 32;
 pub async fn resolve_verified_webvh_service_document_at(
     _http_client: &reqwest::Client,
     egress: &ResolverEgressPolicy,
-    did: &arkret_identifiers::DidFullId,
+    did: &arkret_identifiers::Did,
     decided_at: chrono::DateTime<chrono::Utc>,
 ) -> Result<DidDocument, DidResolveError> {
     if !did.as_str().starts_with("did:webvh:") {
@@ -181,7 +181,7 @@ pub async fn resolve_verified_webvh_service_document_at(
 }
 
 fn verify_historical_webvh_service_chain(
-    did: &arkret_identifiers::DidFullId,
+    did: &arkret_identifiers::Did,
     history: &[u8],
 ) -> Result<arkret_identity::VerifiedDidWebvhLog, DidResolveError> {
     // Gate receipts are signed by the Principal Server's service DID. Service
@@ -196,7 +196,7 @@ fn verify_historical_webvh_service_chain(
 }
 
 fn verified_webvh_document_at(
-    did: &arkret_identifiers::DidFullId,
+    did: &arkret_identifiers::Did,
     verified: &arkret_identity::VerifiedDidWebvhLog,
     decided_at: chrono::DateTime<chrono::Utc>,
 ) -> Result<DidDocument, DidResolveError> {
@@ -551,7 +551,7 @@ fn delegated_resolver_request(
     did: &str,
     requested_evidence_kinds: Vec<arkret_models_identity::IdentityMethodEvidenceKind>,
 ) -> Result<reqwest::RequestBuilder, DidResolveError> {
-    let typed_did = arkret_identifiers::DidFullId::new(did.to_owned())
+    let typed_did = arkret_identifiers::Did::new(did.to_owned())
         .map_err(|error| DidResolveError::InvalidDid(error.to_string()))?;
     let body = arkret_models_identity::IdentityResolveRequestBody {
         did: typed_did,
@@ -835,7 +835,7 @@ fn did_method(did: &str) -> Option<String> {
     // any value the SDK validator rejects is wire-broken and MUST NOT
     // be routed by this resolver.
     Some(
-        arkret_identifiers::DidFullId::new(did.to_owned())
+        arkret_identifiers::Did::new(did.to_owned())
             .ok()?
             .method()
             .to_owned(),
@@ -843,7 +843,7 @@ fn did_method(did: &str) -> Option<String> {
 }
 
 fn did_web_document_url(did: &str) -> Result<Url, DidResolveError> {
-    let did = arkret_identifiers::DidFullId::new(did.to_owned())
+    let did = arkret_identifiers::Did::new(did.to_owned())
         .map_err(|_| DidResolveError::InvalidDid(did.to_owned()))?;
     let url = arkret_models_identity::did_web_document_url(&did)
         .map_err(|_| DidResolveError::InvalidDid(did.to_string()))?;
@@ -1059,7 +1059,7 @@ mod tests {
     }
 
     #[test]
-    fn degraded_and_weak_webvh_evidence_is_not_a_full_identity_fact() {
+    fn degraded_and_weak_webvh_evidence_is_not_an_authority_grade_did_fact() {
         let did = "did:webvh:ztest:resolver.example:users:alice";
         for (evidence, expected) in [
             (
@@ -1129,10 +1129,9 @@ mod tests {
 
     #[test]
     fn verified_webvh_history_resolves_the_key_document_as_of_receipt_time() {
-        let did = arkret_identifiers::DidFullId::new(
-            "did:webvh:z6mkfixture:principal.example".to_owned(),
-        )
-        .unwrap();
+        let did =
+            arkret_identifiers::Did::new("did:webvh:z6mkfixture:principal.example".to_owned())
+                .unwrap();
         let old_time = Utc.with_ymd_and_hms(2026, 8, 8, 10, 0, 0).unwrap();
         let rotated_time = Utc.with_ymd_and_hms(2026, 8, 8, 11, 0, 0).unwrap();
         let document = |key: &str| {
@@ -1201,7 +1200,7 @@ mod tests {
             },
         )
         .unwrap();
-        let did = arkret_identifiers::DidFullId::new(prepared.did.clone()).unwrap();
+        let did = arkret_identifiers::Did::new(prepared.did.clone()).unwrap();
         let history = serde_json::to_vec(&prepared.log_entry).unwrap();
 
         assert!(

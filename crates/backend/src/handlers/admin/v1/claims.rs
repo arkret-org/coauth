@@ -351,8 +351,8 @@ async fn derive_account_id_from_subject(
     }
 
     let bound_user_id = {
-        let mut principal_dids = repo.principal_did();
-        principal_dids
+        let mut principal_ids = repo.principal_did();
+        principal_ids
             .get_by_did(subject)
             .await?
             .map(|binding| binding.user_id)
@@ -392,7 +392,7 @@ fn require_non_empty(value: String, field: &str) -> Result<String, AppError> {
 
 fn require_did(value: String, field: &str) -> Result<String, AppError> {
     let value = require_non_empty(value, field)?;
-    arkret_identifiers::DidFullId::new(value.clone())
+    arkret_identifiers::Did::new(value.clone())
         .map(|_| value)
         .map_err(|error| AppError::bad_request(format!("{field} must be a valid DID: {error}")))
 }

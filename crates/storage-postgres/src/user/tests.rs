@@ -32,7 +32,7 @@ const TEST_ACCOUNT_AUTHORITY_ID: &str = "did:webvh:zaccountauthority:account.exa
 fn registration_binding_input(
     audience: impl Into<String>,
     principal_id: String,
-    full_id: String,
+    did: String,
     key_log_head: arkret_identifiers::Hash,
     version_id: &str,
 ) -> VerifiedPrincipalDidBindingInput {
@@ -40,17 +40,17 @@ fn registration_binding_input(
     let principal_authority = principal_authority(&principal_id, &audience);
     let audience = arkret_identifiers::DidCoreId::new(audience).unwrap();
     let principal_id = arkret_identifiers::DidCoreId::new(principal_id).unwrap();
-    let full_id = arkret_identifiers::DidFullId::new(full_id).unwrap();
+    let did = arkret_identifiers::Did::new(did).unwrap();
     VerifiedPrincipalDidBindingInput {
         audience: audience.clone(),
         principal_id: principal_id.clone(),
         key_log_head: key_log_head.clone(),
-        verified_full_id: full_id.clone(),
+        verified_did: did.clone(),
         verified_version_id: version_id.to_owned(),
         binding_receipt: account_binding_receipt(
             TEST_ACCOUNT_AUTHORITY_ID,
             principal_id,
-            full_id,
+            did,
             version_id,
             key_log_head,
         ),
@@ -1573,7 +1573,7 @@ async fn principal_binding_refreshes_verified_snapshot_only_within_the_same_core
         .unwrap();
     assert_eq!(refreshed.principal_id.as_str(), principal_id);
     assert_eq!(
-        refreshed.verified_full_id.as_str(),
+        refreshed.verified_did.as_str(),
         format!("did:webvh:z{label}:new.example")
     );
     assert_eq!(refreshed.verified_version_id, "2-rotation");

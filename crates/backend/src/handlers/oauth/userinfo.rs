@@ -171,7 +171,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
         .ok_or(RouteError::NoSuchUser(user_id))?;
     let subject_did = arkret::oidc_subject_for_user(&arkret_config, &user);
     let principal_id =
-        arkret::published_principal_did_for_user(&mut repo, &arkret_config, &user).await?;
+        arkret::published_principal_id_for_user(&mut repo, &arkret_config, &user).await?;
 
     let user_info = UserInfo {
         sub: subject_did.clone(),

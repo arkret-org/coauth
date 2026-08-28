@@ -30,7 +30,7 @@ struct DiscoveryDocument {
     arkret_server_describe: String,
 
     #[serde(rename = "org.arkret.service_id")]
-    arkret_service_id: arkret_identifiers::DidFullId,
+    arkret_service_id: arkret_identifiers::DidCoreId,
 
     #[serde(rename = "org.arkret.did_binding_methods")]
     arkret_did_binding_methods: Vec<String>,
@@ -54,7 +54,7 @@ struct PrincipalServerMetadata {
     name: String,
     audience: Option<arkret_identifiers::DidCoreId>,
     endpoint: String,
-    did: Option<arkret_identifiers::DidCoreId>,
+    service_id: Option<arkret_identifiers::DidCoreId>,
 }
 
 #[derive(Debug, Serialize)]
@@ -287,7 +287,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
                 name: server.name.clone(),
                 audience: Some(service_id.clone()),
                 endpoint: server.endpoint.to_string(),
-                did: Some(service_id),
+                service_id: Some(service_id),
             })
         })
         .collect();
@@ -312,7 +312,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
         ],
         arkret_api_endpoint: url_builder.absolute_url("/_arkret").to_string(),
         arkret_server_describe: url_builder.absolute_url("/_arkret/describe").to_string(),
-        arkret_service_id: arkret::issuer_did_for(&arkret_config),
+        arkret_service_id: arkret::service_id_for(&arkret_config),
         arkret_did_binding_methods: vec!["session_grant".to_owned()],
         arkret_supported_scopes: vec![
             scope::COAUTH_ADMIN.to_string(),

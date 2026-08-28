@@ -141,7 +141,7 @@ pub struct BatchInviteRequestBody {
     expires_in_hours: Option<u64>,
 
     /// Optional Arkret consent-gate metadata (Move/Anchor/Lattice spec
-    /// `consent-model.md` §6.1). When `peer_did` is supplied **and** a
+    /// `consent-model.md` §6.1). When `peer_principal_id` is supplied **and** a
     /// `server_name` URL is configured, coauth queries the holder's
     /// consent-grant cell on `soland` before minting registration tokens
     /// and rejects / quarantines the batch when the holder has not granted
@@ -156,16 +156,16 @@ pub struct BatchInviteRequestBody {
 /// Inline consent-gate metadata for `BatchInviteRequestBody`.
 ///
 /// Mirrors the fields on `account::invite_relay::InviteRelayRequestBody`, just
-/// without `inviter_did` / `invite_delivery` (admin batch-invite mints
+/// without `inviter_id` / `invite_delivery` (admin batch-invite mints
 /// fresh tokens — there is no inviter-signed payload to forward).
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct BatchInviteConsentGate {
     /// DID of the requesting peer (the admin / service issuing this
     /// batch on behalf of someone). Triggers the gate when set.
-    pub peer_did: String,
+    pub peer_principal_id: String,
 
     /// DID of the target holder whose consent cell governs the invite.
-    pub target_holder_did: String,
+    pub target_holder_principal_id: String,
 
     /// Consent-cell identifier per spec §6.
     pub consent_id: String,
@@ -255,7 +255,7 @@ pub enum BatchInviteGateOutcome {
 /// `gate_url_override` lets the caller supply a per-request URL that wins
 /// over the primary configured Principal Server endpoint. Both `None` →
 /// gate is skipped (returns `Allow`) — same behaviour as omitting
-/// `peer_did` entirely. This keeps the no-config / no-peer paths
+/// `peer_principal_id` entirely. This keeps the no-config / no-peer paths
 /// indistinguishable, which matches the spec note that the gate is
 /// optional infrastructure.
 pub async fn evaluate_batch_invite_gate(
@@ -289,15 +289,15 @@ pub async fn evaluate_batch_invite_gate(
 
     let lookup = query_consent_cell(
         Some(principal_url),
-        &gate.target_holder_did,
+        &gate.target_holder_principal_id,
         &gate.consent_id,
-        &gate.peer_did,
+        &gate.peer_principal_id,
         gate.scope,
         http_client,
     )
     .await;
 
-    let decision = evaluate_invite_gate(&lookup, &gate.peer_did, gate.scope, gate.consent_required);
+    let decision = evaluate_invite_gate(&lookup, &gate.peer_principal_id, gate.scope, gate.consent_required);
     match decision {
         InviteGateDecision::Allow => BatchInviteGateOutcome::Allow,
         InviteGateDecision::ConsentRequired => BatchInviteGateOutcome::ConsentRequired,
@@ -442,11 +442,11 @@ pub async fn batch_invite(
                 });
                 let enqueue_result = queue
                     .enqueue(EnqueueInviteQuarantine {
-                        peer_did: gate.peer_did.clone(),
-                        target_holder_did: gate.target_holder_did.clone(),
+                        peer_principal_id: gate.peer_principal_id.clone(),
+                        target_holder_principal_id: gate.target_holder_principal_id.clone(),
                         consent_id: gate.consent_id.clone(),
                         scope: gate.scope.to_string(),
-                        requesting_admin_did: admin_user.as_ref().map(|u| u.localpart.clone()),
+                        requesting_admin_localpart: admin_user.as_ref().map(|u| u.localpart.clone()),
                         payload,
                     })
                     .await;
@@ -515,8 +515,8 @@ mod consent_gate_tests {
 
     fn gate_for(consent_id: &str, peer: &str, holder: &str) -> BatchInviteConsentGate {
         BatchInviteConsentGate {
-            peer_did: peer.to_owned(),
-            target_holder_did: holder.to_owned(),
+            peer_principal_id: peer.to_owned(),
+            target_holder_principal_id: holder.to_owned(),
             consent_id: consent_id.to_owned(),
             scope: ConsentScope::Invite,
             target_principal_url: None,

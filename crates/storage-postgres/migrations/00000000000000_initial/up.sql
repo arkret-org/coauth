@@ -334,21 +334,21 @@ CREATE TABLE public.handle_audit_log (
 
 CREATE TABLE public.invite_quarantine_queue (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    peer_did text NOT NULL,
-    target_holder_did text NOT NULL,
+    peer_principal_id text NOT NULL,
+    target_holder_principal_id text NOT NULL,
     consent_id text NOT NULL,
     scope text NOT NULL,
-    requesting_admin_did text,
+    requesting_admin_localpart text,
     payload jsonb DEFAULT '{}'::jsonb NOT NULL,
     status text DEFAULT 'pending'::text NOT NULL,
     resolved_at timestamp with time zone,
     resolution_note text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT invite_quarantine_queue_consent_id_non_empty CHECK ((btrim(consent_id) <> ''::text)),
-    CONSTRAINT invite_quarantine_queue_peer_did_non_empty CHECK ((btrim(peer_did) <> ''::text)),
+    CONSTRAINT invite_quarantine_queue_peer_principal_id_non_empty CHECK ((btrim(peer_principal_id) <> ''::text)),
     CONSTRAINT invite_quarantine_queue_scope_non_empty CHECK ((btrim(scope) <> ''::text)),
     CONSTRAINT invite_quarantine_queue_status_known CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text]))),
-    CONSTRAINT invite_quarantine_queue_target_holder_did_non_empty CHECK ((btrim(target_holder_did) <> ''::text))
+    CONSTRAINT invite_quarantine_queue_target_holder_principal_id_non_empty CHECK ((btrim(target_holder_principal_id) <> ''::text))
 );
 
 CREATE TABLE public.notification_deliveries (
@@ -651,7 +651,7 @@ CREATE TABLE public.principal_did_bindings (
     principal_did_owner_id uuid NOT NULL,
     user_id uuid NOT NULL,
     audience text NOT NULL,
-    verified_full_id text NOT NULL,
+    verified_did text NOT NULL,
     verified_version_id text NOT NULL,
     binding_receipt jsonb NOT NULL,
     accepted_service_id text NOT NULL,
@@ -662,7 +662,7 @@ CREATE TABLE public.principal_did_bindings (
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
     ,CONSTRAINT principal_did_binding_basis_shape CHECK (audience = accepted_service_id AND audience LIKE 'ak:did_core:%' AND binding_version >= 1 AND binding_frontier_digest ~ '^sha256:[0-9a-f]{64}$'::text AND principal_control_realm_id LIKE 'ak:realm:%')
-    ,CONSTRAINT principal_did_binding_resolution_snapshot_shape CHECK (verified_full_id ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text AND btrim(verified_version_id) <> ''::text AND jsonb_typeof(binding_receipt) = 'object'::text AND jsonb_typeof(principal_authority) = 'object'::text)
+    ,CONSTRAINT principal_did_binding_resolution_snapshot_shape CHECK (verified_did ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text AND btrim(verified_version_id) <> ''::text AND jsonb_typeof(binding_receipt) = 'object'::text AND jsonb_typeof(principal_authority) = 'object'::text)
 );
 
 -- Durable exact-replay ledger for short-lived Account Authority controller
@@ -803,7 +803,7 @@ CREATE TABLE public.identity_binding_challenges (
     purpose text NOT NULL,
     account_subject text NOT NULL,
     principal_id text NOT NULL,
-    full_id text NOT NULL,
+    did text NOT NULL,
     operation_digest text NOT NULL,
     did_version_id text NOT NULL,
     log_head_digest text NOT NULL,
@@ -829,7 +829,7 @@ CREATE TABLE public.identity_binding_challenges (
     CONSTRAINT identity_binding_challenges_operation_digest_valid CHECK ((operation_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT identity_binding_challenges_account_subject_valid CHECK ((account_subject ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT identity_binding_challenges_principal_core_valid CHECK ((principal_id ~ '^ak:did_core:[a-z0-9]+:[^[:space:]/?#]+$'::text)),
-    CONSTRAINT identity_binding_challenges_full_id_bare CHECK ((full_id ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text)),
+    CONSTRAINT identity_binding_challenges_did_bare CHECK ((did ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text)),
     CONSTRAINT identity_binding_challenges_did_version_nonempty CHECK ((btrim(did_version_id) <> ''::text)),
     CONSTRAINT identity_binding_challenges_log_head_digest_valid CHECK ((log_head_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT identity_binding_challenges_control_key_digest_valid CHECK ((control_key_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
@@ -850,7 +850,7 @@ CREATE TABLE public.did_binding_challenges (
     service_account_id uuid NOT NULL,
     account_subject text NOT NULL,
     principal_id text NOT NULL,
-    full_id text NOT NULL,
+    did text NOT NULL,
     did_version_id text NOT NULL,
     log_head_digest text NOT NULL,
     control_key_digest text NOT NULL,
@@ -869,7 +869,7 @@ CREATE TABLE public.did_binding_challenges (
     CONSTRAINT did_binding_challenges_request_digest_valid CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT did_binding_challenges_account_subject_valid CHECK ((account_subject ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT did_binding_challenges_principal_core_valid CHECK ((principal_id ~ '^ak:did_core:[a-z0-9]+:[^[:space:]/?#]+$'::text)),
-    CONSTRAINT did_binding_challenges_full_id_bare CHECK ((full_id ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text)),
+    CONSTRAINT did_binding_challenges_did_bare CHECK ((did ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text)),
     CONSTRAINT did_binding_challenges_version_nonempty CHECK ((btrim(did_version_id) <> ''::text)),
     CONSTRAINT did_binding_challenges_log_head_valid CHECK ((log_head_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT did_binding_challenges_control_key_valid CHECK ((control_key_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
@@ -1001,7 +1001,7 @@ CREATE TABLE public.principal_server_trust_enrollments (
     canonical_endpoint text NOT NULL,
     service_id text NOT NULL,
     service_kind text NOT NULL,
-    full_id text NOT NULL,
+    did text NOT NULL,
     method_history_head text NOT NULL,
     version_id text NOT NULL,
     resolution_record_digest text NOT NULL,
@@ -1012,7 +1012,7 @@ CREATE TABLE public.principal_server_trust_enrollments (
     CONSTRAINT principal_server_trust_enrollments_canonical_endpoint_non_empty CHECK ((btrim(canonical_endpoint) <> ''::text)),
     CONSTRAINT principal_server_trust_enrollments_service_id_non_empty CHECK ((btrim(service_id) <> ''::text)),
     CONSTRAINT principal_server_trust_enrollments_service_kind_valid CHECK ((service_kind = 'principal_server'::text)),
-    CONSTRAINT principal_server_trust_enrollments_full_id_non_empty CHECK ((btrim(full_id) <> ''::text)),
+    CONSTRAINT principal_server_trust_enrollments_did_non_empty CHECK ((btrim(did) <> ''::text)),
     CONSTRAINT principal_server_trust_enrollments_method_history_head_non_empty CHECK ((btrim(method_history_head) <> ''::text)),
     CONSTRAINT principal_server_trust_enrollments_version_id_non_empty CHECK ((btrim(version_id) <> ''::text)),
     CONSTRAINT principal_server_trust_enrollments_resolution_record_digest_non_empty CHECK ((btrim(resolution_record_digest) <> ''::text)),
@@ -1710,7 +1710,7 @@ CREATE INDEX idx_identity_binding_challenges_expiry ON public.identity_binding_c
 
 CREATE INDEX invite_quarantine_queue_consent_id_idx ON public.invite_quarantine_queue USING btree (consent_id);
 
-CREATE INDEX invite_quarantine_queue_holder_did_idx ON public.invite_quarantine_queue USING btree (target_holder_did);
+CREATE INDEX invite_quarantine_queue_holder_principal_id_idx ON public.invite_quarantine_queue USING btree (target_holder_principal_id);
 
 CREATE INDEX invite_quarantine_queue_status_created_idx ON public.invite_quarantine_queue USING btree (status, created_at DESC);
 

@@ -186,8 +186,8 @@ fn grant_is_agent_delegated_to_controller(grant: &SessionGrant, controller_id: &
         .is_some_and(|value| value == controller_id)
 }
 
-fn grant_is_owned_by_current_principal(grant: &SessionGrant, principal_did: &str) -> bool {
-    grant.subject == principal_did || grant_is_agent_delegated_to_controller(grant, principal_did)
+fn grant_is_owned_by_current_principal(grant: &SessionGrant, principal_id: &str) -> bool {
+    grant.subject == principal_id || grant_is_agent_delegated_to_controller(grant, principal_id)
 }
 
 fn validate_lifecycle_proof_kind(proof_kind: &str) -> Result<(), ArkretRouteError> {
@@ -297,7 +297,7 @@ async fn verify_cross_session_lifecycle_proof(
         arkret_config,
         repo,
         binding_store,
-        principal_binding.verified_full_id.as_str(),
+        principal_binding.verified_did.as_str(),
         arkret_identity::DidBindingPurpose::AccountBinding,
         now,
     )
@@ -330,14 +330,14 @@ async fn verify_cross_session_lifecycle_proof(
             "lifecycle proof verification_method does not match the detached JWS kid",
         ));
     }
-    let verification_full_id =
-        arkret_identifiers::DidFullId::new(verification_method_did(&verification_method)).map_err(
+    let verification_did =
+        arkret_identifiers::Did::new(verification_method_did(&verification_method)).map_err(
             |error| lifecycle_proof_invalid(format!("invalid verification method DID: {error}")),
         )?;
-    let verification_principal_id =
-        arkret_identifiers::project_full_id_to_core_id(&verification_full_id).map_err(|error| {
-            lifecycle_proof_invalid(format!("verification method projection failed: {error}"))
-        })?;
+    let verification_principal_id = arkret_identifiers::project_did_to_core_id(&verification_did)
+        .map_err(|error| {
+        lifecycle_proof_invalid(format!("verification method projection failed: {error}"))
+    })?;
     if verification_principal_id.as_str() != current_grant.subject {
         return Err(lifecycle_proof_invalid(
             "lifecycle proof verification_method principal does not match the current session grant subject",
@@ -467,7 +467,7 @@ pub async fn revoke_session_grant_endpoint(
         .await?;
     }
 
-    let current_principal_did = current_grant.subject.clone();
+    let current_principal_id = current_grant.subject.clone();
     let target_session_grant_id = match &selector {
         RevokeSelector::Current => Some(current_grant.grant_id.clone()),
         RevokeSelector::Grant(target_session_grant_id) => {
@@ -476,7 +476,7 @@ pub async fn revoke_session_grant_endpoint(
                 .lookup_by_grant_id(target_session_grant_id)
                 .await
                 .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
-                .filter(|grant| grant_is_owned_by_current_principal(grant, &current_principal_did))
+                .filter(|grant| grant_is_owned_by_current_principal(grant, &current_principal_id))
                 .ok_or_else(session_grant_not_found)?;
             Some(target.grant_id)
         }
@@ -492,11 +492,11 @@ pub async fn revoke_session_grant_endpoint(
             }
         }
         RevokeSelector::Device(target_device_id) => coauth_data::SessionGrantRevokeTarget::Device {
-            subject: current_principal_did.clone(),
+            subject: current_principal_id.clone(),
             device_id: target_device_id.to_string(),
         },
         RevokeSelector::All => coauth_data::SessionGrantRevokeTarget::AllForSubject {
-            subject: current_principal_did.clone(),
+            subject: current_principal_id.clone(),
         },
     };
     let mut redacted_body =
@@ -660,11 +660,11 @@ pub async fn revoke_session_grant_endpoint(
                 .expect("grant selector has an id"),
         ),
         RevokeSelector::Device(device_id) => SessionGrantRevokeSelector::Device {
-            subject: &current_principal_did,
+            subject: &current_principal_id,
             device_id: device_id.as_str(),
         },
         RevokeSelector::All => SessionGrantRevokeSelector::AllForSubject {
-            subject: &current_principal_did,
+            subject: &current_principal_id,
         },
     };
     let committed = repo

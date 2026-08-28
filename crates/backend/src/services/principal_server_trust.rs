@@ -36,7 +36,7 @@ use arkret_models_identity::service_identity::CanonicalServiceUrl;
 use arkret_models_identity::{
     AuthenticatedServiceResolution, DidDocument, canonical_service_current_record_path,
 };
-use arkret_wire::{DidCoreId, DidFullId, Hash, ServiceKind};
+use arkret_wire::{Did, DidCoreId, Hash, ServiceKind};
 use chrono::Utc;
 use coauth_config::{ArkretConfig, PrincipalServerConfig};
 use coauth_data::storage::principal_server_trust::{
@@ -286,8 +286,8 @@ impl TrustVerificationError {
 pub struct VerifiedPrincipalServerIdentity {
     /// Stable service core id (the pin).
     pub service_id: DidCoreId,
-    /// Complete service DID verified against its WebVH history.
-    pub full_id: DidFullId,
+    /// Service DID verified against its WebVH history.
+    pub did: Did,
     /// Verified WebVH method-history head (`sha256:` digest of the head
     /// entry) — the anti-rollback floor.
     pub method_history_head: String,
@@ -364,7 +364,7 @@ fn check_anti_rollback(
 ///
 /// 1. canonical HTTPS endpoint under the configured egress policy;
 /// 2. role-scoped typed `ServiceDescribe` with `service_kind == principal_server`;
-/// 3. `project(full_id) == service_id`;
+/// 3. `project(did) == service_id`;
 /// 4. full WebVH history verification; the describe resolution commitment must equal the verified
 ///    head (version id and head digest);
 /// 5. signed `ServiceResolutionRecord` from the canonical path, proof verified against the
@@ -430,7 +430,7 @@ pub async fn verify_principal_server_identity(
 
     // 3. full/core projection.
     arkret_signatures::service_resolution::verify_full_to_core_binding(
-        &commitment.full_id,
+        &commitment.did,
         &service_id,
     )
     .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;
@@ -438,7 +438,7 @@ pub async fn verify_principal_server_identity(
     // 4. WebVH history verification; the describe commitment must equal the
     // verified head.
     let log_url = Url::parse(
-        &DidWebvhResolver::log_url(&commitment.full_id)
+        &DidWebvhResolver::log_url(&commitment.did)
             .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?,
     )
     .map_err(|error| TrustVerificationError::InvalidEndpoint(error.to_string()))?;
@@ -451,7 +451,7 @@ pub async fn verify_principal_server_identity(
     )
     .await?;
     let verified_log =
-        arkret_identity::verify_did_webvh_v1_chain_bytes(&commitment.full_id, &log_bytes)
+        arkret_identity::verify_did_webvh_v1_chain_bytes(&commitment.did, &log_bytes)
             .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;
     if verified_log.head_version_id != commitment.version_id {
         return Err(TrustVerificationError::InvalidEvidence(format!(
@@ -476,10 +476,10 @@ pub async fn verify_principal_server_identity(
     }
     let document: DidDocument = serde_json::from_value(verified_log.head_state.clone())
         .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;
-    if document.id != commitment.full_id {
+    if document.id != commitment.did {
         return Err(TrustVerificationError::InvalidEvidence(format!(
             "verified DID Document id {} does not match {}",
-            document.id, commitment.full_id
+            document.id, commitment.did
         )));
     }
 
@@ -529,7 +529,7 @@ pub async fn verify_principal_server_identity(
             record.record.service_kind.clone(),
         ));
     }
-    if record.record.full_id != commitment.full_id
+    if record.record.did != commitment.did
         || record.record.method_history_head != commitment.method_history_head
         || record.record.version_id != commitment.version_id
     {
@@ -627,7 +627,7 @@ pub async fn verify_principal_server_identity(
 
     Ok(VerifiedPrincipalServerIdentity {
         service_id,
-        full_id: commitment.full_id,
+        did: commitment.did,
         method_history_head: commitment.method_history_head,
         version_id: commitment.version_id,
         resolution_record_digest: resolution_record_digest.as_str().to_owned(),
@@ -710,7 +710,7 @@ fn enrollment_params(
         name: server.name.clone(),
         canonical_endpoint: verified.canonical_endpoint.clone(),
         service_id: verified.service_id.clone(),
-        full_id: verified.full_id.clone(),
+        did: verified.did.clone(),
         method_history_head: verified.method_history_head.clone(),
         version_id: verified.version_id.clone(),
         resolution_record_digest: verified.resolution_record_digest.clone(),
@@ -761,7 +761,7 @@ async fn record_failure_audit(
 
 /// One-time idempotent trust bootstrap for one configured Principal Server.
 ///
-/// Verifies the full identity chain online, then creates the enrollment and
+/// Verifies the DID control chain online, then creates the enrollment and
 /// its audit entry in a single transaction. Re-running with an unchanged
 /// identity succeeds without altering the pin; an endpoint enrolled with a
 /// different identity is rejected in favour of the explicit replace flow.
@@ -982,7 +982,7 @@ pub async fn replace(
             name: server.name.clone(),
             canonical_endpoint: verified.canonical_endpoint.clone(),
             service_id: verified.service_id.clone(),
-            full_id: verified.full_id.clone(),
+            did: verified.did.clone(),
             method_history_head: verified.method_history_head.clone(),
             version_id: verified.version_id.clone(),
             resolution_record_digest: verified.resolution_record_digest.clone(),
@@ -1045,7 +1045,7 @@ pub fn development_auto_enrollment_allowed(
 /// Mandatory online startup preflight for every configured Principal Server.
 ///
 /// Resolves the effective pin (config layer, then persisted enrollment),
-/// verifies the full identity chain online for each server, advances the
+/// verifies the DID control chain online for each server, advances the
 /// persisted anti-rollback floor, populates the request-path cache, and only
 /// then returns. Any missing pin, unreachable server, invalid evidence,
 /// rollback or identity mismatch fails the whole startup before the business

@@ -75,7 +75,7 @@ const INACTIVE: IntrospectionResponse = IntrospectionResponse {
     aud: None,
     iss: None,
     jti: None,
-    arkret_principal_did: None,
+    arkret_principal_id: None,
     arkret_device_id: None,
     arkret_session_id: None,
 };

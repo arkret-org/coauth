@@ -69,12 +69,12 @@ kid 为 `coauth-service-identity-v1` 的 Ed25519 私钥上。
 Provider 每次返回的 `ServiceRegistrationOutcome` 都带一份 registration receipt。
 coauth 在写入任何本地状态之前先完整验证它的 Provider 证明：
 
-1. 从 Provider 的 `/_arkret/describe` 取得它当前的完整 DID；配置了
+1. 从 Provider 的 `/_arkret/describe` 取得它当前的 DID；配置了
    `principal_servers[].service_id` pin 时，describe 声明的 `service_id` 必须逐字等于该 pin；
 2. 从该 DID 自身派生 `did.jsonl` 地址，完整验证 Provider 的方法原生历史（SCID 派生、条目哈希链、
    每条条目的签名与轮换授权），并要求验证出的 head 等于 describe 声明的版本；
-3. 要求 `project(full_id)` 等于 receipt 里的 `provider_service_id`，且 receipt
-   `verification_method` 的裸 controller DID 逐字等于该 `full_id`；
+3. 要求 `project(did)` 等于 receipt 里的 `provider_service_id`，且 receipt
+   `verification_method` 的裸 controller DID 逐字等于该 `did`；
 4. 要求该 method 在 receipt `issued_at` 时点属于 Provider DID Document 的 `assertionMethod`；
 5. 实际验证 receipt 的 Ed25519 detached JWS。
 

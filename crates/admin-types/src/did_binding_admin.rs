@@ -215,7 +215,7 @@ pub struct DidBindingResolverDescriptor {
     pub proof_required_for_pairwise: bool,
 }
 
-/// Full DID binding row returned by `GET .../accounts/{id}/dids`.
+/// DID binding row returned by `GET .../accounts/{id}/dids`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(
     feature = "schema",

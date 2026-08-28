@@ -16,8 +16,8 @@ pub enum ErasureReceiptVerificationError {
     Receipt(#[from] arkret_wire::WireError),
     #[error("issuer DID resolution failed: {0}")]
     DidResolve(#[from] DidResolveError),
-    #[error("issuer DID document cannot back a full identity fact: {0}")]
-    ResolverNotFullIdentityFact(String),
+    #[error("issuer DID document is not authority-grade: {0}")]
+    ResolverNotAuthorityGrade(String),
     #[error("issuer DID document has no verificationMethod entries")]
     NoVerificationMethod,
     #[error("no receipt proof verified under the issuer DID")]
@@ -92,7 +92,7 @@ pub async fn verify_erasure_receipt(
     )
     .await
     .map_err(|error| {
-        ErasureReceiptVerificationError::ResolverNotFullIdentityFact(error.to_string())
+        ErasureReceiptVerificationError::ResolverNotAuthorityGrade(error.to_string())
     })?;
     if resolution.document.verification_method.is_empty() {
         return Err(ErasureReceiptVerificationError::NoVerificationMethod);

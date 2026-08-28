@@ -7,7 +7,7 @@ use thiserror::Error;
 /// holder / principal DID. Kept in sync with the SDK validator's
 /// [`arkret_models_identity::validate_handle_claim_subject`] error-message prefix.
 pub const HANDLE_CLAIM_SUBJECT_NOT_PRINCIPAL_DID_CODE: &str =
-    "handle_claim_subject_not_principal_did";
+    "handle_claim_subject_not_principal_id";
 
 #[derive(Debug, Error)]
 pub enum HandleClaimSubjectError {

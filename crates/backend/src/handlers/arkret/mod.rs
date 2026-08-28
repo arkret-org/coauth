@@ -664,11 +664,11 @@ pub(crate) fn service_id_for(arkret_config: &ArkretConfig) -> arkret_identifiers
         .expect("identity readiness gate prevents handlers from running without a service DID")
 }
 
-/// The deployment's current complete service DID used for proof verification methods.
-pub(crate) fn issuer_did_for(arkret_config: &ArkretConfig) -> arkret_identifiers::DidFullId {
+/// The deployment's current service DID used for proof verification methods.
+pub(crate) fn issuer_did_for(arkret_config: &ArkretConfig) -> arkret_identifiers::Did {
     arkret_config
         .runtime_service_identity
-        .full_id()
+        .did()
         .expect("identity readiness gate prevents handlers from running without a service DID")
 }
 
@@ -683,7 +683,7 @@ pub(crate) fn oidc_subject_for_user(_arkret_config: &ArkretConfig, user: &User) 
 #[derive(Debug, Clone)]
 pub(crate) struct PrincipalDidBinding {
     pub principal_id: arkret_identifiers::DidCoreId,
-    pub full_id: arkret_identifiers::DidFullId,
+    pub did: arkret_identifiers::Did,
     pub audience: String,
     pub accepted_service_id: arkret_identifiers::DidCoreId,
 }
@@ -707,7 +707,7 @@ where
         {
             return Ok(Some(PrincipalDidBinding {
                 principal_id: row.principal_id,
-                full_id: row.verified_full_id,
+                did: row.verified_did,
                 accepted_service_id: row.accepted_service_id,
                 audience: audience.to_string(),
             }));
@@ -717,7 +717,7 @@ where
     Ok(None)
 }
 
-pub(crate) async fn principal_did_for_user<R>(
+pub(crate) async fn principal_id_for_user<R>(
     repo: &mut R,
     arkret_config: &ArkretConfig,
     user: &User,
@@ -731,7 +731,7 @@ where
 }
 
 /// Persisted stable principal identity that is allowed to leave the Account Authority.
-pub(crate) async fn published_principal_did_for_user<R>(
+pub(crate) async fn published_principal_id_for_user<R>(
     repo: &mut R,
     arkret_config: &ArkretConfig,
     user: &User,
@@ -739,7 +739,7 @@ pub(crate) async fn published_principal_did_for_user<R>(
 where
     R: RepositoryAccess,
 {
-    principal_did_for_user(repo, arkret_config, user).await
+    principal_id_for_user(repo, arkret_config, user).await
 }
 
 /// Display form `local@host` used by logging / display paths.
@@ -977,7 +977,7 @@ pub struct DebugIssueDpopGrantOutcome {
     pub scopes: Vec<String>,
     pub expires_at: String,
     /// Verified principal DID this grant is bound to.
-    pub principal_did: String,
+    pub principal_id: String,
 }
 
 /// Byte-preserving response used by the live issuer-ledger fault seam.
@@ -1076,7 +1076,7 @@ pub async fn debug_issue_dpop_grant(
         )
     })?;
     let principal_authority = binding.principal_authority;
-    let principal_did = binding.principal_id;
+    let principal_id = binding.principal_id;
     let scopes = body.scopes.clone().unwrap_or_else(|| {
         vec![
             format!("urn:arkret:client:device:{}", body.device_id),
@@ -1187,7 +1187,7 @@ pub async fn debug_issue_dpop_grant(
         arkret_identifiers::DeviceId::new(body.device_id.clone())
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         scopes,
-        Some(principal_did.as_str()),
+        Some(principal_id.as_str()),
         &principal_authority,
         jkt.clone(),
         arkret_models_identity::SessionGrantDeviceBinding {
@@ -1209,7 +1209,7 @@ pub async fn debug_issue_dpop_grant(
         audience: material.audience.clone(),
         scopes: material.scopes.clone(),
         expires_at: material.expires_at.clone(),
-        principal_did: principal_did.to_string(),
+        principal_id: principal_id.to_string(),
     };
     let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;

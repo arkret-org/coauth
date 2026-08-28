@@ -65,7 +65,7 @@ pub enum IntrospectionError {
 /// device/principal/session association fields.
 ///
 /// RFC 7662 introspection defaults to `sub`/`scope`/`exp`-style claims.
-/// The arkret extension fields (`arkret_principal_did`, `arkret_device_id`,
+/// The arkret extension fields (`arkret_principal_id`, `arkret_device_id`,
 /// `arkret_session_id`) link a token to a concrete
 /// device + principal + local session and materially widen the
 /// de-anonymisation surface. They are S2S material for the trusted
@@ -143,7 +143,7 @@ pub async fn introspect_token(
 
             // The session might not have a user on it (for Client Credentials
             // grants for example), so we're optionally fetching the user
-            let (sub, username, principal_did) = if let Some(user_id) = session.user_id {
+            let (sub, username, principal_id) = if let Some(user_id) = session.user_id {
                 let user = repo
                     .user()
                     .lookup(user_id)
@@ -155,9 +155,9 @@ pub async fn introspect_token(
                 }
 
                 let sub = principal_subject_for_user(arkret_config, &user);
-                let principal_did =
-                    arkret::published_principal_did_for_user(repo, arkret_config, &user).await?;
-                (Some(sub), Some(user.localpart), principal_did)
+                let principal_id =
+                    arkret::published_principal_id_for_user(repo, arkret_config, &user).await?;
+                (Some(sub), Some(user.localpart), principal_id)
             } else {
                 (None, None, None)
             };
@@ -185,7 +185,7 @@ pub async fn introspect_token(
                 aud: None,
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: Some(access_token.jti()),
-                arkret_principal_did: disclosure.is_full().then_some(principal_did).flatten(),
+                arkret_principal_id: disclosure.is_full().then_some(principal_id).flatten(),
                 arkret_device_id: disclosure.is_full().then_some(device_id).flatten(),
                 arkret_session_id: disclosure.is_full().then(|| session.id.to_string()),
             }
@@ -216,7 +216,7 @@ pub async fn introspect_token(
 
             // The session might not have a user on it (for Client Credentials
             // grants for example), so we're optionally fetching the user
-            let (sub, username, principal_did) = if let Some(user_id) = session.user_id {
+            let (sub, username, principal_id) = if let Some(user_id) = session.user_id {
                 let user = repo
                     .user()
                     .lookup(user_id)
@@ -228,9 +228,9 @@ pub async fn introspect_token(
                 }
 
                 let sub = principal_subject_for_user(arkret_config, &user);
-                let principal_did =
-                    arkret::published_principal_did_for_user(repo, arkret_config, &user).await?;
-                (Some(sub), Some(user.localpart), principal_did)
+                let principal_id =
+                    arkret::published_principal_id_for_user(repo, arkret_config, &user).await?;
+                (Some(sub), Some(user.localpart), principal_id)
             } else {
                 (None, None, None)
             };
@@ -256,7 +256,7 @@ pub async fn introspect_token(
                 aud: None,
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: Some(refresh_token.jti()),
-                arkret_principal_did: disclosure.is_full().then_some(principal_did).flatten(),
+                arkret_principal_id: disclosure.is_full().then_some(principal_id).flatten(),
                 arkret_device_id: disclosure.is_full().then_some(device_id).flatten(),
                 arkret_session_id: disclosure.is_full().then(|| session.id.to_string()),
             }
@@ -327,8 +327,8 @@ pub async fn introspect_token(
             let device_id = arkret::primary_device_id(&session.scope);
             let scope = session.scope;
             let actor_user_sub = principal_subject_for_user(arkret_config, &actor_user);
-            let actor_principal_did =
-                arkret::published_principal_did_for_user(repo, arkret_config, &actor_user).await?;
+            let actor_principal_id =
+                arkret::published_principal_id_for_user(repo, arkret_config, &actor_user).await?;
 
             IntrospectionResponse {
                 active: true,
@@ -346,9 +346,9 @@ pub async fn introspect_token(
                 aud: None,
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: None,
-                arkret_principal_did: disclosure
+                arkret_principal_id: disclosure
                     .is_full()
-                    .then_some(actor_principal_did)
+                    .then_some(actor_principal_id)
                     .flatten(),
                 arkret_device_id: disclosure.is_full().then_some(device_id).flatten(),
                 arkret_session_id: disclosure.is_full().then(|| session.id.to_string()),

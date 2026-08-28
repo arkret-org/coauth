@@ -20,7 +20,7 @@
 //! explicitly from storage-neutral domain records.
 
 use arkret_canonical::{canonical_json_bytes, sha256_digest};
-use arkret_identifiers::{DidFullId, DigestSuiteCode, EventId, Hash, RealmId, new_prefixed_uuid7};
+use arkret_identifiers::{Did, DigestSuiteCode, EventId, Hash, RealmId, new_prefixed_uuid7};
 use arkret_models_collaboration::{RealmOrganizationPayload, RealmOrganizationStatus};
 use coauth_admin_types::organization_admin::{
     BootstrapAuthorizationInput, BootstrapOrganizationRequest, IssueOrganizationStatementRequest,
@@ -50,8 +50,8 @@ use crate::services::organization_statement::{
     offline_resolver,
 };
 
-fn parse_did(raw: &str) -> Result<DidFullId, AppError> {
-    DidFullId::new(raw.to_owned())
+fn parse_did(raw: &str) -> Result<Did, AppError> {
+    Did::new(raw.to_owned())
         .map_err(|e| AppError::bad_request(format!("invalid organization DID: {e}")))
 }
 
@@ -524,7 +524,7 @@ pub async fn issue_statement_handler(
 
     let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
-    let service_full_id = crate::handlers::arkret::issuer_did_for(&arkret_config);
+    let service_did = crate::handlers::arkret::issuer_did_for(&arkret_config);
 
     let call_context = extract_call_context(req, depot).await?;
     let executed_by = None;
@@ -542,13 +542,13 @@ pub async fn issue_statement_handler(
         }
         None => None,
     };
-    let organization_id = arkret_identifiers::project_full_id_to_core_id(&organization_id)
+    let organization_id = arkret_identifiers::project_did_to_core_id(&organization_id)
         .map_err(|e| AppError::bad_request(format!("invalid organization DID: {e}")))?;
     let issuer = match (&body.delegation_ref, &delegation) {
         (Some(_), Some(delegation)) => {
-            let full_id = DidFullId::new(delegation.delegate_did.clone())
+            let did = Did::new(delegation.delegate_did.clone())
                 .map_err(|e| AppError::bad_request(format!("invalid delegate DID: {e}")))?;
-            arkret_identifiers::project_full_id_to_core_id(&full_id)
+            arkret_identifiers::project_did_to_core_id(&did)
                 .map_err(|e| AppError::bad_request(format!("invalid delegate DID: {e}")))?
         }
         _ => organization_id.clone(),
@@ -582,17 +582,11 @@ pub async fn issue_statement_handler(
     // delegation row; direct statements use the offline resolver.
     let payload = if body.delegation_ref.is_some() {
         let resolver = RepositoryDelegationResolver::new(delegation, now);
-        issue_organization_statement(
-            &key_store,
-            service_full_id.as_str(),
-            request,
-            now,
-            &resolver,
-        )
+        issue_organization_statement(&key_store, service_did.as_str(), request, now, &resolver)
     } else {
         issue_organization_statement(
             &key_store,
-            service_full_id.as_str(),
+            service_did.as_str(),
             request,
             now,
             &offline_resolver(),

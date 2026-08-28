@@ -215,11 +215,11 @@ pub const PAUSED_REVOCATION_FRESHNESS_WINDOW: chrono::Duration = chrono::Duratio
 /// can't mask a principal-binding bug.
 ///
 /// `verification_method` is the DID URL extracted from the JWS header (or
-/// the embedded `verification_method` claim); `agent_principal_did` is the
+/// the embedded `verification_method` claim); `agent_principal_id` is the
 /// canonical DID carried by `agent_id`.
 pub fn enforce_verification_method_binding(
     verification_method: &str,
-    agent_principal_did: &str,
+    agent_principal_id: &str,
 ) -> Result<(), AgentAuthRejection> {
     // The verification_method is a DID URL. Strip query and fragment before
     // comparing to the scalar principal DID.
@@ -230,7 +230,7 @@ pub fn enforce_verification_method_binding(
         .split('?')
         .next()
         .unwrap_or("");
-    if vm_did != agent_principal_did {
+    if vm_did != agent_principal_id {
         return Err(AgentAuthRejection::VerificationMethodPrincipalMismatch);
     }
     Ok(())

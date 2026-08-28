@@ -130,9 +130,9 @@ pub async fn account_register_endpoint(
             "top-level device_id is not used by the atomic identity-creation flow",
         ));
     }
-    if identity_creation.did_operation.did != body.full_id
+    if identity_creation.did_operation.did != body.did
         || identity_creation.control_proof.principal_id != body.principal_id
-        || identity_creation.control_proof.full_id != body.full_id
+        || identity_creation.control_proof.did != body.did
     {
         return Err(failed_precondition(
             "principal_id does not match the identity-creation operation and control proof",
@@ -227,7 +227,7 @@ pub async fn account_register_endpoint(
                     format!("principal registry rejected identity creation: {error}"),
                 )
             })?;
-            validate_registry_outcome(&outcome, &body.full_id)?;
+            validate_registry_outcome(&outcome, &body.did)?;
             let registration_did_evidence = identity_creation
                 .registration_did_evidence_draft
                 .clone()
@@ -255,7 +255,7 @@ pub async fn account_register_endpoint(
                 context.lease.registry_receipt.clone().ok_or_else(|| {
                     failed_precondition("published identity has no registry receipt")
                 })?;
-            validate_registry_outcome(&outcome, &body.full_id)?;
+            validate_registry_outcome(&outcome, &body.did)?;
             let registration_did_evidence = context
                 .lease
                 .registration_did_evidence
@@ -302,7 +302,7 @@ pub async fn account_register_endpoint(
     let pcr_request = PcrGenesisSubmitRequestBody {
         account_authority_id: service_id_for(&depot.arkret_config()?),
         principal_id: body.principal_id.clone(),
-        full_id: body.full_id.clone(),
+        did: body.did.clone(),
         pcr_realm_id: identity_creation.control_proof.pcr_realm_id.clone(),
         idempotency_key: arkret_wire::IdempotencyKey::new(format!(
             "pcr-genesis:{}",
@@ -407,7 +407,7 @@ pub async fn account_register_endpoint(
         account_authority_id: service_id_for(&depot.arkret_config()?),
         account_subject: context.challenge.account_subject.clone(),
         principal_id: body.principal_id.clone(),
-        full_id: body.full_id.clone(),
+        did: body.did.clone(),
         did_version_id: identity_creation.control_proof.did_version_id.clone(),
         control_key_digest: identity_creation.control_proof.control_key_digest.clone(),
         identity_creation_lease_id: Some(identity_creation.identity_creation_lease_id.clone()),
@@ -483,7 +483,7 @@ pub async fn account_register_endpoint(
                             audience: principal_server.service_id.clone(),
                             principal_id: body.principal_id.clone(),
                             key_log_head: head_event_digest,
-                            verified_full_id: body.full_id.clone(),
+                            verified_did: body.did.clone(),
                             verified_version_id: identity_creation
                                 .control_proof
                                 .did_version_id
@@ -554,7 +554,7 @@ pub async fn account_register_endpoint(
     repo.cancel().await.ok();
     let verified_principal = VerifiedPrincipalIdentity {
         principal_id: body.principal_id.clone(),
-        full_id: body.full_id.clone(),
+        did: body.did.clone(),
     };
     ensure_soland_account_registered(
         &depot.http_client()?,
@@ -697,16 +697,16 @@ fn validate_registration_transcript(
         ));
     }
     if reserved.did_operation != registration.did_operation
-        || arkret_identifiers::project_full_id_to_core_id(&registration.full_id)
+        || arkret_identifiers::project_did_to_core_id(&registration.did)
             .map_err(|error| proof_invalid(error.to_string()))?
             != proof.principal_id
-        || registration.full_id != proof.full_id
+        || registration.did != proof.did
         || reserved.operation_digest != proof.operation_digest
         || challenge.challenge_id != proof.challenge_id
         || challenge.challenge != proof.challenge
         || challenge.purpose != proof.purpose
         || challenge.principal_id != proof.principal_id
-        || challenge.full_id != proof.full_id
+        || challenge.did != proof.did
         || challenge.operation_digest != proof.operation_digest
         || challenge.did_version_id != proof.did_version_id
         || challenge.log_head_digest != proof.log_head_digest
@@ -787,9 +787,9 @@ fn canonical_register_request_digest(
 
 fn validate_registry_outcome(
     outcome: &DidOperationSubmitOutcome,
-    full_id: &arkret_identifiers::DidFullId,
+    did: &arkret_identifiers::Did,
 ) -> Result<(), ArkretRouteError> {
-    if outcome.did.as_str() != full_id.as_str()
+    if outcome.did.as_str() != did.as_str()
         || !matches!(
             outcome.status,
             DidOperationSubmitStatus::Accepted | DidOperationSubmitStatus::Duplicate

@@ -173,7 +173,7 @@ pub struct NewSessionGrant<'a> {
 pub struct NewSessionGrantOperation<'a> {
     /// Stable issuer core DID that owns this replay namespace.
     ///
-    /// This is deliberately not a string: a complete [`arkret_identifiers::DidFullId`]
+    /// This is deliberately not a string: a complete [`arkret_identifiers::Did`]
     /// identifies a particular DID document version and must never partition
     /// the durable issuer ledger.
     pub issuer: DidCoreId,

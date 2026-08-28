@@ -27,7 +27,7 @@ returns a `PolicyCheckOutcome` carrying:
 
 ## DID parsing
 
-`DidFullId` rejects any identifier whose method-name segment falls
+`Did` rejects any identifier whose method-name segment falls
 outside `^did:[a-z0-9]+:[^\s]+$`. The same shape is enforced as a
 database `CHECK` constraint on every stored DID column, so a value that
 bypasses the handler still cannot land in storage.

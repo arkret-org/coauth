@@ -79,7 +79,7 @@ mod tests {
     #[tokio::test]
     async fn did_operation_submit_carries_the_registered_operation_selector() {
         let server = MockServer::start().await;
-        let did = arkret_wire::DidFullId::new("did:webvh:z6mkfixture:local.host").unwrap();
+        let did = arkret_wire::Did::new("did:webvh:z6mkfixture:local.host").unwrap();
         Mock::given(method("POST"))
             .and(path("/_arkret/root/identity/submit-did-operation"))
             .and(header(

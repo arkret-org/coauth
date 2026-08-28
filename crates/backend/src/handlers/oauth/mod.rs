@@ -76,7 +76,7 @@ pub(crate) fn generate_id_token(
     clock: &impl Clock,
     url_builder: &UrlBuilder,
     subject_did: &str,
-    principal_did: Option<&str>,
+    principal_id: Option<&str>,
     key_store: &Keystore,
     client: &Client,
     grant: Option<&AuthorizationGrant>,
@@ -89,10 +89,10 @@ pub(crate) fn generate_id_token(
     let now = clock.now();
     claims::ISS.insert(&mut claims, url_builder.oidc_issuer().to_string())?;
     claims::SUB.insert(&mut claims, subject_did.to_owned())?;
-    if let Some(principal_did) = principal_did {
+    if let Some(principal_id) = principal_id {
         claims.insert(
             arkret::CLAIM_PRINCIPAL_ID.to_owned(),
-            serde_json::Value::String(principal_did.to_owned()),
+            serde_json::Value::String(principal_id.to_owned()),
         );
     }
     claims::AUD.insert(&mut claims, client.client_id.clone())?;
@@ -205,7 +205,7 @@ mod tests {
         let clock = MockClock::default();
         let now = clock.now();
         let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
-        let principal_did =
+        let principal_id =
             "did:webvh:zQmTestPrincipal:example.com:webvh:01964137000070008000000000000000";
         let mut fixture_rng = ChaChaRng::seed_from_u64(7);
 
@@ -241,8 +241,8 @@ mod tests {
             &mut signing_rng,
             &clock,
             &url_builder,
-            principal_did,
-            Some(principal_did),
+            principal_id,
+            Some(principal_id),
             &key_store,
             &client,
             Some(&grant),
@@ -266,13 +266,13 @@ mod tests {
         );
         assert_eq!(
             payload.get("sub").and_then(Value::as_str),
-            Some(principal_did)
+            Some(principal_id)
         );
         assert_eq!(
             payload
                 .get(arkret::CLAIM_PRINCIPAL_ID)
                 .and_then(Value::as_str),
-            Some(principal_did)
+            Some(principal_id)
         );
         assert_eq!(
             payload.get("aud").and_then(Value::as_str),

@@ -21,12 +21,12 @@ fn protocol_now() -> chrono::DateTime<Utc> {
 
 use super::*;
 
-fn did() -> DidFullId {
-    DidFullId::new("did:web:alice.example").unwrap()
+fn did() -> Did {
+    Did::new("did:web:alice.example").unwrap()
 }
 
-fn other_did() -> DidFullId {
-    DidFullId::new("did:web:mallory.example").unwrap()
+fn other_did() -> Did {
+    Did::new("did:web:mallory.example").unwrap()
 }
 
 fn trust_domain(scope: &str) -> TrustDomainId {
@@ -775,7 +775,7 @@ fn primary_did_for_user_never_resolves() {
         );
     }
     assert!(
-        body.contains("principal_did()"),
+        body.contains("principal_id()"),
         "primary_did_for_user must read the persisted principal binding"
     );
 }

@@ -364,7 +364,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         "ak:did_core:web:session-grant-static.test"
     );
     assert_eq!(
-        body["x_coauth_principal_server_delegation_targets"][0]["did"],
+        body["x_coauth_principal_server_delegation_targets"][0]["service_id"],
         "ak:did_core:web:session-grant-static.test"
     );
     assert_eq!(
@@ -797,7 +797,7 @@ fn service_describe_advertises_configured_session_grant_ttl() {
 }
 
 #[test]
-fn session_grant_is_signed_for_the_bound_principal_did() {
+fn session_grant_is_signed_for_the_bound_principal_id() {
     let clock = SystemClock::default();
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
     let arkret_config = personal_node_did_web_config();
@@ -811,12 +811,12 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
     let mut signing_rng = ChaChaRng::seed_from_u64(11);
     let session_key = PrivateKey::generate_ed25519(&mut signing_rng);
     let session_public_key = test_session_public_jwk(&session_key, "test-session-key");
-    let principal_did = format!(
+    let principal_id = format!(
         "ak:did_core:web:auth.example.com:users:{}",
         browser_session.user.id
     );
     let principal_authority = test_principal_authority(
-        &principal_did,
+        &principal_id,
         &required_audience_for(&url_builder, &arkret_config),
     );
 
@@ -829,7 +829,7 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
         &key_store,
         &browser_session,
         session_public_key,
-        &principal_did,
+        &principal_id,
         &principal_authority,
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
             .unwrap(),
@@ -846,7 +846,7 @@ fn session_grant_is_signed_for_the_bound_principal_did() {
     let payload = jwt.payload();
     assert_eq!(payload.kind, "ak.session.grant");
     assert_eq!(payload.grant_id, grant.grant_id);
-    assert_eq!(payload.subject.as_str(), principal_did);
+    assert_eq!(payload.subject.as_str(), principal_id);
     assert_eq!(
         payload.audience.as_str(),
         required_audience_for(&url_builder, &arkret_config)
@@ -992,12 +992,12 @@ fn session_grant_uses_configured_ttl() {
     let mut signing_rng = ChaChaRng::seed_from_u64(11);
     let session_key = PrivateKey::generate_ed25519(&mut signing_rng);
     let session_public_key = test_session_public_jwk(&session_key, "ttl-session-key");
-    let principal_did = format!(
+    let principal_id = format!(
         "ak:did_core:web:auth.example.com:users:{}",
         browser_session.user.id
     );
     let principal_authority = test_principal_authority(
-        &principal_did,
+        &principal_id,
         &required_audience_for(&url_builder, &arkret_config),
     );
 
@@ -1009,7 +1009,7 @@ fn session_grant_uses_configured_ttl() {
         &key_store,
         &browser_session,
         session_public_key,
-        &principal_did,
+        &principal_id,
         &principal_authority,
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
             .unwrap(),
@@ -1192,9 +1192,9 @@ async fn seed_persisted_session_grant(
     // Grant liveness is evaluated against the wall clock the handlers read; a
     // grant minted at the mock epoch is already expired.
     let grant_clock = coauth_data::SystemClock::default();
-    let principal_did = format!("ak:did_core:web:auth.example.com:users:{}", user.id);
+    let principal_id = format!("ak:did_core:web:auth.example.com:users:{}", user.id);
     let principal_authority = test_principal_authority(
-        &principal_did,
+        &principal_id,
         &required_audience_for(&state.url_builder, &grant_config),
     );
     let material = issue_session_grant(
@@ -1205,7 +1205,7 @@ async fn seed_persisted_session_grant(
         &state.key_store,
         &browser_session,
         test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
-        &principal_did,
+        &principal_id,
         &principal_authority,
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
             .unwrap(),
@@ -1464,9 +1464,9 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         "test-ed25519",
     )
     .unwrap();
-    let principal_did = format!("ak:did_core:web:auth.example.com:users:{}", user.id);
+    let principal_id = format!("ak:did_core:web:auth.example.com:users:{}", user.id);
     let audience = required_audience_for(&state.url_builder, &grant_config);
-    let principal_authority = test_principal_authority(&principal_did, &audience);
+    let principal_authority = test_principal_authority(&principal_id, &audience);
     let material = issue_session_grant_for_audience(
         &issuance_seed,
         &grant_clock,
@@ -1478,7 +1478,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
             .unwrap(),
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
-        Some(principal_did.as_str()),
+        Some(principal_id.as_str()),
         &principal_authority,
         bound_jkt.clone(),
         arkret_models_identity::SessionGrantDeviceBinding {

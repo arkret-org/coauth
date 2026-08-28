@@ -564,7 +564,7 @@ async fn accept_provider_outcome(
             prepared
                 .service_registration_operation()
                 .ok()
-                .filter(|operation| operation.state.id == stored.identity.full_id)
+                .filter(|operation| operation.state.id == stored.identity.did)
         });
     let inception_operation = match local_operation {
         Some(operation) => operation,
@@ -616,7 +616,7 @@ async fn accept_provider_outcome(
 /// The Provider's complete DID is therefore resolved independently of the
 /// receipt — from its describe surface, constrained by the operator pin when
 /// the deployment configured one — and its published history is verified in
-/// full before `project(full_id) == provider_service_id` binds the receipt to
+/// full before `project(did) == provider_service_id` binds the receipt to
 /// it. A Provider whose identity surface is temporarily unavailable yields
 /// [`ProviderProofError::Unreachable`] so the caller can wait; everything else
 /// fails closed with zero persistence.
@@ -645,7 +645,7 @@ async fn verify_provider_registration_receipt(
         .validate()
         .map_err(|error| ProviderProofError::InvalidEvidence(error.to_string()))?;
     let log_url = Url::parse(
-        &DidWebvhResolver::log_url(&description.service_resolution.full_id)
+        &DidWebvhResolver::log_url(&description.service_resolution.did)
             .map_err(|error| ProviderProofError::InvalidEvidence(error.to_string()))?,
     )
     .map_err(|error| ProviderProofError::InvalidEvidence(error.to_string()))?;
@@ -684,14 +684,11 @@ fn accept_provider_receipt_evidence(
             provider.reference.name
         )));
     }
-    arkret_signatures::service_resolution::verify_full_to_core_binding(
-        &commitment.full_id,
-        service_id,
-    )
-    .map_err(|error| ProviderProofError::InvalidEvidence(error.to_string()))?;
+    arkret_signatures::service_resolution::verify_full_to_core_binding(&commitment.did, service_id)
+        .map_err(|error| ProviderProofError::InvalidEvidence(error.to_string()))?;
     let verified = arkret_identity::service_identity::verify_registration_receipt_provider_proof(
         receipt,
-        &commitment.full_id,
+        &commitment.did,
         log_bytes,
     )
     .map_err(|error| ProviderProofError::InvalidEvidence(error.to_string()))?;
@@ -759,8 +756,8 @@ async fn restore_inception_operation(
     prepared: &PreparedInception,
     stored: &StoredDidCoreIdentity,
 ) -> Result<ServiceWebvhInceptionOperation, InceptionRestoreError> {
-    let full_id = &stored.identity.full_id;
-    let log_url = DidWebvhResolver::log_url(full_id)
+    let did = &stored.identity.did;
+    let log_url = DidWebvhResolver::log_url(did)
         .map_err(|error| InceptionRestoreError::InvalidEvidence(error.to_string()))?;
     let log_url = Url::parse(&log_url)
         .map_err(|error| InceptionRestoreError::InvalidEvidence(error.to_string()))?;
@@ -791,8 +788,8 @@ fn adopt_inception_from_log(
     stored: &StoredDidCoreIdentity,
     log_bytes: &[u8],
 ) -> Result<ServiceWebvhInceptionOperation, InceptionRestoreError> {
-    let full_id = &stored.identity.full_id;
-    let verified = arkret_identity::verify_did_webvh_v1_chain_bytes(full_id, log_bytes)
+    let did = &stored.identity.did;
+    let verified = arkret_identity::verify_did_webvh_v1_chain_bytes(did, log_bytes)
         .map_err(|error| InceptionRestoreError::InvalidEvidence(error.to_string()))?;
     if verified.head_version_id != stored.identity.version_id {
         return Err(InceptionRestoreError::InvalidEvidence(format!(
@@ -810,9 +807,9 @@ fn adopt_inception_from_log(
     operation
         .validate_for(registration_key)
         .map_err(|error| InceptionRestoreError::InvalidEvidence(error.to_string()))?;
-    if operation.state.id != *full_id {
+    if operation.state.id != *did {
         return Err(InceptionRestoreError::InvalidEvidence(format!(
-            "did:webvh inception subject {} is not the registered service DID {full_id}",
+            "did:webvh inception subject {} is not the registered service DID {did}",
             operation.state.id
         )));
     }
@@ -891,12 +888,12 @@ fn stored_from_outcome(
     ))
     .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let service_id = outcome.service_id().clone();
-    let full_id = outcome.full_id().clone();
+    let did = outcome.did().clone();
     let version_id = outcome.version_id().to_owned();
     let stored = StoredDidCoreIdentity {
         identity: LocalDidCoreIdentity {
             service_id,
-            full_id,
+            did,
             registration_key: registration_key.clone(),
             provider: Some(provider.reference.clone()),
             signing_key_refs: vec![signing_key_ref.clone()],
@@ -1251,8 +1248,8 @@ mod tests {
         operation: &ServiceWebvhInceptionOperation,
         log_head_digest: String,
     ) -> StoredDidCoreIdentity {
-        let full_id = operation.state.id.clone();
-        let service_id = arkret_wire::project_full_id_to_core_id(&full_id).unwrap();
+        let did = operation.state.id.clone();
+        let service_id = arkret_wire::project_did_to_core_id(&did).unwrap();
         let key_ref = DidCoreIdentityKeyRef::new("coauth:secrets:ed25519:test".to_owned()).unwrap();
         let receipt = arkret_models_identity::service_identity::ServiceRegistrationReceipt {
             registration_receipt_id: arkret_wire::ServiceRegistrationReceiptId::new(format!(
@@ -1262,7 +1259,7 @@ mod tests {
             .unwrap(),
             registration_key: registration_key.clone(),
             service_id: service_id.clone(),
-            full_id: full_id.clone(),
+            did: did.clone(),
             version_id: operation.version_id.clone(),
             log_head_digest,
             control_key_digest: operation.control_key_digest().unwrap(),
@@ -1270,7 +1267,7 @@ mod tests {
             provider_service_id: service_id.clone(),
             proof: arkret_wire::PayloadProof {
                 kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-                verification_method: arkret_wire::DidUrl::new(format!("{full_id}#service-key"))
+                verification_method: arkret_wire::DidUrl::new(format!("{did}#service-key"))
                     .unwrap(),
                 payload_digest: arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))
                     .unwrap(),
@@ -1284,7 +1281,7 @@ mod tests {
         StoredDidCoreIdentity {
             identity: LocalDidCoreIdentity {
                 service_id,
-                full_id,
+                did,
                 registration_key: registration_key.clone(),
                 provider: None,
                 signing_key_refs: vec![key_ref.clone()],
@@ -1395,10 +1392,10 @@ mod tests {
             provider_assertion_seed,
         )
         .unwrap();
-        let provider_full_id = arkret_wire::DidFullId::new(prepared.did.clone()).unwrap();
-        let service_id = arkret_wire::project_full_id_to_core_id(&provider_full_id).unwrap();
+        let provider_did = arkret_wire::Did::new(prepared.did.clone()).unwrap();
+        let service_id = arkret_wire::project_did_to_core_id(&provider_did).unwrap();
         let commitment = ResolutionCommitment {
-            full_id: provider_full_id.clone(),
+            did: provider_did.clone(),
             method_history_head: arkret_canonical::canonical_sha256(&prepared.log_entry).unwrap(),
             version_id: prepared.version_id.clone(),
         };
@@ -1407,7 +1404,7 @@ mod tests {
         let registrant =
             prepare_inception(&provider_for_tests(), &registration_key, &[7_u8; 32]).unwrap();
         let operation = registrant.service_registration_operation().unwrap();
-        let full_id = operation.state.id.clone();
+        let did = operation.state.id.clone();
         let mut receipt = ServiceRegistrationReceipt {
             registration_receipt_id: arkret_wire::ServiceRegistrationReceiptId::new(format!(
                 "ak:service_registration_receipt:{}",
@@ -1415,8 +1412,8 @@ mod tests {
             ))
             .unwrap(),
             registration_key,
-            service_id: arkret_wire::project_full_id_to_core_id(&full_id).unwrap(),
-            full_id: full_id.clone(),
+            service_id: arkret_wire::project_did_to_core_id(&did).unwrap(),
+            did: did.clone(),
             version_id: operation.version_id.clone(),
             log_head_digest: operation.log_head_digest().unwrap(),
             control_key_digest: operation.control_key_digest().unwrap(),
@@ -1424,10 +1421,8 @@ mod tests {
             provider_service_id: service_id.clone(),
             proof: arkret_wire::PayloadProof {
                 kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-                verification_method: arkret_wire::DidUrl::new(format!(
-                    "{provider_full_id}#notary-key"
-                ))
-                .unwrap(),
+                verification_method: arkret_wire::DidUrl::new(format!("{provider_did}#notary-key"))
+                    .unwrap(),
                 payload_digest: arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))
                     .unwrap(),
                 created_at: "2026-07-15T01:00:00Z".parse().unwrap(),

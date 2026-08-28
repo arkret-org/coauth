@@ -590,8 +590,6 @@ pub async fn post_display_name(
 pub struct FinishRegistrationOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub did: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     /// If the registration was started as part of another strand (e.g. an
     /// OAuth authorization grant continuation), the frontend uses this to
@@ -674,7 +672,6 @@ pub async fn post_finish(
         RegistrationFinishOutcome::Rejected { error } => {
             return Ok(Json(FinishRegistrationOutcome {
                 status: "error",
-                did: None,
                 error: Some(error.into()),
                 post_auth_action: None,
             }));
@@ -693,7 +690,6 @@ pub async fn post_finish(
     let post_auth_action = completed.registration.post_auth_action.clone();
     Ok(Json(FinishRegistrationOutcome {
         status: "success",
-        did: None,
         error: None,
         post_auth_action,
     }))

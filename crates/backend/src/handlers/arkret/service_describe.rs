@@ -33,7 +33,7 @@ struct PrincipalServerDescriptor {
     name: String,
     audience: Option<arkret_identifiers::DidCoreId>,
     endpoint: String,
-    did: Option<arkret_identifiers::DidCoreId>,
+    service_id: Option<arkret_identifiers::DidCoreId>,
 }
 
 #[derive(Debug, Serialize)]
@@ -380,7 +380,7 @@ pub(crate) fn service_describe_response(
                 name: server.name.clone(),
                 audience: service_id.clone(),
                 endpoint: server.endpoint.to_string(),
-                did: service_id,
+                service_id,
             }
         })
         .collect();
@@ -462,7 +462,7 @@ pub(crate) fn service_describe_response(
     );
 
     let service_id = service_id_for(arkret_config);
-    let service_full_id = issuer_did_for(arkret_config);
+    let service_did = issuer_did_for(arkret_config);
     let service_version_id = arkret_config
         .runtime_service_identity
         .state()
@@ -473,7 +473,7 @@ pub(crate) fn service_describe_response(
     ServiceDescribe {
         service_id,
         service_resolution: arkret_models_identity::ResolutionCommitment {
-            full_id: service_full_id,
+            did: service_did,
             method_history_head: service_version_id.clone(),
             version_id: service_version_id,
         },

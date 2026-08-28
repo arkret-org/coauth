@@ -51,8 +51,8 @@ struct PrincipalDidJoinedRow {
     principal_id: String,
     #[diesel(select_expression = principal_did_owners::key_log_head)]
     key_log_head: String,
-    #[diesel(select_expression = principal_did_bindings::verified_full_id)]
-    verified_full_id: String,
+    #[diesel(select_expression = principal_did_bindings::verified_did)]
+    verified_did: String,
     #[diesel(select_expression = principal_did_bindings::verified_version_id)]
     verified_version_id: String,
     #[diesel(select_expression = principal_did_bindings::binding_receipt)]
@@ -125,14 +125,12 @@ fn binding_from_row(row: PrincipalDidJoinedRow) -> Result<PrincipalDidBinding, D
         audience,
         principal_id,
         key_log_head,
-        verified_full_id: arkret_identifiers::DidFullId::new(row.verified_full_id).map_err(
-            |error| {
-                DatabaseInconsistencyError::on("principal_did_bindings")
-                    .column("verified_full_id")
-                    .row(id)
-                    .source(error)
-            },
-        )?,
+        verified_did: arkret_identifiers::Did::new(row.verified_did).map_err(|error| {
+            DatabaseInconsistencyError::on("principal_did_bindings")
+                .column("verified_did")
+                .row(id)
+                .source(error)
+        })?,
         verified_version_id: row.verified_version_id,
         binding_receipt,
         accepted_service_id: arkret_identifiers::DidCoreId::new(row.accepted_service_id).map_err(
@@ -197,7 +195,7 @@ struct NewPrincipalDidBinding {
     principal_did_owner_id: Uuid,
     user_id: Uuid,
     audience: String,
-    verified_full_id: String,
+    verified_did: String,
     verified_version_id: String,
     binding_receipt: serde_json::Value,
     accepted_service_id: String,
@@ -261,7 +259,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             audience,
             principal_id,
             key_log_head,
-            verified_full_id,
+            verified_did,
             verified_version_id,
             binding_receipt,
             accepted_service_id,
@@ -273,13 +271,13 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
         principal_authority
             .validate()
             .map_err(|_| DatabaseError::invalid_operation())?;
-        let projected = arkret_identifiers::project_full_id_to_core_id(&verified_full_id);
+        let projected = arkret_identifiers::project_did_to_core_id(&verified_did);
         let resolution_snapshot_is_valid = projected
             .is_ok_and(|projected| projected == principal_id)
             && !verified_version_id.trim().is_empty()
             && binding_receipt.validate_shape().is_ok()
             && binding_receipt.principal_id == principal_id
-            && binding_receipt.full_id == verified_full_id
+            && binding_receipt.did == verified_did
             && binding_receipt.did_version_id == verified_version_id
             && binding_receipt.head_event_digest == key_log_head;
         if !resolution_snapshot_is_valid
@@ -343,7 +341,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             principal_did_owner_id: owner.id,
             user_id: Uuid::from(user.id),
             audience: audience.to_string(),
-            verified_full_id: verified_full_id.to_string(),
+            verified_did: verified_did.to_string(),
             verified_version_id: verified_version_id.clone(),
             binding_receipt: serde_json::to_value(&binding_receipt)
                 .map_err(|_| DatabaseError::invalid_operation())?,
@@ -365,7 +363,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             ))
             .do_update()
             .set((
-                principal_did_bindings::verified_full_id.eq(verified_full_id.to_string()),
+                principal_did_bindings::verified_did.eq(verified_did.to_string()),
                 principal_did_bindings::verified_version_id.eq(verified_version_id),
                 principal_did_bindings::binding_receipt.eq(serde_json::to_value(&binding_receipt)
                     .map_err(|_| DatabaseError::invalid_operation())?),

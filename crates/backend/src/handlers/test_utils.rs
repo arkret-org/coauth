@@ -812,10 +812,10 @@ impl TestState {
             coauth_storage_postgres::test_utils::principal_binding_test_material(label);
         // Account-status publication requires the binding to have been accepted
         // by this deployment's own runtime service identity.
-        let account_authority_full_id =
+        let account_authority_did =
             crate::handlers::arkret::issuer_did_for(&self.arkret_config).to_string();
         let input = coauth_storage_postgres::test_utils::verified_principal_binding_input(
-            &account_authority_full_id,
+            &account_authority_did,
             TEST_PRINCIPAL_SERVER_AUDIENCE,
             principal_id.clone(),
             key_log_head,

@@ -1,4 +1,4 @@
-use arkret_identifiers::{DidFullId, Hash, project_full_id_to_core_id};
+use arkret_identifiers::{Did, Hash, project_did_to_core_id};
 use arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding;
 use arkret_models_identity::SessionGrantDeviceBinding;
 use arkret_wire::{
@@ -115,9 +115,9 @@ async fn verify_gate_receipt(
         .as_str()
         .split_once('#')
         .ok_or_else(|| gate_protocol_error("gate receipt verification method has no fragment"))?;
-    let controller = DidFullId::new(controller.to_owned())
-        .map_err(|error| gate_protocol_error(error.to_string()))?;
-    let controller_core = project_full_id_to_core_id(&controller)
+    let controller =
+        Did::new(controller.to_owned()).map_err(|error| gate_protocol_error(error.to_string()))?;
+    let controller_core = project_did_to_core_id(&controller)
         .map_err(|error| gate_protocol_error(error.to_string()))?;
     if controller_core != receipt.principal_authority.principal_server_id {
         return Err(gate_protocol_error(
