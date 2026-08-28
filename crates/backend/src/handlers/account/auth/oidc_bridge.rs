@@ -14,6 +14,7 @@
 // decodes them through the same typed shape. The `integration_describe`
 // endpoint below returns the shared `IntegrationManifest` directly.
 use arkret_identifiers::{DeviceId, Did, DidCoreId};
+use arkret_models_collaboration::objects::account_status::AccountStatus;
 use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
 };
@@ -71,6 +72,14 @@ pub(crate) struct OidcHandoffExchangeSuccess {
     pub user: User,
     pub browser_session_id: Option<Ulid>,
     pub audience: String,
+}
+
+/// Coauth's declared v1 recovery policy permits fresh OIDC account
+/// authentication to produce only the short-lived AccountHandoff for a
+/// deactivated account. Every ordinary session/grant path still applies the
+/// active-account gate, and only recovery completion may restore the status.
+fn account_handoff_auth_status_allowed(status: AccountStatus) -> bool {
+    matches!(status, AccountStatus::Active | AccountStatus::Deactivated)
 }
 
 /// Typed failure of the OIDC exchange, carrying the registry error code the
@@ -535,7 +544,7 @@ pub(crate) async fn authenticate_local_handoff_code(
         ));
     }
     let user = browser_session.user.clone();
-    if !user.is_valid() {
+    if !account_handoff_auth_status_allowed(user.status) {
         return Err(OidcExchangeError::new(
             "invalid_authorization_code",
             "authorization_code is bound to an inactive account",
@@ -861,7 +870,7 @@ async fn exchange_oidc_code(
                     ),
                 )
             })?;
-        if !user.is_valid() {
+        if !account_handoff_auth_status_allowed(user.status) {
             let code = match user.status {
                 arkret_models_collaboration::objects::account_status::AccountStatus::Locked => {
                     "account_locked"
@@ -1452,6 +1461,22 @@ mod tests {
         assert!(!error.contains("other"));
         let error = validate_returned_nonce(None, "nonce").unwrap_err();
         assert!(error.contains("nonce mismatch"));
+    }
+
+    #[test]
+    fn account_handoff_auth_allows_only_active_or_recovery_candidate() {
+        assert!(account_handoff_auth_status_allowed(AccountStatus::Active));
+        assert!(account_handoff_auth_status_allowed(
+            AccountStatus::Deactivated
+        ));
+        for status in [
+            AccountStatus::SoftLoggedOut,
+            AccountStatus::Locked,
+            AccountStatus::Suspended,
+            AccountStatus::ErasurePending,
+        ] {
+            assert!(!account_handoff_auth_status_allowed(status));
+        }
     }
 
     #[test]
