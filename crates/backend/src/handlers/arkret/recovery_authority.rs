@@ -1,5 +1,6 @@
 //! Standard SessionGrant issuance after trusted root-anchored recovery completion.
 
+use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
 use arkret_models_crypto::{RecoveryReceipt, RecoveryReceiptOutcome};
 use arkret_models_identity::{
@@ -10,11 +11,11 @@ use arkret_signatures::proof::verify_detached_ed25519_signature;
 use arkret_wire::{IssueRecoveryCompletionGrantOutcome, IssueRecoveryCompletionGrantRequest};
 use chrono::{Duration, Timelike as _, Utc};
 use coauth_data::storage::user::BrowserSessionRepository as _;
-use coauth_data::user::PrincipalDidRepository as _;
+use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
 use coauth_data::{
     NewRecoveryCompletionGrantIssuance, NewSessionGrantOperation, RepositoryAccess as _,
     SessionGrantCommitOutcome, SessionGrantExactOutcome, SessionGrantProofAuthorization,
-    SessionGrantReserveOutcome,
+    SessionGrantReserveOutcome, UserPatch,
 };
 use coauth_jose::constraints::Constrainable as _;
 use salvo::prelude::*;
@@ -30,6 +31,9 @@ use super::session_grant::{
     new_session_grant_record,
 };
 use crate::handlers::common::DepotExt;
+use crate::services::account_status_publication::{
+    author_transition_plan, enqueue_exact_publication, validate_transition_plan,
+};
 use crate::services::principal_server_trust::{effective_audience, shared};
 
 pub struct RecoveryCompletionCanonicalJson(Vec<u8>);
@@ -132,13 +136,14 @@ pub async fn issue_recovery_completion_grant_endpoint(
     validate_completion_evidence(&request, &receipt, &initial, &handoff, &dpop.jkt)?;
 
     let mut prerequisite_repo = depot.repo().await?;
-    let principal_authority = verify_account_principal_binding(
+    let principal_binding = verify_account_principal_binding(
         &mut prerequisite_repo,
         handoff.service_account_id,
         &handoff.audience_id,
         receipt.principal_id.as_str(),
     )
     .await?;
+    let principal_authority = principal_binding.principal_authority.clone();
     verify_principal_server_completion_signatures(
         depot,
         &mut prerequisite_repo,
@@ -155,7 +160,16 @@ pub async fn issue_recovery_completion_grant_endpoint(
         .lookup(browser_session_id)
         .await?
         .ok_or_else(|| failed_precondition("authenticated browser session no longer exists"))?;
-    if !browser_session.active() || browser_session.user.id != handoff.service_account_id {
+    // A deactivated account is not valid for ordinary use, but the dedicated
+    // recovery-completion path may consume an unfinished browser session that
+    // was established by the deployment's fresh account-auth recovery flow.
+    // All other inactive states remain excluded.
+    let recovery_session_eligible = browser_session.finished_at.is_none()
+        && matches!(
+            browser_session.user.status,
+            AccountStatus::Active | AccountStatus::Deactivated
+        );
+    if !recovery_session_eligible || browser_session.user.id != handoff.service_account_id {
         prerequisite_repo.cancel().await.ok();
         return Err(failed_precondition(
             "account handoff browser session is no longer active for this account",
@@ -311,6 +325,78 @@ pub async fn issue_recovery_completion_grant_endpoint(
     };
     let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+
+    // The deployment permits reactivation, but only here: the terminal PCR
+    // recovery evidence, replacement-device generation check, AccountStatus
+    // successor, local account restoration and first new-generation grant
+    // commit as one transaction. Exact replay then observes the same outcome.
+    let current_user = repo
+        .user()
+        .lookup(handoff.service_account_id)
+        .await?
+        .ok_or_else(|| failed_precondition("recovery account no longer exists"))?;
+    match current_user.status {
+        AccountStatus::Active => {}
+        AccountStatus::Deactivated => {
+            let principal_server = depot.principal_server()?;
+            let plan = author_transition_plan(
+                &mut repo,
+                principal_server.as_ref(),
+                &key_store,
+                super::service_id_for(&config).as_str(),
+                &current_user,
+                &principal_binding,
+                AccountStatus::Active,
+                Some("pcr_recovery_completed".to_owned()),
+                now,
+                &mut rng,
+            )
+            .await
+            .map_err(account_status_reactivation_failed)?;
+            validate_transition_plan(
+                &current_user,
+                &principal_binding,
+                AccountStatus::Active,
+                &plan,
+            )
+            .map_err(account_status_reactivation_failed)?;
+            repo.user()
+                .patch(
+                    &*clock,
+                    current_user.clone(),
+                    UserPatch {
+                        status: Some(AccountStatus::Active),
+                        ..UserPatch::default()
+                    },
+                )
+                .await?;
+            enqueue_exact_publication(
+                &mut repo,
+                &mut rng,
+                &*clock,
+                &plan.destination_name,
+                &plan.idempotency_key,
+                plan.body,
+            )
+            .await
+            .map_err(account_status_reactivation_failed)?;
+        }
+        AccountStatus::ErasurePending => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::ACCOUNT_ERASED,
+                "hard-erasure lifecycle is terminal and cannot be reactivated",
+            ));
+        }
+        status => {
+            repo.cancel().await.ok();
+            return Err(failed_precondition(format!(
+                "account status {} is not eligible for recovery reactivation",
+                status.as_str(),
+            )));
+        }
+    }
     let checkpoint = serde_json::json!({
         "kind": "recovery_completion",
         "account_handoff_id": handoff.id.to_string(),
@@ -463,7 +549,7 @@ async fn verify_account_principal_binding(
     account_id: coauth_data::Ulid,
     audience: &str,
     principal_id: &str,
-) -> Result<arkret_wire::PrincipalAuthorityKey, ArkretRouteError> {
+) -> Result<coauth_data::PrincipalDidBinding, ArkretRouteError> {
     let binding = repo
         .principal_did()
         .get_by_principal_id_and_audience(principal_id, audience)
@@ -480,7 +566,17 @@ async fn verify_account_principal_binding(
         .principal_authority
         .validate()
         .map_err(|error| failed_precondition(error.to_string()))?;
-    Ok(binding.principal_authority)
+    Ok(binding)
+}
+
+fn account_status_reactivation_failed(
+    error: crate::services::account_status_publication::AccountStatusPublicationError,
+) -> ArkretRouteError {
+    ArkretRouteError::coded(
+        StatusCode::PRECONDITION_FAILED,
+        arkret_wire::ErrorCode::FAILED_PRECONDITION,
+        error.to_string(),
+    )
 }
 
 async fn verify_principal_server_completion_signatures(

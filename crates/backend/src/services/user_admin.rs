@@ -438,6 +438,16 @@ fn validate_admin_status_transition(
     current: AccountStatus,
     next: AccountStatus,
 ) -> Result<(), UserAdminServiceError> {
+    // `deactivated -> active` is a protocol-level transition, but it is
+    // reserved for the recovery-completion authority path. A generic admin
+    // patch carries neither a terminal PCR recovery receipt nor the
+    // replacement-device generation fence, so it must never author it.
+    if current == AccountStatus::Deactivated && next == AccountStatus::Active {
+        return Err(UserAdminServiceError::InvalidStatusTransition {
+            from: current,
+            to: next,
+        });
+    }
     if current == next || current.validate_transition_to(next).is_ok() {
         return Ok(());
     }
@@ -467,6 +477,7 @@ mod tests {
 
     #[test]
     fn deactivated_account_cannot_be_reactivated() {
+        assert!(AccountStatus::Deactivated.can_transition_to(AccountStatus::Active));
         assert!(matches!(
             validate_admin_status_transition(AccountStatus::Deactivated, AccountStatus::Active),
             Err(UserAdminServiceError::InvalidStatusTransition {
