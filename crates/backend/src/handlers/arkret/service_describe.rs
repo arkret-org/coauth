@@ -304,11 +304,6 @@ fn build_auth_metadata(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -
     }
 
     AuthMetadata {
-        mode: if arkret_config.principal_servers.is_empty() {
-            "development".to_owned()
-        } else {
-            "production".to_owned()
-        },
         account_authority: Some(AccountAuthority {
             origin,
             gate_account_base,
