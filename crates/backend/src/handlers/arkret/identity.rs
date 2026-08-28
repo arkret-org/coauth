@@ -252,6 +252,7 @@ pub async fn directory_resolve_handle(
     })?;
 
     Ok(Json(DirectoryHandleResolutionOutcome {
+        subject_id: principal_id.clone(),
         principal_id,
         handle: canonical_handle,
         verified,

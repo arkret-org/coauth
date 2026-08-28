@@ -236,7 +236,7 @@ fn resolver_policy(arkret_config: &ArkretConfig) -> ResolverPolicy {
         default_principal_method: Some(arkret_config.principal_method.as_str().to_owned()),
         // The delegated resolver is the trust root for every method coauth does
         // not resolve itself.
-        trust_roots: delegated.into_iter().collect(),
+        trust_root_ids: delegated.into_iter().collect(),
         // coauth's resolver holds no cache of its own: the binding store is the
         // only reuse layer, and it carries `refresh_after` / `expires_at`.
         ttl: None,

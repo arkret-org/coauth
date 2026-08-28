@@ -338,7 +338,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
             )
         })?;
         Ok(UpstreamOidcSessionGrantTarget {
-            audience: grant_target.audience,
+            audience: grant_target.audience_id,
             principal_server_name: grant_target.principal_server_name,
             principal_server_endpoint: grant_target.principal_server_endpoint,
         })

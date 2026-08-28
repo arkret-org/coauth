@@ -966,7 +966,7 @@ fn a_delegated_resolver_declares_webvh_rather_than_any_method() {
         ["did:key:", "did:web:", "did:webvh:"]
     );
     assert_eq!(
-        snapshot.trust_roots(),
+        snapshot.trust_root_ids(),
         ["https://resolver.example/_arkret/root/identity/resolve"]
     );
 }

@@ -148,7 +148,7 @@ where
         realm_frontier_digest: request.realm_frontier_digest,
         organization_policy_ref: request.organization_policy_ref,
         authorization: RealmOrganizationAuthorization {
-            issuer: request.issuer,
+            issuer_id: request.issuer,
             issuer_role: request.issuer_role,
             verification_method,
             delegation_ref: request.delegation_ref,
