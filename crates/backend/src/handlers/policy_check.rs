@@ -123,15 +123,15 @@ pub async fn post_policy_check(
         .principal_servers
         .first()
         .and_then(crate::services::principal_server_trust::effective_audience_shared)
-        .and_then(|destination_service_id| {
+        .and_then(|destination_id| {
             let trust_domain =
                 arkret_identifiers::TrustDomainId::new(arkret_config.trust_domain.clone()?).ok()?;
             Some((
                 key_store.clone(),
                 arkret::issuer_did_for(&arkret_config),
                 arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
-                    source_service_id: arkret::service_id_for(&arkret_config),
-                    destination_service_id,
+                    source_id: arkret::service_id_for(&arkret_config),
+                    destination_id,
                 },
                 trust_domain.clone(),
                 trust_domain,

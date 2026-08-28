@@ -236,7 +236,7 @@ fn build_verified_profile_descriptors(
                 verification_run_id: entry.verification_run_id.clone(),
                 artifact_digest: entry.artifact_digest.clone(),
                 artifact_ref: entry.artifact_ref.clone(),
-                verifier_service_id: entry.verifier_service_id.clone(),
+                verifier_id: entry.verifier_id.clone(),
                 signature: entry.signature.clone(),
                 timestamp: entry.timestamp,
                 expires_at: entry.expires_at,

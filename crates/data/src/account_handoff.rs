@@ -12,7 +12,7 @@ pub struct ControllerGateAttestationIssuance {
     pub request_id: arkret_identifiers::RequestId,
     pub canonical_intent_digest: arkret_identifiers::Hash,
     pub principal_id: arkret_identifiers::DidCoreId,
-    pub agent_authority_service_id: arkret_identifiers::DidCoreId,
+    pub agent_authority_id: arkret_identifiers::DidCoreId,
     pub canonical_outcome: Option<Vec<u8>>,
     pub outcome_digest: Option<arkret_identifiers::Hash>,
     pub attestation_expires_at: Option<DateTime<Utc>>,

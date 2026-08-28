@@ -39,7 +39,7 @@ fn introspection_grant_record(
     let service_account_id = browser_session
         .map(|session| session.user.id.to_string())
         .or_else(|| grant.browser_session_id.map(|id| id.to_string()))
-        .unwrap_or_else(|| grant.subject.clone());
+        .unwrap_or_else(|| grant.subject_id.clone());
     let revocation_ref = grant.browser_session_id.map_or_else(
         || format!("org.arkret.coauth.session_grant:{}", grant.grant_id),
         |id| format!("org.arkret.coauth.browser_session:{id}"),
@@ -54,20 +54,20 @@ fn introspection_grant_record(
                 "stored session grant device_id is invalid: {error}"
             )))
         })?;
-    let audience = DidCoreId::new(grant.audience.clone()).map_err(|error| {
+    let audience_id = DidCoreId::new(grant.audience_id.clone()).map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "stored session grant audience is not a service core_id: {error}"
+            "stored session grant audience_id is not a service core_id: {error}"
         )))
     })?;
 
     Ok(SessionGrantIntrospectGrant {
         id: grant.grant_id.clone(),
-        issuer: grant.issuer.to_string(),
-        subject: parsed_payload.subject,
+        issuer_id: grant.issuer_id.to_string(),
+        subject_id: parsed_payload.subject_id,
         service_account_id,
         device_id,
         device_binding: parsed_payload.device_binding,
-        audience,
+        audience_id,
         scopes: grant
             .scope
             .iter()
@@ -90,9 +90,9 @@ pub(crate) fn introspection_status(
     grant: &SessionGrant,
     user: Option<&User>,
     now: DateTime<Utc>,
-    audience: Option<&str>,
+    audience_id: Option<&str>,
 ) -> SessionGrantIntrospectStatus {
-    if audience.is_some_and(|audience| audience != grant.audience) {
+    if audience_id.is_some_and(|audience_id| audience_id != grant.audience_id) {
         return SessionGrantIntrospectStatus::AudienceMismatch;
     }
 
@@ -153,7 +153,7 @@ fn verify_session_grant_introspection_proof(
     if claims.kind != SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND
         || claims.session_grant_id != grant.grant_id.to_string()
         || claims.grant_jwt_digest != session_grant_jwt_digest(&grant.grant_jwt)
-        || claims.audience.as_str() != grant.audience
+        || claims.audience_id.as_str() != grant.audience_id
         || claims.challenge != proof.challenge
         || claims.expires_at <= now
         || claims.issued_at > now + max_future_skew
@@ -198,7 +198,7 @@ pub async fn introspect_session_grant(
                 .lookup_by_grant_id(&body.id)
                 .await
                 .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-            body.audience,
+            body.audience_id,
             body.proof,
         ),
         SessionGrantIntrospectRequestBody::ByJwt(body) => (
@@ -206,7 +206,7 @@ pub async fn introspect_session_grant(
                 .lookup_by_grant_jwt(&body.grant_jwt)
                 .await
                 .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-            body.audience,
+            body.audience_id,
             body.proof,
         ),
     };
@@ -225,11 +225,13 @@ pub async fn introspect_session_grant(
     };
 
     // SEC-SG-ENUM: a Principal Server caller may only introspect grants for an
-    // audience it is authorized for. A grant minted for any other audience is
-    // reported as an audience mismatch (with no grant metadata) so a Principal
+    // audience_id it is authorized for. A grant minted for any other audience_id is
+    // reported as an audience_id mismatch (with no grant metadata) so a Principal
     // Server cannot probe grants belonging to other audiences.
     if let Some(allowed) = caller.allowed_audiences.as_deref()
-        && !allowed.iter().any(|audience| audience == &grant.audience)
+        && !allowed
+            .iter()
+            .any(|audience_id| audience_id == &grant.audience_id)
     {
         repo.cancel()
             .await
@@ -255,7 +257,7 @@ pub async fn introspect_session_grant(
     let bound_user_id = if browser_session.is_none() {
         let mut principal_ids = repo.principal_did();
         principal_ids
-            .get_by_did_and_audience(&grant.subject, &grant.audience)
+            .get_by_did_and_audience(&grant.subject_id, &grant.audience_id)
             .await
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
             .map(|binding| binding.user_id)
@@ -337,7 +339,7 @@ pub async fn introspect_session_grant(
                 crate::handlers::account::agents::enforce_authoritative_agent_lifecycle(
                     &http_client,
                     &arkret_config,
-                    &grant.subject,
+                    &grant.subject_id,
                 )
                 .await
                 .is_ok();
@@ -371,7 +373,7 @@ pub async fn introspect_session_grant(
         }
     }
 
-    // Non-secret grant metadata (subject / device_id / audience / scopes /
+    // Non-secret grant metadata (subject_id / device_id / audience_id / scopes /
     // expiry / session_public_key / cnf_jkt) is returned over this authenticated
     // S2S channel so the Principal Server can bind the request DPoP to `cnf_jkt`.
     // Only NotFound / AudienceMismatch withhold it — a `proof_required` advisory

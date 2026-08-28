@@ -111,7 +111,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let suffix = if for_update { " FOR UPDATE" } else { "" };
         let query = format!(
             "SELECT request_id, canonical_intent_digest, principal_id, \
-             agent_authority_service_id, canonical_outcome, outcome_digest, \
+             agent_authority_id, canonical_outcome, outcome_digest, \
              attestation_expires_at, retained_until, created_at, committed_at \
              FROM controller_gate_attestation_issuances WHERE request_id = $1{suffix}"
         );
@@ -205,8 +205,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         .optional()?;
         row.map(|row| {
             Ok((
-                arkret_identifiers::DidCoreId::new(row.principal_id)
-                    .map_err(|_| DatabaseError::invalid_operation())?,
+                row.principal_id,
                 arkret_identifiers::Did::new(row.verified_did)
                     .map_err(|_| DatabaseError::invalid_operation())?,
             ))
@@ -624,7 +623,7 @@ struct RateWindowRow {
 #[derive(QueryableByName)]
 struct PrincipalRow {
     #[diesel(sql_type = Text)]
-    principal_id: String,
+    principal_id: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Text)]
     verified_did: String,
 }
@@ -704,9 +703,9 @@ struct ControllerGateAttestationIssuanceRow {
     #[diesel(sql_type = Text)]
     canonical_intent_digest: String,
     #[diesel(sql_type = Text)]
-    principal_id: String,
+    principal_id: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Text)]
-    agent_authority_service_id: String,
+    agent_authority_id: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Nullable<Bytea>)]
     canonical_outcome: Option<Vec<u8>>,
     #[diesel(sql_type = Nullable<Text>)]
@@ -728,12 +727,8 @@ fn controller_gate_issuance_from_row(
         request_id: arkret_identifiers::RequestId::from_uuid(row.request_id),
         canonical_intent_digest: arkret_identifiers::Hash::new(row.canonical_intent_digest)
             .map_err(|_| DatabaseError::invalid_operation())?,
-        principal_id: arkret_identifiers::DidCoreId::new(row.principal_id)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        agent_authority_service_id: arkret_identifiers::DidCoreId::new(
-            row.agent_authority_service_id,
-        )
-        .map_err(|_| DatabaseError::invalid_operation())?,
+        principal_id: row.principal_id,
+        agent_authority_id: row.agent_authority_id,
         canonical_outcome: row.canonical_outcome,
         outcome_digest: row
             .outcome_digest
@@ -837,7 +832,7 @@ struct LeaseRow {
     #[diesel(sql_type = Timestamptz)]
     expires_at: DateTime<Utc>,
     #[diesel(sql_type = Nullable<Text>)]
-    reserved_principal_id: Option<String>,
+    reserved_principal_id: Option<arkret_identifiers::DidCoreId>,
     #[diesel(sql_type = Nullable<Text>)]
     reserved_operation_digest: Option<String>,
     #[diesel(sql_type = Nullable<Jsonb>)]
@@ -883,7 +878,7 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
             let reserved =
                 arkret_models_identity::ReservedIdentityCreation::from_operation(did_operation)
                     .map_err(|_| DatabaseError::invalid_operation())?;
-            if reserved.principal_id.as_str() != principal_id
+            if reserved.principal_id != principal_id
                 || reserved.operation_digest.as_str() != operation_digest
             {
                 return Err(DatabaseError::invalid_operation());
@@ -974,7 +969,7 @@ struct ChallengeRow {
     #[diesel(sql_type = Text)]
     account_subject: String,
     #[diesel(sql_type = Text)]
-    principal_id: String,
+    principal_id: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Text)]
     did: String,
     #[diesel(sql_type = Text)]
@@ -1000,7 +995,7 @@ struct ChallengeRow {
     #[diesel(sql_type = Text)]
     dpop_jkt: String,
     #[diesel(sql_type = Text)]
-    audience: String,
+    audience: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Text)]
     origin: String,
     #[diesel(sql_type = Text)]
@@ -1028,7 +1023,7 @@ struct DidBindingChallengeRow {
     #[diesel(sql_type = Text)]
     account_subject: String,
     #[diesel(sql_type = Text)]
-    principal_id: String,
+    principal_id: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Text)]
     did: String,
     #[diesel(sql_type = Text)]
@@ -1046,7 +1041,7 @@ struct DidBindingChallengeRow {
     #[diesel(sql_type = Text)]
     dpop_jkt: String,
     #[diesel(sql_type = Text)]
-    audience: String,
+    audience: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Text)]
     origin: String,
     #[diesel(sql_type = Text)]
@@ -1079,8 +1074,7 @@ fn did_binding_challenge_from_row(
             service_account_id: Ulid::from(row.service_account_id),
             account_subject: arkret_identifiers::Hash::new(row.account_subject)
                 .map_err(|_| DatabaseError::invalid_operation())?,
-            principal_id: arkret_identifiers::DidCoreId::new(row.principal_id)
-                .map_err(|_| DatabaseError::invalid_operation())?,
+            principal_id: row.principal_id,
             did: arkret_identifiers::Did::new(row.did)
                 .map_err(|_| DatabaseError::invalid_operation())?,
             did_version_id: row.did_version_id,
@@ -1092,8 +1086,7 @@ fn did_binding_challenge_from_row(
             challenge_id: row.challenge_id,
             challenge: row.challenge,
             dpop_jkt: row.dpop_jkt,
-            audience: arkret_identifiers::DidCoreId::new(row.audience)
-                .map_err(|_| DatabaseError::invalid_operation())?,
+            audience: row.audience,
             origin: row.origin,
             trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)
                 .map_err(|_| DatabaseError::invalid_operation())?,
@@ -1126,7 +1119,7 @@ struct AbandonmentChallengeRow {
     #[diesel(sql_type = SqlUuid)]
     service_account_id: Uuid,
     #[diesel(sql_type = Text)]
-    audience: String,
+    audience: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Text)]
     account_subject: String,
     #[diesel(sql_type = Text)]
@@ -1136,7 +1129,7 @@ struct AbandonmentChallengeRow {
     #[diesel(sql_type = BigInt)]
     lease_fence: i64,
     #[diesel(sql_type = Text)]
-    principal_id: String,
+    principal_id: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Text)]
     did_version_id: String,
     #[diesel(sql_type = Text)]
@@ -1171,16 +1164,14 @@ fn abandonment_challenge_from_row(
             .map_err(|_| DatabaseError::invalid_operation())?,
         issuing_handoff_grant_id: Ulid::from(row.issuing_handoff_grant_id),
         service_account_id: Ulid::from(row.service_account_id),
-        audience: arkret_identifiers::DidCoreId::new(row.audience)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        audience: row.audience,
         account_subject: arkret_identifiers::Hash::new(row.account_subject)
             .map_err(|_| DatabaseError::invalid_operation())?,
         holder_jkt: row.holder_jkt,
         lease_id: row.lease_id,
         lease_fence: u64::try_from(row.lease_fence)
             .map_err(|_| DatabaseError::invalid_operation())?,
-        principal_id: arkret_identifiers::DidCoreId::new(row.principal_id)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        principal_id: row.principal_id,
         did_version_id: row.did_version_id,
         challenge_id: row.challenge_id,
         challenge: row.challenge,
@@ -1223,8 +1214,7 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
         purpose: arkret_models_identity::IdentityBindingPurpose::AccountBindingAndPcrGenesis,
         account_subject: arkret_identifiers::Hash::new(row.account_subject)
             .map_err(|_| DatabaseError::invalid_operation())?,
-        principal_id: arkret_identifiers::DidCoreId::new(row.principal_id)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        principal_id: row.principal_id,
         did: arkret_identifiers::Did::new(row.did)
             .map_err(|_| DatabaseError::invalid_operation())?,
         operation_digest: arkret_identifiers::Hash::new(row.operation_digest)
@@ -1250,8 +1240,7 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
         lease_fence: u64::try_from(row.lease_fence)
             .map_err(|_| DatabaseError::invalid_operation())?,
         dpop_jkt: row.dpop_jkt,
-        audience: arkret_identifiers::DidCoreId::new(row.audience)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        audience: row.audience,
         origin: row.origin,
         trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)
             .map_err(|_| DatabaseError::invalid_operation())?,
@@ -1312,14 +1301,14 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let inserted = diesel::sql_query(
             "INSERT INTO controller_gate_attestation_issuances \
              (request_id, canonical_intent_digest, principal_id, \
-              agent_authority_service_id, retained_until, created_at) \
+              agent_authority_id, retained_until, created_at) \
              VALUES ($1, $2, $3, $4, $5, $6) \
              ON CONFLICT (request_id) DO NOTHING",
         )
         .bind::<SqlUuid, _>(input.request_id.uuid())
         .bind::<Text, _>(input.canonical_intent_digest.as_str())
         .bind::<Text, _>(input.principal_id.as_str())
-        .bind::<Text, _>(input.agent_authority_service_id.as_str())
+        .bind::<Text, _>(input.agent_authority_id.as_str())
         .bind::<Timestamptz, _>(input.retained_until)
         .bind::<Timestamptz, _>(input.now)
         .execute(self.conn)
@@ -1331,7 +1320,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .ok_or_else(DatabaseError::invalid_operation)?;
         if issuance.canonical_intent_digest != input.canonical_intent_digest
             || issuance.principal_id != input.principal_id
-            || issuance.agent_authority_service_id != input.agent_authority_service_id
+            || issuance.agent_authority_id != input.agent_authority_id
         {
             return Ok(ControllerGateAttestationReserve::Conflict(issuance));
         }

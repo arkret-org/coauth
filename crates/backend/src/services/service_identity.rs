@@ -518,7 +518,7 @@ async fn accept_provider_outcome(
     {
         return Ok(DidCoreIdentityState::Conflict {
             stored_service_id: prior.identity.identity.service_id.clone(),
-            provider_service_id: outcome.service_id().clone(),
+            provider_id: outcome.service_id().clone(),
         });
     }
     if let Err(error) =
@@ -616,7 +616,7 @@ async fn accept_provider_outcome(
 /// The Provider's complete DID is therefore resolved independently of the
 /// receipt — from its describe surface, constrained by the operator pin when
 /// the deployment configured one — and its published history is verified in
-/// full before `project(did) == provider_service_id` binds the receipt to
+/// full before `project(did) == provider_id` binds the receipt to
 /// it. A Provider whose identity surface is temporarily unavailable yields
 /// [`ProviderProofError::Unreachable`] so the caller can wait; everything else
 /// fails closed with zero persistence.
@@ -1264,7 +1264,7 @@ mod tests {
             log_head_digest,
             control_key_digest: operation.control_key_digest().unwrap(),
             issued_at: Utc::now(),
-            provider_service_id: service_id.clone(),
+            provider_id: service_id.clone(),
             proof: arkret_wire::PayloadProof {
                 kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
                 verification_method: arkret_wire::DidUrl::new(format!("{did}#service-key"))

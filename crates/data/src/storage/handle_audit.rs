@@ -34,7 +34,7 @@ pub struct NewHandleAuditEvent {
     handle_aliases: Vec<String>,
     old_did: Option<String>,
     new_did: Option<String>,
-    issuer_service_id: Option<String>,
+    issuer_id: Option<String>,
     audience: Option<String>,
     details: Value,
     actor_id: Option<Ulid>,
@@ -52,7 +52,7 @@ impl NewHandleAuditEvent {
             handle_aliases: Vec::new(),
             old_did: None,
             new_did: None,
-            issuer_service_id: None,
+            issuer_id: None,
             audience: None,
             details: Value::Null,
             actor_id: None,
@@ -121,8 +121,8 @@ impl NewHandleAuditEvent {
 
     /// Borrow the issuer service DID.
     #[must_use]
-    pub fn issuer_service_id(&self) -> Option<&str> {
-        self.issuer_service_id.as_deref()
+    pub fn issuer_id(&self) -> Option<&str> {
+        self.issuer_id.as_deref()
     }
 
     /// Borrow the audience.

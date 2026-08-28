@@ -88,7 +88,7 @@ async fn terminate_auth_side_session_by_grant_jwt(
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
         return Ok(success_outcome());
     };
-    let issuer = grant.issuer.clone();
+    let issuer_id = grant.issuer_id.clone();
 
     let canonical_intent = arkret_canonical::canonical_json_bytes(&serde_json::json!({
         "operation": "auth_session_logout",
@@ -110,7 +110,7 @@ async fn terminate_auth_side_session_by_grant_jwt(
             &mut rng,
             &*clock,
             coauth_data::NewSessionGrantOperation {
-                issuer,
+                issuer_id,
                 operation: coauth_data::SessionGrantOperationDescriptor::Revoke {
                     selector: coauth_data::SessionGrantRevokeTarget::Grant {
                         grant_id: grant.grant_id.clone(),

@@ -14,10 +14,10 @@ pub struct SessionGrantMaterial {
     pub expires_at: String,
     pub expires_at_timestamp: DateTime<Utc>,
     pub not_before_timestamp: DateTime<Utc>,
-    pub issuer: DidCoreId,
-    pub subject: String,
+    pub issuer_id: DidCoreId,
+    pub subject_id: String,
     pub device_id: Option<String>,
-    pub audience: String,
+    pub audience_id: String,
     pub scopes: Vec<String>,
     /// RFC 7638 JWK SHA-256 thumbprint (base64url) of the DPoP proof the
     /// grant is bound to, when issuance happened on a request that
@@ -26,7 +26,7 @@ pub struct SessionGrantMaterial {
     pub dpop_jkt: Option<String>,
     /// Stable refresh-chain id. It is allocated independently from `grant_id`.
     pub session_id: String,
-    /// Canonical issuer nonce committed by the signed issuance preimage.
+    /// Canonical issuer_id nonce committed by the signed issuance preimage.
     pub issuance_nonce: String,
     /// Exact RFC 8785/JCS bytes from which `grant_id` was derived.
     pub issuance_preimage: Vec<u8>,
@@ -121,7 +121,7 @@ impl SessionGrantIssuanceSeed {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SessionGrantTarget {
-    pub audience: String,
+    pub audience_id: String,
     pub principal_server_name: Option<String>,
     pub principal_server_endpoint: Option<String>,
 }
@@ -131,10 +131,10 @@ pub(crate) struct SessionGrantRecord {
     id: String,
     grant_id: SessionGrantId,
     browser_session_id: Option<String>,
-    issuer: DidCoreId,
-    subject: String,
+    issuer_id: DidCoreId,
+    subject_id: String,
     device_id: Option<String>,
-    audience: String,
+    audience_id: String,
     scopes: Vec<String>,
     #[serde(serialize_with = "arkret_canonical::serialize_canonical_timestamp")]
     created_at: DateTime<Utc>,
@@ -150,10 +150,10 @@ impl From<SessionGrant> for SessionGrantRecord {
             id: value.id.to_string(),
             grant_id: value.grant_id,
             browser_session_id: value.browser_session_id.map(|id| id.to_string()),
-            issuer: value.issuer,
-            subject: value.subject,
+            issuer_id: value.issuer_id,
+            subject_id: value.subject_id,
             device_id: value.device_id,
-            audience: value.audience,
+            audience_id: value.audience_id,
             scopes: value
                 .scope
                 .iter()

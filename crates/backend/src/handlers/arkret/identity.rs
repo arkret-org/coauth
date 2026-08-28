@@ -281,10 +281,10 @@ fn directory_handle_claim_audience(
 fn directory_handle_delivery_binding(
     principal_binding: &PrincipalDidBinding,
 ) -> Result<arkret_models_identity::DeliveryBindingHint, ArkretRouteError> {
-    let recipient_service_id = principal_binding.accepted_service_id.clone();
+    let recipient_id = principal_binding.accepted_service_id.clone();
     Ok(arkret_models_identity::DeliveryBindingHint {
-        recipient_service_id,
-        recipient_service_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
+        recipient_id,
+        recipient_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
         binding_source: arkret_models_identity::HandleHintBindingSource::Explicit,
         delivery_modes: BTreeSet::from([
             arkret_models_identity::DeliveryMode::Events,

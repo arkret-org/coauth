@@ -321,13 +321,13 @@ pub async fn post_invite_relay(
         &arkret_config,
     ))
     .map_err(|error| RouteError::Internal(Box::new(error)))?;
-    let destination_service_id = match params.invite_delivery.as_ref() {
-        Some(delivery) => delivery.invite_address.recipient_service_id.clone(),
+    let destination_id = match params.invite_delivery.as_ref() {
+        Some(delivery) => delivery.invite_address.recipient_id.clone(),
         None => service_id.clone(),
     };
     let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
-        source_service_id: service_id,
-        destination_service_id,
+        source_id: service_id,
+        destination_id,
     };
     let peer_client = match PeerProtocolClient::new(
         principal_url.as_ref(),
@@ -389,8 +389,8 @@ mod tests {
         let service_id =
             arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap();
         arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
-            source_service_id: service_id.clone(),
-            destination_service_id: service_id,
+            source_id: service_id.clone(),
+            destination_id: service_id,
         }
     }
 

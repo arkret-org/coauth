@@ -187,7 +187,7 @@ fn grant_is_agent_delegated_to_controller(grant: &SessionGrant, controller_id: &
 }
 
 fn grant_is_owned_by_current_principal(grant: &SessionGrant, principal_id: &str) -> bool {
-    grant.subject == principal_id || grant_is_agent_delegated_to_controller(grant, principal_id)
+    grant.subject_id == principal_id || grant_is_agent_delegated_to_controller(grant, principal_id)
 }
 
 fn validate_lifecycle_proof_kind(proof_kind: &str) -> Result<(), ArkretRouteError> {
@@ -242,19 +242,19 @@ async fn verify_cross_session_lifecycle_proof(
     validate_lifecycle_proof_kind(&proof.proof_kind)?;
     validate_lifecycle_proof_window(proof.issued_at, proof.expires_at, now)?;
 
-    if proof.audience.as_str() != current_grant.audience {
+    if proof.audience_id.as_str() != current_grant.audience_id {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
-            "session revoke lifecycle proof audience must match the current session grant audience",
+            "session revoke lifecycle proof audience_id must match the current session grant audience_id",
         ));
     }
 
-    let actor_id = DidCoreId::new(current_grant.subject.clone()).map_err(|error| {
+    let actor_id = DidCoreId::new(current_grant.subject_id.clone()).map_err(|error| {
         ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             arkret_wire::ErrorCode::PARAM_INVALID,
-            format!("current session grant subject is not a DID: {error}"),
+            format!("current session grant subject_id is not a DID: {error}"),
         )
     })?;
     let expected_digest = AccountLifecycleProof::session_revoke_request_digest(
@@ -288,7 +288,7 @@ async fn verify_cross_session_lifecycle_proof(
     // response into authority for an already-issued grant.
     let principal_binding = repo
         .principal_did()
-        .get_by_did_and_audience(&current_grant.subject, &current_grant.audience)
+        .get_by_did_and_audience(&current_grant.subject_id, &current_grant.audience_id)
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .ok_or_else(|| lifecycle_proof_invalid("accepted principal binding is missing"))?;
@@ -338,9 +338,9 @@ async fn verify_cross_session_lifecycle_proof(
         .map_err(|error| {
         lifecycle_proof_invalid(format!("verification method projection failed: {error}"))
     })?;
-    if verification_principal_id.as_str() != current_grant.subject {
+    if verification_principal_id.as_str() != current_grant.subject_id {
         return Err(lifecycle_proof_invalid(
-            "lifecycle proof verification_method principal does not match the current session grant subject",
+            "lifecycle proof verification_method principal does not match the current session grant subject_id",
         ));
     }
 
@@ -397,12 +397,12 @@ pub async fn revoke_session_grant_endpoint(
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .ok_or_else(session_grant_not_found)?;
     if presented_claims.grant_id != current_grant.grant_id
-        || presented_claims.issuer != current_grant.issuer
-        || presented_claims.subject.as_str() != current_grant.subject
+        || presented_claims.issuer_id != current_grant.issuer_id
+        || presented_claims.subject_id.as_str() != current_grant.subject_id
     {
         repo.cancel().await.ok();
         return Err(lifecycle_proof_invalid(
-            "presented session grant does not match the issuer ledger",
+            "presented session grant does not match the issuer_id ledger",
         ));
     }
     let now = clock.now();
@@ -467,7 +467,7 @@ pub async fn revoke_session_grant_endpoint(
         .await?;
     }
 
-    let current_principal_id = current_grant.subject.clone();
+    let current_principal_id = current_grant.subject_id.clone();
     let target_session_grant_id = match &selector {
         RevokeSelector::Current => Some(current_grant.grant_id.clone()),
         RevokeSelector::Grant(target_session_grant_id) => {
@@ -492,11 +492,11 @@ pub async fn revoke_session_grant_endpoint(
             }
         }
         RevokeSelector::Device(target_device_id) => coauth_data::SessionGrantRevokeTarget::Device {
-            subject: current_principal_id.clone(),
+            subject_id: current_principal_id.clone(),
             device_id: target_device_id.to_string(),
         },
         RevokeSelector::All => coauth_data::SessionGrantRevokeTarget::AllForSubject {
-            subject: current_principal_id.clone(),
+            subject_id: current_principal_id.clone(),
         },
     };
     let mut redacted_body =
@@ -545,7 +545,7 @@ pub async fn revoke_session_grant_endpoint(
             &mut rng,
             &*clock,
             NewSessionGrantOperation {
-                issuer: presented_claims.issuer.clone(),
+                issuer_id: presented_claims.issuer_id.clone(),
                 operation: coauth_data::SessionGrantOperationDescriptor::Revoke {
                     selector: operation_selector,
                 },
@@ -660,11 +660,11 @@ pub async fn revoke_session_grant_endpoint(
                 .expect("grant selector has an id"),
         ),
         RevokeSelector::Device(device_id) => SessionGrantRevokeSelector::Device {
-            subject: &current_principal_id,
+            subject_id: &current_principal_id,
             device_id: device_id.as_str(),
         },
         RevokeSelector::All => SessionGrantRevokeSelector::AllForSubject {
-            subject: &current_principal_id,
+            subject_id: &current_principal_id,
         },
     };
     let committed = repo
@@ -815,15 +815,15 @@ mod tests {
             id: ulid::Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
             grant_id: material.grant_id,
             browser_session_id: None,
-            issuer: material.issuer,
-            subject: material.subject,
+            issuer_id: material.issuer_id,
+            subject_id: material.subject_id,
             device_id: material.device_id,
             applet_id: None,
             effective_scope: None,
             registration_epoch: None,
             service_id: None,
             capability_grant_refs: Vec::new(),
-            audience: material.audience,
+            audience_id: material.audience_id,
             scope: Scope::from_iter(["ak.self.events.stream.subscribe.v1".parse().unwrap()]),
             grant_jwt: material.grant_jwt,
             session_id: material.session_id,

@@ -342,8 +342,8 @@ pub async fn account_register_endpoint(
             &key_store,
             issuer_did_for(&config),
             arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
-                source_service_id: service_id_for(&config),
-                destination_service_id: principal_server.service_id.clone(),
+                source_id: service_id_for(&config),
+                destination_id: principal_server.service_id.clone(),
             },
             trust_domain.clone(),
             trust_domain,

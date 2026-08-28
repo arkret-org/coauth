@@ -17,7 +17,7 @@ workspace = true
 anyhow = {workspace = true}
 arkret-canonical = {workspace = true}
 arkret-locale = {workspace = true}
-arkret-identifiers = {workspace = true}
+arkret-identifiers = {workspace = true,features = ["diesel"]}
 arkret-models-collaboration = {workspace = true}
 arkret-models-identity = {workspace = true}
 arkret-wire = {workspace = true}

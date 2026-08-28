@@ -68,7 +68,7 @@ fn redact_session_grant_intent(
     {
         // Exact replay is identified by request_id and the signed stable
         // session_intent_digest. Re-signing the same intent must not create a
-        // different issuer operation merely because its freshness window or
+        // different issuer_id operation merely because its freshness window or
         // detached signature changed.
         for field in ["issued_at", "expires_at", "signature"] {
             proof.remove(field);
@@ -154,7 +154,7 @@ async fn reserve_issue_operation(
     // retry horizons. A committed operation can still retain its canonical
     // outcome longer in storage policy; this is the minimum requested here.
     let retained_until = now + depot.arkret_config()?.session_grant_ttl + chrono::Duration::days(7);
-    let issuer = service_id_for(&depot.arkret_config()?);
+    let issuer_id = service_id_for(&depot.arkret_config()?);
     let mut rng = crate::handlers::make_rng();
     let mut repo = depot.repo().await?;
     let reserved = repo
@@ -163,7 +163,7 @@ async fn reserve_issue_operation(
             &mut rng,
             &*clock,
             NewSessionGrantOperation {
-                issuer,
+                issuer_id,
                 operation: coauth_data::SessionGrantOperationDescriptor::Issue,
                 proof_kind: Some(proof_kind),
                 request_identity: &request_identity,
@@ -388,12 +388,12 @@ async fn validate_recovery_handoff_request_before_reservation(
         &handoff,
         arkret_models_identity::AccountHandoffAllowedOperation::IssueSessionGrant,
     )?;
-    if handoff.cnf_jkt != holder_jkt || handoff.audience != body.audience.as_str() {
+    if handoff.cnf_jkt != holder_jkt || handoff.audience_id != body.audience_id.as_str() {
         repo.cancel().await.ok();
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
             arkret_wire::ErrorCode::SIGNATURE_INVALID,
-            "recovery request does not match the AccountHandoff holder or audience",
+            "recovery request does not match the AccountHandoff holder or audience_id",
         ));
     }
     let user = repo
@@ -402,7 +402,7 @@ async fn validate_recovery_handoff_request_before_reservation(
         .await?
         .ok_or(ArkretRouteError::NotFound)?;
     repo.principal_did()
-        .get_for_user_and_audience(&user, &handoff.audience)
+        .get_for_user_and_audience(&user, &handoff.audience_id)
         .await?
         .filter(|binding| binding.principal_id == body.principal_id)
         .ok_or_else(|| {
@@ -543,10 +543,10 @@ async fn issue_account_handoff_session_grant(
         &handoff,
         AccountHandoffAllowedOperation::IssueSessionGrant,
     )?;
-    if dpop.jkt != handoff.cnf_jkt || body.audience.as_str() != handoff.audience {
+    if dpop.jkt != handoff.cnf_jkt || body.audience_id.as_str() != handoff.audience_id {
         repo.cancel().await.ok();
         return Err(proof_invalid(
-            "AccountHandoff holder key or audience does not match",
+            "AccountHandoff holder key or audience_id does not match",
         ));
     }
     let user = repo
@@ -561,12 +561,12 @@ async fn issue_account_handoff_session_grant(
     if proof.account_subject != expected_account_subject {
         repo.cancel().await.ok();
         return Err(proof_invalid(
-            "accepted-device proof account subject does not match AccountHandoff",
+            "accepted-device proof account subject_id does not match AccountHandoff",
         ));
     }
     let binding = repo
         .principal_did()
-        .get_for_user_and_audience(&user, &handoff.audience)
+        .get_for_user_and_audience(&user, &handoff.audience_id)
         .await?
         .filter(|binding| binding.principal_id == body.principal_id)
         .ok_or_else(|| {
@@ -597,7 +597,7 @@ async fn issue_account_handoff_session_grant(
         })?;
     let handoff_id = handoff.id;
     let handoff_service_account_id = handoff.service_account_id;
-    let handoff_audience = handoff.audience.clone();
+    let handoff_audience = handoff.audience_id.clone();
     let handoff_cnf_jkt = handoff.cnf_jkt.clone();
     let handoff_expires_at = handoff.expires_at;
     repo.cancel().await.ok();
@@ -649,14 +649,14 @@ async fn issue_account_handoff_session_grant(
             &material.session_public_key,
         )
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-        audience: body.audience.clone(),
+        audience_id: body.audience_id.clone(),
         granted_scope: material.scopes.clone(),
         scope_details: None,
     };
     let canonical_outcome = arkret_canonical::canonical_json_bytes(&wire_outcome)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
-    // Commit the issuer-ledger operation, handoff consumption and HTTP DPoP
+    // Commit the issuer_id-ledger operation, handoff consumption and HTTP DPoP
     // JTI in one transaction so response loss can replay the exact canonical
     // outcome. Do not consume either one-time credential before the ledger
     // tells us this transaction owns the commit: a final-ledger race or an
@@ -670,7 +670,7 @@ async fn issue_account_handoff_session_grant(
         .filter(|current| {
             current.id == handoff_id
                 && current.service_account_id == handoff_service_account_id
-                && current.audience == handoff_audience
+                && current.audience_id == handoff_audience
                 && current.cnf_jkt == handoff_cnf_jkt
         })
         .ok_or_else(|| {
@@ -786,10 +786,10 @@ async fn issue_recovery_session_grant(
         &handoff,
         arkret_models_identity::AccountHandoffAllowedOperation::IssueSessionGrant,
     )?;
-    if dpop.jkt != handoff.cnf_jkt || body.audience.as_str() != handoff.audience {
+    if dpop.jkt != handoff.cnf_jkt || body.audience_id.as_str() != handoff.audience_id {
         repo.cancel().await.ok();
         return Err(proof_invalid(
-            "AccountHandoff holder key or audience does not match recovery request",
+            "AccountHandoff holder key or audience_id does not match recovery request",
         ));
     }
     let user = repo
@@ -799,7 +799,7 @@ async fn issue_recovery_session_grant(
         .ok_or(ArkretRouteError::NotFound)?;
     let binding = repo
         .principal_did()
-        .get_for_user_and_audience(&user, &handoff.audience)
+        .get_for_user_and_audience(&user, &handoff.audience_id)
         .await?
         .filter(|binding| binding.principal_id == body.principal_id)
         .ok_or_else(|| {
@@ -830,7 +830,7 @@ async fn issue_recovery_session_grant(
         })?;
     let handoff_id = handoff.id;
     let handoff_service_account_id = handoff.service_account_id;
-    let handoff_audience = handoff.audience.clone();
+    let handoff_audience = handoff.audience_id.clone();
     let handoff_cnf_jkt = handoff.cnf_jkt.clone();
     let handoff_expires_at = handoff.expires_at;
     repo.cancel().await.ok();
@@ -871,7 +871,7 @@ async fn issue_recovery_session_grant(
             &material.session_public_key,
         )
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-        audience: body.audience.clone(),
+        audience_id: body.audience_id.clone(),
         granted_scope: material.scopes.clone(),
         scope_details: None,
     };
@@ -888,7 +888,7 @@ async fn issue_recovery_session_grant(
         .filter(|current| {
             current.id == handoff_id
                 && current.service_account_id == handoff_service_account_id
-                && current.audience == handoff_audience
+                && current.audience_id == handoff_audience
                 && current.cnf_jkt == handoff_cnf_jkt
         })
         .ok_or_else(|| {
@@ -1077,7 +1077,7 @@ async fn issue_agent_key_proof_session_grant(
         }
     };
 
-    let audience = body.proof.audience.clone();
+    let audience_id = body.proof.audience_id.clone();
 
     // Controller lifecycle gate: a deactivated / suspended controller fails
     // closed (AKP-0008 §4.6). Resolve the controller's local user record when
@@ -1085,7 +1085,7 @@ async fn issue_agent_key_proof_session_grant(
     // value so the sub-repo borrow is released before `repo.cancel()`.
     let controller_binding = repo
         .principal_did()
-        .get_by_did_and_audience(&authorization.controller_id, audience.as_str())
+        .get_by_did_and_audience(&authorization.controller_id, audience_id.as_str())
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let controller_blocked = if let Some(binding) = controller_binding {
@@ -1111,7 +1111,7 @@ async fn issue_agent_key_proof_session_grant(
     // session, so there is no browser-session anchor to persist against. The
     // grant is a self-validating signed `ak.session.grant` JWT bound to the
     // runtime's DPoP key with the capped agent TTL; soland verifies the coauth
-    // issuer signature and rechecks agent status inside the revocation
+    // issuer_id signature and rechecks agent status inside the revocation
     // freshness window (AKP-0008 §4.11 natural-expiry path), bounded by the
     // ≤ 15-minute TTL.
     let now = clock.now();
@@ -1128,7 +1128,7 @@ async fn issue_agent_key_proof_session_grant(
         &key_store,
         &authorization.agent_id,
         &body.device_id,
-        audience.to_string(),
+        audience_id.to_string(),
         authorization.granted_scope.clone(),
         dpop_binding.jkt.clone(),
         session_public_key,
@@ -1148,7 +1148,7 @@ async fn issue_agent_key_proof_session_grant(
             )))
         })?;
 
-    // grant_id / session_public_key / audience are SessionGrantOutcome
+    // grant_id / session_public_key / audience_id are SessionGrantOutcome
     // top-level fields (mirroring SessionGrantRefreshOutcome), NOT entries in
     // `scope_details`. The wire `scope_details` carries only the spec-typed
     // agent overlay (AKP-0008 §4.6); the JWT-internal scope details with the
@@ -1156,9 +1156,9 @@ async fn issue_agent_key_proof_session_grant(
     // above.
     let grant_id = material.grant_id.clone();
     let wire_audience =
-        arkret_identifiers::DidCoreId::new(material.audience.clone()).map_err(|e| {
+        arkret_identifiers::DidCoreId::new(material.audience_id.clone()).map_err(|e| {
             ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                "issued agent grant carried a non-DID audience: {e}"
+                "issued agent grant carried a non-DID audience_id: {e}"
             )))
         })?;
 
@@ -1172,7 +1172,7 @@ async fn issue_agent_key_proof_session_grant(
             &material.session_public_key,
         )
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-        audience: wire_audience,
+        audience_id: wire_audience,
         granted_scope: material.scopes.clone(),
         scope_details: Some(authorization.wire_scope_details),
     };

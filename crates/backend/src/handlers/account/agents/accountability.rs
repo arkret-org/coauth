@@ -367,7 +367,7 @@ fn build_soland_fanout_payload(
 
     Ok(serde_json::json!({
         "kind": "org.arkret.coauth.accountability_grant.fanout.v1",
-        "issuer_service_id": service_id,
+        "issuer_id": service_id,
         "raw_payload_digest": raw_payload_digest,
         "grant": response,
         "principal_servers": principal_servers,

@@ -431,7 +431,7 @@ fn validate_completion_evidence(
         || receipt.authorization_event_id != attestation.device_authorization_event_id
         || receipt_generation != request_generation
         || receipt.completed_at != attestation.completed_at
-        || attestation.coordinator_service_id.as_str() != handoff.audience
+        || attestation.coordinator_id.as_str() != handoff.audience
     {
         return Err(failed_precondition(
             "recovery receipt, completion attestation, replacement device and current generation disagree",

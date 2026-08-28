@@ -2079,9 +2079,8 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     let key_store = test_keystore();
 
     let hint = arkret_models_identity::DeliveryBindingHint {
-        recipient_service_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example")
-            .unwrap(),
-        recipient_service_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
+        recipient_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example").unwrap(),
+        recipient_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
         binding_source: arkret_models_identity::HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: [arkret_models_identity::DeliveryMode::Events]
             .into_iter()

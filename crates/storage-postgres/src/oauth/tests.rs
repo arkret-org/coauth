@@ -21,14 +21,14 @@ use ulid::Ulid;
 
 use crate::PgRepositoryFactory;
 
-const TEST_SESSION_GRANT_ISSUER: &str = "ak:did_core:web:issuer.example";
-const TEST_SESSION_GRANT_SUBJECT: &str = "ak:did_core:web:subject.example";
-const TEST_SESSION_GRANT_AUDIENCE: &str = "ak:did_core:web:audience.example";
+const TEST_SESSION_GRANT_ISSUER: &str = "ak:did_core:web:issuer_id.example";
+const TEST_SESSION_GRANT_SUBJECT: &str = "ak:did_core:web:subject_id.example";
+const TEST_SESSION_GRANT_AUDIENCE: &str = "ak:did_core:web:audience_id.example";
 const TEST_SESSION_GRANT_SIGNING_KEY_ID: &str = "test-signing-key";
 
 /// Closed inputs a test needs to land one committed session grant.
 ///
-/// Everything the issuer ledger derives — grant id, issuance digest,
+/// Everything the issuer_id ledger derives — grant id, issuance digest,
 /// canonical preimage and credential JWT — is computed by
 /// [`commit_test_session_grant`], because `commit_issuance` rejects any
 /// grant whose material is not the exact projection of its preimage.
@@ -54,10 +54,10 @@ fn test_session_public_key(seed: u8) -> CanonicalSessionPublicJwk {
     .unwrap()
 }
 
-/// Serialize the credential the way the issuer publishes it.
+/// Serialize the credential the way the issuer_id publishes it.
 ///
 /// The storage layer never verifies the JWS signature — that is the
-/// issuer's and the verifier's job — but it does re-parse the header and
+/// issuer_id's and the verifier's job — but it does re-parse the header and
 /// claims, so the two encoded segments must be exact.
 fn test_session_grant_jwt(claims: &SignedSessionGrantClaims) -> String {
     let header = serde_json::json!({
@@ -73,7 +73,7 @@ fn test_session_grant_jwt(claims: &SignedSessionGrantClaims) -> String {
     )
 }
 
-/// Reserve then commit one grant through the issuer-ledger saga.
+/// Reserve then commit one grant through the issuer_id-ledger saga.
 ///
 /// The repository has no single-call `add`: a grant only becomes durable as
 /// the committed outcome of a reserved operation, so tests that need a
@@ -100,11 +100,11 @@ where
     scopes.dedup();
     let preimage = SessionGrantIssuancePreimage {
         schema: SESSION_GRANT_ISSUANCE_SCHEMA.to_owned(),
-        issuer: DidCoreId::new(TEST_SESSION_GRANT_ISSUER).unwrap(),
+        issuer_id: DidCoreId::new(TEST_SESSION_GRANT_ISSUER).unwrap(),
         issuance_nonce: issuance_nonce.clone(),
-        subject: DidCoreId::new(TEST_SESSION_GRANT_SUBJECT).unwrap(),
+        subject_id: DidCoreId::new(TEST_SESSION_GRANT_SUBJECT).unwrap(),
         session_public_key: test_session_public_key(seed.issuance_nonce[0]),
-        audience: DidCoreId::new(TEST_SESSION_GRANT_AUDIENCE).unwrap(),
+        audience_id: DidCoreId::new(TEST_SESSION_GRANT_AUDIENCE).unwrap(),
         scopes,
         not_before,
         expires_at,
@@ -123,11 +123,11 @@ where
     let claims = SignedSessionGrantClaims {
         kind: SESSION_GRANT_CREDENTIAL_KIND.to_owned(),
         grant_id: grant_id.clone(),
-        issuer: preimage.issuer.clone(),
+        issuer_id: preimage.issuer_id.clone(),
         issuance_nonce: preimage.issuance_nonce.clone(),
-        subject: preimage.subject.clone(),
+        subject_id: preimage.subject_id.clone(),
         session_public_key: preimage.session_public_key.clone(),
-        audience: preimage.audience.clone(),
+        audience_id: preimage.audience_id.clone(),
         scopes: preimage.scopes.clone(),
         not_before: preimage.not_before,
         expires_at: preimage.expires_at,
@@ -140,15 +140,15 @@ where
     };
     let grant_jwt = test_session_grant_jwt(&claims);
 
-    let issuer = arkret_identifiers::DidCoreId::new(TEST_SESSION_GRANT_ISSUER.to_owned())
-        .expect("test session grant issuer");
+    let issuer_id = arkret_identifiers::DidCoreId::new(TEST_SESSION_GRANT_ISSUER.to_owned())
+        .expect("test session grant issuer_id");
     let reserved = repo
         .oauth_session_grant()
         .reserve_operation(
             rng,
             clock,
             coauth_data::NewSessionGrantOperation {
-                issuer: issuer.clone(),
+                issuer_id: issuer_id.clone(),
                 operation: coauth_data::SessionGrantOperationDescriptor::Issue,
                 // An `issue` reservation is only valid with a proof kind,
                 // and it must be the one signed into the preimage.
@@ -191,15 +191,15 @@ where
             NewSessionGrant {
                 grant_id,
                 browser_session_id: seed.browser_session_id,
-                issuer: &issuer,
-                subject: TEST_SESSION_GRANT_SUBJECT,
+                issuer_id: &issuer_id,
+                subject_id: TEST_SESSION_GRANT_SUBJECT,
                 device_id: Some(seed.device_id),
                 applet_id: None,
                 effective_scope: None,
                 registration_epoch: None,
                 service_id: None,
                 capability_grant_refs: Vec::new(),
-                audience: TEST_SESSION_GRANT_AUDIENCE,
+                audience_id: TEST_SESSION_GRANT_AUDIENCE,
                 scope: seed.scope,
                 grant_jwt: &grant_jwt,
                 session_id: seed.session_id,

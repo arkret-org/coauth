@@ -324,7 +324,7 @@ CREATE TABLE public.handle_audit_log (
     handle_aliases text[] DEFAULT ARRAY[]::text[] NOT NULL,
     old_did text,
     new_did text,
-    issuer_service_id text,
+    issuer_id text,
     audience text,
     claim_digest text,
     details jsonb DEFAULT '{}'::jsonb NOT NULL,
@@ -518,7 +518,7 @@ CREATE TABLE public.oauth_refresh_tokens (
 
 CREATE TABLE public.oauth_session_grant_operations (
     id uuid NOT NULL,
-    issuer text NOT NULL,
+    issuer_id text NOT NULL,
     operation_kind text NOT NULL,
     proof_kind text,
     request_identity text NOT NULL,
@@ -542,7 +542,7 @@ CREATE TABLE public.oauth_session_grant_operations (
     retained_until timestamp with time zone NOT NULL,
     committed_at timestamp with time zone,
     created_at timestamp with time zone NOT NULL,
-    CONSTRAINT oauth_session_grant_operations_issuer_nonempty CHECK ((btrim(issuer) <> ''::text)),
+    CONSTRAINT oauth_session_grant_operations_issuer_id_nonempty CHECK ((btrim(issuer_id) <> ''::text)),
     CONSTRAINT oauth_session_grant_operations_request_identity_nonempty CHECK ((btrim(request_identity) <> ''::text)),
     CONSTRAINT oauth_session_grant_operations_kind_valid CHECK ((operation_kind = ANY (ARRAY['issue'::text, 'refresh'::text, 'revoke'::text]))),
     CONSTRAINT oauth_session_grant_operations_proof_kind_shape CHECK ((((operation_kind = 'issue'::text) AND (proof_kind IS NOT NULL)) OR ((operation_kind <> 'issue'::text) AND (proof_kind IS NULL)))),
@@ -561,15 +561,15 @@ CREATE TABLE public.oauth_session_grants (
     grant_id bytea NOT NULL CHECK ((octet_length(grant_id) = 33) AND (get_byte(grant_id, 0) = 1)),
     issuance_operation_id uuid NOT NULL,
     user_session_id uuid,
-    issuer text NOT NULL,
-    subject text NOT NULL,
+    issuer_id text NOT NULL,
+    subject_id text NOT NULL,
     device_id text,
     applet_id text,
     effective_scope jsonb,
     registration_epoch text,
     service_id text,
     capability_grant_refs text[] DEFAULT '{}'::text[] NOT NULL,
-    audience text NOT NULL,
+    audience_id text NOT NULL,
     scope_list text[] NOT NULL,
     grant_jwt text NOT NULL,
     session_id text NOT NULL,
@@ -672,7 +672,7 @@ CREATE TABLE public.controller_gate_attestation_issuances (
     request_id uuid PRIMARY KEY,
     canonical_intent_digest text NOT NULL,
     principal_id text NOT NULL,
-    agent_authority_service_id text NOT NULL,
+    agent_authority_id text NOT NULL,
     canonical_outcome bytea,
     outcome_digest text,
     attestation_expires_at timestamp with time zone,
@@ -1752,7 +1752,7 @@ CREATE INDEX oauth_refresh_tokens_last_seen_idx ON public.oauth_refresh_tokens U
 
 CREATE INDEX oauth_session_grants_active_idx ON public.oauth_session_grants USING btree (expires_at) WHERE (lifecycle_state = 'active'::text);
 
-CREATE UNIQUE INDEX oauth_session_grant_operations_identity_idx ON public.oauth_session_grant_operations USING btree (issuer, operation_kind, COALESCE(proof_kind, ''::text), request_identity);
+CREATE UNIQUE INDEX oauth_session_grant_operations_identity_idx ON public.oauth_session_grant_operations USING btree (issuer_id, operation_kind, COALESCE(proof_kind, ''::text), request_identity);
 
 CREATE INDEX oauth_session_grant_operations_retention_idx ON public.oauth_session_grant_operations USING btree (retained_until) WHERE (state <> 'evicted'::text);
 
@@ -1768,7 +1768,7 @@ CREATE UNIQUE INDEX oauth_session_grants_grant_id_idx ON public.oauth_session_gr
 
 CREATE UNIQUE INDEX oauth_session_grants_issuance_operation_idx ON public.oauth_session_grants USING btree (issuance_operation_id);
 
-CREATE INDEX oauth_session_grants_subject_idx ON public.oauth_session_grants USING btree (subject);
+CREATE INDEX oauth_session_grants_subject_id_idx ON public.oauth_session_grants USING btree (subject_id);
 
 CREATE INDEX oauth_session_grants_user_session_idx ON public.oauth_session_grants USING btree (user_session_id);
 

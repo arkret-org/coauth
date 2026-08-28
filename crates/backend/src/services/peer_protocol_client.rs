@@ -87,7 +87,7 @@ impl<'a> PeerProtocolClient<'a> {
         };
         let projected = arkret_identifiers::project_did_to_core_id(&source_did)
             .map_err(|error| PeerProtocolClientError::InvalidUrl(error.to_string()))?;
-        if projected.as_str() != identity.source_service_id.as_str() {
+        if projected.as_str() != identity.source_id.as_str() {
             return Err(PeerProtocolClientError::InvalidUrl(
                 "source service did does not project to Source-Service-ID".to_owned(),
             ));
@@ -323,11 +323,11 @@ impl<'a> PeerProtocolClient<'a> {
         let mut headers = vec![
             (
                 SOURCE_SERVICE_ID_HEADER.to_owned(),
-                self.identity.source_service_id.to_string(),
+                self.identity.source_id.to_string(),
             ),
             (
                 DESTINATION_SERVICE_ID_HEADER.to_owned(),
-                self.identity.destination_service_id.to_string(),
+                self.identity.destination_id.to_string(),
             ),
             (
                 HEADER_SOURCE_TRUST_DOMAIN.to_owned(),
@@ -473,8 +473,8 @@ mod tests {
         let service_id =
             arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap();
         KeyPackagesClaimServiceBinding {
-            source_service_id: service_id.clone(),
-            destination_service_id: service_id,
+            source_id: service_id.clone(),
+            destination_id: service_id,
         }
     }
 

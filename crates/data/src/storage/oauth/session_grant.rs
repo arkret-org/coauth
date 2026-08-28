@@ -22,9 +22,9 @@ pub struct SessionGrantFilter<'a> {
     /// Owning account, resolved through the grant's browser session
     /// (`oauth_session_grants.user_session_id -> user_sessions.user_id`).
     account_id: Option<Ulid>,
-    subject: Option<&'a str>,
+    subject_id: Option<&'a str>,
     device_id: Option<&'a str>,
-    audience: Option<&'a str>,
+    audience_id: Option<&'a str>,
     active_at: Option<DateTime<Utc>>,
 }
 
@@ -66,17 +66,17 @@ impl<'a> SessionGrantFilter<'a> {
         self.account_id
     }
 
-    /// Restrict results to a subject DID.
+    /// Restrict results to a subject_id DID.
     #[must_use]
-    pub fn for_subject(mut self, subject: &'a str) -> Self {
-        self.subject = Some(subject);
+    pub fn for_subject(mut self, subject_id: &'a str) -> Self {
+        self.subject_id = Some(subject_id);
         self
     }
 
-    /// Return the subject constraint, if present.
+    /// Return the subject_id constraint, if present.
     #[must_use]
-    pub fn subject(&self) -> Option<&'a str> {
-        self.subject
+    pub fn subject_id(&self) -> Option<&'a str> {
+        self.subject_id
     }
 
     /// Restrict results to a Arkret client device id.
@@ -92,17 +92,17 @@ impl<'a> SessionGrantFilter<'a> {
         self.device_id
     }
 
-    /// Restrict results to a grant audience.
+    /// Restrict results to a grant audience_id.
     #[must_use]
-    pub fn for_audience(mut self, audience: &'a str) -> Self {
-        self.audience = Some(audience);
+    pub fn for_audience(mut self, audience_id: &'a str) -> Self {
+        self.audience_id = Some(audience_id);
         self
     }
 
-    /// Return the audience constraint, if present.
+    /// Return the audience_id constraint, if present.
     #[must_use]
-    pub fn audience(&self) -> Option<&'a str> {
-        self.audience
+    pub fn audience_id(&self) -> Option<&'a str> {
+        self.audience_id
     }
 
     /// Restrict results to grants active at the provided timestamp.
@@ -126,10 +126,10 @@ pub struct NewSessionGrant<'a> {
     pub grant_id: SessionGrantId,
     /// Browser session that the grant is bound to.
     pub browser_session_id: Option<Ulid>,
-    /// DID issuer of the signed grant.
-    pub issuer: &'a DidCoreId,
-    /// DID subject authorized by the grant.
-    pub subject: &'a str,
+    /// DID issuer_id of the signed grant.
+    pub issuer_id: &'a DidCoreId,
+    /// DID subject_id authorized by the grant.
+    pub subject_id: &'a str,
     /// Optional Arkret client device id.
     pub device_id: Option<&'a str>,
     /// Applet effective install id, for applet-specific delegated sessions.
@@ -142,17 +142,17 @@ pub struct NewSessionGrant<'a> {
     pub service_id: Option<&'a str>,
     /// Capability grant refs that backed the applet delegation.
     pub capability_grant_refs: Vec<String>,
-    /// Intended grant audience.
-    pub audience: &'a str,
+    /// Intended grant audience_id.
+    pub audience_id: &'a str,
     /// Granted OAuth scope set.
     pub scope: Scope,
     /// Signed session grant JWT.
     pub grant_jwt: &'a str,
     /// Stable, independently allocated refresh-chain identifier.
     pub session_id: &'a str,
-    /// Canonical Base64URL issuer nonce included in the signed claims.
+    /// Canonical Base64URL issuer_id nonce included in the signed claims.
     pub issuance_nonce: &'a str,
-    /// Exact canonical JCS issuance preimage committed by the issuer.
+    /// Exact canonical JCS issuance preimage committed by the issuer_id.
     pub issuance_preimage: &'a [u8],
     /// SHA-256 digest of `issuance_preimage` and digest portion of `grant_id`.
     pub issuance_digest: [u8; 32],
@@ -168,15 +168,15 @@ pub struct NewSessionGrant<'a> {
     pub expires_at: DateTime<Utc>,
 }
 
-/// Stable exact-replay identity and canonical intent for one issuer operation.
+/// Stable exact-replay identity and canonical intent for one issuer_id operation.
 #[derive(Debug)]
 pub struct NewSessionGrantOperation<'a> {
-    /// Stable issuer core DID that owns this replay namespace.
+    /// Stable issuer_id core DID that owns this replay namespace.
     ///
     /// This is deliberately not a string: a complete [`arkret_identifiers::Did`]
     /// identifies a particular DID document version and must never partition
-    /// the durable issuer ledger.
-    pub issuer: DidCoreId,
+    /// the durable issuer_id ledger.
+    pub issuer_id: DidCoreId,
     /// Closed lifecycle operation family.
     pub operation: SessionGrantOperationDescriptor,
     /// Signed proof kind for initial issuance; absent for other operations.
@@ -244,17 +244,17 @@ pub struct SessionGrantRefreshCommit<'a> {
 pub enum SessionGrantRevokeSelector<'a> {
     /// Revoke one exact grant.
     Grant(&'a SessionGrantId),
-    /// Revoke every active grant for one subject/device binding.
+    /// Revoke every active grant for one subject_id/device binding.
     Device {
         /// Subject DID.
-        subject: &'a str,
+        subject_id: &'a str,
         /// Device binding.
         device_id: &'a str,
     },
-    /// Revoke every active grant for a subject.
+    /// Revoke every active grant for a subject_id.
     AllForSubject {
         /// Subject DID.
-        subject: &'a str,
+        subject_id: &'a str,
     },
 }
 
@@ -418,14 +418,14 @@ pub trait SessionGrantRepository: Send + Sync {
     /// second active child of one parent.
     async fn revoke_if_active(&mut self, clock: &dyn Clock, id: Ulid) -> Result<bool, Self::Error>;
 
-    /// Revoke every still-active grant minted for `audience`, returning the
+    /// Revoke every still-active grant minted for `audience_id`, returning the
     /// number of grants revoked. Used when a Principal Server trust pin is
-    /// explicitly replaced: grants bound to the old audience must not
+    /// explicitly replaced: grants bound to the old audience_id must not
     /// outlive the pin they were issued under.
     async fn revoke_active_for_audience(
         &mut self,
         clock: &dyn Clock,
-        audience: &str,
+        audience_id: &str,
     ) -> Result<usize, Self::Error>;
 
     /// Delete session grants whose `expires_at` is strictly before `until`.
@@ -523,7 +523,7 @@ repository_impl!(SessionGrantRepository:
     async fn revoke_active_for_audience(
         &mut self,
         clock: &dyn Clock,
-        audience: &str,
+        audience_id: &str,
     ) -> Result<usize, Self::Error>;
 
     async fn cleanup_expired(

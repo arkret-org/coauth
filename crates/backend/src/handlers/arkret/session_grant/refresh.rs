@@ -78,7 +78,7 @@ fn validate_human_refresh_before_reservation(
 ) -> Result<(), ArkretRouteError> {
     let proof = &body.accepted_device_possession_proof;
     if proof.predecessor_session_grant_id != prior_grant.grant_id
-        || proof.principal_id != prior_payload.subject
+        || proof.principal_id != prior_payload.subject_id
         || proof.device_id != body.device_id
         || proof.holder_jkt != holder_jkt
     {
@@ -86,11 +86,11 @@ fn validate_human_refresh_before_reservation(
             "accepted-device refresh proof does not bind the predecessor, principal, device and holder key",
         ));
     }
-    if proof.audience.as_str() != prior_grant.audience {
+    if proof.audience_id.as_str() != prior_grant.audience_id {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
-            "accepted-device refresh proof audience must match the session grant audience",
+            "accepted-device refresh proof audience_id must match the session grant audience_id",
         ));
     }
     if proof.issued_at > now + chrono::Duration::seconds(30) || now >= proof.expires_at {
@@ -98,14 +98,14 @@ fn validate_human_refresh_before_reservation(
             "accepted-device refresh proof is outside its validity window",
         ));
     }
-    let audience = DidCoreId::new(prior_grant.audience.clone())
+    let audience_id = DidCoreId::new(prior_grant.audience_id.clone())
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let expected_digest = session_grant_refresh_request_digest(
         &body.grant_jwt,
         &prior_grant.grant_id,
-        &prior_payload.subject,
+        &prior_payload.subject_id,
         &body.device_id,
-        &audience,
+        &audience_id,
         holder_jkt,
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
@@ -186,7 +186,7 @@ pub async fn refresh_session_grant(
     let (grant_jwt, requested_audience, presented_device_id, request_digest) = match &body {
         SessionGrantRefreshRequestBody::Human(request) => (
             request.grant_jwt.as_str(),
-            request.audience.as_ref(),
+            request.audience_id.as_ref(),
             &request.device_id,
             &request
                 .accepted_device_possession_proof
@@ -194,7 +194,7 @@ pub async fn refresh_session_grant(
         ),
         SessionGrantRefreshRequestBody::Agent(request) => (
             request.grant_jwt.as_str(),
-            request.audience.as_ref(),
+            request.audience_id.as_ref(),
             &request.device_id,
             &request.agent_session_refresh_proof.request_canonical_digest,
         ),
@@ -294,12 +294,12 @@ pub async fn refresh_session_grant(
     // an exact retry is allowed to replay the already-minted successor after
     // the predecessor has become superseded.
     if let Some(requested) = requested_audience
-        && requested.as_str() != prior_grant.audience
+        && requested.as_str() != prior_grant.audience_id
     {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             arkret_wire::ErrorCode::AUDIENCE_MISMATCH,
-            "session-grant rotation MUST NOT change the bound audience",
+            "session-grant rotation MUST NOT change the bound audience_id",
         ));
     }
     let device_id = require_bound_device_id(
@@ -353,7 +353,7 @@ pub async fn refresh_session_grant(
             &mut rng,
             &*clock,
             NewSessionGrantOperation {
-                issuer: prior_payload.issuer.clone(),
+                issuer_id: prior_payload.issuer_id.clone(),
                 operation: coauth_data::SessionGrantOperationDescriptor::Refresh {
                     predecessor_grant_id: prior_grant.grant_id.clone(),
                 },
@@ -489,7 +489,7 @@ pub async fn refresh_session_grant(
         let authoritative_agent = match enforce_authoritative_agent_lifecycle(
             &http_client,
             &arkret_config,
-            prior_payload.subject.as_str(),
+            prior_payload.subject_id.as_str(),
         )
         .await
         {
@@ -558,7 +558,7 @@ pub async fn refresh_session_grant(
             .principal_did()
             .get_by_did_and_audience(
                 &authorization.accountable_principal_id,
-                prior_grant.audience.as_str(),
+                prior_grant.audience_id.as_str(),
             )
             .await
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
@@ -597,9 +597,9 @@ pub async fn refresh_session_grant(
             &issuance_seed,
             &arkret_config,
             &key_store,
-            prior_payload.subject.as_str(),
+            prior_payload.subject_id.as_str(),
             &device_id,
-            prior_grant.audience.clone(),
+            prior_grant.audience_id.clone(),
             scopes,
             verification.jkt.clone(),
             session_public_key,
@@ -617,9 +617,9 @@ pub async fn refresh_session_grant(
             issuance_seed.expires_at,
         )
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-        let audience = DidCoreId::new(new_material.audience.clone()).map_err(|error| {
+        let audience_id = DidCoreId::new(new_material.audience_id.clone()).map_err(|error| {
             ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                "refreshed Agent grant carried an invalid service core_id audience: {error}"
+                "refreshed Agent grant carried an invalid service core_id audience_id: {error}"
             )))
         })?;
         let outcome = SessionGrantRefreshOutcome {
@@ -630,7 +630,7 @@ pub async fn refresh_session_grant(
             )
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
             expires_at: new_material.expires_at_timestamp,
-            audience,
+            audience_id,
             scopes: new_material.scopes.clone(),
             dpop_jkt: verification.jkt.clone(),
             previous_session_grant_id: prior_grant.grant_id.clone(),
@@ -807,14 +807,14 @@ pub async fn refresh_session_grant(
         ));
     }
 
-    // 5. Mint a new grant with the same subject + scope + audience. The
-    // audience MUST NOT change across rotation: a client holding a grant for
+    // 5. Mint a new grant with the same subject_id + scope + audience_id. The
+    // audience_id MUST NOT change across rotation: a client holding a grant for
     // one Principal Server must not be able to rotate it into a grant for a
-    // different audience (which it could then exchange there). Ignore any
-    // client-supplied audience; reject an explicit mismatch defensively.
+    // different audience_id (which it could then exchange there). Ignore any
+    // client-supplied audience_id; reject an explicit mismatch defensively.
     let principal_binding = repo
         .principal_did()
-        .get_by_did_and_audience(&prior_grant.subject, &prior_grant.audience)
+        .get_by_did_and_audience(&prior_grant.subject_id, &prior_grant.audience_id)
         .await?
         .ok_or_else(|| refresh_proof_invalid("session grant principal authority is unavailable"))?;
     principal_binding
@@ -832,7 +832,7 @@ pub async fn refresh_session_grant(
     // 6. Rebuild the successor solely from the durable reservation seed. The
     // signing window, nonce, chain id and signing key therefore remain byte
     // stable across a retry after an ambiguous transport failure.
-    let audience = prior_grant.audience.clone();
+    let audience_id = prior_grant.audience_id.clone();
     let scopes: Vec<String> = prior_grant
         .scope
         .iter()
@@ -879,11 +879,11 @@ pub async fn refresh_session_grant(
         &browser_session,
         crate::services::dpop::session_public_jwk(&verification.public_jwk)
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-        audience,
+        audience_id,
         arkret_identifiers::DeviceId::new(device_id.to_owned())
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         scopes,
-        Some(&prior_grant.subject),
+        Some(&prior_grant.subject_id),
         &principal_binding.principal_authority,
         verification.jkt.clone(),
         device_binding,
@@ -891,9 +891,9 @@ pub async fn refresh_session_grant(
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
 
-    let response_audience = DidCoreId::new(new_material.audience.clone()).map_err(|error| {
+    let response_audience = DidCoreId::new(new_material.audience_id.clone()).map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "refreshed grant carried an invalid service core_id audience: {error}"
+            "refreshed grant carried an invalid service core_id audience_id: {error}"
         )))
     })?;
 
@@ -905,7 +905,7 @@ pub async fn refresh_session_grant(
         )
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         expires_at: new_material.expires_at_timestamp,
-        audience: response_audience,
+        audience_id: response_audience,
         scopes: new_material.scopes.clone(),
         dpop_jkt: verification.jkt.clone(),
         previous_session_grant_id: prior_grant.grant_id.clone(),

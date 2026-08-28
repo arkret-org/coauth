@@ -31,12 +31,12 @@ pub async fn resolve_account_status(
     if request.account_authority_id != service_id_for(&config) {
         return Err(not_found());
     }
-    let source_service_id = required_header(req, "source-service-id")?;
-    let destination_service_id = required_header(req, "destination-service-id")?;
-    if destination_service_id != request.account_authority_id.as_str()
+    let source_id = required_header(req, "source-service-id")?;
+    let destination_id = required_header(req, "destination-service-id")?;
+    if destination_id != request.account_authority_id.as_str()
         || !config.principal_servers.iter().any(|server| {
             crate::services::principal_server_trust::effective_audience_shared(server)
-                .is_some_and(|audience| audience.as_str() == source_service_id)
+                .is_some_and(|audience| audience.as_str() == source_id)
         })
     {
         return Err(not_found());
@@ -58,7 +58,7 @@ pub async fn resolve_account_status(
         &arkret_wire::Did::new(source_did.to_owned()).map_err(|_| not_found())?,
     )
     .map_err(|_| not_found())?;
-    if projected.as_str() != source_service_id {
+    if projected.as_str() != source_id {
         return Err(not_found());
     }
 
@@ -99,9 +99,10 @@ pub async fn resolve_account_status(
             request.account_id.as_str(),
         )
         .await?;
-    if current.as_ref().is_none_or(|record| {
-        record.principal_authority.principal_server_id.as_str() != source_service_id
-    }) {
+    if current
+        .as_ref()
+        .is_none_or(|record| record.principal_authority.principal_server_id.as_str() != source_id)
+    {
         return Err(not_found());
     }
     let fetch_limit = request.limit.saturating_add(1).min(129);

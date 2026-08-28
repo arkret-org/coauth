@@ -8,13 +8,13 @@ use ulid::Ulid;
 
 use crate::{Clock, InvalidTransitionError};
 
-/// Durable issuer-ledger lifecycle state for a session grant.
+/// Durable issuer_id-ledger lifecycle state for a session grant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionGrantLifecycleState {
     /// The grant may be used until its immutable expiry.
     Active,
-    /// The issuer explicitly revoked the grant.
+    /// The issuer_id explicitly revoked the grant.
     Revoked,
     /// A refresh atomically replaced the grant with a successor.
     Superseded,
@@ -61,9 +61,16 @@ impl SessionGrantOperationDescriptor {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SessionGrantRevokeTarget {
-    Grant { grant_id: SessionGrantId },
-    Device { subject: String, device_id: String },
-    AllForSubject { subject: String },
+    Grant {
+        grant_id: SessionGrantId,
+    },
+    Device {
+        subject_id: String,
+        device_id: String,
+    },
+    AllForSubject {
+        subject_id: String,
+    },
 }
 
 impl SessionGrantOperationKind {
@@ -109,7 +116,7 @@ pub enum SessionGrantOperationState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SessionGrantOperation {
     pub id: Ulid,
-    pub issuer: DidCoreId,
+    pub issuer_id: DidCoreId,
     pub operation: SessionGrantOperationDescriptor,
     pub proof_kind: Option<SessionGrantProofKind>,
     pub request_identity: String,
@@ -139,15 +146,15 @@ pub struct SessionGrant {
     pub id: Ulid,
     pub grant_id: SessionGrantId,
     pub browser_session_id: Option<Ulid>,
-    pub issuer: DidCoreId,
-    pub subject: String,
+    pub issuer_id: DidCoreId,
+    pub subject_id: String,
     pub device_id: Option<String>,
     pub applet_id: Option<String>,
     pub effective_scope: Option<Value>,
     pub registration_epoch: Option<String>,
     pub service_id: Option<String>,
     pub capability_grant_refs: Vec<String>,
-    pub audience: String,
+    pub audience_id: String,
     pub scope: Scope,
     pub grant_jwt: String,
     pub session_id: String,

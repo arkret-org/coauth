@@ -76,10 +76,10 @@ pub async fn issue_controller_gate_attestation(
         .principal_did()
         .get_by_did_and_audience(
             request.principal_id.as_str(),
-            request.agent_authority_service_id.as_str(),
+            request.agent_authority_id.as_str(),
         )
         .await?
-        .filter(|binding| binding.accepted_service_id == request.agent_authority_service_id)
+        .filter(|binding| binding.accepted_service_id == request.agent_authority_id)
         .ok_or_else(not_found)?;
     let user = repo
         .user()
@@ -93,7 +93,7 @@ pub async fn issue_controller_gate_attestation(
             request_id: request.request_id.clone(),
             canonical_intent_digest: canonical_intent_digest.clone(),
             principal_id: request.principal_id.clone(),
-            agent_authority_service_id: request.agent_authority_service_id.clone(),
+            agent_authority_id: request.agent_authority_id.clone(),
             retained_until: now + REPLAY_RETENTION,
             now,
         })
@@ -117,7 +117,7 @@ pub async fn issue_controller_gate_attestation(
 
     let (status, eligibility) = controller_status(user.status);
     let authority_did = super::issuer_did_for(&depot.arkret_config()?);
-    let authority_service_id = service_id_for(&depot.arkret_config()?);
+    let authority_id = service_id_for(&depot.arkret_config()?);
     let key_store = depot.key_store()?;
     let signing_jwk = key_store
         .signing_key_for_algorithm(&coauth_iana::jose::JsonWebSignatureAlg::Ed25519)
@@ -144,7 +144,7 @@ pub async fn issue_controller_gate_attestation(
     let basis_digest = arkret_identifiers::Hash::new(
         arkret_canonical::canonical_sha256(&serde_json::json!({
             "principal_id": &request.principal_id,
-            "accepted_service_id": &request.agent_authority_service_id,
+            "accepted_service_id": &request.agent_authority_id,
             "status": status,
             "basis": &basis,
         }))
@@ -161,7 +161,7 @@ pub async fn issue_controller_gate_attestation(
         status,
         basis,
         basis_digest,
-        authority_service_id,
+        authority_id,
         verification_method: DidUrl::new(format!("{authority_did}#{signing_key_id}"))
             .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?,
         issued_at: now,
@@ -221,7 +221,7 @@ async fn authenticate_agent_authority_request(
     let config = depot.arkret_config()?;
     request
         .agent_authority_service_resolution
-        .validate_shape(&request.agent_authority_service_id, now)
+        .validate_shape(&request.agent_authority_id, now)
         .map_err(|_| not_found())?;
 
     let did = &request
@@ -270,7 +270,7 @@ async fn authenticate_agent_authority_request(
     let resolution = &request.agent_authority_service_resolution;
     arkret_signatures::service_resolution::verify_authenticated_service_resolution(
         resolution,
-        &request.agent_authority_service_id,
+        &request.agent_authority_id,
         now,
     )
     .map_err(|_| not_found())?;
@@ -308,7 +308,7 @@ async fn authenticate_agent_authority_request(
     let operation = required_header(req, "arkret-operation-id")?;
     let request_id = required_header(req, "arkret-request-id")?;
     let local_service_id = service_id_for(&config);
-    if source != request.agent_authority_service_id.as_str()
+    if source != request.agent_authority_id.as_str()
         || destination != local_service_id.as_str()
         || selector != GATE_OPERATION_ID
         || operation != GATE_OPERATION_ID

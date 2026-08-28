@@ -37,7 +37,7 @@ impl<'c> PgPrincipalServerTrustRepository<'c> {
 struct EnrollmentRow {
     name: String,
     canonical_endpoint: String,
-    service_id: String,
+    service_id: arkret_identifiers::DidCoreId,
     did: String,
     method_history_head: String,
     version_id: String,
@@ -51,11 +51,6 @@ impl TryFrom<EnrollmentRow> for PrincipalServerTrustEnrollment {
     type Error = DatabaseInconsistencyError;
 
     fn try_from(value: EnrollmentRow) -> Result<Self, Self::Error> {
-        let service_id = arkret_identifiers::DidCoreId::new(value.service_id).map_err(|error| {
-            DatabaseInconsistencyError::on("principal_server_trust_enrollments")
-                .column("service_id")
-                .source(error)
-        })?;
         let did = arkret_identifiers::Did::new(value.did).map_err(|error| {
             DatabaseInconsistencyError::on("principal_server_trust_enrollments")
                 .column("did")
@@ -67,7 +62,7 @@ impl TryFrom<EnrollmentRow> for PrincipalServerTrustEnrollment {
         Ok(Self {
             name: value.name,
             canonical_endpoint: value.canonical_endpoint,
-            service_id,
+            service_id: value.service_id,
             did,
             method_history_head: value.method_history_head,
             version_id: value.version_id,
@@ -84,7 +79,7 @@ impl TryFrom<EnrollmentRow> for PrincipalServerTrustEnrollment {
 struct NewEnrollmentRow {
     name: String,
     canonical_endpoint: String,
-    service_id: String,
+    service_id: arkret_identifiers::DidCoreId,
     service_kind: String,
     did: String,
     method_history_head: String,
@@ -99,7 +94,7 @@ struct NewEnrollmentRow {
 #[diesel(table_name = principal_server_trust_enrollments)]
 struct EnrollmentReplacement {
     canonical_endpoint: String,
-    service_id: String,
+    service_id: arkret_identifiers::DidCoreId,
     did: String,
     method_history_head: String,
     version_id: String,
@@ -113,7 +108,7 @@ impl NewEnrollmentRow {
         Self {
             name: params.name.clone(),
             canonical_endpoint: params.canonical_endpoint.clone(),
-            service_id: params.service_id.to_string(),
+            service_id: params.service_id.clone(),
             service_kind: "principal_server".to_owned(),
             did: params.did.to_string(),
             method_history_head: params.method_history_head.clone(),
@@ -132,8 +127,8 @@ struct AuditRow {
     id: Uuid,
     enrollment_name: String,
     action: String,
-    service_id: Option<String>,
-    previous_service_id: Option<String>,
+    service_id: Option<arkret_identifiers::DidCoreId>,
+    previous_service_id: Option<arkret_identifiers::DidCoreId>,
     detail: String,
     created_at: DateTime<Utc>,
 }
@@ -148,32 +143,12 @@ impl TryFrom<AuditRow> for PrincipalServerTrustAudit {
                     .column("action")
                     .row(value.id.into())
             })?;
-        let service_id = value
-            .service_id
-            .map(arkret_identifiers::DidCoreId::new)
-            .transpose()
-            .map_err(|error| {
-                DatabaseInconsistencyError::on("principal_server_trust_audits")
-                    .column("service_id")
-                    .row(value.id.into())
-                    .source(error)
-            })?;
-        let previous_service_id = value
-            .previous_service_id
-            .map(arkret_identifiers::DidCoreId::new)
-            .transpose()
-            .map_err(|error| {
-                DatabaseInconsistencyError::on("principal_server_trust_audits")
-                    .column("previous_service_id")
-                    .row(value.id.into())
-                    .source(error)
-            })?;
         Ok(Self {
             id: value.id.into(),
             enrollment_name: value.enrollment_name,
             action,
-            service_id,
-            previous_service_id,
+            service_id: value.service_id,
+            previous_service_id: value.previous_service_id,
             detail: value.detail,
             created_at: value.created_at,
         })
@@ -186,8 +161,8 @@ struct NewAuditRow {
     id: Uuid,
     enrollment_name: String,
     action: String,
-    service_id: Option<String>,
-    previous_service_id: Option<String>,
+    service_id: Option<arkret_identifiers::DidCoreId>,
+    previous_service_id: Option<arkret_identifiers::DidCoreId>,
     detail: String,
     created_at: DateTime<Utc>,
 }
@@ -264,7 +239,7 @@ impl PrincipalServerTrustRepository for PgPrincipalServerTrustRepository<'_> {
     ) -> Result<bool, Self::Error> {
         let changes = EnrollmentReplacement {
             canonical_endpoint: params.canonical_endpoint.clone(),
-            service_id: params.service_id.to_string(),
+            service_id: params.service_id.clone(),
             did: params.did.to_string(),
             method_history_head: params.method_history_head.clone(),
             version_id: params.version_id.clone(),
@@ -275,10 +250,7 @@ impl PrincipalServerTrustRepository for PgPrincipalServerTrustRepository<'_> {
         let rows_affected = diesel::update(
             principal_server_trust_enrollments::table
                 .filter(principal_server_trust_enrollments::name.eq(name))
-                .filter(
-                    principal_server_trust_enrollments::service_id
-                        .eq(expected_old_service_id.as_str()),
-                ),
+                .filter(principal_server_trust_enrollments::service_id.eq(expected_old_service_id)),
         )
         .set(&changes)
         .execute(self.conn)
@@ -335,8 +307,8 @@ impl PrincipalServerTrustRepository for PgPrincipalServerTrustRepository<'_> {
             id: Uuid::from(id),
             enrollment_name: params.enrollment_name.clone(),
             action: params.action.as_str().to_owned(),
-            service_id: params.service_id.as_ref().map(ToString::to_string),
-            previous_service_id: params.previous_service_id.as_ref().map(ToString::to_string),
+            service_id: params.service_id.clone(),
+            previous_service_id: params.previous_service_id.clone(),
             detail: params.detail.clone(),
             created_at,
         };
