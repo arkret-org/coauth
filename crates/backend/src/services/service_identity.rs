@@ -890,6 +890,11 @@ fn stored_from_outcome(
     let service_id = outcome.service_id().clone();
     let did = outcome.did().clone();
     let version_id = outcome.version_id().to_owned();
+    // Runtime and durable identity snapshots are compared byte-for-byte at
+    // security boundaries. Normalize before either snapshot is created so the
+    // in-memory value cannot retain sub-millisecond precision that canonical
+    // JSON intentionally discards.
+    let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
     let stored = StoredDidCoreIdentity {
         identity: LocalDidCoreIdentity {
             service_id,
@@ -900,11 +905,11 @@ fn stored_from_outcome(
             active_signing_key_ref: signing_key_ref,
             control_key_ref,
             version_id,
-            last_verified_at: Utc::now(),
+            last_verified_at: now,
         },
         did_document: outcome.did_document,
         registration_receipt: outcome.registration_receipt,
-        stored_at: Utc::now(),
+        stored_at: now,
     };
     stored
         .validate()
@@ -1326,6 +1331,46 @@ mod tests {
             registration_receipt: receipt,
             stored_at: Utc::now(),
         }
+    }
+
+    #[test]
+    fn canonical_identity_timestamps_survive_durable_json_roundtrip() {
+        let provider = provider_for_tests();
+        let registration_key = registration_key_for_tests();
+        let signing_seed = [7_u8; 32];
+        let prepared = prepare_inception(&provider, &registration_key, &signing_seed).unwrap();
+        let operation = prepared.service_registration_operation().unwrap();
+        let fixture = stored_for_tests(
+            &registration_key,
+            &operation,
+            operation.log_head_digest().unwrap(),
+        );
+        let mut registration_receipt = fixture.registration_receipt;
+        registration_receipt.issued_at =
+            arkret_canonical::normalize_timestamp_canonical(registration_receipt.issued_at);
+        registration_receipt.proof.created_at = registration_receipt.issued_at;
+        registration_receipt.registration_receipt_id = registration_receipt
+            .expected_registration_receipt_id()
+            .unwrap();
+        registration_receipt.proof.payload_digest =
+            registration_receipt.expected_payload_digest().unwrap();
+        let stored = stored_from_outcome(
+            &provider,
+            &registration_key,
+            &signing_seed,
+            &prepared,
+            ServiceRegistrationOutcome {
+                did_document: fixture.did_document,
+                registration_receipt,
+                created: true,
+            },
+        )
+        .unwrap();
+
+        let decoded: StoredDidCoreIdentity =
+            serde_json::from_value(serde_json::to_value(&stored).unwrap()).unwrap();
+
+        assert_eq!(decoded, stored);
     }
 
     /// Losing the local `service_identity` row must not cost the deployment
