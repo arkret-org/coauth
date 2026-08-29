@@ -59,10 +59,7 @@ impl Scribe for CanonicalAuthenticatedResolution {
 }
 
 impl salvo::oapi::EndpointOutRegister for CanonicalAuthenticatedResolution {
-    fn register(
-        components: &mut salvo::oapi::Components,
-        operation: &mut salvo::oapi::Operation,
-    ) {
+    fn register(components: &mut salvo::oapi::Components, operation: &mut salvo::oapi::Operation) {
         use salvo::oapi::{Response as OapiResponse, ToSchema};
 
         operation.responses.insert(
@@ -266,8 +263,7 @@ async fn ensure_current_record(
         if let Some(current) = current.as_ref()
             && current.record.record.service_id == identity.service_id
             && current.record.record.did == identity.did
-            && current.record.record.service_kind
-                == arkret_wire::ServiceKind::AuthServer.as_str()
+            && current.record.record.service_kind == arkret_wire::ServiceKind::AuthServer.as_str()
             && current.record.record.method_history_head == *history_head
             && current.record.record.version_id == identity.version_id
             && current.record.record.resolution_event_ref == resolution_event_ref
@@ -401,14 +397,14 @@ pub async fn open_service_resolution(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use arkret_models_identity::service_identity::ServiceRegistrationKey;
     use arkret_signatures::webvh::{
-        ServiceRegistrationInceptionInput,
-        prepare_service_registration_inception_with_did_key_seed,
+        ServiceRegistrationInceptionInput, prepare_service_registration_inception_with_did_key_seed,
     };
     use rand_chacha::ChaCha20Rng;
     use rand_core::SeedableRng;
+
+    use super::*;
 
     #[test]
     fn wrong_service_id_is_not_found() {

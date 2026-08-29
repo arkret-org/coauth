@@ -203,14 +203,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         .get_result::<PrincipalRow>(self.conn)
         .await
         .optional()?;
-        row.map(|row| {
-            Ok((
-                row.principal_id,
-                arkret_identifiers::Did::new(row.verified_did)
-                    .map_err(|_| DatabaseError::invalid_operation())?,
-            ))
-        })
-        .transpose()
+        row.map(principal_from_row).transpose()
     }
 
     async fn challenge_by_request(
@@ -635,6 +628,27 @@ struct PrincipalRow {
     principal_id: arkret_identifiers::DidCoreId,
     #[diesel(sql_type = Text)]
     verified_did: String,
+}
+
+fn principal_from_row(
+    row: PrincipalRow,
+) -> Result<(arkret_identifiers::DidCoreId, arkret_identifiers::Did), DatabaseError> {
+    let did = arkret_identifiers::Did::new(row.verified_did)
+        .map_err(|_| DatabaseError::invalid_operation())?;
+    ensure_did_projects_to_principal(&did, &row.principal_id)?;
+    Ok((row.principal_id, did))
+}
+
+fn ensure_did_projects_to_principal(
+    did: &arkret_identifiers::Did,
+    principal_id: &arkret_identifiers::DidCoreId,
+) -> Result<(), DatabaseError> {
+    if arkret_identifiers::project_did_to_core_id(did)
+        .map_or(true, |projected| &projected != principal_id)
+    {
+        return Err(DatabaseError::invalid_operation());
+    }
+    Ok(())
 }
 
 #[derive(QueryableByName)]
@@ -1070,6 +1084,9 @@ struct DidBindingChallengeRow {
 fn did_binding_challenge_from_row(
     row: DidBindingChallengeRow,
 ) -> Result<DidBindingChallengeRecord, DatabaseError> {
+    let did =
+        arkret_identifiers::Did::new(row.did).map_err(|_| DatabaseError::invalid_operation())?;
+    ensure_did_projects_to_principal(&did, &row.principal_id)?;
     Ok(DidBindingChallengeRecord {
         input: DidBindingChallengeInput {
             request_id: arkret_identifiers::RequestId::new(format!(
@@ -1084,8 +1101,7 @@ fn did_binding_challenge_from_row(
             account_subject: arkret_identifiers::Hash::new(row.account_subject)
                 .map_err(|_| DatabaseError::invalid_operation())?,
             principal_id: row.principal_id,
-            did: arkret_identifiers::Did::new(row.did)
-                .map_err(|_| DatabaseError::invalid_operation())?,
+            did,
             did_version_id: row.did_version_id,
             log_head_digest: arkret_identifiers::Hash::new(row.log_head_digest)
                 .map_err(|_| DatabaseError::invalid_operation())?,
@@ -1212,6 +1228,9 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
     if row.purpose != "account_binding_and_pcr_genesis" {
         return Err(DatabaseError::invalid_operation());
     }
+    let did =
+        arkret_identifiers::Did::new(row.did).map_err(|_| DatabaseError::invalid_operation())?;
+    ensure_did_projects_to_principal(&did, &row.principal_id)?;
     Ok(IdentityBindingChallengeRecord {
         request_id: arkret_identifiers::RequestId::new(format!("ak:request:{}", row.request_id))
             .map_err(|_| DatabaseError::invalid_operation())?,
@@ -1224,8 +1243,7 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
         account_subject: arkret_identifiers::Hash::new(row.account_subject)
             .map_err(|_| DatabaseError::invalid_operation())?,
         principal_id: row.principal_id,
-        did: arkret_identifiers::Did::new(row.did)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        did,
         operation_digest: arkret_identifiers::Hash::new(row.operation_digest)
             .map_err(|_| DatabaseError::invalid_operation())?,
         did_version_id: row.did_version_id,
@@ -1878,6 +1896,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             ),
             ..input
         };
+        ensure_did_projects_to_principal(&input.did, &input.principal_id)?;
         if let Some(existing) = self.challenge_by_request(input.request_id.uuid()).await? {
             if existing.request_digest != input.request_digest
                 || existing.service_account_id != input.service_account_id
@@ -1940,7 +1959,9 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             input.did_operation.clone(),
         )
         .map_err(|_| DatabaseError::invalid_operation())?;
-        if reserved.operation_digest != input.operation_digest {
+        if reserved.operation_digest != input.operation_digest
+            || reserved.principal_id != input.principal_id
+        {
             return Ok(IdentityBindingChallengeIssue::ReservationConflict);
         }
         if let Some(existing) = lease.reserved_identity.as_ref()
@@ -2073,6 +2094,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             expires_at: arkret_canonical::normalize_timestamp_canonical(input.expires_at),
             ..input
         };
+        ensure_did_projects_to_principal(&input.did, &input.principal_id)?;
         if let Some(existing) = self
             .did_binding_challenge_by_request(input.request_id.uuid())
             .await?
@@ -3051,8 +3073,10 @@ mod tests {
     use coauth_data::Ulid;
 
     use super::{
-        ExistingDidBindingChallengeDisposition, classify_existing_did_binding_challenge,
-        lease_quota_advisory_key, reserved_identity_matches_abandonment_checkpoint,
+        ExistingDidBindingChallengeDisposition, PrincipalRow,
+        classify_existing_did_binding_challenge, ensure_did_projects_to_principal,
+        lease_quota_advisory_key, principal_from_row,
+        reserved_identity_matches_abandonment_checkpoint,
     };
 
     #[test]
@@ -3111,6 +3135,25 @@ mod tests {
             &principal_id,
             "version-2",
         ));
+    }
+
+    #[test]
+    fn account_handoff_bound_principal_row_rejects_cross_binding_mismatch() {
+        let row = PrincipalRow {
+            principal_id: arkret_identifiers::DidCoreId::new(
+                "ak:did_core:webvh:expected".to_owned(),
+            )
+            .unwrap(),
+            verified_did: "did:webvh:other:principal.example".to_owned(),
+        };
+
+        assert!(principal_from_row(row).is_err());
+
+        let did =
+            arkret_identifiers::Did::new("did:webvh:other:principal.example".to_owned()).unwrap();
+        let principal_id =
+            arkret_identifiers::DidCoreId::new("ak:did_core:webvh:expected".to_owned()).unwrap();
+        assert!(ensure_did_projects_to_principal(&did, &principal_id).is_err());
     }
 
     #[test]

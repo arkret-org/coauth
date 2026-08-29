@@ -56,6 +56,14 @@ impl TryFrom<EnrollmentRow> for PrincipalServerTrustEnrollment {
                 .column("did")
                 .source(error)
         })?;
+        if arkret_identifiers::project_did_to_core_id(&did)
+            .map_or(true, |projected| projected != value.service_id)
+        {
+            return Err(
+                DatabaseInconsistencyError::on("principal_server_trust_enrollments")
+                    .column("service_id"),
+            );
+        }
         let source = PrincipalServerTrustSource::from_stored(&value.source).ok_or_else(|| {
             DatabaseInconsistencyError::on("principal_server_trust_enrollments").column("source")
         })?;
@@ -209,6 +217,11 @@ impl PrincipalServerTrustRepository for PgPrincipalServerTrustRepository<'_> {
         clock: &dyn Clock,
         params: NewPrincipalServerTrustEnrollment,
     ) -> Result<PrincipalServerTrustEnrollment, Self::Error> {
+        if arkret_identifiers::project_did_to_core_id(&params.did)
+            .map_or(true, |projected| projected != params.service_id)
+        {
+            return Err(DatabaseError::invalid_operation());
+        }
         let now = clock.now();
         let row = NewEnrollmentRow::from_params(&params, now);
         diesel::insert_into(principal_server_trust_enrollments::table)
@@ -237,6 +250,11 @@ impl PrincipalServerTrustRepository for PgPrincipalServerTrustRepository<'_> {
         expected_old_service_id: &arkret_identifiers::DidCoreId,
         params: NewPrincipalServerTrustEnrollment,
     ) -> Result<bool, Self::Error> {
+        if arkret_identifiers::project_did_to_core_id(&params.did)
+            .map_or(true, |projected| projected != params.service_id)
+        {
+            return Err(DatabaseError::invalid_operation());
+        }
         let changes = EnrollmentReplacement {
             canonical_endpoint: params.canonical_endpoint.clone(),
             service_id: params.service_id.clone(),
@@ -359,12 +377,15 @@ mod tests {
     use crate::PgRepositoryFactory;
 
     fn enrollment_params(name: &str, service_id: &str) -> NewPrincipalServerTrustEnrollment {
+        let scid = service_id
+            .strip_prefix("ak:did_core:webvh:")
+            .expect("fixture uses a webvh service id");
         NewPrincipalServerTrustEnrollment {
             name: name.to_owned(),
             canonical_endpoint: format!("https://{name}.example/"),
             service_id: arkret_identifiers::DidCoreId::new(service_id.to_owned())
                 .expect("valid service core id"),
-            did: arkret_identifiers::Did::new("did:webvh:QmFixture:soland.example".to_owned())
+            did: arkret_identifiers::Did::new(format!("did:webvh:{scid}:soland.example"))
                 .expect("valid DID"),
             method_history_head: "sha256:aa".to_owned(),
             version_id: "1-bb".to_owned(),
@@ -519,6 +540,80 @@ mod tests {
                 .is_none()
         );
 
+        repo.cancel().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn enrollment_rejects_mismatched_service_id_and_did_on_create_replace_and_read() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let clock = MockClock::default();
+        let name = format!("binding-{}", Uuid::now_v7().simple());
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
+
+        let mut mismatched = enrollment_params(&name, "ak:did_core:webvh:expected");
+        mismatched.did =
+            arkret_identifiers::Did::new("did:webvh:other:principal-server.example".to_owned())
+                .unwrap();
+        assert!(
+            repo.principal_server_trust()
+                .enroll(&clock, mismatched)
+                .await
+                .is_err()
+        );
+
+        let valid = enrollment_params(&name, "ak:did_core:webvh:expected");
+        repo.principal_server_trust()
+            .enroll(&clock, valid.clone())
+            .await
+            .unwrap();
+
+        let mut replacement = valid;
+        replacement.service_id =
+            arkret_identifiers::DidCoreId::new("ak:did_core:webvh:other".to_owned()).unwrap();
+        assert!(
+            repo.principal_server_trust()
+                .replace(
+                    &clock,
+                    &name,
+                    &arkret_identifiers::DidCoreId::new("ak:did_core:webvh:expected".to_owned(),)
+                        .unwrap(),
+                    replacement,
+                )
+                .await
+                .is_err()
+        );
+        repo.save().await.unwrap();
+
+        let mut conn = pool.get().await.unwrap();
+        diesel::update(
+            principal_server_trust_enrollments::table
+                .filter(principal_server_trust_enrollments::name.eq(&name)),
+        )
+        .set(
+            principal_server_trust_enrollments::did
+                .eq("did:webvh:corrupt:principal-server.example"),
+        )
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+        drop(conn);
+
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
+        assert!(
+            repo.principal_server_trust()
+                .find_by_name(&name)
+                .await
+                .is_err(),
+            "a syntactically valid but cross-bound corrupt row must fail closed"
+        );
         repo.cancel().await.unwrap();
     }
 }

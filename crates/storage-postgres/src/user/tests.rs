@@ -1594,3 +1594,76 @@ async fn principal_binding_refreshes_verified_snapshot_only_within_the_same_core
     );
     repo.save().await.unwrap();
 }
+
+#[tokio::test]
+async fn principal_binding_rejects_mismatched_admission_and_corrupt_row() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let factory = PgRepositoryFactory::new(pool.clone());
+    let label = uuid::Uuid::now_v7().simple().to_string();
+    let principal_id = format!("ak:did_core:webvh:z{label}");
+    let audience_id = "ak:did_core:web:principal-server.example";
+    let clock = MockClock::default();
+    let mut rng = ChaChaRng::seed_from_u64(76);
+
+    let mut repo = factory.create().await.unwrap();
+    let user = repo
+        .user()
+        .add(&mut rng, &clock, format!("alice-cross-binding-{label}"))
+        .await
+        .unwrap();
+    let mismatch = registration_binding_input(
+        audience_id,
+        principal_id.clone(),
+        "did:webvh:other:principal.example".to_owned(),
+        arkret_identifiers::Hash::new(format!("sha256:{}", "3".repeat(64))).unwrap(),
+        "1-mismatch",
+    );
+    assert!(
+        repo.principal_did()
+            .add_verified(&mut rng, &clock, &user, mismatch)
+            .await
+            .is_err(),
+        "storage admission must reject individually valid but mismatched IDs"
+    );
+
+    repo.principal_did()
+        .add_verified(
+            &mut rng,
+            &clock,
+            &user,
+            registration_binding_input(
+                audience_id,
+                principal_id.clone(),
+                format!("did:webvh:z{label}:principal.example"),
+                arkret_identifiers::Hash::new(format!("sha256:{}", "4".repeat(64))).unwrap(),
+                "1-valid",
+            ),
+        )
+        .await
+        .unwrap();
+    repo.save().await.unwrap();
+
+    let mut conn = pool.get().await.unwrap();
+    diesel::sql_query(
+        "UPDATE principal_did_bindings SET verified_did = $1 WHERE user_id = $2 AND audience_id = $3",
+    )
+    .bind::<diesel::sql_types::Text, _>("did:webvh:corrupt:principal.example")
+    .bind::<diesel::sql_types::Uuid, _>(uuid::Uuid::from(user.id))
+    .bind::<diesel::sql_types::Text, _>(audience_id)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    drop(conn);
+
+    let mut repo = factory.create().await.unwrap();
+    assert!(
+        repo.principal_did()
+            .get_for_user_and_audience(&user, audience_id)
+            .await
+            .is_err(),
+        "row decode must reject a syntactically valid cross-binding mismatch"
+    );
+    repo.cancel().await.unwrap();
+}

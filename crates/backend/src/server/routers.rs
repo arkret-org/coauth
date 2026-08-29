@@ -599,8 +599,8 @@ fn admin_subrouter() -> Router {
         account_dids, accounts, audit_feed, circle_capabilities, claims,
         collaboration_capabilities, connector_health, devices, invite_quarantine,
         notification_channels, notification_templates, oauth_clients, oauth_clients_i18n,
-        oauth_clients_register, oauth_sessions, organizations, personal_sessions,
-        policy_data, site_config, upstream_oauth_links, upstream_oauth_providers, user_emails,
+        oauth_clients_register, oauth_sessions, organizations, personal_sessions, policy_data,
+        site_config, upstream_oauth_links, upstream_oauth_providers, user_emails,
         user_registration_tokens, user_sessions, version,
     };
 

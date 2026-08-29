@@ -107,18 +107,27 @@ fn binding_from_row(row: PrincipalDidJoinedRow) -> Result<PrincipalDidBinding, D
             .row(id)
             .source(error)
     })?;
+    let verified_did = arkret_identifiers::Did::new(row.verified_did).map_err(|error| {
+        DatabaseInconsistencyError::on("principal_did_bindings")
+            .column("verified_did")
+            .row(id)
+            .source(error)
+    })?;
+    if arkret_identifiers::project_did_to_core_id(&verified_did)
+        .map_or(true, |projected| projected != row.principal_id)
+    {
+        return Err(DatabaseInconsistencyError::on("principal_did_bindings")
+            .column("verified_did")
+            .row(id)
+            .into());
+    }
     Ok(PrincipalDidBinding {
         id,
         user_id: Ulid::from(row.user_id),
         audience_id: row.audience_id,
         principal_id: row.principal_id,
         key_log_head,
-        verified_did: arkret_identifiers::Did::new(row.verified_did).map_err(|error| {
-            DatabaseInconsistencyError::on("principal_did_bindings")
-                .column("verified_did")
-                .row(id)
-                .source(error)
-        })?,
+        verified_did,
         verified_version_id: row.verified_version_id,
         binding_receipt,
         accepted_id: row.accepted_id,

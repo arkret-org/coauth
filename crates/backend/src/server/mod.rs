@@ -482,7 +482,6 @@ mod tests {
             unknown_body["type"],
             "https://arkret.org/problems/unsupported_operation_version"
         );
-
     }
 
     #[tokio::test]
