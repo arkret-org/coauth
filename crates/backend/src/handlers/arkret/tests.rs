@@ -209,6 +209,32 @@ fn assert_subject_id_occurs_once(raw_payload: &serde_json::Value, subject_id: &s
     );
 }
 
+#[test]
+fn debug_dpop_grant_outcome_carries_typed_service_account_id() {
+    let service_account_id = arkret_identifiers::ServiceAccountId::new("test-account").unwrap();
+    let outcome = DebugIssueDpopGrantOutcome {
+        grant_id: "ak:session_grant:test".to_owned(),
+        grant_jwt: "header.payload.signature".to_owned(),
+        dpop_jkt: "test-jkt".to_owned(),
+        service_account_id: service_account_id.clone(),
+        audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:test-audience")
+            .unwrap(),
+        scopes: vec!["ak.self.account.read.describe.v1".to_owned()],
+        expires_at: "2026-08-29T12:00:00.000Z".to_owned(),
+        principal_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:test-principal")
+            .unwrap(),
+    };
+
+    let encoded = serde_json::to_value(&outcome).unwrap();
+    assert_eq!(encoded["service_account_id"], service_account_id.as_str());
+    let decoded: DebugIssueDpopGrantOutcome = serde_json::from_value(encoded.clone()).unwrap();
+    assert_eq!(decoded.service_account_id, service_account_id);
+
+    let mut invalid = encoded;
+    invalid["service_account_id"] = serde_json::Value::String(String::new());
+    assert!(serde_json::from_value::<DebugIssueDpopGrantOutcome>(invalid).is_err());
+}
+
 /// Static server-to-server bearer the configured Principal Server presents on
 /// the session-grant introspection endpoint.
 const SESSION_GRANT_INTROSPECTION_BEARER: &str = "principal-example-introspection";
