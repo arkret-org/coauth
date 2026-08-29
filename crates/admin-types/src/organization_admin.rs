@@ -30,7 +30,7 @@ pub struct OrganizationPrincipalControl {
     /// evidence boundary.
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub did: Did,
+    pub organization_did: Did,
     pub principal_control_realm_id: String,
     pub control_stream_ref: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -53,7 +53,7 @@ impl From<coauth_data_model::OrganizationPrincipalControl> for OrganizationPrinc
         Self {
             id: value.id,
             organization_id: value.organization_id,
-            did: value.did,
+            organization_did: value.organization_did,
             principal_control_realm_id: value.principal_control_realm_id,
             control_stream_ref: value.control_stream_ref,
             pcr_frontier_digest: value.pcr_frontier_digest,
@@ -160,7 +160,7 @@ pub struct BootstrapOrganizationRequest {
     /// boundary. Its canonical projection MUST equal `organization_id`.
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub did: Did,
+    pub organization_did: Did,
     /// Event-derived Principal Control Realm id. It must equal a retype of
     /// `control_stream_ref` at bootstrap.
     pub principal_control_realm_id: String,

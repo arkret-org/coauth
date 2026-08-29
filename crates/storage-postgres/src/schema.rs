@@ -261,7 +261,7 @@ diesel::table! {
     organization_principal_controls (id) {
         id -> Uuid,
         organization_id -> Text,
-        did -> Text,
+        organization_did -> Text,
         principal_control_realm_id -> Text,
         control_stream_ref -> Text,
         pcr_frontier_digest -> Nullable<Text>,

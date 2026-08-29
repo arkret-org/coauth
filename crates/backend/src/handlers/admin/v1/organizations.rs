@@ -58,11 +58,11 @@ fn parse_organization_id(raw: &str) -> Result<DidCoreId, AppError> {
 }
 
 fn validate_organization_binding(body: &BootstrapOrganizationRequest) -> Result<(), AppError> {
-    let projected = project_did_to_core_id(&body.did)
+    let projected = project_did_to_core_id(&body.organization_did)
         .map_err(|e| AppError::bad_request(format!("invalid organization DID: {e}")))?;
     if projected != body.organization_id {
         return Err(AppError::bad_request(
-            "organization_id does not match the canonical projection of did",
+            "organization_id does not match the canonical projection of organization_did",
         ));
     }
     Ok(())
@@ -99,7 +99,7 @@ struct OrganizationControllerBootstrapTranscript<'a> {
     #[serde(rename = "type")]
     kind: &'static str,
     organization_id: &'a str,
-    did: &'a str,
+    organization_did: &'a str,
     principal_control_realm_id: &'a str,
     control_stream_ref: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -114,7 +114,7 @@ fn organization_controller_bootstrap_transcript_bytes(
     canonical_json_bytes(&OrganizationControllerBootstrapTranscript {
         kind: "org.arkret.coauth.organization_pcr.bootstrap.v1",
         organization_id: body.organization_id.as_str(),
-        did: body.did.as_str(),
+        organization_did: body.organization_did.as_str(),
         principal_control_realm_id: &body.principal_control_realm_id,
         control_stream_ref: &body.control_stream_ref,
         pcr_frontier_digest: body.pcr_frontier_digest.as_deref(),
@@ -153,7 +153,7 @@ async fn verify_organization_controller_proof(
         repo,
         did_resolver.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),
-        body.did.as_str(),
+        body.organization_did.as_str(),
         arkret_identity::DidBindingPurpose::OrganizationRegistry,
         crate::services::did_binding::high_risk_freshness(),
         crate::handlers::make_clock().now(),
@@ -173,7 +173,7 @@ async fn verify_organization_controller_proof(
         .iter()
         .find(|method| method.id == verification_method)
         .ok_or_else(|| AppError::bad_request("controller proof verification method not found"))?;
-    if method.controller != body.did.as_str() {
+    if method.controller != body.organization_did.as_str() {
         return Err(AppError::bad_request(
             "controller proof verification method is not controlled by the organization DID",
         ));
@@ -300,7 +300,7 @@ pub async fn bootstrap_handler(
             &*clock,
             NewOrganizationPrincipalControl {
                 organization_id: body.organization_id,
-                did: body.did,
+                organization_did: body.organization_did,
                 principal_control_realm_id: body.principal_control_realm_id,
                 control_stream_ref: body.control_stream_ref,
                 pcr_frontier_digest: body.pcr_frontier_digest,
@@ -627,7 +627,7 @@ mod tests {
         let did = Did::new(did.to_owned()).unwrap();
         BootstrapOrganizationRequest {
             organization_id: project_did_to_core_id(&did).unwrap(),
-            did,
+            organization_did: did,
             principal_control_realm_id: "ak:realm:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG"
                 .to_owned(),
             control_stream_ref: "ak:event:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG".to_owned(),
@@ -647,7 +647,7 @@ mod tests {
         assert_ne!(first_bytes, second_bytes);
 
         second.organization_id = first.organization_id.clone();
-        second.did = first.did.clone();
+        second.organization_did = first.organization_did.clone();
         second.pcr_frontier_digest = Some(format!("sha256:{}", "cd".repeat(32)));
         let changed_frontier = organization_controller_bootstrap_transcript_bytes(&second).unwrap();
         assert_ne!(first_bytes, changed_frontier);
@@ -658,7 +658,10 @@ mod tests {
             transcript["organization_id"],
             first.organization_id.as_str()
         );
-        assert_eq!(transcript["did"], first.did.as_str());
+        assert_eq!(
+            transcript["organization_did"],
+            first.organization_did.as_str()
+        );
         assert_eq!(
             transcript["profile"],
             "ak.profile.principal_control_realm.v1"
@@ -669,7 +672,7 @@ mod tests {
     fn bootstrap_body_without_control_stream_ref_fails_to_decode() {
         let body = serde_json::json!({
             "organization_id": "ak:did_core:web:org-a.example",
-            "did": "did:web:org-a.example",
+            "organization_did": "did:web:org-a.example",
             "principal_control_realm_id":
                 "ak:realm:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG",
             "authorization": { "kind": "did_controller_proof", "proof_jws": "header..signature" },

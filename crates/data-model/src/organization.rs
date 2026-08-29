@@ -50,7 +50,7 @@ pub struct OrganizationPrincipalControl {
     /// Exact resolvable organization DID accepted as bootstrap evidence.
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub did: Did,
+    pub organization_did: Did,
     pub principal_control_realm_id: String,
     /// Current organization control-stream head. Bootstrap seeds it with the
     /// accepted PCR create Event and rotation replaces it wholesale, so there

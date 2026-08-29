@@ -24,7 +24,7 @@ pub struct NewOrganizationPrincipalControl {
     /// Stable organization principal identity this control row governs.
     pub organization_id: DidCoreId,
     /// Exact resolvable organization DID accepted as bootstrap evidence.
-    pub did: Did,
+    pub organization_did: Did,
     /// Event-derived Realm id of the accepted PCR create Event named by
     /// `control_stream_ref`. Storage rejects a missing or mismatched pair.
     pub principal_control_realm_id: String,

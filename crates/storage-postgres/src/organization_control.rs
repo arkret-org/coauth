@@ -42,7 +42,7 @@ impl<'c> PgOrganizationControlRepository<'c> {
 struct ControlRow {
     id: Uuid,
     organization_id: DidCoreId,
-    did: String,
+    organization_did: String,
     principal_control_realm_id: String,
     control_stream_ref: String,
     pcr_frontier_digest: Option<String>,
@@ -79,15 +79,15 @@ impl TryFrom<ControlRow> for OrganizationPrincipalControl {
                     .column("control_stream_ref")
                     .row(id)
             })?;
-        let did = Did::new(value.did).map_err(|_| {
+        let organization_did = Did::new(value.organization_did).map_err(|_| {
             DatabaseInconsistencyError::on("organization_principal_controls")
-                .column("did")
+                .column("organization_did")
                 .row(id)
         })?;
         let projected_organization_id =
-            arkret_identifiers::project_did_to_core_id(&did).map_err(|_| {
+            arkret_identifiers::project_did_to_core_id(&organization_did).map_err(|_| {
                 DatabaseInconsistencyError::on("organization_principal_controls")
-                    .column("did")
+                    .column("organization_did")
                     .row(id)
             })?;
         if value.organization_id != projected_organization_id {
@@ -100,7 +100,7 @@ impl TryFrom<ControlRow> for OrganizationPrincipalControl {
         Ok(Self {
             id: id.to_string(),
             organization_id: value.organization_id,
-            did,
+            organization_did,
             principal_control_realm_id: principal_control_realm_id.to_string(),
             control_stream_ref: control_stream_ref.to_string(),
             pcr_frontier_digest: value.pcr_frontier_digest,
@@ -119,7 +119,7 @@ impl TryFrom<ControlRow> for OrganizationPrincipalControl {
 struct InsertableControl {
     id: Uuid,
     organization_id: DidCoreId,
-    did: String,
+    organization_did: String,
     principal_control_realm_id: String,
     control_stream_ref: String,
     pcr_frontier_digest: Option<String>,
@@ -276,9 +276,10 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
         let principal_control_realm_id =
             arkret_identifiers::RealmId::from_event_id(&create_event_id);
         let organization_id = params.organization_id;
-        let did = params.did;
-        let projected_organization_id = arkret_identifiers::project_did_to_core_id(&did)
-            .map_err(|_| DatabaseError::invalid_operation())?;
+        let organization_did = params.organization_did;
+        let projected_organization_id =
+            arkret_identifiers::project_did_to_core_id(&organization_did)
+                .map_err(|_| DatabaseError::invalid_operation())?;
         if organization_id != projected_organization_id {
             return Err(DatabaseError::invalid_operation());
         }
@@ -288,7 +289,7 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
         let row = InsertableControl {
             id: Uuid::from(id),
             organization_id: organization_id.clone(),
-            did: did.as_str().to_owned(),
+            organization_did: organization_did.as_str().to_owned(),
             principal_control_realm_id: principal_control_realm_id.to_string(),
             control_stream_ref: create_event_id.to_string(),
             pcr_frontier_digest: params.pcr_frontier_digest,
@@ -308,7 +309,7 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
         Ok(OrganizationPrincipalControl {
             id: id.to_string(),
             organization_id,
-            did,
+            organization_did,
             principal_control_realm_id: row.principal_control_realm_id,
             control_stream_ref: row.control_stream_ref,
             pcr_frontier_digest: row.pcr_frontier_digest,
@@ -541,7 +542,7 @@ mod tests {
             id: Uuid::now_v7(),
             organization_id: DidCoreId::new("ak:did_core:web:different.example".to_owned())
                 .unwrap(),
-            did: "did:web:organization.example".to_owned(),
+            organization_did: "did:web:organization.example".to_owned(),
             principal_control_realm_id: arkret_identifiers::RealmId::from_event_id(
                 &control_stream_ref,
             )
@@ -574,7 +575,7 @@ mod tests {
                 &Did::new(did.to_owned()).unwrap(),
             )
             .unwrap(),
-            did: Did::new(did.to_owned()).unwrap(),
+            organization_did: Did::new(did.to_owned()).unwrap(),
             principal_control_realm_id: arkret_identifiers::RealmId::from_event_id(
                 &create_event_id,
             )
@@ -642,7 +643,7 @@ mod tests {
             .unwrap()
             .expect("control persisted");
         assert_eq!(fetched.organization_id, organization_id);
-        assert_eq!(fetched.did.as_str(), did);
+        assert_eq!(fetched.organization_did.as_str(), did);
         assert_eq!(
             fetched.executed_by.as_ref().map(DidCoreId::as_str),
             Some("ak:did_core:web:admin.example")

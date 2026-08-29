@@ -265,7 +265,7 @@ CREATE TABLE public.circle_capability_grants (
 CREATE TABLE public.organization_principal_controls (
     id uuid NOT NULL,
     organization_id text NOT NULL,
-    did text NOT NULL,
+    organization_did text NOT NULL,
     principal_control_realm_id text NOT NULL,
     control_stream_ref text NOT NULL,
     pcr_frontier_digest text,
