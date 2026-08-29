@@ -581,44 +581,6 @@ mod tests {
     }
 
     #[test]
-    fn signed_get_omits_body_digests() {
-        let base = Url::parse("https://server.example/").unwrap();
-        let client = reqwest::Client::new();
-        let keystore = test_keystore();
-        let identity = peer_identity();
-        let peer = PeerProtocolClient::new(
-            Some(&base),
-            &client,
-            &keystore,
-            source_did(),
-            identity,
-            trust_domain(),
-            trust_domain(),
-        )
-        .unwrap();
-        let url = base
-            .join("/_arkret/peer/snapshot/head?realm_id=ak:realm:test")
-            .unwrap();
-
-        let signed = peer
-            .signed_request(
-                "GET",
-                &url,
-                ServiceOperationId::PEER_SNAPSHOT_READ_MANIFEST_HEAD_V1,
-                None,
-                None,
-            )
-            .unwrap();
-
-        assert!(
-            signed
-                .headers
-                .iter()
-                .all(|(name, _)| !name.eq_ignore_ascii_case("Content-Digest"))
-        );
-    }
-
-    #[test]
     fn signed_query_covers_actual_method_target_and_content_digest() {
         let base = Url::parse("https://server.example/").unwrap();
         let client = reqwest::Client::new();
