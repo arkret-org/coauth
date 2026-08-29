@@ -156,6 +156,10 @@ fn account_api_subrouters() -> (Router, Router) {
         .hoop(public_oidc_browser_cors())
         .hoop(crate::server::arkret_operation_selector_middleware)
         .push(Router::with_path("describe").get(arkret::server_describe))
+        .push(
+            Router::with_path("open/services/{service_id}/resolution")
+                .get(arkret::open_service_resolution),
+        )
         .push(Router::with_path("root/identity/describe").get(arkret::identity_describe))
         .push(Router::with_path("root/identity/resolve").post(arkret::identity_resolve))
         .push(Router::with_path("root/identity/document").get(arkret::identity_document))
@@ -531,6 +535,9 @@ async fn arkret_not_found(req: &Request, res: &mut Response) {
 }
 
 fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
+    if path.starts_with("/_arkret/open/services/") && path.ends_with("/resolution") {
+        return Some("GET");
+    }
     match path {
         "/_arkret/describe"
         | "/_arkret/root/identity/describe"

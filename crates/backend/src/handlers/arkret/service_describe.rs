@@ -9,6 +9,7 @@ use salvo::prelude::*;
 use serde::Serialize;
 
 use super::*;
+use crate::app_state::DepotExt as _;
 use crate::handlers::common::DepotExt;
 
 const CLAIMED_PROFILE_IDS: &[&str] = &[arkret_wire::ProfileId::AUTH_SERVER_V1];
@@ -604,6 +605,41 @@ pub(crate) async fn service_describe_from_depot(
             .copied()
             .unwrap_or(true),
     );
+    let pool = depot.get_pg_pool().ok_or_else(|| {
+        ArkretRouteError::Internal(Box::new(std::io::Error::other(
+            "PostgreSQL pool is unavailable",
+        )))
+    })?;
+    let bundle = crate::services::service_identity::load_durable_identity_bundle(pool)
+        .await
+        .map_err(|error| {
+            ArkretRouteError::Internal(Box::new(std::io::Error::other(error.to_string())))
+        })?;
+    if bundle.identity.identity.service_id != response.service_id
+        || bundle.identity.identity.did != response.service_resolution.did
+        || bundle.identity.identity.version_id != response.service_resolution.version_id
+    {
+        return Err(ArkretRouteError::Internal(Box::new(std::io::Error::other(
+            "durable service identity differs from ServiceDescribe",
+        ))));
+    }
+    let head = bundle.webvh_history_entries.last().ok_or_else(|| {
+        ArkretRouteError::Internal(Box::new(std::io::Error::other(
+            "durable service WebVH history is empty",
+        )))
+    })?;
+    let computed_head = arkret_wire::Hash::new(
+        arkret_canonical::canonical_sha256(head)
+            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+    )
+    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let registered_head = &bundle.identity.registration_receipt.log_head_digest;
+    if computed_head.as_ref() != registered_head {
+        return Err(ArkretRouteError::Internal(Box::new(std::io::Error::other(
+            "durable WebVH history head differs from the accepted registration receipt",
+        ))));
+    }
+    response.service_resolution.method_history_head = registered_head.clone();
     response.rate_limit_policy = Some(depot.limiter()?.advertised_public_lookup_policy());
     set_auth_metadata_oidc_clients(&mut response.auth_metadata, oidc_clients);
     response

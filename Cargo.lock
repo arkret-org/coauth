@@ -304,6 +304,7 @@ dependencies = [
  "diesel",
  "getrandom 0.2.17",
  "getrandom 0.4.2",
+ "salvo-oapi",
  "serde",
  "thiserror 2.0.18",
  "url",
@@ -341,6 +342,7 @@ dependencies = [
 name = "arkret-locale"
 version = "0.3.0"
 dependencies = [
+ "salvo-oapi",
  "serde",
 ]
 
@@ -404,6 +406,7 @@ dependencies = [
  "arkret-locale",
  "arkret-wire",
  "chrono",
+ "salvo-oapi",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -510,6 +513,7 @@ dependencies = [
  "idna",
  "precis-profiles",
  "regex",
+ "salvo-oapi",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

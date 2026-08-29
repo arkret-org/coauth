@@ -992,7 +992,7 @@ async fn load_stored(
 }
 
 fn decode_stored_identity(value: Value) -> StoredIdentityLoad {
-    match serde_json::from_value::<DidCoreIdentityBundle>(value) {
+    match decode_identity_bundle(value) {
         Ok(bundle) => match bundle.validate() {
             Ok(()) => StoredIdentityLoad::Loaded(Box::new(StoredIdentityRecord {
                 inception_operation: bundle.webvh_history_entries[0].clone(),
@@ -1002,6 +1002,35 @@ fn decode_stored_identity(value: Value) -> StoredIdentityLoad {
         },
         Err(error) => StoredIdentityLoad::Invalid(error.to_string()),
     }
+}
+
+/// Decode the durable identity bundle while ignoring Coauth-owned sibling
+/// state stored in the same singleton JSON document. The SDK bundle is a
+/// closed wire object, so local persistence extensions must never be passed
+/// into its deserializer.
+fn decode_identity_bundle(mut value: Value) -> serde_json::Result<DidCoreIdentityBundle> {
+    if let Some(object) = value.as_object_mut() {
+        object.remove("service_resolution");
+    }
+    serde_json::from_value(value)
+}
+
+/// Load and validate the durable service identity used by public authenticated
+/// service-resolution responses.
+pub(crate) async fn load_durable_identity_bundle(
+    pool: &diesel_async::pooled_connection::deadpool::Pool<diesel_async::AsyncPgConnection>,
+) -> anyhow::Result<DidCoreIdentityBundle> {
+    let mut connection = pool.get().await?;
+    let row = diesel::sql_query("SELECT identity FROM service_identity WHERE id = 1")
+        .get_result::<IdentityRow>(&mut *connection)
+        .await
+        .optional()?
+        .ok_or_else(|| anyhow::anyhow!("durable service identity is missing"))?;
+    let bundle = decode_identity_bundle(row.identity)?;
+    bundle
+        .validate()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    Ok(bundle)
 }
 
 async fn save_stored(
@@ -1022,7 +1051,10 @@ async fn save_stored(
     let mut connection = repository_factory.pool().get().await?;
     diesel::sql_query(
         "INSERT INTO service_identity (id, identity, updated_at) VALUES (1, $1, now()) \
-         ON CONFLICT (id) DO UPDATE SET identity = EXCLUDED.identity, updated_at = now()",
+         ON CONFLICT (id) DO UPDATE SET identity = EXCLUDED.identity || \
+         CASE WHEN service_identity.identity ? 'service_resolution' \
+              THEN jsonb_build_object('service_resolution', service_identity.identity->'service_resolution') \
+              ELSE '{}'::jsonb END, updated_at = now()",
     )
     .bind::<Jsonb, _>(serde_json::to_value(persisted)?)
     .execute(&mut *connection)

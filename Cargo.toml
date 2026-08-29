@@ -116,7 +116,7 @@ arkret-locale = {version = "0.3.0",path = "../arkret-rust-sdk/crates/locale",def
 arkret-models-collaboration = {version = "0.3.0",path = "../arkret-rust-sdk/crates/models-collaboration",default-features = false}
 arkret-models-crypto = {version = "0.3.0",path = "../arkret-rust-sdk/crates/models-crypto",default-features = false}
 arkret-models-discovery = {version = "0.3.0",path = "../arkret-rust-sdk/crates/models-discovery",default-features = false}
-arkret-models-identity = {version = "0.3.0",path = "../arkret-rust-sdk/crates/models-identity",default-features = false}
+arkret-models-identity = {version = "0.3.0",path = "../arkret-rust-sdk/crates/models-identity",default-features = false,features = ["openapi"]}
 arkret-policy = {version = "0.3.0",path = "../arkret-rust-sdk/crates/policy",default-features = false}
 arkret-schema = {version = "0.3.0",path = "../arkret-rust-sdk/crates/schema",default-features = false}
 arkret-wire = {version = "0.3.0",path = "../arkret-rust-sdk/crates/wire",default-features = false}

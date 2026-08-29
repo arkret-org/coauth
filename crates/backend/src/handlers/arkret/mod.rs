@@ -8,6 +8,7 @@ mod handle_claim;
 mod identity;
 mod recovery_authority;
 mod service_describe;
+mod service_resolution;
 mod session_grant;
 mod test_chaos;
 
@@ -21,6 +22,7 @@ pub use handle_claim::*;
 pub use identity::*;
 pub use recovery_authority::*;
 pub use service_describe::*;
+pub use service_resolution::*;
 pub use session_grant::*;
 
 #[cfg(test)]
@@ -653,6 +655,39 @@ impl Scribe for ArkretRouteError {
             None => envelope,
         };
         render_problem(res, status, envelope);
+    }
+}
+
+impl salvo::oapi::EndpointOutRegister for ArkretRouteError {
+    fn register(_components: &mut salvo::oapi::Components, operation: &mut salvo::oapi::Operation) {
+        use salvo::oapi::{BasicType, Content, Object, Response};
+
+        let error_schema = Object::new()
+            .property("type", Object::new().schema_type(BasicType::String))
+            .property("title", Object::new().schema_type(BasicType::String))
+            .property("status", Object::new().schema_type(BasicType::Integer))
+            .property("detail", Object::new().schema_type(BasicType::String))
+            .required("type")
+            .required("title")
+            .required("status");
+        for (status, description) in [
+            ("400", "Bad request"),
+            ("401", "Unauthenticated"),
+            ("403", "Forbidden"),
+            ("404", "Not found"),
+            ("409", "Conflict"),
+            ("429", "Rate limited"),
+            ("500", "Internal server error"),
+            ("503", "Temporarily unavailable"),
+        ] {
+            operation.responses.insert(
+                status,
+                salvo::oapi::RefOr::Type(Response::new(description).add_content(
+                    "application/problem+json",
+                    Content::new(error_schema.clone()),
+                )),
+            );
+        }
     }
 }
 
