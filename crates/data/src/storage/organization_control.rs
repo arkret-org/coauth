@@ -21,8 +21,10 @@ use crate::repository_impl;
 /// this struct only carries the verified outcome to persist.
 #[derive(Debug, Clone)]
 pub struct NewOrganizationPrincipalControl {
-    /// Organization principal DID this control row governs.
-    pub organization_did: Did,
+    /// Stable organization principal identity this control row governs.
+    pub organization_id: DidCoreId,
+    /// Exact resolvable organization DID accepted as bootstrap evidence.
+    pub did: Did,
     /// Event-derived Realm id of the accepted PCR create Event named by
     /// `control_stream_ref`. Storage rejects a missing or mismatched pair.
     pub principal_control_realm_id: String,
@@ -62,10 +64,10 @@ pub struct RotatedOrganizationControl {
 pub struct NewOrganizationDelegation {
     /// Stable delegation reference (unique).
     pub delegation_ref: String,
-    /// Organization principal DID that granted the delegation.
-    pub organization_did: Did,
-    /// DID the delegation is granted to (the delegate).
-    pub delegate_did: Did,
+    /// Stable organization principal identity that granted the delegation.
+    pub organization_id: DidCoreId,
+    /// Stable principal identity the delegation is granted to.
+    pub delegate_id: DidCoreId,
     /// Issuer role the delegate may act under.
     pub issuer_role: RealmOrganizationIssuerRole,
     /// Delegation purposes (e.g. `principal_control_realm_bootstrap`).
@@ -89,7 +91,7 @@ pub trait OrganizationControlRepository: Send + Sync {
     type Error;
 
     /// Persist a freshly-bootstrapped organization principal control row. The
-    /// `(organization_did)` unique constraint surfaces a re-bootstrap attempt
+    /// `(organization_id)` unique constraint surfaces a re-bootstrap attempt
     /// as an error.
     async fn bootstrap(
         &mut self,
@@ -98,10 +100,10 @@ pub trait OrganizationControlRepository: Send + Sync {
         params: NewOrganizationPrincipalControl,
     ) -> Result<OrganizationPrincipalControl, Self::Error>;
 
-    /// Fetch the control row for an organization DID.
-    async fn get_control_by_did(
+    /// Fetch the control row for a stable organization identity.
+    async fn get_control_by_id(
         &mut self,
-        organization_did: &str,
+        organization_id: &DidCoreId,
     ) -> Result<Option<OrganizationPrincipalControl>, Self::Error>;
 
     /// Atomically replace the organization's control state with the state a
@@ -109,7 +111,7 @@ pub trait OrganizationControlRepository: Send + Sync {
     async fn replace_control_state(
         &mut self,
         clock: &dyn Clock,
-        organization_did: &str,
+        organization_id: &DidCoreId,
         rotated: RotatedOrganizationControl,
     ) -> Result<Option<OrganizationPrincipalControl>, Self::Error>;
 
@@ -128,10 +130,10 @@ pub trait OrganizationControlRepository: Send + Sync {
         delegation_ref: &str,
     ) -> Result<Option<OrganizationDelegation>, Self::Error>;
 
-    /// List all delegations anchored to an organization DID, newest first.
+    /// List all delegations anchored to a stable organization identity, newest first.
     async fn list_delegations_for_org(
         &mut self,
-        organization_did: &str,
+        organization_id: &DidCoreId,
     ) -> Result<Vec<OrganizationDelegation>, Self::Error>;
 
     /// Revoke an active delegation by `delegation_ref`. Returns `None` when the
@@ -139,7 +141,7 @@ pub trait OrganizationControlRepository: Send + Sync {
     async fn revoke_delegation(
         &mut self,
         clock: &dyn Clock,
-        organization_did: &str,
+        organization_id: &DidCoreId,
         delegation_ref: &str,
     ) -> Result<Option<OrganizationDelegation>, Self::Error>;
 
@@ -148,7 +150,7 @@ pub trait OrganizationControlRepository: Send + Sync {
     async fn renew_delegation(
         &mut self,
         clock: &dyn Clock,
-        organization_did: &str,
+        organization_id: &DidCoreId,
         delegation_ref: &str,
         valid_until: Option<DateTime<Utc>>,
     ) -> Result<Option<OrganizationDelegation>, Self::Error>;
@@ -161,14 +163,14 @@ repository_impl!(OrganizationControlRepository:
         clock: &dyn Clock,
         params: NewOrganizationPrincipalControl,
     ) -> Result<OrganizationPrincipalControl, Self::Error>;
-    async fn get_control_by_did(
+    async fn get_control_by_id(
         &mut self,
-        organization_did: &str,
+        organization_id: &DidCoreId,
     ) -> Result<Option<OrganizationPrincipalControl>, Self::Error>;
     async fn replace_control_state(
         &mut self,
         clock: &dyn Clock,
-        organization_did: &str,
+        organization_id: &DidCoreId,
         rotated: RotatedOrganizationControl,
     ) -> Result<Option<OrganizationPrincipalControl>, Self::Error>;
     async fn add_delegation(
@@ -183,18 +185,18 @@ repository_impl!(OrganizationControlRepository:
     ) -> Result<Option<OrganizationDelegation>, Self::Error>;
     async fn list_delegations_for_org(
         &mut self,
-        organization_did: &str,
+        organization_id: &DidCoreId,
     ) -> Result<Vec<OrganizationDelegation>, Self::Error>;
     async fn revoke_delegation(
         &mut self,
         clock: &dyn Clock,
-        organization_did: &str,
+        organization_id: &DidCoreId,
         delegation_ref: &str,
     ) -> Result<Option<OrganizationDelegation>, Self::Error>;
     async fn renew_delegation(
         &mut self,
         clock: &dyn Clock,
-        organization_did: &str,
+        organization_id: &DidCoreId,
         delegation_ref: &str,
         valid_until: Option<DateTime<Utc>>,
     ) -> Result<Option<OrganizationDelegation>, Self::Error>;

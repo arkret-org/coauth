@@ -25,7 +25,12 @@ pub struct OrganizationPrincipalControl {
     pub id: String,
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub organization_did: Did,
+    pub organization_id: DidCoreId,
+    /// Exact resolvable organization DID accepted at the bootstrap identity
+    /// evidence boundary.
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub did: Did,
     pub principal_control_realm_id: String,
     pub control_stream_ref: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -47,7 +52,8 @@ impl From<coauth_data_model::OrganizationPrincipalControl> for OrganizationPrinc
     fn from(value: coauth_data_model::OrganizationPrincipalControl) -> Self {
         Self {
             id: value.id,
-            organization_did: value.organization_did,
+            organization_id: value.organization_id,
+            did: value.did,
             principal_control_realm_id: value.principal_control_realm_id,
             control_stream_ref: value.control_stream_ref,
             pcr_frontier_digest: value.pcr_frontier_digest,
@@ -71,10 +77,10 @@ pub struct OrganizationDelegation {
     pub delegation_ref: String,
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub organization_did: Did,
+    pub organization_id: DidCoreId,
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub delegate_did: Did,
+    pub delegate_id: DidCoreId,
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
     pub issuer_role: RealmOrganizationIssuerRole,
@@ -106,8 +112,8 @@ impl From<coauth_data_model::OrganizationDelegation> for OrganizationDelegation 
         Self {
             id: value.id,
             delegation_ref: value.delegation_ref,
-            organization_did: value.organization_did,
-            delegate_did: value.delegate_did,
+            organization_id: value.organization_id,
+            delegate_id: value.delegate_id,
             issuer_role: value.issuer_role,
             purposes: value.purposes,
             covered_relationships: value.covered_relationships,
@@ -146,10 +152,15 @@ pub enum BootstrapAuthorizationInput {
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
 pub struct BootstrapOrganizationRequest {
-    /// Organization principal DID being bootstrapped.
+    /// Stable identity of the organization principal being bootstrapped.
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub organization_did: Did,
+    pub organization_id: DidCoreId,
+    /// Exact resolvable organization DID accepted at this bootstrap identity
+    /// boundary. Its canonical projection MUST equal `organization_id`.
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub did: Did,
     /// Event-derived Principal Control Realm id. It must equal a retype of
     /// `control_stream_ref` at bootstrap.
     pub principal_control_realm_id: String,
@@ -163,7 +174,8 @@ pub struct BootstrapOrganizationRequest {
     pub authorization: BootstrapAuthorizationInput,
 }
 
-/// Request body for `POST /_coauth/admin/organizations/{org}/delegations`.
+/// Request body for
+/// `POST /_coauth/admin/organizations/{organization_id}/delegations`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "schema",
@@ -172,10 +184,11 @@ pub struct BootstrapOrganizationRequest {
 pub struct RecordOrganizationDelegationRequest {
     /// Object ref clients put into `authorization.delegation_ref`.
     pub delegation_ref: String,
-    /// The delegated principal (Account Authority / governance service DID).
+    /// Stable identity of the delegated principal (Account Authority /
+    /// governance service).
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub delegate_did: Did,
+    pub delegate_id: DidCoreId,
     /// Issuer role the delegate may act as.
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
@@ -201,7 +214,8 @@ pub struct RecordOrganizationDelegationRequest {
     pub valid_until: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-/// Request body for `POST /_coauth/admin/organizations/{org}/delegations/{ref}/renew`.
+/// Request body for
+/// `POST /_coauth/admin/organizations/{organization_id}/delegations/{ref}/renew`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "schema",
@@ -213,7 +227,8 @@ pub struct RenewOrganizationDelegationRequest {
     pub valid_until: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-/// Request body for `POST /_coauth/admin/organizations/{org}/rotate-controller`.
+/// Request body for
+/// `POST /_coauth/admin/organizations/{organization_id}/rotate-controller`.
 ///
 /// The body states the **complete** control state that must hold after the
 /// rotation, not a partial changeset. A missing field is therefore never an
@@ -235,7 +250,8 @@ pub struct RotateOrganizationControllerRequest {
     pub pcr_frontier_digest: Option<String>,
 }
 
-/// Request body for `POST /_coauth/admin/organizations/{org}/statements`.
+/// Request body for
+/// `POST /_coauth/admin/organizations/{organization_id}/statements`.
 ///
 /// Produces an organization-side `ak.realm.organization` statement. The signed
 /// statement is returned as the SDK [`arkret_models_collaboration::RealmOrganizationPayload`]
@@ -286,7 +302,7 @@ fn default_active_status() -> RealmOrganizationStatus {
     RealmOrganizationStatus::Active
 }
 
-/// Response body for `GET /_coauth/admin/organizations/{org}`.
+/// Response body for `GET /_coauth/admin/organizations/{organization_id}`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "schema",
@@ -299,7 +315,8 @@ pub struct OrganizationControlView {
     pub delegations: Vec<OrganizationDelegation>,
 }
 
-/// Response body for `GET /_coauth/admin/organizations/{org}/delegations`.
+/// Response body for
+/// `GET /_coauth/admin/organizations/{organization_id}/delegations`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "schema",

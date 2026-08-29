@@ -41,7 +41,8 @@ impl<'c> PgOrganizationControlRepository<'c> {
 #[diesel(table_name = organization_principal_controls)]
 struct ControlRow {
     id: Uuid,
-    organization_did: String,
+    organization_id: DidCoreId,
+    did: String,
     principal_control_realm_id: String,
     control_stream_ref: String,
     pcr_frontier_digest: Option<String>,
@@ -78,14 +79,28 @@ impl TryFrom<ControlRow> for OrganizationPrincipalControl {
                     .column("control_stream_ref")
                     .row(id)
             })?;
-        let organization_did = Did::new(value.organization_did).map_err(|_| {
+        let did = Did::new(value.did).map_err(|_| {
             DatabaseInconsistencyError::on("organization_principal_controls")
-                .column("organization_did")
+                .column("did")
                 .row(id)
         })?;
+        let projected_organization_id =
+            arkret_identifiers::project_did_to_core_id(&did).map_err(|_| {
+                DatabaseInconsistencyError::on("organization_principal_controls")
+                    .column("did")
+                    .row(id)
+            })?;
+        if value.organization_id != projected_organization_id {
+            return Err(
+                DatabaseInconsistencyError::on("organization_principal_controls")
+                    .column("organization_id")
+                    .row(id),
+            );
+        }
         Ok(Self {
             id: id.to_string(),
-            organization_did,
+            organization_id: value.organization_id,
+            did,
             principal_control_realm_id: principal_control_realm_id.to_string(),
             control_stream_ref: control_stream_ref.to_string(),
             pcr_frontier_digest: value.pcr_frontier_digest,
@@ -103,7 +118,8 @@ impl TryFrom<ControlRow> for OrganizationPrincipalControl {
 #[diesel(table_name = organization_principal_controls)]
 struct InsertableControl {
     id: Uuid,
-    organization_did: String,
+    organization_id: DidCoreId,
+    did: String,
     principal_control_realm_id: String,
     control_stream_ref: String,
     pcr_frontier_digest: Option<String>,
@@ -122,8 +138,8 @@ struct InsertableControl {
 struct DelegationRow {
     id: Uuid,
     delegation_ref: String,
-    organization_did: String,
-    delegate_did: String,
+    organization_id: DidCoreId,
+    delegate_id: DidCoreId,
     issuer_role: String,
     purposes: Vec<String>,
     covered_relationships: Vec<String>,
@@ -161,14 +177,11 @@ impl TryFrom<DelegationRow> for OrganizationDelegation {
             .iter()
             .map(|raw| parse_control_scope(raw).ok_or_else(|| on_err("covered_control_scopes")))
             .collect::<Result<Vec<_>, _>>()?;
-        let organization_did =
-            Did::new(value.organization_did).map_err(|_| on_err("organization_did"))?;
-        let delegate_did = Did::new(value.delegate_did).map_err(|_| on_err("delegate_did"))?;
         Ok(Self {
             id: id.to_string(),
             delegation_ref: value.delegation_ref,
-            organization_did,
-            delegate_did,
+            organization_id: value.organization_id,
+            delegate_id: value.delegate_id,
             issuer_role,
             purposes: value.purposes,
             covered_relationships,
@@ -189,8 +202,8 @@ impl TryFrom<DelegationRow> for OrganizationDelegation {
 struct InsertableDelegation {
     id: Uuid,
     delegation_ref: String,
-    organization_did: String,
-    delegate_did: String,
+    organization_id: DidCoreId,
+    delegate_id: DidCoreId,
     issuer_role: String,
     purposes: Vec<String>,
     covered_relationships: Vec<String>,
@@ -262,13 +275,20 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
             .map_err(|_| DatabaseError::invalid_operation())?;
         let principal_control_realm_id =
             arkret_identifiers::RealmId::from_event_id(&create_event_id);
-        let organization_did = params.organization_did;
+        let organization_id = params.organization_id;
+        let did = params.did;
+        let projected_organization_id = arkret_identifiers::project_did_to_core_id(&did)
+            .map_err(|_| DatabaseError::invalid_operation())?;
+        if organization_id != projected_organization_id {
+            return Err(DatabaseError::invalid_operation());
+        }
         if supplied_realm_id != principal_control_realm_id {
             return Err(DatabaseError::invalid_operation());
         }
         let row = InsertableControl {
             id: Uuid::from(id),
-            organization_did: organization_did.as_str().to_owned(),
+            organization_id: organization_id.clone(),
+            did: did.as_str().to_owned(),
             principal_control_realm_id: principal_control_realm_id.to_string(),
             control_stream_ref: create_event_id.to_string(),
             pcr_frontier_digest: params.pcr_frontier_digest,
@@ -287,7 +307,8 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
 
         Ok(OrganizationPrincipalControl {
             id: id.to_string(),
-            organization_did,
+            organization_id,
+            did,
             principal_control_realm_id: row.principal_control_realm_id,
             control_stream_ref: row.control_stream_ref,
             pcr_frontier_digest: row.pcr_frontier_digest,
@@ -300,13 +321,13 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
         })
     }
 
-    #[tracing::instrument(name = "db.organization_control.get_control_by_did", skip_all, err)]
-    async fn get_control_by_did(
+    #[tracing::instrument(name = "db.organization_control.get_control_by_id", skip_all, err)]
+    async fn get_control_by_id(
         &mut self,
-        organization_did: &str,
+        organization_id: &DidCoreId,
     ) -> Result<Option<OrganizationPrincipalControl>, Self::Error> {
         organization_principal_controls::table
-            .filter(organization_principal_controls::organization_did.eq(organization_did))
+            .filter(organization_principal_controls::organization_id.eq(organization_id))
             .select(ControlRow::as_select())
             .first::<ControlRow>(self.conn)
             .await
@@ -320,13 +341,13 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
     async fn replace_control_state(
         &mut self,
         clock: &dyn Clock,
-        organization_did: &str,
+        organization_id: &DidCoreId,
         rotated: RotatedOrganizationControl,
     ) -> Result<Option<OrganizationPrincipalControl>, Self::Error> {
         let now = clock.now();
         diesel::update(
             organization_principal_controls::table
-                .filter(organization_principal_controls::organization_did.eq(organization_did)),
+                .filter(organization_principal_controls::organization_id.eq(organization_id)),
         )
         .set((
             organization_principal_controls::control_stream_ref
@@ -353,13 +374,13 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
     ) -> Result<OrganizationDelegation, Self::Error> {
         let now = clock.now();
         let id = new_id(now, rng);
-        let organization_did = params.organization_did;
-        let delegate_did = params.delegate_did;
+        let organization_id = params.organization_id;
+        let delegate_id = params.delegate_id;
         let row = InsertableDelegation {
             id: Uuid::from(id),
             delegation_ref: params.delegation_ref,
-            organization_did: organization_did.as_str().to_owned(),
-            delegate_did: delegate_did.as_str().to_owned(),
+            organization_id: organization_id.clone(),
+            delegate_id: delegate_id.clone(),
             issuer_role: issuer_role_str(params.issuer_role),
             purposes: params.purposes,
             covered_relationships: params
@@ -390,8 +411,8 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
         Ok(OrganizationDelegation {
             id: id.to_string(),
             delegation_ref: row.delegation_ref,
-            organization_did,
-            delegate_did,
+            organization_id,
+            delegate_id,
             issuer_role: params.issuer_role,
             purposes: row.purposes,
             covered_relationships: params.covered_relationships,
@@ -429,10 +450,10 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
     )]
     async fn list_delegations_for_org(
         &mut self,
-        organization_did: &str,
+        organization_id: &DidCoreId,
     ) -> Result<Vec<OrganizationDelegation>, Self::Error> {
         organization_delegations::table
-            .filter(organization_delegations::organization_did.eq(organization_did))
+            .filter(organization_delegations::organization_id.eq(organization_id))
             .order(organization_delegations::created_at.desc())
             .select(DelegationRow::as_select())
             .load::<DelegationRow>(self.conn)
@@ -447,13 +468,13 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
     async fn revoke_delegation(
         &mut self,
         clock: &dyn Clock,
-        organization_did: &str,
+        organization_id: &DidCoreId,
         delegation_ref: &str,
     ) -> Result<Option<OrganizationDelegation>, Self::Error> {
         let now = clock.now();
         diesel::update(
             organization_delegations::table
-                .filter(organization_delegations::organization_did.eq(organization_did))
+                .filter(organization_delegations::organization_id.eq(organization_id))
                 .filter(organization_delegations::delegation_ref.eq(delegation_ref))
                 .filter(organization_delegations::revoked_at.is_null()),
         )
@@ -475,14 +496,14 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
     async fn renew_delegation(
         &mut self,
         clock: &dyn Clock,
-        organization_did: &str,
+        organization_id: &DidCoreId,
         delegation_ref: &str,
         valid_until: Option<DateTime<Utc>>,
     ) -> Result<Option<OrganizationDelegation>, Self::Error> {
         let now = clock.now();
         diesel::update(
             organization_delegations::table
-                .filter(organization_delegations::organization_did.eq(organization_did))
+                .filter(organization_delegations::organization_id.eq(organization_id))
                 .filter(organization_delegations::delegation_ref.eq(delegation_ref))
                 .filter(organization_delegations::revoked_at.is_null()),
         )
@@ -510,13 +531,50 @@ mod tests {
     use super::*;
     use crate::PgRepositoryFactory;
 
+    #[test]
+    fn control_row_rejects_an_organization_id_that_does_not_project_from_the_did() {
+        let control_stream_ref = arkret_identifiers::EventId::new(
+            "ak:event:AQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUF".to_owned(),
+        )
+        .unwrap();
+        let row = ControlRow {
+            id: Uuid::now_v7(),
+            organization_id: DidCoreId::new("ak:did_core:web:different.example".to_owned())
+                .unwrap(),
+            did: "did:web:organization.example".to_owned(),
+            principal_control_realm_id: arkret_identifiers::RealmId::from_event_id(
+                &control_stream_ref,
+            )
+            .to_string(),
+            control_stream_ref: control_stream_ref.to_string(),
+            pcr_frontier_digest: None,
+            bootstrap_authorization: OrganizationBootstrapAuthorization::DidControllerProof
+                .as_str()
+                .to_owned(),
+            bootstrap_delegation_ref: None,
+            executed_by: None,
+            bootstrap_proof_digest: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        assert!(
+            OrganizationPrincipalControl::try_from(row).is_err(),
+            "row decoding must fail closed when stable organization id and exact DID are mismatched"
+        );
+    }
+
     fn control(did: &str) -> NewOrganizationPrincipalControl {
         let create_event_id = arkret_identifiers::EventId::new(
             "ak:event:AQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUF".to_owned(),
         )
         .unwrap();
         NewOrganizationPrincipalControl {
-            organization_did: Did::new(did.to_owned()).unwrap(),
+            organization_id: arkret_identifiers::project_did_to_core_id(
+                &Did::new(did.to_owned()).unwrap(),
+            )
+            .unwrap(),
+            did: Did::new(did.to_owned()).unwrap(),
             principal_control_realm_id: arkret_identifiers::RealmId::from_event_id(
                 &create_event_id,
             )
@@ -537,8 +595,11 @@ mod tests {
     ) -> NewOrganizationDelegation {
         NewOrganizationDelegation {
             delegation_ref: reference.to_owned(),
-            organization_did: Did::new(org.to_owned()).unwrap(),
-            delegate_did: Did::new("did:web:server.acme.example".to_owned()).unwrap(),
+            organization_id: arkret_identifiers::project_did_to_core_id(
+                &Did::new(org.to_owned()).unwrap(),
+            )
+            .unwrap(),
+            delegate_id: DidCoreId::new("ak:did_core:web:server.acme.example".to_owned()).unwrap(),
             issuer_role: RealmOrganizationIssuerRole::GovernanceService,
             purposes: vec!["principal_control_realm_bootstrap".to_owned()],
             covered_relationships: vec![RealmOrganizationRelationship::Owner],
@@ -558,6 +619,8 @@ mod tests {
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(73);
         let did = format!("did:web:{}.example", uuid::Uuid::now_v7());
+        let organization_id =
+            arkret_identifiers::project_did_to_core_id(&Did::new(did.clone()).unwrap()).unwrap();
         let reference = format!("ak:grant:{}", uuid::Uuid::now_v7());
 
         let mut repo = factory.create().await.unwrap();
@@ -574,11 +637,12 @@ mod tests {
         let mut repo = factory.create().await.unwrap();
         let fetched = repo
             .organization_control()
-            .get_control_by_did(&did)
+            .get_control_by_id(&organization_id)
             .await
             .unwrap()
             .expect("control persisted");
-        assert_eq!(fetched.organization_did.as_str(), did);
+        assert_eq!(fetched.organization_id, organization_id);
+        assert_eq!(fetched.did.as_str(), did);
         assert_eq!(
             fetched.executed_by.as_ref().map(DidCoreId::as_str),
             Some("ak:did_core:web:admin.example")
@@ -595,7 +659,7 @@ mod tests {
 
         let revoked = repo
             .organization_control()
-            .revoke_delegation(&clock, &did, &reference)
+            .revoke_delegation(&clock, &organization_id, &reference)
             .await
             .unwrap()
             .expect("active delegation revocable");
@@ -627,6 +691,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn bootstrap_rejects_an_organization_id_that_does_not_project_from_the_did() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let factory = PgRepositoryFactory::new(pool.clone());
+        let clock = MockClock::default();
+        let mut rng = ChaChaRng::seed_from_u64(76);
+        let did = format!("did:web:{}.example", uuid::Uuid::now_v7());
+        let mut input = control(&did);
+        input.organization_id =
+            DidCoreId::new("ak:did_core:web:different.example".to_owned()).unwrap();
+
+        let mut repo = factory.create().await.unwrap();
+        assert!(
+            repo.organization_control()
+                .bootstrap(&mut rng, &clock, input)
+                .await
+                .is_err(),
+            "accepted bootstrap evidence must bind the stable organization id to the exact DID"
+        );
+        repo.cancel().await.unwrap();
+    }
+
+    #[tokio::test]
     async fn rotation_replaces_the_whole_control_state() {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
@@ -635,6 +723,8 @@ mod tests {
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(75);
         let did = format!("did:web:{}.example", uuid::Uuid::now_v7());
+        let organization_id =
+            arkret_identifiers::project_did_to_core_id(&Did::new(did.clone()).unwrap()).unwrap();
         let rotated_head = arkret_identifiers::EventId::new(
             "ak:event:AQcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH".to_owned(),
         )
@@ -656,7 +746,7 @@ mod tests {
             .organization_control()
             .replace_control_state(
                 &clock,
-                &did,
+                &organization_id,
                 RotatedOrganizationControl {
                     control_stream_ref: rotated_head.clone(),
                     pcr_frontier_digest: None,
@@ -672,7 +762,7 @@ mod tests {
         let mut repo = factory.create().await.unwrap();
         let reloaded = repo
             .organization_control()
-            .get_control_by_did(&did)
+            .get_control_by_id(&organization_id)
             .await
             .unwrap()
             .expect("control persisted");
@@ -689,13 +779,15 @@ mod tests {
         let factory = PgRepositoryFactory::new(pool.clone());
         let clock = MockClock::default();
         let did = format!("did:web:{}.example", uuid::Uuid::now_v7());
+        let organization_id =
+            arkret_identifiers::project_did_to_core_id(&Did::new(did).unwrap()).unwrap();
 
         let mut repo = factory.create().await.unwrap();
         let outcome = repo
             .organization_control()
             .replace_control_state(
                 &clock,
-                &did,
+                &organization_id,
                 RotatedOrganizationControl {
                     control_stream_ref: arkret_identifiers::EventId::from_identity(
                         arkret_identifiers::EventIdentityKey::new(

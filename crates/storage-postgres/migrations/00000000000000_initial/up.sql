@@ -264,7 +264,8 @@ CREATE TABLE public.circle_capability_grants (
 
 CREATE TABLE public.organization_principal_controls (
     id uuid NOT NULL,
-    organization_did text NOT NULL,
+    organization_id text NOT NULL,
+    did text NOT NULL,
     principal_control_realm_id text NOT NULL,
     control_stream_ref text NOT NULL,
     pcr_frontier_digest text,
@@ -276,13 +277,13 @@ CREATE TABLE public.organization_principal_controls (
     updated_at timestamp with time zone NOT NULL
 );
 
-COMMENT ON TABLE public.organization_principal_controls IS 'Organization principal control state (identity-did.md §7). One row per organization DID. There is intentionally no shared-credential/password column: an organization principal is controlled by DID keys + delegations only, never a shared human login.';
+COMMENT ON TABLE public.organization_principal_controls IS 'Organization principal control state (identity-did.md §7). One row per stable organization identity, retaining the exact bootstrap DID evidence. There is intentionally no shared-credential/password column: an organization principal is controlled by DID keys + delegations only, never a shared human login.';
 
 CREATE TABLE public.organization_delegations (
     id uuid NOT NULL,
     delegation_ref text NOT NULL,
-    organization_did text NOT NULL,
-    delegate_did text NOT NULL,
+    organization_id text NOT NULL,
+    delegate_id text NOT NULL,
     issuer_role text NOT NULL,
     purposes text[] DEFAULT '{}'::text[] NOT NULL,
     covered_relationships text[] DEFAULT '{}'::text[] NOT NULL,
@@ -296,7 +297,7 @@ CREATE TABLE public.organization_delegations (
     updated_at timestamp with time zone NOT NULL
 );
 
-COMMENT ON TABLE public.organization_delegations IS 'Organization DID delegations to Account Authority / governance service principals. Backs the SDK RealmOrganizationDelegationResolver and the ak.realm.organization issuance + audit API.';
+COMMENT ON TABLE public.organization_delegations IS 'Stable organization identity delegations to Account Authority / governance service principals. Backs the SDK RealmOrganizationDelegationResolver and the ak.realm.organization issuance + audit API.';
 
 CREATE TABLE public.collaboration_capability_grants (
     id uuid NOT NULL,
@@ -1670,13 +1671,13 @@ CREATE INDEX circle_capability_grants_active_realm_subject_idx ON public.circle_
 
 CREATE INDEX circle_capability_grants_revoked_idx ON public.circle_capability_grants USING btree (revoked_at) WHERE (revoked_at IS NOT NULL);
 
-CREATE UNIQUE INDEX organization_principal_controls_org_did_idx ON public.organization_principal_controls USING btree (organization_did);
+CREATE UNIQUE INDEX organization_principal_controls_org_id_idx ON public.organization_principal_controls USING btree (organization_id);
 
 CREATE UNIQUE INDEX organization_delegations_ref_idx ON public.organization_delegations USING btree (delegation_ref);
 
-CREATE INDEX organization_delegations_org_did_idx ON public.organization_delegations USING btree (organization_did, created_at);
+CREATE INDEX organization_delegations_org_id_idx ON public.organization_delegations USING btree (organization_id, created_at);
 
-CREATE INDEX organization_delegations_active_idx ON public.organization_delegations USING btree (organization_did) WHERE (revoked_at IS NULL);
+CREATE INDEX organization_delegations_active_idx ON public.organization_delegations USING btree (organization_id) WHERE (revoked_at IS NULL);
 
 CREATE UNIQUE INDEX collaboration_capability_grants_active_fingerprint_idx ON public.collaboration_capability_grants USING btree (subject, realm_id, action) WHERE (revoked_at IS NULL);
 

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! COA-ORG-02 — organization DID / PCR bootstrap authorization decision.
+//! COA-ORG-02 — organization principal / PCR bootstrap authorization decision.
 //!
 //! Decides whether an organization Principal Control Realm (PCR) genesis is
 //! authorized, per `identity-did.md` §7. There are exactly two acceptable
@@ -22,7 +22,7 @@
 //! resulting control row is the caller's job
 //! ([`coauth_data::organization_control::OrganizationControlRepository::bootstrap`]).
 
-use arkret_identifiers::Did;
+use arkret_identifiers::DidCoreId;
 use coauth_data::organization_control::{
     OrganizationBootstrapAuthorization, OrganizationDelegation,
 };
@@ -44,8 +44,8 @@ pub enum OrganizationBootstrapError {
     /// The referenced delegation did not resolve.
     #[error("delegation_ref did not resolve to a known organization delegation")]
     DelegationNotFound,
-    /// The referenced delegation is anchored to a different organization DID.
-    #[error("delegation is anchored to a different organization DID")]
+    /// The referenced delegation is anchored to a different organization.
+    #[error("delegation is anchored to a different organization")]
     DelegationOrgMismatch,
     /// The referenced delegation is expired or revoked.
     #[error("delegation is not live (expired or revoked)")]
@@ -86,13 +86,13 @@ pub struct AuthorizedBootstrap {
 
 /// Decide whether an organization PCR bootstrap is authorized.
 ///
-/// `organization_did` is the organization principal whose PCR is being
+/// `organization_id` is the stable organization principal whose PCR is being
 /// bootstrapped. `has_admin_session` records that an authenticated admin /
 /// service principal is the *executor*; it never authorizes the bootstrap by
 /// itself, but a delegated bootstrap MUST have an executor present (the
 /// `executed_by` boundary the spec requires).
 pub fn authorize_bootstrap(
-    organization_did: &Did,
+    organization_id: &DidCoreId,
     has_admin_session: bool,
     attempt: BootstrapAttempt<'_>,
     now: chrono::DateTime<chrono::Utc>,
@@ -128,7 +128,7 @@ pub fn authorize_bootstrap(
                 return Err(OrganizationBootstrapError::SessionIsNotOrganizationControl);
             }
             let delegation = delegation.ok_or(OrganizationBootstrapError::DelegationNotFound)?;
-            if &delegation.organization_did != organization_did {
+            if &delegation.organization_id != organization_id {
                 return Err(OrganizationBootstrapError::DelegationOrgMismatch);
             }
             if !delegation.is_live(now) {
@@ -148,6 +148,7 @@ pub fn authorize_bootstrap(
 
 #[cfg(test)]
 mod tests {
+    use arkret_identifiers::DidCoreId;
     use arkret_models_collaboration::{
         RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
     };
@@ -160,16 +161,16 @@ mod tests {
         Utc.with_ymd_and_hms(2026, 6, 25, 12, 0, 0).unwrap()
     }
 
-    fn did(value: &str) -> Did {
-        Did::new(value.to_owned()).unwrap()
+    fn organization_id(value: &str) -> DidCoreId {
+        DidCoreId::new(value.to_owned()).unwrap()
     }
 
     fn delegation(org: &str, covers_bootstrap: bool) -> OrganizationDelegation {
         OrganizationDelegation {
             id: "01J0".to_owned(),
             delegation_ref: "ak:grant:AbrgMKK4KXMpRsGsFrsEQEsjo207metUd4zt8yjzB-UH".to_owned(),
-            organization_did: did(org),
-            delegate_did: did("did:web:server.acme.example"),
+            organization_id: organization_id(org),
+            delegate_id: organization_id("ak:did_core:web:server.acme.example"),
             issuer_role: RealmOrganizationIssuerRole::GovernanceService,
             purposes: if covers_bootstrap {
                 vec!["principal_control_realm_bootstrap".to_owned()]
@@ -193,9 +194,9 @@ mod tests {
 
     #[test]
     fn controller_proof_authorizes_bootstrap() {
-        let organization_did = did("did:web:org.example");
+        let organization_id = organization_id("ak:did_core:web:org.example");
         let out = authorize_bootstrap(
-            &organization_did,
+            &organization_id,
             false,
             BootstrapAttempt::ControllerProof {
                 proof_digest: Some("sha256:abc".to_owned()),
@@ -214,9 +215,9 @@ mod tests {
     fn admin_session_alone_cannot_bootstrap() {
         // No controller proof and no delegation — just a logged-in admin. The
         // delegated path requires an actual delegation row.
-        let organization_did = did("did:web:org.example");
+        let organization_id = organization_id("ak:did_core:web:org.example");
         let err = authorize_bootstrap(
-            &organization_did,
+            &organization_id,
             true,
             BootstrapAttempt::Delegated {
                 delegation_ref: "ak:grant:AbrgMKK4KXMpRsGsFrsEQEsjo207metUd4zt8yjzB-UH",
@@ -230,10 +231,10 @@ mod tests {
 
     #[test]
     fn delegated_bootstrap_without_executor_is_rejected() {
-        let organization_did = did("did:web:org.example");
-        let d = delegation("did:web:org.example", true);
+        let organization_id = organization_id("ak:did_core:web:org.example");
+        let d = delegation("ak:did_core:web:org.example", true);
         let err = authorize_bootstrap(
-            &organization_did,
+            &organization_id,
             false,
             BootstrapAttempt::Delegated {
                 delegation_ref: &d.delegation_ref,
@@ -250,10 +251,10 @@ mod tests {
 
     #[test]
     fn delegated_bootstrap_with_live_covering_delegation_succeeds() {
-        let organization_did = did("did:web:org.example");
-        let d = delegation("did:web:org.example", true);
+        let organization_id = organization_id("ak:did_core:web:org.example");
+        let d = delegation("ak:did_core:web:org.example", true);
         let out = authorize_bootstrap(
-            &organization_did,
+            &organization_id,
             true,
             BootstrapAttempt::Delegated {
                 delegation_ref: &d.delegation_ref,
@@ -274,10 +275,10 @@ mod tests {
 
     #[test]
     fn delegated_bootstrap_wrong_org_rejected() {
-        let organization_did = did("did:web:org.example");
-        let d = delegation("did:web:other.example", true);
+        let organization_id = organization_id("ak:did_core:web:org.example");
+        let d = delegation("ak:did_core:web:other.example", true);
         let err = authorize_bootstrap(
-            &organization_did,
+            &organization_id,
             true,
             BootstrapAttempt::Delegated {
                 delegation_ref: &d.delegation_ref,
@@ -291,10 +292,10 @@ mod tests {
 
     #[test]
     fn delegated_bootstrap_purpose_not_covered_rejected() {
-        let organization_did = did("did:web:org.example");
-        let d = delegation("did:web:org.example", false);
+        let organization_id = organization_id("ak:did_core:web:org.example");
+        let d = delegation("ak:did_core:web:org.example", false);
         let err = authorize_bootstrap(
-            &organization_did,
+            &organization_id,
             true,
             BootstrapAttempt::Delegated {
                 delegation_ref: &d.delegation_ref,
@@ -308,12 +309,12 @@ mod tests {
 
     #[test]
     fn delegated_bootstrap_revoked_delegation_rejected() {
-        let organization_did = did("did:web:org.example");
-        let mut d = delegation("did:web:org.example", true);
+        let organization_id = organization_id("ak:did_core:web:org.example");
+        let mut d = delegation("ak:did_core:web:org.example", true);
         d.status = OrganizationDelegationStatus::Revoked;
         d.revoked_at = Some(Utc.with_ymd_and_hms(2026, 5, 1, 0, 0, 0).unwrap());
         let err = authorize_bootstrap(
-            &organization_did,
+            &organization_id,
             true,
             BootstrapAttempt::Delegated {
                 delegation_ref: &d.delegation_ref,

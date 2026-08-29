@@ -6,21 +6,23 @@
 //! - `POST   /organizations/bootstrap` — bootstrap an organization PCR (COA-ORG-02). Authorized
 //!   only by a DID controller proof or a `principal_control_realm_bootstrap` delegation; the admin
 //!   session is only the executor.
-//! - `GET    /organizations/{org_did}` — read-only control state + delegations.
-//! - `GET    /organizations/{org_did}/delegations` — list delegations.
-//! - `POST   /organizations/{org_did}/delegations` — record a delegation.
-//! - `POST   /organizations/{org_did}/delegations/{ref}/revoke` — revoke.
-//! - `POST   /organizations/{org_did}/delegations/{ref}/renew` — renew validity.
-//! - `POST   /organizations/{org_did}/rotate-controller` — rotate the control stream / frontier
-//!   ref.
-//! - `POST   /organizations/{org_did}/statements` — issue a signed `ak.realm.organization`
+//! - `GET    /organizations/{organization_id}` — read-only control state + delegations.
+//! - `GET    /organizations/{organization_id}/delegations` — list delegations.
+//! - `POST   /organizations/{organization_id}/delegations` — record a delegation.
+//! - `POST   /organizations/{organization_id}/delegations/{ref}/revoke` — revoke.
+//! - `POST   /organizations/{organization_id}/delegations/{ref}/renew` — renew validity.
+//! - `POST   /organizations/{organization_id}/rotate-controller` — rotate the control stream /
+//!   frontier ref.
+//! - `POST   /organizations/{organization_id}/statements` — issue a signed `ak.realm.organization`
 //!   statement (COA-ORG-03).
 //!
 //! Wire shapes come from [`coauth_admin_types::organization_admin`] and map
 //! explicitly from storage-neutral domain records.
 
 use arkret_canonical::{canonical_json_bytes, sha256_digest};
-use arkret_identifiers::{Did, DigestSuiteCode, EventId, Hash, RealmId, new_prefixed_uuid7};
+use arkret_identifiers::{
+    DidCoreId, DigestSuiteCode, EventId, Hash, RealmId, new_prefixed_uuid7, project_did_to_core_id,
+};
 use arkret_models_collaboration::{RealmOrganizationPayload, RealmOrganizationStatus};
 use coauth_admin_types::organization_admin::{
     BootstrapAuthorizationInput, BootstrapOrganizationRequest, IssueOrganizationStatementRequest,
@@ -50,9 +52,20 @@ use crate::services::organization_statement::{
     offline_resolver,
 };
 
-fn parse_did(raw: &str) -> Result<Did, AppError> {
-    Did::new(raw.to_owned())
-        .map_err(|e| AppError::bad_request(format!("invalid organization DID: {e}")))
+fn parse_organization_id(raw: &str) -> Result<DidCoreId, AppError> {
+    DidCoreId::new(raw.to_owned())
+        .map_err(|e| AppError::bad_request(format!("invalid organization_id: {e}")))
+}
+
+fn validate_organization_binding(body: &BootstrapOrganizationRequest) -> Result<(), AppError> {
+    let projected = project_did_to_core_id(&body.did)
+        .map_err(|e| AppError::bad_request(format!("invalid organization DID: {e}")))?;
+    if projected != body.organization_id {
+        return Err(AppError::bad_request(
+            "organization_id does not match the canonical projection of did",
+        ));
+    }
+    Ok(())
 }
 
 /// Parse a reference that has to name an Event on a Principal Control Realm's
@@ -85,7 +98,8 @@ fn parse_frontier_digest(raw: Option<&str>) -> Result<Option<Hash>, AppError> {
 struct OrganizationControllerBootstrapTranscript<'a> {
     #[serde(rename = "type")]
     kind: &'static str,
-    organization_did: &'a str,
+    organization_id: &'a str,
+    did: &'a str,
     principal_control_realm_id: &'a str,
     control_stream_ref: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -99,7 +113,8 @@ fn organization_controller_bootstrap_transcript_bytes(
 ) -> Result<Vec<u8>, AppError> {
     canonical_json_bytes(&OrganizationControllerBootstrapTranscript {
         kind: "org.arkret.coauth.organization_pcr.bootstrap.v1",
-        organization_did: body.organization_did.as_str(),
+        organization_id: body.organization_id.as_str(),
+        did: body.did.as_str(),
         principal_control_realm_id: &body.principal_control_realm_id,
         control_stream_ref: &body.control_stream_ref,
         pcr_frontier_digest: body.pcr_frontier_digest.as_deref(),
@@ -138,13 +153,13 @@ async fn verify_organization_controller_proof(
         repo,
         did_resolver.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),
-        body.organization_did.as_str(),
+        body.did.as_str(),
         arkret_identity::DidBindingPurpose::OrganizationRegistry,
         crate::services::did_binding::high_risk_freshness(),
         crate::handlers::make_clock().now(),
     )
     .await
-    .map_err(|error| AppError::bad_request(format!("organization_did_resolve_failed: {error}")))?;
+    .map_err(|error| AppError::bad_request(format!("did_resolution_failed: {error}")))?;
     let payload = organization_controller_bootstrap_transcript_bytes(body)?;
     let verification_method = verify_detached_jws_with_sdk(
         proof_jws,
@@ -158,7 +173,7 @@ async fn verify_organization_controller_proof(
         .iter()
         .find(|method| method.id == verification_method)
         .ok_or_else(|| AppError::bad_request("controller proof verification method not found"))?;
-    if method.controller != body.organization_did.as_str() {
+    if method.controller != body.did.as_str() {
         return Err(AppError::bad_request(
             "controller proof verification method is not controlled by the organization DID",
         ));
@@ -168,10 +183,10 @@ async fn verify_organization_controller_proof(
 
 async fn load_control(
     repo: &mut BoxRepository,
-    organization_did: &str,
+    organization_id: &DidCoreId,
 ) -> Result<DomainOrganizationPrincipalControl, AppError> {
     repo.organization_control()
-        .get_control_by_did(organization_did)
+        .get_control_by_id(organization_id)
         .await?
         .ok_or_else(|| AppError::not_found("organization control state not found"))
 }
@@ -186,7 +201,9 @@ pub async fn bootstrap_handler(
         .parse_json()
         .await
         .map_err(|e| AppError::bad_request(format!("invalid bootstrap body: {e}")))?;
-    // Validate the organization DID shape up front.
+    // The stable id / resolvable DID relation is an ingress invariant. Check it
+    // before any lookup, authorization decision, or proof resolution.
+    validate_organization_binding(&body)?;
     let create_event_id = parse_control_stream_ref(&body.control_stream_ref)?;
     parse_frontier_digest(body.pcr_frontier_digest.as_deref())?;
     let supplied_realm_id = RealmId::new(body.principal_control_realm_id.clone())
@@ -223,7 +240,7 @@ pub async fn bootstrap_handler(
 
     if repo
         .organization_control()
-        .get_control_by_did(body.organization_did.as_str())
+        .get_control_by_id(&body.organization_id)
         .await?
         .is_some()
     {
@@ -268,7 +285,7 @@ pub async fn bootstrap_handler(
         bootstrap_authorization,
         bootstrap_delegation_ref,
         bootstrap_proof_digest,
-    } = authorize_bootstrap(&body.organization_did, has_admin_session, attempt, now).map_err(
+    } = authorize_bootstrap(&body.organization_id, has_admin_session, attempt, now).map_err(
         |e| {
             // Authorization failures are caller errors (forbidden), not 500s.
             AppError::forbidden(format!("organization bootstrap rejected: {e}"))
@@ -282,7 +299,8 @@ pub async fn bootstrap_handler(
             &mut *rng,
             &*clock,
             NewOrganizationPrincipalControl {
-                organization_did: body.organization_did,
+                organization_id: body.organization_id,
+                did: body.did,
                 principal_control_realm_id: body.principal_control_realm_id,
                 control_stream_ref: body.control_stream_ref,
                 pcr_frontier_digest: body.pcr_frontier_digest,
@@ -303,14 +321,14 @@ pub async fn bootstrap_handler(
 pub async fn get_handler(
     req: &mut Request,
     depot: &Depot,
-    org_did: PathParam<String>,
+    organization_id: PathParam<String>,
 ) -> JsonResult<OrganizationControlView> {
-    let organization_did = org_did.into_inner();
+    let organization_id = parse_organization_id(&organization_id.into_inner())?;
     let mut repo = extract_call_context(req, depot).await?.repo;
-    let control = load_control(&mut repo, &organization_did).await?;
+    let control = load_control(&mut repo, &organization_id).await?;
     let delegations = repo
         .organization_control()
-        .list_delegations_for_org(&organization_did)
+        .list_delegations_for_org(&organization_id)
         .await?;
     repo.cancel().await?;
     Ok(Json(OrganizationControlView {
@@ -324,13 +342,13 @@ pub async fn get_handler(
 pub async fn list_delegations_handler(
     req: &mut Request,
     depot: &Depot,
-    org_did: PathParam<String>,
+    organization_id: PathParam<String>,
 ) -> JsonResult<ListOrganizationDelegationsOutcome> {
-    let organization_did = org_did.into_inner();
+    let organization_id = parse_organization_id(&organization_id.into_inner())?;
     let mut repo = extract_call_context(req, depot).await?.repo;
     let data = repo
         .organization_control()
-        .list_delegations_for_org(&organization_did)
+        .list_delegations_for_org(&organization_id)
         .await?
         .into_iter()
         .map(Into::into)
@@ -344,10 +362,9 @@ pub async fn list_delegations_handler(
 pub async fn record_delegation_handler(
     req: &mut Request,
     depot: &Depot,
-    org_did: PathParam<String>,
+    organization_id: PathParam<String>,
 ) -> JsonResult<OrganizationDelegation> {
-    let organization_did = org_did.into_inner();
-    let organization_did = parse_did(&organization_did)?;
+    let organization_id = parse_organization_id(&organization_id.into_inner())?;
     let body: RecordOrganizationDelegationRequest = req
         .parse_json()
         .await
@@ -377,8 +394,8 @@ pub async fn record_delegation_handler(
             &*clock,
             NewOrganizationDelegation {
                 delegation_ref: body.delegation_ref,
-                organization_did,
-                delegate_did: body.delegate_did,
+                organization_id,
+                delegate_id: body.delegate_id,
                 issuer_role: body.issuer_role,
                 purposes: body.purposes,
                 covered_relationships: body.covered_relationships,
@@ -398,16 +415,16 @@ pub async fn record_delegation_handler(
 pub async fn revoke_delegation_handler(
     req: &mut Request,
     depot: &Depot,
-    org_did: PathParam<String>,
+    organization_id: PathParam<String>,
     delegation_ref: PathParam<String>,
 ) -> JsonResult<OrganizationDelegation> {
-    let organization_did = org_did.into_inner();
+    let organization_id = parse_organization_id(&organization_id.into_inner())?;
     let delegation_ref = delegation_ref.into_inner();
     let mut repo = extract_call_context(req, depot).await?.repo;
     let clock = make_clock();
     let revoked = repo
         .organization_control()
-        .revoke_delegation(&*clock, &organization_did, &delegation_ref)
+        .revoke_delegation(&*clock, &organization_id, &delegation_ref)
         .await?;
     match revoked {
         Some(delegation) => {
@@ -428,10 +445,10 @@ pub async fn revoke_delegation_handler(
 pub async fn renew_delegation_handler(
     req: &mut Request,
     depot: &Depot,
-    org_did: PathParam<String>,
+    organization_id: PathParam<String>,
     delegation_ref: PathParam<String>,
 ) -> JsonResult<OrganizationDelegation> {
-    let organization_did = org_did.into_inner();
+    let organization_id = parse_organization_id(&organization_id.into_inner())?;
     let delegation_ref = delegation_ref.into_inner();
     let body: RenewOrganizationDelegationRequest = req
         .parse_json()
@@ -441,12 +458,7 @@ pub async fn renew_delegation_handler(
     let clock = make_clock();
     let renewed = repo
         .organization_control()
-        .renew_delegation(
-            &*clock,
-            &organization_did,
-            &delegation_ref,
-            body.valid_until,
-        )
+        .renew_delegation(&*clock, &organization_id, &delegation_ref, body.valid_until)
         .await?;
     match renewed {
         Some(delegation) => {
@@ -467,9 +479,9 @@ pub async fn renew_delegation_handler(
 pub async fn rotate_controller_handler(
     req: &mut Request,
     depot: &Depot,
-    org_did: PathParam<String>,
+    organization_id: PathParam<String>,
 ) -> JsonResult<OrganizationPrincipalControl> {
-    let organization_did = org_did.into_inner();
+    let organization_id = parse_organization_id(&organization_id.into_inner())?;
     let body: RotateOrganizationControllerRequest = req
         .parse_json()
         .await
@@ -484,7 +496,7 @@ pub async fn rotate_controller_handler(
     let clock = make_clock();
     let updated = repo
         .organization_control()
-        .replace_control_state(&*clock, &organization_did, rotated)
+        .replace_control_state(&*clock, &organization_id, rotated)
         .await?;
     match updated {
         Some(control) => {
@@ -508,11 +520,10 @@ pub async fn issue_statement_handler(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<RealmOrganizationPayload>, AppError> {
-    let org_did = req
-        .param::<String>("org_did")
-        .ok_or_else(|| AppError::bad_request("missing org_did"))?;
-    let organization_did = org_did;
-    let organization_id = parse_did(&organization_did)?;
+    let organization_id = req
+        .param::<String>("organization_id")
+        .ok_or_else(|| AppError::bad_request("missing organization_id"))?;
+    let organization_id = parse_organization_id(&organization_id)?;
     let body: IssueOrganizationStatementRequest = req
         .parse_json()
         .await
@@ -547,8 +558,8 @@ pub async fn issue_statement_handler(
     let clock = call_context.clock;
     let now = clock.now();
 
-    // Issuer of the statement: the organization DID for direct statements, the
-    // delegate DID for delegated statements.
+    // Issuer of the statement: the stable organization id for direct
+    // statements, the stable delegate id for delegated statements.
     let delegation = match &body.delegation_ref {
         Some(reference) => {
             repo.organization_control()
@@ -557,13 +568,8 @@ pub async fn issue_statement_handler(
         }
         None => None,
     };
-    let organization_id = arkret_identifiers::project_did_to_core_id(&organization_id)
-        .map_err(|e| AppError::bad_request(format!("invalid organization DID: {e}")))?;
     let issuer = match (&body.delegation_ref, &delegation) {
-        (Some(_), Some(delegation)) => {
-            arkret_identifiers::project_did_to_core_id(&delegation.delegate_did)
-                .map_err(|e| AppError::bad_request(format!("invalid delegate DID: {e}")))?
-        }
+        (Some(_), Some(delegation)) => delegation.delegate_id.clone(),
         _ => organization_id.clone(),
     };
 
@@ -613,11 +619,15 @@ pub async fn issue_statement_handler(
 
 #[cfg(test)]
 mod tests {
+    use arkret_identifiers::Did;
+
     use super::*;
 
-    fn bootstrap_request(organization_did: &str) -> BootstrapOrganizationRequest {
+    fn bootstrap_request(did: &str) -> BootstrapOrganizationRequest {
+        let did = Did::new(did.to_owned()).unwrap();
         BootstrapOrganizationRequest {
-            organization_did: Did::new(organization_did.to_owned()).unwrap(),
+            organization_id: project_did_to_core_id(&did).unwrap(),
+            did,
             principal_control_realm_id: "ak:realm:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG"
                 .to_owned(),
             control_stream_ref: "ak:event:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG".to_owned(),
@@ -636,13 +646,19 @@ mod tests {
         let second_bytes = organization_controller_bootstrap_transcript_bytes(&second).unwrap();
         assert_ne!(first_bytes, second_bytes);
 
-        second.organization_did = first.organization_did.clone();
+        second.organization_id = first.organization_id.clone();
+        second.did = first.did.clone();
         second.pcr_frontier_digest = Some(format!("sha256:{}", "cd".repeat(32)));
         let changed_frontier = organization_controller_bootstrap_transcript_bytes(&second).unwrap();
         assert_ne!(first_bytes, changed_frontier);
 
         let transcript: serde_json::Value = serde_json::from_slice(&first_bytes).unwrap();
         assert_eq!(transcript["purpose"], "principal_control");
+        assert_eq!(
+            transcript["organization_id"],
+            first.organization_id.as_str()
+        );
+        assert_eq!(transcript["did"], first.did.as_str());
         assert_eq!(
             transcript["profile"],
             "ak.profile.principal_control_realm.v1"
@@ -652,7 +668,8 @@ mod tests {
     #[test]
     fn bootstrap_body_without_control_stream_ref_fails_to_decode() {
         let body = serde_json::json!({
-            "organization_did": "did:web:org-a.example",
+            "organization_id": "ak:did_core:web:org-a.example",
+            "did": "did:web:org-a.example",
             "principal_control_realm_id":
                 "ak:realm:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG",
             "authorization": { "kind": "did_controller_proof", "proof_jws": "header..signature" },
@@ -663,6 +680,16 @@ mod tests {
             error.to_string().contains("control_stream_ref"),
             "unexpected decode error: {error}"
         );
+    }
+
+    #[test]
+    fn bootstrap_rejects_mismatched_organization_id_and_did() {
+        let mut body = bootstrap_request("did:web:org-a.example");
+        body.organization_id = DidCoreId::new("ak:did_core:web:org-b.example".to_owned()).unwrap();
+
+        let error = validate_organization_binding(&body)
+            .expect_err("a stable id from another DID must fail closed");
+        assert!(error.to_string().contains("organization_id"));
     }
 
     #[test]

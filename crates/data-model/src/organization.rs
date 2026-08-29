@@ -46,7 +46,11 @@ pub struct OrganizationPrincipalControl {
     pub id: String,
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub organization_did: Did,
+    pub organization_id: DidCoreId,
+    /// Exact resolvable organization DID accepted as bootstrap evidence.
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
+    pub did: Did,
     pub principal_control_realm_id: String,
     /// Current organization control-stream head. Bootstrap seeds it with the
     /// accepted PCR create Event and rotation replaces it wholesale, so there
@@ -107,10 +111,10 @@ pub struct OrganizationDelegation {
     pub delegation_ref: String,
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub organization_did: Did,
+    pub organization_id: DidCoreId,
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub delegate_did: Did,
+    pub delegate_id: DidCoreId,
     #[cfg_attr(feature = "schema", schemars(with = "String"))]
     #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
     pub issuer_role: RealmOrganizationIssuerRole,

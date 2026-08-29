@@ -639,7 +639,7 @@ fn admin_subrouter() -> Router {
             Router::with_path("organizations")
                 .push(Router::with_path("bootstrap").post(organizations::bootstrap_handler))
                 .push(
-                    Router::with_path("{org_did}")
+                    Router::with_path("{organization_id}")
                         .get(organizations::get_handler)
                         .push(
                             Router::with_path("rotate-controller")
