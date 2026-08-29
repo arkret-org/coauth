@@ -11,18 +11,6 @@
 `token_entropy_bits`）或 `lookup`（`lookup_table_ref`、`pepper_id`）。
 领取流程与拒绝码见[账户生命周期](../account-lifecycle.md)。
 
-## 策略检查
-
-`POST /_arkret/self/policy/check` 接受 `PolicyCheckRequestBody`，返回的
-`PolicyCheckOutcome` 包含：
-
-- `bound_to`：该结论所绑定的请求字段，使调用方无法把它重放到另一个
-  主体、动作或资源上。
-- 三个来自 soland frontier 源的 frontier digest。frontier 拉取失败时
-  发出「unknown frontier」哨兵值而非占位 digest，评估器据此给出相应
-  保守的结论。
-- 覆盖该结论的 DID 关联签名信封。
-
 ## DID 解析
 
 `Did` 拒绝 method 名段不落在 `^did:[a-z0-9]+:[^\s]+$` 内的标识

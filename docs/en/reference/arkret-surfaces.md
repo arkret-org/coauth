@@ -12,19 +12,6 @@ numbers. The wire form is either `offline_token` (`token_commitment`,
 `pepper_id`). See [Account lifecycle](../account-lifecycle.md) for the
 claim strand and its rejection codes.
 
-## Policy check
-
-`POST /_arkret/self/policy/check` takes a `PolicyCheckRequestBody` and
-returns a `PolicyCheckOutcome` carrying:
-
-- `bound_to` — the request fields the outcome is bound to, so a caller
-  cannot replay it against a different subject, action, or resource.
-- Three frontier digests taken from the soland-backed frontier source.
-  When the frontier cannot be fetched, the "unknown frontier" sentinel
-  is emitted rather than a stub digest, and the evaluator produces a
-  correspondingly conservative outcome.
-- A DID-keyed signature envelope over the outcome.
-
 ## DID parsing
 
 `Did` rejects any identifier whose method-name segment falls

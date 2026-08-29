@@ -427,11 +427,6 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     // `service-describe.schema.json`; schema profiles are expressed through
     // registered extensions or concrete operation contracts instead.
     assert!(body.get("supported_schema_profiles").is_none());
-    let advertised_operations = advertised_operation_ids(&body);
-    assert!(
-        advertised_operations.contains("ak.self.policy.read.check.v1"),
-        "implemented POST /api/v1/policy/check MUST be advertised as ak.self.policy.read.check.v1"
-    );
     let not_authoritative_for = body["x_coauth_service_boundary"]["not_authoritative_for"]
         .as_array()
         .unwrap();
@@ -713,8 +708,6 @@ fn describe_separates_claim_levels() {
     // development_mode field must be present so downstream tools
     // (sodmin / cotest) can render the dev banner.
     assert_eq!(body["development_mode"], true);
-    let advertised_operations = advertised_operation_ids(&body);
-    assert!(advertised_operations.contains("ak.self.policy.read.check.v1"));
 }
 
 #[test]

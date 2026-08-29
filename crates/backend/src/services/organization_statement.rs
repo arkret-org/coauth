@@ -7,8 +7,8 @@
 //!
 //! This module owns the organization-side authorization proof. It builds a
 //! [`RealmOrganizationPayload`] (the SDK wire type — no locally-defined wire
-//! struct), signs its canonical-JSON bytes with the coauth service signing key
-//! (mirroring [`crate::services::policy_signer`]), and self-verifies the result
+//! struct), signs its canonical-JSON bytes with the coauth service signing key,
+//! and self-verifies the result
 //! with the SDK [`verify_realm_organization_statement`] before returning so a
 //! malformed statement never escapes coauth.
 //!

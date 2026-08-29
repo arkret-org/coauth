@@ -483,23 +483,6 @@ mod tests {
             "https://arkret.org/problems/unsupported_operation_version"
         );
 
-        let mut wrong_method = TestClient::get("http://127.0.0.1:8698/_arkret/self/policy/check")
-            .add_header(
-                "Arkret-Operation",
-                arkret_wire::ServiceOperationId::SELF_POLICY_READ_CHECK_V1,
-                true,
-            )
-            .send(&service)
-            .await;
-        assert_eq!(
-            wrong_method.status_code,
-            Some(StatusCode::UNPROCESSABLE_ENTITY)
-        );
-        let wrong_method_body = wrong_method.take_json::<serde_json::Value>().await.unwrap();
-        assert_eq!(
-            wrong_method_body["type"],
-            "https://arkret.org/problems/unsupported_operation_version"
-        );
     }
 
     #[tokio::test]

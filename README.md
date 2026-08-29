@@ -73,13 +73,6 @@ The canonical wire behavior lives in the v1 spec artifacts and prose under
   modes share the 5-terminal-state machine (`claimed` / `send_failed` /
   `revoked_by_capability_loss` / `revoked_by_inviter_left` /
   `invalidated_by_rate_limit`); salt / pepper are zeroized within 24h.
-- **Arkret v1 `/_arkret/self/policy/check`** — request uses `PolicyCheckRequestBody`
-  (`signed_transport` + `source_ip_digest` + `source.{service_id,
-  service_kind}`); response is `PolicyCheckOutcome` carrying the
-  `bound_to{realm_id, actor_id, action, request_canonical_digest,
-  policy_server_id}` envelope plus `auth_state_digest` /
-  `policy_frontier_digest` / `membership_frontier_digest` and a signed
-  `kid: did:.+#.+`.
 - **identity_link is Realm-scoped** — encrypted payload now binds
   `realm_id` + `trust_domain`.
 

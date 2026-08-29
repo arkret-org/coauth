@@ -15,7 +15,6 @@ pub mod oauth_clients_register;
 pub mod oauth_sessions;
 pub mod organizations;
 pub mod personal_sessions;
-pub mod policy_checks;
 pub mod policy_data;
 pub mod revocation_approval;
 pub mod site_config;

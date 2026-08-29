@@ -150,7 +150,7 @@ fn account_api_subrouters() -> (Router, Router) {
         linked_accounts, notification_prefs, oauth_clients, password, recovery, register, sessions,
         site_config, strand, upstream_oauth, users, viewer,
     };
-    use crate::handlers::{arkret, policy_check};
+    use crate::handlers::arkret;
 
     let arkret_router = Router::with_path("/_arkret")
         .hoop(public_oidc_browser_cors())
@@ -283,7 +283,6 @@ fn account_api_subrouters() -> (Router, Router) {
             Router::with_path("peer/account-status/resolve")
                 .post(arkret::resolve_account_status),
         )
-        .push(Router::with_path("self/policy/check").post(policy_check::post_policy_check))
         .push(Router::with_path("{**rest}").goal(arkret_not_found));
 
     let mut coauth_router = Router::with_path("/_coauth")
@@ -547,8 +546,7 @@ fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
         | "/_arkret/find/directory/resolve-handle"
         | "/_arkret/gate/account/auth-sessions/logout"
         | "/_arkret/gate/account/session-grants/introspect"
-        | "/_arkret/self/policy/check" => Some("POST"),
-        "/_arkret/gate/account/authentication-handoffs"
+        | "/_arkret/gate/account/authentication-handoffs"
         | "/_arkret/gate/account/did-binding-challenges"
         | "/_arkret/gate/account/identity-binding-challenges"
         | "/_arkret/gate/account/identity-abandonment-challenges"
@@ -601,7 +599,7 @@ fn admin_subrouter() -> Router {
         account_dids, accounts, audit_feed, circle_capabilities, claims,
         collaboration_capabilities, connector_health, devices, invite_quarantine,
         notification_channels, notification_templates, oauth_clients, oauth_clients_i18n,
-        oauth_clients_register, oauth_sessions, organizations, personal_sessions, policy_checks,
+        oauth_clients_register, oauth_sessions, organizations, personal_sessions,
         policy_data, site_config, upstream_oauth_links, upstream_oauth_providers, user_emails,
         user_registration_tokens, user_sessions, version,
     };
@@ -882,14 +880,6 @@ fn admin_subrouter() -> Router {
                 .post(claims::issue_claim)
                 .push(Router::with_path("status").get(claims::list_claim_status))
                 .push(Router::with_path("{id}/revoke").post(claims::revoke_claim)),
-        )
-        .push(
-            Router::with_path("policy-checks")
-                .push(Router::with_path("dry-run").post(policy_checks::dry_run)),
-        )
-        .push(
-            Router::with_path("policy-decision-audits")
-                .push(Router::with_path("{id}").get(policy_checks::get_signed_decision_audit)),
         )
 }
 
