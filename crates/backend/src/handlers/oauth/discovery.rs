@@ -1,3 +1,4 @@
+use crate::handlers::arkret;
 use coauth_config::ArkretConfig;
 use coauth_data::{SiteConfig, UrlBuilder};
 use coauth_iana::oauth::{
@@ -453,4 +454,3 @@ mod tests {
         insta::assert_json_snapshot!("discovery_scopes_and_claims", snapshot,);
     }
 }
-use crate::handlers::arkret;
