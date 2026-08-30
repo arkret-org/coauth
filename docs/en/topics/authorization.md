@@ -24,7 +24,7 @@ bind together:
 
 Stations should validate `ak.session.grant` records for downstream
 account and device access. The grant payload includes issuer service DID,
-subject principal DID, service account ID, optional device ID, audience,
+the exact `AccountId {principal_id, station_id}`, optional device ID, audience,
 scopes, expiry, revocation reference, and a proof block.
 
 Session-grant JWTs default to a 28800-second (8h) lifetime and can be tuned

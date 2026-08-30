@@ -21,7 +21,7 @@ OAuth 会话在客户端完成授权流程后创建，关联以下信息：
 ### Arkret Session Grant
 
 Station 应验证 `ak.session.grant` 来执行下游账号和设备访问。grant payload
-包含 issuer service DID、subject principal DID、service account ID、可选 device
+包含 issuer service DID、完整 `AccountId {principal_id, station_id}`、可选 device
 ID、audience、scope、expiry、revocation reference 以及 proof block。
 
 session-grant JWT 默认生命周期为 28800 秒（8 小时），可通过配置文件中的
