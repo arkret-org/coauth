@@ -56,6 +56,16 @@ pub enum Credentials {
     },
 }
 
+pub struct CredentialsVerificationParams<'a> {
+    pub http_client: &'a reqwest::Client,
+    pub encrypter: &'a Encrypter,
+    pub method: &'a OAuthClientAuthenticationMethod,
+    pub client: &'a Client,
+    pub expected_audience: &'a str,
+    pub now: chrono::DateTime<chrono::Utc>,
+    pub replay_store: &'a DpopVerifier,
+}
+
 impl Credentials {
     /// Get the `client_id` of the credentials
     #[must_use]
@@ -107,14 +117,17 @@ impl Credentials {
     #[tracing::instrument(skip_all)]
     pub async fn verify(
         &self,
-        http_client: &reqwest::Client,
-        encrypter: &Encrypter,
-        method: &OAuthClientAuthenticationMethod,
-        client: &Client,
-        expected_audience: &str,
-        now: chrono::DateTime<chrono::Utc>,
-        replay_store: &DpopVerifier,
+        params: CredentialsVerificationParams<'_>,
     ) -> Result<(), CredentialsVerificationError> {
+        let CredentialsVerificationParams {
+            http_client,
+            encrypter,
+            method,
+            client,
+            expected_audience,
+            now,
+            replay_store,
+        } = params;
         match (self, method) {
             (Credentials::None { .. }, OAuthClientAuthenticationMethod::None) => {}
 

@@ -16,7 +16,9 @@ use ulid::Ulid;
 
 use super::introspection_service;
 use crate::handlers::{ActivityTracker, METER};
-use crate::salvo_utils::client_authorization::{ClientAuthorization, CredentialsVerificationError};
+use crate::salvo_utils::client_authorization::{
+    ClientAuthorization, CredentialsVerificationError, CredentialsVerificationParams,
+};
 
 static INTROSPECTION_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER
@@ -239,15 +241,15 @@ async fn handle_post(
         };
 
         credentials
-            .verify(
+            .verify(CredentialsVerificationParams {
                 http_client,
                 encrypter,
                 method,
-                &client,
-                &assertion_audience,
-                clock.now(),
-                assertion_replay,
-            )
+                client: &client,
+                expected_audience: &assertion_audience,
+                now: clock.now(),
+                replay_store: assertion_replay,
+            })
             .await?;
         introspection_service::ArkretAssociationDisclosure::Redacted
     };

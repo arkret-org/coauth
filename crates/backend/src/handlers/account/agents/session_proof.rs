@@ -503,7 +503,7 @@ pub async fn validate_agent_session_proof(
         &capability_scope,
         realm_policy.as_ref(),
         policy_data,
-        &agent_id,
+        agent_id,
     )
     .inspect_err(|error| {
         tracing::warn!(

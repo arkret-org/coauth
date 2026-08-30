@@ -9,54 +9,37 @@ homepage.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[dependencies]
+anyhow = { workspace = true }
+arkret-canonical = { workspace = true }
+arkret-models-collaboration = { workspace = true }
+arkret-retry = { workspace = true }
+arkret-wire = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+coauth-data = { workspace = true }
+coauth-i18n = { workspace = true }
+coauth-messaging = { workspace = true }
+coauth-oauth-types = { workspace = true }
+coauth-principal = { workspace = true }
+coauth-storage-postgres = { workspace = true }
+coauth-templates = { workspace = true }
+cron = { workspace = true }
+diesel = { workspace = true }
+diesel-async = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry-semantic-conventions = { workspace = true }
+rand_chacha = { workspace = true }
+rand_core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-postgres = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+ulid = { workspace = true }
+
 [lints]
 workspace = true
-
-[dependencies]
-# -- Async runtime & utilities --------------------------------------------
-
-# -- Serialization & data formats -----------------------------------------
-
-# -- Database access -------------------------------------------------------
-
-# -- Error handling & diagnostics ------------------------------------------
-
-# -- Observability ---------------------------------------------------------
-
-# -- Scheduling & time -----------------------------------------------------
-
-# -- Cryptography & identifiers -------------------------------------------
-
-# -- OAuth / OpenID Connect ------------------------------------------------
-
-# -- Internal crates -------------------------------------------------------
-anyhow = {workspace = true}
-async-trait = {workspace = true}
-chrono = {workspace = true}
-coauth-data = {workspace = true}
-coauth-storage-postgres = {workspace = true}
-coauth-i18n = {workspace = true}
-coauth-messaging = {workspace = true}
-coauth-principal = {workspace = true}
-coauth-templates = {workspace = true}
-arkret-canonical = {workspace = true}
-arkret-models-collaboration = {workspace = true}
-arkret-retry = {workspace = true}
-arkret-wire = {workspace = true}
-cron = {workspace = true}
-diesel = {workspace = true}
-diesel-async = {workspace = true}
-coauth-oauth-types = {workspace = true}
-opentelemetry = {workspace = true}
-opentelemetry-semantic-conventions = {workspace = true}
-rand_chacha = {workspace = true}
-rand_core = {workspace = true}
-serde = {workspace = true}
-serde_json = {workspace = true}
-thiserror = {workspace = true}
-tokio = {workspace = true}
-tokio-postgres = {workspace = true}
-tokio-util = {workspace = true}
-tracing = {workspace = true}
-tracing-opentelemetry = {workspace = true}
-ulid = {workspace = true}

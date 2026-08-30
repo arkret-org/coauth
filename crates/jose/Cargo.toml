@@ -10,42 +10,33 @@ homepage.workspace = true
 repository.workspace = true
 publish.workspace = true
 
-[lints]
-workspace = true
-
 [dependencies]
-# Serialization
-
-# Cryptographic primitives
-
-# Elliptic curves
-
-# Encoding & misc
-
-# Workspace crates
-arkret-canonical = {workspace = true}
-base64ct = {workspace = true}
-chrono = {workspace = true}
-coauth-iana = {workspace = true}
-digest = {workspace = true}
-ecdsa = {workspace = true}
-ed25519-dalek = {workspace = true}
-elliptic-curve = {workspace = true}
-hmac = {workspace = true}
-k256 = {workspace = true}
-p256 = {workspace = true}
-p384 = {workspace = true}
-p521 = {workspace = true}
-rsa = {workspace = true}
-schemars = {workspace = true}
-serde = {workspace = true}
-serde_json = {workspace = true}
-serde_with = {workspace = true}
-sha2 = {workspace = true}
-signature = {workspace = true}
-thiserror = {workspace = true}
-url = {workspace = true}
+arkret-canonical = { workspace = true }
+base64ct = { workspace = true }
+chrono = { workspace = true }
+coauth-iana = { workspace = true }
+digest = { workspace = true }
+ecdsa = { workspace = true }
+ed25519-dalek = { workspace = true }
+elliptic-curve = { workspace = true }
+hmac = { workspace = true }
+k256 = { workspace = true }
+p256 = { workspace = true }
+p384 = { workspace = true }
+p521 = { workspace = true }
+rsa = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_with = { workspace = true }
+sha2 = { workspace = true }
+signature = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
-insta = {workspace = true}
-rand_chacha = {workspace = true}
+insta = { workspace = true }
+rand_chacha = { workspace = true }
+
+[lints]
+workspace = true

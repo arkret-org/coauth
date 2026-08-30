@@ -13,7 +13,9 @@ use ulid::Ulid;
 
 use crate::handlers::account::DepotExt;
 use crate::record_error;
-use crate::salvo_utils::client_authorization::{ClientAuthorization, CredentialsVerificationError};
+use crate::salvo_utils::client_authorization::{
+    ClientAuthorization, CredentialsVerificationError, CredentialsVerificationParams,
+};
 
 #[derive(Debug, Error)]
 pub enum RouteError {
@@ -128,15 +130,15 @@ async fn handle_post(
 
     client_authorization
         .credentials
-        .verify(
-            &http_client,
-            &encrypter,
+        .verify(CredentialsVerificationParams {
+            http_client: &http_client,
+            encrypter: &encrypter,
             method,
-            &client,
-            &assertion_audience,
-            clock.now(),
-            &assertion_replay,
-        )
+            client: &client,
+            expected_audience: &assertion_audience,
+            now: clock.now(),
+            replay_store: &assertion_replay,
+        })
         .await
         .map_err(|err| {
             if err.is_internal() {

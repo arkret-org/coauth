@@ -676,8 +676,7 @@ fn validate_controller_authorize_event(
     let approved_by_matches_controller = approval
         .approved_by
         .as_ref()
-        .map(|approved_by| approved_by.as_str() == controller_id)
-        .unwrap_or(false);
+        .is_some_and(|approved_by| approved_by.as_str() == controller_id);
     if !approved_by_matches_controller {
         return Err(AppError::forbidden(
             "authorize_event.event.payload.approval_evidence.approved_by must match executed_by",

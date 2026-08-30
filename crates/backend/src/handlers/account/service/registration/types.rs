@@ -441,24 +441,16 @@ pub enum LoadRegistrationFinishPreparationError {
     NotFound,
 
     #[error("registration already completed")]
-    AlreadyCompleted(UserRegistration),
+    AlreadyCompleted,
 
     #[error(transparent)]
     Repository(#[from] RepositoryError),
 
     #[error("registration finish eligibility check failed")]
-    Eligibility {
-        registration: UserRegistration,
-        #[source]
-        source: CheckRegistrationFinishEligibilityError,
-    },
+    Eligibility(#[source] CheckRegistrationFinishEligibilityError),
 
     #[error("registration finish preparation failed")]
-    Prepare {
-        registration: UserRegistration,
-        #[source]
-        source: PrepareRegistrationCompletionError,
-    },
+    Prepare(#[source] PrepareRegistrationCompletionError),
 }
 
 #[derive(Debug, Error)]

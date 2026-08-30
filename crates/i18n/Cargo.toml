@@ -10,18 +10,18 @@ homepage.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[dependencies]
+arkret-locale = { workspace = true, features = ["serde"] }
+camino = { workspace = true }
+fluent-bundle = { workspace = true }
+icu_calendar = { workspace = true }
+icu_datetime = { workspace = true }
+icu_experimental = { workspace = true }
+icu_locid = { workspace = true }
+icu_locid_transform = { workspace = true }
+thiserror = { workspace = true }
+unic-langid = { workspace = true }
+writeable = { workspace = true }
+
 [lints]
 workspace = true
-
-[dependencies]
-arkret-locale = {workspace = true,features = ["serde"]}
-camino = {workspace = true}
-fluent-bundle = {workspace = true}
-icu_calendar = {workspace = true}
-icu_datetime = {workspace = true}
-icu_experimental = {workspace = true}
-icu_locid = {workspace = true}
-icu_locid_transform = {workspace = true}
-thiserror = {workspace = true}
-unic-langid = {workspace = true}
-writeable = {workspace = true}

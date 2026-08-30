@@ -780,6 +780,7 @@ where
 /// Display form `local@host` used by logging / display paths.
 /// NOT the canonical handle form — use [`user_handle`]
 /// (spec 7157ee8 §3.1) for `alsoKnownAs` / DID Document / claim emission.
+#[cfg(test)]
 pub(crate) fn user_handle_display(url_builder: &UrlBuilder, user: &User) -> String {
     format!(
         "{}@{}",

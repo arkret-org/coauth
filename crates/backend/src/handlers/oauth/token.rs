@@ -24,7 +24,9 @@ use super::token_service::{
     RefreshTokenExchangeError,
 };
 use crate::handlers::METER;
-use crate::salvo_utils::client_authorization::{ClientAuthorization, CredentialsVerificationError};
+use crate::salvo_utils::client_authorization::{
+    ClientAuthorization, CredentialsVerificationError, CredentialsVerificationParams,
+};
 
 static TOKEN_REQUEST_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER
@@ -392,15 +394,15 @@ async fn handle_post(
 
     client_authorization
         .credentials
-        .verify(
+        .verify(CredentialsVerificationParams {
             http_client,
             encrypter,
             method,
-            &client,
-            &assertion_audience,
-            clock.now(),
-            assertion_replay,
-        )
+            client: &client,
+            expected_audience: &assertion_audience,
+            now: clock.now(),
+            replay_store: assertion_replay,
+        })
         .await
         .map_err(|err| {
             // Classify the error differently, depending on whether it's an 'internal'

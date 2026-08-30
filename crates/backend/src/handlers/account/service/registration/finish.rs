@@ -70,9 +70,7 @@ pub async fn load_registration_finish_preparation(
     let registration = progress.registration.clone();
 
     if registration.completed_at.is_some() {
-        return Err(LoadRegistrationFinishPreparationError::AlreadyCompleted(
-            registration,
-        ));
+        return Err(LoadRegistrationFinishPreparationError::AlreadyCompleted);
     }
 
     check_registration_finish_eligibility(
@@ -83,19 +81,11 @@ pub async fn load_registration_finish_preparation(
         browser_session_present,
     )
     .await
-    .map_err(
-        |source| LoadRegistrationFinishPreparationError::Eligibility {
-            registration: registration.clone(),
-            source,
-        },
-    )?;
+    .map_err(LoadRegistrationFinishPreparationError::Eligibility)?;
 
     prepare_registration_completion(repo, clock, progress, registration_token_required)
         .await
-        .map_err(|source| LoadRegistrationFinishPreparationError::Prepare {
-            registration,
-            source,
-        })
+        .map_err(LoadRegistrationFinishPreparationError::Prepare)
 }
 
 pub async fn prepare_registration_completion(
@@ -359,12 +349,12 @@ pub async fn finish_registration(
         Err(LoadRegistrationFinishPreparationError::NotFound) => {
             return Err(RegistrationFinishError::NotFound);
         }
-        Err(LoadRegistrationFinishPreparationError::AlreadyCompleted(_)) => {
+        Err(LoadRegistrationFinishPreparationError::AlreadyCompleted) => {
             return Ok(RegistrationFinishOutcome::Rejected {
                 error: "registration_already_completed",
             });
         }
-        Err(LoadRegistrationFinishPreparationError::Eligibility { source, .. }) => match source {
+        Err(LoadRegistrationFinishPreparationError::Eligibility(source)) => match source {
             CheckRegistrationFinishEligibilityError::RegistrationExpired => {
                 return Ok(RegistrationFinishOutcome::Rejected {
                     error: "registration_expired",
@@ -389,7 +379,7 @@ pub async fn finish_registration(
                 return Err(RegistrationFinishError::Repository(error));
             }
         },
-        Err(LoadRegistrationFinishPreparationError::Prepare { source, .. }) => match source {
+        Err(LoadRegistrationFinishPreparationError::Prepare(source)) => match source {
             PrepareRegistrationCompletionError::RegistrationTokenRequired => {
                 return Ok(RegistrationFinishOutcome::Rejected {
                     error: "registration_token_required",

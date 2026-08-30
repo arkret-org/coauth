@@ -134,9 +134,7 @@ async fn reserve_issue_operation(
     if let Some(ttl_cap) = ttl_cap {
         grant_ttl = grant_ttl.min(ttl_cap);
     }
-    let grant_expires_at = expires_at_cap
-        .map(|cap| (now + grant_ttl).min(cap))
-        .unwrap_or(now + grant_ttl);
+    let grant_expires_at = expires_at_cap.map_or(now + grant_ttl, |cap| (now + grant_ttl).min(cap));
     if grant_expires_at <= now {
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,

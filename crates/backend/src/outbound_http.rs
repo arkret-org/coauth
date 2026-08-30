@@ -743,7 +743,7 @@ mod tests {
             DESCRIBE_MAX_BYTES,
             arkret_http_client::SERVICE_DESCRIBE_FETCH_MAX_BYTES
         );
-        assert!(DESCRIBE_MAX_BYTES > 64 * 1024);
+        const { assert!(DESCRIBE_MAX_BYTES > 64 * 1024) };
     }
 
     fn addr(raw: &str) -> SocketAddr {

@@ -11,46 +11,6 @@ publish.workspace = true
 
 build = "build.rs"
 
-[lints]
-workspace = true
-
-[dependencies]
-anyhow = {workspace = true}
-arkret-identifiers = {workspace = true}
-camino = {workspace = true}
-chrono = {workspace = true}
-clap = {workspace = true}
-coauth-backend = {workspace = true}
-coauth-config = {workspace = true}
-coauth-data = {workspace = true}
-coauth-storage-postgres = {workspace = true}
-coauth-messaging = {workspace = true}
-coauth-tasks = {workspace = true}
-console = {workspace = true}
-dialoguer = {workspace = true}
-dotenvy = {workspace = true}
-figment = {workspace = true}
-http = {workspace = true}
-hyper = {workspace = true}
-itertools = {workspace = true}
-listenfd = {workspace = true}
-rand_chacha = {workspace = true}
-rand_core = {workspace = true}
-reqwest = {workspace = true}
-rustls = {workspace = true}
-salvo = {workspace = true}
-sentry = {workspace = true}
-sentry-tracing = {workspace = true}
-serde_json = {workspace = true}
-serde_yaml_ng = {workspace = true}
-tokio = {workspace = true}
-tracing = {workspace = true}
-tracing-appender = {workspace = true}
-tracing-opentelemetry = {workspace = true}
-tracing-subscriber = {workspace = true}
-url = {workspace = true}
-zeroize = {workspace = true}
-
 [features]
 default = ["cedar"]
 
@@ -60,3 +20,43 @@ docker = ["coauth-config/docker"]
 # Policy engine backends
 cedar = ["coauth-backend/cedar"]
 password-bootstrap = ["coauth-backend/password-bootstrap"]
+
+[dependencies]
+anyhow = { workspace = true }
+arkret-identifiers = { workspace = true }
+camino = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+coauth-backend = { workspace = true }
+coauth-config = { workspace = true }
+coauth-data = { workspace = true }
+coauth-messaging = { workspace = true }
+coauth-storage-postgres = { workspace = true }
+coauth-tasks = { workspace = true }
+console = { workspace = true }
+dialoguer = { workspace = true }
+dotenvy = { workspace = true }
+figment = { workspace = true }
+http = { workspace = true }
+hyper = { workspace = true }
+itertools = { workspace = true }
+listenfd = { workspace = true }
+rand_chacha = { workspace = true }
+rand_core = { workspace = true }
+reqwest = { workspace = true }
+rustls = { workspace = true }
+salvo = { workspace = true }
+sentry = { workspace = true }
+sentry-tracing = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml_ng = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+tracing-subscriber = { workspace = true }
+url = { workspace = true }
+zeroize = { workspace = true }
+
+[lints]
+workspace = true

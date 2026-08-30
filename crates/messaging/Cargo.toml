@@ -9,9 +9,6 @@ homepage.workspace = true
 repository.workspace = true
 publish.workspace = true
 
-[lints]
-workspace = true
-
 [dependencies]
 # Email dependencies
 
@@ -19,28 +16,31 @@ workspace = true
 # The workspace pins uuid with only the `v7` feature; we need `v4` for the
 # random Aliyun SignatureNonce, so declare it explicitly (matching the
 # workspace version 1.23.1).
-async-trait = {workspace = true}
-base64 = {workspace = true}
-chrono = {workspace = true}
-coauth-email-types = {workspace = true}
-coauth-templates = {workspace = true}
-hex = {workspace = true}
-hmac = {workspace = true}
-mail-builder = {workspace = true}
-mail-send = {workspace = true}
-reqwest = {workspace = true}
-serde = {workspace = true}
-serde_json = {workspace = true}
-sha1 = {workspace = true}
-sha2 = {workspace = true}
-thiserror = {workspace = true}
-tokio = {workspace = true,features = ["process"]}
-tracing = {workspace = true}
-url = {workspace = true}
-uuid = {workspace = true,features = ["v4"]}
+async-trait = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+coauth-email-types = { workspace = true }
+coauth-templates = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
+mail-builder = { workspace = true }
+mail-send = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha1 = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["process"] }
+tracing = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
-rustls = {workspace = true}
-rustls-platform-verifier = {workspace = true}
-tokio = {workspace = true}
-wiremock = {workspace = true}
+rustls = { workspace = true }
+rustls-platform-verifier = { workspace = true }
+tokio = { workspace = true }
+wiremock = { workspace = true }
+
+[lints]
+workspace = true

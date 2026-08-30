@@ -534,6 +534,7 @@ mod tests {
 
     #[test]
     fn control_row_rejects_an_organization_id_that_does_not_project_from_the_did() {
+        let now = MockClock::default().now();
         let control_stream_ref = arkret_identifiers::EventId::new(
             "ak:event:AQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUF".to_owned(),
         )
@@ -555,8 +556,8 @@ mod tests {
             bootstrap_delegation_ref: None,
             executed_by: None,
             bootstrap_proof_digest: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: now,
+            updated_at: now,
         };
 
         assert!(

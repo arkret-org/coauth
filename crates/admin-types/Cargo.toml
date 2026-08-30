@@ -10,9 +10,6 @@ homepage.workspace = true
 repository.workspace = true
 publish.workspace = true
 
-[lints]
-workspace = true
-
 [features]
 default = []
 # Enable JSON Schema + salvo OpenAPI derives. Backends turn this on so
@@ -22,12 +19,15 @@ default = []
 schema = ["dep:schemars", "dep:salvo", "coauth-data-model/schema"]
 
 [dependencies]
-arkret-identifiers = {workspace = true}
-arkret-schema = {workspace = true}
-chrono = {workspace = true,features = ["serde"]}
-coauth-data-model = {workspace = true}
-arkret-models-collaboration = {workspace = true}
-salvo = {workspace = true,optional = true}
-schemars = {workspace = true,optional = true}
-serde = {workspace = true,features = ["derive"]}
-serde_json = {workspace = true}
+arkret-identifiers = { workspace = true }
+arkret-models-collaboration = { workspace = true }
+arkret-schema = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+coauth-data-model = { workspace = true }
+salvo = { workspace = true, optional = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

@@ -13,7 +13,9 @@ use thiserror::Error;
 use ulid::Ulid;
 
 use crate::handlers::oauth::revocation_service;
-use crate::salvo_utils::client_authorization::{ClientAuthorization, CredentialsVerificationError};
+use crate::salvo_utils::client_authorization::{
+    ClientAuthorization, CredentialsVerificationError, CredentialsVerificationParams,
+};
 
 #[derive(Debug, Error)]
 pub(crate) enum RouteError {
@@ -179,15 +181,15 @@ async fn handle_post(req: &mut Request, depot: &mut Depot) -> Result<(), RouteEr
 
         client_authorization
             .credentials
-            .verify(
+            .verify(CredentialsVerificationParams {
                 http_client,
                 encrypter,
                 method,
-                &client,
-                &assertion_audience,
-                clock.now(),
-                assertion_replay,
-            )
+                client: &client,
+                expected_audience: &assertion_audience,
+                now: clock.now(),
+                replay_store: assertion_replay,
+            })
             .await
             .map_err(|err| {
                 if err.is_internal() {

@@ -639,7 +639,10 @@ pub(crate) async fn service_describe_from_depot(
             "durable WebVH history head differs from the accepted registration receipt",
         ))));
     }
-    response.service_resolution.method_history_head = registered_head.clone();
+    response
+        .service_resolution
+        .method_history_head
+        .clone_from(registered_head);
     response.rate_limit_policy = Some(depot.limiter()?.advertised_public_lookup_policy());
     set_auth_metadata_oidc_clients(&mut response.auth_metadata, oidc_clients);
     response

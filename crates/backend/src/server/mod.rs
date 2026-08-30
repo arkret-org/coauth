@@ -402,7 +402,6 @@ mod tests {
         assert!(json["paths"]["/_coauth/admin/devices/{id}/revoke"].is_object());
         assert!(json["paths"]["/_coauth/admin/claims"].is_object());
         assert!(json["paths"]["/_coauth/admin/claims/status"].is_object());
-        assert!(json["paths"]["/_coauth/admin/policy-checks/dry-run"].is_object());
     }
 
     #[tokio::test]

@@ -5,149 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
-[lints]
-workspace = true
-
-[dependencies]
-
-
-# Arkret v1 SDK: shared protocol DTOs, RFC 9421 signatures, and typed
-# identity helpers used by the account, peer-protocol, and WebVH bridges.
-anyhow = {workspace = true}
-argon2 = {workspace = true}
-async-trait = {workspace = true}
-base64ct = {workspace = true}
-bcrypt = {workspace = true}
-bytes = {workspace = true}
-camino = {workspace = true}
-chrono = {workspace = true}
-coauth-account-types = {workspace = true,features = ["schema"]}
-coauth-admin-types = {workspace = true,features = ["schema"]}
-coauth-config = {workspace = true}
-coauth-data = {workspace = true}
-coauth-storage-postgres = {workspace = true}
-coauth-email-types = {workspace = true}
-coauth-i18n = {workspace = true}
-coauth-iana = {workspace = true}
-coauth-jose = {workspace = true}
-coauth-keystore = {workspace = true}
-coauth-messaging = {workspace = true}
-coauth-policy = {workspace = true}
-coauth-principal = {workspace = true}
-coauth-tasks = {workspace = true}
-coauth-templates = {workspace = true}
-arkret-auth = {workspace = true}
-arkret-locale = {workspace = true}
-arkret-canonical = {workspace = true}
-arkret-identifiers = {workspace = true, features = ["diesel"]}
-arkret-identity = {workspace = true}
-arkret-models-collaboration = {workspace = true}
-arkret-models-crypto = {workspace = true}
-arkret-models-discovery = {workspace = true}
-arkret-models-identity = {workspace = true}
-arkret-policy = {workspace = true}
-arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
-arkret-wire = {workspace = true}
-arkret-http-client = {workspace = true}
-arkret-egress-reqwest = {workspace = true}
-arkret-retry = {workspace = true}
-arkret-signatures = {workspace = true,features = ["signer", "service-identity"]}
-cookie = {workspace = true}
-deadpool = {workspace = true}
-der = {workspace = true}
-diesel = {workspace = true}
-diesel-async = {workspace = true}
-ed25519-dalek = {workspace = true}
-elliptic-curve = {workspace = true}
-email_address = {workspace = true}
-form_urlencoded = {workspace = true}
-futures-util = {workspace = true}
-headers = {workspace = true}
-hex = {workspace = true}
-hmac = {workspace = true}
-http = {workspace = true}
-http-body = {workspace = true}
-hyper = {workspace = true}
-hyper-util = {workspace = true}
-icu_locid = {workspace = true}
-icu_normalizer = {workspace = true}
-ipnetwork = {workspace = true}
-listenfd = {workspace = true}
-mime = {workspace = true}
-minijinja = {workspace = true}
-minijinja-contrib = {workspace = true}
-coauth-oauth-types = {workspace = true}
-opendal = {workspace = true}
-opentelemetry = {workspace = true}
-opentelemetry-http = {workspace = true}
-opentelemetry-instrumentation-process = {workspace = true}
-opentelemetry-instrumentation-tokio = {workspace = true}
-opentelemetry-jaeger-propagator = {workspace = true}
-opentelemetry-otlp = {workspace = true}
-opentelemetry-prometheus-text-exporter = {workspace = true}
-opentelemetry-resource-detectors = {workspace = true}
-opentelemetry-semantic-conventions = {workspace = true}
-opentelemetry-stdout = {workspace = true}
-opentelemetry_sdk = {workspace = true}
-p256 = {workspace = true}
-pbkdf2 = {workspace = true}
-pin-project-lite = {workspace = true}
-pkcs8 = {workspace = true}
-psl = {workspace = true}
-rand = {workspace = true}
-rand_chacha = {workspace = true}
-rand_core = {workspace = true}
-reqwest = {workspace = true}
-rsa = {workspace = true}
-rustls = {workspace = true}
-rustls-platform-verifier = {workspace = true}
-salvo = {workspace = true}
-schemars = {workspace = true}
-sentry = {workspace = true}
-serde = {workspace = true}
-serde_json = {workspace = true}
-serde_urlencoded = {workspace = true}
-serde_with = {workspace = true}
-serde_yaml_ng = {workspace = true}
-sha1 = {workspace = true,features = ["oid"]}
-sha2 = {workspace = true}
-signature = {workspace = true}
-socket2 = {workspace = true}
-soland-contracts = {workspace = true}
-subtle = {workspace = true}
-thiserror = {workspace = true}
-time = {workspace = true}
-tokio = {workspace = true}
-tokio-rustls = {workspace = true}
-tokio-util = {workspace = true}
-tracing = {workspace = true}
-tracing-opentelemetry = {workspace = true}
-ulid = {workspace = true}
-url = {workspace = true}
-uuid = {workspace = true}
-webauthn-rs = {workspace = true}
-woothee = {workspace = true}
-x509-cert = {workspace = true}
-zeroize = {workspace = true}
-zxcvbn = {workspace = true}
-
-
-[target.'cfg(unix)'.dependencies]
-sd-notify = {workspace = true}
-
-[dev-dependencies]
-arkret-wire = {workspace = true,features = ["test-support"]}
-cookie_store = {workspace = true}
-insta = {workspace = true}
-salvo = {workspace = true,features = ["test"]}
-tokio-test = {workspace = true}
-tracing-subscriber = {workspace = true}
-wiremock = {workspace = true}
-
-[build-dependencies]
-anyhow = {workspace = true}
-vergen-gitcl = {workspace = true}
-
 [features]
 # Policy engine backends
 cedar = ["coauth-policy/cedar"]
@@ -159,3 +16,144 @@ cedar = ["coauth-policy/cedar"]
 # `arkret.password_login_session_grants_enabled` runtime flag is only honoured
 # when this feature is present). Never enable for production.
 password-bootstrap = []
+
+[dependencies]
+
+# Arkret v1 SDK: shared protocol DTOs, RFC 9421 signatures, and typed
+# identity helpers used by the account, peer-protocol, and WebVH bridges.
+anyhow = { workspace = true }
+argon2 = { workspace = true }
+arkret-auth = { workspace = true }
+arkret-canonical = { workspace = true }
+arkret-egress-reqwest = { workspace = true }
+arkret-http-client = { workspace = true }
+arkret-identifiers = { workspace = true, features = ["diesel"] }
+arkret-identity = { workspace = true }
+arkret-locale = { workspace = true }
+arkret-models-collaboration = { workspace = true }
+arkret-models-crypto = { workspace = true }
+arkret-models-discovery = { workspace = true }
+arkret-models-identity = { workspace = true }
+arkret-policy = { workspace = true }
+arkret-retry = { workspace = true }
+arkret-schema = { workspace = true, features = ["embedded-artifacts"] }
+arkret-signatures = { workspace = true, features = ["signer", "service-identity"] }
+arkret-wire = { workspace = true }
+async-trait = { workspace = true }
+base64ct = { workspace = true }
+bcrypt = { workspace = true }
+bytes = { workspace = true }
+camino = { workspace = true }
+chrono = { workspace = true }
+coauth-account-types = { workspace = true, features = ["schema"] }
+coauth-admin-types = { workspace = true, features = ["schema"] }
+coauth-config = { workspace = true }
+coauth-data = { workspace = true }
+coauth-email-types = { workspace = true }
+coauth-i18n = { workspace = true }
+coauth-iana = { workspace = true }
+coauth-jose = { workspace = true }
+coauth-keystore = { workspace = true }
+coauth-messaging = { workspace = true }
+coauth-oauth-types = { workspace = true }
+coauth-policy = { workspace = true }
+coauth-principal = { workspace = true }
+coauth-storage-postgres = { workspace = true }
+coauth-tasks = { workspace = true }
+coauth-templates = { workspace = true }
+cookie = { workspace = true }
+deadpool = { workspace = true }
+der = { workspace = true }
+diesel = { workspace = true }
+diesel-async = { workspace = true }
+ed25519-dalek = { workspace = true }
+elliptic-curve = { workspace = true }
+email_address = { workspace = true }
+form_urlencoded = { workspace = true }
+futures-util = { workspace = true }
+headers = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+icu_locid = { workspace = true }
+icu_normalizer = { workspace = true }
+ipnetwork = { workspace = true }
+listenfd = { workspace = true }
+mime = { workspace = true }
+minijinja = { workspace = true }
+minijinja-contrib = { workspace = true }
+opendal = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry-http = { workspace = true }
+opentelemetry-instrumentation-process = { workspace = true }
+opentelemetry-instrumentation-tokio = { workspace = true }
+opentelemetry-jaeger-propagator = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry-prometheus-text-exporter = { workspace = true }
+opentelemetry-resource-detectors = { workspace = true }
+opentelemetry-semantic-conventions = { workspace = true }
+opentelemetry-stdout = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+p256 = { workspace = true }
+pbkdf2 = { workspace = true }
+pin-project-lite = { workspace = true }
+pkcs8 = { workspace = true }
+psl = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+rand_core = { workspace = true }
+reqwest = { workspace = true }
+rsa = { workspace = true }
+rustls = { workspace = true }
+rustls-platform-verifier = { workspace = true }
+salvo = { workspace = true }
+schemars = { workspace = true }
+sentry = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_urlencoded = { workspace = true }
+serde_with = { workspace = true }
+serde_yaml_ng = { workspace = true }
+sha1 = { workspace = true, features = ["oid"] }
+sha2 = { workspace = true }
+signature = { workspace = true }
+socket2 = { workspace = true }
+soland-contracts = { workspace = true }
+subtle = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+tokio = { workspace = true }
+tokio-rustls = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+ulid = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+webauthn-rs = { workspace = true }
+woothee = { workspace = true }
+x509-cert = { workspace = true }
+zeroize = { workspace = true }
+zxcvbn = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+sd-notify = { workspace = true }
+
+[build-dependencies]
+anyhow = { workspace = true }
+vergen-gitcl = { workspace = true }
+
+[dev-dependencies]
+arkret-wire = { workspace = true, features = ["test-support"] }
+cookie_store = { workspace = true }
+insta = { workspace = true }
+salvo = { workspace = true, features = ["test"] }
+tokio-test = { workspace = true }
+tracing-subscriber = { workspace = true }
+wiremock = { workspace = true }
+
+[lints]
+workspace = true
