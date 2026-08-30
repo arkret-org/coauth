@@ -553,7 +553,7 @@ pub async fn revoke_session_grant_endpoint(
                 request_identity: &request_identity,
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
-                target_session_grant_id: None,
+                target_session_grant_id: target_session_grant_id.as_ref(),
                 issuance_nonce: None,
                 session_id: None,
                 grant_not_before: None,

@@ -120,7 +120,7 @@ async fn terminate_auth_side_session_by_grant_jwt(
                 request_identity: &request_identity,
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
-                target_session_grant_id: None,
+                target_session_grant_id: Some(&grant.grant_id),
                 issuance_nonce: None,
                 session_id: None,
                 grant_not_before: None,
