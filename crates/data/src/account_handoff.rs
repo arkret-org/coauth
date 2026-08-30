@@ -88,7 +88,7 @@ impl TryFrom<&str> for AccountHandoffCreationAttemptState {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AccountHandoffAuthorizationCheckpoint {
-    pub service_account_id: String,
+    pub local_account_id: String,
     pub browser_session_id: Option<String>,
     pub audience_id: arkret_identifiers::DidCoreId,
     pub account_handle: String,
@@ -158,7 +158,7 @@ pub struct AccountHandoffGrant {
     pub id: Ulid,
     pub request_id: arkret_identifiers::RequestId,
     pub request_digest: arkret_identifiers::Hash,
-    pub service_account_id: Ulid,
+    pub local_account_id: Ulid,
     pub browser_session_id: Option<Ulid>,
     pub audience_id: String,
     pub cnf_jkt: String,
@@ -177,7 +177,7 @@ impl std::fmt::Debug for AccountHandoffGrant {
             .field("id", &self.id)
             .field("request_id", &self.request_id)
             .field("request_digest", &self.request_digest)
-            .field("service_account_id", &self.service_account_id)
+            .field("local_account_id", &self.local_account_id)
             .field("browser_session_id", &self.browser_session_id)
             .field("audience_id", &self.audience_id)
             .field("cnf_jkt", &self.cnf_jkt)
@@ -196,7 +196,7 @@ pub struct AccountHandoffGrantInput {
     pub id: Ulid,
     pub request_id: arkret_identifiers::RequestId,
     pub request_digest: arkret_identifiers::Hash,
-    pub service_account_id: Ulid,
+    pub local_account_id: Ulid,
     pub browser_session_id: Option<Ulid>,
     pub audience_id: String,
     /// Stable, non-reversible subject used to serialize and rate-limit lease
@@ -221,7 +221,7 @@ pub enum IdentityCreationLeaseRiskDecision {
 
 #[derive(Clone, Debug)]
 pub struct IdentityCreationLeaseRecord {
-    pub service_account_id: Ulid,
+    pub local_account_id: Ulid,
     pub audience_id: String,
     pub lease_id: String,
     pub holder_jkt: String,
@@ -314,7 +314,7 @@ pub enum AccountHandoffCreation {
 pub struct IdentityBindingChallengeInput {
     pub request_id: arkret_identifiers::RequestId,
     pub request_digest: arkret_identifiers::Hash,
-    pub service_account_id: Ulid,
+    pub local_account_id: Ulid,
     pub audience_id: arkret_identifiers::DidCoreId,
     pub lease_id: String,
     pub lease_fence: u64,
@@ -344,7 +344,7 @@ pub struct IdentityBindingChallengeInput {
 pub struct IdentityBindingChallengeRecord {
     pub request_id: arkret_identifiers::RequestId,
     pub request_digest: arkret_identifiers::Hash,
-    pub service_account_id: Ulid,
+    pub local_account_id: Ulid,
     pub challenge_id: String,
     pub challenge: String,
     pub purpose: arkret_models_identity::IdentityBindingPurpose,
@@ -419,7 +419,7 @@ pub struct DidBindingChallengeInput {
     pub request_id: arkret_identifiers::RequestId,
     pub request_digest: arkret_identifiers::Hash,
     pub issuing_handoff_grant_id: Ulid,
-    pub service_account_id: Ulid,
+    pub local_account_id: Ulid,
     pub account_subject: arkret_identifiers::Hash,
     pub principal_id: arkret_identifiers::DidCoreId,
     pub did: arkret_identifiers::Did,
@@ -510,7 +510,7 @@ pub struct IdentityAbandonmentChallengeInput {
     pub request_id: arkret_identifiers::RequestId,
     pub request_digest: arkret_identifiers::Hash,
     pub issuing_handoff_grant_id: Ulid,
-    pub service_account_id: Ulid,
+    pub local_account_id: Ulid,
     pub audience_id: arkret_identifiers::DidCoreId,
     pub account_subject: arkret_identifiers::Hash,
     pub holder_jkt: String,
@@ -531,7 +531,7 @@ pub struct IdentityAbandonmentChallengeRecord {
     pub request_id: arkret_identifiers::RequestId,
     pub request_digest: arkret_identifiers::Hash,
     pub issuing_handoff_grant_id: Ulid,
-    pub service_account_id: Ulid,
+    pub local_account_id: Ulid,
     pub audience_id: arkret_identifiers::DidCoreId,
     pub account_subject: arkret_identifiers::Hash,
     pub holder_jkt: String,
@@ -591,7 +591,7 @@ pub struct IdentityAbandonmentCommitInput {
     pub request_id: arkret_identifiers::RequestId,
     pub request_digest: arkret_identifiers::Hash,
     pub confirming_handoff_grant_id: Ulid,
-    pub service_account_id: Ulid,
+    pub local_account_id: Ulid,
     pub audience_id: arkret_identifiers::DidCoreId,
     pub holder_jkt: String,
     pub challenge_id: String,

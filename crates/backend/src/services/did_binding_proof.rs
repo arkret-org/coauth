@@ -46,7 +46,7 @@ pub fn validate_account_registration_control_proof(
     proof: &arkret_models_identity::AccountRegistrationControlProof,
     challenge: &coauth_data::DidBindingChallengeRecord,
     resolution: &DidResolution,
-    expected_service_account_id: coauth_data::Ulid,
+    expected_local_account_id: coauth_data::Ulid,
     expected_account_subject: &arkret_identifiers::Hash,
     expected_audience: &arkret_identifiers::DidCoreId,
     expected_origin: &str,
@@ -58,7 +58,7 @@ pub fn validate_account_registration_control_proof(
         .validate_shape()
         .map_err(|error| DidBindingProofError::InvalidShape(error.to_string()))?;
     let stored = &challenge.input;
-    if stored.service_account_id != expected_service_account_id
+    if stored.local_account_id != expected_local_account_id
         || &stored.account_subject != expected_account_subject
     {
         return Err(DidBindingProofError::ChallengeMismatch("account"));
@@ -344,7 +344,7 @@ mod tests {
                 .unwrap(),
                 request_digest,
                 issuing_handoff_grant_id: grant_id,
-                service_account_id: account_id,
+                local_account_id: account_id,
                 account_subject: account_subject.clone(),
                 principal_id,
                 did: did.clone(),

@@ -168,26 +168,26 @@ CREATE TABLE public.verified_did_bindings (
 
 CREATE TABLE public.account_status_ledger_heads (
     account_authority_id text NOT NULL,
-    service_account_id text NOT NULL,
+    local_account_id text NOT NULL,
     current_status_seq bigint,
     current_record_id text,
-    PRIMARY KEY (account_authority_id, service_account_id),
+    PRIMARY KEY (account_authority_id, local_account_id),
     CHECK ((current_status_seq IS NULL) = (current_record_id IS NULL))
 );
 
 CREATE TABLE public.account_status_records (
     account_authority_id text NOT NULL,
-    service_account_id text NOT NULL,
+    local_account_id text NOT NULL,
     status_seq bigint NOT NULL CHECK (status_seq >= 1),
     record_id text NOT NULL,
     record jsonb NOT NULL,
     issued_at timestamp with time zone NOT NULL,
-    PRIMARY KEY (account_authority_id, service_account_id, status_seq),
+    PRIMARY KEY (account_authority_id, local_account_id, status_seq),
     UNIQUE (record_id)
 );
 
 CREATE INDEX account_status_records_range_idx
-    ON public.account_status_records (account_authority_id, service_account_id, status_seq);
+    ON public.account_status_records (account_authority_id, local_account_id, status_seq);
 
 -- RFC 9449 DPoP proof replay cache. `jti_digest` is a SHA-256 digest of
 -- the caller-supplied `jti`, bounded for storage and safe for audit logs.
@@ -221,7 +221,7 @@ CREATE UNIQUE INDEX user_erasure_requests_live_intent_idx
 CREATE TABLE public.recovery_completion_grant_issuances (
     transaction_id text NOT NULL,
     transaction_request_digest text NOT NULL,
-    service_account_id uuid NOT NULL,
+    local_account_id uuid NOT NULL,
     principal_id text NOT NULL,
     device_id text NOT NULL,
     device_authorization_event_id text NOT NULL,
@@ -565,7 +565,7 @@ CREATE TABLE public.oauth_session_grants (
     user_session_id uuid,
     issuer_id text NOT NULL,
     subject_id text NOT NULL,
-    service_account_id text NOT NULL,
+    local_account_id text NOT NULL,
     device_id text,
     applet_id text,
     effective_scope jsonb,
@@ -591,7 +591,7 @@ CREATE TABLE public.oauth_session_grants (
     ,CONSTRAINT oauth_session_grants_issuance_digest_valid CHECK ((octet_length(issuance_digest) = 32) AND (substring(grant_id from 2 for 32) = issuance_digest))
     ,CONSTRAINT oauth_session_grants_nonce_valid CHECK ((issuance_nonce ~ '^[A-Za-z0-9_-]{43}$'::text))
     ,CONSTRAINT oauth_session_grants_session_id_nonempty CHECK ((btrim(session_id) <> ''::text))
-    ,CONSTRAINT oauth_session_grants_service_account_id_valid CHECK ((btrim(service_account_id) <> ''::text) AND (length(service_account_id) <= 255) AND (service_account_id !~ '^(ak|did):'::text))
+    ,CONSTRAINT oauth_session_grants_local_account_id_valid CHECK ((btrim(local_account_id) <> ''::text) AND (length(local_account_id) <= 255) AND (local_account_id !~ '^(ak|did):'::text))
     ,CONSTRAINT oauth_session_grants_signing_key_id_nonempty CHECK ((btrim(signing_key_id) <> ''::text))
     ,CONSTRAINT oauth_session_grants_lifecycle_valid CHECK ((lifecycle_state = ANY (ARRAY['active'::text, 'revoked'::text, 'superseded'::text])) AND (((lifecycle_state = 'active'::text) AND (revoked_at IS NULL) AND (superseded_at IS NULL) AND (successor_grant_id IS NULL)) OR ((lifecycle_state = 'revoked'::text) AND (revoked_at IS NOT NULL) AND (superseded_at IS NULL) AND (successor_grant_id IS NULL)) OR ((lifecycle_state = 'superseded'::text) AND (revoked_at IS NULL) AND (superseded_at IS NOT NULL) AND (successor_grant_id IS NOT NULL))))
     ,CONSTRAINT oauth_session_grants_successor_id_valid CHECK (((successor_grant_id IS NULL) OR ((octet_length(successor_grant_id) = 33) AND (get_byte(successor_grant_id, 0) = 1))))
@@ -722,7 +722,7 @@ CREATE TABLE public.account_handoff_grants (
     id uuid NOT NULL,
     request_id uuid NOT NULL,
     request_digest text NOT NULL,
-    service_account_id uuid NOT NULL,
+    local_account_id uuid NOT NULL,
     browser_session_id uuid,
     audience_id text NOT NULL,
     cnf_jkt text NOT NULL,
@@ -741,7 +741,7 @@ CREATE TABLE public.account_handoff_grants (
 );
 
 CREATE TABLE public.identity_creation_leases (
-    service_account_id uuid NOT NULL,
+    local_account_id uuid NOT NULL,
     audience_id text NOT NULL,
     lease_id text NOT NULL,
     holder_jkt text NOT NULL,
@@ -802,7 +802,7 @@ CREATE TABLE public.identity_creation_lease_rate_limit_events (
 CREATE TABLE public.identity_binding_challenges (
     request_id uuid NOT NULL,
     request_digest text NOT NULL,
-    service_account_id uuid NOT NULL,
+    local_account_id uuid NOT NULL,
     challenge_id text NOT NULL,
     challenge text NOT NULL,
     purpose text NOT NULL,
@@ -852,7 +852,7 @@ CREATE TABLE public.did_binding_challenges (
     request_id uuid PRIMARY KEY,
     request_digest text NOT NULL,
     issuing_handoff_grant_id uuid NOT NULL,
-    service_account_id uuid NOT NULL,
+    local_account_id uuid NOT NULL,
     account_subject text NOT NULL,
     principal_id text NOT NULL,
     did text NOT NULL,
@@ -892,7 +892,7 @@ CREATE TABLE public.identity_abandonment_challenges (
     request_id uuid PRIMARY KEY,
     request_digest text NOT NULL,
     issuing_handoff_grant_id uuid NOT NULL,
-    service_account_id uuid NOT NULL,
+    local_account_id uuid NOT NULL,
     audience_id text NOT NULL,
     account_subject text NOT NULL,
     holder_jkt text NOT NULL,
@@ -994,13 +994,6 @@ CREATE TABLE public.risk_action_proposals (
     CONSTRAINT risk_action_proposals_reason_non_empty CHECK ((btrim(reason) <> ''::text)),
     CONSTRAINT risk_action_proposals_required_approvals_positive CHECK ((required_approvals >= 1)),
     CONSTRAINT risk_action_proposals_state_valid CHECK ((state = ANY (ARRAY['draft'::text, 'approved'::text, 'executed'::text, 'cancelled'::text, 'rejected'::text])))
-);
-
-CREATE TABLE public.service_identity (
-    id smallint PRIMARY KEY,
-    identity jsonb NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT service_identity_singleton CHECK ((id = 1))
 );
 
 CREATE TABLE public.station_trust_enrollments (
@@ -1489,7 +1482,7 @@ ALTER TABLE ONLY public.account_handoff_grants
     ADD CONSTRAINT account_handoff_grants_token_unique UNIQUE (account_handoff_grant);
 
 ALTER TABLE ONLY public.identity_creation_leases
-    ADD CONSTRAINT identity_creation_leases_pkey PRIMARY KEY (service_account_id, audience_id);
+    ADD CONSTRAINT identity_creation_leases_pkey PRIMARY KEY (local_account_id, audience_id);
 
 ALTER TABLE ONLY public.identity_creation_leases
     ADD CONSTRAINT identity_creation_leases_lease_id_unique UNIQUE (lease_id);
@@ -1699,7 +1692,7 @@ CREATE INDEX idx_principal_did_bindings_user_id ON public.principal_did_bindings
 
 CREATE INDEX idx_principal_did_owners_user_id ON public.principal_did_owners USING btree (user_id);
 
-CREATE INDEX idx_account_handoff_grants_account_audience_id ON public.account_handoff_grants USING btree (service_account_id, audience_id);
+CREATE INDEX idx_account_handoff_grants_account_audience_id ON public.account_handoff_grants USING btree (local_account_id, audience_id);
 
 CREATE INDEX idx_account_handoff_creation_attempts_retention ON public.account_handoff_creation_attempts USING btree (retained_until);
 
@@ -1711,7 +1704,7 @@ CREATE INDEX idx_identity_creation_lease_rate_acquisition ON public.identity_cre
 
 CREATE INDEX idx_identity_creation_lease_rate_renewal ON public.identity_creation_lease_rate_limit_events USING btree (lease_id, occurred_at DESC) WHERE (action = 'renewal'::text);
 
-CREATE INDEX idx_identity_binding_challenges_reservation ON public.identity_binding_challenges USING btree (service_account_id, audience_id, lease_id, lease_fence, operation_digest);
+CREATE INDEX idx_identity_binding_challenges_reservation ON public.identity_binding_challenges USING btree (local_account_id, audience_id, lease_id, lease_fence, operation_digest);
 
 CREATE INDEX idx_identity_binding_challenges_expiry ON public.identity_binding_challenges USING btree (expires_at) WHERE ((consumed_at IS NULL) AND (replaced_at IS NULL));
 
@@ -1863,7 +1856,7 @@ ALTER TABLE ONLY public.oauth_session_grants
     ADD CONSTRAINT oauth_session_grants_issuance_operation_id_fkey FOREIGN KEY (issuance_operation_id) REFERENCES public.oauth_session_grant_operations(id);
 
 ALTER TABLE ONLY public.recovery_completion_grant_issuances
-    ADD CONSTRAINT recovery_completion_grant_issuances_account_id_fkey FOREIGN KEY (service_account_id) REFERENCES public.users(id) ON DELETE CASCADE;
+    ADD CONSTRAINT recovery_completion_grant_issuances_account_id_fkey FOREIGN KEY (local_account_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.recovery_completion_grant_issuances
     ADD CONSTRAINT recovery_completion_grant_issuances_operation_id_fkey FOREIGN KEY (session_grant_operation_id) REFERENCES public.oauth_session_grant_operations(id);
@@ -1896,16 +1889,16 @@ ALTER TABLE ONLY public.principal_did_owners
     ADD CONSTRAINT principal_did_owners_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.account_handoff_grants
-    ADD CONSTRAINT account_handoff_grants_service_account_id_fkey FOREIGN KEY (service_account_id) REFERENCES public.users(id) ON DELETE CASCADE;
+    ADD CONSTRAINT account_handoff_grants_local_account_id_fkey FOREIGN KEY (local_account_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.account_handoff_grants
     ADD CONSTRAINT account_handoff_grants_browser_session_id_fkey FOREIGN KEY (browser_session_id) REFERENCES public.user_sessions(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY public.identity_creation_leases
-    ADD CONSTRAINT identity_creation_leases_service_account_id_fkey FOREIGN KEY (service_account_id) REFERENCES public.users(id) ON DELETE CASCADE;
+    ADD CONSTRAINT identity_creation_leases_local_account_id_fkey FOREIGN KEY (local_account_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.identity_binding_challenges
-    ADD CONSTRAINT identity_binding_challenges_service_account_id_fkey FOREIGN KEY (service_account_id) REFERENCES public.users(id) ON DELETE CASCADE;
+    ADD CONSTRAINT identity_binding_challenges_local_account_id_fkey FOREIGN KEY (local_account_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.queue_jobs
     ADD CONSTRAINT queue_jobs_next_attempt_id_fkey FOREIGN KEY (next_attempt_id) REFERENCES public.queue_jobs(id);

@@ -385,7 +385,7 @@ pub async fn revoke_session_grant_endpoint(
         ArkretRouteError::Unauthorized(format!("invalid session grant: {error}"))
     })?;
 
-    let service_id = service_id_for(&arkret_config);
+    let service_id = owning_station_id_for(&arkret_config);
 
     let mut repo = depot.repo().await?;
     let current_grant = repo
@@ -396,7 +396,7 @@ pub async fn revoke_session_grant_endpoint(
         .ok_or_else(session_grant_not_found)?;
     if presented_claims.grant_id != current_grant.grant_id
         || presented_claims.issuer_id != current_grant.issuer_id
-        || presented_claims.subject_id != current_grant.subject_id
+        || presented_claims.account_id.principal_id != current_grant.subject_id
     {
         repo.cancel().await.ok();
         return Err(lifecycle_proof_invalid(
@@ -755,7 +755,7 @@ mod tests {
         ArkretConfig {
             deployment_profile: DeploymentProfileConfig::PersonalNode,
             principal_method: PrincipalMethodConfig::DidWeb,
-            runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+            runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
                 "did:web:auth.example",
             ),
             ..ArkretConfig::default()
@@ -787,7 +787,7 @@ mod tests {
             &personal_did_web_config(),
             &test_keystore(),
             &DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
-            arkret_identifiers::ServiceAccountId::new("test-account").unwrap(),
+            coauth_data::LocalAccountId::new("test-account").unwrap(),
             &DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000006").unwrap(),
             DidCoreId::new("ak:did_core:web:soland.example").unwrap(),
             vec!["ak.self.events.stream.subscribe.v1".to_owned()],
@@ -818,7 +818,7 @@ mod tests {
             browser_session_id: None,
             issuer_id: material.issuer_id,
             subject_id: material.subject_id,
-            service_account_id: material.service_account_id,
+            local_account_id: material.local_account_id,
             device_id: material.device_id,
             applet_id: None,
             effective_scope: None,

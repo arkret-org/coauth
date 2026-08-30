@@ -63,7 +63,7 @@ impl SecretsConfig {
                 into_key_config(ec_p384_key)?,
                 into_key_config(ec_p521_key)?,
                 into_key_config(ec_k256_key)?,
-                into_key_config_with_kid(ed25519_key, coauth_keystore::SERVICE_IDENTITY_KEY_ID)?,
+                into_key_config_with_kid(ed25519_key, coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID)?,
             ]),
             keys_dir: None,
         })

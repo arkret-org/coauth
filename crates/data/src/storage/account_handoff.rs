@@ -122,7 +122,7 @@ pub trait AccountHandoffRepository: Send + Sync {
     /// caller's account-binding transaction.
     async fn consume_did_binding_challenge(
         &mut self,
-        service_account_id: Ulid,
+        local_account_id: Ulid,
         account_subject: &arkret_identifiers::Hash,
         challenge_id: &str,
         request_digest: &arkret_identifiers::Hash,
@@ -161,7 +161,7 @@ pub trait AccountHandoffRepository: Send + Sync {
     /// lease. Expired and consumed challenges are never projected.
     async fn active_identity_abandonment_challenge(
         &mut self,
-        service_account_id: Ulid,
+        local_account_id: Ulid,
         audience_id: &arkret_identifiers::DidCoreId,
         lease_id: &str,
         now: DateTime<Utc>,
@@ -305,7 +305,7 @@ repository_impl!(AccountHandoffRepository:
     ) -> Result<DidBindingChallengeIssue, Self::Error>;
     async fn consume_did_binding_challenge(
         &mut self,
-        service_account_id: Ulid,
+        local_account_id: Ulid,
         account_subject: &arkret_identifiers::Hash,
         challenge_id: &str,
         request_digest: &arkret_identifiers::Hash,
@@ -332,7 +332,7 @@ repository_impl!(AccountHandoffRepository:
     ) -> Result<IdentityAbandonmentChallengeIssue, Self::Error>;
     async fn active_identity_abandonment_challenge(
         &mut self,
-        service_account_id: Ulid,
+        local_account_id: Ulid,
         audience_id: &arkret_identifiers::DidCoreId,
         lease_id: &str,
         now: DateTime<Utc>,

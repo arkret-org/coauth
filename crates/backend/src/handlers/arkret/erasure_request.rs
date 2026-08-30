@@ -45,7 +45,7 @@ use coauth_principal::ConnectorAdmin;
 use rand_core::RngCore;
 use salvo::prelude::*;
 
-use super::{ArkretRouteError, service_id_for};
+use super::{ArkretRouteError, owning_station_id_for};
 use crate::handlers::common::{DepotExt, extract_session_info, make_clock, make_rng};
 use crate::services::account_status_publication::{
     author_transition_plan, enqueue_exact_publication, validate_transition_plan,
@@ -321,7 +321,7 @@ pub(crate) async fn accept_erasure_request(
         repo,
         station,
         key_store,
-        service_id_for(arkret_config).as_str(),
+        owning_station_id_for(arkret_config).as_str(),
         user,
         &binding,
         AccountStatus::ErasurePending,
@@ -370,6 +370,7 @@ pub(crate) async fn accept_erasure_request(
         rng,
         clock,
         &plan.destination_name,
+        plan.local_account_id,
         &plan.idempotency_key,
         plan.body,
     )
@@ -497,7 +498,7 @@ mod tests {
             &mut repo,
             state.station_admin.as_ref(),
             &state.key_store,
-            service_id_for(&state.arkret_config).as_str(),
+            owning_station_id_for(&state.arkret_config).as_str(),
             user,
             &binding,
             status,
@@ -657,7 +658,7 @@ mod tests {
         let head = repo
             .account_status_ledger()
             .current(
-                service_id_for(&state.arkret_config).as_str(),
+                owning_station_id_for(&state.arkret_config).as_str(),
                 &user.id.to_string(),
             )
             .await

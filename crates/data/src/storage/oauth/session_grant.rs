@@ -1,4 +1,4 @@
-use arkret_identifiers::{DidCoreId, ServiceAccountId, SessionGrantId};
+use arkret_identifiers::{DidCoreId, SessionGrantId};
 use arkret_models_identity::SessionGrantProofKind;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -7,7 +7,9 @@ use rand_core::RngCore;
 use serde_json::Value;
 use ulid::Ulid;
 
-use crate::oauth::{SessionGrant, SessionGrantOperation, SessionGrantOperationDescriptor};
+use crate::oauth::{
+    LocalAccountId, SessionGrant, SessionGrantOperation, SessionGrantOperationDescriptor,
+};
 use crate::pagination::Page;
 use crate::storage::Pagination;
 use crate::{Clock, repository_impl};
@@ -131,7 +133,7 @@ pub struct NewSessionGrant<'a> {
     /// DID subject_id authorized by the grant.
     pub subject_id: &'a DidCoreId,
     /// Service-local account bound into the exact signed grant identity.
-    pub service_account_id: &'a ServiceAccountId,
+    pub local_account_id: &'a LocalAccountId,
     /// Optional Arkret client device id.
     pub device_id: Option<&'a str>,
     /// Applet effective install id, for applet-specific delegated sessions.

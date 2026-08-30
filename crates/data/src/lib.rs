@@ -175,7 +175,7 @@ pub use self::notification::{
 };
 pub use self::oauth::{
     AuthorizationCode, AuthorizationGrant, AuthorizationGrantStage, Client, DeviceCodeGrant,
-    DeviceCodeGrantState, InvalidRedirectUriError, JwksOrJwksUri, LocalizableField,
+    DeviceCodeGrantState, InvalidRedirectUriError, JwksOrJwksUri, LocalAccountId, LocalizableField,
     LocalizedClientMetadata, NewSessionGrantOperation, Pkce, Session, SessionGrant,
     SessionGrantCommitOutcome, SessionGrantExactOutcome, SessionGrantLifecycleState,
     SessionGrantOperation, SessionGrantOperationDescriptor, SessionGrantOperationKind,

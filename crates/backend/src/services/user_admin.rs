@@ -172,6 +172,7 @@ pub async fn patch_user(
             rng,
             clock,
             &plan.destination_name,
+            plan.local_account_id,
             &plan.idempotency_key,
             plan.body,
         )

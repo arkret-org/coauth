@@ -5,11 +5,11 @@ use arkret_models_collaboration::account_lifecycle::{
     AccountStatusRecord, UnsignedAccountStatusRecord,
 };
 use arkret_models_collaboration::objects::account_status::AccountStatus;
-use arkret_wire::{DidCoreId, Hash, SchemaId, ServiceAccountId};
+use arkret_wire::{DidCoreId, Hash, SchemaId};
 use coauth_data::queue::{AccountStatusPublicationJob, QueueJobRepositoryExt as _};
 use coauth_data::{
-    AccountStatusAppendOutcome, BoxRepository, Clock, PrincipalDidBinding, RepositoryAccess as _,
-    RepositoryError, User,
+    AccountStatusAppendOutcome, BoxRepository, Clock, LocalAccountId, PrincipalDidBinding,
+    RepositoryAccess as _, RepositoryError, User,
 };
 use rand_core::RngCore;
 use thiserror::Error;
@@ -27,6 +27,7 @@ pub enum AccountStatusPublicationError {
 pub struct AccountStatusPublicationPlan {
     pub audience_id: DidCoreId,
     pub destination_name: String,
+    pub local_account_id: LocalAccountId,
     pub idempotency_key: String,
     pub body: AccountStatusPublicationRequestBody,
 }
@@ -56,14 +57,14 @@ pub async fn author_transition_plan(
         .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
     if account_authority_id != binding.binding_receipt.account_authority_id {
         return Err(AccountStatusPublicationError::InvalidBody(
-            "runtime service identity does not match the accepted account authority".to_owned(),
+            "owning Station identity does not match the accepted account authority".to_owned(),
         ));
     }
-    let service_account_id = ServiceAccountId::new(user.id.to_string())
+    let local_account_id = LocalAccountId::new(user.id.to_string())
         .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
     let current = repo
         .account_status_ledger()
-        .current(account_authority_id.as_str(), service_account_id.as_str())
+        .current(account_authority_id.as_str(), local_account_id.as_str())
         .await?;
     if let Some(head) = &current {
         if head.status != user.status {
@@ -85,7 +86,6 @@ pub async fn author_transition_plan(
     let unsigned = UnsignedAccountStatusRecord {
         schema: SchemaId::ACCOUNT_STATUS_RECORD_V1.to_owned(),
         account_authority_id: account_authority_id.clone(),
-        service_account_id,
         account_id: arkret_wire::AccountId {
             principal_id: binding.account_id.principal_id.clone(),
             station_id: binding.account_id.station_id.clone(),
@@ -104,7 +104,7 @@ pub async fn author_transition_plan(
         expires_at: None,
     };
     let signing_seed = keystore
-        .service_identity_seed()
+        .account_authority_seed()
         .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
     let record = arkret_signatures::account_status::sign_account_status_record(
         unsigned,
@@ -113,7 +113,11 @@ pub async fn author_transition_plan(
     )
     .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
 
-    match repo.account_status_ledger().append(&record).await? {
+    match repo
+        .account_status_ledger()
+        .append(&local_account_id, &record)
+        .await?
+    {
         AccountStatusAppendOutcome::Appended => {}
         AccountStatusAppendOutcome::Duplicate => {
             return Err(AccountStatusPublicationError::InvalidBody(
@@ -136,6 +140,7 @@ pub async fn author_transition_plan(
     Ok(AccountStatusPublicationPlan {
         audience_id: audience,
         destination_name,
+        local_account_id,
         idempotency_key,
         body,
     })
@@ -158,7 +163,7 @@ pub fn validate_transition_plan(
         || binding.principal_control_realm_id != record.principal_control_realm_id
         || binding.binding_version != record.binding_version
         || binding.binding_receipt.account_authority_id != record.account_authority_id
-        || record.service_account_id.as_str() != user.id.to_string()
+        || plan.local_account_id.as_str() != user.id.to_string()
         || record.status != target_status
     {
         return Err(AccountStatusPublicationError::InvalidBody(
@@ -173,6 +178,7 @@ pub async fn enqueue_exact_publication(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     destination_name: &str,
+    local_account_id: LocalAccountId,
     idempotency_key: &str,
     body: AccountStatusPublicationRequestBody,
 ) -> Result<Hash, AccountStatusPublicationError> {
@@ -197,6 +203,7 @@ pub async fn enqueue_exact_publication(
             clock,
             AccountStatusPublicationJob::new(
                 destination_name.to_owned(),
+                local_account_id,
                 idempotency_key.to_owned(),
                 body_digest.clone(),
                 body,

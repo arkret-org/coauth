@@ -24,7 +24,7 @@ use crate::handlers::admin::audit_helper::{AdminAuditSigning, record_admin_opera
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::params::extract_ulid_param;
 use crate::handlers::admin::response::SingleOutcome;
-use crate::handlers::arkret::service_id_for;
+use crate::handlers::arkret::owning_station_id_for;
 use crate::handlers::common::DepotExt;
 use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
 use crate::services::did_resolver::DidResolverService;
@@ -474,7 +474,7 @@ pub async fn propose(
     let risk_action_proposals = depot.risk_action_proposals_service()?;
     let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
-    let service_did = crate::handlers::arkret::issuer_did_for(&arkret_config);
+    let service_did = crate::handlers::arkret::owning_station_did_for(&arkret_config);
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
         clock,
@@ -600,7 +600,7 @@ pub async fn approve(
     let key_store = depot.key_store()?;
     let url_builder = depot.url_builder()?;
     let http_client = depot.http_client().map_err(AppError::internal)?;
-    let service_did = crate::handlers::arkret::issuer_did_for(&arkret_config);
+    let service_did = crate::handlers::arkret::owning_station_did_for(&arkret_config);
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
         clock,
@@ -821,8 +821,8 @@ pub async fn execute(
     let arkret_config = depot.arkret_config()?;
     let station = depot.station()?;
     let key_store = depot.key_store()?;
-    let service_id = service_id_for(&arkret_config);
-    let service_did = crate::handlers::arkret::issuer_did_for(&arkret_config);
+    let service_id = owning_station_id_for(&arkret_config);
+    let service_did = crate::handlers::arkret::owning_station_did_for(&arkret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
         service_id: &service_id,

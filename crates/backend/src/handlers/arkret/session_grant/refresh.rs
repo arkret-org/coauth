@@ -1,4 +1,4 @@
-use arkret_identifiers::{DeviceId, ServiceAccountId};
+use arkret_identifiers::DeviceId;
 use arkret_models_collaboration::session_grant_bodies::{
     HumanSessionGrantRefreshRequest, SessionGrantRefreshOutcome, SessionGrantRefreshRequestBody,
     session_grant_refresh_request_digest,
@@ -6,9 +6,9 @@ use arkret_models_collaboration::session_grant_bodies::{
 use arkret_models_identity::{SessionGrantCredentialClass, SessionGrantProofKind};
 use chrono::{DateTime, Utc};
 use coauth_data::{
-    NewSessionGrantOperation, SessionGrantExactOutcome, SessionGrantProofAuthorization,
-    SessionGrantRefreshCommit, SessionGrantRefreshOutcome as LedgerRefreshOutcome,
-    SessionGrantReserveOutcome,
+    LocalAccountId, NewSessionGrantOperation, SessionGrantExactOutcome,
+    SessionGrantProofAuthorization, SessionGrantRefreshCommit,
+    SessionGrantRefreshOutcome as LedgerRefreshOutcome, SessionGrantReserveOutcome,
 };
 use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
@@ -78,7 +78,7 @@ fn validate_human_refresh_before_reservation(
 ) -> Result<(), ArkretRouteError> {
     let proof = &body.accepted_device_possession_proof;
     if proof.predecessor_session_grant_id != prior_grant.grant_id
-        || proof.principal_id != prior_payload.subject_id
+        || proof.principal_id != prior_payload.account_id.principal_id
         || proof.device_id != body.device_id
         || proof.holder_jkt != holder_jkt
     {
@@ -102,7 +102,7 @@ fn validate_human_refresh_before_reservation(
     let expected_digest = session_grant_refresh_request_digest(
         &body.grant_jwt,
         &prior_grant.grant_id,
-        &prior_payload.subject_id,
+        &prior_payload.account_id.principal_id,
         &body.device_id,
         &audience_id,
         holder_jkt,
@@ -488,7 +488,7 @@ pub async fn refresh_session_grant(
         let authoritative_agent = match enforce_authoritative_agent_lifecycle(
             &http_client,
             &arkret_config,
-            prior_payload.subject_id.as_str(),
+            prior_payload.account_id.principal_id.as_str(),
         )
         .await
         {
@@ -601,8 +601,8 @@ pub async fn refresh_session_grant(
             &issuance_seed,
             &arkret_config,
             &key_store,
-            &prior_payload.subject_id,
-            ServiceAccountId::new(controller_user_id.to_string())
+            &prior_payload.account_id.principal_id,
+            LocalAccountId::new(controller_user_id.to_string())
                 .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
             &device_id,
             prior_grant.audience_id.clone(),
@@ -626,7 +626,7 @@ pub async fn refresh_session_grant(
         let audience_id = new_material.audience_id.clone();
         let outcome = SessionGrantRefreshOutcome {
             session_grant_id: new_material.grant_id.clone(),
-            service_account_id: new_material.service_account_id.clone(),
+            account_id: new_material.account_id.clone(),
             grant_jwt: new_material.grant_jwt.clone(),
             session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
                 &new_material.session_public_key,
@@ -901,7 +901,7 @@ pub async fn refresh_session_grant(
 
     let outcome = SessionGrantRefreshOutcome {
         session_grant_id: new_material.grant_id.clone(),
-        service_account_id: new_material.service_account_id.clone(),
+        account_id: new_material.account_id.clone(),
         grant_jwt: new_material.grant_jwt.clone(),
         session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
             &new_material.session_public_key,

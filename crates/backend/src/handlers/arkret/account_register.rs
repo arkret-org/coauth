@@ -34,7 +34,8 @@ use super::session_grant::{
     persist_session_grant,
 };
 use super::{
-    ArkretRouteError, DepotExt, SessionGrantError, issuer_did_for, service_id_for, trust_domain_for,
+    ArkretRouteError, DepotExt, SessionGrantError, owning_station_did_for, owning_station_id_for,
+    trust_domain_for,
 };
 use crate::handlers::account::auth::oidc_bridge::{
     VerifiedPrincipalIdentity, ensure_soland_account_registered,
@@ -174,7 +175,7 @@ pub async fn account_register_endpoint(
     }
     validate_initial_session_request(identity_creation, &grant)?;
     // Resolve the exact Station once for the whole registration
-    // transaction. The same service identity is the handoff/session audience,
+    // transaction. The same owning Station identity is the handoff/session audience,
     // the PCR submission target, and the server pinned by the resulting
     // AccountId.
     let station = station_target(depot, &grant.audience_id)?;
@@ -300,7 +301,7 @@ pub async fn account_register_endpoint(
     };
 
     let pcr_request = PcrGenesisSubmitRequestBody {
-        account_authority_id: service_id_for(&depot.arkret_config()?),
+        account_authority_id: owning_station_id_for(&depot.arkret_config()?),
         principal_id: body.principal_id.clone(),
         did: body.did.clone(),
         pcr_realm_id: identity_creation.control_proof.pcr_realm_id.clone(),
@@ -340,9 +341,9 @@ pub async fn account_register_endpoint(
             Some(&station.endpoint),
             &http_client,
             &key_store,
-            issuer_did_for(&config),
+            owning_station_did_for(&config),
             arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
-                source_id: service_id_for(&config),
+                source_id: owning_station_id_for(&config),
                 destination_id: station.service_id.clone(),
             },
             trust_domain.clone(),
@@ -402,7 +403,7 @@ pub async fn account_register_endpoint(
     let mut receipt = AccountBindingReceipt {
         binding_state: AccountBindingState::Bound,
         binding_kind: AccountBindingKind::IdentityCreation,
-        account_authority_id: service_id_for(&depot.arkret_config()?),
+        account_authority_id: owning_station_id_for(&depot.arkret_config()?),
         account_subject: context.challenge.account_subject.clone(),
         principal_id: body.principal_id.clone(),
         did: body.did.clone(),
@@ -418,8 +419,8 @@ pub async fn account_register_endpoint(
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
             verification_method: arkret_wire::DidUrl::new(format!(
                 "{}#{}",
-                issuer_did_for(&depot.arkret_config()?),
-                crate::services::service_identity::SERVICE_IDENTITY_VERIFICATION_METHOD_FRAGMENT
+                owning_station_did_for(&depot.arkret_config()?),
+                crate::services::peer_protocol_client::ACCOUNT_AUTHORITY_VERIFICATION_METHOD_FRAGMENT
             ))
             .map_err(|error| {
                 ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
@@ -451,7 +452,7 @@ pub async fn account_register_endpoint(
         }
         let user = repo
             .user()
-            .lookup(grant.service_account_id)
+            .lookup(grant.local_account_id)
             .await?
             .ok_or(ArkretRouteError::NotFound)?;
         let existing_binding = repo
@@ -505,7 +506,7 @@ pub async fn account_register_endpoint(
             }
         };
         let account_status_connector = depot.station()?;
-        let account_authority_id = service_id_for(&depot.arkret_config()?);
+        let account_authority_id = owning_station_id_for(&depot.arkret_config()?);
         let initial_status_publication = author_transition_plan(
             &mut repo,
             account_status_connector.as_ref(),
@@ -532,6 +533,7 @@ pub async fn account_register_endpoint(
             &mut *rng,
             &*clock,
             &initial_status_publication.destination_name,
+            initial_status_publication.local_account_id,
             &initial_status_publication.idempotency_key,
             initial_status_publication.body,
         )
@@ -618,8 +620,7 @@ pub async fn account_register_endpoint(
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     persist_session_grant(&mut repo, &mut *rng, &*clock, &browser_session, &material).await?;
     let session_grant_outcome = SessionGrantOutcome {
-        principal_id: body.principal_id.clone(),
-        service_account_id: material.service_account_id.clone(),
+        account_id: material.account_id.clone(),
         device_id: Some(initial.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
@@ -757,7 +758,7 @@ fn sign_account_binding_receipt(
     let payload = Base64UrlUnpadded::encode_string(&payload);
     let signing_input = format!("{protected}.{payload}");
     let signer = key_store
-        .service_identity_signer()
+        .account_authority_signer()
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let mut entropy = make_rng();
     let mut rng = crate::handlers::make_rng_from(&mut *entropy);

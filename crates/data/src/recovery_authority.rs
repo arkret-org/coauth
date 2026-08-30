@@ -8,7 +8,7 @@ use serde_json::Value;
 pub struct RecoveryCompletionGrantIssuance {
     pub transaction_id: String,
     pub transaction_request_digest: String,
-    pub service_account_id: crate::Ulid,
+    pub local_account_id: crate::Ulid,
     pub principal_id: arkret_identifiers::DidCoreId,
     pub device_id: String,
     pub device_authorization_event_id: String,
@@ -25,7 +25,7 @@ pub struct RecoveryCompletionGrantIssuance {
 pub struct NewRecoveryCompletionGrantIssuance {
     pub transaction_id: String,
     pub transaction_request_digest: String,
-    pub service_account_id: crate::Ulid,
+    pub local_account_id: crate::Ulid,
     pub principal_id: arkret_identifiers::DidCoreId,
     pub device_id: String,
     pub device_authorization_event_id: String,

@@ -22,8 +22,8 @@ pub struct VerifiedPrincipalDidBindingInput {
     /// Canonical Account Authority binding receipt retained for exact replay
     /// and audit. This snapshot is private state, never PCR resolution truth.
     pub binding_receipt: arkret_models_identity::AccountBindingReceipt,
-    /// Stable service identity core accepted by the principal binding. Gate
-    /// attestations bind to this exact accepting service identity.
+    /// Stable owning Station id accepted by the principal binding. Gate
+    /// attestations bind to this exact Account Authority identity.
     pub accepted_id: arkret_identifiers::DidCoreId,
     /// Monotonic private Account Authority binding generation.
     pub binding_version: u64,

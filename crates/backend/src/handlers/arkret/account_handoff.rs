@@ -79,8 +79,8 @@ pub async fn issue_did_binding_challenge(
 
     let arkret_config = depot.arkret_config()?;
     let account_subject = account_subject(
-        &super::service_id_for(&arkret_config),
-        grant.service_account_id,
+        &super::owning_station_id_for(&arkret_config),
+        grant.local_account_id,
     )?;
     let url_builder = depot.url_builder()?;
     let key_store = depot.key_store()?;
@@ -137,7 +137,7 @@ pub async fn issue_did_binding_challenge(
             request_id: body.request_id,
             request_digest,
             issuing_handoff_grant_id: grant.id,
-            service_account_id: grant.service_account_id,
+            local_account_id: grant.local_account_id,
             account_subject,
             principal_id: body.principal_id,
             did: body.did,
@@ -326,7 +326,7 @@ pub async fn create_account_handoff(
     )?;
     let preferred_locale = authenticated.user.preferred_locale;
     let checkpoint = AccountHandoffAuthorizationCheckpoint {
-        service_account_id: authenticated.user.id.to_string(),
+        local_account_id: authenticated.user.id.to_string(),
         browser_session_id: authenticated.browser_session_id.map(|id| id.to_string()),
         audience_id: arkret_identifiers::DidCoreId::new(authenticated.audience)
             .map_err(|error| failed_precondition(error.to_string()))?,
@@ -506,7 +506,7 @@ async fn create_local_account_handoff(
         arkret_config.trust_domain.as_deref(),
     )?;
     let checkpoint = AccountHandoffAuthorizationCheckpoint {
-        service_account_id: authenticated.user.id.to_string(),
+        local_account_id: authenticated.user.id.to_string(),
         browser_session_id: Some(authenticated.browser_session_id.to_string()),
         audience_id: arkret_identifiers::DidCoreId::new(authenticated.audience)
             .map_err(|error| failed_precondition(error.to_string()))?,
@@ -583,8 +583,8 @@ pub async fn account_onboarding_snapshot(
     let (grant, _dpop) = authenticate_account_handoff_snapshot(req, depot).await?;
     let observed_at = make_clock().now();
     let account_subject = account_subject(
-        &super::service_id_for(&depot.arkret_config()?),
-        grant.service_account_id,
+        &super::owning_station_id_for(&depot.arkret_config()?),
+        grant.local_account_id,
     )?;
     let mut repo = depot.repo().await?;
     let creation = repo
@@ -607,7 +607,7 @@ pub async fn account_onboarding_snapshot(
             .map_err(|error| failed_precondition(error.to_string()))?;
         repo.account_handoff()
             .active_identity_abandonment_challenge(
-                grant.service_account_id,
+                grant.local_account_id,
                 &audience,
                 &identity_creation_lease.identity_creation_lease_id,
                 observed_at,
@@ -737,7 +737,7 @@ async fn finalize_handoff_creation(
     attempt: &AccountHandoffCreationAttempt,
     checkpoint: &AccountHandoffAuthorizationCheckpoint,
 ) -> Result<Vec<u8>, ArkretRouteError> {
-    let service_account_id = Ulid::from_string(&checkpoint.service_account_id)
+    let local_account_id = Ulid::from_string(&checkpoint.local_account_id)
         .map_err(|_| indeterminate_handoff_replay())?;
     let browser_session_id = checkpoint
         .browser_session_id
@@ -755,15 +755,17 @@ async fn finalize_handoff_creation(
     };
     let now = make_clock().now();
     let mut rng = make_rng();
-    let account_subject =
-        account_subject(&super::service_id_for(arkret_config), service_account_id)?;
+    let account_subject = account_subject(
+        &super::owning_station_id_for(arkret_config),
+        local_account_id,
+    )?;
     let creation = repo
         .account_handoff()
         .create_with_lease(AccountHandoffGrantInput {
             id: new_id(now, &mut *rng),
             request_id: attempt.request_id.clone(),
             request_digest: attempt.request_digest.clone(),
-            service_account_id,
+            local_account_id,
             browser_session_id,
             audience_id: checkpoint.audience_id.to_string(),
             account_subject: account_subject.clone(),
@@ -866,8 +868,8 @@ pub async fn issue_identity_binding_challenge(
 
     let arkret_config = depot.arkret_config()?;
     let account_subject = account_subject(
-        &super::service_id_for(&arkret_config),
-        grant.service_account_id,
+        &super::owning_station_id_for(&arkret_config),
+        grant.local_account_id,
     )?;
     let url_builder = depot.url_builder()?;
     let trust_domain = trust_domain_for(&url_builder, &arkret_config);
@@ -892,7 +894,7 @@ pub async fn issue_identity_binding_challenge(
         .reserve_and_issue_challenge(IdentityBindingChallengeInput {
             request_id: body.request_id,
             request_digest,
-            service_account_id: grant.service_account_id,
+            local_account_id: grant.local_account_id,
             audience_id: audience.clone(),
             lease_id: body.identity_creation_lease_id,
             lease_fence: body.lease_fence,
@@ -981,8 +983,8 @@ pub async fn issue_identity_abandonment_challenge(
         .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
     let arkret_config = depot.arkret_config()?;
     let account_subject = account_subject(
-        &super::service_id_for(&arkret_config),
-        grant.service_account_id,
+        &super::owning_station_id_for(&arkret_config),
+        grant.local_account_id,
     )?;
     let url_builder = depot.url_builder()?;
     let trust_domain =
@@ -1002,7 +1004,7 @@ pub async fn issue_identity_abandonment_challenge(
             request_id: body.request_id,
             request_digest,
             issuing_handoff_grant_id: grant.id,
-            service_account_id: grant.service_account_id,
+            local_account_id: grant.local_account_id,
             audience_id: audience.clone(),
             account_subject,
             holder_jkt: grant.cnf_jkt.clone(),
@@ -1095,7 +1097,7 @@ pub async fn abandon_identity_creation(
             request_id: body.request_id,
             request_digest,
             confirming_handoff_grant_id: grant.id,
-            service_account_id: grant.service_account_id,
+            local_account_id: grant.local_account_id,
             audience_id: audience,
             holder_jkt: grant.cnf_jkt,
             challenge_id: body.challenge_id,
@@ -1411,11 +1413,11 @@ fn creation_binding(
 
 pub(crate) fn account_subject(
     account_authority_id: &arkret_identifiers::DidCoreId,
-    service_account_id: Ulid,
+    local_account_id: Ulid,
 ) -> Result<arkret_identifiers::Hash, ArkretRouteError> {
     let value = serde_json::json!({
         "account_authority_id": account_authority_id,
-        "service_account_id": service_account_id.to_string(),
+        "local_account_id": local_account_id.to_string(),
     });
     let mut bytes = b"ak.account-subject.v1\n".to_vec();
     bytes.extend(

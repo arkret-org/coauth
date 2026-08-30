@@ -1,4 +1,4 @@
-use arkret_identifiers::{DidCoreId, ServiceAccountId, SessionGrantId};
+use arkret_identifiers::{DidCoreId, SessionGrantId};
 use arkret_models_collaboration::account_lifecycle::SessionRevokeOutcome as WireSessionRevokeOutcome;
 use arkret_models_identity::{
     SessionGrantCredentialClass, SessionGrantHolderBinding, SessionGrantIssuancePreimage,
@@ -16,7 +16,7 @@ use coauth_data::oauth::{
     SessionGrantRevokeTarget,
 };
 use coauth_data::pagination::{Node, PaginationDirection};
-use coauth_data::{Clock, Page, Pagination, SessionGrant, new_id};
+use coauth_data::{Clock, LocalAccountId, Page, Pagination, SessionGrant, new_id};
 use coauth_oauth_types::scope::{Scope, ScopeToken};
 use diesel::prelude::*;
 use diesel_async::{AsyncConnection, RunQueryDsl};
@@ -284,7 +284,7 @@ struct SessionGrantLookup {
     user_session_id: Option<Uuid>,
     issuer_id: DidCoreId,
     subject_id: DidCoreId,
-    service_account_id: ServiceAccountId,
+    local_account_id: String,
     device_id: Option<String>,
     applet_id: Option<String>,
     effective_scope: Option<Value>,
@@ -371,7 +371,12 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
             browser_session_id: value.user_session_id.map(Into::into),
             issuer_id: value.issuer_id,
             subject_id: value.subject_id,
-            service_account_id: value.service_account_id,
+            local_account_id: LocalAccountId::new(value.local_account_id).map_err(|error| {
+                DatabaseInconsistencyError::on("oauth_session_grants")
+                    .column("local_account_id")
+                    .row(id)
+                    .source(error)
+            })?,
             device_id: value.device_id,
             applet_id: value.applet_id,
             effective_scope: value.effective_scope,
@@ -408,7 +413,7 @@ struct NewSessionGrantRow<'a> {
     user_session_id: Option<Uuid>,
     issuer_id: &'a DidCoreId,
     subject_id: &'a DidCoreId,
-    service_account_id: &'a ServiceAccountId,
+    local_account_id: &'a str,
     device_id: Option<&'a str>,
     applet_id: Option<&'a str>,
     effective_scope: Option<Value>,
@@ -642,7 +647,7 @@ fn new_grant_row<'a>(
         user_session_id: grant.browser_session_id.map(Uuid::from),
         issuer_id: grant.issuer_id,
         subject_id: grant.subject_id,
-        service_account_id: grant.service_account_id,
+        local_account_id: grant.local_account_id.as_str(),
         device_id: grant.device_id,
         applet_id: grant.applet_id,
         effective_scope: grant.effective_scope.clone(),
@@ -681,7 +686,7 @@ fn owned_grant(
         browser_session_id: grant.browser_session_id,
         issuer_id: grant.issuer_id.clone(),
         subject_id: grant.subject_id.clone(),
-        service_account_id: grant.service_account_id.clone(),
+        local_account_id: grant.local_account_id.clone(),
         device_id: grant.device_id.map(ToOwned::to_owned),
         applet_id: grant.applet_id.map(ToOwned::to_owned),
         effective_scope: grant.effective_scope,

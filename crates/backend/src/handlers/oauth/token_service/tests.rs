@@ -347,7 +347,7 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
     let grant_config = ArkretConfig {
         deployment_profile: coauth_config::DeploymentProfileConfig::PersonalNode,
         principal_method: coauth_config::PrincipalMethodConfig::DidWeb,
-        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+        runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
             "did:web:issuer.example",
         ),
         // Session-grant audiences are Station core DIDs.

@@ -67,7 +67,8 @@ impl DbConnectorAdmin {
         }
     }
 
-    /// Attach the runtime service identity used for RFC 9421 peer requests.
+    /// Attach the private Account Authority signing material used for RFC
+    /// 9421 peer requests on behalf of the owning Station.
     #[must_use]
     pub fn with_peer_signing(
         mut self,
@@ -94,20 +95,16 @@ fn default_station(arkret_config: &ArkretConfig) -> Result<&StationConfig, anyho
     }
 }
 
-/// Snapshot both halves of the runtime service identity from one lifecycle
-/// state. The Provider supervisor can move the shared handle from
-/// `WaitingProvider` to `Ready` after this facade is constructed, so peer
-/// signing must never freeze an empty (or stale) identity at process startup.
-fn runtime_peer_identity(
+/// Resolve the verified owning Station identity delegated to this private
+/// Account Authority component.
+fn owning_station_peer_identity(
     arkret_config: &ArkretConfig,
 ) -> Result<(arkret_identifiers::DidCoreId, arkret_identifiers::Did), anyhow::Error> {
-    let state = arkret_config.runtime_service_identity.state();
-    let identity = state.identity().ok_or_else(|| {
-        anyhow::anyhow!(
-            "account-status peer signing identity is unavailable while the runtime service identity is {state:?}"
-        )
-    })?;
-    Ok((identity.service_id.clone(), identity.did.clone()))
+    let identity = arkret_config
+        .runtime_owning_station_identity
+        .get()
+        .ok_or_else(|| anyhow::anyhow!("owning Station identity is not verified"))?;
+    Ok((identity.station_id, identity.did))
 }
 
 pub(crate) async fn commit_agent_key_pair_to_station(
@@ -327,9 +324,9 @@ impl ConnectorAdmin for DbConnectorAdmin {
             .peer_signing
             .as_ref()
             .context("account-status peer signing configuration is unavailable")?;
-        let (source_id, source_did) = runtime_peer_identity(&self.arkret_config)?;
+        let (source_id, source_did) = owning_station_peer_identity(&self.arkret_config)?;
         let destination_id = crate::services::station_trust::effective_audience_shared(target)
-            .context("account-status destination service identity is unavailable or stale")?;
+            .context("owning Station identity is unavailable or stale")?;
         let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
             source_id,
             destination_id,
@@ -385,9 +382,9 @@ impl ConnectorAdmin for DbConnectorAdmin {
             .peer_signing
             .as_ref()
             .context("erasure-receipt peer signing configuration is unavailable")?;
-        let (source_id, source_did) = runtime_peer_identity(&self.arkret_config)?;
+        let (source_id, source_did) = owning_station_peer_identity(&self.arkret_config)?;
         let destination_id = crate::services::station_trust::effective_audience_shared(target)
-            .context("erasure-receipt destination service identity is unavailable or stale")?;
+            .context("owning Station identity is unavailable or stale")?;
         let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
             source_id,
             destination_id,
@@ -513,7 +510,7 @@ fn unsupported_principal_delete_reason(erase: bool) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{default_station, runtime_peer_identity, unsupported_principal_delete_reason};
+    use super::{default_station, unsupported_principal_delete_reason};
 
     fn station(name: &str) -> coauth_config::StationConfig {
         coauth_config::StationConfig {
@@ -559,34 +556,6 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("ambiguous")
-        );
-    }
-
-    #[test]
-    fn runtime_peer_identity_is_unavailable_before_provider_readiness() {
-        let config = coauth_config::ArkretConfig::default();
-
-        let error = runtime_peer_identity(&config).expect_err("default identity is faulted");
-
-        assert!(error.to_string().contains("identity is unavailable"));
-    }
-
-    #[test]
-    fn runtime_peer_identity_observes_identity_installed_after_construction() {
-        let config = coauth_config::ArkretConfig::default();
-        let shared = config.runtime_service_identity.clone();
-        let ready = coauth_config::RuntimeServiceIdentity::fixture(
-            "did:webvh:QmService:auth.example:webvh:service",
-        )
-        .state();
-
-        shared.store(ready);
-        let (service_id, did) = runtime_peer_identity(&config).expect("identity became ready");
-
-        assert_eq!(service_id.as_str(), "ak:did_core:webvh:QmService");
-        assert_eq!(
-            did.as_str(),
-            "did:webvh:QmService:auth.example:webvh:service"
         );
     }
 

@@ -632,20 +632,20 @@ pub struct Keystore {
     >,
 }
 
-/// Stable key identifier reserved for Coauth's service-identity signing key.
+/// Stable key identifier reserved for the private Account Authority signer.
 ///
-/// Selecting by `kid` keeps service-identity custody independent from the
-/// order of OIDC/JWT keys and permits unrelated Ed25519 keys to coexist.
-pub const SERVICE_IDENTITY_KEY_ID: &str = "coauth-service-identity-v1";
+/// The owning Station delegates use of this key to its coauth component; the
+/// key does not create a separately registered Arkret service identity.
+pub const ACCOUNT_AUTHORITY_KEY_ID: &str = "coauth-account-authority-v1";
 
-/// Invalid service-identity key selection from the configured key backend.
+/// Invalid Account Authority key selection from the configured key backend.
 #[derive(Debug, Error)]
-pub enum ServiceIdentityKeyError {
-    #[error("no key with kid `{SERVICE_IDENTITY_KEY_ID}` is configured")]
+pub enum AccountAuthorityKeyError {
+    #[error("no key with kid `{ACCOUNT_AUTHORITY_KEY_ID}` is configured")]
     Missing,
-    #[error("more than one key with kid `{SERVICE_IDENTITY_KEY_ID}` is configured")]
+    #[error("more than one key with kid `{ACCOUNT_AUTHORITY_KEY_ID}` is configured")]
     Ambiguous,
-    #[error("key `{SERVICE_IDENTITY_KEY_ID}` must be Ed25519")]
+    #[error("key `{ACCOUNT_AUTHORITY_KEY_ID}` must be Ed25519")]
     WrongKeyType,
 }
 
@@ -675,39 +675,35 @@ impl Keystore {
         (*self.public_jwks).clone()
     }
 
-    /// Return the explicitly designated Ed25519 seed for service identity.
-    ///
-    /// Deriving the WebVH control key from this stable key keeps Provider
-    /// recovery deterministic when the business database is rebuilt while
-    /// the configured key backend is retained.
-    pub fn service_identity_seed(&self) -> Result<[u8; 32], ServiceIdentityKeyError> {
+    /// Return the explicitly designated Ed25519 seed used by the private
+    /// Account Authority component.
+    pub fn account_authority_seed(&self) -> Result<[u8; 32], AccountAuthorityKeyError> {
         let mut candidates = self
             .inner
             .iter()
-            .filter(|jwk| jwk.kid() == Some(SERVICE_IDENTITY_KEY_ID));
-        let candidate = candidates.next().ok_or(ServiceIdentityKeyError::Missing)?;
+            .filter(|jwk| jwk.kid() == Some(ACCOUNT_AUTHORITY_KEY_ID));
+        let candidate = candidates.next().ok_or(AccountAuthorityKeyError::Missing)?;
         if candidates.next().is_some() {
-            return Err(ServiceIdentityKeyError::Ambiguous);
+            return Err(AccountAuthorityKeyError::Ambiguous);
         }
         match candidate.params() {
             PrivateKey::OkpEd25519(key) => Ok(key.to_bytes()),
-            _ => Err(ServiceIdentityKeyError::WrongKeyType),
+            _ => Err(AccountAuthorityKeyError::WrongKeyType),
         }
     }
 
-    /// Return the signer backed by the explicitly designated service-identity
-    /// key.
+    /// Return the signer delegated to the private Account Authority component.
     ///
     /// Service-to-service protocols must use this selector instead of the
     /// generic algorithm-only selector: a deployment can legitimately contain
     /// other Ed25519 keys (for example, the device-enrollment authority), and
-    /// their ordering must not change the service identity used on the wire.
-    pub fn service_identity_signer(
+    /// their ordering must not change the Station-delegated issuer used on the wire.
+    pub fn account_authority_signer(
         &self,
-    ) -> Result<Arc<AsymmetricSigningKey>, ServiceIdentityKeyError> {
-        let seed = self.service_identity_seed()?;
+    ) -> Result<Arc<AsymmetricSigningKey>, AccountAuthorityKeyError> {
+        let seed = self.account_authority_seed()?;
         let alg = JsonWebSignatureAlg::Ed25519;
-        let cache_key = (SERVICE_IDENTITY_KEY_ID.to_owned(), alg);
+        let cache_key = (ACCOUNT_AUTHORITY_KEY_ID.to_owned(), alg);
 
         if let Ok(cache) = self.signer_cache.read()
             && let Some(signer) = cache.get(&cache_key)

@@ -120,7 +120,7 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
         )
         .await?
         .ok_or_else(|| AppError::conflict("admin account has no published principal_id"))?,
-        None => crate::handlers::arkret::service_id_for(&arkret_config),
+        None => crate::handlers::arkret::owning_station_id_for(&arkret_config),
     };
 
     // REL-03: consume the approved proposal *before* persisting the grant.

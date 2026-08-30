@@ -366,11 +366,11 @@ mod tests {
 
         assert!(algs.contains(&JsonWebSignatureAlg::Es512));
         assert!(algs.contains(&JsonWebSignatureAlg::Ed25519));
-        assert!(key_store.service_identity_seed().is_ok());
+        assert!(key_store.account_authority_seed().is_ok());
         assert!(
             key_store
                 .iter()
-                .any(|key| key.kid() == Some(coauth_keystore::SERVICE_IDENTITY_KEY_ID))
+                .any(|key| key.kid() == Some(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID))
         );
     }
 

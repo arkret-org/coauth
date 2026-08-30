@@ -70,15 +70,6 @@ impl Options {
             .key_store()
             .await
             .context("could not import keys from config")?;
-        coauth_backend::services::service_identity::initialize_and_spawn(
-            PgRepositoryFactory::new(db_pool.clone()),
-            &app_cfg.arkret,
-            &app_cfg.http.public_base_url,
-            &key_store,
-            arkret_http_client.clone(),
-        )
-        .await
-        .context("could not initialize Provider-backed service identity")?;
         coauth_backend::services::station_trust::preflight_and_spawn(
             PgRepositoryFactory::new(db_pool.clone()),
             app_cfg.arkret.clone(),

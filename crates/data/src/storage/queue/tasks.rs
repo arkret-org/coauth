@@ -114,6 +114,7 @@ impl InsertableJob for ProcessNotificationDeliveriesJob {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AccountStatusPublicationJob {
     destination_name: String,
+    local_account_id: crate::LocalAccountId,
     idempotency_key: String,
     record_id: arkret_wire::AccountStatusRecordId,
     body_digest: Hash,
@@ -125,6 +126,7 @@ impl AccountStatusPublicationJob {
     #[must_use]
     pub fn new(
         destination_name: String,
+        local_account_id: crate::LocalAccountId,
         idempotency_key: String,
         body_digest: Hash,
         body: AccountStatusPublicationRequestBody,
@@ -132,6 +134,7 @@ impl AccountStatusPublicationJob {
         let record_id = body.publication.record().account_status_record_id.clone();
         Self {
             destination_name,
+            local_account_id,
             idempotency_key,
             record_id,
             body_digest,
@@ -143,6 +146,12 @@ impl AccountStatusPublicationJob {
     #[must_use]
     pub fn destination_name(&self) -> &str {
         &self.destination_name
+    }
+
+    /// Station-local account-row key used only for issuer-ledger recovery.
+    #[must_use]
+    pub fn local_account_id(&self) -> &crate::LocalAccountId {
+        &self.local_account_id
     }
 
     /// Destination-scoped protocol idempotency key.

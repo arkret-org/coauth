@@ -115,6 +115,7 @@ pub async fn deactivate_current_account(
         rng,
         clock,
         &publication.destination_name,
+        publication.local_account_id,
         &publication.idempotency_key,
         publication.body,
     )

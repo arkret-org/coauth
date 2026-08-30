@@ -34,7 +34,7 @@ use super::proof::canonical_digest;
 use crate::handlers::account::{DepotExt, make_clock, make_rng};
 use crate::handlers::admin::CreatedJson;
 use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
-use crate::handlers::arkret::{issuer_did_for, service_id_for};
+use crate::handlers::arkret::{owning_station_did_for, owning_station_id_for};
 use crate::{AppError, CreatedJsonResult};
 
 const ACCOUNTABILITY_GRANT_FANOUT_QUEUE: &str = "soland-accountability-grant-fanout";
@@ -177,7 +177,7 @@ pub async fn post_accountability_grant(
     let capabilities_digest =
         accountability_capabilities_digest(&agent_id, &controller_id, &capabilities)?;
     let idempotency_key = accountability_grant_idempotency_key(&accountability_grant_id);
-    let service_id = service_id_for(&arkret_config);
+    let service_id = owning_station_id_for(&arkret_config);
     let fanout_payload = build_soland_fanout_payload(
         &response,
         &raw_payload_digest,
@@ -260,7 +260,7 @@ pub async fn post_accountability_grant(
         }
     });
     let key_store = depot.key_store()?;
-    let service_did = issuer_did_for(&arkret_config);
+    let service_did = owning_station_did_for(&arkret_config);
     record_service_admin_operation_signed(
         &mut repo,
         &mut *rng,

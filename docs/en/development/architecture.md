@@ -1,6 +1,6 @@
 # Architecture
 
-coauth is the Arkret Auth Server. It handles account authentication,
+coauth is a deployment-private Station Account Authority component. It handles account authentication,
 OAuth/OIDC, session grants, and Station integration for downstream
 systems such as Soland. It is meant to stay lightweight in terms of resource
 usage and easily scalable horizontally.

@@ -37,6 +37,7 @@ use url::Url;
 use crate::outbound_http;
 
 const SIGNATURE_LABEL: &str = "sig1";
+pub(crate) const ACCOUNT_AUTHORITY_VERIFICATION_METHOD_FRAGMENT: &str = "account-authority";
 const SIGNATURE_WINDOW_SECONDS: i64 = 300;
 const SOURCE_SERVICE_ID_HEADER: &str = "Source-Service-ID";
 const DESTINATION_SERVICE_ID_HEADER: &str = "Destination-Service-ID";
@@ -373,8 +374,7 @@ impl<'a> PeerProtocolClient<'a> {
             .join(" ");
         let signature_input_header = format!(
             "{SIGNATURE_LABEL}=({covered_wire});created={created};expires={expires};keyid=\"{}#{}\";alg=\"ed25519\"",
-            self.source_did,
-            super::service_identity::SERVICE_IDENTITY_VERIFICATION_METHOD_FRAGMENT
+            self.source_did, ACCOUNT_AUTHORITY_VERIFICATION_METHOD_FRAGMENT
         );
         let signature_input = parse_signature_input(&signature_input_header)
             .map_err(|_| PeerProtocolClientError::Sign)?;
@@ -435,7 +435,7 @@ fn ed25519_signer(
     keystore: &Keystore,
 ) -> Result<std::sync::Arc<coauth_jose::jwa::AsymmetricSigningKey>, PeerProtocolClientError> {
     keystore
-        .service_identity_signer()
+        .account_authority_signer()
         .map_err(|_| PeerProtocolClientError::NoSigningKey)
 }
 
@@ -455,7 +455,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey, SERVICE_IDENTITY_KEY_ID};
+    use coauth_keystore::{ACCOUNT_AUTHORITY_KEY_ID, JsonWebKey, JsonWebKeySet, PrivateKey};
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
@@ -463,7 +463,7 @@ mod tests {
     fn test_keystore() -> Keystore {
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(7);
         let service_key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-            .with_kid(SERVICE_IDENTITY_KEY_ID);
+            .with_kid(ACCOUNT_AUTHORITY_KEY_ID);
         let unrelated_device_key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
             .with_kid("device-enrollment-key");
         Keystore::new(JsonWebKeySet::new(vec![service_key, unrelated_device_key]))
@@ -549,7 +549,7 @@ mod tests {
         assert!(header("Signature").unwrap().starts_with("sig1=:"));
 
         let service_key =
-            ed25519_dalek::SigningKey::from_bytes(&keystore.service_identity_seed().unwrap());
+            ed25519_dalek::SigningKey::from_bytes(&keystore.account_authority_seed().unwrap());
         let policy = arkret_signatures::http_signature::SignatureVerificationPolicy::new(vec![
             Component::Method,
             Component::TargetUri,
@@ -577,7 +577,7 @@ mod tests {
             &policy,
             chrono::Utc::now().timestamp(),
         )
-        .expect("peer HTTP signature must verify with the reserved service-identity key");
+        .expect("peer HTTP signature must verify with the Account Authority key");
     }
 
     #[test]

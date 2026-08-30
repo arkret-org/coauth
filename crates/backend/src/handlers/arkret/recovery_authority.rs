@@ -103,7 +103,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             prior,
             &request,
             &canonical_request,
-            replay_grant.service_account_id,
+            replay_grant.local_account_id,
         );
     }
 
@@ -138,7 +138,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
     let mut prerequisite_repo = depot.repo().await?;
     let principal_binding = verify_account_principal_binding(
         &mut prerequisite_repo,
-        handoff.service_account_id,
+        handoff.local_account_id,
         &handoff.audience_id,
         receipt.principal_id.as_str(),
     )
@@ -169,7 +169,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             browser_session.user.status,
             AccountStatus::Active | AccountStatus::Deactivated
         );
-    if !recovery_session_eligible || browser_session.user.id != handoff.service_account_id {
+    if !recovery_session_eligible || browser_session.user.id != handoff.local_account_id {
         prerequisite_repo.cancel().await.ok();
         return Err(failed_precondition(
             "account handoff browser session is no longer active for this account",
@@ -197,7 +197,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             ))
         })?
         .to_owned();
-    let issuer_id = super::service_id_for(&config);
+    let issuer_id = super::owning_station_id_for(&config);
     let request_identity = format!("recovery-completion:{}", request.transaction_id);
     let intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_request).into();
     let mut rng = crate::handlers::make_rng();
@@ -240,7 +240,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
                 depot,
                 &request,
                 &canonical_request,
-                handoff.service_account_id,
+                handoff.local_account_id,
                 Some(bytes),
             )
             .await;
@@ -306,8 +306,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
     )
     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let wire_grant = SessionGrantOutcome {
-        principal_id: receipt.principal_id.clone(),
-        service_account_id: material.service_account_id.clone(),
+        account_id: material.account_id.clone(),
         device_id: Some(initial.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
@@ -332,7 +331,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
     // commit as one transaction. Exact replay then observes the same outcome.
     let current_user = repo
         .user()
-        .lookup(handoff.service_account_id)
+        .lookup(handoff.local_account_id)
         .await?
         .ok_or_else(|| failed_precondition("recovery account no longer exists"))?;
     match current_user.status {
@@ -343,7 +342,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
                 &mut repo,
                 station.as_ref(),
                 &key_store,
-                super::service_id_for(&config).as_str(),
+                super::owning_station_id_for(&config).as_str(),
                 &current_user,
                 &principal_binding,
                 AccountStatus::Active,
@@ -375,6 +374,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
                 &mut rng,
                 &*clock,
                 &plan.destination_name,
+                plan.local_account_id,
                 &plan.idempotency_key,
                 plan.body,
             )
@@ -436,7 +436,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
                 depot,
                 &request,
                 &canonical_request,
-                handoff.service_account_id,
+                handoff.local_account_id,
                 Some(bytes),
             )
             .await;
@@ -454,7 +454,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         .insert_completion_issuance(NewRecoveryCompletionGrantIssuance {
             transaction_id: request.transaction_id.to_string(),
             transaction_request_digest: request.transaction_request_digest.to_string(),
-            service_account_id: handoff.service_account_id,
+            local_account_id: handoff.local_account_id,
             principal_id: receipt.principal_id.clone(),
             device_id: initial.device_id.to_string(),
             device_authorization_event_id: request.device_authorization_event_id.to_string(),
@@ -472,7 +472,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             depot,
             &request,
             &canonical_request,
-            handoff.service_account_id,
+            handoff.local_account_id,
             None,
         )
         .await;
@@ -675,7 +675,7 @@ fn exact_replay(
 ) -> Result<RecoveryCompletionCanonicalJson, ArkretRouteError> {
     if record.transaction_request_digest != request.transaction_request_digest.as_str()
         || record.canonical_request_digest != request.canonical_request_digest.as_str()
-        || record.service_account_id != account_id
+        || record.local_account_id != account_id
         || record.canonical_request != canonical_request
     {
         return Err(duplicate_conflict(

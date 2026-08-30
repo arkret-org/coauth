@@ -85,6 +85,9 @@ arkret:
       service_id: ak:did_core:webvh:<soland-scid>
       embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 
+  # Required when more than one Station trust edge is configured.
+  owning_station: soland
+
   identity_registry:
     resolver: https://resolver.example.com/
     proof_required_for_pairwise: true
@@ -103,8 +106,12 @@ arkret:
 - `principal_method`: principal DID method. Defaults to `did:webvh`; `did:web`
   must be explicitly paired with `deployment_profile: personal_node`.
 - `identity_registry`: delegated DID / identity resolver, typically a public DID resolver service
-- Coauth resolves, registers, and persists its service DID through the configured Provider;
-  configuration never accepts a DID.
+- `owning_station`: selects the Station that owns this deployment-private
+  Account Authority component. A single configured Station is selected
+  automatically; multiple Stations require an explicit name.
+- Coauth has no independent Arkret service DID or service registration. After
+  trust preflight, it uses the verified owning Station identity only for the
+  private issuer/controller duties delegated to the Account Authority.
 - Station audiences and DIDs are pinned by configuration or by the
   persisted trust enrollment; `/_arkret/describe` is only used for online
   identity-chain verification during bootstrap and revalidation.

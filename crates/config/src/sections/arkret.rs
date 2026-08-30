@@ -1,11 +1,6 @@
 use std::sync::{Arc, RwLock};
 
 use arkret_identifiers::{Did, DidCoreId, project_did_to_core_id};
-use arkret_identity::service_identity::{
-    DidCoreIdentityDiagnostic, DidCoreIdentityKeyRef, DidCoreIdentityState, LocalDidCoreIdentity,
-};
-use arkret_models_identity::service_identity::{CanonicalServiceUrl, ServiceRegistrationKey};
-use arkret_wire::ServiceKind;
 use chrono::Duration;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -93,96 +88,56 @@ impl PrincipalMethodConfig {
     }
 }
 
-/// Shared runtime lifecycle state for the deployment service identity.
-///
-/// This handle is skipped by serde and schema generation because the DID is
-/// resolved from a trusted Provider and never belongs in configuration.
-#[derive(Clone)]
-pub struct RuntimeServiceIdentity(Arc<RwLock<DidCoreIdentityState>>);
+/// Identity of the owning Station delegated to this deployment-private
+/// Account Authority component after trust preflight.
+#[derive(Debug, Clone)]
+pub struct DelegatedStationIdentity {
+    /// Stable authorization id of the owning Station.
+    pub station_id: DidCoreId,
+    /// Full verified DID of the owning Station.
+    pub did: Did,
+}
 
-impl std::fmt::Debug for RuntimeServiceIdentity {
+/// Shared runtime slot populated exclusively by verified Station trust.
+#[derive(Clone, Default)]
+pub struct RuntimeOwningStationIdentity(Arc<RwLock<Option<DelegatedStationIdentity>>>);
+
+impl std::fmt::Debug for RuntimeOwningStationIdentity {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
-            .debug_tuple("RuntimeServiceIdentity")
-            .field(&self.state())
+            .debug_tuple("RuntimeOwningStationIdentity")
+            .field(&self.get())
             .finish()
     }
 }
 
-impl Default for RuntimeServiceIdentity {
-    fn default() -> Self {
-        Self(Arc::new(RwLock::new(DidCoreIdentityState::Faulted {
-            diagnostic: DidCoreIdentityDiagnostic::ProviderNotConfigured,
-            next_action: "configure one trusted service-registration Provider endpoint and bearer"
-                .to_owned(),
-        })))
-    }
-}
-
-impl RuntimeServiceIdentity {
-    /// Returns a snapshot of the current lifecycle state.
+impl RuntimeOwningStationIdentity {
+    /// Return the currently delegated identity, if trust preflight installed it.
     #[must_use]
-    pub fn state(&self) -> DidCoreIdentityState {
+    pub fn get(&self) -> Option<DelegatedStationIdentity> {
         self.0
             .read()
-            .expect("service identity lock poisoned")
+            .expect("owning Station identity lock poisoned")
             .clone()
     }
 
-    /// Replaces the current state after validating its invariants.
-    pub fn store(&self, state: DidCoreIdentityState) {
-        state.validate().expect("valid service identity state");
-        *self.0.write().expect("service identity lock poisoned") = state;
-    }
-
-    /// Returns the stable service core id when the state carries an identity.
-    #[must_use]
-    pub fn service_id(&self) -> Option<DidCoreId> {
-        self.state()
-            .identity()
-            .map(|identity| identity.service_id.clone())
-    }
-
-    /// Returns the current service DID when the state carries an identity.
-    #[must_use]
-    pub fn did(&self) -> Option<Did> {
-        self.state().identity().map(|identity| identity.did.clone())
-    }
-
-    /// Returns whether normal request handling may proceed.
-    #[must_use]
-    pub fn is_ready(&self) -> bool {
-        self.state().is_ready()
+    /// Install identity material after successful owning Station verification.
+    pub fn store(&self, station_id: DidCoreId, did: Did) {
+        *self
+            .0
+            .write()
+            .expect("owning Station identity lock poisoned") =
+            Some(DelegatedStationIdentity { station_id, did });
     }
 
     #[doc(hidden)]
     #[must_use]
-    pub fn fixture(service_id: &str) -> Self {
-        let did = Did::new(service_id.to_owned()).expect("fixture service DID");
-        let service_id = project_did_to_core_id(&did).expect("fixture service DID adapter");
-        let signing_key_ref =
-            DidCoreIdentityKeyRef::new("fixture:coauth:signing").expect("fixture key ref");
-        let handle = Self::default();
-        handle.store(DidCoreIdentityState::Ready {
-            identity: LocalDidCoreIdentity {
-                service_id,
-                did,
-                registration_key: ServiceRegistrationKey::new(
-                    ServiceKind::Station,
-                    CanonicalServiceUrl::canonicalize("https://auth.test/")
-                        .expect("fixture public base"),
-                )
-                .expect("fixture registration key"),
-                provider: None,
-                signing_key_refs: vec![signing_key_ref.clone()],
-                active_signing_key_ref: signing_key_ref,
-                control_key_ref: DidCoreIdentityKeyRef::new("fixture:coauth:control")
-                    .expect("fixture control key ref"),
-                version_id: "fixture-v1".to_owned(),
-                last_verified_at: chrono::DateTime::UNIX_EPOCH,
-            },
-        });
-        handle
+    pub fn fixture(did: &str) -> Self {
+        let did = Did::new(did.to_owned()).expect("fixture Station DID");
+        let station_id = project_did_to_core_id(&did).expect("fixture Station core ID");
+        let value = Self::default();
+        value.store(station_id, did);
+        value
     }
 }
 
@@ -197,15 +152,12 @@ pub struct ArkretConfig {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stations: Vec<StationConfig>,
 
-    /// Trusted services that provide the standard service-registration role
-    /// without also acting as a Station.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub identity_services: Vec<IdentityServiceConfig>,
-
-    /// Provider name used only to disambiguate multiple registration-capable
-    /// entries. A single candidate is selected automatically.
+    /// Name of the Station that owns this deployment-private Account
+    /// Authority component. A single configured Station is selected
+    /// automatically; deployments with multiple Station trust edges must set
+    /// this explicitly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub identity_provider: Option<String>,
+    pub owning_station: Option<String>,
 
     /// Deployment profile that gates principal DID method choices.
     ///
@@ -228,10 +180,10 @@ pub struct ArkretConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity_registry: Option<IdentityRegistryConfig>,
 
-    /// Runtime-only Provider resolution result. Never serialized.
+    /// Runtime-only identity delegated by the verified owning Station.
     #[serde(skip)]
     #[schemars(skip)]
-    pub runtime_service_identity: RuntimeServiceIdentity,
+    pub runtime_owning_station_identity: RuntimeOwningStationIdentity,
 
     /// Lifetime of Arkret session grants, in seconds.
     ///
@@ -354,12 +306,11 @@ impl Default for ArkretConfig {
     fn default() -> Self {
         Self {
             stations: Vec::new(),
-            identity_services: Vec::new(),
-            identity_provider: None,
+            owning_station: None,
             deployment_profile: DeploymentProfileConfig::default(),
             principal_method: PrincipalMethodConfig::default(),
             identity_registry: None,
-            runtime_service_identity: RuntimeServiceIdentity::default(),
+            runtime_owning_station_identity: RuntimeOwningStationIdentity::default(),
             session_grant_ttl: default_session_grant_ttl(),
             admin_audience: None,
             high_risk_threshold: default_high_risk_threshold(),
@@ -378,8 +329,7 @@ impl ArkretConfig {
     #[must_use]
     pub fn is_default(&self) -> bool {
         self.stations.is_empty()
-            && self.identity_services.is_empty()
-            && self.identity_provider.is_none()
+            && self.owning_station.is_none()
             && DeploymentProfileConfig::is_default(&self.deployment_profile)
             && PrincipalMethodConfig::is_default(&self.principal_method)
             && self.identity_registry.is_none()
@@ -417,9 +367,6 @@ impl ArkretConfig {
         for server in &self.stations {
             push(&server.endpoint);
         }
-        for service in &self.identity_services {
-            push(&service.endpoint);
-        }
         if let Some(registry) = self.identity_registry.as_ref() {
             push(&registry.resolver);
         }
@@ -456,6 +403,19 @@ impl ArkretConfig {
     #[must_use]
     pub fn primary_station_url(&self) -> Option<&Url> {
         self.stations.first().map(|server| &server.endpoint)
+    }
+
+    /// Station whose verified identity is delegated to this private Account
+    /// Authority component.
+    #[must_use]
+    pub fn owning_station(&self) -> Option<&StationConfig> {
+        match self.owning_station.as_deref() {
+            Some(name) => self.stations.iter().find(|station| station.name == name),
+            None => match self.stations.as_slice() {
+                [station] => Some(station),
+                _ => None,
+            },
+        }
     }
 
     /// Validate the configured `trust_domain` (if any) against the SDK
@@ -536,7 +496,7 @@ impl ConfigurationSection for ArkretConfig {
             }
         }
 
-        let mut provider_names = std::collections::BTreeSet::new();
+        let mut station_names = std::collections::BTreeSet::new();
         for server in &self.stations {
             if server.name.trim().is_empty() {
                 return Err(
@@ -553,34 +513,21 @@ impl ConfigurationSection for ArkretConfig {
                 )
                 .into());
             }
-            if server.embedded_webvh_registration_bearer.is_some()
-                && !provider_names.insert(server.name.as_str())
-            {
-                return Err(std::io::Error::other(
-                    "service-registration Provider names must be unique",
-                )
-                .into());
+            if !station_names.insert(server.name.as_str()) {
+                return Err(std::io::Error::other("Station names must be unique").into());
             }
         }
-        for service in &self.identity_services {
-            if service.name.trim().is_empty() || service.registration_bearer.trim().is_empty() {
-                return Err(std::io::Error::other(
-                    "arkret.identity_services[] requires non-empty name and registration_bearer",
-                )
-                .into());
-            }
-            if !provider_names.insert(service.name.as_str()) {
-                return Err(std::io::Error::other(
-                    "service-registration Provider names must be unique",
-                )
-                .into());
-            }
+        if self.stations.len() > 1 && self.owning_station.is_none() {
+            return Err(std::io::Error::other(
+                "arkret.owning_station is required when multiple Stations are configured",
+            )
+            .into());
         }
-        if let Some(selected) = self.identity_provider.as_deref()
-            && (selected.trim().is_empty() || !provider_names.contains(selected))
+        if let Some(selected) = self.owning_station.as_deref()
+            && (selected.trim().is_empty() || !station_names.contains(selected))
         {
             return Err(std::io::Error::other(
-                "arkret.identity_provider must name a configured registration-capable service entry",
+                "arkret.owning_station must name a configured Station",
             )
             .into());
         }
@@ -651,20 +598,6 @@ pub struct StationConfig {
     /// `did:webvh` registration records into this Station.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub embedded_webvh_registration_bearer: Option<String>,
-}
-
-/// Trusted standalone service-identity Provider metadata.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct IdentityServiceConfig {
-    /// Operator-facing stable name used for ambiguity resolution.
-    pub name: String,
-
-    /// Base URL serving the standard service-registration operations.
-    pub endpoint: Url,
-
-    /// Deployment credential authorizing service-registration calls.
-    pub registration_bearer: String,
 }
 
 /// External identity-registry resolver configuration.
@@ -752,11 +685,13 @@ mod tests {
     }
 
     #[test]
-    fn service_identity_is_runtime_only() {
+    fn coauth_has_no_independent_service_identity_configuration() {
         let config = ArkretConfig::default();
         let serialized = serde_json::to_value(&config).unwrap();
         assert!(serialized.get("service_id").is_none());
-        assert!(serialized.get("runtime_service_identity").is_none());
+        assert!(serialized.get("runtime_owning_station_identity").is_none());
+        assert!(serialized.get("identity_services").is_none());
+        assert!(serialized.get("identity_provider").is_none());
     }
 
     #[test]
@@ -863,17 +798,22 @@ mod tests {
     }
 
     #[test]
-    fn standalone_identity_provider_uses_role_shaped_config() {
-        let config: ArkretConfig = serde_json::from_value(serde_json::json!({
-            "identity_services": [{
-                "name": "identity-a",
-                "endpoint": "https://identity.example/",
-                "registration_bearer": "secret"
-            }]
-        }))
-        .unwrap();
-        assert_eq!(config.identity_services[0].name, "identity-a");
+    fn multiple_stations_require_explicit_owner() {
+        let station = |name: &str| StationConfig {
+            name: name.to_owned(),
+            endpoint: format!("https://{name}.example/").parse().unwrap(),
+            service_id: None,
+            session_grant_introspection_bearer: None,
+            embedded_webvh_registration_bearer: None,
+        };
+        let mut config = ArkretConfig {
+            stations: vec![station("one"), station("two")],
+            ..ArkretConfig::default()
+        };
+        assert!(config.validate(&figment::Figment::new()).is_err());
+        config.owning_station = Some("two".to_owned());
         assert!(config.validate(&figment::Figment::new()).is_ok());
+        assert_eq!(config.owning_station().unwrap().name, "two");
     }
 
     #[test]

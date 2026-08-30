@@ -11,7 +11,9 @@ use serde_json::Value;
 use thiserror::Error;
 use url::Url;
 
-use crate::handlers::arkret::{DidDocument, SessionGrantError, issuer_did_for, service_id_for};
+use crate::handlers::arkret::{
+    DidDocument, SessionGrantError, owning_station_did_for, owning_station_id_for,
+};
 use crate::outbound_http::RequestBuilderExt as _;
 
 pub type DidResolverServiceHandle = Arc<dyn DidResolverService>;
@@ -279,11 +281,11 @@ pub struct DefaultDidResolverService {
 #[async_trait]
 impl DidResolverService for DefaultDidResolverService {
     fn service_id(&self, arkret_config: &ArkretConfig) -> arkret_identifiers::DidCoreId {
-        service_id_for(arkret_config)
+        owning_station_id_for(arkret_config)
     }
 
     fn issuer_did(&self, arkret_config: &ArkretConfig) -> Did {
-        issuer_did_for(arkret_config)
+        owning_station_did_for(arkret_config)
     }
 
     fn resolver_egress_policy(&self) -> &ResolverEgressPolicy {

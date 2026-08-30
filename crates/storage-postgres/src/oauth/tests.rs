@@ -1,4 +1,4 @@
-use arkret_identifiers::{DidCoreId, ServiceAccountId};
+use arkret_identifiers::DidCoreId;
 use arkret_models_identity::{
     CanonicalSessionPublicJwk, SESSION_GRANT_CREDENTIAL_KIND, SESSION_GRANT_ISSUANCE_SCHEMA,
     SessionGrantCredentialClass, SessionGrantHolderBinding, SessionGrantIssuanceNonce,
@@ -10,7 +10,7 @@ use coauth_data::oauth::{
     NewSessionGrant, OAuthDeviceCodeGrantParams, OAuthSessionFilter, OAuthSessionRepository,
 };
 use coauth_data::{
-    AuthorizationCode, Clock, Pagination, RefreshTokenState, RepositoryAccess,
+    AuthorizationCode, Clock, LocalAccountId, Pagination, RefreshTokenState, RepositoryAccess,
     RepositoryFactory as _,
 };
 use coauth_oauth_types::requests::{GrantType, ResponseMode};
@@ -196,7 +196,7 @@ where
                 browser_session_id: seed.browser_session_id,
                 issuer_id: &issuer_id,
                 subject_id: &preimage.account_id.principal_id,
-                service_account_id: &ServiceAccountId::new("test-account").unwrap(),
+                local_account_id: &LocalAccountId::new("test-account").unwrap(),
                 device_id: Some(seed.device_id),
                 applet_id: None,
                 effective_scope: None,

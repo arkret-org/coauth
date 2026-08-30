@@ -180,7 +180,7 @@ pub async fn add_account_did(
         return Err(AppError::conflict("account DID binding is already active"));
     }
 
-    let expected_audience = crate::handlers::arkret::service_id_for(&arkret_config);
+    let expected_audience = crate::handlers::arkret::owning_station_id_for(&arkret_config);
     let expected_trust_domain = arkret_identifiers::TrustDomainId::new(
         crate::handlers::arkret::trust_domain_for(&url_builder, &arkret_config),
     )

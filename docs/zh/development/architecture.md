@@ -1,6 +1,6 @@
 # 架构设计
 
-coauth 是 Arkret 的 Auth Server，负责账号认证、OAuth/OIDC、会话授权与 Station（例如 soland）集成。它以 PostgreSQL 为主要外部存储依赖，支持水平扩展部署。
+coauth 是 Station 内部的部署私有 Account Authority 组件，负责账号认证、OAuth/OIDC、会话授权与 owning Station（例如 soland）集成。它不构成独立 Arkret service role，不拥有独立 service DID，也不执行 service registration。它以 PostgreSQL 为主要外部存储依赖，支持水平扩展部署。
 
 ## 设计目标
 

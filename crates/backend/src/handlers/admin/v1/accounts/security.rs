@@ -20,7 +20,7 @@ use zeroize::Zeroizing;
 use crate::handlers::admin::audit_helper::record_admin_operation_signed;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::params::extract_ulid_param;
-use crate::handlers::arkret::issuer_did_for;
+use crate::handlers::arkret::owning_station_did_for;
 use crate::handlers::common::DepotExt;
 use crate::{AppError, AppResult};
 
@@ -29,7 +29,7 @@ fn audit_signing_context(
 ) -> Result<(coauth_keystore::Keystore, arkret_identifiers::Did, bool), AppError> {
     let key_store = depot.key_store()?;
     let arkret_config = depot.arkret_config()?;
-    let service_did = issuer_did_for(&arkret_config);
+    let service_did = owning_station_did_for(&arkret_config);
     Ok((
         key_store,
         service_did,

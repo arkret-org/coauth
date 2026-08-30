@@ -15,7 +15,7 @@ use crate::handlers::admin::audit_helper::{
     AuditSignatureStatus, verify_admin_operation_signature,
 };
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::arkret::issuer_did_for;
+use crate::handlers::arkret::owning_station_did_for;
 use crate::handlers::common::DepotExt;
 use crate::{AppError, JsonResult};
 
@@ -95,7 +95,7 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<AuditFeedOu
         .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
     let key_store = depot.key_store()?;
     let arkret_config = depot.arkret_config()?;
-    let service_did = issuer_did_for(&arkret_config);
+    let service_did = owning_station_did_for(&arkret_config);
 
     let mut filter = AdminOperationFilter::new().with_limit(query.limit.unwrap_or(50));
 

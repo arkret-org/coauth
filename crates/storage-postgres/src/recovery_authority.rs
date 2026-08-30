@@ -29,7 +29,7 @@ impl<'c> PgRecoveryAuthorityRepository<'c> {
 struct RecoveryCompletionGrantIssuanceRow {
     transaction_id: String,
     transaction_request_digest: String,
-    service_account_id: uuid::Uuid,
+    local_account_id: uuid::Uuid,
     principal_id: arkret_identifiers::DidCoreId,
     device_id: String,
     device_authorization_event_id: String,
@@ -46,7 +46,7 @@ impl From<RecoveryCompletionGrantIssuanceRow> for RecoveryCompletionGrantIssuanc
         Self {
             transaction_id: value.transaction_id,
             transaction_request_digest: value.transaction_request_digest,
-            service_account_id: value.service_account_id.into(),
+            local_account_id: value.local_account_id.into(),
             principal_id: value.principal_id,
             device_id: value.device_id,
             device_authorization_event_id: value.device_authorization_event_id,
@@ -65,7 +65,7 @@ impl From<RecoveryCompletionGrantIssuanceRow> for RecoveryCompletionGrantIssuanc
 struct InsertableRecoveryCompletionGrantIssuance {
     transaction_id: String,
     transaction_request_digest: String,
-    service_account_id: uuid::Uuid,
+    local_account_id: uuid::Uuid,
     principal_id: arkret_identifiers::DidCoreId,
     device_id: String,
     device_authorization_event_id: String,
@@ -104,7 +104,7 @@ impl RecoveryAuthorityRepository for PgRecoveryAuthorityRepository<'_> {
         let row = InsertableRecoveryCompletionGrantIssuance {
             transaction_id: params.transaction_id,
             transaction_request_digest: params.transaction_request_digest,
-            service_account_id: params.service_account_id.into(),
+            local_account_id: params.local_account_id.into(),
             principal_id: params.principal_id,
             device_id: params.device_id,
             device_authorization_event_id: params.device_authorization_event_id,

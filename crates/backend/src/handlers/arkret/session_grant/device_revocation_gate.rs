@@ -8,7 +8,9 @@ use arkret_wire::{
 use chrono::{DateTime, Utc};
 use salvo::prelude::{Depot, StatusCode};
 
-use crate::handlers::arkret::{ArkretRouteError, issuer_did_for, service_id_for, trust_domain_for};
+use crate::handlers::arkret::{
+    ArkretRouteError, owning_station_did_for, owning_station_id_for, trust_domain_for,
+};
 use crate::handlers::common::DepotExt as _;
 use crate::services::did_binding_proof::verify_detached_jws_against_method;
 use crate::services::peer_protocol_client::PeerProtocolClient;
@@ -55,7 +57,7 @@ pub(crate) async fn acquire_human_device_binding(
     };
     request.validate().map_err(gate_protocol_error)?;
 
-    let source_id = service_id_for(&config);
+    let source_id = owning_station_id_for(&config);
     let trust_domain =
         arkret_identifiers::TrustDomainId::new(trust_domain_for(&depot.url_builder()?, &config))
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
@@ -69,7 +71,7 @@ pub(crate) async fn acquire_human_device_binding(
         Some(&destination.endpoint),
         &http_client,
         &key_store,
-        issuer_did_for(&config),
+        owning_station_did_for(&config),
         identity,
         trust_domain.clone(),
         trust_domain,

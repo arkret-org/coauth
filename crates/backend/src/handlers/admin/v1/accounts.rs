@@ -443,8 +443,8 @@ async fn patch_account(
     let id = extract_ulid_param(req)?;
     let station = depot.station()?;
     let key_store = depot.key_store()?;
-    let service_id = crate::handlers::arkret::service_id_for(&arkret_config);
-    let service_did = crate::handlers::arkret::issuer_did_for(&arkret_config);
+    let service_id = crate::handlers::arkret::owning_station_id_for(&arkret_config);
+    let service_did = crate::handlers::arkret::owning_station_did_for(&arkret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
         service_id: &service_id,

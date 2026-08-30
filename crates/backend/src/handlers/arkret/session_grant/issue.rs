@@ -1,11 +1,11 @@
-use arkret_identifiers::{DidCoreId, ServiceAccountId};
+use arkret_identifiers::DidCoreId;
 use arkret_models_collaboration::session_grant_bodies::{
     AgentSessionGrantRequest, HumanSessionGrantRequest, RecoverySessionGrantRequest,
     SessionGrantOutcome, SessionGrantRequestBody,
 };
 use coauth_data::user::PrincipalDidRepository as _;
 use coauth_data::{
-    NewSessionGrantOperation, RepositoryAccess as _, SessionGrantCommitOutcome,
+    LocalAccountId, NewSessionGrantOperation, RepositoryAccess as _, SessionGrantCommitOutcome,
     SessionGrantOperation, SessionGrantReserveOutcome,
 };
 use salvo::prelude::*;
@@ -153,7 +153,7 @@ async fn reserve_issue_operation(
     // retry horizons. A committed operation can still retain its canonical
     // outcome longer in storage policy; this is the minimum requested here.
     let retained_until = now + depot.arkret_config()?.session_grant_ttl + chrono::Duration::days(7);
-    let issuer_id = service_id_for(&depot.arkret_config()?);
+    let issuer_id = owning_station_id_for(&depot.arkret_config()?);
     let mut rng = crate::handlers::make_rng();
     let mut repo = depot.repo().await?;
     let reserved = repo
@@ -397,7 +397,7 @@ async fn validate_recovery_handoff_request_before_reservation(
     }
     let user = repo
         .user()
-        .lookup(handoff.service_account_id)
+        .lookup(handoff.local_account_id)
         .await?
         .ok_or(ArkretRouteError::NotFound)?;
     repo.principal_did()
@@ -550,11 +550,11 @@ async fn issue_account_handoff_session_grant(
     }
     let user = repo
         .user()
-        .lookup(handoff.service_account_id)
+        .lookup(handoff.local_account_id)
         .await?
         .ok_or(ArkretRouteError::NotFound)?;
     let expected_account_subject = super::super::account_handoff::account_subject(
-        &service_id_for(&depot.arkret_config()?),
+        &owning_station_id_for(&depot.arkret_config()?),
         user.id,
     )?;
     if proof.account_subject != expected_account_subject {
@@ -595,7 +595,7 @@ async fn issue_account_handoff_session_grant(
             )
         })?;
     let handoff_id = handoff.id;
-    let handoff_service_account_id = handoff.service_account_id;
+    let handoff_local_account_id = handoff.local_account_id;
     let handoff_audience = handoff.audience_id.clone();
     let handoff_cnf_jkt = handoff.cnf_jkt.clone();
     let handoff_expires_at = handoff.expires_at;
@@ -640,8 +640,7 @@ async fn issue_account_handoff_session_grant(
     )
     .map_err(map_session_grant_material_error)?;
     let wire_outcome = SessionGrantOutcome {
-        principal_id: binding.principal_id.clone(),
-        service_account_id: material.service_account_id.clone(),
+        account_id: material.account_id.clone(),
         device_id: Some(device_id),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
@@ -670,7 +669,7 @@ async fn issue_account_handoff_session_grant(
         .await?
         .filter(|current| {
             current.id == handoff_id
-                && current.service_account_id == handoff_service_account_id
+                && current.local_account_id == handoff_local_account_id
                 && current.audience_id == handoff_audience
                 && current.cnf_jkt == handoff_cnf_jkt
         })
@@ -795,7 +794,7 @@ async fn issue_recovery_session_grant(
     }
     let user = repo
         .user()
-        .lookup(handoff.service_account_id)
+        .lookup(handoff.local_account_id)
         .await?
         .ok_or(ArkretRouteError::NotFound)?;
     let binding = repo
@@ -830,7 +829,7 @@ async fn issue_recovery_session_grant(
             )
         })?;
     let handoff_id = handoff.id;
-    let handoff_service_account_id = handoff.service_account_id;
+    let handoff_local_account_id = handoff.local_account_id;
     let handoff_audience = handoff.audience_id.clone();
     let handoff_cnf_jkt = handoff.cnf_jkt.clone();
     let handoff_expires_at = handoff.expires_at;
@@ -859,15 +858,14 @@ async fn issue_recovery_session_grant(
         body.device_id.clone(),
         granted_scope,
         &binding.principal_id,
-        ServiceAccountId::new(handoff_service_account_id.to_string())
+        LocalAccountId::new(handoff_local_account_id.to_string())
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         &binding.account_id,
         dpop.jkt.clone(),
     )
     .map_err(map_session_grant_material_error)?;
     let wire_outcome = SessionGrantOutcome {
-        principal_id: binding.principal_id,
-        service_account_id: material.service_account_id.clone(),
+        account_id: material.account_id.clone(),
         device_id: Some(body.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
@@ -892,7 +890,7 @@ async fn issue_recovery_session_grant(
         .await?
         .filter(|current| {
             current.id == handoff_id
-                && current.service_account_id == handoff_service_account_id
+                && current.local_account_id == handoff_local_account_id
                 && current.audience_id == handoff_audience
                 && current.cnf_jkt == handoff_cnf_jkt
         })
@@ -1140,7 +1138,7 @@ async fn issue_agent_key_proof_session_grant(
         &arkret_config,
         &key_store,
         &authorization.agent_id,
-        ServiceAccountId::new(controller_user_id.to_string())
+        LocalAccountId::new(controller_user_id.to_string())
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         &body.device_id,
         audience_id,
@@ -1156,8 +1154,6 @@ async fn issue_agent_key_proof_session_grant(
     )
     .map_err(map_session_grant_material_error)?;
 
-    let principal_id = authorization.agent_id.clone();
-
     // grant_id / session_public_key / audience_id are SessionGrantOutcome
     // top-level fields (mirroring SessionGrantRefreshOutcome), NOT entries in
     // `scope_details`. The wire `scope_details` carries only the spec-typed
@@ -1168,8 +1164,7 @@ async fn issue_agent_key_proof_session_grant(
     let wire_audience = material.audience_id.clone();
 
     let wire_outcome = SessionGrantOutcome {
-        principal_id,
-        service_account_id: material.service_account_id.clone(),
+        account_id: material.account_id.clone(),
         device_id: Some(body.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,

@@ -8,8 +8,8 @@ use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::jwk::{ParametersInfo, Thumbprint};
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::{
-    JsonWebKey, JsonWebKeySet, Keystore, PrivateKey, SERVICE_IDENTITY_KEY_ID,
-    ServiceIdentityKeyError,
+    ACCOUNT_AUTHORITY_KEY_ID, AccountAuthorityKeyError, JsonWebKey, JsonWebKeySet, Keystore,
+    PrivateKey,
 };
 use der::pem::LineEnding;
 use rand_core::SeedableRng;
@@ -315,7 +315,7 @@ fn generated_private_key_thumbprints_match_public_jwks() {
 }
 
 #[test]
-fn service_identity_key_is_selected_by_reserved_kid() {
+fn account_authority_key_is_selected_by_reserved_kid() {
     let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(2027);
     let unrelated = PrivateKey::generate_ed25519(&mut rng);
     let expected = PrivateKey::generate_ed25519(&mut rng);
@@ -326,39 +326,39 @@ fn service_identity_key_is_selected_by_reserved_kid() {
     let expected_verifying_key =
         ed25519_dalek::SigningKey::from_bytes(&expected_seed).verifying_key();
     let store = Keystore::new(JsonWebKeySet::new(vec![
-        JsonWebKey::new(expected).with_kid(SERVICE_IDENTITY_KEY_ID),
-        // Keep another Ed25519 key after the service key: the generic
+        JsonWebKey::new(expected).with_kid(ACCOUNT_AUTHORITY_KEY_ID),
+        // Keep another Ed25519 key after the authority key: the generic
         // algorithm-only selector prefers this entry, which is the exact
         // ordering that previously broke peer HTTP signatures.
         JsonWebKey::new(unrelated).with_kid("unrelated-ed25519"),
     ]));
 
-    assert_eq!(store.service_identity_seed().unwrap(), expected_seed);
-    let signer = store.service_identity_signer().unwrap();
+    assert_eq!(store.account_authority_seed().unwrap(), expected_seed);
+    let signer = store.account_authority_signer().unwrap();
     match signer.as_ref() {
         coauth_jose::jwa::AsymmetricSigningKey::Ed25519(key) => {
             assert_eq!(key.verifying_key(), expected_verifying_key);
         }
-        _ => panic!("service identity signer must be Ed25519"),
+        _ => panic!("Account Authority signer must be Ed25519"),
     }
 }
 
 #[test]
-fn service_identity_key_rejects_missing_and_wrong_type() {
+fn account_authority_key_rejects_missing_and_wrong_type() {
     let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(2028);
     let missing = Keystore::new(JsonWebKeySet::new(vec![JsonWebKey::new(
         PrivateKey::generate_ed25519(&mut rng),
     )]));
     assert!(matches!(
-        missing.service_identity_seed(),
-        Err(ServiceIdentityKeyError::Missing)
+        missing.account_authority_seed(),
+        Err(AccountAuthorityKeyError::Missing)
     ));
 
     let wrong_type = Keystore::new(JsonWebKeySet::new(vec![
-        JsonWebKey::new(PrivateKey::generate_ec_p256(&mut rng)).with_kid(SERVICE_IDENTITY_KEY_ID),
+        JsonWebKey::new(PrivateKey::generate_ec_p256(&mut rng)).with_kid(ACCOUNT_AUTHORITY_KEY_ID),
     ]));
     assert!(matches!(
-        wrong_type.service_identity_seed(),
-        Err(ServiceIdentityKeyError::WrongKeyType)
+        wrong_type.account_authority_seed(),
+        Err(AccountAuthorityKeyError::WrongKeyType)
     ));
 }

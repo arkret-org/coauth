@@ -36,7 +36,6 @@ fn introspection_grant_record(
                 "stored session public key is invalid: {error}"
             )))
         })?;
-    let service_account_id = grant.service_account_id.clone();
     let revocation_ref = grant.browser_session_id.map_or_else(
         || format!("org.arkret.coauth.session_grant:{}", grant.grant_id),
         |id| format!("org.arkret.coauth.browser_session:{id}"),
@@ -56,8 +55,7 @@ fn introspection_grant_record(
     Ok(SessionGrantIntrospectGrant {
         id: grant.grant_id.clone(),
         issuer_id: grant.issuer_id.clone(),
-        subject_id: parsed_payload.subject_id,
-        service_account_id,
+        account_id: parsed_payload.account_id,
         device_id,
         device_binding: parsed_payload.device_binding,
         audience_id,
@@ -300,7 +298,7 @@ pub async fn introspect_session_grant(
     // The grant's authentication context (browser session) being logged out
     // MUST make the grant read inactive here, even if this grant row was not
     // individually revoked — otherwise a grant rotated out just before logout
-    // could keep introspecting `active` until self-expiry. Auth Server fail
+    // could keep introspecting `active` until self-expiry. Account Authority fail
     // closed per account-lifecycle §4.1.
     if active && grant.browser_session_id.is_some() {
         let logged_out = browser_session

@@ -4,7 +4,7 @@ This part of the documentation goes through installing the service, the importan
 
 Before going through the installation, it is important to understand the main
 Arkret components and how they interact with each other.
-coauth is the Auth Server: it owns authentication, OAuth/OIDC, account sessions,
+coauth is the owning Station's deployment-private Account Authority component: it owns authentication, OAuth/OIDC, account sessions,
 and Arkret session grants.
 
 Downstream Stations such as Soland trust coauth-issued tokens and

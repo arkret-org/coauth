@@ -7,8 +7,6 @@ mod erasure_request;
 mod handle_claim;
 mod identity;
 mod recovery_authority;
-mod service_describe;
-mod service_resolution;
 mod session_grant;
 mod test_chaos;
 
@@ -21,8 +19,6 @@ pub use erasure_request::*;
 pub use handle_claim::*;
 pub use identity::*;
 pub use recovery_authority::*;
-pub use service_describe::*;
-pub use service_resolution::*;
 pub use session_grant::*;
 
 #[cfg(test)]
@@ -43,8 +39,6 @@ use thiserror::Error;
 
 use crate::handlers::common::{DepotExt, RouteError};
 use crate::services::station_trust::{self, StationTrustResolver, effective_audience};
-
-const ARKRET_PROTOCOL_VERSION: &str = "1.0";
 
 pub const CLAIM_PRINCIPAL_ID: &str = "org.arkret.principal_id";
 
@@ -687,20 +681,23 @@ impl salvo::oapi::EndpointOutRegister for ArkretRouteError {
     }
 }
 
-/// The deployment's Provider-resolved stable service core id.
-pub(crate) fn service_id_for(arkret_config: &ArkretConfig) -> arkret_identifiers::DidCoreId {
+fn owning_station_identity_for(
+    arkret_config: &ArkretConfig,
+) -> coauth_config::DelegatedStationIdentity {
     arkret_config
-        .runtime_service_identity
-        .service_id()
-        .expect("identity readiness gate prevents handlers from running without a service DID")
+        .runtime_owning_station_identity
+        .get()
+        .expect("Station trust preflight verifies the owning Station before serving requests")
 }
 
-/// The deployment's current service DID used for proof verification methods.
-pub(crate) fn issuer_did_for(arkret_config: &ArkretConfig) -> arkret_identifiers::Did {
-    arkret_config
-        .runtime_service_identity
-        .did()
-        .expect("identity readiness gate prevents handlers from running without a service DID")
+/// Stable authorization id delegated by the owning Station.
+pub(crate) fn owning_station_id_for(arkret_config: &ArkretConfig) -> arkret_identifiers::DidCoreId {
+    owning_station_identity_for(arkret_config).station_id
+}
+
+/// Full DID delegated by the owning Station for issuer/controller proofs.
+pub(crate) fn owning_station_did_for(arkret_config: &ArkretConfig) -> arkret_identifiers::Did {
+    owning_station_identity_for(arkret_config).did
 }
 
 /// Local OIDC subject for Account Authority-issued OAuth tokens.
@@ -713,10 +710,10 @@ pub(crate) fn oidc_subject_for_user(_arkret_config: &ArkretConfig, user: &User) 
 
 #[derive(Debug, Clone)]
 pub(crate) struct PrincipalDidBinding {
+    pub account_id: arkret_wire::AccountId,
     pub principal_id: arkret_identifiers::DidCoreId,
     pub did: arkret_identifiers::Did,
     pub audience_id: String,
-    pub accepted_id: arkret_identifiers::DidCoreId,
 }
 
 pub(crate) async fn principal_did_binding_for_user<R>(
@@ -737,9 +734,9 @@ where
             .await?
         {
             return Ok(Some(PrincipalDidBinding {
+                account_id: row.account_id,
                 principal_id: row.principal_id,
                 did: row.verified_did,
-                accepted_id: row.accepted_id,
                 audience_id: audience.to_string(),
             }));
         }
@@ -823,7 +820,7 @@ pub(crate) fn required_audience_for(
     arkret_config
         .admin_audience
         .clone()
-        .unwrap_or_else(|| service_id_for(arkret_config).to_string())
+        .unwrap_or_else(|| owning_station_id_for(arkret_config).to_string())
 }
 
 pub(crate) fn trust_domain_for(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -> String {
@@ -1000,7 +997,7 @@ pub struct DebugIssueDpopGrantOutcome {
     pub grant_id: String,
     pub grant_jwt: String,
     pub dpop_jkt: String,
-    pub service_account_id: arkret_identifiers::ServiceAccountId,
+    pub local_account_id: coauth_data::LocalAccountId,
     pub audience_id: arkret_identifiers::DidCoreId,
     pub scopes: Vec<String>,
     pub expires_at: String,
@@ -1136,7 +1133,7 @@ pub async fn debug_issue_dpop_grant(
     let signing_key_id = signing_key
         .kid()
         .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
-    let issuer_id = service_id_for(&arkret_config);
+    let issuer_id = owning_station_id_for(&arkret_config);
     let reserved = repo
         .oauth_session_grant()
         .reserve_operation(
@@ -1243,7 +1240,7 @@ pub async fn debug_issue_dpop_grant(
         grant_id: material.grant_id.to_string(),
         grant_jwt: material.grant_jwt.clone(),
         dpop_jkt: jkt,
-        service_account_id: material.service_account_id.clone(),
+        local_account_id: material.local_account_id.clone(),
         audience_id: material.audience_id.clone(),
         scopes: material.scopes.clone(),
         expires_at: material.expires_at.clone(),

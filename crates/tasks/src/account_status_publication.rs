@@ -65,7 +65,7 @@ impl RunnableJob for AccountStatusPublicationJob {
                 .account_status_ledger()
                 .resolve(
                     record.account_authority_id.as_str(),
-                    record.account_id.as_str(),
+                    self.local_account_id().as_str(),
                     required,
                     limit.min(128),
                 )

@@ -2,7 +2,7 @@
 
 use arkret_models_collaboration::account_lifecycle::AccountStatusRecord;
 use async_trait::async_trait;
-use coauth_data::{AccountStatusAppendOutcome, AccountStatusLedgerRepository};
+use coauth_data::{AccountStatusAppendOutcome, AccountStatusLedgerRepository, LocalAccountId};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
@@ -32,11 +32,11 @@ impl<'c> PgAccountStatusLedgerRepository<'c> {
     async fn current_locked(
         &mut self,
         authority: &str,
-        service_account_id: &str,
+        local_account_id: &str,
     ) -> Result<Option<AccountStatusRecord>, DatabaseError> {
         let value = account_status_records::table
             .filter(account_status_records::account_authority_id.eq(authority))
-            .filter(account_status_records::service_account_id.eq(service_account_id))
+            .filter(account_status_records::local_account_id.eq(local_account_id))
             .order(account_status_records::status_seq.desc())
             .select(account_status_records::record)
             .for_update()
@@ -51,7 +51,7 @@ impl<'c> PgAccountStatusLedgerRepository<'c> {
 #[diesel(table_name = account_status_records)]
 struct NewRecord {
     account_authority_id: String,
-    service_account_id: String,
+    local_account_id: String,
     status_seq: i64,
     record_id: String,
     record: serde_json::Value,
@@ -64,6 +64,7 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
 
     async fn append(
         &mut self,
+        local_account_id: &LocalAccountId,
         record: &AccountStatusRecord,
     ) -> Result<AccountStatusAppendOutcome, Self::Error> {
         record
@@ -88,8 +89,7 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
             .values((
                 account_status_ledger_heads::account_authority_id
                     .eq(record.account_authority_id.as_str()),
-                account_status_ledger_heads::service_account_id
-                    .eq(record.service_account_id.as_str()),
+                account_status_ledger_heads::local_account_id.eq(local_account_id.as_str()),
             ))
             .on_conflict_do_nothing()
             .execute(self.conn)
@@ -99,11 +99,8 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
                 account_status_ledger_heads::account_authority_id
                     .eq(record.account_authority_id.as_str()),
             )
-            .filter(
-                account_status_ledger_heads::service_account_id
-                    .eq(record.service_account_id.as_str()),
-            )
-            .select(account_status_ledger_heads::service_account_id)
+            .filter(account_status_ledger_heads::local_account_id.eq(local_account_id.as_str()))
+            .select(account_status_ledger_heads::local_account_id)
             .for_update()
             .first::<String>(self.conn)
             .await?;
@@ -111,7 +108,7 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
         let current = self
             .current_locked(
                 record.account_authority_id.as_str(),
-                record.service_account_id.as_str(),
+                local_account_id.as_str(),
             )
             .await?;
         if current
@@ -139,7 +136,7 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
         diesel::insert_into(account_status_records::table)
             .values(NewRecord {
                 account_authority_id: record.account_authority_id.to_string(),
-                service_account_id: record.service_account_id.to_string(),
+                local_account_id: local_account_id.to_string(),
                 status_seq,
                 record_id: record.account_status_record_id.to_string(),
                 record: serde_json::to_value(record)
@@ -155,8 +152,7 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
                         .eq(record.account_authority_id.as_str()),
                 )
                 .filter(
-                    account_status_ledger_heads::service_account_id
-                        .eq(record.service_account_id.as_str()),
+                    account_status_ledger_heads::local_account_id.eq(local_account_id.as_str()),
                 ),
         )
         .set((
@@ -172,23 +168,23 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
     async fn current(
         &mut self,
         account_authority_id: &str,
-        service_account_id: &str,
+        local_account_id: &str,
     ) -> Result<Option<AccountStatusRecord>, Self::Error> {
-        self.current_locked(account_authority_id, service_account_id)
+        self.current_locked(account_authority_id, local_account_id)
             .await
     }
 
     async fn resolve(
         &mut self,
         account_authority_id: &str,
-        service_account_id: &str,
+        local_account_id: &str,
         from_status_seq: u64,
         limit: u16,
     ) -> Result<Vec<AccountStatusRecord>, Self::Error> {
         let from = i64::try_from(from_status_seq).map_err(DatabaseError::to_invalid_operation)?;
         let values = account_status_records::table
             .filter(account_status_records::account_authority_id.eq(account_authority_id))
-            .filter(account_status_records::service_account_id.eq(service_account_id))
+            .filter(account_status_records::local_account_id.eq(local_account_id))
             .filter(account_status_records::status_seq.ge(from))
             .order(account_status_records::status_seq.asc())
             .limit(i64::from(limit))
@@ -229,16 +225,11 @@ mod tests {
         OutboxAndAudit,
     }
 
-    fn genesis_record(
-        account_id: ulid::Ulid,
-        now: chrono::DateTime<chrono::Utc>,
-    ) -> AccountStatusRecord {
+    fn genesis_record(now: chrono::DateTime<chrono::Utc>) -> AccountStatusRecord {
         let authority = DidCoreId::new("ak:did_core:webvh:zrollbackauthority").unwrap();
         let unsigned = UnsignedAccountStatusRecord {
             schema: SchemaId::ACCOUNT_STATUS_RECORD_V1.to_owned(),
             account_authority_id: authority,
-            service_account_id: arkret_identifiers::ServiceAccountId::new(account_id.to_string())
-                .unwrap(),
             account_id: arkret_wire::AccountId {
                 principal_id: DidCoreId::new("ak:did_core:webvh:zrollbackprincipal").unwrap(),
                 station_id: DidCoreId::new("ak:did_core:webvh:zrollbackserver").unwrap(),
@@ -284,7 +275,8 @@ mod tests {
         let user = setup.user().add(&mut rng, &clock, handle).await.unwrap();
         setup.save().await.unwrap();
 
-        let record = genesis_record(user.id, clock.now());
+        let record = genesis_record(clock.now());
+        let local_account_id = coauth_data::LocalAccountId::new(user.id.to_string()).unwrap();
         let body = AccountStatusPublicationRequestBody {
             publication: AccountStatusPublication::Initial(AccountStatusInitialPublication {
                 record: record.clone(),
@@ -303,7 +295,10 @@ mod tests {
         ] {
             let mut repo = factory.create().await.unwrap();
             assert!(matches!(
-                repo.account_status_ledger().append(&record).await.unwrap(),
+                repo.account_status_ledger()
+                    .append(&local_account_id, &record,)
+                    .await
+                    .unwrap(),
                 AccountStatusAppendOutcome::Appended
             ));
 
@@ -322,6 +317,7 @@ mod tests {
                         &clock,
                         AccountStatusPublicationJob::new(
                             "station".to_owned(),
+                            local_account_id.clone(),
                             idempotency_key.clone(),
                             body_digest.clone(),
                             body.clone(),
@@ -354,7 +350,7 @@ mod tests {
                     .account_status_ledger()
                     .current(
                         record.account_authority_id.as_str(),
-                        record.service_account_id.as_str()
+                        local_account_id.as_str()
                     )
                     .await
                     .unwrap()
@@ -420,7 +416,8 @@ mod tests {
         let clock = coauth_data::clock::MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(0x626);
         let account_id = coauth_data::new_id(clock.now(), &mut rng);
-        let record = genesis_record(account_id, clock.now());
+        let record = genesis_record(clock.now());
+        let local_account_id = coauth_data::LocalAccountId::new(account_id.to_string()).unwrap();
         let body = AccountStatusPublicationRequestBody {
             publication: AccountStatusPublication::Initial(AccountStatusInitialPublication {
                 record: record.clone(),
@@ -438,6 +435,7 @@ mod tests {
                 &clock,
                 AccountStatusPublicationJob::new(
                     destination.clone(),
+                    local_account_id.clone(),
                     format!("{record_id}:first"),
                     body_digest.clone(),
                     body.clone(),
@@ -478,6 +476,7 @@ mod tests {
                 &clock,
                 AccountStatusPublicationJob::new(
                     destination.clone(),
+                    local_account_id.clone(),
                     format!("{record_id}:second"),
                     body_digest.clone(),
                     body.clone(),
@@ -499,6 +498,7 @@ mod tests {
                 &clock,
                 AccountStatusPublicationJob::new(
                     mirror.clone(),
+                    local_account_id,
                     format!("{record_id}:mirror"),
                     body_digest.clone(),
                     body.clone(),

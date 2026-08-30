@@ -80,8 +80,7 @@ pub(crate) async fn arkret_operation_selector_middleware(
                 .ok()
                 .and_then(arkret_wire::ServiceOperationId::from_wire);
             if selected.is_some_and(|operation| {
-                crate::handlers::arkret::supports_advertised_http_operation(operation)
-                    && operation.matches_http_request(req.method().as_str(), req.uri().path())
+                operation.matches_http_request(req.method().as_str(), req.uri().path())
             }) {
                 ctrl.call_next(req, depot, res).await;
                 if res.status_code.unwrap_or(StatusCode::OK).is_success() {
@@ -95,7 +94,7 @@ pub(crate) async fn arkret_operation_selector_middleware(
             (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 arkret_wire::ErrorCode::UNSUPPORTED_OPERATION_VERSION,
-                "Arkret-Operation is unknown, not advertised, or does not match the selected HTTP route",
+                "Arkret-Operation is unknown or does not match the selected HTTP route",
             )
         }
     };

@@ -9,10 +9,10 @@ use arkret_signatures::http_signature::{
     verify_signed_canonical_json_message,
 };
 use arkret_wire::DidUrl;
-use coauth_data::{Clock as _, RepositoryAccess as _};
+use coauth_data::{Clock as _, LocalAccountId, RepositoryAccess as _};
 use salvo::prelude::*;
 
-use super::{ArkretRouteError, service_id_for};
+use super::{ArkretRouteError, owning_station_id_for};
 use crate::handlers::common::DepotExt;
 use crate::services::did_binding;
 
@@ -28,7 +28,7 @@ pub async fn resolve_account_status(
         arkret_canonical::canonical_json_bytes(&request).map_err(|_| not_found())?;
 
     let config = depot.arkret_config()?;
-    if request.account_authority_id != service_id_for(&config) {
+    if request.account_authority_id != owning_station_id_for(&config) {
         return Err(not_found());
     }
     let source_id = required_header(req, "source-service-id")?;
@@ -63,6 +63,17 @@ pub async fn resolve_account_status(
     }
 
     let mut repo = depot.repo().await?;
+    let binding = repo
+        .principal_did()
+        .get_by_principal_id_and_audience(
+            request.account_id.principal_id.as_str(),
+            request.account_id.station_id.as_str(),
+        )
+        .await?
+        .filter(|binding| binding.account_id == request.account_id)
+        .ok_or_else(not_found)?;
+    let local_account_id =
+        LocalAccountId::new(binding.user_id.to_string()).map_err(|_| not_found())?;
     let authority = did_binding::authority_document(
         &depot.http_client()?,
         &depot.url_builder()?,
@@ -96,7 +107,7 @@ pub async fn resolve_account_status(
         .account_status_ledger()
         .current(
             request.account_authority_id.as_str(),
-            request.account_id.as_str(),
+            local_account_id.as_str(),
         )
         .await?;
     if current
@@ -110,7 +121,7 @@ pub async fn resolve_account_status(
         .account_status_ledger()
         .resolve(
             request.account_authority_id.as_str(),
-            request.account_id.as_str(),
+            local_account_id.as_str(),
             request.from_status_seq,
             fetch_limit,
         )

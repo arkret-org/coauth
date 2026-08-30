@@ -16,7 +16,6 @@ pub mod principal_facade;
 pub mod refresh_token_rotation;
 pub mod risk_action_proposals;
 pub mod risk_action_state;
-pub mod service_identity;
 pub mod soland_webvh;
 pub mod station_trust;
 pub mod upstream_oidc;

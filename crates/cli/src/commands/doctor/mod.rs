@@ -19,7 +19,7 @@ pub(super) struct Options {}
 impl Options {
     pub async fn run(self, figment: &Figment) -> anyhow::Result<ExitCode> {
         let _span = info_span!("cli.doctor").entered();
-        info!("Running Arkret auth server diagnostics.");
+        info!("Running Station Account Authority diagnostics.");
 
         let config = RootConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
 

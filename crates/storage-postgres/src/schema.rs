@@ -4,9 +4,9 @@
 #![allow(missing_docs)]
 
 diesel::table! {
-    account_status_records (account_authority_id, service_account_id, status_seq) {
+    account_status_records (account_authority_id, local_account_id, status_seq) {
         account_authority_id -> Text,
-        service_account_id -> Text,
+        local_account_id -> Text,
         status_seq -> Int8,
         record_id -> Text,
         record -> Jsonb,
@@ -15,9 +15,9 @@ diesel::table! {
 }
 
 diesel::table! {
-    account_status_ledger_heads (account_authority_id, service_account_id) {
+    account_status_ledger_heads (account_authority_id, local_account_id) {
         account_authority_id -> Text,
-        service_account_id -> Text,
+        local_account_id -> Text,
         current_status_seq -> Nullable<Int8>,
         current_record_id -> Nullable<Text>,
     }
@@ -229,7 +229,7 @@ diesel::table! {
     recovery_completion_grant_issuances (transaction_id) {
         transaction_id -> Text,
         transaction_request_digest -> Text,
-        service_account_id -> Uuid,
+        local_account_id -> Uuid,
         principal_id -> Text,
         device_id -> Text,
         device_authorization_event_id -> Text,
@@ -728,7 +728,7 @@ diesel::table! {
         user_session_id -> Nullable<Uuid>,
         issuer_id -> Text,
         subject_id -> Text,
-        service_account_id -> Text,
+        local_account_id -> Text,
         device_id -> Nullable<Text>,
         applet_id -> Nullable<Text>,
         effective_scope -> Nullable<Jsonb>,
@@ -1081,7 +1081,7 @@ diesel::joinable!(oauth_device_code_grant -> oauth_clients (oauth_client_id));
 diesel::joinable!(oauth_session_grants -> user_sessions (user_session_id));
 diesel::joinable!(oauth_session_grants -> oauth_session_grant_operations (issuance_operation_id));
 diesel::joinable!(user_erasure_requests -> users (user_id));
-diesel::joinable!(recovery_completion_grant_issuances -> users (service_account_id));
+diesel::joinable!(recovery_completion_grant_issuances -> users (local_account_id));
 diesel::joinable!(recovery_completion_grant_issuances -> oauth_session_grant_operations (session_grant_operation_id));
 diesel::joinable!(oauth_client_localized_metadata -> oauth_clients (client_id));
 diesel::joinable!(upstream_oauth_links -> upstream_oauth_providers (upstream_oauth_provider_id));

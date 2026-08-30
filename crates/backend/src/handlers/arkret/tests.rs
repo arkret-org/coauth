@@ -6,10 +6,7 @@ use arkret_models_identity::{
     SessionGrantCredentialClass, SessionGrantHolderBinding, SignedSessionGrantClaims,
 };
 use chrono::{Duration, Utc};
-use coauth_config::{
-    ArkretConfig, DeploymentProfileConfig, IdentityRegistryConfig, PrincipalMethodConfig,
-    StationConfig,
-};
+use coauth_config::{ArkretConfig, DeploymentProfileConfig, PrincipalMethodConfig, StationConfig};
 use coauth_data::{BrowserSession, Clock, RepositoryAccess, SessionGrant, SystemClock, User};
 use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
 use coauth_jose::jwk::{JsonWebKey, JsonWebKeyPublicParameters, PublicJsonWebKey};
@@ -26,21 +23,6 @@ use crate::handlers::test_utils::{
     CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce,
 };
 use crate::salvo_utils::SessionInfoExt;
-
-fn advertised_operation_ids(body: &serde_json::Value) -> std::collections::BTreeSet<String> {
-    body["supported_operation_bundles"]
-        .as_array()
-        .expect("supported_operation_bundles array")
-        .iter()
-        .flat_map(|bundle_id| {
-            arkret_wire::operation_bundle_descriptor(bundle_id.as_str().expect("bundle id"))
-                .expect("registered advertised bundle")
-                .members
-                .iter()
-                .map(|member| member.operation_id.as_str().to_owned())
-        })
-        .collect()
-}
 
 #[salvo::handler]
 async fn human_approval_error_fixture() -> Result<(), ArkretRouteError> {
@@ -207,13 +189,13 @@ fn assert_subject_id_occurs_once(raw_payload: &serde_json::Value, subject_id: &s
 }
 
 #[test]
-fn debug_dpop_grant_outcome_carries_typed_service_account_id() {
-    let service_account_id = arkret_identifiers::ServiceAccountId::new("test-account").unwrap();
+fn debug_dpop_grant_outcome_carries_typed_local_account_id() {
+    let local_account_id = coauth_data::LocalAccountId::new("test-account").unwrap();
     let outcome = DebugIssueDpopGrantOutcome {
         grant_id: "ak:session_grant:test".to_owned(),
         grant_jwt: "header.payload.signature".to_owned(),
         dpop_jkt: "test-jkt".to_owned(),
-        service_account_id: service_account_id.clone(),
+        local_account_id: local_account_id.clone(),
         audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:test-audience").unwrap(),
         scopes: vec!["ak.self.account.read.describe.v1".to_owned()],
         expires_at: "2026-08-29T12:00:00.000Z".to_owned(),
@@ -221,12 +203,12 @@ fn debug_dpop_grant_outcome_carries_typed_service_account_id() {
     };
 
     let encoded = serde_json::to_value(&outcome).unwrap();
-    assert_eq!(encoded["service_account_id"], service_account_id.as_str());
+    assert_eq!(encoded["local_account_id"], local_account_id.as_str());
     let decoded: DebugIssueDpopGrantOutcome = serde_json::from_value(encoded.clone()).unwrap();
-    assert_eq!(decoded.service_account_id, service_account_id);
+    assert_eq!(decoded.local_account_id, local_account_id);
 
     let mut invalid = encoded;
-    invalid["service_account_id"] = serde_json::Value::String(String::new());
+    invalid["local_account_id"] = serde_json::Value::String(String::new());
     assert!(serde_json::from_value::<DebugIssueDpopGrantOutcome>(invalid).is_err());
 }
 
@@ -238,7 +220,7 @@ fn personal_node_did_web_config() -> ArkretConfig {
     ArkretConfig {
         // Personal-node no-history profile legitimately advertises a did:web
         // service DID (spec identity-did.md §3.1 personal_node exception).
-        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+        runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
             "did:web:auth.example.com",
         ),
         // Session-grant audiences are Station core DIDs.
@@ -265,7 +247,7 @@ fn personal_node_did_web_config() -> ArkretConfig {
 /// derives a did:web default; startup validation enforces it in production).
 fn test_arkret_config() -> ArkretConfig {
     ArkretConfig {
-        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+        runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
             "did:webvh:ztest:auth.example.com:webvh:service",
         ),
         ..ArkretConfig::default()
@@ -287,13 +269,13 @@ fn service_and_user_identifiers_follow_arkret_shape() {
     // is always the explicitly configured one (did:webvh by default; startup
     // validation fails fast when it is missing).
     let arkret_config = ArkretConfig {
-        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+        runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
             "did:webvh:ztest:auth.example.com:webvh:service",
         ),
         ..ArkretConfig::default()
     };
     assert_eq!(
-        service_id_for(&arkret_config).as_str(),
+        owning_station_id_for(&arkret_config).as_str(),
         "ak:did_core:webvh:ztest"
     );
     assert_eq!(oidc_subject_for_user(&arkret_config, &user), user.sub);
@@ -310,201 +292,9 @@ fn service_and_user_identifiers_follow_arkret_shape() {
     );
 }
 
-#[test]
-fn service_describe_exposes_auth_account_boundary_profile() {
-    let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let arkret_config = ArkretConfig {
-        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
-            "did:webvh:ztest:auth.example.com:webvh:service",
-        ),
-        admin_audience: Some("https://auth.example.com/api/admin".to_owned()),
-        stations: vec![StationConfig {
-            name: "soland-prod".to_owned(),
-            endpoint: "https://soland.example.com/arkret".parse().unwrap(),
-            service_id: Some(
-                arkret_identifiers::DidCoreId::new("ak:did_core:web:session-grant-static.test")
-                    .unwrap(),
-            ),
-            session_grant_introspection_bearer: None,
-            embedded_webvh_registration_bearer: None,
-        }],
-        identity_services: Vec::new(),
-        identity_provider: None,
-        deployment_profile: DeploymentProfileConfig::default(),
-        principal_method: PrincipalMethodConfig::default(),
-        identity_registry: Some(IdentityRegistryConfig {
-            resolver: "https://resolver.example.com/resolve".parse().unwrap(),
-            proof_required_for_pairwise: true,
-        }),
-        session_grant_ttl: Duration::try_minutes(5).unwrap(),
-        high_risk_threshold: 2,
-        trust_domain: None,
-        development_auto_enrollment_hosts: Vec::new(),
-        password_login_session_grants_enabled: false,
-        admin_org_id: None,
-        audit_signature_fail_closed: false,
-        erasure_request_max_auth_age: None,
-    };
-
-    let body = serde_json::to_value(service_describe_response(
-        &url_builder,
-        &arkret_config,
-        &[],
-        false,
-    ))
-    .unwrap();
-
-    assert_eq!(body["service_id"], "ak:did_core:webvh:ztest");
-    assert_eq!(body["trust_domain"], "ak:trust_domain:auth.example.com");
-    assert_eq!(body["service_kind"], "station");
-    for retired_field in ["registry_mode", "supported_receipts", "profiles"] {
-        assert!(
-            body.get(retired_field).is_none(),
-            "retired identity describe field must not be emitted: {retired_field}"
-        );
-    }
-    assert_eq!(
-        body["x_coauth_admin_audience"],
-        "https://auth.example.com/api/admin"
-    );
-    assert_eq!(
-        body["auth_metadata"]["issuer_did"],
-        "did:webvh:ztest:auth.example.com:webvh:service"
-    );
-    assert_eq!(
-        body["auth_metadata"]["session_grant_scope"],
-        STATION_SESSION_BIND_SCOPE
-    );
-    assert_eq!(
-        body["x_coauth_station_delegation_targets"][0]["endpoint"],
-        "https://soland.example.com/arkret"
-    );
-    assert_eq!(
-        body["x_coauth_station_delegation_targets"][0]["audience"],
-        "ak:did_core:web:session-grant-static.test"
-    );
-    assert_eq!(
-        body["x_coauth_station_delegation_targets"][0]["service_id"],
-        "ak:did_core:web:session-grant-static.test"
-    );
-    assert_eq!(
-        body["x_coauth_identity_registry_resolver"]["mode"],
-        "delegated_resolver"
-    );
-    assert_eq!(
-        body["x_coauth_identity_registry_resolver"]["endpoint"],
-        "https://auth.example.com/_arkret/root/identity/resolve"
-    );
-    assert_eq!(
-        body["x_coauth_identity_registry_resolver"]["delegated_resolver"]["kind"],
-        "public_did_resolver"
-    );
-    assert_eq!(
-        body["x_coauth_identity_registry_resolver"]["delegated_resolver"]["resolver"],
-        "https://resolver.example.com/resolve"
-    );
-    assert_eq!(
-        body["x_coauth_problem_details"]["example"],
-        serde_json::json!({
-            "type": "https://arkret.org/problems/not_found",
-            "title": "Not found",
-            "status": 404,
-            "detail": "not found",
-            "instance": "ak:request:01964137-0000-7000-8000-000000000000"
-        })
-    );
-
-    let supported_profiles = body["supported_profiles"].as_array().unwrap();
-    assert!(supported_profiles.is_empty());
-    assert!(body.get("supported_reducer_profiles").is_none());
-    assert!(body.get("x_coauth_supported_reducer_profiles").is_none());
-    // `supported_schema_profiles` is not declared by the closed
-    // `service-describe.schema.json`; schema profiles are expressed through
-    // registered extensions or concrete operation contracts instead.
-    assert!(body.get("supported_schema_profiles").is_none());
-    let not_authoritative_for = body["x_coauth_service_boundary"]["not_authoritative_for"]
-        .as_array()
-        .unwrap();
-    assert!(not_authoritative_for.contains(&serde_json::json!("did_key_log")));
-    assert!(not_authoritative_for.contains(&serde_json::json!("identity_registry_receipt")));
-
-    // T6.3 — service_roles must list every role coauth carries.
-    // Internal component inventory is diagnostic-only and never a service role.
-    let service_roles = body["x_coauth_service_roles"]
-        .as_array()
-        .expect("service_roles array present");
-    assert!(service_roles.contains(&serde_json::json!("account_authority_process")));
-    assert!(service_roles.contains(&serde_json::json!("identity_resolver")));
-    assert!(service_roles.contains(&serde_json::json!("account_registry")));
-
-    // T6.3 — the ak.root.identity.* surfaces are DID document / key-log
-    // faces served on behalf of a canonical authority coauth does not claim
-    // to be, so service-describe.schema.json requires kind
-    // `delegated_resolver`. `external_interop` is reserved for non-Arkret
-    // interop surfaces and MUST NOT be used for Arkret operation ids.
-    let interop: Vec<(&str, &str)> = body["interop_surfaces"]
-        .as_array()
-        .expect("interop_surfaces array present")
-        .iter()
-        .filter(|entry| entry["kind"].as_str() == Some("delegated_resolver"))
-        .filter_map(|entry| Some((entry["name"].as_str()?, entry["notes"].as_str()?)))
-        .collect();
-    assert!(interop.iter().any(|(name, notes)| {
-        *name == "ak.root.identity.read.resolve.v1" && notes.contains("delegated-resolver")
-    }));
-    assert!(interop.iter().any(|(name, notes)| {
-        *name == "ak.root.identity.document.resource.get.v1" && notes.contains("delegated-resolver")
-    }));
-    assert!(interop.iter().any(|(name, notes)| {
-        *name == "ak.root.identity.registry.read.describe.v1"
-            && notes.contains("delegated-resolver")
-    }));
-    // verified_profiles MUST NOT include ak.profile.identity_registry.v1
-    // because coauth is a delegated resolver, not a registry.
-    let verified = body["verified_profiles"]
-        .as_array()
-        .expect("verified_profiles array present");
-    for entry in verified {
-        assert_ne!(
-            entry["profile_id"], "ak.profile.identity_registry.v1",
-            "coauth MUST NOT advertise canonical identity registry conformance"
-        );
-    }
-}
-
-#[test]
-fn service_describe_marks_personal_node_did_web_service_as_no_history() {
-    let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let arkret_config = ArkretConfig {
-        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
-            "did:web:auth.example.com",
-        ),
-        deployment_profile: DeploymentProfileConfig::PersonalNode,
-        principal_method: PrincipalMethodConfig::DidWeb,
-        ..ArkretConfig::default()
-    };
-    let body = serde_json::to_value(service_describe_response(
-        &url_builder,
-        &arkret_config,
-        &[],
-        false,
-    ))
-    .unwrap();
-
-    assert_eq!(body["service_id"], "ak:did_core:web:auth.example.com");
-    assert_eq!(
-        body["auth_metadata"]["service_id_history_evidence_kind"],
-        "none"
-    );
-    assert_eq!(
-        body["auth_metadata"]["service_id_trust_profile"],
-        "no_history_service"
-    );
-}
-
 fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
     ArkretConfig {
-        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+        runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
             "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:coauth",
         ),
         stations: vec![StationConfig {
@@ -518,51 +308,6 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
             embedded_webvh_registration_bearer: None,
         }],
         ..ArkretConfig::default()
-    }
-}
-
-#[test]
-fn service_describe_advertises_auth_session_logout_boundary() {
-    let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
-    let body =
-        serde_json::to_value(service_describe_response(&url_builder, &config, &[], false)).unwrap();
-    let advertised_operations = advertised_operation_ids(&body);
-
-    assert!(
-        advertised_operations.contains("ak.gate.account.command.logout_auth_session.v1"),
-        "coauth exposes only the Auth-side hard logout sub-operation"
-    );
-    assert!(
-        !advertised_operations.contains("ak.gate.account.command.logout.v1"),
-        "the client-visible account logout operation belongs to the Account Authority"
-    );
-}
-
-#[test]
-fn service_describe_advertises_complete_bundled_account_first_surface() {
-    let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
-    let body =
-        serde_json::to_value(service_describe_response(&url_builder, &config, &[], false)).unwrap();
-    let advertised_operations = advertised_operation_ids(&body);
-
-    for operation in [
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER_V1,
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT_V1,
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_EXCHANGE_CREATE_HANDOFF_V1,
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE_V1,
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_READ_ONBOARDING_V1,
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_DID_BINDING_CHALLENGE_V1,
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_ABANDONMENT_CHALLENGE_V1,
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ABANDON_IDENTITY_CREATION_V1,
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_CONTROLLER_GATE_ATTESTATION_V1,
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REQUEST_ERASURE_V1,
-    ] {
-        assert!(
-            advertised_operations.contains(operation),
-            "bundled account-first endpoint operation {operation} must be advertised"
-        );
     }
 }
 
@@ -619,193 +364,6 @@ fn station_static_session_grant_bearer_ignores_unset_field() {
 }
 
 #[test]
-fn describe_separates_claim_levels() {
-    // T6.1 — describe response MUST partition into
-    // registered operation bundles and profile claim-level arrays.
-    // Exercise the development posture explicitly so the response cannot
-    // accidentally advertise verifier output while development mode is on.
-    let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let body = serde_json::to_value(service_describe_response(
-        &url_builder,
-        &test_arkret_config(),
-        &[],
-        true,
-    ))
-    .unwrap();
-
-    // verified_profiles MUST be present and (with no cotest run wired
-    // in) empty.
-    let verified = body["verified_profiles"]
-        .as_array()
-        .expect("verified_profiles array present");
-    assert!(
-        verified.is_empty(),
-        "coauth must not advertise conformance_verified profiles without a verifier"
-    );
-
-    // claimed_profiles entries MUST carry claim_kind=self_claimed.
-    for entry in body["claimed_profiles"]
-        .as_array()
-        .expect("claimed_profiles array present")
-    {
-        assert_eq!(
-            entry["claim_kind"], "self_claimed",
-            "claimed_profiles entries MUST be self_claimed"
-        );
-    }
-
-    let bundles = body["supported_operation_bundles"]
-        .as_array()
-        .expect("supported_operation_bundles array present");
-    assert_eq!(
-        bundles,
-        &[
-            serde_json::json!("ak.operation_bundle.station.account_authority.v1"),
-            serde_json::json!("ak.operation_bundle.station.describe.v1"),
-            serde_json::json!("ak.operation_bundle.station.account_authority_support.v1"),
-        ]
-    );
-    assert!(body["supported_features"].as_array().unwrap().is_empty());
-    assert_eq!(body["transport_bindings"][0]["kind"], "http_json");
-
-    // interop_surfaces entries must declare a kind from the closed
-    // `service-describe.schema.json#/properties/interop_surfaces/items/properties/kind`
-    // enum. T6.3 — coauth's `ak.identity.*` proxy operations are NOT a
-    // canonical identity registry; the delegated-resolver semantics
-    // are carried in notes.
-    for surface in body["interop_surfaces"]
-        .as_array()
-        .expect("interop_surfaces array present")
-    {
-        let kind = surface["kind"].as_str().expect("interop surface kind");
-        assert!(
-            matches!(
-                kind,
-                "matrix_passthrough"
-                    | "mimi_passthrough"
-                    | "delegated_resolver"
-                    | "external_interop"
-            ),
-            "unknown interop_surface kind {kind}"
-        );
-        assert!(
-            surface["notes"]
-                .as_str()
-                .is_some_and(|notes| notes.contains("delegated-resolver")),
-            "delegated-resolver semantics must remain in interop_surface notes"
-        );
-    }
-
-    // development_mode field must be present so downstream tools
-    // (sodmin / cotest) can render the dev banner.
-    assert_eq!(body["development_mode"], true);
-}
-
-#[test]
-fn service_describe_emits_trust_domain_when_configured() {
-    // Round 4 (spec a77b995) — trust_domain MUST surface on the
-    // wire when the deployment sets it. Mirrors the SDK's
-    // `Realm.trust_domain` / `ServiceDescribe.trust_domain`
-    // requirement so federation peers can bind their canonical
-    // transcript.
-    let url_builder = UrlBuilder::new(
-        "https://auth.example.com/coauth/".parse().unwrap(),
-        None,
-        None,
-    );
-    let config = ArkretConfig {
-        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
-            "did:webvh:ztest:auth.example.com:webvh:service",
-        ),
-        trust_domain: Some("ak:trust_domain:example.net".to_owned()),
-        ..Default::default()
-    };
-
-    let body =
-        serde_json::to_value(service_describe_response(&url_builder, &config, &[], false)).unwrap();
-    assert_eq!(body["trust_domain"], "ak:trust_domain:example.net");
-}
-
-#[test]
-fn service_describe_derives_trust_domain_from_public_host_when_unset() {
-    let url_builder = UrlBuilder::new(
-        "https://auth.example.com/coauth/".parse().unwrap(),
-        None,
-        None,
-    );
-    let body = serde_json::to_value(service_describe_response(
-        &url_builder,
-        &test_arkret_config(),
-        &[],
-        false,
-    ))
-    .unwrap();
-    assert_eq!(body["trust_domain"], "ak:trust_domain:auth.example.com");
-}
-
-#[test]
-fn service_describe_derives_valid_trust_domain_for_ipv6_host() {
-    let url_builder = UrlBuilder::new("https://[::1]/coauth/".parse().unwrap(), None, None);
-    let body = serde_json::to_value(service_describe_response(
-        &url_builder,
-        &test_arkret_config(),
-        &[],
-        false,
-    ))
-    .unwrap();
-    assert_eq!(body["trust_domain"], "ak:trust_domain:host-::1");
-    ArkretConfig::validate_trust_domain(body["trust_domain"].as_str().unwrap()).unwrap();
-}
-
-#[test]
-fn service_describe_defaults_to_local_identity_binding_resolver() {
-    let url_builder = UrlBuilder::new(
-        "https://auth.example.com/coauth/".parse().unwrap(),
-        None,
-        None,
-    );
-
-    let body = serde_json::to_value(service_describe_response(
-        &url_builder,
-        &test_arkret_config(),
-        &[],
-        false,
-    ))
-    .unwrap();
-
-    assert_eq!(
-        body["x_coauth_identity_registry_resolver"]["mode"],
-        "local_bindings"
-    );
-    assert_eq!(
-        body["x_coauth_identity_registry_resolver"]["endpoint"],
-        "https://auth.example.com/coauth/_arkret/root/identity/resolve"
-    );
-    assert!(body["x_coauth_identity_registry_resolver"]["delegated_resolver"].is_null());
-}
-
-#[test]
-fn service_describe_advertises_configured_session_grant_ttl() {
-    let url_builder = UrlBuilder::new(
-        "https://auth.example.com/coauth/".parse().unwrap(),
-        None,
-        None,
-    );
-    let config = ArkretConfig {
-        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
-            "did:webvh:ztest:auth.example.com:webvh:service",
-        ),
-        session_grant_ttl: Duration::try_minutes(15).unwrap(),
-        ..ArkretConfig::default()
-    };
-
-    let body =
-        serde_json::to_value(service_describe_response(&url_builder, &config, &[], false)).unwrap();
-
-    assert_eq!(body["limits"]["session_grant_ttl_seconds"], 900);
-}
-
-#[test]
 fn session_grant_is_signed_for_the_bound_principal_id() {
     let clock = SystemClock::default();
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
@@ -855,7 +413,7 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
     let payload = jwt.payload();
     assert_eq!(payload.kind, "ak.session.grant");
     assert_eq!(payload.grant_id, grant.grant_id);
-    assert_eq!(payload.subject_id.as_str(), principal_id);
+    assert_eq!(payload.account_id.principal_id.as_str(), principal_id);
     assert_eq!(
         payload.audience_id.as_str(),
         required_audience_for(&url_builder, &arkret_config)
@@ -875,7 +433,7 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
     );
     let raw_payload = jwt_payload_value(&grant.grant_jwt);
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
-    assert_subject_id_occurs_once(&raw_payload, payload.subject_id.as_str());
+    assert_subject_id_occurs_once(&raw_payload, payload.account_id.principal_id.as_str());
     assert!(raw_payload.get("session_public_key").is_some());
     assert!(raw_payload.get("cnf").is_none());
     assert!(
@@ -921,7 +479,7 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
             .map(str::to_owned)
             .to_vec(),
         &principal_core_id,
-        arkret_identifiers::ServiceAccountId::new("test-account").unwrap(),
+        coauth_data::LocalAccountId::new("test-account").unwrap(),
         &authority,
         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
     )
@@ -973,7 +531,7 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
                 .map(str::to_owned)
                 .to_vec(),
             &principal_core_id,
-            arkret_identifiers::ServiceAccountId::new("test-account").unwrap(),
+            coauth_data::LocalAccountId::new("test-account").unwrap(),
             &authority,
             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
         )
@@ -988,7 +546,7 @@ fn session_grant_uses_configured_ttl() {
     let arkret_config = ArkretConfig {
         // Personal-node no-history profile legitimately advertises a did:web
         // service DID (spec identity-did.md §3.1 personal_node exception).
-        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+        runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
             "did:web:auth.example.com",
         ),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
@@ -1062,7 +620,7 @@ fn session_grant_record_exposes_metadata_without_secrets() {
             "ak:did_core:web:auth.example.com:users:01J44Q10GR4AMTFZEEF936DTCP",
         )
         .unwrap(),
-        service_account_id: arkret_identifiers::ServiceAccountId::new("test-account").unwrap(),
+        local_account_id: coauth_data::LocalAccountId::new("test-account").unwrap(),
         device_id: Some("device-1".to_owned()),
         applet_id: None,
         effective_scope: None,
@@ -1122,7 +680,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
             user.id
         ))
         .unwrap(),
-        service_account_id: arkret_identifiers::ServiceAccountId::new(user.id.to_string()).unwrap(),
+        local_account_id: coauth_data::LocalAccountId::new(user.id.to_string()).unwrap(),
         device_id: Some("device-1".to_owned()),
         applet_id: None,
         effective_scope: None,
@@ -1695,7 +1253,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         &state.arkret_config,
         &state.key_store,
         &arkret_identifiers::DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
-        arkret_identifiers::ServiceAccountId::new("test-account").unwrap(),
+        coauth_data::LocalAccountId::new("test-account").unwrap(),
         &arkret_identifiers::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000005")
             .unwrap(),
         audience.clone(),
@@ -2117,38 +1675,26 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
     let key_store = test_keystore();
 
-    let hint = arkret_models_identity::DeliveryBindingHint {
-        recipient_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example").unwrap(),
-        recipient_kind: arkret_models_identity::RecipientServiceKind::Station,
-        binding_source: arkret_models_identity::HandleHintBindingSource::OrganizationPolicy,
-        delivery_modes: [arkret_models_identity::DeliveryMode::Events]
-            .into_iter()
-            .collect(),
-        service_acceptance_ref: None,
-        policy_event_ref: None,
-    };
-
     // Subject is the client-created webvh principal DID, passed by the caller.
     let subject_id = "ak:did_core:webvh:zQmExampleScid:soland.example";
+    let account_id = arkret_wire::AccountId::new(
+        arkret_identifiers::DidCoreId::new(subject_id).unwrap(),
+        owning_station_id_for(&arkret_config),
+    );
     let material = issue_handle_claim(
         &clock,
         &url_builder,
         &arkret_config,
         &key_store,
         &user,
-        subject_id,
+        &account_id,
         arkret_models_identity::HandleClaimKind::HandleBinding,
         "did:web:space.example".to_owned(),
-        hint.clone(),
     )
     .expect("handle claim must mint with the test keystore");
     assert_eq!(
-        material
-            .payload
-            .subject_id
-            .as_ref()
-            .map(arkret_identifiers::DidCoreId::as_str),
-        Some(subject_id)
+        material.payload.subject_account_id.principal_id.as_str(),
+        subject_id
     );
 
     let canonical = user_handle(&url_builder, &user);
@@ -2160,7 +1706,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     assert_eq!(material.payload.schema, "ak.schema.handle_claim.v1");
     let payload_value = serde_json::to_value(&material.payload).unwrap();
     assert!(payload_value.get("type").is_none());
-    let handle = material.payload.handle.as_ref().unwrap();
+    let handle = &material.payload.handle;
     assert_eq!(handle.canonical(), canonical);
     assert!(
         handle.canonical().contains(':'),
@@ -2181,15 +1727,6 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     assert_eq!(
         material.payload.audience.as_deref(),
         Some("did:web:space.example")
-    );
-    assert_eq!(
-        material
-            .payload
-            .member_delivery_binding
-            .as_ref()
-            .unwrap()
-            .binding_source,
-        hint.binding_source
     );
     // `claim_digest` moved off the spec-aligned payload onto the
     // material wrapper (audit-chain anchor only).
@@ -2222,27 +1759,20 @@ fn issue_handle_claim_accepts_organization_handle_claim_kind() {
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
     let key_store = test_keystore();
 
-    let hint = arkret_models_identity::DeliveryBindingHint {
-        recipient_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example").unwrap(),
-        recipient_kind: arkret_models_identity::RecipientServiceKind::Station,
-        binding_source: arkret_models_identity::HandleHintBindingSource::OrganizationPolicy,
-        delivery_modes: [arkret_models_identity::DeliveryMode::Events]
-            .into_iter()
-            .collect(),
-        service_acceptance_ref: None,
-        policy_event_ref: None,
-    };
-
+    let account_id = arkret_wire::AccountId::new(
+        arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zQmExampleScid:soland.example")
+            .unwrap(),
+        owning_station_id_for(&arkret_config),
+    );
     let material = issue_handle_claim(
         &clock,
         &url_builder,
         &arkret_config,
         &key_store,
         &user,
-        "ak:did_core:webvh:zQmExampleScid:soland.example",
+        &account_id,
         arkret_models_identity::HandleClaimKind::OrganizationHandle,
         "did:web:space.example".to_owned(),
-        hint,
     )
     .expect("organization_handle claim_kind must be accepted");
     assert_eq!(

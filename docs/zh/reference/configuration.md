@@ -82,6 +82,9 @@ arkret:
       service_id: ak:did_core:webvh:<soland-scid>
       embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 
+  # 配置多个 Station trust edge 时必须显式指定。
+  owning_station: soland
+
   identity_registry:
     resolver: https://resolver.example.com/
     proof_required_for_pairwise: true
@@ -98,10 +101,14 @@ arkret:
 - `principal_method`：principal DID 方法。默认 `did:webvh`；`did:web`
   必须显式搭配 `deployment_profile: personal_node`。
 - `identity_registry`：委托的 DID / identity resolver，通常是 public DID resolver 服务
-- Coauth 的 service DID 由配置的 Provider 自动查询/注册并持久化；配置文件不接受 DID。
+- `owning_station`：选择拥有此部署私有 Account Authority 组件的 Station。
+  仅配置一个 Station 时自动选择；配置多个 Station 时必须显式填写名称。
+- Coauth 没有独立的 Arkret service DID 或 service registration。trust preflight
+  完成后，它仅在 Account Authority 被委托的私有 issuer/controller 职责中使用已验证的
+  owning Station 身份。
 - Station 的 audience/DID 由配置 pin 或持久化的 trust enrollment 固定；
   `/_arkret/describe` 仅用于 bootstrap/验证时的在线身份链核验。
-- `admin_audience`：Arkret admin 集成期望的 audience，取 `did_core_id`；默认回退到本部署自身的运行时 service core id
+- `admin_audience`：Arkret admin 集成期望的 audience，取 `did_core_id`；默认回退到 owning Station id
 - `session_grant_ttl`：REST auth bridge 登录/交换路径以及 refresh endpoint
   返回的 Arkret session-grant JWT 生命周期，单位秒；默认 `300`（5 分钟）。
 

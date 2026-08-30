@@ -28,7 +28,8 @@ use crate::AppError;
 use crate::handlers::account::{DepotExt, make_clock, make_rng};
 use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
 use crate::handlers::arkret::{
-    ArkretRouteError, is_allowed_session_grant_audience, issuer_did_for, service_id_for,
+    ArkretRouteError, is_allowed_session_grant_audience, owning_station_did_for,
+    owning_station_id_for,
 };
 use crate::services::did_binding_proof::normalize_did_for_binding;
 
@@ -343,7 +344,7 @@ pub async fn post_agent_key_pair(
         .agent_key_authorization()
         .list_active_for_agent(agent_id.as_str())
         .await?;
-    let service_id = service_id_for(&arkret_config);
+    let service_id = owning_station_id_for(&arkret_config);
     let outcome_event_id = arkret_identifiers::EventId::new(authorized_event_id.clone())
         .map_err(|err| AppError::internal_box(Box::new(err)))?;
 
@@ -435,7 +436,7 @@ pub async fn post_agent_key_pair(
         }
     });
     let key_store = depot.key_store()?;
-    let service_did = issuer_did_for(&arkret_config);
+    let service_did = owning_station_did_for(&arkret_config);
     record_service_admin_operation_signed(
         &mut repo,
         &mut *rng,
@@ -514,7 +515,7 @@ fn validate_controller_authorize_event(
         .map_err(|error| AppError::bad_request(format!("authorize_event.event {error}")))?;
 
     let expected_agent_id = parse_actor_id(agent_id, "agent_id")?;
-    if event.actor_id != expected_agent_id {
+    if event.actor_id != arkret_wire::ActorId::service(expected_agent_id.clone()) {
         return Err(AppError::forbidden(
             "authorize_event.event.actor_id must equal the managed Agent DID",
         ));
@@ -522,6 +523,7 @@ fn validate_controller_authorize_event(
     let controller_id = event
         .executed_by
         .as_ref()
+        .map(arkret_wire::ActorId::signing_principal_id)
         .map(arkret_identifiers::DidCoreId::as_str)
         .ok_or_else(|| AppError::bad_request("authorize_event.event.executed_by is required"))?;
     if authoritative_key_state.agent_id != expected_agent_id

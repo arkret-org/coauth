@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 use arkret_identifiers::Did;
@@ -225,17 +225,15 @@ pub async fn directory_resolve_handle(
     let clock = crate::handlers::make_clock();
     let handle_claim_audience =
         directory_handle_claim_audience(&body, &principal_binding.audience_id);
-    let member_delivery_binding = directory_handle_delivery_binding(&principal_binding)?;
     let claim_material = issue_handle_claim(
         &*clock,
         &url_builder,
         &arkret_config,
         &key_store,
         &user,
-        principal_id.as_str(),
+        &principal_binding.account_id,
         arkret_models_identity::HandleClaimKind::HandleBinding,
         handle_claim_audience.clone(),
-        member_delivery_binding,
     )
     .map_err(map_handle_claim_issue_error)?;
     claim_material.payload.validate().map_err(|error| {
@@ -245,20 +243,12 @@ pub async fn directory_resolve_handle(
     })?;
 
     Ok(Json(DirectoryHandleResolutionOutcome {
-        subject_id: principal_id.clone(),
-        principal_id,
+        account_id: principal_binding.account_id,
         handle: canonical_handle,
         verified,
         claims: Some(vec![claim_material.payload.clone()]),
-        audience: Some(handle_claim_audience),
-        member_delivery_binding: claim_material.payload.member_delivery_binding.clone(),
-        handle_claim: Some(claim_material.payload),
-        as_of: Some(clock.now()),
         source_refs: vec![claim_material.claim_digest],
-        policy_revision: None,
-        stale: false,
-        divergent: false,
-        via_services: Vec::new(),
+        expires_at: Some(claim_material.expires_at),
     }))
 }
 
@@ -271,26 +261,6 @@ fn directory_handle_claim_audience(
         .or_else(|| body.realm_id.as_ref().map(ToString::to_string))
         .or_else(|| body.requester_id.as_ref().map(ToString::to_string))
         .unwrap_or_else(|| principal_audience.to_owned())
-}
-
-fn directory_handle_delivery_binding(
-    principal_binding: &PrincipalDidBinding,
-) -> Result<arkret_models_identity::DeliveryBindingHint, ArkretRouteError> {
-    let recipient_id = principal_binding.accepted_id.clone();
-    Ok(arkret_models_identity::DeliveryBindingHint {
-        recipient_id,
-        recipient_kind: arkret_models_identity::RecipientServiceKind::Station,
-        binding_source: arkret_models_identity::HandleHintBindingSource::Explicit,
-        delivery_modes: BTreeSet::from([
-            arkret_models_identity::DeliveryMode::Events,
-            arkret_models_identity::DeliveryMode::Sync,
-            arkret_models_identity::DeliveryMode::ToDevice,
-            arkret_models_identity::DeliveryMode::Push,
-            arkret_models_identity::DeliveryMode::KeyPackages,
-        ]),
-        service_acceptance_ref: None,
-        policy_event_ref: None,
-    })
 }
 
 fn map_handle_claim_issue_error(error: SessionGrantError) -> ArkretRouteError {

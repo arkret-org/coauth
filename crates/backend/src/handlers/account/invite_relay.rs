@@ -291,7 +291,7 @@ pub async fn post_invite_relay(
     // Deny-by-default for the federation hop: the relay forwards a request
     // signed under coauth's service DID, so the destination MUST resolve to
     // a configured trust anchor (a `stations` endpoint, an
-    // `identity_services` endpoint, or the `identity_registry` resolver).
+    // configured Station endpoint or the `identity_registry` resolver).
     // This blocks the SSRF / signing-oracle vector where a caller supplies
     // an arbitrary `target_principal_url`.
     if let Some(target) = principal_url.as_ref()
@@ -315,7 +315,7 @@ pub async fn post_invite_relay(
         }
     }
 
-    let service_id = arkret::service_id_for(&arkret_config);
+    let service_id = arkret::owning_station_id_for(&arkret_config);
     let trust_domain = arkret_identifiers::TrustDomainId::new(arkret::trust_domain_for(
         &url_builder,
         &arkret_config,
@@ -333,7 +333,7 @@ pub async fn post_invite_relay(
         principal_url.as_ref(),
         &http_client,
         &key_store,
-        arkret::issuer_did_for(&arkret_config),
+        arkret::owning_station_did_for(&arkret_config),
         identity,
         trust_domain.clone(),
         trust_domain,
@@ -381,7 +381,7 @@ mod tests {
         use rand_chacha::rand_core::SeedableRng as _;
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(9);
         let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-            .with_kid(coauth_keystore::SERVICE_IDENTITY_KEY_ID);
+            .with_kid(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID);
         coauth_keystore::Keystore::new(JsonWebKeySet::new(vec![key]))
     }
 
@@ -414,10 +414,10 @@ mod tests {
 
     fn payload() -> serde_json::Value {
         arkret_models_collaboration::governance::membership_invite::InviteCreatePayload::new(
-            arkret_identifiers::DidCoreId::new("ak:did_core:web:holder".to_owned()).unwrap(),
-            arkret_models_collaboration::governance::invite_addressing::InviteDeliveryTarget::station(
-                arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap(),
-                service_resolution(),
+            arkret_wire::AccountId::new(
+                arkret_identifiers::DidCoreId::new("ak:did_core:web:holder".to_owned()).unwrap(),
+                arkret_identifiers::DidCoreId::new("ak:did_core:web:station.example".to_owned())
+                    .unwrap(),
             ),
             arkret_identifiers::Hash::new(
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111",

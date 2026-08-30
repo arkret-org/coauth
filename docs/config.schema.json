@@ -1313,15 +1313,8 @@
             "$ref": "#/definitions/StationConfig"
           }
         },
-        "identity_services": {
-          "description": "Trusted services that provide the standard service-registration role\nwithout also acting as a Station.",
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/IdentityServiceConfig"
-          }
-        },
-        "identity_provider": {
-          "description": "Provider name used only to disambiguate multiple registration-capable\nentries. A single candidate is selected automatically.",
+        "owning_station": {
+          "description": "Name of the Station that owns this deployment-private Account\nAuthority component. A single configured Station is selected\nautomatically; deployments with multiple Station trust edges must set\nthis explicitly.",
           "type": [
             "string",
             "null"
@@ -1456,31 +1449,6 @@
       "required": [
         "name",
         "endpoint"
-      ]
-    },
-    "IdentityServiceConfig": {
-      "description": "Trusted standalone service-identity Provider metadata.",
-      "type": "object",
-      "properties": {
-        "name": {
-          "description": "Operator-facing stable name used for ambiguity resolution.",
-          "type": "string"
-        },
-        "endpoint": {
-          "description": "Base URL serving the standard service-registration operations.",
-          "type": "string",
-          "format": "uri"
-        },
-        "registration_bearer": {
-          "description": "Deployment credential authorizing service-registration calls.",
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "endpoint",
-        "registration_bearer"
       ]
     },
     "DeploymentProfileConfig": {

@@ -21,7 +21,7 @@ use coauth_data::{Clock as _, RepositoryAccess as _};
 use coauth_jose::constraints::Constrainable as _;
 use salvo::prelude::*;
 
-use super::{ArkretRouteError, service_id_for};
+use super::{ArkretRouteError, owning_station_id_for};
 use crate::handlers::common::DepotExt;
 
 const GATE_TTL: Duration = Duration::minutes(5);
@@ -116,8 +116,8 @@ pub async fn issue_controller_gate_attestation(
     }
 
     let (status, eligibility) = controller_status(user.status);
-    let authority_did = super::issuer_did_for(&depot.arkret_config()?);
-    let authority_id = service_id_for(&depot.arkret_config()?);
+    let authority_did = super::owning_station_did_for(&depot.arkret_config()?);
+    let authority_id = owning_station_id_for(&depot.arkret_config()?);
     let key_store = depot.key_store()?;
     let signing_jwk = key_store
         .signing_key_for_algorithm(&coauth_iana::jose::JsonWebSignatureAlg::Ed25519)
@@ -304,7 +304,7 @@ async fn authenticate_agent_authority_request(
     let selector = required_header(req, "arkret-operation")?;
     let operation = required_header(req, "arkret-operation-id")?;
     let request_id = required_header(req, "arkret-request-id")?;
-    let local_service_id = service_id_for(&config);
+    let local_service_id = owning_station_id_for(&config);
     if source != request.agent_authority_id.as_str()
         || destination != local_service_id.as_str()
         || selector != GATE_OPERATION_ID

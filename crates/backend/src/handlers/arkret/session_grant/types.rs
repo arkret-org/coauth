@@ -1,7 +1,7 @@
-use arkret_identifiers::{DidCoreId, ServiceAccountId, SessionGrantId};
+use arkret_identifiers::{DidCoreId, SessionGrantId};
 use arkret_models_identity::SessionGrantIssuanceNonce;
 use chrono::{DateTime, Utc};
-use coauth_data::SessionGrant;
+use coauth_data::{LocalAccountId, SessionGrant};
 use salvo::http::StatusCode;
 use serde::{Deserialize, Serialize};
 
@@ -15,8 +15,9 @@ pub struct SessionGrantMaterial {
     pub expires_at_timestamp: DateTime<Utc>,
     pub not_before_timestamp: DateTime<Utc>,
     pub issuer_id: DidCoreId,
+    pub account_id: arkret_wire::AccountId,
     pub subject_id: DidCoreId,
-    pub service_account_id: ServiceAccountId,
+    pub local_account_id: LocalAccountId,
     pub device_id: Option<String>,
     pub audience_id: DidCoreId,
     pub scopes: Vec<String>,

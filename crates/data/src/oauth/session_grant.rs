@@ -1,4 +1,7 @@
-use arkret_identifiers::{DidCoreId, ServiceAccountId, SessionGrantId};
+use std::fmt;
+use std::str::FromStr;
+
+use arkret_identifiers::{DidCoreId, SessionGrantId};
 use arkret_models_identity::SessionGrantProofKind;
 use chrono::{DateTime, Utc};
 use coauth_oauth_types::scope::Scope;
@@ -7,6 +10,76 @@ use serde_json::Value;
 use ulid::Ulid;
 
 use crate::{Clock, InvalidTransitionError};
+
+/// Station-local lookup key for one coauth account row.
+///
+/// This is deliberately owned by coauth-data: it is not an Arkret protocol
+/// identity and must never replace [`arkret_models_identity::AccountId`] at a
+/// service boundary.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct LocalAccountId(String);
+
+impl LocalAccountId {
+    /// Validate and construct a local account-row key.
+    pub fn new(value: impl Into<String>) -> arkret_identifiers::Result<Self> {
+        let value = value.into();
+        if value.is_empty() || value.len() > 255 || value.chars().any(char::is_control) {
+            return Err(arkret_identifiers::IdentifierError::InvalidId(value));
+        }
+        Ok(Self(value))
+    }
+
+    /// Borrow the database representation.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Consume this key into its database representation.
+    #[must_use]
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl fmt::Display for LocalAccountId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl AsRef<str> for LocalAccountId {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl FromStr for LocalAccountId {
+    type Err = arkret_identifiers::IdentifierError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::new(value)
+    }
+}
+
+impl Serialize for LocalAccountId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for LocalAccountId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Self::new(value).map_err(serde::de::Error::custom)
+    }
+}
 
 /// Durable issuer_id-ledger lifecycle state for a session grant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,7 +221,7 @@ pub struct SessionGrant {
     pub browser_session_id: Option<Ulid>,
     pub issuer_id: DidCoreId,
     pub subject_id: DidCoreId,
-    pub service_account_id: ServiceAccountId,
+    pub local_account_id: LocalAccountId,
     pub device_id: Option<String>,
     pub applet_id: Option<String>,
     pub effective_scope: Option<Value>,

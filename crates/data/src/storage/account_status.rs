@@ -3,7 +3,7 @@
 use arkret_models_collaboration::account_lifecycle::AccountStatusRecord;
 use async_trait::async_trait;
 
-use crate::repository_impl;
+use crate::{LocalAccountId, repository_impl};
 
 /// Result of attempting to append an immutable record at the current head.
 #[derive(Clone, Debug)]
@@ -28,6 +28,7 @@ pub trait AccountStatusLedgerRepository: Send + Sync {
     /// Append with a durable current-head compare-and-swap.
     async fn append(
         &mut self,
+        local_account_id: &LocalAccountId,
         record: &AccountStatusRecord,
     ) -> Result<AccountStatusAppendOutcome, Self::Error>;
 
@@ -35,14 +36,14 @@ pub trait AccountStatusLedgerRepository: Send + Sync {
     async fn current(
         &mut self,
         account_authority_id: &str,
-        service_account_id: &str,
+        local_account_id: &str,
     ) -> Result<Option<AccountStatusRecord>, Self::Error>;
 
     /// Return a bounded ascending contiguous range.
     async fn resolve(
         &mut self,
         account_authority_id: &str,
-        service_account_id: &str,
+        local_account_id: &str,
         from_status_seq: u64,
         limit: u16,
     ) -> Result<Vec<AccountStatusRecord>, Self::Error>;
@@ -51,17 +52,18 @@ pub trait AccountStatusLedgerRepository: Send + Sync {
 repository_impl!(AccountStatusLedgerRepository:
     async fn append(
         &mut self,
+        local_account_id: &LocalAccountId,
         record: &AccountStatusRecord,
     ) -> Result<AccountStatusAppendOutcome, Self::Error>;
     async fn current(
         &mut self,
         account_authority_id: &str,
-        service_account_id: &str,
+        local_account_id: &str,
     ) -> Result<Option<AccountStatusRecord>, Self::Error>;
     async fn resolve(
         &mut self,
         account_authority_id: &str,
-        service_account_id: &str,
+        local_account_id: &str,
         from_status_seq: u64,
         limit: u16,
     ) -> Result<Vec<AccountStatusRecord>, Self::Error>;

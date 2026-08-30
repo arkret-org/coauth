@@ -2,8 +2,7 @@ use std::collections::BTreeMap;
 
 use arkret_identifiers::Hash;
 use arkret_models_identity::{
-    DeliveryBindingHint as HandleClaimDeliveryBindingHint, Handle, HandleBindingState,
-    HandleClaim as HandleClaimPayload, HandleClaimKind,
+    Handle, HandleBindingState, HandleClaim as HandleClaimPayload, HandleClaimKind,
 };
 use arkret_wire::{Audience, PayloadProof, proof_kind};
 use chrono::{DateTime, Duration, Utc};
@@ -50,9 +49,6 @@ fn did_url_for_handle_claim(value: String) -> Result<arkret_wire::DidUrl, Sessio
 }
 
 /// Mint a handle-claim JWT bound to `audience`. The claim's
-/// `member_delivery_binding` MUST come from upstream policy (handed to this
-/// function by the caller); we never default to `did_document_default`.
-///
 /// Signs with the same preferred ed25519 key used for session grants, so
 /// downstream verifiers can use coauth's published DID Document
 /// `verificationMethod` to validate both artefacts.
@@ -62,17 +58,16 @@ pub(crate) fn issue_handle_claim(
     arkret_config: &ArkretConfig,
     key_store: &Keystore,
     user: &User,
-    subject_id: &str,
+    account_id: &arkret_wire::AccountId,
     claim_kind: HandleClaimKind,
     audience: String,
-    member_delivery_binding: HandleClaimDeliveryBindingHint,
 ) -> Result<HandleClaimMaterial, SessionGrantError> {
     use crate::services::handle_subject_validator::ensure_subject_is_principal_core_id;
 
-    let issuer_id = service_id_for(arkret_config);
-    let issuer_did = issuer_did_for(arkret_config);
-    let subject = arkret_identifiers::DidCoreId::new(subject_id.to_owned())?;
-    ensure_subject_is_principal_core_id(subject.as_str())?;
+    let issuer_id = owning_station_id_for(arkret_config);
+    let issuer_did = owning_station_did_for(arkret_config);
+    account_id.validate()?;
+    ensure_subject_is_principal_core_id(account_id.principal_id.as_str())?;
 
     // Spec 7157ee8 §3.1 — canonical handle wire form is
     // `<localpart>:<domain>`.
@@ -91,18 +86,17 @@ pub(crate) fn issue_handle_claim(
     // payload.
     let payload_no_proofs = HandleClaimPayload {
         schema: arkret_wire::SchemaId::HANDLE_CLAIM_V1.to_owned(),
-        handle: Some(handle),
+        handle,
         handle_aliases: aliases.clone(),
-        subject_id: Some(subject),
-        issuer_id: Some(issuer_id),
+        subject_account_id: account_id.clone(),
+        issuer_id,
         vouching_id: None,
-        binding_state: Some(HandleBindingState::Verified),
+        binding_state: HandleBindingState::Verified,
         claim_kind: Some(claim_kind),
         visibility: None,
         audience: Some(audience.clone()),
         challenge: None,
         claim_scope: BTreeMap::new(),
-        member_delivery_binding: Some(member_delivery_binding.clone()),
         claims: Vec::new(),
         created_at: now,
         expires_at: Some(expires_at),

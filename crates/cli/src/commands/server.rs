@@ -163,16 +163,6 @@ impl Options {
             &config.http.public_base_url,
             config.http.issuer.as_ref(),
         );
-        coauth_backend::services::service_identity::initialize_and_spawn(
-            PgRepositoryFactory::new(pool.clone()),
-            &arkret_config,
-            &config.http.public_base_url,
-            &key_store,
-            http_client.clone(),
-        )
-        .await
-        .context("could not initialize Provider-backed service identity")?;
-
         let (station_admin, connector_registry) = station_connection_from_config(
             &site_config,
             PgRepositoryFactory::new(pool.clone()).boxed(),

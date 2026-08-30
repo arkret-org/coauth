@@ -387,7 +387,7 @@ fn test_arkret_config(stations: Vec<coauth_config::StationConfig>) -> ArkretConf
     // Seed the runtime identity fixture so DID-shaped assertions stay
     // stable without introducing a configuration-level service DID.
     ArkretConfig {
-        runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+        runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
             "did:web:example.com",
         ),
         stations,
@@ -461,15 +461,15 @@ impl TestState {
             .with_kid("test-ed25519")
             .with_alg(JsonWebSignatureAlg::Ed25519);
         // Server-to-server payloads (account-status records, peer requests) are
-        // signed with the explicitly designated service-identity key, so a
+        // signed with the explicitly designated Account Authority key, so a
         // deployment without one cannot publish at all.
-        // Deliberately carries no `alg`: the service identity is selected by
+        // Deliberately carries no `alg`: the private signer is selected by
         // its `kid`, and advertising a second Ed25519 signing key would make
         // the algorithm-only selector ambiguous.
-        let service_identity =
+        let account_authority_key =
             JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(44)))
-                .with_kid(coauth_keystore::SERVICE_IDENTITY_KEY_ID);
-        let jwks = JsonWebKeySet::new(vec![rsa, ed25519, service_identity]);
+                .with_kid(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID);
+        let jwks = JsonWebKeySet::new(vec![rsa, ed25519, account_authority_key]);
         let key_store = Keystore::new(jwks);
 
         let encrypter = Encrypter::new(&[0x42; 32]);
@@ -807,9 +807,9 @@ impl TestState {
         let (principal_id, key_log_head) =
             coauth_storage_postgres::test_utils::principal_binding_test_material(label);
         // Account-status publication requires the binding to have been accepted
-        // by this deployment's own runtime service identity.
+        // by this deployment's verified owning Station identity.
         let account_authority_did =
-            crate::handlers::arkret::issuer_did_for(&self.arkret_config).to_string();
+            crate::handlers::arkret::owning_station_did_for(&self.arkret_config).to_string();
         let input = coauth_storage_postgres::test_utils::verified_principal_binding_input(
             &account_authority_did,
             TEST_STATION_AUDIENCE,
@@ -832,7 +832,7 @@ impl TestState {
             &mut repo,
             self.station_admin.as_ref(),
             &self.key_store,
-            crate::handlers::arkret::service_id_for(&self.arkret_config).as_str(),
+            crate::handlers::arkret::owning_station_id_for(&self.arkret_config).as_str(),
             user,
             &binding,
             arkret_models_collaboration::objects::account_status::AccountStatus::Active,

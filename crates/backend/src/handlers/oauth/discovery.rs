@@ -320,9 +320,10 @@ mod tests {
         depot.insert(
             "arkret_config",
             ArkretConfig {
-                runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
-                    "did:webvh:ztest:auth.example.com:webvh:service",
-                ),
+                runtime_owning_station_identity:
+                    coauth_config::RuntimeOwningStationIdentity::fixture(
+                        "did:webvh:ztest:auth.example.com:webvh:service",
+                    ),
                 ..ArkretConfig::default()
             },
         );
@@ -452,3 +453,4 @@ mod tests {
         insta::assert_json_snapshot!("discovery_scopes_and_claims", snapshot,);
     }
 }
+use crate::handlers::arkret;

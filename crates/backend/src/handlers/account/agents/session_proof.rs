@@ -132,7 +132,7 @@ where
         .ok_or(AgentAuthRejection::ProofInvalid)?;
     let verification_method = &proof.verification_method;
     if !agent_runtime_method_matches_endpoint(
-        prior_claims.subject_id.as_str(),
+        prior_claims.account_id.principal_id.as_str(),
         device_id,
         verification_method.as_str(),
     ) {
@@ -170,7 +170,7 @@ where
     validate_agent_key_authorization_binding(
         &authorization,
         now,
-        prior_claims.subject_id.as_str(),
+        prior_claims.account_id.principal_id.as_str(),
         verification_method.as_str(),
         proof_audience.as_str(),
     )?;
@@ -182,7 +182,7 @@ where
 
     let expected_digest = agent_session_refresh_request_digest(
         prior_grant_jwt,
-        &prior_claims.subject_id,
+        &prior_claims.account_id.principal_id,
         device_id,
         proof_audience,
         verification_method,
@@ -211,7 +211,7 @@ where
             rng,
             clock,
             NewAgentSessionProofReplay {
-                agent_id: prior_claims.subject_id.to_string(),
+                agent_id: prior_claims.account_id.principal_id.to_string(),
                 verification_method: verification_method.to_string(),
                 challenge: request_digest.to_string(),
                 nonce: request_digest.to_string(),

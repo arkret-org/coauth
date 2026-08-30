@@ -1,5 +1,5 @@
 use arkret_canonical::format_timestamp_canonical;
-use arkret_identifiers::{DeviceId, DidCoreId, EventId, ServiceAccountId};
+use arkret_identifiers::{DeviceId, DidCoreId, EventId};
 use arkret_models_identity::{
     CanonicalSessionPublicJwk, SESSION_GRANT_CREDENTIAL_KIND, SESSION_GRANT_ISSUANCE_SCHEMA,
     SessionGrantCredentialClass, SessionGrantDeviceBinding, SessionGrantHolderBinding,
@@ -11,7 +11,7 @@ use coauth_config::ArkretConfig;
 #[cfg(test)]
 use coauth_data::UrlBuilder;
 use coauth_data::oauth::NewSessionGrant;
-use coauth_data::{BrowserSession, Clock, RepositoryAccess, SessionGrant};
+use coauth_data::{BrowserSession, Clock, LocalAccountId, RepositoryAccess, SessionGrant};
 use coauth_jose::jwk::PublicJsonWebKey;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
@@ -107,7 +107,7 @@ pub(crate) fn issue_session_grant_for_audience(
 
     let now = issuance_seed.not_before;
     let expires_at = issuance_seed.expires_at;
-    let issuer_id = service_id_for(arkret_config);
+    let issuer_id = owning_station_id_for(arkret_config);
     account_id.validate()?;
     if account_id.principal_id != subject_id || account_id.station_id != audience_id {
         return Err(SessionGrantError::PrincipalUnknown);
@@ -117,7 +117,7 @@ pub(crate) fn issue_session_grant_for_audience(
     scopes.dedup();
     let issuance_nonce = issuance_seed.issuance_nonce.clone();
     let session_id = issuance_seed.session_id.clone();
-    let service_account_id = ServiceAccountId::new(browser_session.user.id.to_string())?;
+    let local_account_id = LocalAccountId::new(browser_session.user.id.to_string())?;
     let preimage = SessionGrantIssuancePreimage {
         schema: SESSION_GRANT_ISSUANCE_SCHEMA.to_owned(),
         issuer_id: issuer_id.clone(),
@@ -145,7 +145,7 @@ pub(crate) fn issue_session_grant_for_audience(
         grant_id: grant_id.clone(),
         issuer_id: preimage.issuer_id,
         issuance_nonce: preimage.issuance_nonce,
-        account_id: preimage.account_id,
+        account_id: preimage.account_id.clone(),
         session_public_key: preimage.session_public_key.clone(),
         audience_id: preimage.audience_id,
         scopes: preimage.scopes,
@@ -176,8 +176,9 @@ pub(crate) fn issue_session_grant_for_audience(
         expires_at_timestamp: expires_at,
         not_before_timestamp: now,
         issuer_id,
+        account_id: preimage.account_id,
         subject_id,
-        service_account_id,
+        local_account_id,
         device_id: Some(device_id.to_string()),
         audience_id,
         scopes,
@@ -200,7 +201,7 @@ pub(crate) fn issue_recovery_session_grant_for_audience(
     device_id: DeviceId,
     scopes: Vec<String>,
     subject_id: &DidCoreId,
-    service_account_id: ServiceAccountId,
+    local_account_id: LocalAccountId,
     account_id: &arkret_wire::AccountId,
     dpop_jkt: String,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
@@ -214,7 +215,7 @@ pub(crate) fn issue_recovery_session_grant_for_audience(
         )
         .into());
     }
-    let issuer_id = service_id_for(arkret_config);
+    let issuer_id = owning_station_id_for(arkret_config);
     let subject_id = subject_id.clone();
     account_id.validate()?;
     if account_id.principal_id != subject_id || account_id.station_id != audience_id {
@@ -252,7 +253,7 @@ pub(crate) fn issue_recovery_session_grant_for_audience(
         grant_id: grant_id.clone(),
         issuer_id: preimage.issuer_id,
         issuance_nonce: preimage.issuance_nonce,
-        account_id: preimage.account_id,
+        account_id: preimage.account_id.clone(),
         session_public_key: preimage.session_public_key.clone(),
         audience_id: preimage.audience_id,
         scopes: preimage.scopes,
@@ -281,8 +282,9 @@ pub(crate) fn issue_recovery_session_grant_for_audience(
         expires_at_timestamp: expires_at,
         not_before_timestamp: now,
         issuer_id,
+        account_id: preimage.account_id,
         subject_id,
-        service_account_id,
+        local_account_id,
         device_id: Some(device_id.to_string()),
         audience_id,
         scopes,
@@ -442,7 +444,7 @@ pub(crate) fn new_session_grant_record(
         browser_session_id,
         issuer_id: &material.issuer_id,
         subject_id: &material.subject_id,
-        service_account_id: &material.service_account_id,
+        local_account_id: &material.local_account_id,
         device_id: material.device_id.as_deref(),
         applet_id: None,
         effective_scope: None,
@@ -545,7 +547,7 @@ pub(crate) fn mint_agent_session_grant(
     arkret_config: &ArkretConfig,
     key_store: &Keystore,
     agent_id: &DidCoreId,
-    service_account_id: ServiceAccountId,
+    local_account_id: LocalAccountId,
     device_id: &DeviceId,
     audience_id: DidCoreId,
     scopes: Vec<String>,
@@ -559,7 +561,7 @@ pub(crate) fn mint_agent_session_grant(
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     let now = issuance_seed.not_before;
     let expires_at = issuance_seed.expires_at;
-    let issuer_id = service_id_for(arkret_config);
+    let issuer_id = owning_station_id_for(arkret_config);
     let session_id = issuance_seed.session_id.clone();
     let scope_details = compact_agent_scope_details(scope_details);
     let session_public_key = CanonicalSessionPublicJwk::new(session_public_key)?;
@@ -599,7 +601,7 @@ pub(crate) fn mint_agent_session_grant(
         grant_id: grant_id.clone(),
         issuer_id: preimage.issuer_id,
         issuance_nonce: preimage.issuance_nonce,
-        account_id: preimage.account_id,
+        account_id: preimage.account_id.clone(),
         session_public_key: preimage.session_public_key.clone(),
         audience_id: preimage.audience_id,
         scopes: preimage.scopes,
@@ -630,8 +632,9 @@ pub(crate) fn mint_agent_session_grant(
         expires_at_timestamp: expires_at,
         not_before_timestamp: now,
         issuer_id,
+        account_id: preimage.account_id,
         subject_id: agent_id.clone(),
-        service_account_id,
+        local_account_id,
         device_id: Some(device_id.to_string()),
         audience_id,
         scopes,

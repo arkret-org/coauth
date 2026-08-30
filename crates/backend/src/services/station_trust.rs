@@ -108,7 +108,17 @@ pub struct StationTrustResolver {
 #[derive(Debug, Clone)]
 struct ResolvedPin {
     value: DidCoreId,
+    did: Did,
     last_verified_at: Instant,
+}
+
+/// Verified identity material of a configured Station.
+#[derive(Debug, Clone)]
+pub struct ResolvedStationIdentity {
+    /// Stable Station authorization id.
+    pub station_id: DidCoreId,
+    /// Full Station DID used as the issuer/controller in delegated proofs.
+    pub did: Did,
 }
 
 impl Default for StationTrustResolver {
@@ -136,6 +146,19 @@ impl StationTrustResolver {
         self.resolve_at(endpoint, Instant::now())
     }
 
+    /// Current verified full identity for `endpoint`.
+    #[must_use]
+    pub fn resolve_identity(&self, endpoint: &Url) -> Option<ResolvedStationIdentity> {
+        let key = canonical_endpoint_key(endpoint)?;
+        let map = self.inner.read().ok()?;
+        let resolved = map.get(&key)?;
+        (Instant::now().saturating_duration_since(resolved.last_verified_at) < self.max_trusted_age)
+            .then(|| ResolvedStationIdentity {
+                station_id: resolved.value.clone(),
+                did: resolved.did.clone(),
+            })
+    }
+
     fn resolve_at(&self, endpoint: &Url, now: Instant) -> Option<DidCoreId> {
         let key = canonical_endpoint_key(endpoint)?;
         let map = self.inner.read().ok()?;
@@ -154,17 +177,18 @@ impl StationTrustResolver {
 
     /// Record a freshly verified pin. Callers only pass endpoints from the
     /// deployment configuration; [`MAX_CACHE_ENTRIES`] is a defensive bound.
-    pub(crate) fn note_verified(&self, endpoint: &Url, service_id: DidCoreId) {
-        self.note_verified_at(endpoint, service_id, Instant::now());
+    pub(crate) fn note_verified(&self, endpoint: &Url, service_id: DidCoreId, did: Did) {
+        self.note_verified_at(endpoint, service_id, did, Instant::now());
     }
 
-    fn note_verified_at(&self, endpoint: &Url, service_id: DidCoreId, now: Instant) {
+    fn note_verified_at(&self, endpoint: &Url, service_id: DidCoreId, did: Did, now: Instant) {
         let Some(key) = canonical_endpoint_key(endpoint) else {
             return;
         };
         if let Ok(mut map) = self.inner.write() {
             if let Some(existing) = map.get_mut(&key) {
                 if existing.value == service_id {
+                    existing.did = did;
                     existing.last_verified_at = now;
                 } else {
                     // A pin change only lands here after an explicit
@@ -172,6 +196,7 @@ impl StationTrustResolver {
                     // identity from a remote self-assertion.
                     *existing = ResolvedPin {
                         value: service_id,
+                        did,
                         last_verified_at: now,
                     };
                 }
@@ -180,6 +205,7 @@ impl StationTrustResolver {
                     key,
                     ResolvedPin {
                         value: service_id,
+                        did,
                         last_verified_at: now,
                     },
                 );
@@ -195,8 +221,10 @@ impl StationTrustResolver {
     /// Test/seed helper: insert a resolved value directly without a probe.
     #[cfg(test)]
     pub fn insert_for_test(&self, endpoint: &Url, service_id: impl Into<String>) {
-        let service_id = DidCoreId::new(service_id.into()).expect("valid test service core ID");
-        self.note_verified_at(endpoint, service_id, Instant::now());
+        let did = Did::new(service_id.into()).expect("valid test Station DID");
+        let service_id =
+            arkret_identifiers::project_did_to_core_id(&did).expect("valid test Station core ID");
+        self.note_verified_at(endpoint, service_id, did, Instant::now());
     }
 }
 
@@ -824,7 +852,11 @@ pub async fn bootstrap(
             )
             .await?;
         repo.save().await?;
-        shared().note_verified(&server.endpoint, verified.service_id.clone());
+        shared().note_verified(
+            &server.endpoint,
+            verified.service_id.clone(),
+            verified.did.clone(),
+        );
         return Ok(BootstrapOutcome {
             enrollment: existing,
             already_enrolled: true,
@@ -861,7 +893,11 @@ pub async fn bootstrap(
         )
         .await?;
     repo.save().await?;
-    shared().note_verified(&server.endpoint, verified.service_id.clone());
+    shared().note_verified(
+        &server.endpoint,
+        verified.service_id.clone(),
+        verified.did.clone(),
+    );
     Ok(BootstrapOutcome {
         enrollment,
         already_enrolled: false,
@@ -966,7 +1002,11 @@ pub async fn replace(
         )
         .await?;
     repo.save().await?;
-    shared().note_verified(&server.endpoint, verified.service_id.clone());
+    shared().note_verified(
+        &server.endpoint,
+        verified.service_id.clone(),
+        verified.did.clone(),
+    );
     Ok(ReplaceOutcome {
         enrollment: StationTrustEnrollment {
             name: server.name.clone(),
@@ -1084,6 +1124,22 @@ pub async fn preflight_and_spawn(
     Ok(())
 }
 
+fn delegate_owning_station_identity(
+    arkret_config: &ArkretConfig,
+    server: &StationConfig,
+    station_id: DidCoreId,
+    did: Did,
+) {
+    if arkret_config
+        .owning_station()
+        .is_some_and(|owner| owner.name == server.name)
+    {
+        arkret_config
+            .runtime_owning_station_identity
+            .store(station_id, did);
+    }
+}
+
 async fn preflight_server(
     repository_factory: &PgRepositoryFactory,
     arkret_config: &ArkretConfig,
@@ -1139,6 +1195,12 @@ async fn preflight_server(
                 source = source.as_str(),
                 "enrolled station trust pin",
             );
+            delegate_owning_station_identity(
+                arkret_config,
+                server,
+                outcome.enrollment.service_id,
+                outcome.enrollment.did,
+            );
             return Ok(());
         }
     };
@@ -1169,7 +1231,8 @@ async fn preflight_server(
             .await?;
         repo.save().await?;
     }
-    shared().note_verified(&server.endpoint, effective);
+    shared().note_verified(&server.endpoint, effective.clone(), verified.did.clone());
+    delegate_owning_station_identity(arkret_config, server, effective, verified.did);
     Ok(())
 }
 
@@ -1221,7 +1284,17 @@ async fn revalidate_all(
         .await
         {
             Ok(verified) => {
-                resolver.note_verified(&server.endpoint, verified.service_id.clone());
+                resolver.note_verified(
+                    &server.endpoint,
+                    verified.service_id.clone(),
+                    verified.did.clone(),
+                );
+                delegate_owning_station_identity(
+                    arkret_config,
+                    server,
+                    verified.service_id.clone(),
+                    verified.did.clone(),
+                );
                 if let Ok(mut repo) = repository_factory.create().await
                     && let Some(endpoint) = canonical_endpoint_key(&server.endpoint)
                 {
@@ -1356,6 +1429,7 @@ mod tests {
         resolver.note_verified_at(
             &endpoint,
             DidCoreId::new("ak:did_core:webvh:persisted".to_owned()).unwrap(),
+            Did::new("did:webvh:persisted".to_owned()).unwrap(),
             verified_at,
         );
 

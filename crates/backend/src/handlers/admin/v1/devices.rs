@@ -503,7 +503,7 @@ mod tests {
         let grant_config = coauth_config::ArkretConfig {
             deployment_profile: coauth_config::DeploymentProfileConfig::PersonalNode,
             principal_method: coauth_config::PrincipalMethodConfig::DidWeb,
-            runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
+            runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
                 "did:web:auth.example",
             ),
             // Session-grant audiences are Station core DIDs.
