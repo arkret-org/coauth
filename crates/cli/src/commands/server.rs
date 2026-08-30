@@ -269,10 +269,8 @@ impl Options {
             EmailWebhookService::from_email_config(&config.email, http_client.clone())
                 .context("invalid email webhook configuration")?;
 
-        // Profile requirements guard self-claims at startup only. They must
-        // never become request-routing or authorization input.
-        coauth_backend::handlers::arkret::validate_claimed_profiles_at_startup()
-            .context("coauth claimed profile requirements are not satisfied")?;
+        // Coauth is a Station-internal component and makes no public role
+        // profile self-claim. The owning Station validates its own profiles.
         // Explicitly the config to properly zeroize secret keys
         drop(config);
 

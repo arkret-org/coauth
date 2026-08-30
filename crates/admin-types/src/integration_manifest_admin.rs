@@ -2,10 +2,12 @@
 //!
 //! Mirrors the wire shape emitted by:
 //!
-//! - `GET /_coauth/gate/account/integration/describe` — `IntegrationManifestResponse` from
+//! - `GET /_coauth/account/integration/describe` — `IntegrationManifest` from
 //!   `coauth/crates/backend/src/handlers/account/auth/oidc_bridge.rs`.
 //!
-//! These types contain only stable discovery data consumed by sodmin.
+//! These types contain deployment-private integration data consumed by sodmin.
+//! `service_kind` classifies that private manifest, not an Arkret service role;
+//! this response is never a public ServiceDescribe or federation discovery target.
 //! Historical rollout metadata, TODO text, and example payloads belong
 //! in documentation or OpenAPI rather than the runtime contract.
 

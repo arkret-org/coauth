@@ -23,7 +23,7 @@ The `doctor` command performs the following diagnostics:
 - **Issuer hygiene** — Warns when the configured issuer is not HTTPS.
 - **Station configuration** — Reports the configured `arkret.stations` entries.
 - **OpenID discovery** — Fetches `/.well-known/openid-configuration` and verifies its issuer.
-- **Arkret discovery** — Fetches `/_arkret/describe`.
+- **Arkret discovery** — Fetches `/_arkret/describe` from each configured Station endpoint, not from coauth's internal authentication endpoint.
 
 ### Interpreting the output
 

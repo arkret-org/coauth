@@ -40,7 +40,8 @@ The following surfaces are tracked contracts:
 - `/.well-known/arkret/openapi.yaml`
 - `/_coauth/admin/openapi.yaml` (the canonical `sodmin` integration
   contract)
-- `/_arkret/describe` and the rest of `/_arkret/*`
+- The Station's `/_arkret/gate/account/*` operations dispatched to coauth;
+  `/_arkret/describe` remains the owning Station's surface.
 - The CLI subcommand surface (`server`, `worker`, `manage`, `database`,
   `config`, `templates`, `doctor`).
 

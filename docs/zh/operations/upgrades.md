@@ -30,7 +30,8 @@
 - `/.well-known/openid-configuration`
 - `/.well-known/arkret/openapi.yaml`
 - `/_coauth/admin/openapi.yaml`
-- `/_arkret/describe` 与 `/_arkret/*` 其余路径
+- Station 分派给 coauth 的 `/_arkret/gate/account/*` 操作；
+  `/_arkret/describe` 仍由所属 Station 发布
 - CLI 子命令（`server`、`worker`、`manage`、`database`、`config`、
   `templates`、`doctor`）
 

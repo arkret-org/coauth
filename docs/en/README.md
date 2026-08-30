@@ -1,6 +1,7 @@
 # About this documentation
 
-This documentation describes `coauth`, the Arkret Auth / Account Server. It is
+This documentation describes `coauth`, a Station-internal authentication and
+account-management component behind the Station's Account Authority entry. It is
 intended for operators, administrators, and developers integrating coauth with
 Arkret Stations, public DID resolver services, `sodmin`, and first-party clients.
 

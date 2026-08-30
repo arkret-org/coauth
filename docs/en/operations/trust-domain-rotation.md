@@ -7,7 +7,7 @@ issued under the previous trust domain.
 Before rotating:
 
 1. Record the current configured value and confirm it matches
-   `/_arkret/describe`.
+   the owning Station's `/_arkret/describe`.
 2. Pause or reject in-flight recovery approvals minted under the old value.
 3. Snapshot the database and keep the previous config alongside the
    snapshot.
@@ -17,8 +17,9 @@ Before rotating:
 During rotation:
 
 1. Set the new value in `arkret.trust_domain`.
-2. Restart one `coauth` replica and verify `/_arkret/describe`
-   advertises the new value.
+2. Restart one `coauth` replica and verify the owning Station's
+   `/_arkret/describe` advertises the coordinated new value. Coauth has no
+   independent role-local Describe.
 3. Roll the remaining replicas.
 4. Reissue reset proofs through the device recovery strand. The affected
    proof families are `principal_signing`, `recovery_unlock`,

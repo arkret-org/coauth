@@ -94,7 +94,7 @@ mod tests {
         std::fs::write(
             &path,
             br#"{"verified":[
-                {"profile_id":"principal","claim_kind":"conformance_verified","verification_run_id":"run","service_role":"station","artifact_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","artifact_ref":"file:///artifact","verifier_did":"did:web:cotest.example","verifier_id":"ak:did_core:web:cotest.example","signature":"sig","timestamp":"2026-05-20T00:00:00.000Z"},
+                {"profile_id":"station-profile","claim_kind":"conformance_verified","verification_run_id":"run","service_role":"station","artifact_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","artifact_ref":"file:///artifact","verifier_did":"did:web:cotest.example","verifier_id":"ak:did_core:web:cotest.example","signature":"sig","timestamp":"2026-05-20T00:00:00.000Z"},
                 {"profile_id":"push","claim_kind":"conformance_verified","verification_run_id":"run","service_role":"push_gateway","artifact_digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","artifact_ref":"file:///artifact","verifier_did":"did:web:cotest.example","verifier_id":"ak:did_core:web:cotest.example","signature":"sig","timestamp":"2026-05-20T00:00:00.000Z"}
             ]}"#,
         )
@@ -102,6 +102,6 @@ mod tests {
         let path = camino::Utf8PathBuf::from_path_buf(path).unwrap();
         let entries = load_from_path(path);
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].profile_id, "auth");
+        assert_eq!(entries[0].profile_id, "station-profile");
     }
 }

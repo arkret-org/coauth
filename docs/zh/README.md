@@ -1,6 +1,7 @@
 # 关于本文档
 
-本文档介绍 `coauth`，即 Arkret Auth / Account Server。它面向运维人员、管理员，以及
+本文档介绍 `coauth`：Station 内部、位于其 Account Authority 入口之后的认证与账号管理组件，
+不是独立 Arkret 公开服务角色。它面向运维人员、管理员，以及
 需要把 coauth 接入 Arkret Station、public DID resolver 服务、`sodmin` 和第一方客户端的开发者。
 
 `coauth` 是 OAuth 和 OpenID Connect Provider。它的主产品接口是 Arkret-native

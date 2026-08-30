@@ -23,9 +23,13 @@ adapt the package list to coauth's workspace.
 > [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)) fails the build
 > if anything that looks like a credential lands in a tracked path.
 
-`coauth` is the Arkret Auth / Account Server. It provides OIDC/OAuth login,
-account lifecycle management, short-lived session grants, policy hooks,
-notifications, and a stable admin API for Arkret deployments.
+`coauth` is the Station's internal authentication and account-management
+component. It provides OIDC/OAuth login, account lifecycle management,
+short-lived session grants, policy hooks, notifications, and an admin API.
+Clients use the Account Authority entry published by their Station; a
+separate coauth process does not create an Arkret service role or peer
+discovery target. Station-local identity is the complete
+`AccountId {principal_id, station_id}`.
 
 `coauth` is not a DID registry. It proves who authenticated to which local
 account, device, and session, then publishes that state to Stations
@@ -92,12 +96,17 @@ work that affects wire shape is tracked in [`../arkret-spec/spec/v1/`](../arkret
 
 ## Current status
 
-The primary Arkret paths include:
+The Station may dispatch these account and identity operations to coauth:
 
 - `/.well-known/openid-configuration`
-- `/_arkret/describe`
-- `/_arkret/root/identity/describe`
+- `/_arkret/gate/account/authentication-handoffs`
+- `/_arkret/gate/account/session-grants`
 - `/_arkret/find/directory/resolve-handle`
+
+The Station itself publishes `/_arkret/describe`; coauth does not expose
+an independent role-local Describe. Its `/_coauth/account/integration/describe`
+manifest is deployment-private administration metadata, not an Arkret
+ServiceDescribe or public service-kind registration.
 
 coauth hosts **no** DID documents (`/.well-known/did.json`, `/did.json`, and
 `/users/{id}/did.json` were removed): DID hosting is the Station's
@@ -110,8 +119,8 @@ verified via the introspection endpoints and the OAuth JWKS.
 
 - OpenID Connect provider with authorization code, refresh token, client
   credentials, and device code grants
-- Arkret discovery, service DID documents, handle resolution, and short-lived
-  session grants with Station introspection
+- Station-backed identity and handle resolution, and short-lived session
+  grants with exact AccountId-bound Station introspection
 - Local account lifecycle, password auth, upstream OAuth federation, and
   recovery workflows
 - Admin APIs for sessions, tokens, users, clients, templates, connectors, and
@@ -190,8 +199,8 @@ just build-all
 | Endpoint | Purpose |
 |----------|---------|
 | `/.well-known/openid-configuration` | OIDC discovery |
-| `/_arkret/describe` | Arkret service metadata |
-| `/_arkret/root/identity/describe` | Identity-registry contract |
+| `/_arkret/gate/account/authentication-handoffs` | Station Account Authority authentication handoff |
+| `/_coauth/account/integration/describe` | Deployment-private integration metadata, not a public Arkret role |
 | `/_arkret/find/directory/resolve-handle` | Handle -> DID resolution |
 | `/_arkret/gate/account/session-grants/introspect` | Station session grant validation |
 | `/_coauth/admin/*` | Admin API for `sodmin` and service automation |

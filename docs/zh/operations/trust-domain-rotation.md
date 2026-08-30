@@ -6,7 +6,7 @@
 
 轮换前：
 
-1. 记录当前配置值，并确认其与 `/_arkret/describe`
+1. 记录当前配置值，并确认其与所属 Station 的 `/_arkret/describe`
    返回的一致。
 2. 暂停或拒绝以旧值签发、尚未完成的恢复批准请求。
 3. 对数据库做快照，并将旧配置与该快照一起保存。
@@ -16,8 +16,8 @@
 轮换过程中：
 
 1. 在 `arkret.trust_domain` 中写入新值。
-2. 重启一个 `coauth` 副本，确认
-   `/_arkret/describe` 公布了新值。
+2. 重启一个 `coauth` 副本，确认所属 Station 的
+   `/_arkret/describe` 公布了协调后的新值；coauth 没有独立 role-local Describe。
 3. 滚动重启其余副本。
 4. 通过设备恢复流程重新签发 reset 证明。受影响的证明族
    包括 `principal_signing`、`recovery_unlock`、

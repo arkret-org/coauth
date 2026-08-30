@@ -1,6 +1,6 @@
 //! Deployment health-check diagnostics
 //!
-//! Validates Arkret/OIDC discovery surfaces exposed by the coauth server.
+//! Validates coauth OIDC discovery and configured Stations' Arkret discovery.
 // CLI diagnostic checks use raw `reqwest` so they don't pull in the
 // outbound-http tracing layer required by the server runtime.
 #![allow(clippy::disallowed_methods)]
@@ -60,7 +60,9 @@ impl Options {
         }
 
         check_openid_discovery(&http, public_base_url, resolved_issuer).await;
-        check_arkret_server_describe(&http, public_base_url).await;
+        for station in &config.arkret.stations {
+            check_arkret_server_describe(&http, &station.endpoint).await;
+        }
 
         Ok(ExitCode::SUCCESS)
     }
