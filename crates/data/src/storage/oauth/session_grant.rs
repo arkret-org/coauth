@@ -421,7 +421,7 @@ pub trait SessionGrantRepository: Send + Sync {
     async fn revoke_if_active(&mut self, clock: &dyn Clock, id: Ulid) -> Result<bool, Self::Error>;
 
     /// Revoke every still-active grant minted for `audience_id`, returning the
-    /// number of grants revoked. Used when a Principal Server trust pin is
+    /// number of grants revoked. Used when a Station trust pin is
     /// explicitly replaced: grants bound to the old audience_id must not
     /// outlive the pin they were issued under.
     async fn revoke_active_for_audience(

@@ -116,7 +116,7 @@ pub async fn get_viewer(
     let config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let clock = make_clock();
 
     let activity_tracker = extract_bound_activity_tracker(req, depot);
@@ -131,7 +131,7 @@ pub async fn get_viewer(
             let user = &session.user;
 
             // Load viewer profile from service
-            let profile = load_viewer_profile(&mut repo, principal_server.as_ref(), user)
+            let profile = load_viewer_profile(&mut repo, station.as_ref(), user)
                 .await
                 .map_err(super::map_user_profile_error)?;
 

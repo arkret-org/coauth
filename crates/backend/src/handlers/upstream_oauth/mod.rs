@@ -13,7 +13,7 @@
 //!   `link_workflow` submodule.
 //!
 //! The `ConnectorRegistry` provides runtime provider lookup. Each upstream
-//! OAuth provider is NOT a `ConnectorProvider` (that's for PrincipalServers).
+//! OAuth provider is NOT a `ConnectorProvider` (that's for Stations).
 //! Instead, upstream providers are managed through
 //! `UpstreamOAuthProviderRepository`.
 

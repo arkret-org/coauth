@@ -52,7 +52,7 @@
 //!
 //! No local `did:webvh` history verifier. `did_resolver.rs` carries the
 //! CAU-SPEC-02 ruling that webvh log/history authority belongs to the
-//! principal server; this module consumes whatever history evidence the
+//! Station; this module consumes whatever history evidence the
 //! delegated resolver returned and pins it, but never re-derives it.
 
 use std::sync::Arc;

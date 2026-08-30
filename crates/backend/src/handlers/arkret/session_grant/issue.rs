@@ -465,7 +465,7 @@ async fn consume_recovery_dpop_jti(
 ///
 /// OIDC is consumed when the handoff is created. This branch deliberately
 /// does not perform another OIDC exchange: the handoff identifies the account,
-/// its holder key signs this request, and the Principal Server independently
+/// its holder key signs this request, and the Station independently
 /// gates the requested durable device against revocation.
 fn validate_human_issue_proof_before_reservation(
     body: &HumanSessionGrantRequest,
@@ -604,7 +604,7 @@ async fn issue_account_handoff_session_grant(
     let device_id = body.device_id.clone();
     let device_binding = acquire_human_device_binding(
         depot,
-        &binding.principal_authority,
+        &binding.account_id,
         device_id.clone(),
         arkret_wire::DeviceRevocationGateActionClass::ReturningSessionGrantIssue,
         None,
@@ -633,7 +633,7 @@ async fn issue_account_handoff_session_grant(
         device_id.clone(),
         granted_scope,
         Some(&binding.principal_id),
-        &binding.principal_authority,
+        &binding.account_id,
         dpop.jkt.clone(),
         device_binding,
         SessionGrantProofKind::AccountHandoff,
@@ -861,7 +861,7 @@ async fn issue_recovery_session_grant(
         &binding.principal_id,
         ServiceAccountId::new(handoff_service_account_id.to_string())
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-        &binding.principal_authority,
+        &binding.account_id,
         dpop.jkt.clone(),
     )
     .map_err(map_session_grant_material_error)?;

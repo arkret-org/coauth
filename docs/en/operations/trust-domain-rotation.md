@@ -11,7 +11,7 @@ Before rotating:
 2. Pause or reject in-flight recovery approvals minted under the old value.
 3. Snapshot the database and keep the previous config alongside the
    snapshot.
-4. Coordinate with Principal Server operators so they reject stale
+4. Coordinate with Station operators so they reject stale
    recovery proofs after the cutover.
 
 During rotation:

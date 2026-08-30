@@ -312,7 +312,7 @@ pub async fn validate_agent_session_proof(
     if !is_allowed_session_grant_audience(
         url_builder,
         arkret_config,
-        crate::services::principal_server_trust::shared(),
+        crate::services::station_trust::shared(),
         proof.audience_id.as_str(),
     ) {
         tracing::warn!(agent_id, verification_method, audience_id = %proof.audience_id, "agent_key_proof rejected: audience is not configured");
@@ -688,7 +688,7 @@ fn validate_authoritative_agent_session_evidence(
     }
 
     // A delivered pair request is verifier-private evidence that the
-    // Principal Server validated the controller-signed disclosure against the
+    // Station validated the controller-signed disclosure against the
     // accepted-at Agent DID commitment. Re-bind that cached evidence to the
     // current authoritative projection before every session issuance.
     let paired_request: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody =
@@ -1376,7 +1376,7 @@ where
 }
 
 /// Resolve the current reducer-stamped agent lifecycle state from a configured
-/// Principal Server. Missing or unreachable authority fails closed.
+/// Station. Missing or unreachable authority fails closed.
 pub(super) async fn fetch_authoritative_agent_view(
     http_client: &reqwest::Client,
     arkret_config: &ArkretConfig,
@@ -1384,14 +1384,14 @@ pub(super) async fn fetch_authoritative_agent_view(
 ) -> Result<
     (
         arkret_models_collaboration::agent_operations::AgentView,
-        coauth_config::PrincipalServerConfig,
+        coauth_config::StationConfig,
     ),
     AgentAuthRejection,
 > {
     let mut queried = false;
     let mut saw_not_found = false;
 
-    for server in &arkret_config.principal_servers {
+    for server in &arkret_config.stations {
         let Some(bearer) = server
             .session_grant_introspection_bearer
             .as_deref()
@@ -1477,7 +1477,7 @@ pub async fn enforce_authoritative_pairing_handle(
 ) -> Result<
     (
         arkret_models_collaboration::agent_operations::AgentView,
-        coauth_config::PrincipalServerConfig,
+        coauth_config::StationConfig,
     ),
     AgentAuthRejection,
 > {
@@ -1557,21 +1557,17 @@ mod tests {
             .mount(&server)
             .await;
         let mut config = ArkretConfig::default();
-        config
-            .principal_servers
-            .push(coauth_config::PrincipalServerConfig {
-                name: "soland-test".to_owned(),
-                endpoint: server.uri().parse().unwrap(),
-                service_id: Some(
-                    arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.test").unwrap(),
-                ),
-                session_grant_introspection_bearer: Some("lifecycle-secret".to_owned()),
-                embedded_webvh_registration_bearer: None,
-            });
-        crate::services::principal_server_trust::shared().insert_for_test(
-            &config.principal_servers[0].endpoint,
-            "ak:did_core:web:soland.test",
-        );
+        config.stations.push(coauth_config::StationConfig {
+            name: "soland-test".to_owned(),
+            endpoint: server.uri().parse().unwrap(),
+            service_id: Some(
+                arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.test").unwrap(),
+            ),
+            session_grant_introspection_bearer: Some("lifecycle-secret".to_owned()),
+            embedded_webvh_registration_bearer: None,
+        });
+        crate::services::station_trust::shared()
+            .insert_for_test(&config.stations[0].endpoint, "ak:did_core:web:soland.test");
         (server, config)
     }
 

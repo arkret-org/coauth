@@ -34,7 +34,7 @@ use crate::handlers::common::DepotExt;
 use crate::services::account_status_publication::{
     author_transition_plan, enqueue_exact_publication, validate_transition_plan,
 };
-use crate::services::principal_server_trust::{effective_audience, shared};
+use crate::services::station_trust::{effective_audience, shared};
 
 pub struct RecoveryCompletionCanonicalJson(Vec<u8>);
 
@@ -53,7 +53,7 @@ impl Scribe for RecoveryCompletionCanonicalJson {
 /// `POST /_arkret/gate/account/recovery-session-grants/issue`.
 ///
 /// A still-valid, Bound account handoff authenticates the account and the new
-/// session key. The handoff audience Principal Server proves that root
+/// session key. The handoff audience Station proves that root
 /// re-anchor and replacement-device authorization completed. Coauth then
 /// issues a fresh Standard grant directly; there is no restricted predecessor
 /// credential or cross-service recovery-coordinator authority.
@@ -143,8 +143,8 @@ pub async fn issue_recovery_completion_grant_endpoint(
         receipt.principal_id.as_str(),
     )
     .await?;
-    let principal_authority = principal_binding.principal_authority.clone();
-    verify_principal_server_completion_signatures(
+    let account_id = principal_binding.account_id.clone();
+    verify_station_completion_signatures(
         depot,
         &mut prerequisite_repo,
         &handoff.audience_id,
@@ -269,7 +269,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
     };
     let device_binding = acquire_human_device_binding(
         depot,
-        &principal_authority,
+        &account_id,
         initial.device_id.clone(),
         arkret_wire::DeviceRevocationGateActionClass::SessionGrantIssue,
         Some(&expected_device_binding),
@@ -299,7 +299,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             .map(|operation| operation.as_str().to_owned())
             .collect(),
         Some(&receipt.principal_id),
-        &principal_authority,
+        &account_id,
         handoff.cnf_jkt.clone(),
         device_binding,
         SessionGrantProofKind::AccountHandoff,
@@ -338,10 +338,10 @@ pub async fn issue_recovery_completion_grant_endpoint(
     match current_user.status {
         AccountStatus::Active => {}
         AccountStatus::Deactivated => {
-            let principal_server = depot.principal_server()?;
+            let station = depot.station()?;
             let plan = author_transition_plan(
                 &mut repo,
-                principal_server.as_ref(),
+                station.as_ref(),
                 &key_store,
                 super::service_id_for(&config).as_str(),
                 &current_user,
@@ -563,7 +563,7 @@ async fn verify_account_principal_binding(
         ));
     }
     binding
-        .principal_authority
+        .account_id
         .validate()
         .map_err(|error| failed_precondition(error.to_string()))?;
     Ok(binding)
@@ -579,18 +579,18 @@ fn account_status_reactivation_failed(
     )
 }
 
-async fn verify_principal_server_completion_signatures(
+async fn verify_station_completion_signatures(
     depot: &Depot,
     repo: &mut coauth_data::BoxRepository,
-    expected_principal_server: &str,
+    expected_station: &str,
     request: &IssueRecoveryCompletionGrantRequest,
     receipt: &RecoveryReceipt,
 ) -> Result<(), ArkretRouteError> {
     let attestation = &request.completion_attestation;
     if verification_method_did(attestation.auth_data.verification_method.as_str())
-        != expected_principal_server
+        != expected_station
         || verification_method_did(receipt.auth_data.verification_method.as_str())
-            != expected_principal_server
+            != expected_station
     {
         return Err(signature_invalid(
             "recovery receipt and completion attestation must be signed by the handoff audience",
@@ -598,13 +598,13 @@ async fn verify_principal_server_completion_signatures(
     }
     let config = depot.arkret_config()?;
     let trusted = config
-        .principal_servers
+        .stations
         .iter()
         .filter_map(|server| effective_audience(server, shared()))
-        .any(|service_id| service_id.as_str() == expected_principal_server);
+        .any(|service_id| service_id.as_str() == expected_station);
     if !trusted {
         return Err(signature_invalid(
-            "recovery completion signer is not the configured Principal Server",
+            "recovery completion signer is not the configured Station",
         ));
     }
     let resolution = crate::services::did_binding::authority_document(
@@ -615,7 +615,7 @@ async fn verify_principal_server_completion_signatures(
         repo,
         depot.did_resolver_service()?.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),
-        expected_principal_server,
+        expected_station,
         arkret_identity::DidBindingPurpose::Recovery,
         crate::services::did_binding::high_risk_freshness(),
         crate::handlers::make_clock().now(),
@@ -623,7 +623,7 @@ async fn verify_principal_server_completion_signatures(
     .await
     .map_err(|error| {
         signature_invalid(format!(
-            "no fresh trusted recovery binding for the Principal Server: {error}"
+            "no fresh trusted recovery binding for the Station: {error}"
         ))
     })?;
     verify_with_document_method(

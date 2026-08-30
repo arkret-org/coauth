@@ -50,7 +50,7 @@ pub struct AppState {
     pub cookie_manager: CookieManager,
     pub encrypter: Encrypter,
     pub url_builder: UrlBuilder,
-    pub principal_server_admin: Arc<dyn ConnectorAdmin>,
+    pub station_admin: Arc<dyn ConnectorAdmin>,
     pub connector_registry: ConnectorRegistry,
     pub policy_factory: Arc<PolicyFactory>,
     pub http_client: reqwest::Client,
@@ -85,7 +85,7 @@ pub struct AppState {
 
     /// G4.T3 — verified-profile descriptors loaded from the cotest
     /// artifact path in `COAUTH_VERIFIED_PROFILES_ARTIFACT` at server
-    /// startup. Filtered to entries whose `service_role == "auth_server"`
+    /// startup. This private process does not publish an independent role claim.
     /// and additionally cross-checked against coauth's hard-coded
     /// `claimed_profiles[]` set inside
     /// `handlers::arkret::build_verified_profile_descriptors`. Empty
@@ -213,10 +213,7 @@ pub async fn inject_app_state(
         ))),
     );
     depot.insert("policy_factory", state.policy_factory.clone());
-    depot.insert(
-        "principal_server_admin",
-        Arc::clone(&state.principal_server_admin),
-    );
+    depot.insert("station_admin", Arc::clone(&state.station_admin));
     depot.insert("connector_registry", state.connector_registry.clone());
     depot.insert("app_version", AppVersion(crate::version()));
     depot.insert("activity_tracker", state.activity_tracker.clone());
@@ -384,7 +381,7 @@ pub trait DepotExt {
     fn get_limiter(&self) -> Option<&Limiter>;
     fn get_dpop_verifier(&self) -> Option<&DpopVerifier>;
     fn get_policy_factory(&self) -> Option<&Arc<PolicyFactory>>;
-    fn get_principal_server_admin(&self) -> Option<&Arc<dyn ConnectorAdmin>>;
+    fn get_station_admin(&self) -> Option<&Arc<dyn ConnectorAdmin>>;
     fn get_connector_registry(&self) -> Option<&ConnectorRegistry>;
     fn get_app_version(&self) -> Option<&AppVersion>;
     fn get_activity_tracker(&self) -> Option<&ActivityTracker>;
@@ -457,9 +454,8 @@ impl DepotExt for Depot {
         self.get::<Arc<PolicyFactory>>("policy_factory").ok()
     }
 
-    fn get_principal_server_admin(&self) -> Option<&Arc<dyn ConnectorAdmin>> {
-        self.get::<Arc<dyn ConnectorAdmin>>("principal_server_admin")
-            .ok()
+    fn get_station_admin(&self) -> Option<&Arc<dyn ConnectorAdmin>> {
+        self.get::<Arc<dyn ConnectorAdmin>>("station_admin").ok()
     }
 
     fn get_connector_registry(&self) -> Option<&ConnectorRegistry> {
@@ -491,7 +487,7 @@ mod tests {
     fn waiting_provider_response_is_retryable_and_diagnostic() {
         let state = DidCoreIdentityState::WaitingProvider {
             registration_key: ServiceRegistrationKey::new(
-                ServiceKind::AuthServer,
+                ServiceKind::Station,
                 CanonicalServiceUrl::canonicalize("https://auth.example/").unwrap(),
             )
             .unwrap(),

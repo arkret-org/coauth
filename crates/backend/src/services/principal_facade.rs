@@ -23,7 +23,7 @@ use std::collections::HashSet;
 
 use anyhow::Context as _;
 use async_trait::async_trait;
-use coauth_config::{ArkretConfig, PrincipalServerConfig};
+use coauth_config::{ArkretConfig, StationConfig};
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess};
 use coauth_principal::{
     ConnectorAccountProfile, ConnectorAdmin, ConnectorProvider, ConnectorProvisionRequest,
@@ -34,7 +34,7 @@ use url::Url;
 
 /// `ConnectorAdmin` backed by coauth's own Postgres (`users`).
 pub struct DbConnectorAdmin {
-    principal_authority: String,
+    account_id: String,
     repository_factory: BoxRepositoryFactory,
     arkret_config: ArkretConfig,
     http_client: reqwest::Client,
@@ -49,17 +49,17 @@ struct PeerSigningContext {
 }
 
 impl DbConnectorAdmin {
-    /// Create a facade rooted at `principal_authority`, reading accounts
+    /// Create a facade rooted at `account_id`, reading accounts
     /// through `repository_factory`.
     #[must_use]
     pub fn new(
-        principal_authority: impl Into<String>,
+        account_id: impl Into<String>,
         repository_factory: BoxRepositoryFactory,
         arkret_config: ArkretConfig,
         http_client: reqwest::Client,
     ) -> Self {
         Self {
-            principal_authority: principal_authority.into(),
+            account_id: account_id.into(),
             repository_factory,
             arkret_config,
             http_client,
@@ -84,14 +84,12 @@ impl DbConnectorAdmin {
     }
 }
 
-fn default_principal_server(
-    arkret_config: &ArkretConfig,
-) -> Result<&PrincipalServerConfig, anyhow::Error> {
-    match arkret_config.principal_servers.as_slice() {
+fn default_station(arkret_config: &ArkretConfig) -> Result<&StationConfig, anyhow::Error> {
+    match arkret_config.stations.as_slice() {
         [server] => Ok(server),
-        [] => anyhow::bail!("no Principal Server is configured for account-status publication"),
+        [] => anyhow::bail!("no Station is configured for account-status publication"),
         _ => anyhow::bail!(
-            "account-status publication destination is ambiguous; configure exactly one Principal Server"
+            "account-status publication destination is ambiguous; configure exactly one Station"
         ),
     }
 }
@@ -112,27 +110,27 @@ fn runtime_peer_identity(
     Ok((identity.service_id.clone(), identity.did.clone()))
 }
 
-pub(crate) async fn commit_agent_key_pair_to_principal_server(
+pub(crate) async fn commit_agent_key_pair_to_station(
     http_client: &reqwest::Client,
     arkret_config: &ArkretConfig,
     request: &PrincipalAgentKeyPairCommitRequest,
 ) -> Result<(), anyhow::Error> {
     let server = arkret_config
-        .principal_servers
+        .stations
         .iter()
-        .find(|server| server.name == request.principal_server_name())
-        .ok_or_else(|| anyhow::anyhow!("authoritative Principal Server is no longer configured"))?;
+        .find(|server| server.name == request.station_name())
+        .ok_or_else(|| anyhow::anyhow!("authoritative Station is no longer configured"))?;
     let bearer = server
         .session_grant_introspection_bearer
         .as_deref()
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| anyhow::anyhow!("authoritative Principal Server has no S2S bearer"))?;
+        .ok_or_else(|| anyhow::anyhow!("authoritative Station has no S2S bearer"))?;
     submit_agent_key_pair_to_target(http_client, server, bearer, request).await
 }
 
 async fn submit_agent_key_pair_to_target(
     http_client: &reqwest::Client,
-    target: &PrincipalServerConfig,
+    target: &StationConfig,
     bearer: &str,
     request: &PrincipalAgentKeyPairCommitRequest,
 ) -> Result<(), anyhow::Error> {
@@ -160,7 +158,7 @@ async fn submit_agent_key_pair_to_target(
     if !status.is_success() {
         let body = String::from_utf8_lossy(&bytes);
         anyhow::bail!(
-            "Principal Server {} rejected Agent key-pair commit {} with status {}: {}",
+            "Station {} rejected Agent key-pair commit {} with status {}: {}",
             target.name,
             request.authorized_event_id(),
             status,
@@ -173,10 +171,10 @@ async fn submit_agent_key_pair_to_target(
     validate_agent_key_pair_response(request, &response)
         .with_context(|| format!("validate Agent key-pair response from {}", target.name))?;
     tracing::info!(
-        principal_server = target.name,
+        station = target.name,
         endpoint = %url,
         authorized_event_id = request.authorized_event_id(),
-        "committed Agent key pair at authoritative Principal Server"
+        "committed Agent key pair at authoritative Station"
     );
     Ok(())
 }
@@ -211,23 +209,23 @@ fn truncate_response_body(body: &str) -> String {
 
 #[async_trait]
 impl ConnectorAdmin for DbConnectorAdmin {
-    fn principal_authority(&self) -> &str {
-        self.principal_authority.as_str()
+    fn account_id(&self) -> &str {
+        self.account_id.as_str()
     }
 
     fn account_status_destination(
         &self,
     ) -> Result<(String, arkret_identifiers::DidCoreId), anyhow::Error> {
-        let target = default_principal_server(&self.arkret_config)?;
-        let audience = crate::services::principal_server_trust::effective_audience_shared(target)
-            .context("configured Principal Server identity is unavailable or stale")?;
+        let target = default_station(&self.arkret_config)?;
+        let audience = crate::services::station_trust::effective_audience_shared(target)
+            .context("configured Station identity is unavailable or stale")?;
         Ok((target.name.clone(), audience))
     }
 
     async fn verify_token(&self, _token: &str) -> Result<bool, anyhow::Error> {
         // coauth IS the principal authority — there is no separate downstream
         // principal service whose bearer this would validate. Session-grant
-        // introspection uses its own static Principal Server bearer check, so
+        // introspection uses its own static Station bearer check, so
         // this never honours a token of its own.
         Ok(false)
     }
@@ -321,18 +319,17 @@ impl ConnectorAdmin for DbConnectorAdmin {
     > {
         let target = self
             .arkret_config
-            .principal_servers
+            .stations
             .iter()
             .find(|server| server.name == request.destination_name())
-            .context("account-status destination Principal Server is no longer configured")?;
+            .context("account-status destination Station is no longer configured")?;
         let signing = self
             .peer_signing
             .as_ref()
             .context("account-status peer signing configuration is unavailable")?;
         let (source_id, source_did) = runtime_peer_identity(&self.arkret_config)?;
-        let destination_id =
-            crate::services::principal_server_trust::effective_audience_shared(target)
-                .context("account-status destination service identity is unavailable or stale")?;
+        let destination_id = crate::services::station_trust::effective_audience_shared(target)
+            .context("account-status destination service identity is unavailable or stale")?;
         let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
             source_id,
             destination_id,
@@ -380,18 +377,17 @@ impl ConnectorAdmin for DbConnectorAdmin {
 
         let target = self
             .arkret_config
-            .principal_servers
+            .stations
             .iter()
             .find(|server| server.name == request.destination_name())
-            .context("erasure-receipt destination Principal Server is no longer configured")?;
+            .context("erasure-receipt destination Station is no longer configured")?;
         let signing = self
             .peer_signing
             .as_ref()
             .context("erasure-receipt peer signing configuration is unavailable")?;
         let (source_id, source_did) = runtime_peer_identity(&self.arkret_config)?;
-        let destination_id =
-            crate::services::principal_server_trust::effective_audience_shared(target)
-                .context("erasure-receipt destination service identity is unavailable or stale")?;
+        let destination_id = crate::services::station_trust::effective_audience_shared(target)
+            .context("erasure-receipt destination service identity is unavailable or stale")?;
         let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
             source_id,
             destination_id,
@@ -477,8 +473,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
         &self,
         request: &PrincipalAgentKeyPairCommitRequest,
     ) -> Result<(), anyhow::Error> {
-        commit_agent_key_pair_to_principal_server(&self.http_client, &self.arkret_config, request)
-            .await
+        commit_agent_key_pair_to_station(&self.http_client, &self.arkret_config, request).await
     }
 
     async fn delete_user(&self, _handle: &str, erase: bool) -> Result<(), anyhow::Error> {
@@ -518,12 +513,10 @@ fn unsupported_principal_delete_reason(erase: bool) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        default_principal_server, runtime_peer_identity, unsupported_principal_delete_reason,
-    };
+    use super::{default_station, runtime_peer_identity, unsupported_principal_delete_reason};
 
-    fn principal_server(name: &str) -> coauth_config::PrincipalServerConfig {
-        coauth_config::PrincipalServerConfig {
+    fn station(name: &str) -> coauth_config::StationConfig {
+        coauth_config::StationConfig {
             name: name.to_owned(),
             endpoint: "https://principal.example/".parse().unwrap(),
             service_id: Some(
@@ -536,13 +529,13 @@ mod tests {
     }
 
     #[test]
-    fn account_status_destination_uses_the_only_configured_principal_server() {
+    fn account_status_destination_uses_the_only_configured_station() {
         let config = coauth_config::ArkretConfig {
-            principal_servers: vec![principal_server("soland-dev")],
+            stations: vec![station("soland-dev")],
             ..coauth_config::ArkretConfig::default()
         };
 
-        let server = default_principal_server(&config).expect("single destination");
+        let server = default_station(&config).expect("single destination");
 
         assert_eq!(server.name, "soland-dev");
     }
@@ -551,18 +544,18 @@ mod tests {
     fn account_status_destination_fails_closed_when_not_unique() {
         let empty = coauth_config::ArkretConfig::default();
         assert!(
-            default_principal_server(&empty)
+            default_station(&empty)
                 .unwrap_err()
                 .to_string()
-                .contains("no Principal Server")
+                .contains("no Station")
         );
 
         let ambiguous = coauth_config::ArkretConfig {
-            principal_servers: vec![principal_server("a"), principal_server("b")],
+            stations: vec![station("a"), station("b")],
             ..coauth_config::ArkretConfig::default()
         };
         assert!(
-            default_principal_server(&ambiguous)
+            default_station(&ambiguous)
                 .unwrap_err()
                 .to_string()
                 .contains("ambiguous")

@@ -74,7 +74,7 @@ database:
 
 arkret:
   admin_audience: ak:did_core:web:localhost
-  principal_servers:
+  stations:
     - name: soland
       endpoint: https://soland.example.com/
       service_id: ak:did_core:webvh:<soland-scid>

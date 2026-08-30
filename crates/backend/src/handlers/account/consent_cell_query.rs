@@ -59,8 +59,8 @@ pub struct ConsentState {
 
 /// Look up the holder's consent-grant cell on their `server_name`.
 ///
-/// * `principal_server_url` — base URL of the holder's soland deployment. `None` means soland is
-///   not wired into this coauth instance and the gate degrades to `ConsentLookup::Unknown`.
+/// * `station_url` — base URL of the holder's soland deployment. `None` means soland is not wired
+///   into this coauth instance and the gate degrades to `ConsentLookup::Unknown`.
 /// * `holder_principal_id` — the cell-owner stable principal id; embedded in the request path so
 ///   soland can route the read to the right principal control Realm.
 /// * `consent_id` — the consent-cell identifier per spec §6.
@@ -69,20 +69,20 @@ pub struct ConsentState {
 /// * `http_client` — caller-provided client so tests can inject a wiremock server and production
 ///   callers can share the global pool.
 pub async fn query_consent_cell(
-    principal_server_url: Option<&Url>,
+    station_url: Option<&Url>,
     holder_principal_id: &DidCoreId,
     consent_id: &str,
     peer_principal_id: &DidCoreId,
     scope: ConsentScope,
     http_client: &reqwest::Client,
 ) -> ConsentLookup {
-    let Some(base) = principal_server_url else {
+    let Some(base) = station_url else {
         debug!(
             consent_id = %consent_id,
-            "principal_server_url not configured; consent gate returns Unknown",
+            "station_url not configured; consent gate returns Unknown",
         );
         return ConsentLookup::Unknown {
-            reason: "principal_server_url_not_configured",
+            reason: "station_url_not_configured",
         };
     };
 
@@ -180,7 +180,7 @@ async fn query_consent_cell_scope(
                 "failed to build consent-cell URL"
             );
             return ConsentScopeLookup::Unknown {
-                reason: "invalid_principal_server_url",
+                reason: "invalid_station_url",
             };
         }
     };
@@ -204,7 +204,7 @@ async fn query_consent_cell_scope(
         Err(error) => {
             warn!(?error, "consent cell query: HTTP error");
             return ConsentScopeLookup::Unknown {
-                reason: "principal_server_unreachable",
+                reason: "station_unreachable",
             };
         }
     };
@@ -216,7 +216,7 @@ async fn query_consent_cell_scope(
     if !status.is_success() {
         warn!(?status, "consent cell query: non-success status");
         return ConsentScopeLookup::Unknown {
-            reason: "principal_server_error",
+            reason: "station_error",
         };
     }
 
@@ -225,7 +225,7 @@ async fn query_consent_cell_scope(
         Err(error) => {
             warn!(?error, "consent cell query: failed to parse response");
             return ConsentScopeLookup::Unknown {
-                reason: "principal_server_response_invalid",
+                reason: "station_response_invalid",
             };
         }
     };
@@ -245,7 +245,7 @@ async fn query_consent_cell_scope(
             "consent cell query: response key mismatch"
         );
         return ConsentScopeLookup::Unknown {
-            reason: "principal_server_response_invalid",
+            reason: "station_response_invalid",
         };
     }
 
@@ -396,7 +396,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn consent_unknown_when_principal_server_url_is_none() {
+    async fn consent_unknown_when_station_url_is_none() {
         setup();
         let client = reqwest::Client::new();
         let result = query_consent_cell(
@@ -410,7 +410,7 @@ mod tests {
         .await;
         match result {
             ConsentLookup::Unknown { reason } => {
-                assert_eq!(reason, "principal_server_url_not_configured");
+                assert_eq!(reason, "station_url_not_configured");
             }
             other => panic!("expected Unknown, got {other:?}"),
         }
@@ -486,7 +486,7 @@ mod tests {
 
         match result {
             ConsentLookup::Unknown { reason } => {
-                assert_eq!(reason, "principal_server_response_invalid");
+                assert_eq!(reason, "station_response_invalid");
             }
             other => panic!("expected Unknown, got {other:?}"),
         }
@@ -549,7 +549,7 @@ mod tests {
 
         match result {
             ConsentLookup::Unknown { reason } => {
-                assert_eq!(reason, "principal_server_error");
+                assert_eq!(reason, "station_error");
             }
             other => panic!("expected Unknown, got {other:?}"),
         }
@@ -628,7 +628,7 @@ mod tests {
     #[test]
     fn invite_gate_rejects_when_required_and_unknown() {
         let lookup = ConsentLookup::Unknown {
-            reason: "principal_server_url_not_configured",
+            reason: "station_url_not_configured",
         };
         assert_eq!(
             evaluate_invite_gate(
@@ -644,7 +644,7 @@ mod tests {
     #[test]
     fn invite_gate_quarantines_when_not_required_and_unknown() {
         let lookup = ConsentLookup::Unknown {
-            reason: "principal_server_unreachable",
+            reason: "station_unreachable",
         };
         assert_eq!(
             evaluate_invite_gate(

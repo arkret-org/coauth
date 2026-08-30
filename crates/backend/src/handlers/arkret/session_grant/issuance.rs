@@ -36,7 +36,7 @@ pub(crate) fn issue_session_grant(
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
     subject_id: &str,
-    principal_authority: &arkret_wire::PrincipalAuthorityKey,
+    account_id: &arkret_wire::AccountId,
     device_id: DeviceId,
     scopes: Vec<String>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
@@ -72,7 +72,7 @@ pub(crate) fn issue_session_grant(
         device_id,
         scopes,
         Some(&DidCoreId::new(subject_id.to_owned())?),
-        principal_authority,
+        account_id,
         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
         device_binding,
         SessionGrantProofKind::AccountHandoff,
@@ -80,7 +80,7 @@ pub(crate) fn issue_session_grant(
 }
 
 // `subject_override` binds the grant to the persisted principal DID verified
-// for the target Principal Server audience_id. Issuance never fabricates a
+// for the target Station audience_id. Issuance never fabricates a
 // service-local DID when that binding is absent.
 pub(crate) fn issue_session_grant_for_audience(
     issuance_seed: &SessionGrantIssuanceSeed,
@@ -93,7 +93,7 @@ pub(crate) fn issue_session_grant_for_audience(
     device_id: DeviceId,
     scopes: Vec<String>,
     subject_override: Option<&DidCoreId>,
-    principal_authority: &arkret_wire::PrincipalAuthorityKey,
+    account_id: &arkret_wire::AccountId,
     dpop_jkt: String,
     device_binding: SessionGrantDeviceBinding,
     proof_kind: SessionGrantProofKind,
@@ -108,10 +108,8 @@ pub(crate) fn issue_session_grant_for_audience(
     let now = issuance_seed.not_before;
     let expires_at = issuance_seed.expires_at;
     let issuer_id = service_id_for(arkret_config);
-    principal_authority.validate()?;
-    if principal_authority.principal_id != subject_id
-        || principal_authority.principal_server_id != audience_id
-    {
+    account_id.validate()?;
+    if account_id.principal_id != subject_id || account_id.station_id != audience_id {
         return Err(SessionGrantError::PrincipalUnknown);
     }
     let mut scopes = scopes;
@@ -124,8 +122,7 @@ pub(crate) fn issue_session_grant_for_audience(
         schema: SESSION_GRANT_ISSUANCE_SCHEMA.to_owned(),
         issuer_id: issuer_id.clone(),
         issuance_nonce: issuance_nonce.clone(),
-        subject_id: subject_id.clone(),
-        service_account_id: service_account_id.clone(),
+        account_id: account_id.clone(),
         session_public_key: session_public_key.clone(),
         audience_id: audience_id.clone(),
         scopes: scopes.clone(),
@@ -148,8 +145,7 @@ pub(crate) fn issue_session_grant_for_audience(
         grant_id: grant_id.clone(),
         issuer_id: preimage.issuer_id,
         issuance_nonce: preimage.issuance_nonce,
-        subject_id: preimage.subject_id,
-        service_account_id: preimage.service_account_id,
+        account_id: preimage.account_id,
         session_public_key: preimage.session_public_key.clone(),
         audience_id: preimage.audience_id,
         scopes: preimage.scopes,
@@ -205,7 +201,7 @@ pub(crate) fn issue_recovery_session_grant_for_audience(
     scopes: Vec<String>,
     subject_id: &DidCoreId,
     service_account_id: ServiceAccountId,
-    principal_authority: &arkret_wire::PrincipalAuthorityKey,
+    account_id: &arkret_wire::AccountId,
     dpop_jkt: String,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     let session_public_key =
@@ -220,10 +216,8 @@ pub(crate) fn issue_recovery_session_grant_for_audience(
     }
     let issuer_id = service_id_for(arkret_config);
     let subject_id = subject_id.clone();
-    principal_authority.validate()?;
-    if principal_authority.principal_id != subject_id
-        || principal_authority.principal_server_id != audience_id
-    {
+    account_id.validate()?;
+    if account_id.principal_id != subject_id || account_id.station_id != audience_id {
         return Err(SessionGrantError::PrincipalUnknown);
     }
     let mut scopes = scopes;
@@ -235,8 +229,7 @@ pub(crate) fn issue_recovery_session_grant_for_audience(
         schema: SESSION_GRANT_ISSUANCE_SCHEMA.to_owned(),
         issuer_id: issuer_id.clone(),
         issuance_nonce: issuance_nonce.clone(),
-        subject_id: subject_id.clone(),
-        service_account_id: service_account_id.clone(),
+        account_id: account_id.clone(),
         session_public_key: session_public_key.clone(),
         audience_id: audience_id.clone(),
         scopes: scopes.clone(),
@@ -259,8 +252,7 @@ pub(crate) fn issue_recovery_session_grant_for_audience(
         grant_id: grant_id.clone(),
         issuer_id: preimage.issuer_id,
         issuance_nonce: preimage.issuance_nonce,
-        subject_id: preimage.subject_id,
-        service_account_id: preimage.service_account_id,
+        account_id: preimage.account_id,
         session_public_key: preimage.session_public_key.clone(),
         audience_id: preimage.audience_id,
         scopes: preimage.scopes,
@@ -315,7 +307,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
     device_id: DeviceId,
     scopes: Vec<String>,
     subject_override: Option<&DidCoreId>,
-    principal_authority: &arkret_wire::PrincipalAuthorityKey,
+    account_id: &arkret_wire::AccountId,
     dpop_jkt: String,
     device_binding: SessionGrantDeviceBinding,
     proof_kind: SessionGrantProofKind,
@@ -331,7 +323,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
         device_id,
         scopes,
         subject_override,
-        principal_authority,
+        account_id,
         dpop_jkt,
         device_binding,
         proof_kind,
@@ -576,12 +568,12 @@ pub(crate) fn mint_agent_session_grant(
     let mut scopes = scopes;
     scopes.sort_unstable();
     scopes.dedup();
+    let account_id = arkret_wire::AccountId::new(subject_id.clone(), audience_id.clone());
     let preimage = SessionGrantIssuancePreimage {
         schema: SESSION_GRANT_ISSUANCE_SCHEMA.to_owned(),
         issuer_id: issuer_id.clone(),
         issuance_nonce: issuance_nonce.clone(),
-        subject_id: subject_id.clone(),
-        service_account_id: service_account_id.clone(),
+        account_id,
         session_public_key: session_public_key.clone(),
         audience_id: audience_id.clone(),
         scopes: scopes.clone(),
@@ -607,8 +599,7 @@ pub(crate) fn mint_agent_session_grant(
         grant_id: grant_id.clone(),
         issuer_id: preimage.issuer_id,
         issuance_nonce: preimage.issuance_nonce,
-        subject_id: preimage.subject_id,
-        service_account_id: preimage.service_account_id,
+        account_id: preimage.account_id,
         session_public_key: preimage.session_public_key.clone(),
         audience_id: preimage.audience_id,
         scopes: preimage.scopes,

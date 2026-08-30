@@ -20,7 +20,7 @@ OAuth 会话在客户端完成授权流程后创建，关联以下信息：
 
 ### Arkret Session Grant
 
-Principal Server 应验证 `ak.session.grant` 来执行下游账号和设备访问。grant payload
+Station 应验证 `ak.session.grant` 来执行下游账号和设备访问。grant payload
 包含 issuer service DID、subject principal DID、service account ID、可选 device
 ID、audience、scope、expiry、revocation reference 以及 proof block。
 

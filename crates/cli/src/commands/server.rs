@@ -12,9 +12,8 @@ use coauth_backend::services::email_webhook::EmailWebhookService;
 use coauth_backend::util::{
     database_url_from_config, diesel_pool_from_config,
     load_policy_factory_dynamic_data_continuously, notification_center_from_config,
-    password_manager_from_config, policy_factory_from_config,
-    principal_server_connection_from_config, site_config_from_config, templates_from_config,
-    test_mailer_in_background,
+    password_manager_from_config, policy_factory_from_config, site_config_from_config,
+    station_connection_from_config, templates_from_config, test_mailer_in_background,
 };
 use coauth_config::http::{BindConfig, ListenerConfig, Resource};
 use coauth_config::{
@@ -41,7 +40,7 @@ pub(super) struct Options {
     #[arg(long)]
     no_sync: bool,
 
-    /// Authorize one-time trust bootstrap of unenrolled Principal Servers at
+    /// Authorize one-time trust bootstrap of unenrolled Stations at
     /// startup (same as `COAUTH_FIRST_PROVISIONING=1`). After a successful
     /// bootstrap the flag only idempotently re-verifies the enrolled pin; it
     /// can never replace an identity.
@@ -174,7 +173,7 @@ impl Options {
         .await
         .context("could not initialize Provider-backed service identity")?;
 
-        let (principal_server_admin, connector_registry) = principal_server_connection_from_config(
+        let (station_admin, connector_registry) = station_connection_from_config(
             &site_config,
             PgRepositoryFactory::new(pool.clone()).boxed(),
             arkret_config.clone(),
@@ -197,7 +196,7 @@ impl Options {
                 database_url,
                 SystemClock::default(),
                 &notifications,
-                principal_server_admin.clone(),
+                station_admin.clone(),
                 url_builder.clone(),
                 &site_config,
                 shutdown.soft_shutdown_token(),
@@ -296,7 +295,7 @@ impl Options {
                 cookie_manager,
                 encrypter,
                 url_builder,
-                principal_server_admin,
+                station_admin,
                 connector_registry,
                 policy_factory,
                 http_client,
@@ -321,15 +320,15 @@ impl Options {
             };
             s.init_metrics();
             s.init_metadata_cache();
-            // Mandatory Principal Server trust preflight: resolve the
+            // Mandatory Station trust preflight: resolve the
             // effective audience pin (explicit config pin, else persisted
-            // trust enrollment), verify every Principal Server's identity
+            // trust enrollment), verify every Station's identity
             // chain online, and only then allow the business listeners below
             // to bind. Any missing pin, unreachable server, invalid evidence,
             // rollback or identity mismatch aborts startup with a non-zero
             // exit code; the spawned background revalidation fatally shuts
             // the process down on a runtime identity conflict.
-            coauth_backend::services::principal_server_trust::preflight_and_spawn(
+            coauth_backend::services::station_trust::preflight_and_spawn(
                 PgRepositoryFactory::new(pool.clone()),
                 s.arkret_config.clone(),
                 s.http_client.clone(),
@@ -338,10 +337,10 @@ impl Options {
                     || coauth_config::runtime_var("COAUTH_FIRST_PROVISIONING")
                         .is_ok_and(|value| value.trim() == "1"),
                 shutdown.soft_shutdown_token(),
-                coauth_backend::services::principal_server_trust::DEFAULT_REFRESH_INTERVAL,
+                coauth_backend::services::station_trust::DEFAULT_REFRESH_INTERVAL,
             )
             .await
-            .context("principal-server trust preflight failed")?;
+            .context("station trust preflight failed")?;
             s
         };
 

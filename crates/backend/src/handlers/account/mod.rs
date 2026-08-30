@@ -219,7 +219,7 @@ pub(crate) fn map_user_profile_error(error: UserProfileServiceError) -> RouteErr
         UserProfileServiceError::DuplicateNotificationChannel(channel) => {
             RouteError::BadRequest(format!("Duplicate notification channel: {channel}"))
         }
-        UserProfileServiceError::PrincipalServer(error) => RouteError::Internal(error.into()),
+        UserProfileServiceError::Station(error) => RouteError::Internal(error.into()),
         UserProfileServiceError::Repository(error) => RouteError::from(error),
     }
 }

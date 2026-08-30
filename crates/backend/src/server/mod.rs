@@ -129,7 +129,7 @@ pub fn build_router(
                 ),
             // NOTE: coauth deliberately hosts NO DID documents
             // (`/.well-known/did.json`, `/did.json`, `/users/{id}/did.json`
-            // were removed). DID hosting is the principal server's job —
+            // were removed). DID hosting is the Station's job —
             // soland's embedded webvh provider serves
             // `did:webvh` documents under its own authority; coauth only
             // mints/registers against it. coauth-issued artefacts (session

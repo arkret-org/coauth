@@ -113,7 +113,7 @@ pub enum OAuthAccessError {
 pub async fn load_authorization_consent(
     mut repo: BoxRepository,
     policy_factory: &PolicyFactory,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     _clock: &dyn Clock,
     browser_session: &BrowserSession,
     grant_id: Ulid,
@@ -151,13 +151,13 @@ pub async fn load_authorization_consent(
     repo.cancel().await?;
 
     let username = &browser_session.user.localpart;
-    let user_display_name = fetch_display_name(principal_server, username).await;
+    let user_display_name = fetch_display_name(station, username).await;
 
     Ok(AuthorizationConsentInfo {
         grant,
         client,
         principal_user: PrincipalUser {
-            principal_address: principal_server.principal_address(username),
+            principal_address: station.principal_address(username),
             display_name: user_display_name,
         },
         policy_violation,
@@ -291,7 +291,7 @@ pub async fn lookup_device_link(
 pub async fn load_device_consent(
     mut repo: BoxRepository,
     policy_factory: &PolicyFactory,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     clock: &dyn Clock,
     browser_session: &BrowserSession,
     grant_id: Ulid,
@@ -329,13 +329,13 @@ pub async fn load_device_consent(
     repo.cancel().await?;
 
     let username = &browser_session.user.localpart;
-    let user_display_name = fetch_display_name(principal_server, username).await;
+    let user_display_name = fetch_display_name(station, username).await;
 
     Ok(ConsentScreen {
         grant_id: grant.id,
         client,
         scope: grant.scope.to_string(),
-        user_principal_address: principal_server.principal_address(username),
+        user_principal_address: station.principal_address(username),
         user_display_name,
         policy_violation,
     })
@@ -444,16 +444,8 @@ async fn has_policy_violation(
     Ok(!eval_result.valid())
 }
 
-async fn fetch_display_name(
-    principal_server: &dyn ConnectorAdmin,
-    username: &str,
-) -> Option<String> {
-    match tokio::time::timeout(
-        Duration::from_secs(1),
-        principal_server.query_user(username),
-    )
-    .await
-    {
+async fn fetch_display_name(station: &dyn ConnectorAdmin, username: &str) -> Option<String> {
+    match tokio::time::timeout(Duration::from_secs(1), station.query_user(username)).await {
         Ok(Ok(user)) => user.displayname,
         Ok(Err(err)) => {
             tracing::warn!(

@@ -1,7 +1,7 @@
 # Architecture
 
 coauth is the Arkret Auth Server. It handles account authentication,
-OAuth/OIDC, session grants, and Principal Server integration for downstream
+OAuth/OIDC, session grants, and Station integration for downstream
 systems such as Soland. It is meant to stay lightweight in terms of resource
 usage and easily scalable horizontally.
 
@@ -11,7 +11,7 @@ coauth focuses on Arkret authentication and authorization workflows rather
 than acting as a general purpose Identity Provider (IdP).
 
 It speaks OAuth / OIDC for authentication and exposes Arkret session grant
-surfaces for Principal Servers. If you want to connect to an upstream SAML, CAS
+surfaces for Stations. If you want to connect to an upstream SAML, CAS
 or LDAP backend then you need to pair coauth with a separate service (such as
 [Dex](https://dexidp.io) or [Keycloak](https://www.keycloak.org)) which does that
 translation for you.
@@ -40,7 +40,7 @@ This includes:
  - [`coauth-templates`][coauth-templates]: Server-rendered template registry and render context
  - [`coauth-i18n`][coauth-i18n] / [`coauth-i18n-scan`][coauth-i18n-scan]: Fluent translation loading, and the opt-in CLI scanner for translation keys in MiniJinja templates
  - [`coauth-policy`][coauth-policy]: Policy engine abstraction layer; the shipped backend is Cedar
- - [`coauth-principal`][coauth-principal]: Principal-server client types and helpers
+ - [`coauth-principal`][coauth-principal]: Station client types and helpers
  - [`coauth-keystore`][coauth-keystore]: Key material storage and encryption
  - [`coauth-iana`][coauth-iana]: Hand-maintained enums for the IANA JOSE and OAuth registries, declared through the crate's `open_enum!` / `closed_enum!` macros
  - [`coauth-jose`][coauth-jose]: JWT/JWS/JWE/JWK abstraction

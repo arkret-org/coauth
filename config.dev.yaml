@@ -150,12 +150,12 @@ rate_limiting:
 arkret:
   trust_domain: ak:trust_domain:local.host
   # Dev auto-enrollment: exact local HTTPS hosts eligible for one-time
-  # principal-server trust enrollment in development mode (0831). The pin is
+  # station trust enrollment in development mode (0831). The pin is
   # persisted in the database after the first verified enrollment; no static
   # service_id is kept here because local identity re-genesis makes it drift.
   development_auto_enrollment_hosts:
   - local.host
-  principal_servers:
+  stations:
   - name: soland-dev
     endpoint: https://local.host/
     session_grant_introspection_bearer: local-coauth-session-grant-introspection

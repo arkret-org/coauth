@@ -217,7 +217,7 @@ async fn ensure_current_record(
         .get_pg_pool()
         .ok_or_else(|| internal("PostgreSQL pool is unavailable"))?;
     let identity = &bundle.identity.identity;
-    if description.service_kind != arkret_wire::ServiceKind::AuthServer
+    if description.service_kind != arkret_wire::ServiceKind::Station
         || description.service_id != identity.service_id
         || description.service_resolution.did != identity.did
         || description.service_resolution.version_id != identity.version_id
@@ -263,7 +263,7 @@ async fn ensure_current_record(
         if let Some(current) = current.as_ref()
             && current.record.record.service_id == identity.service_id
             && current.record.record.did == identity.did
-            && current.record.record.service_kind == arkret_wire::ServiceKind::AuthServer.as_str()
+            && current.record.record.service_kind == arkret_wire::ServiceKind::Station.as_str()
             && current.record.record.method_history_head == *history_head
             && current.record.record.version_id == identity.version_id
             && current.record.record.resolution_event_ref == resolution_event_ref
@@ -294,7 +294,7 @@ async fn ensure_current_record(
         })?;
         let core = ServiceResolutionRecordCore {
             service_id: identity.service_id.clone(),
-            service_kind: arkret_wire::ServiceKind::AuthServer.as_str().to_owned(),
+            service_kind: arkret_wire::ServiceKind::Station.as_str().to_owned(),
             did: identity.did.clone(),
             method_history_head: history_head.clone(),
             version_id: identity.version_id.clone(),
@@ -438,7 +438,7 @@ mod tests {
         let signing_seed = [7_u8; 32];
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&signing_seed);
         let registration_key = ServiceRegistrationKey::new(
-            arkret_wire::ServiceKind::AuthServer,
+            arkret_wire::ServiceKind::Station,
             CanonicalServiceUrl::canonicalize("https://auth.example/").unwrap(),
         )
         .unwrap();
@@ -461,7 +461,7 @@ mod tests {
         let head = operation.log_head_digest().unwrap();
         let core = ServiceResolutionRecordCore {
             service_id: service_id.clone(),
-            service_kind: arkret_wire::ServiceKind::AuthServer.as_str().to_owned(),
+            service_kind: arkret_wire::ServiceKind::Station.as_str().to_owned(),
             did: operation.state.id.clone(),
             method_history_head: head.clone(),
             version_id: operation.version_id.clone(),

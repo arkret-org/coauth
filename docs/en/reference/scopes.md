@@ -33,19 +33,19 @@ Arkret client capability family for first-party or trusted Arkret clients.
 ## `urn:arkret:client:device:[device id]`
 
 Arkret device-binding scope. It associates the OAuth session with the client
-device identifier used by downstream Principal Servers.
+device identifier used by downstream Stations.
 
-## `urn:arkret:principal-server:*`
+## `urn:arkret:station:*`
 
-Principal Server capability family. This namespace is intended for trusted
-Principal Server integrations that need scoped access beyond a generic OIDC
+Station capability family. This namespace is intended for trusted
+Station integrations that need scoped access beyond a generic OIDC
 login.
 
-## `urn:arkret:principal-server:session.bind`
+## `urn:arkret:station:session.bind`
 
 Requests or describes the ability to mint a short-lived Arkret session grant
 for the authenticated browser session. This is the scope `coauth` uses when it
-issues a session grant for a trusted Principal Server.
+issues a session grant for a trusted Station.
 
 ## Arkret Claims
 

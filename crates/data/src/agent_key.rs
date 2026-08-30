@@ -11,7 +11,7 @@ pub use crate::storage::agent_key::*;
 ///
 /// coauth validates the runtime key pairing proof-of-possession, persists this
 /// row for the agent-key-proof session branch, and commits the unchanged
-/// standard key-pair request to the authoritative Principal Server. The row is
+/// standard key-pair request to the authoritative Station. The row is
 /// usable only after that server durably accepts the supplied
 /// `ak.agent.key.authorize` Event. Column order tracks
 /// `event-payload.schema.json#/$defs/agent_key_authorize_payload`.
@@ -20,7 +20,7 @@ pub struct AgentKeyAuthorization {
     /// Storage row id.
     pub id: Ulid,
     /// Complete suite-tagged content identity of the durable
-    /// `ak.agent.key.authorize` Event accepted by the Principal Server. The
+    /// `ak.agent.key.authorize` Event accepted by the Station. The
     /// session-grant agent branch resolves `agent_key_authorization_ref`
     /// against this id.
     pub authorized_event_id: String,

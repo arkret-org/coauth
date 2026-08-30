@@ -2,8 +2,8 @@ use arkret_identifiers::{Did, Hash, project_did_to_core_id};
 use arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding;
 use arkret_models_identity::SessionGrantDeviceBinding;
 use arkret_wire::{
-    DeviceId, DeviceRevocationGateActionClass, DeviceRevocationGateCheckRequestBody,
-    DeviceRevocationGateDecision, PrincipalAuthorityKey,
+    AccountId, DeviceId, DeviceRevocationGateActionClass, DeviceRevocationGateCheckRequestBody,
+    DeviceRevocationGateDecision,
 };
 use chrono::{DateTime, Utc};
 use salvo::prelude::{Depot, StatusCode};
@@ -15,7 +15,7 @@ use crate::services::peer_protocol_client::PeerProtocolClient;
 
 pub(crate) async fn acquire_human_device_binding(
     depot: &Depot,
-    principal_authority: &PrincipalAuthorityKey,
+    account_id: &AccountId,
     device_id: DeviceId,
     action_class: DeviceRevocationGateActionClass,
     expected_binding: Option<&SessionGrantDeviceBinding>,
@@ -25,17 +25,17 @@ pub(crate) async fn acquire_human_device_binding(
 ) -> Result<SessionGrantDeviceBinding, ArkretRouteError> {
     let config = depot.arkret_config()?;
     let destination = config
-        .principal_servers
+        .stations
         .iter()
         .find(|server| {
-            crate::services::principal_server_trust::effective_audience_shared(server)
-                .is_some_and(|audience_id| audience_id == principal_authority.principal_server_id)
+            crate::services::station_trust::effective_audience_shared(server)
+                .is_some_and(|audience_id| audience_id == account_id.station_id)
         })
         .ok_or_else(|| {
             ArkretRouteError::coded(
                 StatusCode::BAD_REQUEST,
                 arkret_wire::ErrorCode::AUDIENCE_UNKNOWN,
-                "principal authority has no configured origin Principal Server",
+                "principal authority has no configured origin Station",
             )
         })?;
     let (expected_device_authorize_event_id, expected_device_generation_ref) = expected_binding
@@ -44,7 +44,7 @@ pub(crate) async fn acquire_human_device_binding(
             SessionGrantDeviceBinding::as_expected_gate_binding,
         );
     let request = DeviceRevocationGateCheckRequestBody {
-        principal_authority: principal_authority.clone(),
+        account_id: account_id.clone(),
         device_id,
         expected_device_authorize_event_id,
         expected_device_generation_ref,
@@ -61,7 +61,7 @@ pub(crate) async fn acquire_human_device_binding(
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let identity = KeyPackagesClaimServiceBinding {
         source_id,
-        destination_id: principal_authority.principal_server_id.clone(),
+        destination_id: account_id.station_id.clone(),
     };
     let http_client = depot.http_client()?;
     let key_store = depot.key_store()?;
@@ -119,9 +119,9 @@ async fn verify_gate_receipt(
         Did::new(controller.to_owned()).map_err(|error| gate_protocol_error(error.to_string()))?;
     let controller_core = project_did_to_core_id(&controller)
         .map_err(|error| gate_protocol_error(error.to_string()))?;
-    if controller_core != receipt.principal_authority.principal_server_id {
+    if controller_core != receipt.account_id.station_id {
         return Err(gate_protocol_error(
-            "gate receipt signer is not the origin Principal Server",
+            "gate receipt signer is not the origin Station",
         ));
     }
 

@@ -33,7 +33,7 @@ pub async fn exchange_device_code(
     arkret_config: &ArkretConfig,
     site_config: &SiteConfig,
     mut repo: BoxRepository,
-    principal_server: &Arc<dyn ConnectorAdmin>,
+    station: &Arc<dyn ConnectorAdmin>,
     user_agent: Option<String>,
 ) -> Result<(AccessTokenResponse, BoxRepository), DeviceCodeExchangeError> {
     debug!(
@@ -255,7 +255,7 @@ pub async fn exchange_device_code(
         );
     }
     for device_id in &requested_device_ids {
-        principal_server
+        station
             .upsert_device(&browser_session.user.localpart, device_id, None)
             .await
             .map_err(|err| {

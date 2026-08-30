@@ -26,7 +26,7 @@ const TRUST_DOMAIN_PREFIX: &str = "ak:trust_domain:";
 // the access bearers minted from it are short-lived (capped server-side), so a
 // multi-hour grant gives a normal working-session length WITHOUT long-lived
 // bearers. Stays within the spec ceiling (`conformance-profiles.md`
-// §ak.profile.auth_server.v1: minutes-to-hours, not multi-day) and the
+// Station Account Authority contract: minutes-to-hours, not multi-day) and the
 // configurable [min, max] = [60s, 24h] range below.
 const SESSION_GRANT_TTL_MICROS: i64 = 8 * 60 * 60 * 1_000_000;
 const SESSION_GRANT_TTL_MIN_SECONDS: i64 = 60;
@@ -168,7 +168,7 @@ impl RuntimeServiceIdentity {
                 service_id,
                 did,
                 registration_key: ServiceRegistrationKey::new(
-                    ServiceKind::AuthServer,
+                    ServiceKind::Station,
                     CanonicalServiceUrl::canonicalize("https://auth.test/")
                         .expect("fixture public base"),
                 )
@@ -192,13 +192,13 @@ impl RuntimeServiceIdentity {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ArkretConfig {
-    /// Principal Server audiences trusted to consume session grants and admin
+    /// Station audiences trusted to consume session grants and admin
     /// tokens emitted by coauth.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub principal_servers: Vec<PrincipalServerConfig>,
+    pub stations: Vec<StationConfig>,
 
     /// Trusted services that provide the standard service-registration role
-    /// without also acting as a Principal Server.
+    /// without also acting as a Station.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub identity_services: Vec<IdentityServiceConfig>,
 
@@ -238,7 +238,7 @@ pub struct ArkretConfig {
     /// These are the DPoP-bound JWT grants returned by the REST auth bridge
     /// login/exchange paths and rotated through
     /// `/_arkret/gate/account/session-grants/refresh`. Default: 28800 (8h) —
-    /// access bearers minted from a grant are short-lived (capped Principal-Server
+    /// access bearers minted from a grant are short-lived (capped Station
     /// side), so a multi-hour grant gives a normal working session without
     /// long-lived bearers, within the spec ceiling (minutes-to-hours).
     #[schemars(with = "u64", range(min = 60, max = 86400))]
@@ -274,7 +274,7 @@ pub struct ArkretConfig {
     /// authorization transcripts to the deployment.
     ///
     /// When omitted, callers expected to honour cross-deployment replay
-    /// protection (`Realm` policy, principal-server describe) MUST be
+    /// protection (`Realm` policy, station describe) MUST be
     /// told the trust domain is unset and fail closed.
     ///
     /// Typically provisioned consistently across the deployment.
@@ -286,7 +286,7 @@ pub struct ArkretConfig {
     pub trust_domain: Option<String>,
 
     /// Fail-closed gate for the temporary password-login bridge that returns a
-    /// Arkret principal-server session grant directly from
+    /// Arkret station session grant directly from
     /// `POST /_coauth/gate/account/auth/login`.
     ///
     /// Defaults to `false`: production callers must use the OIDC/passkey bridge
@@ -330,7 +330,7 @@ pub struct ArkretConfig {
     pub erasure_request_max_auth_age: Option<Duration>,
 
     /// Exact local HTTPS host names eligible for development-mode automatic
-    /// principal-server trust enrollment.
+    /// station trust enrollment.
     ///
     /// Every entry must be a bare lowercase host name (no scheme, port, path
     /// or wildcard). Auto-enrollment only runs when ALL of these hold: the
@@ -353,7 +353,7 @@ fn is_false(value: &bool) -> bool {
 impl Default for ArkretConfig {
     fn default() -> Self {
         Self {
-            principal_servers: Vec::new(),
+            stations: Vec::new(),
             identity_services: Vec::new(),
             identity_provider: None,
             deployment_profile: DeploymentProfileConfig::default(),
@@ -377,7 +377,7 @@ impl ArkretConfig {
     /// Returns `true` when the Arkret section carries no explicit overrides.
     #[must_use]
     pub fn is_default(&self) -> bool {
-        self.principal_servers.is_empty()
+        self.stations.is_empty()
             && self.identity_services.is_empty()
             && self.identity_provider.is_none()
             && DeploymentProfileConfig::is_default(&self.deployment_profile)
@@ -395,9 +395,9 @@ impl ArkretConfig {
     }
 
     /// Set of host names this deployment trusts as outbound
-    /// principal-server / identity-resolver targets.
+    /// station / identity-resolver targets.
     ///
-    /// Built from every configured `principal_servers[].endpoint` and the
+    /// Built from every configured `stations[].endpoint` and the
     /// `identity_registry.resolver`.
     /// Hosts are lower-cased so comparison is
     /// case-insensitive. Used by outbound relays (e.g. the consent-gated
@@ -414,7 +414,7 @@ impl ArkretConfig {
                 }
             }
         };
-        for server in &self.principal_servers {
+        for server in &self.stations {
             push(&server.endpoint);
         }
         for service in &self.identity_services {
@@ -450,14 +450,12 @@ impl ArkretConfig {
             .any(|allowed| allowed == host)
     }
 
-    /// Primary Principal Server endpoint for call sites that operate on a
+    /// Primary Station endpoint for call sites that operate on a
     /// single server. The endpoint is topology configuration only; its
     /// service DID is always resolved at runtime.
     #[must_use]
-    pub fn primary_principal_server_url(&self) -> Option<&Url> {
-        self.principal_servers
-            .first()
-            .map(|server| &server.endpoint)
+    pub fn primary_station_url(&self) -> Option<&Url> {
+        self.stations.first().map(|server| &server.endpoint)
     }
 
     /// Validate the configured `trust_domain` (if any) against the SDK
@@ -539,12 +537,11 @@ impl ConfigurationSection for ArkretConfig {
         }
 
         let mut provider_names = std::collections::BTreeSet::new();
-        for server in &self.principal_servers {
+        for server in &self.stations {
             if server.name.trim().is_empty() {
-                return Err(std::io::Error::other(
-                    "arkret.principal_servers[].name must not be empty",
-                )
-                .into());
+                return Err(
+                    std::io::Error::other("arkret.stations[].name must not be empty").into(),
+                );
             }
             if server
                 .embedded_webvh_registration_bearer
@@ -552,7 +549,7 @@ impl ConfigurationSection for ArkretConfig {
                 .is_some_and(|bearer| bearer.trim().is_empty())
             {
                 return Err(std::io::Error::other(
-                    "arkret.principal_servers[].embedded_webvh_registration_bearer must not be empty",
+                    "arkret.stations[].embedded_webvh_registration_bearer must not be empty",
                 )
                 .into());
             }
@@ -590,7 +587,7 @@ impl ConfigurationSection for ArkretConfig {
 
         // Fail closed: `password_login_session_grants_enabled` activates the
         // P0 password-bootstrap scaffold (auth.rs), which mints a
-        // principal-server session grant directly from a password login,
+        // station session grant directly from a password login,
         // bypassing the canonical OIDC `authorize -> token` ceremony, PKCE
         // binding and the PoP strand. It is a development-only bring-up
         // path that MUST be replaced before production. Require an explicit
@@ -619,21 +616,21 @@ impl ConfigurationSection for ArkretConfig {
 /// closed at startup.
 const PASSWORD_BOOTSTRAP_ESCAPE_HATCH: &str = "COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP";
 
-/// Trusted Principal Server metadata published through Arkret discovery.
+/// Trusted Station metadata published through Arkret discovery.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct PrincipalServerConfig {
+pub struct StationConfig {
     /// Human-readable identifier for the consumer, such as `soland-prod`.
     pub name: String,
 
-    /// Base URL of the Principal Server integration point.
+    /// Base URL of the Station integration point.
     pub endpoint: Url,
 
     /// Stable service identity core for authenticated S2S authorization.
     ///
     /// Optional explicit authorization pin, highest priority. When omitted,
     /// the effective pin comes from the persisted trust enrollment written by
-    /// `coauth principal-server trust bootstrap` (or, under the strict
+    /// `coauth station trust bootstrap` (or, under the strict
     /// development-mode gate, the automatic first enrollment). Describe
     /// metadata may confirm a pin but can never discover or replace it; an
     /// endpoint URL or bearer token is never converted into an identity core.
@@ -643,15 +640,15 @@ pub struct PrincipalServerConfig {
     #[schemars(with = "Option<String>")]
     pub service_id: Option<arkret_identifiers::DidCoreId>,
 
-    /// Optional static bearer for the Account Authority / Principal Server
-    /// trust edge. The Principal Server presents it to coauth introspection and
+    /// Optional static bearer for the Account Authority / Station
+    /// trust edge. The Station presents it to coauth introspection and
     /// Auth-side logout; coauth presents the same deployment credential when
     /// reading the standard agent projection for lifecycle authorization.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_grant_introspection_bearer: Option<String>,
 
     /// Optional static bearer token coauth should send when writing embedded
-    /// `did:webvh` registration records into this Principal Server.
+    /// `did:webvh` registration records into this Station.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub embedded_webvh_registration_bearer: Option<String>,
 }
@@ -772,7 +769,7 @@ mod tests {
         );
         assert!(
             serde_json::from_value::<ArkretConfig>(serde_json::json!({
-                "principal_servers": [{
+                "stations": [{
                     "name": "principal-a",
                     "endpoint": "https://principal.example/",
                     "audience": "did:webvh:zold:principal.example:webvh:service"
@@ -782,7 +779,7 @@ mod tests {
         );
         assert!(
             serde_json::from_value::<ArkretConfig>(serde_json::json!({
-                "principal_servers": [{
+                "stations": [{
                     "name": "principal-a",
                     "endpoint": "https://principal.example/",
                     "did": "did:webvh:zold:principal.example:webvh:service"
@@ -793,9 +790,9 @@ mod tests {
     }
 
     #[test]
-    fn principal_server_config_persists_explicit_service_identity_pin() {
+    fn station_config_persists_explicit_service_identity_pin() {
         let config: ArkretConfig = serde_json::from_value(serde_json::json!({
-            "principal_servers": [{
+            "stations": [{
                 "name": "principal-a",
                 "endpoint": "https://principal.example/",
                 "service_id": "ak:did_core:webvh:QmUz1hyNMdPEzWvu41UVazczohzzXmiWFy8w6xxrboxN3i"
@@ -803,7 +800,7 @@ mod tests {
         }))
         .unwrap();
 
-        let serialized = serde_json::to_value(&config.principal_servers[0]).unwrap();
+        let serialized = serde_json::to_value(&config.stations[0]).unwrap();
         assert_eq!(serialized["name"], "principal-a");
         assert_eq!(serialized["endpoint"], "https://principal.example/");
         assert_eq!(
@@ -816,22 +813,22 @@ mod tests {
     }
 
     #[test]
-    fn principal_server_config_allows_missing_service_identity_pin() {
+    fn station_config_allows_missing_service_identity_pin() {
         let config: ArkretConfig = serde_json::from_value(serde_json::json!({
-            "principal_servers": [{
+            "stations": [{
                 "name": "principal-a",
                 "endpoint": "https://principal.example/"
             }]
         }))
         .unwrap();
 
-        assert_eq!(config.principal_servers[0].service_id, None);
+        assert_eq!(config.stations[0].service_id, None);
         // An omitted pin is valid configuration: the effective pin then comes
         // from the persisted trust enrollment (bootstrap), never from
         // implicit describe TOFU at startup.
         assert!(config.validate(&figment::Figment::new()).is_ok());
 
-        let serialized = serde_json::to_value(&config.principal_servers[0]).unwrap();
+        let serialized = serde_json::to_value(&config.stations[0]).unwrap();
         assert!(serialized.get("service_id").is_none());
     }
 

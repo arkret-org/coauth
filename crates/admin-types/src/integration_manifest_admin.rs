@@ -97,7 +97,7 @@ mod tests {
             "dependencies": [
                 {
                     "service": "soland",
-                    "purpose": "principal_server_session_exchange",
+                    "purpose": "station_session_exchange",
                     "required_contract": "arkret.rest.principal_bridge.v1",
                     "discovery_path": "/_coauth/gate/account/auth/bridge/describe",
                     "mode": "remote_service_contract"

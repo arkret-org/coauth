@@ -19,7 +19,7 @@ use crate::oidc_client::requests::jose::{
 };
 use crate::oidc_client::requests::token::request_access_token;
 use crate::outbound_http::RequestBuilderExt as _;
-use crate::services::principal_server_trust::{PrincipalServerTrustResolver, effective_audience};
+use crate::services::station_trust::{StationTrustResolver, effective_audience};
 
 pub type UpstreamOidcServiceHandle = Arc<dyn UpstreamOidcService>;
 
@@ -41,8 +41,8 @@ pub struct OidcUserinfoClaims {
 #[derive(Clone, Debug)]
 pub struct UpstreamOidcSessionGrantTarget {
     pub audience: String,
-    pub principal_server_name: Option<String>,
-    pub principal_server_endpoint: Option<String>,
+    pub station_name: Option<String>,
+    pub station_endpoint: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -93,7 +93,7 @@ pub trait UpstreamOidcService: Send + Sync {
         &self,
         url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
-        resolved: &PrincipalServerTrustResolver,
+        resolved: &StationTrustResolver,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String>;
 
@@ -107,7 +107,7 @@ pub trait UpstreamOidcService: Send + Sync {
         &self,
         url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
-        resolved: &PrincipalServerTrustResolver,
+        resolved: &StationTrustResolver,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String>;
 
@@ -268,10 +268,10 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
         &self,
         url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
-        resolved: &PrincipalServerTrustResolver,
+        resolved: &StationTrustResolver,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String> {
-        // Startup preflight guarantees every enrolled Principal Server is
+        // Startup preflight guarantees every enrolled Station is
         // verified and cached before the business listener binds. A cache
         // miss here means not enrolled or expired — fail closed rather than
         // probing describe from the request path.
@@ -287,22 +287,22 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
         &self,
         url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
-        resolved: &PrincipalServerTrustResolver,
+        resolved: &StationTrustResolver,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String> {
         if let Some(requested_audience) = requested_audience
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
-            for server in &arkret_config.principal_servers {
+            for server in &arkret_config.stations {
                 let Some(effective) = effective_audience(server, resolved) else {
                     continue;
                 };
                 if effective.as_str() == requested_audience {
                     return Ok(UpstreamOidcSessionGrantTarget {
                         audience: effective.to_string(),
-                        principal_server_name: Some(server.name.clone()),
-                        principal_server_endpoint: Some(server.endpoint.to_string()),
+                        station_name: Some(server.name.clone()),
+                        station_endpoint: Some(server.endpoint.to_string()),
                     });
                 }
             }
@@ -316,8 +316,8 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
                 let local_audience = arkret::required_audience_for(url_builder, arkret_config);
                 return Ok(UpstreamOidcSessionGrantTarget {
                     audience: local_audience,
-                    principal_server_name: None,
-                    principal_server_endpoint: None,
+                    station_name: None,
+                    station_endpoint: None,
                 });
             }
 
@@ -339,8 +339,8 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
         })?;
         Ok(UpstreamOidcSessionGrantTarget {
             audience: grant_target.audience_id.to_string(),
-            principal_server_name: grant_target.principal_server_name,
-            principal_server_endpoint: grant_target.principal_server_endpoint,
+            station_name: grant_target.station_name,
+            station_endpoint: grant_target.station_endpoint,
         })
     }
 
@@ -576,14 +576,14 @@ pub fn default_upstream_oidc_service() -> UpstreamOidcServiceHandle {
 
 #[cfg(test)]
 mod tests {
-    use coauth_config::PrincipalServerConfig;
+    use coauth_config::StationConfig;
     use wiremock::MockServer;
 
     use super::*;
 
-    fn principal_server_config_for(endpoint: Url) -> ArkretConfig {
+    fn station_config_for(endpoint: Url) -> ArkretConfig {
         ArkretConfig {
-            principal_servers: vec![PrincipalServerConfig {
+            stations: vec![StationConfig {
                 name: "soland".to_owned(),
                 endpoint: endpoint.clone(),
                 service_id: Some(
@@ -600,10 +600,10 @@ mod tests {
     async fn oidc_target_uses_configured_principal_audience_without_describe_discovery() {
         let server = MockServer::start().await;
         let endpoint = Url::parse(&server.uri()).unwrap();
-        let config = principal_server_config_for(endpoint);
+        let config = station_config_for(endpoint);
         let service_id = arkret_identifiers::DidCoreId::new("ak:did_core:webvh:current").unwrap();
 
-        let resolved = PrincipalServerTrustResolver::new();
+        let resolved = StationTrustResolver::new();
         let url_builder = UrlBuilder::new("https://auth.example/".parse().unwrap(), None, None);
         let target = DefaultUpstreamOidcService
             .session_grant_target_for_requested_audience(

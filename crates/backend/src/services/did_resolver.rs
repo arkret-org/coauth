@@ -185,7 +185,7 @@ fn verify_historical_webvh_service_chain(
     did: &arkret_identifiers::Did,
     history: &[u8],
 ) -> Result<arkret_identity::VerifiedDidWebvhLog, DidResolveError> {
-    // Gate receipts are signed by the Principal Server's service DID. Service
+    // Gate receipts are signed by the Station's service DID. Service
     // documents intentionally publish verification methods, so they require
     // generic WebVH chain verification rather than the human-principal
     // profile, which forbids device and business authority keys.
@@ -296,9 +296,8 @@ impl DidResolverService for DefaultDidResolverService {
         arkret_config: &ArkretConfig,
         user: &User,
     ) -> Result<Did, SessionGrantError> {
-        for server in &arkret_config.principal_servers {
-            let Some(audience) =
-                crate::services::principal_server_trust::effective_audience_shared(server)
+        for server in &arkret_config.stations {
+            let Some(audience) = crate::services::station_trust::effective_audience_shared(server)
             else {
                 continue;
             };
@@ -373,7 +372,7 @@ impl DidResolverService for DefaultDidResolverService {
             // RULING (2026-07 review, CAU-SPEC-02 closed): coauth deliberately
             // does NOT resolve/verify `did:webvh` natively. identity-did.md
             // §3.5 places webvh hosting and log/history verification authority
-            // on the principal server (soland); every other method —
+            // on the Station (soland); every other method —
             // including `did:webvh` — is delegated to the configured
             // `identity_registry.resolver`, and deployments without one
             // fail closed with `UnsupportedMethod`. Do not add a local webvh
@@ -772,9 +771,9 @@ fn contains_key(value: &Value, key: &str) -> bool {
 ///   returned address is non-public; the request is then dispatched through a client pinned to that
 ///   validated address set, closing the DNS rebinding window.
 /// - The single widening is [`ArkretConfig::trusted_outbound_hosts`] — exact operator-owned host
-///   names (configured principal-server endpoints, identity services, and the delegated resolver)
-///   that may resolve *wholly* to loopback. IP literals, `localhost`, `.local` / `.internal` names,
-///   private addresses, and mixed public+loopback answers stay rejected.
+///   names (configured station endpoints, identity services, and the delegated resolver) that may
+///   resolve *wholly* to loopback. IP literals, `localhost`, `.local` / `.internal` names, private
+///   addresses, and mixed public+loopback answers stay rejected.
 #[derive(Clone, Debug)]
 pub struct ResolverEgressPolicy {
     guard: arkret_egress_reqwest::EgressGuard,
@@ -936,7 +935,7 @@ mod tests {
     #[test]
     fn configured_trusted_hosts_are_the_only_loopback_widening() {
         let config = ArkretConfig {
-            principal_servers: vec![coauth_config::PrincipalServerConfig {
+            stations: vec![coauth_config::StationConfig {
                 name: "soland-alpha".to_owned(),
                 endpoint: "https://soland-alpha.local.host/".parse().unwrap(),
                 service_id: None,

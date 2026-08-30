@@ -1496,7 +1496,7 @@ mod tests {
 
     use super::*;
     use crate::handlers::test_utils::{
-        RequestBuilderExt as _, ResponseExt as _, TEST_PRINCIPAL_SERVER_AUDIENCE, TestState, setup,
+        RequestBuilderExt as _, ResponseExt as _, TEST_STATION_AUDIENCE, TestState, setup,
         unique_test_nonce,
     };
 
@@ -1677,13 +1677,13 @@ mod tests {
             .json(body)
     }
 
-    /// A `TestState` wired with the single configured principal server the
+    /// A `TestState` wired with the single configured Station the
     /// audience resolution requires, or `None` when no test database is
     /// available.
     async fn local_handoff_state()
     -> Option<(TestState, coauth_storage_postgres::test_utils::TestDatabase)> {
         let database = coauth_storage_postgres::test_utils::setup_test_pool().await?;
-        let state = TestState::from_pool_with_principal_server(database.clone())
+        let state = TestState::from_pool_with_station(database.clone())
             .await
             .unwrap();
         Some((state, database))
@@ -1837,7 +1837,7 @@ mod tests {
                 &signing,
                 request_id.clone(),
                 format!("local-ok-jti-{}", unique_test_nonce()),
-                TEST_PRINCIPAL_SERVER_AUDIENCE,
+                TEST_STATION_AUDIENCE,
                 None,
                 None,
             ))
@@ -1891,7 +1891,7 @@ mod tests {
                 &signing,
                 request_id.clone(),
                 jti.clone(),
-                TEST_PRINCIPAL_SERVER_AUDIENCE,
+                TEST_STATION_AUDIENCE,
                 None,
                 None,
             ))
@@ -1905,7 +1905,7 @@ mod tests {
                 &signing,
                 request_id,
                 jti,
-                TEST_PRINCIPAL_SERVER_AUDIENCE,
+                TEST_STATION_AUDIENCE,
                 None,
                 None,
             ))
@@ -1946,7 +1946,7 @@ mod tests {
                 &signing,
                 request_id.clone(),
                 jti.clone(),
-                TEST_PRINCIPAL_SERVER_AUDIENCE,
+                TEST_STATION_AUDIENCE,
                 Some("wrong-verifier-wrong-verifier-wrong-verifie"),
                 None,
             ))
@@ -1978,7 +1978,7 @@ mod tests {
                 &signing,
                 request_id,
                 jti,
-                TEST_PRINCIPAL_SERVER_AUDIENCE,
+                TEST_STATION_AUDIENCE,
                 None,
                 None,
             ))
@@ -2009,7 +2009,7 @@ mod tests {
             &signing,
             test_request_id(unique_test_nonce()),
             format!("local-race-jti-a-{}", unique_test_nonce()),
-            TEST_PRINCIPAL_SERVER_AUDIENCE,
+            TEST_STATION_AUDIENCE,
             None,
             None,
         ));
@@ -2019,7 +2019,7 @@ mod tests {
             &signing,
             test_request_id(unique_test_nonce()),
             format!("local-race-jti-b-{}", unique_test_nonce()),
-            TEST_PRINCIPAL_SERVER_AUDIENCE,
+            TEST_STATION_AUDIENCE,
             None,
             None,
         ));
@@ -2071,7 +2071,7 @@ mod tests {
                 &signing,
                 test_request_id(unique_test_nonce()),
                 format!("local-bind-jti-a-{}", unique_test_nonce()),
-                TEST_PRINCIPAL_SERVER_AUDIENCE,
+                TEST_STATION_AUDIENCE,
                 None,
                 None,
             ))
@@ -2091,7 +2091,7 @@ mod tests {
                 &signing,
                 test_request_id(unique_test_nonce()),
                 format!("local-bind-jti-b-{}", unique_test_nonce()),
-                TEST_PRINCIPAL_SERVER_AUDIENCE,
+                TEST_STATION_AUDIENCE,
                 None,
                 Some("attacker-supplied-state"),
             ))

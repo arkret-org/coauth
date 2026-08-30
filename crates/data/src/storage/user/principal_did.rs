@@ -9,7 +9,7 @@ use crate::repository_impl;
 /// Typed input for persisting one authority-verified principal DID binding.
 #[derive(Clone, Debug)]
 pub struct VerifiedPrincipalDidBindingInput {
-    /// Principal Server audience_id for which this binding was verified.
+    /// Station audience_id for which this binding was verified.
     pub audience_id: arkret_identifiers::DidCoreId,
     /// Principal DID controlled by the account holder.
     pub principal_id: arkret_identifiers::DidCoreId,
@@ -31,7 +31,7 @@ pub struct VerifiedPrincipalDidBindingInput {
     /// this generation.
     pub binding_frontier_digest: arkret_identifiers::Hash,
     /// Public account authority coordinate accepted at registration.
-    pub principal_authority: arkret_wire::PrincipalAuthorityKey,
+    pub account_id: arkret_wire::AccountId,
     /// Exact PCR accepted by the registration genesis operation.
     pub principal_control_realm_id: arkret_identifiers::RealmId,
 }
@@ -42,7 +42,7 @@ pub trait PrincipalDidRepository: Send + Sync {
     /// The error type returned by the repository.
     type Error;
 
-    /// Fetch the binding for one account and Principal Server audience_id.
+    /// Fetch the binding for one account and Station audience_id.
     async fn get_for_user_and_audience(
         &mut self,
         user: &User,
@@ -55,7 +55,7 @@ pub trait PrincipalDidRepository: Send + Sync {
         principal_id: &str,
     ) -> Result<Option<PrincipalDidBinding>, Self::Error>;
 
-    /// Fetch a binding by stable principal core id and Principal Server audience_id.
+    /// Fetch a binding by stable principal core id and Station audience_id.
     async fn get_by_principal_id_and_audience(
         &mut self,
         principal_id: &str,

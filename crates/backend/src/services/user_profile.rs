@@ -58,7 +58,7 @@ pub enum UserProfileServiceError {
     DuplicateNotificationChannel(String),
 
     #[error(transparent)]
-    PrincipalServer(AnyhowError),
+    Station(AnyhowError),
 
     #[error(transparent)]
     Repository(#[from] RepositoryError),
@@ -68,7 +68,7 @@ pub async fn patch_viewer_profile(
     repo: &mut BoxRepository,
     requester: &Requester,
     clock: &dyn Clock,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     patch: UserProfilePatch,
 ) -> Result<User, UserProfileServiceError> {
     let requester_user = requester
@@ -89,18 +89,18 @@ pub async fn patch_viewer_profile(
     let display_name_patch = patch.display_name.clone();
     let user = repo.user().update_profile(clock, user, patch).await?;
 
-    sync_display_name_patch(principal_server, &user, display_name_patch).await?;
+    sync_display_name_patch(station, &user, display_name_patch).await?;
 
     Ok(user)
 }
 
 pub async fn load_viewer_profile(
     repo: &mut BoxRepository,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     user: &User,
 ) -> Result<ViewerProfile, UserProfileServiceError> {
-    let principal_address = principal_server.principal_address(&user.localpart);
-    let principal_display_name = match principal_server.query_user(&user.localpart).await {
+    let principal_address = station.principal_address(&user.localpart);
+    let principal_display_name = match station.query_user(&user.localpart).await {
         Ok(info) => info.displayname.or_else(|| user.display_name.clone()),
         Err(_) => user.display_name.clone(),
     };
@@ -228,7 +228,7 @@ pub(crate) fn validate_display_name_patch(
 }
 
 pub(crate) async fn sync_display_name_patch(
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     user: &User,
     patch: Option<Option<String>>,
 ) -> Result<(), UserProfileServiceError> {
@@ -237,14 +237,14 @@ pub(crate) async fn sync_display_name_patch(
     };
 
     match display_name {
-        Some(name) => principal_server
+        Some(name) => station
             .set_displayname(&user.localpart, &name)
             .await
-            .map_err(UserProfileServiceError::PrincipalServer),
-        None => principal_server
+            .map_err(UserProfileServiceError::Station),
+        None => station
             .unset_displayname(&user.localpart)
             .await
-            .map_err(UserProfileServiceError::PrincipalServer),
+            .map_err(UserProfileServiceError::Station),
     }
 }
 

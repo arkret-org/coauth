@@ -54,7 +54,7 @@ pub async fn patch_profile(
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
     let repo_factory = depot.repo_factory()?;
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let clock = make_clock();
 
     let activity_tracker = extract_bound_activity_tracker(req, depot);
@@ -77,15 +77,10 @@ pub async fn patch_profile(
         preferred_locale,
     };
 
-    let user = user_profile::patch_viewer_profile(
-        &mut repo,
-        &requester,
-        &clock,
-        principal_server.as_ref(),
-        patch,
-    )
-    .await
-    .map_err(super::map_user_profile_error)?;
+    let user =
+        user_profile::patch_viewer_profile(&mut repo, &requester, &clock, station.as_ref(), patch)
+            .await
+            .map_err(super::map_user_profile_error)?;
 
     repo.save().await?;
 
@@ -97,7 +92,7 @@ pub async fn patch_profile(
             updated_at: arkret_canonical::format_timestamp_canonical(user.updated_at),
         },
         principal: PrincipalUserData {
-            principal_address: principal_server.principal_address(&user.localpart),
+            principal_address: station.principal_address(&user.localpart),
             display_name: user.display_name,
         },
     }))
@@ -129,7 +124,7 @@ pub async fn deactivate_user(
     let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let password_manager = depot.password_manager()?;
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let key_store = depot.key_store()?;
     let arkret_config = depot.arkret_config()?;
     let service_id = crate::handlers::arkret::service_id_for(&arkret_config);
@@ -149,7 +144,7 @@ pub async fn deactivate_user(
         &clock,
         &config,
         &password_manager,
-        principal_server.as_ref(),
+        station.as_ref(),
         &key_store,
         service_id.as_str(),
         input.password,
@@ -240,7 +235,7 @@ mod tests {
         repo.save().await.unwrap();
 
         state
-            .principal_server_admin
+            .station_admin
             .provision_user(&ConnectorProvisionRequest::new(&user.localpart, &user.sub))
             .await
             .unwrap();
@@ -291,11 +286,7 @@ mod tests {
         assert_eq!(cleared.display_name.as_deref(), Some("Alice Example"));
         assert!(cleared.avatar_url.is_none());
 
-        let principal_user = state
-            .principal_server_admin
-            .query_user(&username)
-            .await
-            .unwrap();
+        let principal_user = state.station_admin.query_user(&username).await.unwrap();
         assert_eq!(principal_user.displayname.as_deref(), Some("Alice Example"));
     }
 }

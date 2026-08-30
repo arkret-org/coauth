@@ -37,14 +37,14 @@ pub struct AddRequestBody {
     /// The handle of the account to add.
     handle: String,
 
-    /// Skip checking with the `PrincipalServer` whether the username is
+    /// Skip checking with the `Station` whether the username is
     /// available.
     ///
     /// Use this with caution. It bypasses downstream username reservation and
-    /// should only be used when the caller already knows the Principal Server
+    /// should only be used when the caller already knows the Station
     /// state is consistent.
     #[serde(default)]
-    skip_principal_server_check: bool,
+    skip_station_check: bool,
 }
 
 #[endpoint]
@@ -61,7 +61,7 @@ pub async fn add_account(
         ..
     } = call_context;
     let mut rng = crate::handlers::account::make_rng();
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let params: AddRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     // Validate the handle before any repository lookup: the existence query
@@ -76,24 +76,19 @@ pub async fn add_account(
         return Err(AppError::conflict("User already exists"));
     }
 
-    // Ask the PrincipalServer if the username is available
-    let principal_server_available = principal_server
+    // Ask the Station if the username is available
+    let station_available = station
         .is_handle_available(&params.handle)
         .await
         .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
 
-    if !principal_server_available {
-        if !params.skip_principal_server_check {
-            return Err(AppError::conflict(
-                "Username is reserved by the PrincipalServer",
-            ));
+    if !station_available {
+        if !params.skip_station_check {
+            return Err(AppError::conflict("Username is reserved by the Station"));
         }
 
         // If we skipped the check, we still want to shout about it
-        warn!(
-            "Skipped PrincipalServer check for username {}",
-            params.handle
-        );
+        warn!("Skipped Station check for username {}", params.handle);
     }
 
     let user = repo.user().add(&mut rng, &clock, params.handle).await?;
@@ -101,7 +96,7 @@ pub async fn add_account(
     // Admin creation persists only the service account. Principal identity
     // onboarding remains a separate client-signed flow.
 
-    principal_server
+    station
         .provision_user(&ConnectorProvisionRequest::new(&user.localpart, &user.sub))
         .await
         .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
@@ -178,7 +173,7 @@ pub struct BatchInviteConsentGate {
     #[schemars(with = "String")]
     pub scope: ConsentScope,
 
-    /// Override the first configured Principal Server endpoint per request. Useful
+    /// Override the first configured Station endpoint per request. Useful
     /// when a deployment fans out across multiple `server_names` and
     /// the global config points at a different one.
     #[serde(default)]
@@ -255,7 +250,7 @@ pub enum BatchInviteGateOutcome {
 /// I/O so unit tests can inject a wiremock-backed `reqwest::Client`.
 ///
 /// `gate_url_override` lets the caller supply a per-request URL that wins
-/// over the primary configured Principal Server endpoint. Both `None` →
+/// over the primary configured Station endpoint. Both `None` →
 /// gate is skipped (returns `Allow`) — same behaviour as omitting
 /// `peer_principal_id` entirely. This keeps the no-config / no-peer paths
 /// indistinguishable, which matches the spec note that the gate is
@@ -272,7 +267,7 @@ pub async fn evaluate_batch_invite_gate(
     let principal_url = gate
         .target_principal_url
         .as_ref()
-        .or_else(|| arkret_config.primary_principal_server_url());
+        .or_else(|| arkret_config.primary_station_url());
 
     let Some(principal_url) = principal_url else {
         // Gate metadata supplied, but no server to query. Mirror the
@@ -509,7 +504,7 @@ mod consent_gate_tests {
     //!
     //! The full Salvo handler is covered by integration tests in
     //! `accounts::tests`; here we only need to confirm the gate logic
-    //! routes the three outcomes correctly given the principal-server
+    //! routes the three outcomes correctly given the station
     //! response.
     use coauth_config::ArkretConfig;
     use wiremock::matchers::{method, path_regex, query_param};

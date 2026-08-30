@@ -1,8 +1,8 @@
 //! Atomic Account Authority issuer-ledger and durable publication boundary.
 
 use arkret_models_collaboration::account_lifecycle::{
-    AccountStatusInitialPublication, AccountStatusPrincipalAuthority, AccountStatusPublication,
-    AccountStatusPublicationRequestBody, AccountStatusRecord, UnsignedAccountStatusRecord,
+    AccountStatusInitialPublication, AccountStatusPublication, AccountStatusPublicationRequestBody,
+    AccountStatusRecord, UnsignedAccountStatusRecord,
 };
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_wire::{DidCoreId, Hash, SchemaId, ServiceAccountId};
@@ -34,7 +34,7 @@ pub struct AccountStatusPublicationPlan {
 #[allow(clippy::too_many_arguments)]
 pub async fn author_transition_plan(
     repo: &mut BoxRepository,
-    principal_server: &dyn coauth_principal::ConnectorAdmin,
+    station: &dyn coauth_principal::ConnectorAdmin,
     keystore: &coauth_keystore::Keystore,
     service_id: &str,
     user: &User,
@@ -44,7 +44,7 @@ pub async fn author_transition_plan(
     now: chrono::DateTime<chrono::Utc>,
     _rng: &mut (dyn RngCore + Send),
 ) -> Result<AccountStatusPublicationPlan, AccountStatusPublicationError> {
-    let (destination_name, audience) = principal_server
+    let (destination_name, audience) = station
         .account_status_destination()
         .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
     if audience != binding.audience_id {
@@ -59,11 +59,11 @@ pub async fn author_transition_plan(
             "runtime service identity does not match the accepted account authority".to_owned(),
         ));
     }
-    let account_id = ServiceAccountId::new(user.id.to_string())
+    let service_account_id = ServiceAccountId::new(user.id.to_string())
         .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
     let current = repo
         .account_status_ledger()
-        .current(account_authority_id.as_str(), account_id.as_str())
+        .current(account_authority_id.as_str(), service_account_id.as_str())
         .await?;
     if let Some(head) = &current {
         if head.status != user.status {
@@ -85,10 +85,10 @@ pub async fn author_transition_plan(
     let unsigned = UnsignedAccountStatusRecord {
         schema: SchemaId::ACCOUNT_STATUS_RECORD_V1.to_owned(),
         account_authority_id: account_authority_id.clone(),
-        account_id,
-        principal_authority: AccountStatusPrincipalAuthority {
-            principal_id: binding.principal_authority.principal_id.clone(),
-            principal_server_id: binding.principal_authority.principal_server_id.clone(),
+        service_account_id,
+        account_id: arkret_wire::AccountId {
+            principal_id: binding.account_id.principal_id.clone(),
+            station_id: binding.account_id.station_id.clone(),
         },
         principal_control_realm_id: binding.principal_control_realm_id.clone(),
         binding_version: binding.binding_version,
@@ -153,13 +153,12 @@ pub fn validate_transition_plan(
     let record: &AccountStatusRecord = plan.body.publication.record();
     if binding.user_id != user.id
         || binding.audience_id != plan.audience_id
-        || binding.principal_id != record.principal_authority.principal_id
-        || binding.principal_authority.principal_server_id
-            != record.principal_authority.principal_server_id
+        || binding.principal_id != record.account_id.principal_id
+        || binding.account_id.station_id != record.account_id.station_id
         || binding.principal_control_realm_id != record.principal_control_realm_id
         || binding.binding_version != record.binding_version
         || binding.binding_receipt.account_authority_id != record.account_authority_id
-        || record.account_id.as_str() != user.id.to_string()
+        || record.service_account_id.as_str() != user.id.to_string()
         || record.status != target_status
     {
         return Err(AccountStatusPublicationError::InvalidBody(
@@ -179,7 +178,7 @@ pub async fn enqueue_exact_publication(
 ) -> Result<Hash, AccountStatusPublicationError> {
     if destination_name.trim().is_empty() {
         return Err(AccountStatusPublicationError::InvalidBody(
-            "destination Principal Server name is empty".to_owned(),
+            "destination Station name is empty".to_owned(),
         ));
     }
     if idempotency_key.trim().is_empty() {

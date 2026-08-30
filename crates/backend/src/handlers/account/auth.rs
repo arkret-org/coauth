@@ -119,7 +119,7 @@ struct ProvidersQuery {
 
 /// Authenticate a user with username and password, returning viewer info,
 /// setting a session cookie on success, and minting a temporary scaffold
-/// session grant for the configured principal-server bridge.
+/// session grant for the configured station bridge.
 #[endpoint]
 pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Result<(), RouteError> {
     let mut rng = make_rng();
@@ -129,7 +129,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let limiter = depot.limiter()?;
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let repo = depot.repo().await?;
     let activity_tracker = extract_bound_activity_tracker(req, depot);
     let requester = activity_tracker
@@ -205,7 +205,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         &clock,
         &password_manager,
         &limiter,
-        principal_server.as_ref(),
+        station.as_ref(),
         &url_builder,
         &arkret_config,
         &site_config,
@@ -261,7 +261,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 .await;
 
             let cookie_jar = cookie_jar.set_session(&user_session);
-            let display_name = match principal_server.query_user(&user.localpart).await {
+            let display_name = match station.query_user(&user.localpart).await {
                 Ok(info) => info.displayname,
                 Err(_) => None,
             };
@@ -298,7 +298,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                             id: NodeType::User.serialize(user.id),
                             handle: user.localpart.clone(),
                             federated_handle: arkret::user_handle(&url_builder, &user),
-                            principal_address: principal_server.principal_address(&user.localpart),
+                            principal_address: station.principal_address(&user.localpart),
                             display_name,
                         }),
                         None,

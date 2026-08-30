@@ -69,10 +69,10 @@ pub enum IntrospectionError {
 /// `arkret_session_id`) link a token to a concrete
 /// device + principal + local session and materially widen the
 /// de-anonymisation surface. They are S2S material for the trusted
-/// Principal Server (which enforces the `/_arkret/self/*` surface), not
+/// Station (which enforces the `/_arkret/self/*` surface), not
 /// for arbitrary confidential OIDC clients. Callers pass
 /// [`ArkretAssociationDisclosure::Full`] only when authenticated as the
-/// Principal Server (homeserver bearer) or for internal self-introspection;
+/// Station (homeserver bearer) or for internal self-introspection;
 /// untrusted confidential clients pass
 /// [`ArkretAssociationDisclosure::Redacted`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

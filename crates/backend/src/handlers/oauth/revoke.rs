@@ -136,8 +136,8 @@ async fn handle_post(req: &mut Request, depot: &mut Depot) -> Result<(), RouteEr
         .get::<crate::services::dpop::DpopVerifier>("dpop_verifier")
         .expect("DpopVerifier not found in depot");
     let assertion_audience = url_builder.oauth_revocation_endpoint().to_string();
-    let principal_server = depot
-        .get::<Arc<dyn ConnectorAdmin>>("principal_server_admin")
+    let station = depot
+        .get::<Arc<dyn ConnectorAdmin>>("station_admin")
         .expect("ConnectorAdmin not found in depot");
     let repo_factory = depot
         .get::<BoxRepositoryFactory>("box_repository_factory")
@@ -151,12 +151,12 @@ async fn handle_post(req: &mut Request, depot: &mut Depot) -> Result<(), RouteEr
 
     let mut repo: BoxRepository = repo_factory.create().await?;
 
-    // Check if the caller authenticated with the PrincipalServer admin secret
+    // Check if the caller authenticated with the Station admin secret
     // (bearer token).  When that is the case, skip the client-ownership
-    // check so that the PrincipalServer can revoke any token on behalf of a
+    // check so that the Station can revoke any token on behalf of a
     // client.
     let admin_mode = if let Some(token) = client_authorization.credentials.bearer_token() {
-        principal_server
+        station
             .verify_token(token)
             .await
             .map_err(|e| RouteError::Internal(e.into()))?

@@ -118,7 +118,7 @@ pub async fn get_link(
     let url_builder = depot.url_builder()?;
     let site_config = depot.site_config()?;
     let ip_address = extract_bound_activity_tracker(req, depot).ip();
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let mut policy = depot
         .policy_factory()?
         .instantiate()
@@ -135,7 +135,7 @@ pub async fn get_link(
         &mut *rng,
         &*clock,
         &url_builder,
-        &*principal_server,
+        &*station,
         &mut policy,
         &site_config,
         user_agent,
@@ -181,7 +181,7 @@ pub async fn post_link(
         .instantiate()
         .await
         .map_err(|e| RouteError::Internal(e.into()))?;
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let url_builder = depot.url_builder()?;
     let site_config = depot.site_config()?;
     let ip_address = extract_bound_activity_tracker(req, depot).ip();
@@ -217,7 +217,7 @@ pub async fn post_link(
         &mut *rng,
         &*clock,
         &url_builder,
-        &*principal_server,
+        &*station,
         &mut policy,
         &site_config,
         user_agent,

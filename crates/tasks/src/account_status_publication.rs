@@ -124,7 +124,7 @@ impl RunnableJob for AccountStatusPublicationJob {
             self.destination_name().to_owned(),
             self.record_id().clone(),
             record.account_id.to_string(),
-            record.principal_authority.principal_id.clone(),
+            record.account_id.principal_id.clone(),
         );
         let Some(package) = state
             .principal_connection()

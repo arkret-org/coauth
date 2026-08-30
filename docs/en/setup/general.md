@@ -18,7 +18,7 @@ sections you override and remove the untouched defaults.
 
 - `http.public_base_url`
 - `database`
-- `arkret.principal_servers`
+- `arkret.stations`
 - `arkret.identity_registry`
 - `arkret.admin_audience`
 - `secrets`

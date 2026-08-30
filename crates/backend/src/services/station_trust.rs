@@ -1,15 +1,15 @@
-//! Principal Server trust resolution: three-layer pin resolution, mandatory
+//! Station trust resolution: three-layer pin resolution, mandatory
 //! online startup preflight, one-time bootstrap and explicit replacement.
 //!
 //! ## Why
 //!
 //! `/_arkret/describe` is capability metadata, not an authorization root.
-//! The effective audience pin for each configured Principal Server is
+//! The effective audience pin for each configured Station is
 //! resolved from exactly one of three layers, in priority order:
 //!
-//! 1. the explicit config pin (`principal_servers[].service_id`);
-//! 2. the persisted trust enrollment written by an explicit `coauth principal-server trust
-//!    bootstrap` / `replace` (or the narrowly scoped development auto-enrollment);
+//! 1. the explicit config pin (`stations[].service_id`);
+//! 2. the persisted trust enrollment written by an explicit `coauth station trust bootstrap` /
+//!    `replace` (or the narrowly scoped development auto-enrollment);
 //! 3. nothing — startup refuses to bind the business listener and points at the bootstrap command.
 //!
 //! A remote describe response only ever *confirms* a pin. It can never
@@ -38,10 +38,10 @@ use arkret_models_identity::{
 };
 use arkret_wire::{Did, DidCoreId, Hash, ServiceKind};
 use chrono::Utc;
-use coauth_config::{ArkretConfig, PrincipalServerConfig};
-use coauth_data::storage::principal_server_trust::{
-    NewPrincipalServerTrustAudit, NewPrincipalServerTrustEnrollment,
-    PrincipalServerTrustAuditAction, PrincipalServerTrustEnrollment, PrincipalServerTrustSource,
+use coauth_config::{ArkretConfig, StationConfig};
+use coauth_data::storage::station_trust::{
+    NewStationTrustAudit, NewStationTrustEnrollment, StationTrustAuditAction,
+    StationTrustEnrollment, StationTrustSource,
 };
 use coauth_data::{RepositoryAccess, RepositoryError, RepositoryFactory, SystemClock};
 use coauth_storage_postgres::PgRepositoryFactory;
@@ -52,7 +52,7 @@ use url::Url;
 
 use crate::outbound_http;
 
-/// Root-relative describe path served by every Arkret Principal Server.
+/// Root-relative describe path served by every Arkret Station.
 pub(crate) const DESCRIBE_PATH: &str = "_arkret/describe";
 
 /// Revalidation-interval floor: faster than this just hammers the Principal
@@ -78,7 +78,7 @@ const AUTHENTICATED_RESOLUTION_MAX_BYTES: usize =
     arkret_http_client::SERVICE_RESOLUTION_FETCH_MAX_BYTES;
 
 /// Defensive cache bound. The cache only ever holds one entry per configured
-/// Principal Server; this cap bounds damage if that invariant ever breaks.
+/// Station; this cap bounds damage if that invariant ever breaks.
 const MAX_CACHE_ENTRIES: usize = 64;
 
 /// Bounded audit detail length. Audit entries never carry bearer tokens,
@@ -88,12 +88,11 @@ const AUDIT_DETAIL_MAX_CHARS: usize = 256;
 /// Process-wide shared resolver. Populated by [`preflight_and_spawn`] before
 /// the business listener binds and read by the request-path audience checks
 /// via [`shared`].
-static SHARED: LazyLock<PrincipalServerTrustResolver> =
-    LazyLock::new(PrincipalServerTrustResolver::new);
+static SHARED: LazyLock<StationTrustResolver> = LazyLock::new(StationTrustResolver::new);
 
-/// The process-wide Principal Server trust resolver.
+/// The process-wide Station trust resolver.
 #[must_use]
-pub fn shared() -> &'static PrincipalServerTrustResolver {
+pub fn shared() -> &'static StationTrustResolver {
     &SHARED
 }
 
@@ -101,7 +100,7 @@ pub fn shared() -> &'static PrincipalServerTrustResolver {
 /// time it was last verified online. Cheap to clone (the map is behind an
 /// `Arc`); all clones share the same underlying cache.
 #[derive(Debug, Clone)]
-pub struct PrincipalServerTrustResolver {
+pub struct StationTrustResolver {
     inner: Arc<RwLock<HashMap<String, ResolvedPin>>>,
     max_trusted_age: Duration,
 }
@@ -112,7 +111,7 @@ struct ResolvedPin {
     last_verified_at: Instant,
 }
 
-impl Default for PrincipalServerTrustResolver {
+impl Default for StationTrustResolver {
     fn default() -> Self {
         Self {
             inner: Arc::default(),
@@ -121,7 +120,7 @@ impl Default for PrincipalServerTrustResolver {
     }
 }
 
-impl PrincipalServerTrustResolver {
+impl StationTrustResolver {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -187,7 +186,7 @@ impl PrincipalServerTrustResolver {
             } else {
                 tracing::error!(
                     endpoint = %endpoint,
-                    "principal-server trust cache is full; refusing to cache pin",
+                    "station trust cache is full; refusing to cache pin",
                 );
             }
         }
@@ -209,8 +208,8 @@ impl PrincipalServerTrustResolver {
 /// metadata never supplies this value.
 #[must_use]
 pub fn effective_audience(
-    server: &PrincipalServerConfig,
-    resolver: &PrincipalServerTrustResolver,
+    server: &StationConfig,
+    resolver: &StationTrustResolver,
 ) -> Option<DidCoreId> {
     server
         .service_id
@@ -221,7 +220,7 @@ pub fn effective_audience(
 /// [`effective_audience`] against the process-wide [`shared`] resolver — the
 /// common form for call sites that don't thread a resolver handle.
 #[must_use]
-pub fn effective_audience_shared(server: &PrincipalServerConfig) -> Option<DidCoreId> {
+pub fn effective_audience_shared(server: &StationConfig) -> Option<DidCoreId> {
     effective_audience(server, shared())
 }
 
@@ -232,28 +231,28 @@ fn canonical_endpoint_key(endpoint: &Url) -> Option<String> {
         .map(|canonical| canonical.to_string())
 }
 
-/// Classification of an online Principal Server identity verification
+/// Classification of an online Station identity verification
 /// failure.
 #[derive(Debug, thiserror::Error)]
 pub enum TrustVerificationError {
     /// The endpoint is not a canonical HTTPS base URL.
-    #[error("principal-server endpoint is not a canonical HTTPS base URL: {0}")]
+    #[error("station endpoint is not a canonical HTTPS base URL: {0}")]
     InvalidEndpoint(String),
     /// Transient network failure: connect, DNS or timeout. This is the only
     /// class the runtime revalidation tolerates for a bounded last-verified
     /// age.
-    #[error("principal-server is unreachable: {0}")]
+    #[error("station is unreachable: {0}")]
     Unreachable(String),
     /// The target was denied by the outbound egress policy (SSRF/DNS
     /// rebinding protection).
-    #[error("principal-server target denied by egress policy: {0}")]
+    #[error("station target denied by egress policy: {0}")]
     EgressDenied(String),
     /// The response carried the wrong service role.
-    #[error("wrong service kind: expected principal_server, observed {0}")]
+    #[error("wrong service kind: expected station, observed {0}")]
     WrongServiceKind(String),
     /// DID Document, WebVH history, resolution proof or freshness failed
     /// verification.
-    #[error("invalid principal-server identity evidence: {0}")]
+    #[error("invalid station identity evidence: {0}")]
     InvalidEvidence(String),
     /// The observed service id does not equal the effective pin.
     #[error("observed service_id {observed} does not match the effective pin {expected}")]
@@ -280,10 +279,10 @@ impl TrustVerificationError {
     }
 }
 
-/// Fully verified Principal Server identity material, ready to persist as a
+/// Fully verified Station identity material, ready to persist as a
 /// trust enrollment or to confirm an existing pin.
 #[derive(Debug, Clone)]
-pub struct VerifiedPrincipalServerIdentity {
+pub struct VerifiedStationIdentity {
     /// Stable service core id (the pin).
     pub service_id: DidCoreId,
     /// Service DID verified against its WebVH history.
@@ -357,13 +356,13 @@ fn check_anti_rollback(
     Ok(())
 }
 
-/// Fetch and fully verify the current Principal Server identity material for
+/// Fetch and fully verify the current Station identity material for
 /// `endpoint`.
 ///
 /// Verification chain, all fail-closed:
 ///
 /// 1. canonical HTTPS endpoint under the configured egress policy;
-/// 2. role-scoped typed `ServiceDescribe` with `service_kind == principal_server`;
+/// 2. role-scoped typed `ServiceDescribe` with `service_kind == station`;
 /// 3. `project(did) == service_id`;
 /// 4. full WebVH history verification; the describe resolution commitment must equal the verified
 ///    head (version id and head digest);
@@ -374,12 +373,12 @@ fn check_anti_rollback(
 ///    `describe_digest`;
 /// 7. the observed `service_id` must equal `expected_service_id` when given;
 /// 8. anti-rollback: the verified coordinates must not regress below `floor` when given.
-pub async fn verify_principal_server_identity(
+pub async fn verify_station_identity(
     http_client: &reqwest::Client,
     endpoint: &Url,
     expected_service_id: Option<&DidCoreId>,
     floor: Option<(&str, &str)>,
-) -> Result<VerifiedPrincipalServerIdentity, TrustVerificationError> {
+) -> Result<VerifiedStationIdentity, TrustVerificationError> {
     let canonical = CanonicalServiceUrl::canonicalize(endpoint.as_str())
         .map_err(|error| TrustVerificationError::InvalidEndpoint(error.to_string()))?;
     canonical
@@ -392,7 +391,7 @@ pub async fn verify_principal_server_identity(
         .map_err(|error| TrustVerificationError::InvalidEndpoint(error.to_string()))?;
     describe_url
         .query_pairs_mut()
-        .append_pair("service_kind", ServiceKind::PrincipalServer.as_str());
+        .append_pair("service_kind", ServiceKind::Station.as_str());
     let describe_bytes = fetch_bounded(
         http_client,
         "principal_trust_describe",
@@ -406,7 +405,7 @@ pub async fn verify_principal_server_identity(
     description
         .validate()
         .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;
-    if description.service_kind != ServiceKind::PrincipalServer {
+    if description.service_kind != ServiceKind::Station {
         return Err(TrustVerificationError::WrongServiceKind(
             description.service_kind.as_str().to_owned(),
         ));
@@ -524,7 +523,7 @@ pub async fn verify_principal_server_identity(
             "resolution record targets a different service".to_owned(),
         ));
     }
-    if record.record.service_kind != ServiceKind::PrincipalServer.as_str() {
+    if record.record.service_kind != ServiceKind::Station.as_str() {
         return Err(TrustVerificationError::WrongServiceKind(
             record.record.service_kind.clone(),
         ));
@@ -598,7 +597,7 @@ pub async fn verify_principal_server_identity(
     }
     let route_binding_digest = arkret_models_identity::route_binding_describe_digest(
         &service_id,
-        ServiceKind::PrincipalServer.as_str(),
+        ServiceKind::Station.as_str(),
         &commitment,
         advertised_base,
     )
@@ -625,7 +624,7 @@ pub async fn verify_principal_server_identity(
     )
     .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;
 
-    Ok(VerifiedPrincipalServerIdentity {
+    Ok(VerifiedStationIdentity {
         service_id,
         did: commitment.did,
         method_history_head: commitment.method_history_head,
@@ -643,7 +642,7 @@ pub enum TrustEnrollmentError {
     Verification(#[from] TrustVerificationError),
     /// The endpoint is already enrolled with a different identity.
     #[error(
-        "endpoint {endpoint} is already enrolled with service_id {existing}; use `coauth principal-server trust replace` to change it"
+        "endpoint {endpoint} is already enrolled with service_id {existing}; use `coauth station trust replace` to change it"
     )]
     ConflictingEnrollment {
         /// Canonical endpoint.
@@ -696,17 +695,17 @@ pub enum TrustEnrollmentError {
 #[derive(Debug)]
 pub struct BootstrapOutcome {
     /// The persisted (or pre-existing, for idempotent reruns) enrollment.
-    pub enrollment: PrincipalServerTrustEnrollment,
+    pub enrollment: StationTrustEnrollment,
     /// Whether the enrollment already existed with the same identity.
     pub already_enrolled: bool,
 }
 
 fn enrollment_params(
-    server: &PrincipalServerConfig,
-    verified: &VerifiedPrincipalServerIdentity,
-    source: PrincipalServerTrustSource,
-) -> NewPrincipalServerTrustEnrollment {
-    NewPrincipalServerTrustEnrollment {
+    server: &StationConfig,
+    verified: &VerifiedStationIdentity,
+    source: StationTrustSource,
+) -> NewStationTrustEnrollment {
+    NewStationTrustEnrollment {
         name: server.name.clone(),
         canonical_endpoint: verified.canonical_endpoint.clone(),
         service_id: verified.service_id.clone(),
@@ -729,13 +728,13 @@ async fn record_failure_audit(
     match repository_factory.create().await {
         Ok(mut repo) => {
             let recorded = repo
-                .principal_server_trust()
+                .station_trust()
                 .record_audit(
                     &mut rng,
                     &SystemClock::default(),
-                    NewPrincipalServerTrustAudit {
+                    NewStationTrustAudit {
                         enrollment_name: name.to_owned(),
-                        action: PrincipalServerTrustAuditAction::VerificationFailed,
+                        action: StationTrustAuditAction::VerificationFailed,
                         service_id,
                         previous_service_id: None,
                         detail: detail.clone(),
@@ -759,7 +758,7 @@ async fn record_failure_audit(
     }
 }
 
-/// One-time idempotent trust bootstrap for one configured Principal Server.
+/// One-time idempotent trust bootstrap for one configured Station.
 ///
 /// Verifies the DID control chain online, then creates the enrollment and
 /// its audit entry in a single transaction. Re-running with an unchanged
@@ -768,10 +767,10 @@ async fn record_failure_audit(
 pub async fn bootstrap(
     repository_factory: &PgRepositoryFactory,
     http_client: &reqwest::Client,
-    server: &PrincipalServerConfig,
-    source: PrincipalServerTrustSource,
+    server: &StationConfig,
+    source: StationTrustSource,
 ) -> Result<BootstrapOutcome, TrustEnrollmentError> {
-    let verified = match verify_principal_server_identity(
+    let verified = match verify_station_identity(
         http_client,
         &server.endpoint,
         server.service_id.as_ref(),
@@ -797,7 +796,7 @@ pub async fn bootstrap(
     // mutably, and holding it across the `if let` scrutinee would block the
     // writes in the idempotent-rerun path.
     let existing_by_endpoint = repo
-        .principal_server_trust()
+        .station_trust()
         .find_by_endpoint(&verified.canonical_endpoint)
         .await?;
     if let Some(existing) = existing_by_endpoint {
@@ -815,7 +814,7 @@ pub async fn bootstrap(
         }
         // Idempotent rerun: advance the anti-rollback floor and the
         // last-verified timestamp, never the pin.
-        repo.principal_server_trust()
+        repo.station_trust()
             .record_verification(
                 &SystemClock::default(),
                 &verified.canonical_endpoint,
@@ -831,11 +830,7 @@ pub async fn bootstrap(
             already_enrolled: true,
         });
     }
-    if let Some(existing) = repo
-        .principal_server_trust()
-        .find_by_name(&server.name)
-        .await?
-    {
+    if let Some(existing) = repo.station_trust().find_by_name(&server.name).await? {
         return Err(TrustEnrollmentError::ConflictingName {
             name: server.name.clone(),
             existing: existing.canonical_endpoint,
@@ -844,17 +839,17 @@ pub async fn bootstrap(
 
     let params = enrollment_params(server, &verified, source);
     let enrollment = repo
-        .principal_server_trust()
+        .station_trust()
         .enroll(&SystemClock::default(), params)
         .await?;
     let mut rng = ChaCha20Rng::from_entropy();
-    repo.principal_server_trust()
+    repo.station_trust()
         .record_audit(
             &mut rng,
             &SystemClock::default(),
-            NewPrincipalServerTrustAudit {
+            NewStationTrustAudit {
                 enrollment_name: server.name.clone(),
-                action: PrincipalServerTrustAuditAction::Enrolled,
+                action: StationTrustAuditAction::Enrolled,
                 service_id: Some(verified.service_id.clone()),
                 previous_service_id: None,
                 detail: format!(
@@ -877,7 +872,7 @@ pub async fn bootstrap(
 #[derive(Debug)]
 pub struct ReplaceOutcome {
     /// The enrollment after replacement.
-    pub enrollment: PrincipalServerTrustEnrollment,
+    pub enrollment: StationTrustEnrollment,
     /// Number of active session grants bound to the old audience that were
     /// revoked in the same transaction.
     pub revoked_session_grants: usize,
@@ -893,21 +888,16 @@ pub struct ReplaceOutcome {
 pub async fn replace(
     repository_factory: &PgRepositoryFactory,
     http_client: &reqwest::Client,
-    server: &PrincipalServerConfig,
+    server: &StationConfig,
     expect_old: &DidCoreId,
     accept_new: Option<&DidCoreId>,
 ) -> Result<ReplaceOutcome, TrustEnrollmentError> {
-    let verified =
-        verify_principal_server_identity(http_client, &server.endpoint, accept_new, None)
-            .await
-            .map_err(TrustEnrollmentError::Verification)?;
+    let verified = verify_station_identity(http_client, &server.endpoint, accept_new, None)
+        .await
+        .map_err(TrustEnrollmentError::Verification)?;
 
     let mut repo = repository_factory.create().await?;
-    let Some(existing) = repo
-        .principal_server_trust()
-        .find_by_name(&server.name)
-        .await?
-    else {
+    let Some(existing) = repo.station_trust().find_by_name(&server.name).await? else {
         return Err(TrustEnrollmentError::UnknownEnrollment {
             name: server.name.clone(),
         });
@@ -936,12 +926,12 @@ pub async fn replace(
     }
 
     let applied = repo
-        .principal_server_trust()
+        .station_trust()
         .replace(
             &SystemClock::default(),
             &server.name,
             expect_old,
-            enrollment_params(server, &verified, PrincipalServerTrustSource::OperatorCli),
+            enrollment_params(server, &verified, StationTrustSource::OperatorCli),
         )
         .await?;
     if !applied {
@@ -959,13 +949,13 @@ pub async fn replace(
         .revoke_active_for_audience(&SystemClock::default(), expect_old)
         .await?;
     let mut rng = ChaCha20Rng::from_entropy();
-    repo.principal_server_trust()
+    repo.station_trust()
         .record_audit(
             &mut rng,
             &SystemClock::default(),
-            NewPrincipalServerTrustAudit {
+            NewStationTrustAudit {
                 enrollment_name: server.name.clone(),
-                action: PrincipalServerTrustAuditAction::Replaced,
+                action: StationTrustAuditAction::Replaced,
                 service_id: Some(verified.service_id.clone()),
                 previous_service_id: Some(expect_old.clone()),
                 detail: format!(
@@ -978,7 +968,7 @@ pub async fn replace(
     repo.save().await?;
     shared().note_verified(&server.endpoint, verified.service_id.clone());
     Ok(ReplaceOutcome {
-        enrollment: PrincipalServerTrustEnrollment {
+        enrollment: StationTrustEnrollment {
             name: server.name.clone(),
             canonical_endpoint: verified.canonical_endpoint.clone(),
             service_id: verified.service_id.clone(),
@@ -986,7 +976,7 @@ pub async fn replace(
             method_history_head: verified.method_history_head.clone(),
             version_id: verified.version_id.clone(),
             resolution_record_digest: verified.resolution_record_digest.clone(),
-            source: PrincipalServerTrustSource::OperatorCli,
+            source: StationTrustSource::OperatorCli,
             enrolled_at: existing.enrolled_at,
             last_verified_at: Utc::now(),
         },
@@ -1000,21 +990,21 @@ pub async fn revoke(
     name: &str,
 ) -> Result<bool, TrustEnrollmentError> {
     let mut repo = repository_factory.create().await?;
-    let Some(existing) = repo.principal_server_trust().find_by_name(name).await? else {
+    let Some(existing) = repo.station_trust().find_by_name(name).await? else {
         return Err(TrustEnrollmentError::UnknownEnrollment {
             name: name.to_owned(),
         });
     };
-    let revoked = repo.principal_server_trust().revoke(name).await?;
+    let revoked = repo.station_trust().revoke(name).await?;
     if revoked {
         let mut rng = ChaCha20Rng::from_entropy();
-        repo.principal_server_trust()
+        repo.station_trust()
             .record_audit(
                 &mut rng,
                 &SystemClock::default(),
-                NewPrincipalServerTrustAudit {
+                NewStationTrustAudit {
                     enrollment_name: name.to_owned(),
-                    action: PrincipalServerTrustAuditAction::Revoked,
+                    action: StationTrustAuditAction::Revoked,
                     service_id: None,
                     previous_service_id: Some(existing.service_id),
                     detail: "enrollment revoked by operator".to_owned(),
@@ -1032,7 +1022,7 @@ pub async fn revoke(
 #[must_use]
 pub fn development_auto_enrollment_allowed(
     arkret_config: &ArkretConfig,
-    server: &PrincipalServerConfig,
+    server: &StationConfig,
     development_mode: bool,
 ) -> bool {
     development_mode
@@ -1042,7 +1032,7 @@ pub fn development_auto_enrollment_allowed(
         })
 }
 
-/// Mandatory online startup preflight for every configured Principal Server.
+/// Mandatory online startup preflight for every configured Station.
 ///
 /// Resolves the effective pin (config layer, then persisted enrollment),
 /// verifies the DID control chain online for each server, advances the
@@ -1064,7 +1054,7 @@ pub async fn preflight_and_spawn(
     soft_shutdown: CancellationToken,
     refresh_interval: Duration,
 ) -> anyhow::Result<()> {
-    for server in &arkret_config.principal_servers {
+    for server in &arkret_config.stations {
         preflight_server(
             &repository_factory,
             &arkret_config,
@@ -1098,15 +1088,15 @@ async fn preflight_server(
     repository_factory: &PgRepositoryFactory,
     arkret_config: &ArkretConfig,
     http_client: &reqwest::Client,
-    server: &PrincipalServerConfig,
+    server: &StationConfig,
     development_mode: bool,
     first_provisioning: bool,
 ) -> anyhow::Result<()> {
     let canonical_endpoint = canonical_endpoint_key(&server.endpoint)
-        .ok_or_else(|| anyhow::anyhow!("principal server {:?} endpoint is invalid", server.name))?;
+        .ok_or_else(|| anyhow::anyhow!("Station {:?} endpoint is invalid", server.name))?;
     let mut repo = repository_factory.create().await?;
     let enrollment = repo
-        .principal_server_trust()
+        .station_trust()
         .find_by_endpoint(&canonical_endpoint)
         .await?;
 
@@ -1115,7 +1105,7 @@ async fn preflight_server(
     let effective = match (server.service_id.as_ref(), enrollment.as_ref()) {
         (Some(configured), Some(persisted)) if configured != &persisted.service_id => {
             anyhow::bail!(
-                "principal server {:?} ({canonical_endpoint}): configured service_id {configured} conflicts with the persisted enrollment {}; resolve with `coauth principal-server trust replace` or fix the configuration",
+                "Station {:?} ({canonical_endpoint}): configured service_id {configured} conflicts with the persisted enrollment {}; resolve with `coauth station trust replace` or fix the configuration",
                 server.name,
                 persisted.service_id,
             );
@@ -1127,30 +1117,27 @@ async fn preflight_server(
                 development_auto_enrollment_allowed(arkret_config, server, development_mode);
             if !auto_enroll && !first_provisioning {
                 anyhow::bail!(
-                    "principal server {:?} ({canonical_endpoint}) is not enrolled: no config service_id pin and no persisted trust enrollment; run `coauth principal-server trust bootstrap --name {}` first",
+                    "Station {:?} ({canonical_endpoint}) is not enrolled: no config service_id pin and no persisted trust enrollment; run `coauth station trust bootstrap --name {}` first",
                     server.name,
                     server.name,
                 );
             }
             let source = if auto_enroll {
-                PrincipalServerTrustSource::DevelopmentAuto
+                StationTrustSource::DevelopmentAuto
             } else {
-                PrincipalServerTrustSource::OperatorCli
+                StationTrustSource::OperatorCli
             };
             let outcome = bootstrap(repository_factory, http_client, server, source)
                 .await
                 .map_err(|error| {
-                    anyhow::anyhow!(
-                        "principal server {:?} trust bootstrap failed: {error}",
-                        server.name
-                    )
+                    anyhow::anyhow!("Station {:?} trust bootstrap failed: {error}", server.name)
                 })?;
             tracing::info!(
                 name = %server.name,
                 endpoint = %canonical_endpoint,
                 service_id = %outcome.enrollment.service_id,
                 source = source.as_str(),
-                "enrolled principal-server trust pin",
+                "enrolled station trust pin",
             );
             return Ok(());
         }
@@ -1162,21 +1149,16 @@ async fn preflight_server(
             persisted.version_id.as_str(),
         )
     });
-    let verified = verify_principal_server_identity(
-        http_client,
-        &server.endpoint,
-        Some(&effective),
-        floor,
-    )
-    .await
-    .map_err(|error| {
-        anyhow::anyhow!(
-            "principal server {:?} ({canonical_endpoint}) failed startup verification: {error}",
-            server.name
-        )
-    })?;
+    let verified = verify_station_identity(http_client, &server.endpoint, Some(&effective), floor)
+        .await
+        .map_err(|error| {
+            anyhow::anyhow!(
+                "Station {:?} ({canonical_endpoint}) failed startup verification: {error}",
+                server.name
+            )
+        })?;
     if enrollment.is_some() {
-        repo.principal_server_trust()
+        repo.station_trust()
             .record_verification(
                 &SystemClock::default(),
                 &canonical_endpoint,
@@ -1195,26 +1177,22 @@ async fn revalidate_all(
     repository_factory: &PgRepositoryFactory,
     arkret_config: &ArkretConfig,
     http_client: &reqwest::Client,
-    resolver: &PrincipalServerTrustResolver,
+    resolver: &StationTrustResolver,
     soft_shutdown: &CancellationToken,
 ) {
-    for server in &arkret_config.principal_servers {
+    for server in &arkret_config.stations {
         let Some(pin) = effective_audience(server, resolver) else {
             tracing::error!(
                 name = %server.name,
                 endpoint = %server.endpoint,
-                "principal-server has no effective pin at runtime; initiating fatal shutdown",
+                "station has no effective pin at runtime; initiating fatal shutdown",
             );
             soft_shutdown.cancel();
             return;
         };
         let floor = match repository_factory.create().await {
             Ok(mut repo) => match canonical_endpoint_key(&server.endpoint) {
-                Some(endpoint) => match repo
-                    .principal_server_trust()
-                    .find_by_endpoint(&endpoint)
-                    .await
-                {
+                Some(endpoint) => match repo.station_trust().find_by_endpoint(&endpoint).await {
                     Ok(Some(enrollment)) => Some((
                         enrollment.method_history_head.clone(),
                         enrollment.version_id.clone(),
@@ -1232,7 +1210,7 @@ async fn revalidate_all(
                 continue;
             }
         };
-        match verify_principal_server_identity(
+        match verify_station_identity(
             http_client,
             &server.endpoint,
             Some(&pin),
@@ -1248,7 +1226,7 @@ async fn revalidate_all(
                     && let Some(endpoint) = canonical_endpoint_key(&server.endpoint)
                 {
                     let result = repo
-                        .principal_server_trust()
+                        .station_trust()
                         .record_verification(
                             &SystemClock::default(),
                             &endpoint,
@@ -1279,7 +1257,7 @@ async fn revalidate_all(
                             endpoint = %server.endpoint,
                             %error,
                             remaining_trust_seconds = resolver.max_trusted_age.saturating_sub(age).as_secs(),
-                            "principal-server revalidation failed transiently; retaining last-verified pin",
+                            "station revalidation failed transiently; retaining last-verified pin",
                         );
                     }
                     _ => {
@@ -1287,7 +1265,7 @@ async fn revalidate_all(
                             name = %server.name,
                             endpoint = %server.endpoint,
                             %error,
-                            "principal-server unreachable beyond the maximum trusted age; initiating fatal shutdown",
+                            "station unreachable beyond the maximum trusted age; initiating fatal shutdown",
                         );
                         soft_shutdown.cancel();
                         return;
@@ -1299,7 +1277,7 @@ async fn revalidate_all(
                     name = %server.name,
                     endpoint = %server.endpoint,
                     %error,
-                    "principal-server identity conflict detected at runtime; initiating fatal shutdown",
+                    "station identity conflict detected at runtime; initiating fatal shutdown",
                 );
                 soft_shutdown.cancel();
                 return;
@@ -1312,8 +1290,8 @@ async fn revalidate_all(
 mod tests {
     use super::*;
 
-    fn server(endpoint: &str) -> PrincipalServerConfig {
-        PrincipalServerConfig {
+    fn server(endpoint: &str) -> StationConfig {
+        StationConfig {
             name: "soland".to_owned(),
             endpoint: Url::parse(endpoint).unwrap(),
             service_id: Some(DidCoreId::new("ak:did_core:webvh:configured".to_owned()).unwrap()),
@@ -1324,7 +1302,7 @@ mod tests {
 
     #[test]
     fn configured_pin_wins_over_cached_enrollment_value() {
-        let resolver = PrincipalServerTrustResolver::new();
+        let resolver = StationTrustResolver::new();
         let endpoint = "https://local.host/";
         resolver.insert_for_test(
             &Url::parse(endpoint).unwrap(),
@@ -1341,7 +1319,7 @@ mod tests {
 
     #[test]
     fn persisted_pin_resolves_when_config_omits_pin() {
-        let resolver = PrincipalServerTrustResolver::new();
+        let resolver = StationTrustResolver::new();
         let endpoint = Url::parse("https://local.host/").unwrap();
         resolver.insert_for_test(&endpoint, "ak:did_core:webvh:persisted");
         let mut server = server(endpoint.as_str());
@@ -1356,7 +1334,7 @@ mod tests {
 
     #[test]
     fn missing_pin_in_both_layers_fails_closed() {
-        let resolver = PrincipalServerTrustResolver::new();
+        let resolver = StationTrustResolver::new();
         let mut server = server("https://local.host/");
         server.service_id = None;
         assert_eq!(effective_audience(&server, &resolver), None);
@@ -1372,7 +1350,7 @@ mod tests {
 
     #[test]
     fn cached_pin_expires_at_maximum_trusted_age() {
-        let resolver = PrincipalServerTrustResolver::new();
+        let resolver = StationTrustResolver::new();
         let endpoint = Url::parse("https://local.host/").unwrap();
         let verified_at = Instant::now();
         resolver.note_verified_at(
@@ -1419,13 +1397,13 @@ mod tests {
             &config, &server, false
         ));
         // Host not in the exact allowlist.
-        let other = PrincipalServerConfig {
+        let other = StationConfig {
             endpoint: Url::parse("https://soland.local/").unwrap(),
             ..server.clone()
         };
         assert!(!development_auto_enrollment_allowed(&config, &other, true));
         // Plain HTTP is never auto-enrolled.
-        let insecure = PrincipalServerConfig {
+        let insecure = StationConfig {
             endpoint: Url::parse("http://localhost:8448/").unwrap(),
             ..server.clone()
         };

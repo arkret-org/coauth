@@ -59,8 +59,8 @@ mod tests {
 
         assert_eq!(user.localpart, "alice");
 
-        // Check that the user was created on the PrincipalServer
-        let result = state.principal_server_admin.query_user("alice").await;
+        // Check that the user was created on the Station
+        let result = state.station_admin.query_user("alice").await;
         assert!(result.is_ok());
     }
 
@@ -293,9 +293,9 @@ mod tests {
             return;
         };
         // Patching `locked` is an account-status transition: it needs a single
-        // configured Principal Server as the publication destination and an
+        // configured Station as the publication destination and an
         // accepted principal binding for the account.
-        let mut state = TestState::from_pool_with_principal_server(pool.clone())
+        let mut state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
         let unique = unique_test_nonce();
@@ -311,7 +311,7 @@ mod tests {
             .await
             .unwrap();
         state
-            .principal_server_admin
+            .station_admin
             .provision_user(&ConnectorProvisionRequest::new(&user.localpart, &user.sub))
             .await
             .unwrap();
@@ -338,11 +338,7 @@ mod tests {
         assert_eq!(body["data"]["attributes"]["admin"], true);
         assert!(body["data"]["attributes"]["locked_at"].is_string());
 
-        let user = state
-            .principal_server_admin
-            .query_user(&username)
-            .await
-            .unwrap();
+        let user = state.station_admin.query_user(&username).await.unwrap();
         assert_eq!(user.displayname.as_deref(), Some("Alice Admin"));
     }
 
@@ -369,7 +365,7 @@ mod tests {
         repo.save().await.unwrap();
 
         state
-            .principal_server_admin
+            .station_admin
             .provision_user(&ConnectorProvisionRequest::new(&user.localpart, &user.sub))
             .await
             .unwrap();
@@ -384,7 +380,7 @@ mod tests {
         response.assert_status(StatusCode::BAD_REQUEST);
 
         let principal_user = state
-            .principal_server_admin
+            .station_admin
             .query_user(&user.localpart)
             .await
             .unwrap();

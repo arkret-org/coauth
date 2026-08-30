@@ -8,8 +8,8 @@ expression: snapshot
     "profile",
     "urn:arkret:admin:*",
     "urn:arkret:client:*",
-    "urn:arkret:principal-server:*",
-    "urn:arkret:principal-server:session.bind",
+    "urn:arkret:station:*",
+    "urn:arkret:station:session.bind",
     "urn:coauth:admin"
   ],
   "claims_supported": [

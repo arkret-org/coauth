@@ -60,7 +60,7 @@ fn require_auth_session_logout_service_caller(
     }
 
     let arkret_config = depot.arkret_config()?;
-    if super::super::principal_server_static_session_grant_bearer_matches(&arkret_config, token) {
+    if super::super::station_static_session_grant_bearer_matches(&arkret_config, token) {
         return Ok(());
     }
 
@@ -165,7 +165,7 @@ async fn terminate_auth_side_session_by_grant_jwt(
         }
     };
     if let Some(operation) = operation {
-        let checkpoint = serde_json::json!({"kind":"principal_server_logout"});
+        let checkpoint = serde_json::json!({"kind":"station_logout"});
         let committed = repo
             .oauth_session_grant()
             .commit_revoke(

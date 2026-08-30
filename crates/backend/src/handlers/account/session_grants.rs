@@ -41,7 +41,7 @@ pub async fn list_session_grants(
 
     let caller = require_session_grant_caller(req, depot).await?;
 
-    // SEC-SG-ENUM: a Principal Server caller may not enumerate session-grant
+    // SEC-SG-ENUM: a Station caller may not enumerate session-grant
     // metadata across arbitrary subjects/audiences. Pin the query to the
     // caller's own audience; an admin caller stays unrestricted.
     let audience = caller
@@ -109,7 +109,7 @@ pub async fn revoke_session_grant(
     // Revocation is destructive — server_name scope is not enough.
     match require_session_grant_caller(req, depot).await?.authz {
         SessionGrantAuthz::Admin => {}
-        SessionGrantAuthz::PrincipalServer => {
+        SessionGrantAuthz::Station => {
             return Err(ArkretRouteError::Forbidden(
                 "session-grant revocation requires admin scope".to_owned(),
             ));

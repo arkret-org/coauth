@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use arkret_identifiers::Did;
 use arkret_identity::DidBindingPurpose;
 use arkret_models_discovery::{
-    DirectoryHandleResolutionOutcome, DirectoryResolveHandleRequestBody, ServiceDescribe,
+    DirectoryHandleResolutionOutcome, DirectoryResolveHandleRequestBody,
 };
 use arkret_models_identity::http_bodies::IdentityDocumentViewOutcome;
 use arkret_models_identity::{
@@ -19,13 +19,6 @@ use crate::handlers::common::{DepotExt, extract_bound_activity_tracker};
 use crate::services::did_binding;
 
 const DIRECTORY_RESOLVE_FAILURE_FLOOR: Duration = Duration::from_millis(25);
-
-#[handler]
-pub async fn identity_describe(depot: &Depot) -> Result<Json<ServiceDescribe>, ArkretRouteError> {
-    Ok(Json(
-        super::service_describe::service_describe_from_depot(depot).await?,
-    ))
-}
 
 #[handler]
 pub async fn identity_resolve(
@@ -286,7 +279,7 @@ fn directory_handle_delivery_binding(
     let recipient_id = principal_binding.accepted_id.clone();
     Ok(arkret_models_identity::DeliveryBindingHint {
         recipient_id,
-        recipient_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
+        recipient_kind: arkret_models_identity::RecipientServiceKind::Station,
         binding_source: arkret_models_identity::HandleHintBindingSource::Explicit,
         delivery_modes: BTreeSet::from([
             arkret_models_identity::DeliveryMode::Events,

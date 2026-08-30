@@ -45,7 +45,7 @@ pub async fn post_register(
     // grant (principal_unknown) and therefore cannot make any persistent write.
     let site_config = depot.site_config()?;
     let password_manager = depot.password_manager()?;
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let policy_factory = depot.policy_factory()?;
     let limiter = depot.limiter()?;
     let repo_factory = depot.repo_factory()?;
@@ -99,7 +99,7 @@ pub async fn post_register(
         &mut rng,
         &clock,
         &password_manager,
-        principal_server.as_ref(),
+        station.as_ref(),
         policy_factory.as_ref(),
         &limiter,
         BeginPasswordRegistrationRequestBody {
@@ -617,7 +617,7 @@ pub async fn post_finish(
         .map_err(|_| RouteError::BadRequest("invalid id".into()))?;
 
     let site_config = depot.site_config()?;
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let repo_factory = depot.repo_factory()?;
     let input = if req
         .payload()
@@ -649,7 +649,7 @@ pub async fn post_finish(
         repo,
         &mut rng,
         &clock,
-        principal_server.as_ref(),
+        station.as_ref(),
         id,
         None,
         site_config.registration_token_required,

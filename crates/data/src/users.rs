@@ -580,7 +580,7 @@ pub struct UserPhoneAuthenticationCode {
 pub struct PrincipalDidBinding {
     pub id: Ulid,
     pub user_id: Ulid,
-    /// Principal server that verified the submitted DID.
+    /// Station that verified the submitted DID.
     pub audience_id: arkret_identifiers::DidCoreId,
     /// Principal DID supplied by the client and verified by the authoritative host.
     pub principal_id: arkret_identifiers::DidCoreId,
@@ -594,7 +594,7 @@ pub struct PrincipalDidBinding {
     pub accepted_id: arkret_identifiers::DidCoreId,
     pub binding_version: u64,
     pub binding_frontier_digest: arkret_identifiers::Hash,
-    pub principal_authority: arkret_wire::PrincipalAuthorityKey,
+    pub account_id: arkret_wire::AccountId,
     /// Principal Control Realm accepted by the PCR genesis operation that
     /// installed this exact account binding. Lifecycle authoring must use
     /// this frozen authority basis and must never rediscover or guess a PCR.

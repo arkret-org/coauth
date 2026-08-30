@@ -42,9 +42,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::handlers::common::{DepotExt, RouteError};
-use crate::services::principal_server_trust::{
-    self, PrincipalServerTrustResolver, effective_audience,
-};
+use crate::services::station_trust::{self, StationTrustResolver, effective_audience};
 
 const ARKRET_PROTOCOL_VERSION: &str = "1.0";
 
@@ -54,7 +52,7 @@ pub const CLAIM_DEVICE_ID: &str = "org.arkret.device_id";
 
 pub const CLAIM_SESSION_ID: &str = "org.arkret.session_id";
 
-pub const PRINCIPAL_SERVER_SESSION_BIND_SCOPE: &str = "urn:arkret:principal-server:session.bind";
+pub const STATION_SESSION_BIND_SCOPE: &str = "urn:arkret:station:session.bind";
 
 #[derive(Debug, Error)]
 pub enum SessionGrantError {
@@ -253,15 +251,15 @@ pub(crate) enum SessionGrantAuthz {
     Admin,
     /// The caller presented the `server_name` `session.bind` scope.
     /// Allowed for read-only paths (list / introspect).
-    PrincipalServer,
+    Station,
 }
 
 /// Resolved session-grant caller: the authorization tier plus, for a
-/// Principal Server caller, the set of audiences it is allowed to read.
+/// Station caller, the set of audiences it is allowed to read.
 ///
 /// `allowed_audiences` is `None` for an admin caller (unrestricted) and
-/// `Some(..)` for a Principal Server caller. A Principal Server is only ever
-/// authorized for the audience(s) of the principal-server configuration it
+/// `Some(..)` for a Station caller. A Station is only ever
+/// authorized for the audience(s) of the station configuration it
 /// authenticated as, so it must not be able to enumerate session-grant
 /// metadata across other subjects/audiences (SEC-SG-ENUM).
 #[derive(Debug, Clone)]
@@ -278,9 +276,9 @@ impl SessionGrantCaller {
         }
     }
 
-    fn principal_server(allowed_audiences: Vec<String>) -> Self {
+    fn station(allowed_audiences: Vec<String>) -> Self {
         Self {
-            authz: SessionGrantAuthz::PrincipalServer,
+            authz: SessionGrantAuthz::Station,
             allowed_audiences: Some(allowed_audiences),
         }
     }
@@ -290,10 +288,10 @@ impl SessionGrantCaller {
     ///
     /// - An admin caller (`allowed_audiences == None`) is unrestricted: the requested audience is
     ///   honoured as-is and `None` means "all".
-    /// - A Principal Server caller MUST stay within its `allowed_audiences` (SEC-SG-ENUM). When it
-    ///   requests an audience, that audience must be in the allow-list. When it requests none and
-    ///   exactly one audience is configured for it, that single audience is auto-pinned. Otherwise
-    ///   the caller must disambiguate, so cross-subject enumeration is refused.
+    /// - A Station caller MUST stay within its `allowed_audiences` (SEC-SG-ENUM). When it requests
+    ///   an audience, that audience must be in the allow-list. When it requests none and exactly
+    ///   one audience is configured for it, that single audience is auto-pinned. Otherwise the
+    ///   caller must disambiguate, so cross-subject enumeration is refused.
     pub(crate) fn resolve_read_audience(
         &self,
         requested: Option<&str>,
@@ -307,14 +305,14 @@ impl SessionGrantCaller {
                         Ok(Some(audience.to_owned()))
                     } else {
                         Err(ArkretRouteError::Forbidden(
-                            "principal-server caller may only query its own audience".to_owned(),
+                            "station caller may only query its own audience".to_owned(),
                         ))
                     }
                 }
                 None => match allowed.as_slice() {
                     [audience] => Ok(Some(audience.clone())),
                     _ => Err(ArkretRouteError::Forbidden(
-                        "principal-server caller must specify an allowed audience".to_owned(),
+                        "station caller must specify an allowed audience".to_owned(),
                     )),
                 },
             },
@@ -349,19 +347,17 @@ pub(crate) async fn require_session_grant_caller(
         .or_else(|| auth_str.strip_prefix("bearer "))
         .ok_or_else(|| ArkretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
 
-    // Static bearer fallback: a Principal Server may authenticate with a
-    // token configured in `arkret.principal_servers[].
+    // Static bearer fallback: a Station may authenticate with a
+    // token configured in `arkret.stations[].
     // session_grant_introspection_bearer`. This lets a server-to-server caller
-    // skip the DB-backed PAT/OAuth-session lookup. Grants `PrincipalServer`
+    // skip the DB-backed PAT/OAuth-session lookup. Grants `Station`
     // authz only — never `Admin` — so it cannot revoke session grants. The
     // matching server's audience is the only one this caller may read.
     let arkret_config = depot.arkret_config()?;
     let static_bearer_audiences =
-        principal_server_static_session_grant_bearer_audiences(&arkret_config, token);
+        station_static_session_grant_bearer_audiences(&arkret_config, token);
     if !static_bearer_audiences.is_empty() {
-        return Ok(SessionGrantCaller::principal_server(
-            static_bearer_audiences,
-        ));
+        return Ok(SessionGrantCaller::station(static_bearer_audiences));
     }
 
     let now = crate::handlers::make_clock().now();
@@ -447,39 +443,39 @@ pub(crate) async fn require_session_grant_caller(
 
     if crate::handlers::admin::has_admin_scope(&scope) {
         Ok(SessionGrantCaller::admin())
-    } else if scope.contains(PRINCIPAL_SERVER_SESSION_BIND_SCOPE) {
-        // A `session.bind`-scoped caller is a Principal Server. The scope does
+    } else if scope.contains(STATION_SESSION_BIND_SCOPE) {
+        // A `session.bind`-scoped caller is a Station. The scope does
         // not pin which configured server, so the caller may read any of the
-        // configured principal-server audiences (and only those). The list /
+        // configured station audiences (and only those). The list /
         // introspect handlers further require the caller to pin one of these
         // audiences before any subject/device enumeration is allowed.
         let allowed_audiences = arkret_config
-            .principal_servers
+            .stations
             .iter()
-            .filter_map(|server| effective_audience(server, principal_server_trust::shared()))
+            .filter_map(|server| effective_audience(server, station_trust::shared()))
             .map(|audience| audience.to_string())
             .collect();
-        Ok(SessionGrantCaller::principal_server(allowed_audiences))
+        Ok(SessionGrantCaller::station(allowed_audiences))
     } else {
         Err(ArkretRouteError::Forbidden(
-            "missing admin or principal-server scope".to_owned(),
+            "missing admin or station scope".to_owned(),
         ))
     }
 }
 
-pub(crate) fn principal_server_static_session_grant_bearer_matches(
+pub(crate) fn station_static_session_grant_bearer_matches(
     arkret_config: &ArkretConfig,
     token: &str,
 ) -> bool {
-    !principal_server_static_session_grant_bearer_audiences(arkret_config, token).is_empty()
+    !station_static_session_grant_bearer_audiences(arkret_config, token).is_empty()
 }
 
-/// Returns every Principal Server audience whose static
+/// Returns every Station audience whose static
 /// `session_grant_introspection_bearer` matches `token`. Operators may
 /// deliberately share one deployment credential across a cluster; in that
 /// case the credential is authorized for exactly the matching configured
 /// audiences rather than whichever entry happens to appear first.
-fn principal_server_static_session_grant_bearer_audiences(
+fn station_static_session_grant_bearer_audiences(
     arkret_config: &ArkretConfig,
     token: &str,
 ) -> Vec<String> {
@@ -487,7 +483,7 @@ fn principal_server_static_session_grant_bearer_audiences(
         return Vec::new();
     }
     arkret_config
-        .principal_servers
+        .stations
         .iter()
         .filter(|server| {
             server
@@ -495,7 +491,7 @@ fn principal_server_static_session_grant_bearer_audiences(
                 .as_deref()
                 .is_some_and(|configured| crate::util::constant_time_token_eq(configured, token))
         })
-        .filter_map(|server| effective_audience(server, principal_server_trust::shared()))
+        .filter_map(|server| effective_audience(server, station_trust::shared()))
         .map(|audience| audience.to_string())
         .collect()
 }
@@ -709,7 +705,7 @@ pub(crate) fn issuer_did_for(arkret_config: &ArkretConfig) -> arkret_identifiers
 
 /// Local OIDC subject for Account Authority-issued OAuth tokens.
 ///
-/// This identifies the authenticated coauth account. Principal-server DIDs are
+/// This identifies the authenticated coauth account. Station DIDs are
 /// resolved later by the `session-grants` bridge for the requested audience.
 pub(crate) fn oidc_subject_for_user(_arkret_config: &ArkretConfig, user: &User) -> String {
     user.sub.clone()
@@ -731,8 +727,8 @@ pub(crate) async fn principal_did_binding_for_user<R>(
 where
     R: RepositoryAccess,
 {
-    for server in &arkret_config.principal_servers {
-        let Some(audience) = effective_audience(server, principal_server_trust::shared()) else {
+    for server in &arkret_config.stations {
+        let Some(audience) = effective_audience(server, station_trust::shared()) else {
             continue;
         };
         if let Some(row) = repo
@@ -868,7 +864,7 @@ fn derived_trust_domain_scope(host: &str) -> String {
 pub(crate) fn is_allowed_session_grant_audience(
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
-    resolved: &PrincipalServerTrustResolver,
+    resolved: &StationTrustResolver,
     audience: &str,
 ) -> bool {
     let audience = audience.trim();
@@ -877,27 +873,25 @@ pub(crate) fn is_allowed_session_grant_audience(
     }
 
     audience == required_audience_for(url_builder, arkret_config)
-        || arkret_config.principal_servers.iter().any(|server| {
+        || arkret_config.stations.iter().any(|server| {
             effective_audience(server, resolved)
                 .as_ref()
                 .is_some_and(|effective| effective.as_str() == audience)
         })
 }
 
-/// Reasons why a caller-supplied principal-server audience could not be
+/// Reasons why a caller-supplied station audience could not be
 /// honoured. Distinct error variants let the HTTP layer return precise
 /// 4xx codes instead of a generic "bad request".
 #[derive(Debug, Clone, thiserror::Error)]
 pub(crate) enum SessionGrantTargetError {
     #[error("requested audience is not configured for this coauth service")]
     UnknownAudience,
-    #[error(
-        "audience resolves to the local admin surface; specify a principal_server audience instead"
-    )]
+    #[error("audience resolves to the local admin surface; specify a station audience instead")]
     LocalAudienceNotAllowed,
 }
 
-/// Resolve the principal-server target for a password login session grant.
+/// Resolve the station target for a password login session grant.
 ///
 /// `requested_audience` is the audience the client proved during the login
 /// ceremony (e.g. carried in a request body field or audience-bound state).
@@ -905,33 +899,31 @@ pub(crate) enum SessionGrantTargetError {
 /// is accepted — falling back to "first `server_name` wins" silently
 /// would let any caller mint a grant for an audience they never asked for.
 ///
-/// When `requested_audience` is `None` and exactly one principal server is
+/// When `requested_audience` is `None` and exactly one Station is
 /// configured, that single server is used. With zero or multiple principal
 /// servers and no explicit choice, returns `UnknownAudience` so the caller
 /// must disambiguate.
 pub(crate) fn password_login_session_grant_target(
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
-    resolved: &PrincipalServerTrustResolver,
+    resolved: &StationTrustResolver,
     requested_audience: Option<&str>,
 ) -> Result<SessionGrantTarget, SessionGrantTargetError> {
     if let Some(audience) = requested_audience.map(str::trim).filter(|a| !a.is_empty()) {
-        if let Some((server, effective)) =
-            arkret_config.principal_servers.iter().find_map(|server| {
-                effective_audience(server, resolved)
-                    .filter(|effective| effective.as_str() == audience)
-                    .map(|effective| (server, effective))
-            })
-        {
+        if let Some((server, effective)) = arkret_config.stations.iter().find_map(|server| {
+            effective_audience(server, resolved)
+                .filter(|effective| effective.as_str() == audience)
+                .map(|effective| (server, effective))
+        }) {
             return Ok(SessionGrantTarget {
                 audience_id: effective,
-                principal_server_name: Some(server.name.clone()),
-                principal_server_endpoint: Some(server.endpoint.to_string()),
+                station_name: Some(server.name.clone()),
+                station_endpoint: Some(server.endpoint.to_string()),
             });
         }
 
         // The local admin audience never becomes a session-grant audience:
-        // there is no principal server to bind the grant to.
+        // there is no Station to bind the grant to.
         if audience == required_audience_for(url_builder, arkret_config) {
             return Err(SessionGrantTargetError::LocalAudienceNotAllowed);
         }
@@ -939,18 +931,18 @@ pub(crate) fn password_login_session_grant_target(
         return Err(SessionGrantTargetError::UnknownAudience);
     }
 
-    match arkret_config.principal_servers.as_slice() {
-        // A sole principal server with no explicit audience whose describe
+    match arkret_config.stations.as_slice() {
+        // A sole Station with no explicit audience whose describe
         // probe has not yet landed fails closed (UnknownAudience) rather than
         // minting a grant with no bindable audience.
         // This deliberate fail-closed behavior is documented in
-        // `services::principal_server_trust`: startup may reject briefly
+        // `services::station_trust`: startup may reject briefly
         // rather than minting a grant with an audience that cannot be bound.
         [server] => Ok(SessionGrantTarget {
             audience_id: effective_audience(server, resolved)
                 .ok_or(SessionGrantTargetError::UnknownAudience)?,
-            principal_server_name: Some(server.name.clone()),
-            principal_server_endpoint: Some(server.endpoint.to_string()),
+            station_name: Some(server.name.clone()),
+            station_endpoint: Some(server.endpoint.to_string()),
         }),
         [] => Err(SessionGrantTargetError::UnknownAudience),
         _ => Err(SessionGrantTargetError::UnknownAudience),
@@ -1113,19 +1105,19 @@ pub async fn debug_issue_dpop_grant(
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
         .ok_or(ArkretRouteError::NotFound)?;
-    binding.principal_authority.validate().map_err(|error| {
+    binding.account_id.validate().map_err(|error| {
         ArkretRouteError::coded(
             StatusCode::PRECONDITION_FAILED,
             arkret_wire::ErrorCode::FAILED_PRECONDITION,
             error.to_string(),
         )
     })?;
-    let principal_authority = binding.principal_authority;
+    let account_id = binding.account_id;
     let principal_id = binding.principal_id;
     let scopes = body.scopes.clone().unwrap_or_else(|| {
         vec![
             format!("urn:arkret:client:device:{}", body.device_id),
-            PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
+            STATION_SESSION_BIND_SCOPE.to_owned(),
         ]
     });
 
@@ -1233,7 +1225,7 @@ pub async fn debug_issue_dpop_grant(
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         scopes,
         Some(&principal_id),
-        &principal_authority,
+        &account_id,
         jkt.clone(),
         arkret_models_identity::SessionGrantDeviceBinding {
             device_id: arkret_identifiers::DeviceId::new(body.device_id.clone())

@@ -177,7 +177,7 @@ impl<'a> PeerProtocolClient<'a> {
     }
 
     /// Linearize one exact session-grant issue or refresh intent against the
-    /// origin Principal Server's durable device-revocation state.
+    /// origin Station's durable device-revocation state.
     pub async fn post_device_revocation_gate_check(
         &self,
         request: &DeviceRevocationGateCheckRequestBody,

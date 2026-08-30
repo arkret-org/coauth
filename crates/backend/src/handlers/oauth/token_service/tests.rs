@@ -130,7 +130,7 @@ async fn authorization_code_openid_exchange_does_not_require_principal_id_row() 
     let arkret_config = ArkretConfig::default();
     let templates = test_templates(url_builder.clone()).await;
     let key_store = ed25519_keystore();
-    let principal_server: Arc<dyn ConnectorAdmin> = Arc::new(DbConnectorAdmin::new(
+    let station: Arc<dyn ConnectorAdmin> = Arc::new(DbConnectorAdmin::new(
         "example.com",
         factory.clone().boxed(),
         arkret_config.clone(),
@@ -235,7 +235,7 @@ async fn authorization_code_openid_exchange_does_not_require_principal_id_row() 
         &arkret_config,
         &site_config,
         repo,
-        &principal_server,
+        &station,
         &templates,
         None,
     )
@@ -350,7 +350,7 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
         runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
             "did:web:issuer.example",
         ),
-        // Session-grant audiences are Principal Server core DIDs.
+        // Session-grant audiences are Station core DIDs.
         admin_audience: Some("ak:did_core:web:principal.example.com".to_owned()),
         ..ArkretConfig::default()
     };
@@ -360,11 +360,11 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
         coauth_jose::jwk::JsonWebKeyPublicParameters::from(&PrivateKey::generate_ed25519(&mut rng)),
     );
     let principal_id = "ak:did_core:web:subject.example";
-    let principal_server_id =
+    let station_id =
         crate::handlers::arkret::required_audience_for(&grant_url_builder, &grant_config);
-    let principal_authority = arkret_wire::PrincipalAuthorityKey::new(
+    let account_id = arkret_wire::AccountId::new(
         arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
-        arkret_identifiers::DidCoreId::new(principal_server_id).unwrap(),
+        arkret_identifiers::DidCoreId::new(station_id).unwrap(),
     );
     let grant_material = crate::handlers::arkret::issue_session_grant(
         &mut rng,
@@ -375,11 +375,11 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
         &browser_session,
         grant_public_jwk,
         principal_id,
-        &principal_authority,
+        &account_id,
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
             .unwrap(),
         vec![
-            crate::handlers::arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
+            crate::handlers::arkret::STATION_SESSION_BIND_SCOPE.to_owned(),
             "urn:arkret:client:device:device-1".to_owned(),
         ],
     )

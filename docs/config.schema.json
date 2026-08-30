@@ -1306,15 +1306,15 @@
       "description": "Arkret-specific deployment settings layered on top of the generic OIDC\nand account-management configuration.",
       "type": "object",
       "properties": {
-        "principal_servers": {
-          "description": "Principal Server audiences trusted to consume session grants and admin\ntokens emitted by coauth.",
+        "stations": {
+          "description": "Station audiences trusted to consume session grants and admin\ntokens emitted by coauth.",
           "type": "array",
           "items": {
-            "$ref": "#/definitions/PrincipalServerConfig"
+            "$ref": "#/definitions/StationConfig"
           }
         },
         "identity_services": {
-          "description": "Trusted services that provide the standard service-registration role\nwithout also acting as a Principal Server.",
+          "description": "Trusted services that provide the standard service-registration role\nwithout also acting as a Station.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/IdentityServiceConfig"
@@ -1355,7 +1355,7 @@
           ]
         },
         "session_grant_ttl": {
-          "description": "Lifetime of Arkret session grants, in seconds.\n\nThese are the DPoP-bound JWT grants returned by the REST auth bridge\nlogin/exchange paths and rotated through\n`/_arkret/gate/account/session-grants/refresh`. Default: 28800 (8h) —\naccess bearers minted from a grant are short-lived (capped Principal-Server\nside), so a multi-hour grant gives a normal working session without\nlong-lived bearers, within the spec ceiling (minutes-to-hours).",
+          "description": "Lifetime of Arkret session grants, in seconds.\n\nThese are the DPoP-bound JWT grants returned by the REST auth bridge\nlogin/exchange paths and rotated through\n`/_arkret/gate/account/session-grants/refresh`. Default: 28800 (8h) —\naccess bearers minted from a grant are short-lived (capped Station\nside), so a multi-hour grant gives a normal working session without\nlong-lived bearers, within the spec ceiling (minutes-to-hours).",
           "type": "integer",
           "format": "uint64",
           "minimum": 60,
@@ -1376,14 +1376,14 @@
           "default": 2
         },
         "trust_domain": {
-          "description": "Round R2/R3 (2026-05-20) — deployment trust-domain identifier\ninjected into Realm policy and the server-describe document.\n\nWire form: `ak:trust_domain:<scope>` where `<scope>` matches\n`[a-z0-9._:-]{1,128}`. This value binds peer and recovery\nauthorization transcripts to the deployment.\n\nWhen omitted, callers expected to honour cross-deployment replay\nprotection (`Realm` policy, principal-server describe) MUST be\ntold the trust domain is unset and fail closed.\n\nTypically provisioned consistently across the deployment.",
+          "description": "Round R2/R3 (2026-05-20) — deployment trust-domain identifier\ninjected into Realm policy and the server-describe document.\n\nWire form: `ak:trust_domain:<scope>` where `<scope>` matches\n`[a-z0-9._:-]{1,128}`. This value binds peer and recovery\nauthorization transcripts to the deployment.\n\nWhen omitted, callers expected to honour cross-deployment replay\nprotection (`Realm` policy, station describe) MUST be\ntold the trust domain is unset and fail closed.\n\nTypically provisioned consistently across the deployment.",
           "type": [
             "string",
             "null"
           ]
         },
         "password_login_session_grants_enabled": {
-          "description": "Fail-closed gate for the temporary password-login bridge that returns a\nArkret principal-server session grant directly from\n`POST /_coauth/gate/account/auth/login`.\n\nDefaults to `false`: production callers must use the OIDC/passkey bridge\nand proof-bound grant exchange. When enabled for development, the login\nhandler still requires a valid DPoP proof before minting the grant.",
+          "description": "Fail-closed gate for the temporary password-login bridge that returns a\nArkret station session grant directly from\n`POST /_coauth/gate/account/auth/login`.\n\nDefaults to `false`: production callers must use the OIDC/passkey bridge\nand proof-bound grant exchange. When enabled for development, the login\nhandler still requires a valid DPoP proof before minting the grant.",
           "type": "boolean"
         },
         "admin_org_id": {
@@ -1408,7 +1408,7 @@
           "maximum": 86400
         },
         "development_auto_enrollment_hosts": {
-          "description": "Exact local HTTPS host names eligible for development-mode automatic\nprincipal-server trust enrollment.\n\nEvery entry must be a bare lowercase host name (no scheme, port, path\nor wildcard). Auto-enrollment only runs when ALL of these hold: the\nprocess runs in explicit development mode, the configured endpoint is\nan HTTPS URL whose host exactly matches one entry, and neither a\nconfig pin nor a persisted enrollment exists. It never overwrites an\nexisting pin and must stay empty in production.",
+          "description": "Exact local HTTPS host names eligible for development-mode automatic\nstation trust enrollment.\n\nEvery entry must be a bare lowercase host name (no scheme, port, path\nor wildcard). Auto-enrollment only runs when ALL of these hold: the\nprocess runs in explicit development mode, the configured endpoint is\nan HTTPS URL whose host exactly matches one entry, and neither a\nconfig pin nor a persisted enrollment exists. It never overwrites an\nexisting pin and must stay empty in production.",
           "type": "array",
           "items": {
             "type": "string"
@@ -1417,8 +1417,8 @@
       },
       "additionalProperties": false
     },
-    "PrincipalServerConfig": {
-      "description": "Trusted Principal Server metadata published through Arkret discovery.",
+    "StationConfig": {
+      "description": "Trusted Station metadata published through Arkret discovery.",
       "type": "object",
       "properties": {
         "name": {
@@ -1426,26 +1426,26 @@
           "type": "string"
         },
         "endpoint": {
-          "description": "Base URL of the Principal Server integration point.",
+          "description": "Base URL of the Station integration point.",
           "type": "string",
           "format": "uri"
         },
         "service_id": {
-          "description": "Stable service identity core for authenticated S2S authorization.\n\nOptional explicit authorization pin, highest priority. When omitted,\nthe effective pin comes from the persisted trust enrollment written by\n`coauth principal-server trust bootstrap` (or, under the strict\ndevelopment-mode gate, the automatic first enrollment). Describe\nmetadata may confirm a pin but can never discover or replace it; an\nendpoint URL or bearer token is never converted into an identity core.\nA configured value that conflicts with the persisted enrollment fails\nstartup closed.",
+          "description": "Stable service identity core for authenticated S2S authorization.\n\nOptional explicit authorization pin, highest priority. When omitted,\nthe effective pin comes from the persisted trust enrollment written by\n`coauth station trust bootstrap` (or, under the strict\ndevelopment-mode gate, the automatic first enrollment). Describe\nmetadata may confirm a pin but can never discover or replace it; an\nendpoint URL or bearer token is never converted into an identity core.\nA configured value that conflicts with the persisted enrollment fails\nstartup closed.",
           "type": [
             "string",
             "null"
           ]
         },
         "session_grant_introspection_bearer": {
-          "description": "Optional static bearer for the Account Authority / Principal Server\ntrust edge. The Principal Server presents it to coauth introspection and\nAuth-side logout; coauth presents the same deployment credential when\nreading the standard agent projection for lifecycle authorization.",
+          "description": "Optional static bearer for the Account Authority / Station\ntrust edge. The Station presents it to coauth introspection and\nAuth-side logout; coauth presents the same deployment credential when\nreading the standard agent projection for lifecycle authorization.",
           "type": [
             "string",
             "null"
           ]
         },
         "embedded_webvh_registration_bearer": {
-          "description": "Optional static bearer token coauth should send when writing embedded\n`did:webvh` registration records into this Principal Server.",
+          "description": "Optional static bearer token coauth should send when writing embedded\n`did:webvh` registration records into this Station.",
           "type": [
             "string",
             "null"

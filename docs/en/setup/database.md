@@ -69,7 +69,7 @@ coauth database migrate
 
 Once the database is up, the remaining steps are to:
 
- - [Configure Principal Server discovery (recommended)](./principal-server.md)
+ - [Configure Station discovery (recommended)](./station.md)
  - [Setup email sending (optional)](../reference/configuration.md#email)
  - [Configure a reverse proxy (optional)](./reverse-proxy.md)
  - [Run the service](./running.md)

@@ -64,13 +64,12 @@ pub const COAUTH_ADMIN: ScopeToken = ScopeToken::from_static("urn:coauth:admin")
 /// `urn:arkret:client:*` — Arkret client capability family.
 pub const ARKRET_CLIENT: ScopeToken = ScopeToken::from_static("urn:arkret:client:*");
 
-/// `urn:arkret:principal-server:*` — Principal Server capability family.
-pub const ARKRET_PRINCIPAL_SERVER: ScopeToken =
-    ScopeToken::from_static("urn:arkret:principal-server:*");
+/// `urn:arkret:station:*` — Station capability family.
+pub const ARKRET_STATION: ScopeToken = ScopeToken::from_static("urn:arkret:station:*");
 
-/// `urn:arkret:principal-server:session.bind` — session-grant binding scope.
-pub const ARKRET_PRINCIPAL_SERVER_SESSION_BIND: ScopeToken =
-    ScopeToken::from_static("urn:arkret:principal-server:session.bind");
+/// `urn:arkret:station:session.bind` — session-grant binding scope.
+pub const ARKRET_STATION_SESSION_BIND: ScopeToken =
+    ScopeToken::from_static("urn:arkret:station:session.bind");
 
 /// `urn:arkret:admin:*` — Arkret admin capability family.
 pub const ARKRET_ADMIN: ScopeToken = ScopeToken::from_static("urn:arkret:admin:*");

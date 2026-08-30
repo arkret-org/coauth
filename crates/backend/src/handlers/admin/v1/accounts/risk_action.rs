@@ -177,7 +177,7 @@ fn account_risk_action_mutation(action: &str) -> Result<AccountRiskActionMutatio
                 principal_erase: true,
             },
             mutation_kind: "account_erasure_scheduled",
-            mutation_description: "account disabled and PrincipalServer erasure job scheduled through services.user_admin",
+            mutation_description: "account disabled and Station erasure job scheduled through services.user_admin",
         }),
         "reset_recovery" => Ok(AccountRiskActionMutation {
             operation: AccountRiskActionOperation::PatchUser {
@@ -819,7 +819,7 @@ pub async fn execute(
         ..
     } = extract_call_context(req, depot).await?;
     let arkret_config = depot.arkret_config()?;
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let key_store = depot.key_store()?;
     let service_id = service_id_for(&arkret_config);
     let service_did = crate::handlers::arkret::issuer_did_for(&arkret_config);
@@ -872,7 +872,7 @@ pub async fn execute(
             &mut repo,
             &mut rng,
             &*clock,
-            principal_server.as_ref(),
+            station.as_ref(),
             admin_user.as_ref(),
             account.id,
             patch,

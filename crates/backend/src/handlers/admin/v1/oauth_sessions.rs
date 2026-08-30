@@ -23,7 +23,7 @@ use crate::handlers::admin::response::{
 use crate::{AppError, JsonResult};
 
 /// Terminate an active OAuth session. If the session is associated with a
-/// user, a device-sync job is enqueued so that downstream `PrincipalServers`
+/// user, a device-sync job is enqueued so that downstream `Stations`
 /// learn about the revocation promptly.
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.oauth_sessions.finish", skip_all)]
@@ -56,7 +56,7 @@ pub async fn finish_session(
     }
 
     // When the session belongs to a user, schedule a device list sync so that
-    // the PrincipalServer is notified of the change.
+    // the Station is notified of the change.
     if let Some(uid) = oauth_session.user_id {
         tracing::info!(user.id = %uid, "Scheduling device sync job for user");
         let sync_job = SyncDevicesJob::new_for_id(uid);

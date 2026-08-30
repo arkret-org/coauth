@@ -120,7 +120,7 @@ pub(crate) struct TestState {
     pub metadata_cache: MetadataCache,
     pub encrypter: Encrypter,
     pub url_builder: UrlBuilder,
-    pub principal_server_admin: Arc<DbConnectorAdmin>,
+    pub station_admin: Arc<DbConnectorAdmin>,
     pub policy_factory: Arc<PolicyFactory>,
     pub password_manager: PasswordManager,
     pub site_config: SiteConfig,
@@ -333,8 +333,8 @@ impl Handler for InjectTestState {
         depot.insert("limiter", state.limiter.clone());
         depot.insert("policy_factory", state.policy_factory.clone());
         depot.insert(
-            "principal_server_admin",
-            Arc::clone(&state.principal_server_admin) as Arc<dyn ConnectorAdmin>,
+            "station_admin",
+            Arc::clone(&state.station_admin) as Arc<dyn ConnectorAdmin>,
         );
         depot.insert("app_version", AppVersion("v0.0.0-test"));
         depot.insert("activity_tracker", state.activity_tracker.clone());
@@ -376,23 +376,21 @@ impl Handler for InjectTestState {
     }
 }
 
-/// Principal Server core DID used by [`TestState::from_pool_with_principal_server`].
+/// Station core DID used by [`TestState::from_pool_with_station`].
 ///
 /// Account-status publication and principal-DID resolution both require a
-/// single configured Principal Server whose audience is a `did_core_id`, so
+/// single configured Station whose audience is a `did_core_id`, so
 /// the tests that exercise those paths must configure one.
-pub(crate) const TEST_PRINCIPAL_SERVER_AUDIENCE: &str = "ak:did_core:webvh:zTestPrincipalServer";
+pub(crate) const TEST_STATION_AUDIENCE: &str = "ak:did_core:webvh:zTestStation";
 
-fn test_arkret_config(
-    principal_servers: Vec<coauth_config::PrincipalServerConfig>,
-) -> ArkretConfig {
+fn test_arkret_config(stations: Vec<coauth_config::StationConfig>) -> ArkretConfig {
     // Seed the runtime identity fixture so DID-shaped assertions stay
     // stable without introducing a configuration-level service DID.
     ArkretConfig {
         runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
             "did:web:example.com",
         ),
-        principal_servers,
+        stations,
         ..ArkretConfig::default()
     }
 }
@@ -404,20 +402,18 @@ impl TestState {
     }
 
     /// Create a new test state whose Arkret config carries exactly one
-    /// Principal Server, the destination required by account-status
+    /// Station, the destination required by account-status
     /// publication and principal-DID resolution.
-    pub async fn from_pool_with_principal_server(
+    pub async fn from_pool_with_station(
         pool: DieselPool<AsyncPgConnection>,
     ) -> Result<Self, anyhow::Error> {
         Self::build(
             pool,
             test_site_config(),
-            test_arkret_config(vec![coauth_config::PrincipalServerConfig {
+            test_arkret_config(vec![coauth_config::StationConfig {
                 name: "principal-test".to_owned(),
                 endpoint: "https://principal.example/".parse()?,
-                service_id: Some(arkret_identifiers::DidCoreId::new(
-                    TEST_PRINCIPAL_SERVER_AUDIENCE,
-                )?),
+                service_id: Some(arkret_identifiers::DidCoreId::new(TEST_STATION_AUDIENCE)?),
                 session_grant_introspection_bearer: None,
                 embedded_webvh_registration_bearer: None,
             }]),
@@ -493,7 +489,7 @@ impl TestState {
         let policy_factory =
             policy_factory(&site_config.server_name, serde_json::json!({})).await?;
 
-        let principal_server_admin = Arc::new(DbConnectorAdmin::new(
+        let station_admin = Arc::new(DbConnectorAdmin::new(
             site_config.server_name.clone(),
             PgRepositoryFactory::new(pool.clone()).boxed(),
             arkret_config.clone(),
@@ -527,7 +523,7 @@ impl TestState {
             database_url,
             Arc::clone(&clock),
             &notifications,
-            principal_server_admin.clone(),
+            station_admin.clone(),
             url_builder.clone(),
             &site_config,
             shutdown_token.child_token(),
@@ -546,7 +542,7 @@ impl TestState {
             metadata_cache,
             encrypter,
             url_builder,
-            principal_server_admin,
+            station_admin,
             policy_factory,
             password_manager,
             site_config,
@@ -795,7 +791,7 @@ impl TestState {
     }
 
     /// Persist an accepted principal-DID binding for `user` against
-    /// [`TEST_PRINCIPAL_SERVER_AUDIENCE`] and return the bound principal core
+    /// [`TEST_STATION_AUDIENCE`] and return the bound principal core
     /// DID.
     ///
     /// Every admin path that touches account status, risk actions, or the DID
@@ -816,7 +812,7 @@ impl TestState {
             crate::handlers::arkret::issuer_did_for(&self.arkret_config).to_string();
         let input = coauth_storage_postgres::test_utils::verified_principal_binding_input(
             &account_authority_did,
-            TEST_PRINCIPAL_SERVER_AUDIENCE,
+            TEST_STATION_AUDIENCE,
             principal_id.clone(),
             key_log_head,
         );
@@ -834,7 +830,7 @@ impl TestState {
         // that does not begin at `active`.
         crate::services::account_status_publication::author_transition_plan(
             &mut repo,
-            self.principal_server_admin.as_ref(),
+            self.station_admin.as_ref(),
             &self.key_store,
             crate::handlers::arkret::service_id_for(&self.arkret_config).as_str(),
             user,

@@ -141,12 +141,12 @@ pub mod organization_control;
 pub mod personal;
 /// Policy data repositories.
 pub mod policy_data;
-/// Principal Server trust enrollment repositories.
-pub mod principal_server_trust;
 /// Queue repositories.
 pub mod queue;
 /// Recovery authority ticket-consumption repositories.
 pub mod recovery_authority;
+/// Station trust enrollment repositories.
+pub mod station_trust;
 /// Upstream OAuth repositories.
 pub mod upstream_oauth;
 /// User repositories.

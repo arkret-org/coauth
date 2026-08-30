@@ -173,11 +173,11 @@ pub async fn account_register_endpoint(
         ));
     }
     validate_initial_session_request(identity_creation, &grant)?;
-    // Resolve the exact Principal Server once for the whole registration
+    // Resolve the exact Station once for the whole registration
     // transaction. The same service identity is the handoff/session audience,
     // the PCR submission target, and the server pinned by the resulting
-    // PrincipalAuthorityKey.
-    let principal_server = principal_server_target(depot, &grant.audience_id)?;
+    // AccountId.
+    let station = station_target(depot, &grant.audience_id)?;
     let browser_session_id = grant.browser_session_id.ok_or_else(|| {
         failed_precondition("identity creation requires its originating browser session")
     })?;
@@ -215,8 +215,8 @@ pub async fn account_register_endpoint(
         IdentityCreationLeaseState::Reserved => {
             let outcome = soland_webvh::submit_did_operation(
                 &depot.http_client()?,
-                &principal_server.endpoint,
-                principal_server.bearer.as_deref(),
+                &station.endpoint,
+                station.bearer.as_deref(),
                 &identity_creation.did_operation,
             )
             .await
@@ -337,13 +337,13 @@ pub async fn account_register_endpoint(
         let http_client = depot.http_client()?;
         let key_store = depot.key_store()?;
         let peer = PeerProtocolClient::new(
-            Some(&principal_server.endpoint),
+            Some(&station.endpoint),
             &http_client,
             &key_store,
             issuer_did_for(&config),
             arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
                 source_id: service_id_for(&config),
-                destination_id: principal_server.service_id.clone(),
+                destination_id: station.service_id.clone(),
             },
             trust_domain.clone(),
             trust_domain,
@@ -382,15 +382,13 @@ pub async fn account_register_endpoint(
             .map_err(|error| failed_precondition(error.to_string()))?;
         outcome
     };
-    if pcr_outcome.receipt.issuer_id != principal_server.service_id {
+    if pcr_outcome.receipt.issuer_id != station.service_id {
         return Err(failed_precondition(
-            "PCR genesis receipt issuer does not match the selected Principal Server",
+            "PCR genesis receipt issuer does not match the selected Station",
         ));
     }
-    let principal_authority = arkret_wire::PrincipalAuthorityKey::new(
-        body.principal_id.clone(),
-        principal_server.service_id.clone(),
-    );
+    let account_id =
+        arkret_wire::AccountId::new(body.principal_id.clone(), station.service_id.clone());
 
     let operation_status = match registry_outcome.status {
         DidOperationSubmitStatus::Accepted => IdentityCreationOperationStatus::Accepted,
@@ -480,7 +478,7 @@ pub async fn account_register_endpoint(
                         &*clock,
                         &user,
                         VerifiedPrincipalDidBindingInput {
-                            audience_id: principal_server.service_id.clone(),
+                            audience_id: station.service_id.clone(),
                             principal_id: body.principal_id.clone(),
                             key_log_head: head_event_digest,
                             verified_did: body.did.clone(),
@@ -489,14 +487,14 @@ pub async fn account_register_endpoint(
                                 .did_version_id
                                 .clone(),
                             binding_receipt: receipt.clone(),
-                            accepted_id: principal_server.service_id.clone(),
+                            accepted_id: station.service_id.clone(),
                             binding_version: 1,
                             binding_frontier_digest: arkret_identifiers::Hash::new(
                                 arkret_canonical::canonical_sha256(&receipt)
                                     .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
                             )
                             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-                            principal_authority: principal_authority.clone(),
+                            account_id: account_id.clone(),
                             principal_control_realm_id: identity_creation
                                 .control_proof
                                 .pcr_realm_id
@@ -506,7 +504,7 @@ pub async fn account_register_endpoint(
                     .await?
             }
         };
-        let account_status_connector = depot.principal_server()?;
+        let account_status_connector = depot.station()?;
         let account_authority_id = service_id_for(&depot.arkret_config()?);
         let initial_status_publication = author_transition_plan(
             &mut repo,
@@ -545,12 +543,12 @@ pub async fn account_register_endpoint(
 
     // The account-first flow mints its initial grant directly instead of
     // passing through the OIDC exchange path. Keep the same fail-closed
-    // invariant here: the Principal Server account and primary localpart must
+    // invariant here: the Station account and primary localpart must
     // be durably projected before a usable grant can escape this saga.
     //
     // Account projection is idempotent, so a retry after a later Coauth
     // failure safely replays this step. Do not hold a Coauth transaction open
-    // across the Principal Server request.
+    // across the Station request.
     repo.cancel().await.ok();
     let verified_principal = VerifiedPrincipalIdentity {
         principal_id: body.principal_id.clone(),
@@ -558,9 +556,9 @@ pub async fn account_register_endpoint(
     };
     ensure_soland_account_registered(
         &depot.http_client()?,
-        Some(principal_server.endpoint.as_str()),
+        Some(station.endpoint.as_str()),
         &verified_principal,
-        principal_server.bearer.as_deref(),
+        station.bearer.as_deref(),
         browser_session.user.display_name.as_deref(),
         Some(identity_creation.initial_session.device_id.as_str()),
         browser_session.user.localpart.as_str(),
@@ -589,7 +587,7 @@ pub async fn account_register_endpoint(
             .map_err(|error| proof_invalid(error.to_string()))?;
     let device_binding = acquire_human_device_binding(
         depot,
-        &principal_authority,
+        &account_id,
         initial.device_id.clone(),
         arkret_wire::DeviceRevocationGateActionClass::SessionGrantIssue,
         None,
@@ -612,7 +610,7 @@ pub async fn account_register_endpoint(
             .map(|operation| operation.as_str().to_owned())
             .collect(),
         Some(&body.principal_id),
-        &principal_authority,
+        &account_id,
         grant.cnf_jkt.clone(),
         device_binding,
         arkret_models_identity::SessionGrantProofKind::AccountHandoff,
@@ -805,31 +803,26 @@ fn validate_registry_outcome(
     Ok(())
 }
 
-struct PrincipalServerTarget {
+struct StationTarget {
     endpoint: url::Url,
     service_id: arkret_identifiers::DidCoreId,
     bearer: Option<String>,
 }
 
-fn principal_server_target(
-    depot: &Depot,
-    audience: &str,
-) -> Result<PrincipalServerTarget, ArkretRouteError> {
+fn station_target(depot: &Depot, audience: &str) -> Result<StationTarget, ArkretRouteError> {
     let config = depot.arkret_config()?;
     let server = config
-        .principal_servers
+        .stations
         .iter()
         .find(|server| {
-            crate::services::principal_server_trust::effective_audience_shared(server)
+            crate::services::station_trust::effective_audience_shared(server)
                 .as_ref()
                 .is_some_and(|candidate| candidate.as_str() == audience)
         })
-        .ok_or_else(|| {
-            failed_precondition("handoff audience has no configured principal server")
-        })?;
-    let service_id = crate::services::principal_server_trust::effective_audience_shared(server)
-        .ok_or_else(|| failed_precondition("principal server identity is unavailable or stale"))?;
-    Ok(PrincipalServerTarget {
+        .ok_or_else(|| failed_precondition("handoff audience has no configured Station"))?;
+    let service_id = crate::services::station_trust::effective_audience_shared(server)
+        .ok_or_else(|| failed_precondition("Station identity is unavailable or stale"))?;
+    Ok(StationTarget {
         endpoint: server.endpoint.clone(),
         service_id,
         bearer: server
@@ -870,7 +863,7 @@ fn map_peer_error(error: PeerProtocolClientError) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::SERVICE_UNAVAILABLE,
         arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
-        format!("principal server PCR genesis submission failed: {error}"),
+        format!("Station PCR genesis submission failed: {error}"),
     )
 }
 

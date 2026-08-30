@@ -218,12 +218,12 @@ impl PrincipalAccountStatusPublicationRequest {
 }
 
 /// Request to deliver a controller-approved Agent key authorization to the
-/// configured Principal Server.
+/// configured Station.
 #[derive(Debug, Clone)]
 pub struct PrincipalAgentKeyPairCommitRequest {
     idempotency_key: String,
     request_digest: String,
-    principal_server_name: String,
+    station_name: String,
     body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody,
 }
 
@@ -232,13 +232,13 @@ impl PrincipalAgentKeyPairCommitRequest {
     pub fn new(
         idempotency_key: String,
         request_digest: String,
-        principal_server_name: String,
+        station_name: String,
         body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody,
     ) -> Self {
         Self {
             idempotency_key,
             request_digest,
-            principal_server_name,
+            station_name,
             body,
         }
     }
@@ -254,8 +254,8 @@ impl PrincipalAgentKeyPairCommitRequest {
     }
 
     #[must_use]
-    pub fn principal_server_name(&self) -> &str {
-        &self.principal_server_name
+    pub fn station_name(&self) -> &str {
+        &self.station_name
     }
 
     #[must_use]
@@ -278,7 +278,7 @@ impl PrincipalAgentKeyPairCommitRequest {
 pub trait ConnectorAdmin: Send + Sync {
     /// Get the principal system authority used for generated account
     /// identifiers.
-    fn principal_authority(&self) -> &str;
+    fn account_id(&self) -> &str;
 
     /// Resolve the configured destination name and exact service audience
     /// used to select a durable account/PCR binding.
@@ -296,7 +296,7 @@ pub trait ConnectorAdmin: Send + Sync {
     ///
     /// * `handle` - The local account handle.
     fn principal_address(&self, handle: &str) -> String {
-        format!("{handle}@{}", self.principal_authority())
+        format!("{handle}@{}", self.account_id())
     }
 
     /// Verify a bearer token coming from a downstream principal service.
@@ -530,8 +530,8 @@ where
     W: AsAdmin + Send + Sync,
     W::Target: ConnectorAdmin,
 {
-    fn principal_authority(&self) -> &str {
-        self.as_admin().principal_authority()
+    fn account_id(&self) -> &str {
+        self.as_admin().account_id()
     }
 
     async fn verify_token(&self, token: &str) -> Result<bool, anyhow::Error> {

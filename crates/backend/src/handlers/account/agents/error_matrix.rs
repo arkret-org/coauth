@@ -21,7 +21,7 @@ use crate::AppError;
 // paused agents — existing tokens must         fail closed within the
 // configured window even before reducer         convergence catches up.
 //
-// Full reducer/persistence wiring is in soland (the principal server is the
+// Full reducer/persistence wiring is in soland (the Station is the
 // persistence authority). coauth owns the gate endpoints and the wire-level
 // error matrix for `agent_key_pair` / the `agent_key_proof` session-grant
 // branch, then relies on soland projection state for pairing lifetime, agent

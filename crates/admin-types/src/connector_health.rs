@@ -39,7 +39,7 @@ impl ConnectorHealthStatus {
 /// Single connector-provider health row.
 ///
 /// `provider` is the connector name registered in the
-/// `ConnectorRegistry` (e.g. `"soland"`); `principal_authority` is the
+/// `ConnectorRegistry` (e.g. `"soland"`); `account_id` is the
 /// authority the provider is pointed at. `error` carries the probe failure
 /// message when the provider is unhealthy.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -51,7 +51,7 @@ pub struct ConnectorHealthRow {
     #[serde(default)]
     pub provider: String,
     #[serde(default)]
-    pub principal_authority: String,
+    pub account_id: String,
     #[serde(default)]
     pub status: ConnectorHealthStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -99,8 +99,7 @@ mod tests {
         }
 
         let row: ConnectorHealthRow =
-            serde_json::from_str(r#"{"provider":"soland","principal_authority":"soland.example"}"#)
-                .unwrap();
+            serde_json::from_str(r#"{"provider":"soland","account_id":"soland.example"}"#).unwrap();
         assert_eq!(row.status, ConnectorHealthStatus::Unhealthy);
         assert!(!row.is_healthy());
     }
@@ -109,7 +108,7 @@ mod tests {
     fn healthy_omits_error_on_serialize() {
         let row = ConnectorHealthRow {
             provider: "soland".into(),
-            principal_authority: "soland.example".into(),
+            account_id: "soland.example".into(),
             status: ConnectorHealthStatus::Healthy,
             error: None,
         };
@@ -122,7 +121,7 @@ mod tests {
     fn unhealthy_carries_error_field() {
         let row = ConnectorHealthRow {
             provider: "soland".into(),
-            principal_authority: "soland.example".into(),
+            account_id: "soland.example".into(),
             status: ConnectorHealthStatus::Unhealthy,
             error: Some("probe timed out".into()),
         };
@@ -136,13 +135,13 @@ mod tests {
             providers: vec![
                 ConnectorHealthRow {
                     provider: "soland".into(),
-                    principal_authority: "soland-a.example".into(),
+                    account_id: "soland-a.example".into(),
                     status: ConnectorHealthStatus::Healthy,
                     error: None,
                 },
                 ConnectorHealthRow {
                     provider: "secondary".into(),
-                    principal_authority: "soland-b.example".into(),
+                    account_id: "soland-b.example".into(),
                     status: ConnectorHealthStatus::Unhealthy,
                     error: Some("connection refused".into()),
                 },

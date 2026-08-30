@@ -2,7 +2,7 @@
 
 This documentation describes `coauth`, the Arkret Auth / Account Server. It is
 intended for operators, administrators, and developers integrating coauth with
-Arkret Principal Servers, public DID resolver services, `sodmin`, and first-party clients.
+Arkret Stations, public DID resolver services, `sodmin`, and first-party clients.
 
 `coauth` is an OAuth and OpenID Connect provider. Its primary product
 surface is Arkret-native account, session, DID-binding, claim, and admin

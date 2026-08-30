@@ -8,7 +8,7 @@ use arkret_models_identity::{
 use chrono::{Duration, Utc};
 use coauth_config::{
     ArkretConfig, DeploymentProfileConfig, IdentityRegistryConfig, PrincipalMethodConfig,
-    PrincipalServerConfig,
+    StationConfig,
 };
 use coauth_data::{BrowserSession, Clock, RepositoryAccess, SessionGrant, SystemClock, User};
 use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
@@ -153,13 +153,10 @@ fn test_keystore() -> Keystore {
     Keystore::new(JsonWebKeySet::new(vec![ed25519]))
 }
 
-fn test_principal_authority(
-    principal_id: &str,
-    principal_server_id: &str,
-) -> arkret_wire::PrincipalAuthorityKey {
-    arkret_wire::PrincipalAuthorityKey::new(
+fn test_account_id(principal_id: &str, station_id: &str) -> arkret_wire::AccountId {
+    arkret_wire::AccountId::new(
         arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
-        arkret_identifiers::DidCoreId::new(principal_server_id).unwrap(),
+        arkret_identifiers::DidCoreId::new(station_id).unwrap(),
     )
 }
 
@@ -233,7 +230,7 @@ fn debug_dpop_grant_outcome_carries_typed_service_account_id() {
     assert!(serde_json::from_value::<DebugIssueDpopGrantOutcome>(invalid).is_err());
 }
 
-/// Static server-to-server bearer the configured Principal Server presents on
+/// Static server-to-server bearer the configured Station presents on
 /// the session-grant introspection endpoint.
 const SESSION_GRANT_INTROSPECTION_BEARER: &str = "principal-example-introspection";
 
@@ -244,11 +241,11 @@ fn personal_node_did_web_config() -> ArkretConfig {
         runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
             "did:web:auth.example.com",
         ),
-        // Session-grant audiences are Principal Server core DIDs.
+        // Session-grant audiences are Station core DIDs.
         admin_audience: Some("ak:did_core:web:principal.example.com".to_owned()),
         // Introspection is a server-to-server surface: the caller must be the
-        // Principal Server that owns the grant's audience.
-        principal_servers: vec![PrincipalServerConfig {
+        // Station that owns the grant's audience.
+        stations: vec![StationConfig {
             name: "principal-example".to_owned(),
             endpoint: "https://principal.example.com/".parse().unwrap(),
             service_id: Some(
@@ -321,7 +318,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
             "did:webvh:ztest:auth.example.com:webvh:service",
         ),
         admin_audience: Some("https://auth.example.com/api/admin".to_owned()),
-        principal_servers: vec![PrincipalServerConfig {
+        stations: vec![StationConfig {
             name: "soland-prod".to_owned(),
             endpoint: "https://soland.example.com/arkret".parse().unwrap(),
             service_id: Some(
@@ -359,7 +356,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
 
     assert_eq!(body["service_id"], "ak:did_core:webvh:ztest");
     assert_eq!(body["trust_domain"], "ak:trust_domain:auth.example.com");
-    assert_eq!(body["service_kind"], "auth_server");
+    assert_eq!(body["service_kind"], "station");
     for retired_field in ["registry_mode", "supported_receipts", "profiles"] {
         assert!(
             body.get(retired_field).is_none(),
@@ -376,18 +373,18 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     );
     assert_eq!(
         body["auth_metadata"]["session_grant_scope"],
-        PRINCIPAL_SERVER_SESSION_BIND_SCOPE
+        STATION_SESSION_BIND_SCOPE
     );
     assert_eq!(
-        body["x_coauth_principal_server_delegation_targets"][0]["endpoint"],
+        body["x_coauth_station_delegation_targets"][0]["endpoint"],
         "https://soland.example.com/arkret"
     );
     assert_eq!(
-        body["x_coauth_principal_server_delegation_targets"][0]["audience"],
+        body["x_coauth_station_delegation_targets"][0]["audience"],
         "ak:did_core:web:session-grant-static.test"
     );
     assert_eq!(
-        body["x_coauth_principal_server_delegation_targets"][0]["service_id"],
+        body["x_coauth_station_delegation_targets"][0]["service_id"],
         "ak:did_core:web:session-grant-static.test"
     );
     assert_eq!(
@@ -432,11 +429,11 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     assert!(not_authoritative_for.contains(&serde_json::json!("identity_registry_receipt")));
 
     // T6.3 — service_roles must list every role coauth carries.
-    // Boundary check: account_registry + auth_server + identity_resolver.
+    // Internal component inventory is diagnostic-only and never a service role.
     let service_roles = body["x_coauth_service_roles"]
         .as_array()
         .expect("service_roles array present");
-    assert!(service_roles.contains(&serde_json::json!("auth_server")));
+    assert!(service_roles.contains(&serde_json::json!("account_authority_process")));
     assert!(service_roles.contains(&serde_json::json!("identity_resolver")));
     assert!(service_roles.contains(&serde_json::json!("account_registry")));
 
@@ -510,7 +507,7 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
         runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
             "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:coauth",
         ),
-        principal_servers: vec![PrincipalServerConfig {
+        stations: vec![StationConfig {
             name: "soland-dev".to_owned(),
             endpoint: "https://session-grant-static.test/".parse().unwrap(),
             service_id: Some(
@@ -570,9 +567,9 @@ fn service_describe_advertises_complete_bundled_account_first_surface() {
 }
 
 #[test]
-fn principal_server_static_session_grant_bearer_matches_exact_token() {
+fn station_static_session_grant_bearer_matches_exact_token() {
     let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
-    assert!(principal_server_static_session_grant_bearer_matches(
+    assert!(station_static_session_grant_bearer_matches(
         &config,
         "local-coauth-session-grant"
     ));
@@ -581,7 +578,7 @@ fn principal_server_static_session_grant_bearer_matches_exact_token() {
 #[test]
 fn shared_static_bearer_is_scoped_to_every_matching_server() {
     let mut config = config_with_static_session_grant_bearer("shared-cluster-token");
-    config.principal_servers.push(PrincipalServerConfig {
+    config.stations.push(StationConfig {
         name: "soland-beta".to_owned(),
         endpoint: "https://session-grant-static-beta.test/".parse().unwrap(),
         service_id: Some(
@@ -592,7 +589,7 @@ fn shared_static_bearer_is_scoped_to_every_matching_server() {
         embedded_webvh_registration_bearer: None,
     });
     assert_eq!(
-        principal_server_static_session_grant_bearer_audiences(&config, "shared-cluster-token"),
+        station_static_session_grant_bearer_audiences(&config, "shared-cluster-token"),
         vec![
             "ak:did_core:web:session-grant-static.test".to_owned(),
             "ak:did_core:web:session-grant-static-beta.test".to_owned(),
@@ -601,25 +598,21 @@ fn shared_static_bearer_is_scoped_to_every_matching_server() {
 }
 
 #[test]
-fn principal_server_static_session_grant_bearer_rejects_other_tokens() {
+fn station_static_session_grant_bearer_rejects_other_tokens() {
     let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
-    assert!(!principal_server_static_session_grant_bearer_matches(
+    assert!(!station_static_session_grant_bearer_matches(
         &config,
         "other-token"
     ));
-    assert!(!principal_server_static_session_grant_bearer_matches(
-        &config, ""
-    ));
-    assert!(!principal_server_static_session_grant_bearer_matches(
-        &config, "   "
-    ));
+    assert!(!station_static_session_grant_bearer_matches(&config, ""));
+    assert!(!station_static_session_grant_bearer_matches(&config, "   "));
 }
 
 #[test]
-fn principal_server_static_session_grant_bearer_ignores_unset_field() {
+fn station_static_session_grant_bearer_ignores_unset_field() {
     let mut config = config_with_static_session_grant_bearer("placeholder");
-    config.principal_servers[0].session_grant_introspection_bearer = None;
-    assert!(!principal_server_static_session_grant_bearer_matches(
+    config.stations[0].session_grant_introspection_bearer = None;
+    assert!(!station_static_session_grant_bearer_matches(
         &config,
         "placeholder"
     ));
@@ -667,9 +660,9 @@ fn describe_separates_claim_levels() {
     assert_eq!(
         bundles,
         &[
-            serde_json::json!("ak.operation_bundle.auth_server.account_authority.v1"),
-            serde_json::json!("ak.operation_bundle.auth_server.describe.v1"),
-            serde_json::json!("ak.operation_bundle.auth_server.http_core.v1"),
+            serde_json::json!("ak.operation_bundle.station.account_authority.v1"),
+            serde_json::json!("ak.operation_bundle.station.describe.v1"),
+            serde_json::json!("ak.operation_bundle.station.account_authority_support.v1"),
         ]
     );
     assert!(body["supported_features"].as_array().unwrap().is_empty());
@@ -831,7 +824,7 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
         "ak:did_core:web:auth.example.com:users:{}",
         browser_session.user.id
     );
-    let principal_authority = test_principal_authority(
+    let account_id = test_account_id(
         &principal_id,
         &required_audience_for(&url_builder, &arkret_config),
     );
@@ -846,11 +839,11 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
         &browser_session,
         session_public_key,
         &principal_id,
-        &principal_authority,
+        &account_id,
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
             .unwrap(),
         vec![
-            PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
+            STATION_SESSION_BIND_SCOPE.to_owned(),
             device_scope.to_owned(),
         ],
     )
@@ -869,7 +862,7 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
     );
     assert_eq!(
         payload.scopes,
-        vec![device_scope, PRINCIPAL_SERVER_SESSION_BIND_SCOPE]
+        vec![device_scope, STATION_SESSION_BIND_SCOPE]
     );
     assert_eq!(payload.session_id, browser_session.id.to_string());
     assert_eq!(
@@ -912,7 +905,7 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
     let audience = required_audience_for(&url_builder, &arkret_config);
     let principal_id = "ak:did_core:web:alice.example";
     let principal_core_id = arkret_identifiers::DidCoreId::new(principal_id).unwrap();
-    let authority = test_principal_authority(principal_id, &audience);
+    let authority = test_account_id(principal_id, &audience);
     let device_id =
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000077")
             .unwrap();
@@ -1018,7 +1011,7 @@ fn session_grant_uses_configured_ttl() {
         "ak:did_core:web:auth.example.com:users:{}",
         browser_session.user.id
     );
-    let principal_authority = test_principal_authority(
+    let account_id = test_account_id(
         &principal_id,
         &required_audience_for(&url_builder, &arkret_config),
     );
@@ -1032,11 +1025,11 @@ fn session_grant_uses_configured_ttl() {
         &browser_session,
         session_public_key,
         &principal_id,
-        &principal_authority,
+        &account_id,
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
             .unwrap(),
         vec![
-            PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
+            STATION_SESSION_BIND_SCOPE.to_owned(),
             "urn:arkret:client:device:ak:device:01964137-0000-7000-8000-000000000001".to_owned(),
         ],
     )
@@ -1078,7 +1071,7 @@ fn session_grant_record_exposes_metadata_without_secrets() {
         capability_grant_refs: Vec::new(),
         audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example.com")
             .unwrap(),
-        scope: Scope::from_iter([PRINCIPAL_SERVER_SESSION_BIND_SCOPE.parse().unwrap()]),
+        scope: Scope::from_iter([STATION_SESSION_BIND_SCOPE.parse().unwrap()]),
         grant_jwt: "header.payload.signature".to_owned(),
         session_id: "test-session".to_owned(),
         issuance_nonce: arkret_canonical::base64url_encode([0x11; 32]),
@@ -1101,7 +1094,7 @@ fn session_grant_record_exposes_metadata_without_secrets() {
     assert_eq!(body["audience_id"], "ak:did_core:web:soland.example.com");
     assert_eq!(
         body["scopes"],
-        serde_json::json!([PRINCIPAL_SERVER_SESSION_BIND_SCOPE])
+        serde_json::json!([STATION_SESSION_BIND_SCOPE])
     );
     assert!(body.get("grant_jwt").is_none());
     assert!(body.get("session_public_key").is_none());
@@ -1138,7 +1131,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
         capability_grant_refs: Vec::new(),
         audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example.com")
             .unwrap(),
-        scope: Scope::from_iter([PRINCIPAL_SERVER_SESSION_BIND_SCOPE.parse().unwrap()]),
+        scope: Scope::from_iter([STATION_SESSION_BIND_SCOPE.parse().unwrap()]),
         grant_jwt: "header.payload.signature".to_owned(),
         session_id: "test-session".to_owned(),
         issuance_nonce: arkret_canonical::base64url_encode([0x22; 32]),
@@ -1224,13 +1217,13 @@ async fn seed_persisted_session_grant(
     let session_key = PrivateKey::generate_ed25519(&mut rng);
     let grant_config = personal_node_did_web_config();
     // The HTTP layer authorizes introspection against `state.arkret_config`,
-    // so it has to carry the same Principal Server the grant is issued for.
+    // so it has to carry the same Station the grant is issued for.
     state.arkret_config = grant_config.clone();
     // Grant liveness is evaluated against the wall clock the handlers read; a
     // grant minted at the mock epoch is already expired.
     let grant_clock = coauth_data::SystemClock::default();
     let principal_id = format!("ak:did_core:web:auth.example.com:users:{}", user.id);
-    let principal_authority = test_principal_authority(
+    let account_id = test_account_id(
         &principal_id,
         &required_audience_for(&state.url_builder, &grant_config),
     );
@@ -1243,10 +1236,10 @@ async fn seed_persisted_session_grant(
         &browser_session,
         test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
         &principal_id,
-        &principal_authority,
+        &account_id,
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
             .unwrap(),
-        vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
+        vec![STATION_SESSION_BIND_SCOPE.to_owned()],
     )
     .unwrap();
     let raw_payload = jwt_payload_value(&material.grant_jwt);
@@ -1304,7 +1297,7 @@ async fn session_grant_http_list_and_filter_work() {
         seed_persisted_session_grant(&mut state).await;
 
     // Session-grant listing is a server-to-server read pinned to the calling
-    // Principal Server's own audience.
+    // Station's own audience.
     let response = state
         .request(
             Request::get("/_coauth/account/session-grants")
@@ -1322,7 +1315,7 @@ async fn session_grant_http_list_and_filter_work() {
     );
     assert_eq!(
         body["grants"][0]["scopes"],
-        serde_json::json!([PRINCIPAL_SERVER_SESSION_BIND_SCOPE])
+        serde_json::json!([STATION_SESSION_BIND_SCOPE])
     );
 
     let response = state
@@ -1388,7 +1381,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
     assert!(body["grant"].get("grant_jwt").is_none());
     // Server-to-server introspection MUST expose session_public_key so the
-    // Principal Server can verify RFC 9421 PoP presentations (SPEC-CR-001).
+    // Station can verify RFC 9421 PoP presentations (SPEC-CR-001).
     assert_eq!(
         body["grant"]["session_public_key"],
         grant.session_public_key
@@ -1457,7 +1450,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
 }
 
 /// ② contract D4: a DPoP-bound grant MUST surface its `cnf.jkt` to the
-/// Principal Server through introspection so it can verify the per-request DPoP
+/// Station through introspection so it can verify the per-request DPoP
 /// proof. The thumbprint is not a stored column — it is read back out of the
 /// signed grant JWT — so this exercises the full persist → introspect round-trip.
 #[tokio::test]
@@ -1507,7 +1500,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     ))
     .unwrap();
     let audience = required_audience_for(&state.url_builder, &grant_config);
-    let principal_authority = test_principal_authority(principal_id.as_str(), &audience);
+    let account_id = test_account_id(principal_id.as_str(), &audience);
     let material = issue_session_grant_for_audience(
         &issuance_seed,
         &grant_clock,
@@ -1518,9 +1511,9 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         arkret_identifiers::DidCoreId::new(audience).unwrap(),
         arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
             .unwrap(),
-        vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
+        vec![STATION_SESSION_BIND_SCOPE.to_owned()],
         Some(&principal_id),
-        &principal_authority,
+        &account_id,
         bound_jkt.clone(),
         arkret_models_identity::SessionGrantDeviceBinding {
             device_id: arkret_identifiers::DeviceId::new(
@@ -1553,7 +1546,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
 
     // ① A `cnf`-bound grant introspected WITHOUT a client-carried grant-binding DPoP proof
     // still reports active WITH metadata over the authenticated S2S channel:
-    // the Principal Server binds the request DPoP to the returned `cnf_jkt`
+    // the Station binds the request DPoP to the returned `cnf_jkt`
     // itself (service-operation-dtos.schema.json). `proof_required` is an
     // advisory flag only — the default grant+DPoP path ignores it.
     let response = state
@@ -1574,7 +1567,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     assert_eq!(body["grant"]["cnf_jkt"], bound_jkt);
 
     // ② With a grant-binding DPoP proof the bound grant introspects active
-    // and exposes `cnf.jkt` to the Principal Server.
+    // and exposes `cnf.jkt` to the Station.
     let challenge = format!("introspect-{}", grant.grant_id);
     let proof_jwt = session_grant_introspection_proof(&grant, &material, &session_key, &challenge);
     let response = state
@@ -1613,13 +1606,13 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     };
 
     // The agent use-time gate (key-management §3.6.1) resolves the
-    // authoritative AgentView from the configured Principal Server; stub it
+    // authoritative AgentView from the configured Station; stub it
     // with wiremock so the lifecycle reads `active` (loopback egress is
     // permitted by the test HTTP client).
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    let principal_server = MockServer::start().await;
+    let station = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path(
             "/_arkret/self/agents/ak:did_core:web:agent.example",
@@ -1655,9 +1648,9 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
                 "active_authorizations": []
             }
         })))
-        .mount(&principal_server)
+        .mount(&station)
         .await;
-    state.arkret_config.principal_servers[0].endpoint = principal_server.uri().parse().unwrap();
+    state.arkret_config.stations[0].endpoint = station.uri().parse().unwrap();
 
     let mut rng = ChaChaRng::seed_from_u64(0xa9e17);
     let session_key = PrivateKey::generate_ed25519(&mut rng);
@@ -1665,7 +1658,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         serde_json::to_string(&test_session_public_jwk(&session_key, "agent-session-key")).unwrap();
     // Both the agent subject and the audience are core DIDs on the wire (the
     // grant claims are typed `DidCoreId`), and the audience must be the
-    // Principal Server whose static introspection bearer is configured above.
+    // Station whose static introspection bearer is configured above.
     let audience =
         arkret_identifiers::DidCoreId::new("ak:did_core:web:session-grant-static.test").unwrap();
     // Grant liveness is evaluated against the wall clock the handlers read.
@@ -1898,7 +1891,7 @@ async fn session_grant_http_revoke_updates_followup_introspection() {
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
     let (_browser_session, grant, _material, _session_key) =
         seed_persisted_session_grant(&mut state).await;
-    // Revocation is destructive, so the read-only Principal Server bearer is
+    // Revocation is destructive, so the read-only Station bearer is
     // not enough: it requires admin scope.
     let admin_token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -2126,7 +2119,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
 
     let hint = arkret_models_identity::DeliveryBindingHint {
         recipient_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example").unwrap(),
-        recipient_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
+        recipient_kind: arkret_models_identity::RecipientServiceKind::Station,
         binding_source: arkret_models_identity::HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: [arkret_models_identity::DeliveryMode::Events]
             .into_iter()
@@ -2231,7 +2224,7 @@ fn issue_handle_claim_accepts_organization_handle_claim_kind() {
 
     let hint = arkret_models_identity::DeliveryBindingHint {
         recipient_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example").unwrap(),
-        recipient_kind: arkret_models_identity::RecipientServiceKind::PrincipalServer,
+        recipient_kind: arkret_models_identity::RecipientServiceKind::Station,
         binding_source: arkret_models_identity::HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: [arkret_models_identity::DeliveryMode::Events]
             .into_iter()

@@ -43,7 +43,7 @@ pub async fn deactivate_current_account(
     clock: &dyn Clock,
     config: &SiteConfig,
     password_manager: &PasswordManager,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     key_store: &Keystore,
     service_id: &str,
     password: Option<String>,
@@ -81,7 +81,7 @@ pub async fn deactivate_current_account(
     }
 
     let original_user = browser_session.user.clone();
-    let (_destination_name, audience) = principal_server
+    let (_destination_name, audience) = station
         .account_status_destination()
         .map_err(|error| AccountProfileError::AccountStatusPublication(error.to_string()))?;
     let binding = repo
@@ -95,7 +95,7 @@ pub async fn deactivate_current_account(
         })?;
     let publication = crate::services::account_status_publication::author_transition_plan(
         &mut repo,
-        principal_server,
+        station,
         key_store,
         service_id,
         &original_user,

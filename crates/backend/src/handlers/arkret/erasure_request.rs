@@ -85,7 +85,7 @@ pub async fn request_account_erasure(
 
     let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let clock = make_clock();
     let mut rng = make_rng();
 
@@ -133,7 +133,7 @@ pub async fn request_account_erasure(
         &*clock,
         &arkret_config,
         &key_store,
-        principal_server.as_ref(),
+        station.as_ref(),
         &user,
         last_authenticated_at,
         &body,
@@ -168,7 +168,7 @@ pub(crate) async fn accept_erasure_request(
     clock: &dyn Clock,
     arkret_config: &ArkretConfig,
     key_store: &Keystore,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     user: &User,
     last_authenticated_at: Option<DateTime<Utc>>,
     body: &AccountRequestErasureRequestBody,
@@ -251,16 +251,13 @@ pub(crate) async fn accept_erasure_request(
 
     // ── Durable principal binding: the acceptance outcome and the record
     // both carry the bound principal identity.
-    let (_destination_name, audience) =
-        principal_server
-            .account_status_destination()
-            .map_err(|error| {
-                ArkretRouteError::coded(
-                    StatusCode::PRECONDITION_FAILED,
-                    arkret_wire::ErrorCode::FAILED_PRECONDITION,
-                    error.to_string(),
-                )
-            })?;
+    let (_destination_name, audience) = station.account_status_destination().map_err(|error| {
+        ArkretRouteError::coded(
+            StatusCode::PRECONDITION_FAILED,
+            arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            error.to_string(),
+        )
+    })?;
     let binding = repo
         .principal_did()
         .get_for_user_and_audience(user, audience.as_str())
@@ -322,7 +319,7 @@ pub(crate) async fn accept_erasure_request(
     // by design, so no cross-service intermediate state exists.
     let plan = author_transition_plan(
         repo,
-        principal_server,
+        station,
         key_store,
         service_id_for(arkret_config).as_str(),
         user,
@@ -443,8 +440,8 @@ mod tests {
 
     use super::*;
     use crate::handlers::test_utils::{
-        CookieHelper, RequestBuilderExt, ResponseExt, TEST_PRINCIPAL_SERVER_AUDIENCE, TestState,
-        setup, unique_test_nonce,
+        CookieHelper, RequestBuilderExt, ResponseExt, TEST_STATION_AUDIENCE, TestState, setup,
+        unique_test_nonce,
     };
     use crate::salvo_utils::SessionInfoExt as _;
 
@@ -492,13 +489,13 @@ mod tests {
         let mut rng = ChaChaRng::seed_from_u64(unique_test_nonce());
         let binding = repo
             .principal_did()
-            .get_for_user_and_audience(user, TEST_PRINCIPAL_SERVER_AUDIENCE)
+            .get_for_user_and_audience(user, TEST_STATION_AUDIENCE)
             .await
             .unwrap()
             .expect("seeded principal binding");
         author_transition_plan(
             &mut repo,
-            state.principal_server_admin.as_ref(),
+            state.station_admin.as_ref(),
             &state.key_store,
             service_id_for(&state.arkret_config).as_str(),
             user,
@@ -542,7 +539,7 @@ mod tests {
             &clock,
             config,
             &state.key_store,
-            state.principal_server_admin.as_ref(),
+            state.station_admin.as_ref(),
             user,
             last_authenticated_at,
             body,
@@ -588,7 +585,7 @@ mod tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let state = TestState::from_pool_with_principal_server(pool.clone())
+        let state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
         let user = seed_account(&state).await;
@@ -609,7 +606,7 @@ mod tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let state = TestState::from_pool_with_principal_server(pool.clone())
+        let state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
         let user = seed_account(&state).await;
@@ -634,7 +631,7 @@ mod tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let state = TestState::from_pool_with_principal_server(pool.clone())
+        let state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
         let user = seed_account(&state).await;
@@ -712,7 +709,7 @@ mod tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let state = TestState::from_pool_with_principal_server(pool.clone())
+        let state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
         let user = seed_account(&state).await;
@@ -755,7 +752,7 @@ mod tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let state = TestState::from_pool_with_principal_server(pool.clone())
+        let state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
         let user = seed_account(&state).await;
@@ -804,7 +801,7 @@ mod tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let state = TestState::from_pool_with_principal_server(pool.clone())
+        let state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
         let config = fresh_config(&state);
@@ -861,7 +858,7 @@ mod tests {
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
         };
-        let mut state = TestState::from_pool_with_principal_server(pool.clone())
+        let mut state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
         state.arkret_config.erasure_request_max_auth_age = Duration::try_minutes(10);

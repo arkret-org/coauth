@@ -32,11 +32,11 @@ impl<'c> PgAccountStatusLedgerRepository<'c> {
     async fn current_locked(
         &mut self,
         authority: &str,
-        account: &str,
+        service_account_id: &str,
     ) -> Result<Option<AccountStatusRecord>, DatabaseError> {
         let value = account_status_records::table
             .filter(account_status_records::account_authority_id.eq(authority))
-            .filter(account_status_records::account_id.eq(account))
+            .filter(account_status_records::service_account_id.eq(service_account_id))
             .order(account_status_records::status_seq.desc())
             .select(account_status_records::record)
             .for_update()
@@ -51,7 +51,7 @@ impl<'c> PgAccountStatusLedgerRepository<'c> {
 #[diesel(table_name = account_status_records)]
 struct NewRecord {
     account_authority_id: String,
-    account_id: String,
+    service_account_id: String,
     status_seq: i64,
     record_id: String,
     record: serde_json::Value,
@@ -88,7 +88,8 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
             .values((
                 account_status_ledger_heads::account_authority_id
                     .eq(record.account_authority_id.as_str()),
-                account_status_ledger_heads::account_id.eq(record.account_id.as_str()),
+                account_status_ledger_heads::service_account_id
+                    .eq(record.service_account_id.as_str()),
             ))
             .on_conflict_do_nothing()
             .execute(self.conn)
@@ -98,8 +99,11 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
                 account_status_ledger_heads::account_authority_id
                     .eq(record.account_authority_id.as_str()),
             )
-            .filter(account_status_ledger_heads::account_id.eq(record.account_id.as_str()))
-            .select(account_status_ledger_heads::account_id)
+            .filter(
+                account_status_ledger_heads::service_account_id
+                    .eq(record.service_account_id.as_str()),
+            )
+            .select(account_status_ledger_heads::service_account_id)
             .for_update()
             .first::<String>(self.conn)
             .await?;
@@ -107,7 +111,7 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
         let current = self
             .current_locked(
                 record.account_authority_id.as_str(),
-                record.account_id.as_str(),
+                record.service_account_id.as_str(),
             )
             .await?;
         if current
@@ -135,7 +139,7 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
         diesel::insert_into(account_status_records::table)
             .values(NewRecord {
                 account_authority_id: record.account_authority_id.to_string(),
-                account_id: record.account_id.to_string(),
+                service_account_id: record.service_account_id.to_string(),
                 status_seq,
                 record_id: record.account_status_record_id.to_string(),
                 record: serde_json::to_value(record)
@@ -150,7 +154,10 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
                     account_status_ledger_heads::account_authority_id
                         .eq(record.account_authority_id.as_str()),
                 )
-                .filter(account_status_ledger_heads::account_id.eq(record.account_id.as_str())),
+                .filter(
+                    account_status_ledger_heads::service_account_id
+                        .eq(record.service_account_id.as_str()),
+                ),
         )
         .set((
             account_status_ledger_heads::current_status_seq.eq(status_seq),
@@ -165,22 +172,23 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
     async fn current(
         &mut self,
         account_authority_id: &str,
-        account_id: &str,
+        service_account_id: &str,
     ) -> Result<Option<AccountStatusRecord>, Self::Error> {
-        self.current_locked(account_authority_id, account_id).await
+        self.current_locked(account_authority_id, service_account_id)
+            .await
     }
 
     async fn resolve(
         &mut self,
         account_authority_id: &str,
-        account_id: &str,
+        service_account_id: &str,
         from_status_seq: u64,
         limit: u16,
     ) -> Result<Vec<AccountStatusRecord>, Self::Error> {
         let from = i64::try_from(from_status_seq).map_err(DatabaseError::to_invalid_operation)?;
         let values = account_status_records::table
             .filter(account_status_records::account_authority_id.eq(account_authority_id))
-            .filter(account_status_records::account_id.eq(account_id))
+            .filter(account_status_records::service_account_id.eq(service_account_id))
             .filter(account_status_records::status_seq.ge(from))
             .order(account_status_records::status_seq.asc())
             .limit(i64::from(limit))
@@ -194,7 +202,7 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
 #[cfg(test)]
 mod tests {
     use arkret_models_collaboration::account_lifecycle::{
-        AccountStatusInitialPublication, AccountStatusPrincipalAuthority, AccountStatusPublication,
+        AccountStatusInitialPublication, AccountStatusPublication,
         AccountStatusPublicationRequestBody, AccountStatusRecord, UnsignedAccountStatusRecord,
     };
     use arkret_models_collaboration::objects::account_status::AccountStatus;
@@ -229,10 +237,11 @@ mod tests {
         let unsigned = UnsignedAccountStatusRecord {
             schema: SchemaId::ACCOUNT_STATUS_RECORD_V1.to_owned(),
             account_authority_id: authority,
-            account_id: arkret_identifiers::ServiceAccountId::new(account_id.to_string()).unwrap(),
-            principal_authority: AccountStatusPrincipalAuthority {
+            service_account_id: arkret_identifiers::ServiceAccountId::new(account_id.to_string())
+                .unwrap(),
+            account_id: arkret_wire::AccountId {
                 principal_id: DidCoreId::new("ak:did_core:webvh:zrollbackprincipal").unwrap(),
-                principal_server_id: DidCoreId::new("ak:did_core:webvh:zrollbackserver").unwrap(),
+                station_id: DidCoreId::new("ak:did_core:webvh:zrollbackserver").unwrap(),
             },
             principal_control_realm_id: arkret_wire::RealmId::from_event_id(
                 &arkret_wire::EventId::from_digest(
@@ -312,7 +321,7 @@ mod tests {
                         &mut rng,
                         &clock,
                         AccountStatusPublicationJob::new(
-                            "principal-server".to_owned(),
+                            "station".to_owned(),
                             idempotency_key.clone(),
                             body_digest.clone(),
                             body.clone(),
@@ -345,7 +354,7 @@ mod tests {
                     .account_status_ledger()
                     .current(
                         record.account_authority_id.as_str(),
-                        record.account_id.as_str()
+                        record.service_account_id.as_str()
                     )
                     .await
                     .unwrap()
@@ -418,7 +427,7 @@ mod tests {
             }),
         };
         let body_digest = Hash::new(arkret_canonical::canonical_sha256(&body).unwrap()).unwrap();
-        let destination = format!("principal-server-{account_id}");
+        let destination = format!("station-{account_id}");
         let mirror = format!("mirror-{account_id}");
         let record_id = record.account_status_record_id.to_string();
 

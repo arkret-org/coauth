@@ -812,7 +812,7 @@ pub async fn refresh_session_grant(
 
     // 5. Mint a new grant with the same subject_id + scope + audience_id. The
     // audience_id MUST NOT change across rotation: a client holding a grant for
-    // one Principal Server must not be able to rotate it into a grant for a
+    // one Station must not be able to rotate it into a grant for a
     // different audience_id (which it could then exchange there). Ignore any
     // client-supplied audience_id; reject an explicit mismatch defensively.
     let principal_binding = repo
@@ -824,7 +824,7 @@ pub async fn refresh_session_grant(
         .await?
         .ok_or_else(|| refresh_proof_invalid("session grant principal authority is unavailable"))?;
     principal_binding
-        .principal_authority
+        .account_id
         .validate()
         .map_err(|error| refresh_proof_invalid(error.to_string()))?;
     let human_request = match &body {
@@ -858,7 +858,7 @@ pub async fn refresh_session_grant(
     })?;
     let device_binding = acquire_human_device_binding(
         depot,
-        &principal_binding.principal_authority,
+        &principal_binding.account_id,
         arkret_identifiers::DeviceId::new(device_id.to_owned())
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         arkret_wire::DeviceRevocationGateActionClass::SessionGrantRefresh,
@@ -890,7 +890,7 @@ pub async fn refresh_session_grant(
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         scopes,
         Some(&prior_grant.subject_id),
-        &principal_binding.principal_authority,
+        &principal_binding.account_id,
         verification.jkt.clone(),
         device_binding,
         proof_kind,

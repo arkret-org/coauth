@@ -17,7 +17,7 @@ $ coauth worker -c config.yaml
 The worker process handles asynchronous tasks that do not need to be performed during an HTTP request. These include:
 
 - **Sending emails** — Verification codes, password reset links, and notification emails.
-- **Principal account tasks** — Account lifecycle jobs run against the local Principal Server abstraction.
+- **Principal account tasks** — Account lifecycle jobs run against the local Station abstraction.
 - **Session cleanup** — Expiring old sessions and tokens according to configured TTL values.
 - **Scheduled maintenance** — Periodic tasks like flushing activity tracking data to the database.
 
@@ -35,7 +35,7 @@ The worker uses the same configuration file as the server. It requires access to
 
 - The PostgreSQL database (for the task queue)
 - SMTP credentials (if email sending is configured)
-- Arkret Principal Server configuration, when downstream session grants are enabled
+- Arkret Station configuration, when downstream session grants are enabled
 
 ### Example: systemd service
 

@@ -51,7 +51,7 @@ pub async fn update_account(
         ..
     } = call_context;
     let id = extract_ulid_param(req)?;
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let key_store = depot.key_store()?;
     let arkret_config = depot.arkret_config()?;
     let service_id = service_id_for(&arkret_config);
@@ -89,7 +89,7 @@ pub async fn update_account(
         &mut repo,
         &mut rng,
         &*clock,
-        principal_server.as_ref(),
+        station.as_ref(),
         admin_user.as_ref(),
         id,
         patch,
@@ -167,7 +167,7 @@ pub(super) fn map_service_error(
         } => AppError::conflict(format!(
             "Provider ID {provider_id} already has subject {subject}"
         )),
-        crate::services::user_admin::UserAdminServiceError::PrincipalServer(error) => {
+        crate::services::user_admin::UserAdminServiceError::Station(error) => {
             AppError::internal(std::io::Error::other(error.to_string()))
         }
         crate::services::user_admin::UserAdminServiceError::Repository(error) => {

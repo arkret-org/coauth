@@ -5,7 +5,7 @@
 //! controller supplies the signed `ak.agent.key.authorize` event; coauth only
 //! validates the request binding, persists the pending local authorization for
 //! `agent_key_proof`, and commits the unchanged signed request to the
-//! authoritative Principal Server before reporting the Event as durable. The
+//! authoritative Station before reporting the Event as durable. The
 //! caller closes it into an accepted Agent-PCR frontier and retries the same
 //! idempotent request before the runtime is reported active.
 
@@ -32,7 +32,7 @@ use crate::handlers::arkret::{
 };
 use crate::services::did_binding_proof::normalize_did_for_binding;
 
-/// Durable retry queue used when the authoritative Principal Server cannot be
+/// Durable retry queue used when the authoritative Station cannot be
 /// reached after the exact pairing request has been persisted locally.
 const AGENT_KEY_PAIR_COMMIT_QUEUE: &str = "principal-agent-key-pair-commit";
 
@@ -41,7 +41,7 @@ const AGENT_KEY_PAIR_COMMIT_QUEUE: &str = "principal-agent-key-pair-commit";
 ///
 /// Validates the runtime key pairing proof-of-possession and, on success,
 /// records a pending local agent key authorization, commits the exact same
-/// canonical operation to the authoritative Principal Server, and returns only
+/// canonical operation to the authoritative Station, and returns only
 /// after that server durably accepts the supplied Event and activates the
 /// Agent. Runtime replacement re-pairing is expressed atomically by the
 /// controller-signed `authorize_event.event.payload.supersedes[]`; Coauth never
@@ -244,11 +244,11 @@ pub async fn post_agent_key_pair(
 
     // Expiry: a stale pairing PoP is rejected as `pairing_request_expired`.
     // Audience MUST be this service (the coauth issuer audience or a configured
-    // principal-server audience).
+    // station audience).
     if !is_allowed_session_grant_audience(
         &url_builder,
         &arkret_config,
-        crate::services::principal_server_trust::shared(),
+        crate::services::station_trust::shared(),
         pop.audience_id.as_str(),
     ) {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
@@ -317,7 +317,7 @@ pub async fn post_agent_key_pair(
         now,
     )?;
 
-    // `pair_agent_key` validates the current Principal-Server pairing handle
+    // `pair_agent_key` validates the current Station pairing handle
     // above and the controller-signed authorization here. Accountability-grant
     // issuance is a precondition of the aggregate `provision` operation, not
     // an operation-specific precondition of runtime-key pairing. In
@@ -430,7 +430,7 @@ pub async fn post_agent_key_pair(
             "state": AccountabilityGrantFanoutState::Queued,
             "idempotency_key": &idempotency_key,
             "queue": AGENT_KEY_PAIR_COMMIT_QUEUE,
-            "principal_server": &authoritative_server.name,
+            "station": &authoritative_server.name,
             "next_retry_at": issued_at,
         }
     });
@@ -807,7 +807,7 @@ async fn commit_and_mark_agent_key_authorization(
     authorized_event_id: &str,
     idempotency_key: &str,
     request_digest: &str,
-    principal_server_name: &str,
+    station_name: &str,
     body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody,
 ) -> Result<(), AppError> {
     let superseded_event_refs = pairing_superseded_event_refs(&body)?;
@@ -816,10 +816,10 @@ async fn commit_and_mark_agent_key_authorization(
     let request = PrincipalAgentKeyPairCommitRequest::new(
         idempotency_key.to_owned(),
         request_digest.to_owned(),
-        principal_server_name.to_owned(),
+        station_name.to_owned(),
         body,
     );
-    crate::services::principal_facade::commit_agent_key_pair_to_principal_server(
+    crate::services::principal_facade::commit_agent_key_pair_to_station(
         &http_client,
         &arkret_config,
         &request,
@@ -830,7 +830,7 @@ async fn commit_and_mark_agent_key_authorization(
         AppError::new(
             StatusCode::SERVICE_UNAVAILABLE,
             format!(
-                "Agent key-pair request is durable but the authoritative Principal Server has not accepted it: {error}"
+                "Agent key-pair request is durable but the authoritative Station has not accepted it: {error}"
             ),
         )
     })?;
@@ -849,7 +849,7 @@ async fn commit_and_mark_agent_key_authorization(
     if !updated {
         return Err(AppError::new(
             StatusCode::SERVICE_UNAVAILABLE,
-            "Principal Server accepted the Agent key, but local reconciliation is pending",
+            "Station accepted the Agent key, but local reconciliation is pending",
         ));
     }
     repo.save().await?;

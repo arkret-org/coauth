@@ -13,7 +13,7 @@ coauth worker -c config.yaml
 Worker 处理以下异步任务：
 
 - **发送邮件** — 验证码、密码重置链接、通知邮件
-- **Principal account 任务** — 旧账号生命周期任务现在通过本地 Principal Server 抽象执行
+- **Principal account 任务** — 旧账号生命周期任务现在通过本地 Station 抽象执行
 - **会话清理** — 根据配置的 TTL 过期旧会话和令牌
 - **定时维护** — 刷新活动追踪数据等定期任务
 

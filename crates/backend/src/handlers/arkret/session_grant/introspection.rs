@@ -217,7 +217,7 @@ pub async fn introspect_session_grant(
         }));
     };
 
-    // SEC-SG-ENUM: a Principal Server caller may only introspect grants for an
+    // SEC-SG-ENUM: a Station caller may only introspect grants for an
     // audience_id it is authorized for. A grant minted for any other audience_id is
     // reported as an audience_id mismatch (with no grant metadata) so a Principal
     // Server cannot probe grants belonging to other audiences.
@@ -283,12 +283,12 @@ pub async fn introspect_session_grant(
             // Every grant is `cnf`-bound and surfaces `proof_required` as an ADVISORY
             // signal: a stricter caller MAY re-introspect with a device-signed
             // grant-binding proof. But per `service-operation-dtos.schema.json`, the
-            // default Principal Server grant+DPoP path does NOT require this
+            // default Station grant+DPoP path does NOT require this
             // client-carried introspection proof — it verifies the request DPoP
             // locally against the returned `cnf_jkt`. So the grant MUST still
             // report active WITH metadata over this authenticated S2S channel;
             // only the advisory flag is raised. (Forcing `active=false` /
-            // withholding metadata here broke every Principal Server session:
+            // withholding metadata here broke every Station session:
             // soland never reached its own DPoP check and read "not active".)
             None => {
                 proof_required = true;
@@ -368,7 +368,7 @@ pub async fn introspect_session_grant(
 
     // Non-secret grant metadata (subject_id / device_id / audience_id / scopes /
     // expiry / session_public_key / cnf_jkt) is returned over this authenticated
-    // S2S channel so the Principal Server can bind the request DPoP to `cnf_jkt`.
+    // S2S channel so the Station can bind the request DPoP to `cnf_jkt`.
     // Only NotFound / AudienceMismatch withhold it — a `proof_required` advisory
     // does NOT, or the default grant+DPoP path could never obtain the cnf_jkt it
     // must verify against.
@@ -383,7 +383,7 @@ pub async fn introspect_session_grant(
     // proof, so it MUST remain valid within its TTL. Consumption/rotation is the
     // `session-grants/refresh` endpoint's job (revoke-old + issue-new), NOT
     // introspection's — revoking here made the grant single-use at the first
-    // Principal Server exchange and silently broke the refresh chain.
+    // Station exchange and silently broke the refresh chain.
     repo.cancel()
         .await
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;

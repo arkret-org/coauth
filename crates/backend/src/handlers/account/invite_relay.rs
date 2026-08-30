@@ -64,7 +64,7 @@ pub struct InviteRelayRequestBody {
     /// Base URL of the target's `server_name` (`soland`).
     ///
     /// Optional in the body; when omitted, falls back to
-    /// the first configured `principal_servers[].endpoint`. If neither is present the
+    /// the first configured `stations[].endpoint`. If neither is present the
     /// handler returns 400 `config_required` because there's nowhere to
     /// query the consent cell.
     #[serde(default)]
@@ -252,7 +252,7 @@ pub async fn post_invite_relay(
 
     // ── Authentication + authorization ─────────────────────────────
     // This endpoint drives a signed, coauth-DID-attested outbound forward to
-    // a target principal server, so it MUST NOT be reachable anonymously
+    // a target Station, so it MUST NOT be reachable anonymously
     // (the `/_coauth` parent router only mounts CORS). Mirror the standard
     // `self/` auth pattern (`viewer`, `sessions`): require an authenticated
     // requester, then bind the relay to that identity.
@@ -286,11 +286,11 @@ pub async fn post_invite_relay(
     let principal_url = params
         .target_principal_url
         .clone()
-        .or_else(|| arkret_config.primary_principal_server_url().cloned());
+        .or_else(|| arkret_config.primary_station_url().cloned());
 
     // Deny-by-default for the federation hop: the relay forwards a request
     // signed under coauth's service DID, so the destination MUST resolve to
-    // a configured trust anchor (a `principal_servers` endpoint, an
+    // a configured trust anchor (a `stations` endpoint, an
     // `identity_services` endpoint, or the `identity_registry` resolver).
     // This blocks the SSRF / signing-oracle vector where a caller supplies
     // an arbitrary `target_principal_url`.
@@ -415,7 +415,7 @@ mod tests {
     fn payload() -> serde_json::Value {
         arkret_models_collaboration::governance::membership_invite::InviteCreatePayload::new(
             arkret_identifiers::DidCoreId::new("ak:did_core:web:holder".to_owned()).unwrap(),
-            arkret_models_collaboration::governance::invite_addressing::InviteDeliveryTarget::principal_server(
+            arkret_models_collaboration::governance::invite_addressing::InviteDeliveryTarget::station(
                 arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap(),
                 service_resolution(),
             ),
@@ -455,7 +455,7 @@ mod tests {
                 payload(),
             )
             .unwrap(),
-            arkret_models_collaboration::governance::invite_addressing::InviteAddress::principal_server(
+            arkret_models_collaboration::governance::invite_addressing::InviteAddress::station(
                 arkret_identifiers::DidCoreId::new("ak:did_core:web:holder".to_owned()).unwrap(),
                 arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap(),
                 service_resolution(),

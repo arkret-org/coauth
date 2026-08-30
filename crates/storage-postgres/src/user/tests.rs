@@ -22,7 +22,7 @@ use rand_core::SeedableRng;
 
 use crate::PgRepositoryFactory;
 use crate::test_utils::{
-    account_binding_receipt, principal_authority, principal_binding_test_material,
+    account_binding_receipt, account_id, principal_binding_test_material,
     principal_control_realm_id, verified_principal_binding_input,
 };
 
@@ -37,7 +37,7 @@ fn registration_binding_input(
     version_id: &str,
 ) -> VerifiedPrincipalDidBindingInput {
     let audience_id = audience_id.into();
-    let principal_authority = principal_authority(&principal_id, &audience_id);
+    let account_id = account_id(&principal_id, &audience_id);
     let audience_id = arkret_identifiers::DidCoreId::new(audience_id).unwrap();
     let principal_id = arkret_identifiers::DidCoreId::new(principal_id).unwrap();
     let did = arkret_identifiers::Did::new(did).unwrap();
@@ -61,7 +61,7 @@ fn registration_binding_input(
             "c".repeat(64)
         ))
         .unwrap(),
-        principal_authority,
+        account_id,
         principal_control_realm_id: principal_control_realm_id(),
     }
 }
@@ -1527,7 +1527,7 @@ async fn principal_binding_refreshes_verified_snapshot_only_within_the_same_core
     let factory = PgRepositoryFactory::new(pool.clone());
     let label = uuid::Uuid::now_v7().simple().to_string();
     let principal_id = format!("ak:did_core:webvh:z{label}");
-    let audience_id = "ak:did_core:web:principal-server.example";
+    let audience_id = "ak:did_core:web:station.example";
     let clock = MockClock::default();
     let mut rng = ChaChaRng::seed_from_u64(75);
 
@@ -1603,7 +1603,7 @@ async fn principal_binding_rejects_mismatched_admission_and_corrupt_row() {
     let factory = PgRepositoryFactory::new(pool.clone());
     let label = uuid::Uuid::now_v7().simple().to_string();
     let principal_id = format!("ak:did_core:webvh:z{label}");
-    let audience_id = "ak:did_core:web:principal-server.example";
+    let audience_id = "ak:did_core:web:station.example";
     let clock = MockClock::default();
     let mut rng = ChaChaRng::seed_from_u64(76);
 

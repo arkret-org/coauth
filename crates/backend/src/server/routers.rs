@@ -155,12 +155,9 @@ fn account_api_subrouters() -> (Router, Router) {
     let arkret_router = Router::with_path("/_arkret")
         .hoop(public_oidc_browser_cors())
         .hoop(crate::server::arkret_operation_selector_middleware)
-        .push(Router::with_path("describe").get(arkret::server_describe))
-        .push(
-            Router::with_path("open/services/{service_id}/resolution")
-                .get(arkret::open_service_resolution),
-        )
-        .push(Router::with_path("root/identity/describe").get(arkret::identity_describe))
+        // Account Authority is a Station capability. This deployment-private
+        // process does not publish a role-local Describe or service-resolution
+        // endpoint; the owning Station advertises the Account Authority URL.
         .push(Router::with_path("root/identity/resolve").post(arkret::identity_resolve))
         .push(Router::with_path("root/identity/document").get(arkret::identity_document))
         .push(
@@ -225,7 +222,7 @@ fn account_api_subrouters() -> (Router, Router) {
                 .post(arkret::revoke_session_grant_endpoint),
         )
         // Auth-side hard logout sub-operation (account-lifecycle §4.1).
-        // This is an internal Account Authority -> Auth Server service call:
+        // This is an internal Account Authority sub-operation:
         // the client-visible hard logout endpoint is the Principal/Account
         // Authority `POST /_arkret/gate/account/logout`, and clients must not
         // call this path directly.
@@ -234,7 +231,7 @@ fn account_api_subrouters() -> (Router, Router) {
                 .post(arkret::logout_auth_session),
         )
         // Server-to-server session-grant introspection (RFC 7662-style): the
-        // Principal Server validating a presented grant calls this to learn
+        // Station validating a presented grant calls this to learn
         // whether it is active and to obtain the session public key for RFC 9421
         // PoP verification. It is a spec operation
         // (`ak.gate.account.command.introspect_session_grant.v1`), so it lives under
@@ -295,7 +292,7 @@ fn account_api_subrouters() -> (Router, Router) {
             // path (not a spec operation). It deliberately avoids the protocol
             // trust-surface classifier `root/identity/` (reserved for the
             // canonical `/_arkret/root/identity/{describe,resolve,document}`
-            // Principal Server identity-root operations), mirroring how
+            // Station identity-root operations), mirroring how
             // `account/session-grants` below avoids the `gate/` classifier.
             Router::with_path("account/identity/primary-handle")
                 .patch(crate::handlers::account::primary_handle::patch_primary_handle_preference),
@@ -534,13 +531,8 @@ async fn arkret_not_found(req: &Request, res: &mut Response) {
 }
 
 fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
-    if path.starts_with("/_arkret/open/services/") && path.ends_with("/resolution") {
-        return Some("GET");
-    }
     match path {
-        "/_arkret/describe"
-        | "/_arkret/root/identity/describe"
-        | "/_arkret/root/identity/document" => Some("GET"),
+        "/_arkret/root/identity/document" => Some("GET"),
         "/_arkret/gate/account/onboarding" => Some("GET, OPTIONS"),
         "/_arkret/root/identity/resolve"
         | "/_arkret/find/directory/resolve-handle"

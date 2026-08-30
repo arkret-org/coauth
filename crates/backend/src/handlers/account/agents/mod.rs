@@ -9,13 +9,13 @@
 //!
 //! Authentication: this endpoint accepts the soland / sodmin static
 //! bearer token configured under
-//! `arkret.principal_servers[].session_grant_introspection_bearer` —
+//! `arkret.stations[].session_grant_introspection_bearer` —
 //! the same trust anchor used elsewhere for server-to-server strands.
 //! Browser sessions and end-user OAuth tokens are NOT accepted.
 //!
 //! Persistence: coauth stores the accountability grant, writes a signed
 //! audit row, and commits the same standard request to the authoritative
-//! Principal Server. The Principal Server remains the reducer-side
+//! Station. The Station remains the reducer-side
 //! authority for agent lifecycle state.
 //!
 //! Wire shape: see [`AccountabilityGrantRequestBody`] and

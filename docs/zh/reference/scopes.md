@@ -28,18 +28,18 @@ Arkret 管理能力族。`coauth` 接受 wildcard scope，也接受
 
 ## `urn:arkret:client:device:[device id]`
 
-Arkret 设备绑定 scope。它把 OAuth session 与下游 Principal Server 使用的
+Arkret 设备绑定 scope。它把 OAuth session 与下游 Station 使用的
 client device identifier 关联起来。
 
-## `urn:arkret:principal-server:*`
+## `urn:arkret:station:*`
 
-Principal Server 能力族。这个命名空间用于需要比普通 OIDC 登录更细粒度授权的
-受信任 Principal Server 集成。
+Station 能力族。这个命名空间用于需要比普通 OIDC 登录更细粒度授权的
+受信任 Station 集成。
 
-## `urn:arkret:principal-server:session.bind`
+## `urn:arkret:station:session.bind`
 
 请求或描述为已认证浏览器会话签发短时 Arkret session grant 的能力。`coauth`
-给受信任 Principal Server 签发 session grant 时使用这个 scope。
+给受信任 Station 签发 session grant 时使用这个 scope。
 
 ## Arkret Claims
 

@@ -118,7 +118,7 @@ pub async fn begin_password_registration(
     rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
     password_manager: &PasswordManager,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     policy_factory: &PolicyFactory,
     limiter: &Limiter,
     mut request: BeginPasswordRegistrationRequestBody,
@@ -140,13 +140,13 @@ pub async fn begin_password_registration(
                 if repo.user().exists(&request.handle).await? {
                     issues.push(BeginPasswordRegistrationIssue::HandleExists);
                 } else {
-                    match principal_server.is_handle_available(&request.handle).await {
+                    match station.is_handle_available(&request.handle).await {
                         Ok(false) => issues.push(BeginPasswordRegistrationIssue::HandleExists),
                         Ok(true) => {}
                         Err(error) => {
                             tracing::warn!(
                                 error = &*error as &dyn std::error::Error,
-                                "Failed to check username availability, skipping PrincipalServer check"
+                                "Failed to check username availability, skipping Station check"
                             );
                         }
                     }

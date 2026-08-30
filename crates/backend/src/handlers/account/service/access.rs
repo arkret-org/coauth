@@ -58,7 +58,7 @@ pub async fn login_with_password(
     clock: &dyn Clock,
     password_manager: &PasswordManager,
     limiter: &Limiter,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
     site_config: &SiteConfig,
@@ -78,7 +78,7 @@ pub async fn login_with_password(
     // response latency matches the real-verify path.
     let Some(user) = find_user_by_login_identifier(
         site_config,
-        principal_server,
+        station,
         url_builder,
         arkret_config,
         &mut repo,
@@ -231,7 +231,7 @@ async fn find_user_by_email_or_by_username(
 
 async fn find_user_by_login_identifier(
     site_config: &SiteConfig,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     url_builder: &UrlBuilder,
     _arkret_config: &ArkretConfig,
     repo: &mut BoxRepository,
@@ -243,7 +243,7 @@ async fn find_user_by_login_identifier(
         return Ok(Some(user));
     }
 
-    let _ = principal_server;
+    let _ = station;
     find_user_by_email_or_by_username(site_config, repo, identifier).await
 }
 
@@ -272,7 +272,7 @@ mod lockout_wiring_tests {
             &state.clock,
             &state.password_manager,
             limiter,
-            state.principal_server_admin.as_ref(),
+            state.station_admin.as_ref(),
             &state.url_builder,
             &state.arkret_config,
             &state.site_config,

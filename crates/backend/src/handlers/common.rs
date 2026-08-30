@@ -229,7 +229,7 @@ pub trait DepotExt {
     /// repeated in 40+ handler files.
     fn repo(&self) -> impl std::future::Future<Output = Result<BoxRepository, RouteError>> + Send;
     fn site_config(&self) -> Result<SiteConfig, RouteError>;
-    fn principal_server(&self) -> Result<Arc<dyn ConnectorAdmin>, RouteError>;
+    fn station(&self) -> Result<Arc<dyn ConnectorAdmin>, RouteError>;
     fn policy_factory(&self) -> Result<Arc<PolicyFactory>, RouteError>;
     fn password_manager(&self) -> Result<PasswordManager, RouteError>;
     fn url_builder(&self) -> Result<UrlBuilder, RouteError>;
@@ -304,8 +304,8 @@ impl DepotExt for Depot {
         depot_get(self, "site_config")
     }
 
-    fn principal_server(&self) -> Result<Arc<dyn ConnectorAdmin>, RouteError> {
-        depot_get(self, "principal_server_admin")
+    fn station(&self) -> Result<Arc<dyn ConnectorAdmin>, RouteError> {
+        depot_get(self, "station_admin")
     }
 
     fn policy_factory(&self) -> Result<Arc<PolicyFactory>, RouteError> {

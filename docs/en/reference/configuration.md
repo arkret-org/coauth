@@ -79,7 +79,7 @@ arkret:
   deployment_profile: organization
   principal_method: did:webvh
 
-  principal_servers:
+  stations:
     - name: soland
       endpoint: https://soland.example.com/
       service_id: ak:did_core:webvh:<soland-scid>
@@ -93,10 +93,10 @@ arkret:
   session_grant_ttl: 300
 ```
 
-- `principal_servers`: trusted Principal Server configuration; operations
+- `stations`: trusted Station configuration; operations
   authenticating that service require an authorization pin — an explicit
   `service_id` or a trust enrollment persisted by
-  `coauth principal-server trust bootstrap` — and fail closed without one;
+  `coauth station trust bootstrap` — and fail closed without one;
   Describe cannot act as identity discovery or an authorization root
 - `deployment_profile`: identity deployment profile. `did:web` principal DIDs
   are accepted only for `personal_node`.
@@ -105,7 +105,7 @@ arkret:
 - `identity_registry`: delegated DID / identity resolver, typically a public DID resolver service
 - Coauth resolves, registers, and persists its service DID through the configured Provider;
   configuration never accepts a DID.
-- Principal Server audiences and DIDs are pinned by configuration or by the
+- Station audiences and DIDs are pinned by configuration or by the
   persisted trust enrollment; `/_arkret/describe` is only used for online
   identity-chain verification during bootstrap and revalidation.
 - `admin_audience`: audience expected by Arkret admin integrations, as a

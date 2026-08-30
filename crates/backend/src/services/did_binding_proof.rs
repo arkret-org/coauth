@@ -516,7 +516,7 @@ mod tests {
             &signing_key.verifying_key(),
         )];
         let payload = br#"{"context":"ak.proof.device_revocation_gate_decision.v1"}"#;
-        // The exact signer the Principal Server uses for gate receipts.
+        // The exact signer the Station uses for gate receipts.
         let jws = arkret_signatures::jws::sign_jws_ed25519(payload, &signing_key).unwrap();
         verify_detached_jws_against_method(&jws, payload, &methods, method_id).unwrap();
     }

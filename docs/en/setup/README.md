@@ -7,7 +7,7 @@ Arkret components and how they interact with each other.
 coauth is the Auth Server: it owns authentication, OAuth/OIDC, account sessions,
 and Arkret session grants.
 
-Downstream Principal Servers such as Soland trust coauth-issued tokens and
+Downstream Stations such as Soland trust coauth-issued tokens and
 session grants instead of receiving direct account-provisioning calls from
 coauth.
 

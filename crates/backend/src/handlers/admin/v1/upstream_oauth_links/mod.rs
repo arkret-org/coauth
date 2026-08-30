@@ -453,7 +453,7 @@ fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) 
         crate::services::user_admin::UserAdminServiceError::EmailAlreadyInUse(email) => {
             AppError::conflict(format!("User email {email:?} already in use"))
         }
-        crate::services::user_admin::UserAdminServiceError::PrincipalServer(error) => {
+        crate::services::user_admin::UserAdminServiceError::Station(error) => {
             AppError::internal(std::io::Error::other(error.to_string()))
         }
         crate::services::user_admin::UserAdminServiceError::MissingAccountStatusPublication

@@ -123,8 +123,8 @@ impl SessionGrantIssuanceSeed {
 #[derive(Debug, Clone)]
 pub(crate) struct SessionGrantTarget {
     pub audience_id: DidCoreId,
-    pub principal_server_name: Option<String>,
-    pub principal_server_endpoint: Option<String>,
+    pub station_name: Option<String>,
+    pub station_endpoint: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

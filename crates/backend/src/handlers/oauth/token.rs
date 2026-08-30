@@ -348,8 +348,8 @@ async fn handle_post(
         .get::<ArkretConfig>("arkret_config")
         .cloned()
         .unwrap_or_default();
-    let principal_server = depot
-        .get::<Arc<dyn ConnectorAdmin>>("principal_server_admin")
+    let station = depot
+        .get::<Arc<dyn ConnectorAdmin>>("station_admin")
         .expect("ConnectorAdmin not found in depot");
     let site_config = depot
         .get::<SiteConfig>("site_config")
@@ -442,7 +442,7 @@ async fn handle_post(
                 &arkret_config,
                 site_config,
                 repo,
-                principal_server,
+                station,
                 templates,
                 user_agent,
             )
@@ -490,7 +490,7 @@ async fn handle_post(
                 &arkret_config,
                 site_config,
                 repo,
-                principal_server,
+                station,
                 user_agent,
             )
             .await?;

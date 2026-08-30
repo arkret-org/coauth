@@ -4,7 +4,7 @@
 //! coauth deliberately provides NO DID-document hosting: the former
 //! `/.well-known/did.json`, `/did.json`, and `/users/{id}/did.json` routes
 //! and their user-document builders were removed. DID hosting is the
-//! principal server's job (soland's embedded webvh provider); coauth
+//! Station's job (soland's embedded webvh provider); coauth
 //! artefacts are verified via introspection + OAuth JWKS instead.
 //!
 //! NOTE (CAU-DRY-02, rechecked): this is intentionally not the SDK

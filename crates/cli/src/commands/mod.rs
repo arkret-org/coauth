@@ -11,8 +11,8 @@ mod debug;
 mod doctor;
 mod healthcheck;
 mod manage;
-mod principal_server;
 mod server;
+mod station;
 mod templates;
 mod worker;
 
@@ -35,8 +35,8 @@ enum Subcommand {
     /// Manage the instance
     Manage(self::manage::Options),
 
-    /// Manage Principal Server trust enrollment
-    PrincipalServer(self::principal_server::Options),
+    /// Manage Station trust enrollment
+    Station(self::station::Options),
 
     /// Templates-related commands
     Templates(self::templates::Options),
@@ -134,7 +134,7 @@ impl Options {
             Some(S::Server(c)) => Box::pin(c.run(figment)).await,
             Some(S::Worker(c)) => Box::pin(c.run(figment)).await,
             Some(S::Manage(c)) => Box::pin(c.run(figment)).await,
-            Some(S::PrincipalServer(c)) => Box::pin(c.run(figment)).await,
+            Some(S::Station(c)) => Box::pin(c.run(figment)).await,
             Some(S::Templates(c)) => Box::pin(c.run(figment)).await,
             Some(S::Debug(c)) => Box::pin(c.run(figment)).await,
             Some(S::Doctor(c)) => Box::pin(c.run(figment)).await,

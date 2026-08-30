@@ -34,7 +34,7 @@ sh ./misc/device-code-grant.sh https://auth.example.com/ urn:coauth:admin
 Use Arkret scopes for Arkret-native integrations:
 
 ```sh
-sh ./misc/device-code-grant.sh https://auth.example.com/ urn:arkret:admin:* urn:arkret:principal-server:session.bind
+sh ./misc/device-code-grant.sh https://auth.example.com/ urn:arkret:admin:* urn:arkret:station:session.bind
 ```
 
 ## Automation

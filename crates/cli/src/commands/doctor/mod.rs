@@ -38,24 +38,22 @@ impl Options {
             );
         }
 
-        if config.arkret.principal_servers.is_empty() {
-            warn!(
-                "No Arkret principal servers are configured (`arkret.principal_servers` is empty)."
-            );
+        if config.arkret.stations.is_empty() {
+            warn!("No Arkret Stations are configured (`arkret.stations` is empty).");
         } else {
-            for server in &config.arkret.principal_servers {
+            for server in &config.arkret.stations {
                 match server.service_id.as_ref() {
                     Some(service_id) => info!(
                         name = %server.name,
                         audience = %service_id.as_str(),
                         endpoint = %server.endpoint,
-                        "Configured Arkret principal server (identity pinned in configuration)"
+                        "Configured Arkret Station (identity pinned in configuration)"
                     ),
                     None => info!(
                         name = %server.name,
-                        audience = "<pinned by the persisted trust enrollment; run `coauth principal-server trust bootstrap --name <name>` if none exists yet>",
+                        audience = "<pinned by the persisted trust enrollment; run `coauth station trust bootstrap --name <name>` if none exists yet>",
                         endpoint = %server.endpoint,
-                        "Configured Arkret principal server"
+                        "Configured Arkret Station"
                     ),
                 }
             }

@@ -311,7 +311,7 @@ pub async fn exchange_authorization_code(
     arkret_config: &ArkretConfig,
     site_config: &SiteConfig,
     mut repo: BoxRepository,
-    principal_server: &Arc<dyn ConnectorAdmin>,
+    station: &Arc<dyn ConnectorAdmin>,
     templates: &Templates,
     user_agent: Option<String>,
 ) -> Result<(AccessTokenResponse, BoxRepository), AuthorizationCodeExchangeError> {
@@ -455,7 +455,7 @@ pub async fn exchange_authorization_code(
         );
     }
     for device_id in &requested_device_ids {
-        principal_server
+        station
             .upsert_device(
                 &browser_session.user.localpart,
                 device_id,

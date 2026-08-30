@@ -441,7 +441,7 @@ async fn patch_account(
     } = call_context;
     let arkret_config = depot.arkret_config()?;
     let id = extract_ulid_param(req)?;
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let key_store = depot.key_store()?;
     let service_id = crate::handlers::arkret::service_id_for(&arkret_config);
     let service_did = crate::handlers::arkret::issuer_did_for(&arkret_config);
@@ -540,7 +540,7 @@ async fn patch_account(
         &mut repo,
         &mut rng,
         &*clock,
-        principal_server.as_ref(),
+        station.as_ref(),
         admin_user.as_ref(),
         id,
         patch,
@@ -736,7 +736,7 @@ mod tests {
         // Locking and disabling are account-status transitions, so they need a
         // configured publication destination and an accepted principal binding
         // for the target account.
-        let mut state = TestState::from_pool_with_principal_server(pool.clone())
+        let mut state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
@@ -796,8 +796,8 @@ mod tests {
         };
         // Executing a risk action resolves the acting admin's principal DID and
         // publishes the resulting account-status transition, so both need a
-        // configured Principal Server and an accepted binding.
-        let mut state = TestState::from_pool_with_principal_server(pool.clone())
+        // configured Station and an accepted binding.
+        let mut state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
@@ -960,7 +960,7 @@ mod tests {
         };
         // The proposal workflow resolves the acting admin's principal DID
         // through the accepted-binding projection.
-        let mut state = TestState::from_pool_with_principal_server(pool.clone())
+        let mut state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
@@ -1091,8 +1091,8 @@ mod tests {
             return;
         };
         // The inventory projects accepted principal bindings only, so the
-        // account needs one against a configured Principal Server audience.
-        let mut state = TestState::from_pool_with_principal_server(pool.clone())
+        // account needs one against a configured Station audience.
+        let mut state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;

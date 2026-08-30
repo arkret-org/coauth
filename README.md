@@ -28,7 +28,7 @@ account lifecycle management, short-lived session grants, policy hooks,
 notifications, and a stable admin API for Arkret deployments.
 
 `coauth` is not a DID registry. It proves who authenticated to which local
-account, device, and session, then publishes that state to Principal Servers
+account, device, and session, then publishes that state to Stations
 and admin tooling. DID documents, key logs, and registry receipts belong to
 delegated/public DID resolver services.
 
@@ -84,7 +84,7 @@ work that affects wire shape is tracked in [`../arkret-spec/spec/v1/`](../arkret
 ## Integration model
 
 - `inkson` acts as a public/native Arkret client and consumes OIDC tokens.
-- Principal Servers such as `soland` consume session grants and account
+- Stations such as `soland` consume session grants and account
   metadata from `coauth`.
 - `sodmin` uses the admin API with `urn:coauth:admin` or
   `urn:arkret:admin:*`.
@@ -100,7 +100,7 @@ The primary Arkret paths include:
 - `/_arkret/find/directory/resolve-handle`
 
 coauth hosts **no** DID documents (`/.well-known/did.json`, `/did.json`, and
-`/users/{id}/did.json` were removed): DID hosting is the principal server's
+`/users/{id}/did.json` were removed): DID hosting is the Station's
 job — soland's embedded webvh provider serves
 `did:webvh` documents under its own authority, and coauth only mints/registers
 against it. coauth-issued artefacts (session grants, handle claims) are
@@ -111,7 +111,7 @@ verified via the introspection endpoints and the OAuth JWKS.
 - OpenID Connect provider with authorization code, refresh token, client
   credentials, and device code grants
 - Arkret discovery, service DID documents, handle resolution, and short-lived
-  session grants with Principal Server introspection
+  session grants with Station introspection
 - Local account lifecycle, password auth, upstream OAuth federation, and
   recovery workflows
 - Admin APIs for sessions, tokens, users, clients, templates, connectors, and
@@ -137,7 +137,7 @@ database:
   uri: postgresql://coauth:password@localhost/coauth
 
 arkret:
-  principal_servers:
+  stations:
     - name: soland
       endpoint: https://soland.example.com/
       embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
@@ -193,7 +193,7 @@ just build-all
 | `/_arkret/describe` | Arkret service metadata |
 | `/_arkret/root/identity/describe` | Identity-registry contract |
 | `/_arkret/find/directory/resolve-handle` | Handle -> DID resolution |
-| `/_arkret/gate/account/session-grants/introspect` | Principal Server session grant validation |
+| `/_arkret/gate/account/session-grants/introspect` | Station session grant validation |
 | `/_coauth/admin/*` | Admin API for `sodmin` and service automation |
 | `/_coauth/admin/openapi.yaml` | Coauth admin API OpenAPI document |
 | `/.well-known/arkret/openapi.yaml` | Admin API discovery document for `sodmin` |

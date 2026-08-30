@@ -16,7 +16,7 @@ use super::*;
 pub async fn check_registration_finish_eligibility(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     registration: &UserRegistration,
     browser_session_present: Option<bool>,
 ) -> Result<(), CheckRegistrationFinishEligibilityError> {
@@ -32,16 +32,13 @@ pub async fn check_registration_finish_eligibility(
         return Err(CheckRegistrationFinishEligibilityError::HandleTaken);
     }
 
-    match principal_server
-        .is_handle_available(&registration.localpart)
-        .await
-    {
+    match station.is_handle_available(&registration.localpart).await {
         Ok(true) => Ok(()),
         Ok(false) => Err(CheckRegistrationFinishEligibilityError::HandleNotAvailable),
         Err(error) => {
             tracing::warn!(
                 error = %error,
-                "Failed to check username availability during finish, skipping PrincipalServer check"
+                "Failed to check username availability during finish, skipping Station check"
             );
             Ok(())
         }
@@ -51,7 +48,7 @@ pub async fn check_registration_finish_eligibility(
 pub async fn load_registration_finish_preparation(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     registration_id: Ulid,
     browser_session_present: Option<bool>,
     registration_token_required: bool,
@@ -76,7 +73,7 @@ pub async fn load_registration_finish_preparation(
     check_registration_finish_eligibility(
         repo,
         clock,
-        principal_server,
+        station,
         &registration,
         browser_session_present,
     )
@@ -234,7 +231,7 @@ pub async fn complete_registration(
 
     // Mirror the registration's display_name / avatar_url onto coauth's
     // local user record so the account UI ("Edit profile") shows them
-    // immediately, before the async PrincipalServer-provision job runs.
+    // immediately, before the async Station-provision job runs.
     if registration.display_name.is_some() || registration.avatar_url.is_some() {
         let profile_patch = coauth_data::UserProfilePatch {
             display_name: registration.display_name.clone().map(Some),
@@ -327,7 +324,7 @@ pub async fn finish_registration(
     mut repo: BoxRepository,
     rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     registration_id: Ulid,
     browser_session_present: Option<bool>,
     registration_token_required: bool,
@@ -338,7 +335,7 @@ pub async fn finish_registration(
     let prepared = match load_registration_finish_preparation(
         &mut repo,
         clock,
-        principal_server,
+        station,
         registration_id,
         browser_session_present,
         registration_token_required,

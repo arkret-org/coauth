@@ -4,9 +4,9 @@
 #![allow(missing_docs)]
 
 diesel::table! {
-    account_status_records (account_authority_id, account_id, status_seq) {
+    account_status_records (account_authority_id, service_account_id, status_seq) {
         account_authority_id -> Text,
-        account_id -> Text,
+        service_account_id -> Text,
         status_seq -> Int8,
         record_id -> Text,
         record -> Jsonb,
@@ -15,9 +15,9 @@ diesel::table! {
 }
 
 diesel::table! {
-    account_status_ledger_heads (account_authority_id, account_id) {
+    account_status_ledger_heads (account_authority_id, service_account_id) {
         account_authority_id -> Text,
-        account_id -> Text,
+        service_account_id -> Text,
         current_status_seq -> Nullable<Int8>,
         current_record_id -> Nullable<Text>,
     }
@@ -911,7 +911,7 @@ diesel::table! {
 }
 
 diesel::table! {
-    principal_server_trust_audits (id) {
+    station_trust_audits (id) {
         id -> Uuid,
         enrollment_name -> Text,
         action -> Text,
@@ -923,7 +923,7 @@ diesel::table! {
 }
 
 diesel::table! {
-    principal_server_trust_enrollments (name) {
+    station_trust_enrollments (name) {
         name -> Text,
         canonical_endpoint -> Text,
         service_id -> Text,
@@ -1028,7 +1028,7 @@ diesel::table! {
         accepted_id -> Text,
         binding_version -> Int8,
         binding_frontier_digest -> Text,
-        principal_authority -> Jsonb,
+        account_id -> Jsonb,
         principal_control_realm_id -> Text,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
@@ -1103,8 +1103,8 @@ diesel::allow_tables_to_appear_in_same_query!(
     user_passwords,
     principal_did_bindings,
     principal_did_owners,
-    principal_server_trust_enrollments,
-    principal_server_trust_audits,
+    station_trust_enrollments,
+    station_trust_audits,
     user_emails,
     user_email_authentications,
     user_email_authentication_codes,

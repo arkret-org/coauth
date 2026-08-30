@@ -158,7 +158,7 @@ pub async fn oauth_approval_get(
     res: &mut Response,
 ) -> Result<(), RouteError> {
     let clock = make_clock();
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let policy_factory = depot.policy_factory()?;
     let mut repo = depot.repo().await?;
     let activity_tracker = extract_bound_activity_tracker(req, depot);
@@ -178,7 +178,7 @@ pub async fn oauth_approval_get(
     let info = load_authorization_consent(
         repo,
         policy_factory.as_ref(),
-        principal_server.as_ref(),
+        station.as_ref(),
         &clock,
         &session,
         grant_id,
@@ -358,7 +358,7 @@ pub async fn device_approval_get(
     res: &mut Response,
 ) -> Result<(), RouteError> {
     let clock = make_clock();
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let policy_factory = depot.policy_factory()?;
     let mut repo = depot.repo().await?;
     let activity_tracker = extract_bound_activity_tracker(req, depot);
@@ -378,7 +378,7 @@ pub async fn device_approval_get(
     let screen = load_device_consent(
         repo,
         policy_factory.as_ref(),
-        principal_server.as_ref(),
+        station.as_ref(),
         &clock,
         &session,
         grant_id,

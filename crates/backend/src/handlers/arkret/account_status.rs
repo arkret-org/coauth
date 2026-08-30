@@ -34,8 +34,8 @@ pub async fn resolve_account_status(
     let source_id = required_header(req, "source-service-id")?;
     let destination_id = required_header(req, "destination-service-id")?;
     if destination_id != request.account_authority_id.as_str()
-        || !config.principal_servers.iter().any(|server| {
-            crate::services::principal_server_trust::effective_audience_shared(server)
+        || !config.stations.iter().any(|server| {
+            crate::services::station_trust::effective_audience_shared(server)
                 .is_some_and(|audience| audience.as_str() == source_id)
         })
     {
@@ -101,7 +101,7 @@ pub async fn resolve_account_status(
         .await?;
     if current
         .as_ref()
-        .is_none_or(|record| record.principal_authority.principal_server_id.as_str() != source_id)
+        .is_none_or(|record| record.account_id.station_id.as_str() != source_id)
     {
         return Err(not_found());
     }

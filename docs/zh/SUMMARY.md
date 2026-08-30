@@ -10,7 +10,7 @@
 - [安装](./setup/installation.md)
 - [基本配置](./setup/general.md)
 - [数据库设置](./setup/database.md)
-- [Principal Server 配置](./setup/principal-server.md)
+- [Station 配置](./setup/station.md)
 - [配置反向代理](./setup/reverse-proxy.md)
 - [配置上游 SSO 提供商](./setup/sso.md)
 - [运行服务](./setup/running.md)

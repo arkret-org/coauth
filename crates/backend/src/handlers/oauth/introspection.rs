@@ -187,8 +187,8 @@ async fn handle_post(
     let encrypter = depot
         .get::<Encrypter>("encrypter")
         .map_err(|_| depot_missing("Encrypter"))?;
-    let principal_server = depot
-        .get::<Arc<dyn ConnectorAdmin>>("principal_server_admin")
+    let station = depot
+        .get::<Arc<dyn ConnectorAdmin>>("station_admin")
         .map_err(|_| depot_missing("ConnectorAdmin"))?;
     let repo_factory = depot
         .get::<BoxRepositoryFactory>("box_repository_factory")
@@ -213,11 +213,11 @@ async fn handle_post(
 
     let mut repo: BoxRepository = repo_factory.create().await?;
 
-    // Only the trusted Principal Server (homeserver bearer) is entitled to
+    // Only the trusted Station (homeserver bearer) is entitled to
     // the arkret device/principal/session association fields; arbitrary
     // confidential OIDC clients get the redacted RFC 7662 view.
     let disclosure = if let Some(token) = credentials.bearer_token() {
-        if !principal_server
+        if !station
             .verify_token(token)
             .await
             .map_err(RouteError::FailedToVerifyToken)?

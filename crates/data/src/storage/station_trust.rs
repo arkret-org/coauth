@@ -1,8 +1,8 @@
-//! Deployment-local Principal Server trust enrollment persistence.
+//! Deployment-local Station trust enrollment persistence.
 //!
 //! These records are deployment control-plane state, not Arkret wire types:
 //! they persist the authorization pin an operator (or the narrowly-scoped
-//! development auto-enrollment) accepted for a canonical Principal Server
+//! development auto-enrollment) accepted for a canonical Station
 //! endpoint, plus the WebVH anti-rollback floor verified at enrollment time.
 //! Public `/_arkret/describe` responses can never create or replace them.
 
@@ -17,8 +17,8 @@ use crate::{Clock, repository_impl};
 /// the database constrains the same set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum PrincipalServerTrustSource {
-    /// Explicit `coauth principal-server trust bootstrap` operator command.
+pub enum StationTrustSource {
+    /// Explicit `coauth station trust bootstrap` operator command.
     OperatorCli,
     /// Pin material provisioned by a trusted deployment artifact.
     DeploymentArtifact,
@@ -26,7 +26,7 @@ pub enum PrincipalServerTrustSource {
     DevelopmentAuto,
 }
 
-impl PrincipalServerTrustSource {
+impl StationTrustSource {
     /// The stored text form of the source.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
@@ -53,7 +53,7 @@ impl PrincipalServerTrustSource {
 /// text; the database constrains the same set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum PrincipalServerTrustAuditAction {
+pub enum StationTrustAuditAction {
     /// A new enrollment pin was accepted and persisted.
     Enrolled,
     /// An enrollment or re-verification attempt failed validation.
@@ -64,7 +64,7 @@ pub enum PrincipalServerTrustAuditAction {
     Revoked,
 }
 
-impl PrincipalServerTrustAuditAction {
+impl StationTrustAuditAction {
     /// The stored text form of the action.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
@@ -89,10 +89,10 @@ impl PrincipalServerTrustAuditAction {
     }
 }
 
-/// A persisted Principal Server trust enrollment.
+/// A persisted Station trust enrollment.
 #[derive(Debug, Clone)]
-pub struct PrincipalServerTrustEnrollment {
-    /// Operator-facing unique name (matches `principal_servers[].name`).
+pub struct StationTrustEnrollment {
+    /// Operator-facing unique name (matches `stations[].name`).
     pub name: String,
     /// Canonicalized endpoint URL; unique across enrollments.
     pub canonical_endpoint: String,
@@ -107,17 +107,17 @@ pub struct PrincipalServerTrustEnrollment {
     /// `sha256:` digest of the canonical verified resolution record.
     pub resolution_record_digest: String,
     /// Where this enrollment came from.
-    pub source: PrincipalServerTrustSource,
+    pub source: StationTrustSource,
     /// When the pin was first accepted.
     pub enrolled_at: DateTime<Utc>,
     /// When the pinned identity was last verified online.
     pub last_verified_at: DateTime<Utc>,
 }
 
-/// Parameters used to insert a new [`PrincipalServerTrustEnrollment`].
+/// Parameters used to insert a new [`StationTrustEnrollment`].
 #[derive(Debug, Clone)]
-pub struct NewPrincipalServerTrustEnrollment {
-    /// Operator-facing unique name (matches `principal_servers[].name`).
+pub struct NewStationTrustEnrollment {
+    /// Operator-facing unique name (matches `stations[].name`).
     pub name: String,
     /// Canonicalized endpoint URL; unique across enrollments.
     pub canonical_endpoint: String,
@@ -132,16 +132,16 @@ pub struct NewPrincipalServerTrustEnrollment {
     /// `sha256:` digest of the canonical verified resolution record.
     pub resolution_record_digest: String,
     /// Where this enrollment came from.
-    pub source: PrincipalServerTrustSource,
+    pub source: StationTrustSource,
 }
 
-/// Parameters used to append a [`PrincipalServerTrustAudit`] entry.
+/// Parameters used to append a [`StationTrustAudit`] entry.
 #[derive(Debug, Clone)]
-pub struct NewPrincipalServerTrustAudit {
+pub struct NewStationTrustAudit {
     /// Operator-facing enrollment name the entry refers to.
     pub enrollment_name: String,
     /// What happened.
-    pub action: PrincipalServerTrustAuditAction,
+    pub action: StationTrustAuditAction,
     /// Newly observed or accepted service core id, when applicable.
     pub service_id: Option<arkret_identifiers::DidCoreId>,
     /// Previously pinned service core id, for replacements.
@@ -153,13 +153,13 @@ pub struct NewPrincipalServerTrustAudit {
 
 /// A persisted trust audit entry.
 #[derive(Debug, Clone)]
-pub struct PrincipalServerTrustAudit {
+pub struct StationTrustAudit {
     /// Audit entry id.
     pub id: Ulid,
     /// Operator-facing enrollment name the entry refers to.
     pub enrollment_name: String,
     /// What happened.
-    pub action: PrincipalServerTrustAuditAction,
+    pub action: StationTrustAuditAction,
     /// Newly observed or accepted service core id, when applicable.
     pub service_id: Option<arkret_identifiers::DidCoreId>,
     /// Previously pinned service core id, for replacements.
@@ -170,10 +170,10 @@ pub struct PrincipalServerTrustAudit {
     pub created_at: DateTime<Utc>,
 }
 
-/// Repository accessor for Principal Server trust enrollments and their
+/// Repository accessor for Station trust enrollments and their
 /// append-only audit log.
 #[async_trait]
-pub trait PrincipalServerTrustRepository: Send + Sync {
+pub trait StationTrustRepository: Send + Sync {
     /// Backend error type.
     type Error;
 
@@ -181,21 +181,21 @@ pub trait PrincipalServerTrustRepository: Send + Sync {
     async fn find_by_endpoint(
         &mut self,
         canonical_endpoint: &str,
-    ) -> Result<Option<PrincipalServerTrustEnrollment>, Self::Error>;
+    ) -> Result<Option<StationTrustEnrollment>, Self::Error>;
 
     /// Look up an enrollment by its operator-facing name.
     async fn find_by_name(
         &mut self,
         name: &str,
-    ) -> Result<Option<PrincipalServerTrustEnrollment>, Self::Error>;
+    ) -> Result<Option<StationTrustEnrollment>, Self::Error>;
 
     /// Insert a new enrollment. Relies on the database unique constraints so
     /// concurrent bootstraps converge on a single identity.
     async fn enroll(
         &mut self,
         clock: &dyn Clock,
-        params: NewPrincipalServerTrustEnrollment,
-    ) -> Result<PrincipalServerTrustEnrollment, Self::Error>;
+        params: NewStationTrustEnrollment,
+    ) -> Result<StationTrustEnrollment, Self::Error>;
 
     /// Compare-and-swap replacement of an existing enrollment: the update
     /// only applies when the stored `service_id` still equals
@@ -206,7 +206,7 @@ pub trait PrincipalServerTrustRepository: Send + Sync {
         clock: &dyn Clock,
         name: &str,
         expected_old_service_id: &arkret_identifiers::DidCoreId,
-        params: NewPrincipalServerTrustEnrollment,
+        params: NewStationTrustEnrollment,
     ) -> Result<bool, Self::Error>;
 
     /// Advance the anti-rollback floor and `last_verified_at` after a
@@ -230,37 +230,37 @@ pub trait PrincipalServerTrustRepository: Send + Sync {
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: NewPrincipalServerTrustAudit,
-    ) -> Result<PrincipalServerTrustAudit, Self::Error>;
+        params: NewStationTrustAudit,
+    ) -> Result<StationTrustAudit, Self::Error>;
 
     /// List audit entries for one enrollment, newest first.
     async fn list_audits(
         &mut self,
         enrollment_name: &str,
         limit: usize,
-    ) -> Result<Vec<PrincipalServerTrustAudit>, Self::Error>;
+    ) -> Result<Vec<StationTrustAudit>, Self::Error>;
 }
 
-repository_impl!(PrincipalServerTrustRepository:
+repository_impl!(StationTrustRepository:
     async fn find_by_endpoint(
         &mut self,
         canonical_endpoint: &str
-    ) -> Result<Option<PrincipalServerTrustEnrollment>, Self::Error>;
+    ) -> Result<Option<StationTrustEnrollment>, Self::Error>;
     async fn find_by_name(
         &mut self,
         name: &str
-    ) -> Result<Option<PrincipalServerTrustEnrollment>, Self::Error>;
+    ) -> Result<Option<StationTrustEnrollment>, Self::Error>;
     async fn enroll(
         &mut self,
         clock: &dyn Clock,
-        params: NewPrincipalServerTrustEnrollment
-    ) -> Result<PrincipalServerTrustEnrollment, Self::Error>;
+        params: NewStationTrustEnrollment
+    ) -> Result<StationTrustEnrollment, Self::Error>;
     async fn replace(
         &mut self,
         clock: &dyn Clock,
         name: &str,
         expected_old_service_id: &arkret_identifiers::DidCoreId,
-        params: NewPrincipalServerTrustEnrollment
+        params: NewStationTrustEnrollment
     ) -> Result<bool, Self::Error>;
     async fn record_verification(
         &mut self,
@@ -275,11 +275,11 @@ repository_impl!(PrincipalServerTrustRepository:
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: NewPrincipalServerTrustAudit
-    ) -> Result<PrincipalServerTrustAudit, Self::Error>;
+        params: NewStationTrustAudit
+    ) -> Result<StationTrustAudit, Self::Error>;
     async fn list_audits(
         &mut self,
         enrollment_name: &str,
         limit: usize
-    ) -> Result<Vec<PrincipalServerTrustAudit>, Self::Error>;
+    ) -> Result<Vec<StationTrustAudit>, Self::Error>;
 );

@@ -77,7 +77,7 @@ pub async fn add_session(
         ..
     } = ctx;
     let mut rng = crate::handlers::account::make_rng();
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let body: AddRequestBody = req.parse_json().await.map_err(AppError::internal)?;
     let owner = personal_session_owner_from_caller(&caller_session);
 
@@ -131,7 +131,7 @@ pub async fn add_session(
         for scope_token in &*new_session.scope {
             let raw = scope_token.as_str();
             if let Some(device_id) = raw.strip_prefix("urn:arkret:client:device:") {
-                principal_server
+                station
                     .upsert_device(&target_user.localpart, device_id, None)
                     .await
                     .context("Device provisioning failed")

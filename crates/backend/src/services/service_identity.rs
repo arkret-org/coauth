@@ -35,7 +35,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::outbound_http;
-use crate::services::principal_server_trust;
+use crate::services::station_trust;
 
 const RETRY_DELAY_SECONDS: i64 = 5;
 pub(crate) const SERVICE_IDENTITY_VERIFICATION_METHOD_FRAGMENT: &str = "service-key";
@@ -167,7 +167,7 @@ pub async fn initialize_and_spawn(
         }
     };
     let registration_key = ServiceRegistrationKey::new(
-        ServiceKind::AuthServer,
+        ServiceKind::Station,
         CanonicalServiceUrl::canonicalize(public_base_url.as_str())
             .map_err(|error| anyhow::anyhow!(error.to_string()))?,
     )
@@ -252,7 +252,7 @@ async fn run_supervisor(
 
 fn select_provider(config: &ArkretConfig) -> Result<ProviderCandidate, Box<DidCoreIdentityState>> {
     let mut candidates = config
-        .principal_servers
+        .stations
         .iter()
         .filter_map(|server| {
             server
@@ -282,7 +282,7 @@ fn select_provider(config: &ArkretConfig) -> Result<ProviderCandidate, Box<DidCo
     match candidates.as_slice() {
         [] => Err(Box::new(DidCoreIdentityState::Faulted {
             diagnostic: DidCoreIdentityDiagnostic::ProviderNotConfigured,
-            next_action: "configure registration credentials on one trusted principal_servers[] or identity_services[] entry"
+            next_action: "configure registration credentials on one trusted stations[] or identity_services[] entry"
                 .to_owned(),
         })),
         [(name, provider_endpoint, bearer, expected_service_id)] => {
@@ -628,7 +628,7 @@ async fn verify_provider_registration_receipt(
     let describe_url = Url::parse(&format!(
         "{}{}",
         provider.reference.endpoint.as_str(),
-        principal_server_trust::DESCRIBE_PATH
+        station_trust::DESCRIBE_PATH
     ))
     .map_err(|error| ProviderProofError::InvalidEvidence(error.to_string()))?;
     let describe_bytes = fetch_provider_evidence(
@@ -1110,7 +1110,7 @@ fn provider_unavailable(error: &arkret_http_client::Error) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use coauth_config::{IdentityServiceConfig, PrincipalServerConfig};
+    use coauth_config::{IdentityServiceConfig, StationConfig};
 
     use super::*;
 
@@ -1122,8 +1122,8 @@ mod tests {
         }
     }
 
-    fn principal(name: &str, endpoint: &str) -> PrincipalServerConfig {
-        PrincipalServerConfig {
+    fn principal(name: &str, endpoint: &str) -> StationConfig {
+        StationConfig {
             name: name.to_owned(),
             endpoint: endpoint.parse().unwrap(),
             service_id: None,
@@ -1149,7 +1149,7 @@ mod tests {
     #[test]
     fn multiple_provider_roles_require_explicit_name() {
         let config = ArkretConfig {
-            principal_servers: vec![principal("principal-a", "https://principal.example/")],
+            stations: vec![principal("principal-a", "https://principal.example/")],
             identity_services: vec![standalone("identity-a", "https://identity.example/")],
             ..ArkretConfig::default()
         };
@@ -1168,7 +1168,7 @@ mod tests {
     fn configured_provider_pin_reaches_the_selected_candidate() {
         let expected = DidCoreId::new("ak:did_core:webvh:QmProviderPin").unwrap();
         let config = ArkretConfig {
-            principal_servers: vec![PrincipalServerConfig {
+            stations: vec![StationConfig {
                 service_id: Some(expected.clone()),
                 ..principal("principal-a", "https://principal.example/")
             }],
@@ -1192,7 +1192,7 @@ mod tests {
     #[test]
     fn explicit_provider_name_disambiguates_equal_roles() {
         let config = ArkretConfig {
-            principal_servers: vec![principal("principal-a", "https://principal.example/")],
+            stations: vec![principal("principal-a", "https://principal.example/")],
             identity_services: vec![standalone("identity-a", "https://identity.example/")],
             identity_provider: Some("identity-a".to_owned()),
             ..ArkretConfig::default()
@@ -1226,7 +1226,7 @@ mod tests {
         };
         let provider = select_provider(&config).unwrap();
         let registration_key = ServiceRegistrationKey::new(
-            ServiceKind::AuthServer,
+            ServiceKind::Station,
             CanonicalServiceUrl::canonicalize("https://account.example/").unwrap(),
         )
         .unwrap();
@@ -1255,7 +1255,7 @@ mod tests {
 
     fn registration_key_for_tests() -> ServiceRegistrationKey {
         ServiceRegistrationKey::new(
-            ServiceKind::AuthServer,
+            ServiceKind::Station,
             CanonicalServiceUrl::canonicalize("https://account.example/").unwrap(),
         )
         .unwrap()
@@ -1458,7 +1458,7 @@ mod tests {
             &ServiceRegistrationInceptionInput {
                 provider_endpoint: &"https://identity.example/".parse().unwrap(),
                 registration_key: &ServiceRegistrationKey::new(
-                    ServiceKind::PrincipalServer,
+                    ServiceKind::Station,
                     CanonicalServiceUrl::new("https://identity.example/").unwrap(),
                 )
                 .unwrap(),

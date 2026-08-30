@@ -1,7 +1,7 @@
-//! Principal Server trust enrollment commands
+//! Station trust enrollment commands
 //!
 //! Machine-executable one-time bootstrap and explicit replacement of the
-//! persisted Principal Server authorization pins. The endpoint, egress, TLS
+//! persisted Station authorization pins. The endpoint, egress, TLS
 //! and Provider settings all come from the same configuration the server
 //! uses, so operators never re-enter a second, drift-prone URL set.
 
@@ -10,8 +10,8 @@ use std::process::ExitCode;
 use anyhow::Context;
 use clap::Parser;
 use coauth_backend::util::diesel_pool_from_config;
-use coauth_config::{AppConfig, ConfigurationSection, PrincipalServerConfig};
-use coauth_data::storage::principal_server_trust::PrincipalServerTrustSource;
+use coauth_config::{AppConfig, ConfigurationSection, StationConfig};
+use coauth_data::storage::station_trust::StationTrustSource;
 use coauth_storage_postgres::PgRepositoryFactory;
 use figment::Figment;
 use tracing::{info, info_span};
@@ -24,7 +24,7 @@ pub(super) struct Options {
 
 #[derive(Parser, Debug)]
 enum Subcommand {
-    /// Manage Principal Server trust enrollment
+    /// Manage Station trust enrollment
     Trust(TrustOptions),
 }
 
@@ -36,7 +36,7 @@ struct TrustOptions {
 
 #[derive(Parser, Debug)]
 enum TrustSubcommand {
-    /// One-time idempotent trust bootstrap of a configured Principal Server
+    /// One-time idempotent trust bootstrap of a configured Station
     Bootstrap(BootstrapOptions),
     /// Explicitly replace an enrolled pin after a legitimate identity genesis
     Replace(ReplaceOptions),
@@ -46,14 +46,14 @@ enum TrustSubcommand {
 
 #[derive(Parser, Debug)]
 struct BootstrapOptions {
-    /// Name of the `arkret.principal_servers[]` entry to enroll
+    /// Name of the `arkret.stations[]` entry to enroll
     #[arg(long)]
     name: String,
 }
 
 #[derive(Parser, Debug)]
 struct ReplaceOptions {
-    /// Name of the enrolled `arkret.principal_servers[]` entry
+    /// Name of the enrolled `arkret.stations[]` entry
     #[arg(long)]
     name: String,
 
@@ -70,14 +70,14 @@ struct ReplaceOptions {
 
 #[derive(Parser, Debug)]
 struct RevokeOptions {
-    /// Name of the enrolled `arkret.principal_servers[]` entry
+    /// Name of the enrolled `arkret.stations[]` entry
     #[arg(long)]
     name: String,
 }
 
 impl Options {
     pub async fn run(self, figment: &Figment) -> anyhow::Result<ExitCode> {
-        let _span = info_span!("cli.principal_server").entered();
+        let _span = info_span!("cli.station").entered();
         match self.subcommand {
             Subcommand::Trust(options) => options.run(figment).await,
         }
@@ -85,7 +85,7 @@ impl Options {
 }
 
 struct CommandContext {
-    server: PrincipalServerConfig,
+    server: StationConfig,
     repository_factory: PgRepositoryFactory,
     http_client: reqwest::Client,
 }
@@ -95,14 +95,14 @@ impl TrustOptions {
         match &self.subcommand {
             TrustSubcommand::Bootstrap(options) => {
                 let context = load_context(figment, &options.name).await?;
-                let outcome = coauth_backend::services::principal_server_trust::bootstrap(
+                let outcome = coauth_backend::services::station_trust::bootstrap(
                     &context.repository_factory,
                     &context.http_client,
                     &context.server,
-                    PrincipalServerTrustSource::OperatorCli,
+                    StationTrustSource::OperatorCli,
                 )
                 .await
-                .context("principal-server trust bootstrap failed")?;
+                .context("station trust bootstrap failed")?;
                 print_summary(serde_json::json!({
                     "action": if outcome.already_enrolled { "verified" } else { "enrolled" },
                     "name": outcome.enrollment.name,
@@ -127,7 +127,7 @@ impl TrustOptions {
                             .context("--accept-new must be a valid did_core id")
                     })
                     .transpose()?;
-                let outcome = coauth_backend::services::principal_server_trust::replace(
+                let outcome = coauth_backend::services::station_trust::replace(
                     &context.repository_factory,
                     &context.http_client,
                     &context.server,
@@ -135,7 +135,7 @@ impl TrustOptions {
                     accept_new.as_ref(),
                 )
                 .await
-                .context("principal-server trust replace failed")?;
+                .context("station trust replace failed")?;
                 print_summary(serde_json::json!({
                     "action": "replaced",
                     "name": outcome.enrollment.name,
@@ -149,12 +149,12 @@ impl TrustOptions {
                 let config = AppConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
                 let pool = diesel_pool_from_config(&config.database).await?;
                 let repository_factory = PgRepositoryFactory::new(pool);
-                let revoked = coauth_backend::services::principal_server_trust::revoke(
+                let revoked = coauth_backend::services::station_trust::revoke(
                     &repository_factory,
                     &options.name,
                 )
                 .await
-                .context("principal-server trust revoke failed")?;
+                .context("station trust revoke failed")?;
                 print_summary(serde_json::json!({
                     "action": if revoked { "revoked" } else { "unchanged" },
                     "name": options.name,
@@ -165,18 +165,18 @@ impl TrustOptions {
     }
 }
 
-/// Load the configuration, find the named Principal Server entry, and build
+/// Load the configuration, find the named Station entry, and build
 /// the same database pool and egress-controlled HTTP client the server uses.
 async fn load_context(figment: &Figment, name: &str) -> anyhow::Result<CommandContext> {
     let config = AppConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
     let server = config
         .arkret
-        .principal_servers
+        .stations
         .iter()
         .find(|server| server.name == name)
         .cloned()
         .with_context(|| {
-            format!("no `arkret.principal_servers[]` entry named {name:?} in the configuration")
+            format!("no `arkret.stations[]` entry named {name:?} in the configuration")
         })?;
     let pool = diesel_pool_from_config(&config.database).await?;
     let http_client = coauth_backend::reqwest_client_for_server(
@@ -195,6 +195,6 @@ async fn load_context(figment: &Figment, name: &str) -> anyhow::Result<CommandCo
 /// identity material — never bearer tokens, private keys or raw evidence.
 fn print_summary(summary: serde_json::Value) {
     let rendered = serde_json::to_string(&summary).expect("summary serialization cannot fail");
-    info!(%rendered, "principal-server trust operation completed");
+    info!(%rendered, "station trust operation completed");
     println!("{rendered}");
 }

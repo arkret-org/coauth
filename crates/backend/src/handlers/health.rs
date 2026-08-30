@@ -138,7 +138,7 @@ fn health_payload(depot: &Depot) -> serde_json::Value {
 
 fn configured_provider_endpoint(config: &ArkretConfig) -> Option<String> {
     let mut candidates = config
-        .principal_servers
+        .stations
         .iter()
         .filter(|server| server.embedded_webvh_registration_bearer.is_some())
         .map(|server| (server.name.as_str(), &server.endpoint))

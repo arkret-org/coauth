@@ -528,10 +528,13 @@ fn validate_grant_material(
         ("header_kid", header_kid == grant.signing_key_id),
         ("preimage_issuer", preimage.issuer_id == *grant.issuer_id),
         ("operation_issuer", operation.issuer_id == *grant.issuer_id),
-        ("preimage_subject", preimage.subject_id == *grant.subject_id),
         (
-            "preimage_service_account",
-            preimage.service_account_id == *grant.service_account_id,
+            "preimage_subject",
+            preimage.account_id.principal_id == *grant.subject_id,
+        ),
+        (
+            "preimage_station",
+            preimage.account_id.station_id == *grant.audience_id,
         ),
         (
             "preimage_audience",
@@ -604,8 +607,7 @@ fn validate_refresh_chain(
         serde_json::from_slice(successor.issuance_preimage)
             .map_err(|_| DatabaseError::invalid_operation())?;
     let common_binding_mismatch = predecessor_preimage.issuer_id != successor_preimage.issuer_id
-        || predecessor_preimage.subject_id != successor_preimage.subject_id
-        || predecessor_preimage.service_account_id != successor_preimage.service_account_id
+        || predecessor_preimage.account_id != successor_preimage.account_id
         || predecessor_preimage.audience_id != successor_preimage.audience_id
         || predecessor_preimage.session_id != successor_preimage.session_id
         || predecessor_preimage.session_public_key != successor_preimage.session_public_key

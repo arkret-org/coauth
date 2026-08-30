@@ -90,7 +90,7 @@ pub struct LoginReqBody {
     pub handle: String,
     pub password: String,
     /// Audience the client wants the issued session grant to be bound to.
-    /// Must exactly match a configured principal-server audience. When
+    /// Must exactly match a configured station audience. When
     /// omitted, the caller is implicitly accepting the deployment's only
     /// configured server name.
     #[serde(default)]
@@ -99,7 +99,7 @@ pub struct LoginReqBody {
     /// provider configured.
     #[serde(default)]
     pub captcha_token: Option<String>,
-    /// Device the issued principal-server session grant is bound to. Required
+    /// Device the issued station session grant is bound to. Required
     /// when password-login session grants are enabled.
     #[serde(default)]
     pub device_id: Option<String>,
@@ -182,12 +182,12 @@ pub struct SessionGrantOneShotInfo {
     pub audience: String,
     pub scopes: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub principal_server: Option<SessionGrantPrincipalServerInfo>,
+    pub station: Option<SessionGrantStationInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
-pub struct SessionGrantPrincipalServerInfo {
+pub struct SessionGrantStationInfo {
     pub name: String,
     pub endpoint: String,
 }

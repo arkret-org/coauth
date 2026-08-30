@@ -73,7 +73,7 @@ pub enum UserAdminServiceError {
     UpstreamSubjectAlreadyLinked { provider_id: Ulid, subject: String },
 
     #[error(transparent)]
-    PrincipalServer(AnyhowError),
+    Station(AnyhowError),
 
     #[error(transparent)]
     Repository(#[from] RepositoryError),
@@ -84,7 +84,7 @@ pub async fn patch_user(
     repo: &mut BoxRepository,
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     admin_user: Option<&User>,
     user_id: Ulid,
     patch: AdminUserPatch,
@@ -110,9 +110,9 @@ pub async fn patch_user(
     let status_changes = user.status != next_status;
     let mut account_status_publication = account_status_publication;
     let publication_binding = if status_changes {
-        let (destination_name, audience) = principal_server
+        let (destination_name, audience) = station
             .account_status_destination()
-            .map_err(UserAdminServiceError::PrincipalServer)?;
+            .map_err(UserAdminServiceError::Station)?;
         let binding = repo
             .principal_did()
             .get_for_user_and_audience(&user, audience.as_str())
@@ -125,7 +125,7 @@ pub async fn patch_user(
             account_status_publication = Some(
                 author_transition_plan(
                     repo,
-                    principal_server,
+                    station,
                     signing.keystore,
                     signing.service_id.as_str(),
                     &user,
@@ -146,7 +146,7 @@ pub async fn patch_user(
             .ok_or(UserAdminServiceError::MissingAccountStatusPublication)?;
         if plan.destination_name != destination_name || plan.audience_id != audience {
             return Err(UserAdminServiceError::InvalidAccountStatusPublication(
-                "publication destination does not match the configured Principal Server".to_owned(),
+                "publication destination does not match the configured Station".to_owned(),
             ));
         }
         validate_transition_plan(&user, &binding, next_status, plan).map_err(|error| {
@@ -182,11 +182,11 @@ pub async fn patch_user(
     }
 
     if !account_status_needs_deactivation_fanout(updated.status) {
-        sync_display_name_patch(principal_server, &updated, display_name_patch)
+        sync_display_name_patch(station, &updated, display_name_patch)
             .await
             .map_err(|error| match error {
-                crate::services::user_profile::UserProfileServiceError::PrincipalServer(error) => {
-                    UserAdminServiceError::PrincipalServer(error)
+                crate::services::user_profile::UserProfileServiceError::Station(error) => {
+                    UserAdminServiceError::Station(error)
                 }
                 crate::services::user_profile::UserProfileServiceError::InvalidDisplayName => {
                     UserAdminServiceError::InvalidDisplayName

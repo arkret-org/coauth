@@ -22,7 +22,7 @@ pub async fn upload_avatar(
     depot: &Depot,
 ) -> Result<Json<UploadAvatarOutcome>, RouteError> {
     let repo_factory = depot.repo_factory()?;
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let url_builder = depot.url_builder()?;
     let clock = make_clock();
 
@@ -113,7 +113,7 @@ pub async fn upload_avatar(
         &mut repo,
         &requester,
         &clock,
-        principal_server.as_ref(),
+        station.as_ref(),
         patch,
     )
     .await

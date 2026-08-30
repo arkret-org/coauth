@@ -126,7 +126,7 @@ pub struct AccountabilityGrantOutcome {
 ///
 /// Internal AKP-0008 grant-issuance endpoint. Accepts only the soland /
 /// sodmin static bearer token (matched against any
-/// `arkret.principal_servers[].session_grant_introspection_bearer`
+/// `arkret.stations[].session_grant_introspection_bearer`
 /// configured for the deployment); browser sessions and end-user
 /// bearers are rejected with 401.
 ///
@@ -352,12 +352,11 @@ fn build_soland_fanout_payload(
     service_id: &str,
     arkret_config: &ArkretConfig,
 ) -> Result<serde_json::Value, AppError> {
-    let principal_servers: Vec<_> = arkret_config
-        .principal_servers
+    let stations: Vec<_> = arkret_config
+        .stations
         .iter()
         .map(|server| {
-            let service_id =
-                crate::services::principal_server_trust::effective_audience_shared(server);
+            let service_id = crate::services::station_trust::effective_audience_shared(server);
             serde_json::json!({
                 "name": server.name.as_str(),
                 "audience": service_id.clone(),
@@ -372,14 +371,14 @@ fn build_soland_fanout_payload(
         "issuer_id": service_id,
         "raw_payload_digest": raw_payload_digest,
         "grant": response,
-        "principal_servers": principal_servers,
+        "stations": stations,
     }))
 }
 
 /// Reject any caller that isn't soland / sodmin (no browser session, no
 /// end-user bearer). The single accepted credential is the static
 /// bearer configured under
-/// `arkret.principal_servers[].session_grant_introspection_bearer` —
+/// `arkret.stations[].session_grant_introspection_bearer` —
 /// shared with the existing session-grant introspection path.
 fn authn_internal_caller(req: &Request, arkret_config: &ArkretConfig) -> Result<(), AppError> {
     let authorization = req
@@ -397,7 +396,7 @@ fn authn_internal_caller(req: &Request, arkret_config: &ArkretConfig) -> Result<
             )
         })?;
 
-    let accepted = arkret_config.principal_servers.iter().any(|server| {
+    let accepted = arkret_config.stations.iter().any(|server| {
         server
             .session_grant_introspection_bearer
             .as_deref()

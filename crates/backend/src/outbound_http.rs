@@ -213,7 +213,7 @@ async fn fetch_bounded_inner(
     Ok(body)
 }
 
-/// Policy for calls to the principal server.
+/// Policy for calls to the Station.
 ///
 /// The backoff curve is `sync/api-conventions.md` §9 and is normative, not a
 /// coauth tuning knob: the previous flat 100 ms wait breached the 1,000 ms
@@ -227,7 +227,7 @@ pub(crate) const fn soland_policy(operation: &'static str) -> OutboundRequestPol
         .with_max_attempts(2)
 }
 
-/// Policy for Principal Server trust verification.
+/// Policy for Station trust verification.
 ///
 /// Coauth and Soland are commonly launched together behind the same reverse
 /// proxy. During that short readiness window the proxy can legitimately

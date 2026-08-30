@@ -305,7 +305,7 @@ pub async fn set_oauth_session_name(
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
     let repo_factory = depot.repo_factory()?;
-    let principal_server = depot.principal_server()?;
+    let station = depot.station()?;
     let clock = make_clock();
 
     let activity_tracker = extract_bound_activity_tracker(req, depot);
@@ -318,7 +318,7 @@ pub async fn set_oauth_session_name(
         repo,
         &requester,
         &clock,
-        principal_server.as_ref(),
+        station.as_ref(),
         ulid,
         input.human_name,
     )

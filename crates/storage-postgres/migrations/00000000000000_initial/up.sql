@@ -168,26 +168,26 @@ CREATE TABLE public.verified_did_bindings (
 
 CREATE TABLE public.account_status_ledger_heads (
     account_authority_id text NOT NULL,
-    account_id text NOT NULL,
+    service_account_id text NOT NULL,
     current_status_seq bigint,
     current_record_id text,
-    PRIMARY KEY (account_authority_id, account_id),
+    PRIMARY KEY (account_authority_id, service_account_id),
     CHECK ((current_status_seq IS NULL) = (current_record_id IS NULL))
 );
 
 CREATE TABLE public.account_status_records (
     account_authority_id text NOT NULL,
-    account_id text NOT NULL,
+    service_account_id text NOT NULL,
     status_seq bigint NOT NULL CHECK (status_seq >= 1),
     record_id text NOT NULL,
     record jsonb NOT NULL,
     issued_at timestamp with time zone NOT NULL,
-    PRIMARY KEY (account_authority_id, account_id, status_seq),
+    PRIMARY KEY (account_authority_id, service_account_id, status_seq),
     UNIQUE (record_id)
 );
 
 CREATE INDEX account_status_records_range_idx
-    ON public.account_status_records (account_authority_id, account_id, status_seq);
+    ON public.account_status_records (account_authority_id, service_account_id, status_seq);
 
 -- RFC 9449 DPoP proof replay cache. `jti_digest` is a SHA-256 digest of
 -- the caller-supplied `jti`, bounded for storage and safe for audit logs.
@@ -661,12 +661,12 @@ CREATE TABLE public.principal_did_bindings (
     accepted_id text NOT NULL,
     binding_version bigint NOT NULL,
     binding_frontier_digest text NOT NULL,
-    principal_authority jsonb NOT NULL,
+    account_id jsonb NOT NULL,
     principal_control_realm_id text NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
     ,CONSTRAINT principal_did_binding_basis_shape CHECK (audience_id = accepted_id AND audience_id LIKE 'ak:did_core:%' AND binding_version >= 1 AND binding_frontier_digest ~ '^sha256:[0-9a-f]{64}$'::text AND principal_control_realm_id LIKE 'ak:realm:%')
-    ,CONSTRAINT principal_did_binding_resolution_snapshot_shape CHECK (verified_did ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text AND btrim(verified_version_id) <> ''::text AND jsonb_typeof(binding_receipt) = 'object'::text AND jsonb_typeof(principal_authority) = 'object'::text)
+    ,CONSTRAINT principal_did_binding_resolution_snapshot_shape CHECK (verified_did ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text AND btrim(verified_version_id) <> ''::text AND jsonb_typeof(binding_receipt) = 'object'::text AND jsonb_typeof(account_id) = 'object'::text)
 );
 
 -- Durable exact-replay ledger for short-lived Account Authority controller
@@ -1003,7 +1003,7 @@ CREATE TABLE public.service_identity (
     CONSTRAINT service_identity_singleton CHECK ((id = 1))
 );
 
-CREATE TABLE public.principal_server_trust_enrollments (
+CREATE TABLE public.station_trust_enrollments (
     name text NOT NULL,
     canonical_endpoint text NOT NULL,
     service_id text NOT NULL,
@@ -1015,20 +1015,20 @@ CREATE TABLE public.principal_server_trust_enrollments (
     source text NOT NULL,
     enrolled_at timestamp with time zone DEFAULT now() NOT NULL,
     last_verified_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT principal_server_trust_enrollments_name_non_empty CHECK ((btrim(name) <> ''::text)),
-    CONSTRAINT principal_server_trust_enrollments_canonical_endpoint_non_empty CHECK ((btrim(canonical_endpoint) <> ''::text)),
-    CONSTRAINT principal_server_trust_enrollments_service_id_non_empty CHECK ((btrim(service_id) <> ''::text)),
-    CONSTRAINT principal_server_trust_enrollments_service_kind_valid CHECK ((service_kind = 'principal_server'::text)),
-    CONSTRAINT principal_server_trust_enrollments_did_non_empty CHECK ((btrim(did) <> ''::text)),
-    CONSTRAINT principal_server_trust_enrollments_method_history_head_non_empty CHECK ((btrim(method_history_head) <> ''::text)),
-    CONSTRAINT principal_server_trust_enrollments_version_id_non_empty CHECK ((btrim(version_id) <> ''::text)),
-    CONSTRAINT principal_server_trust_enrollments_resolution_record_digest_non_empty CHECK ((btrim(resolution_record_digest) <> ''::text)),
-    CONSTRAINT principal_server_trust_enrollments_source_valid CHECK ((source = ANY (ARRAY['operator_cli'::text, 'deployment_artifact'::text, 'development_auto'::text])))
+    CONSTRAINT station_trust_enrollments_name_non_empty CHECK ((btrim(name) <> ''::text)),
+    CONSTRAINT station_trust_enrollments_canonical_endpoint_non_empty CHECK ((btrim(canonical_endpoint) <> ''::text)),
+    CONSTRAINT station_trust_enrollments_service_id_non_empty CHECK ((btrim(service_id) <> ''::text)),
+    CONSTRAINT station_trust_enrollments_service_kind_valid CHECK ((service_kind = 'station'::text)),
+    CONSTRAINT station_trust_enrollments_did_non_empty CHECK ((btrim(did) <> ''::text)),
+    CONSTRAINT station_trust_enrollments_method_history_head_non_empty CHECK ((btrim(method_history_head) <> ''::text)),
+    CONSTRAINT station_trust_enrollments_version_id_non_empty CHECK ((btrim(version_id) <> ''::text)),
+    CONSTRAINT station_trust_enrollments_resolution_record_digest_non_empty CHECK ((btrim(resolution_record_digest) <> ''::text)),
+    CONSTRAINT station_trust_enrollments_source_valid CHECK ((source = ANY (ARRAY['operator_cli'::text, 'deployment_artifact'::text, 'development_auto'::text])))
 );
 
-COMMENT ON TABLE public.principal_server_trust_enrollments IS 'Deployment-local principal-server trust enrollment: the accepted authorization pin per canonical endpoint, written only by explicit bootstrap/replace or the narrowly-scoped development auto-enrollment.';
+COMMENT ON TABLE public.station_trust_enrollments IS 'Deployment-local station trust enrollment: the accepted authorization pin per canonical endpoint, written only by explicit bootstrap/replace or the narrowly-scoped development auto-enrollment.';
 
-CREATE TABLE public.principal_server_trust_audits (
+CREATE TABLE public.station_trust_audits (
     id uuid NOT NULL,
     enrollment_name text NOT NULL,
     action text NOT NULL,
@@ -1036,10 +1036,10 @@ CREATE TABLE public.principal_server_trust_audits (
     previous_service_id text,
     detail text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT principal_server_trust_audits_action_valid CHECK ((action = ANY (ARRAY['enrolled'::text, 'verification_failed'::text, 'replaced'::text, 'revoked'::text])))
+    CONSTRAINT station_trust_audits_action_valid CHECK ((action = ANY (ARRAY['enrolled'::text, 'verification_failed'::text, 'replaced'::text, 'revoked'::text])))
 );
 
-COMMENT ON TABLE public.principal_server_trust_audits IS 'Append-only audit log covering principal-server trust enrollment creation, verification failures, explicit replacement and revocation.';
+COMMENT ON TABLE public.station_trust_audits IS 'Append-only audit log covering station trust enrollment creation, verification failures, explicit replacement and revocation.';
 
 CREATE TABLE public.upstream_oauth_authorization_sessions (
     id uuid NOT NULL,
@@ -1521,14 +1521,14 @@ ALTER TABLE ONLY public.queue_workers
 ALTER TABLE ONLY public.risk_action_proposals
     ADD CONSTRAINT risk_action_proposals_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.principal_server_trust_enrollments
-    ADD CONSTRAINT principal_server_trust_enrollments_pkey PRIMARY KEY (name);
+ALTER TABLE ONLY public.station_trust_enrollments
+    ADD CONSTRAINT station_trust_enrollments_pkey PRIMARY KEY (name);
 
-ALTER TABLE ONLY public.principal_server_trust_enrollments
-    ADD CONSTRAINT principal_server_trust_enrollments_canonical_endpoint_key UNIQUE (canonical_endpoint);
+ALTER TABLE ONLY public.station_trust_enrollments
+    ADD CONSTRAINT station_trust_enrollments_canonical_endpoint_key UNIQUE (canonical_endpoint);
 
-ALTER TABLE ONLY public.principal_server_trust_audits
-    ADD CONSTRAINT principal_server_trust_audits_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.station_trust_audits
+    ADD CONSTRAINT station_trust_audits_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.upstream_oauth_authorization_sessions
     ADD CONSTRAINT upstream_oauth_authorization_sessions_pkey PRIMARY KEY (id);

@@ -76,9 +76,9 @@ coauth manage issue-user-registration-token -c config.yaml
 
 ## 批量操作
 
-### 同步所有用户到 Principal Server
+### 同步所有用户到 Station
 
-通过 Principal Server 抽象同步 coauth 中的所有用户：
+通过 Station 抽象同步 coauth 中的所有用户：
 
 ```bash
 coauth manage provision-all-users -c config.yaml

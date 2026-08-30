@@ -147,13 +147,10 @@ pub fn account_authority_core_id(did: &str) -> arkret_identifiers::DidCoreId {
 
 /// Public account-authority coordinate for a binding fixture.
 #[must_use]
-pub fn principal_authority(
-    principal_id: &str,
-    principal_server_id: &str,
-) -> arkret_wire::PrincipalAuthorityKey {
-    arkret_wire::PrincipalAuthorityKey::new(
+pub fn account_id(principal_id: &str, station_id: &str) -> arkret_wire::AccountId {
+    arkret_wire::AccountId::new(
         arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
-        arkret_identifiers::DidCoreId::new(principal_server_id).unwrap(),
+        arkret_identifiers::DidCoreId::new(station_id).unwrap(),
     )
 }
 
@@ -238,7 +235,7 @@ pub fn verified_principal_binding_input(
         .strip_prefix("ak:did_core:webvh:")
         .expect("webvh test principal core");
     let did = format!("did:webvh:{method_specific_id}:fixture.example");
-    let principal_authority = principal_authority(&principal_id, &audience);
+    let account_id = account_id(&principal_id, &audience);
     let audience_id = arkret_identifiers::DidCoreId::new(audience).unwrap();
     let principal_id = arkret_identifiers::DidCoreId::new(principal_id).unwrap();
     let did = arkret_identifiers::Did::new(did).unwrap();
@@ -255,7 +252,7 @@ pub fn verified_principal_binding_input(
             "1-fixture",
             key_log_head,
         ),
-        // The accepted service identity is the Principal Server the binding is
+        // The accepted service identity is the Station the binding is
         // scoped to; the Account Authority that accepted it is carried by the
         // receipt.
         accepted_id: audience_id,
@@ -265,7 +262,7 @@ pub fn verified_principal_binding_input(
             "b".repeat(64)
         ))
         .unwrap(),
-        principal_authority,
+        account_id,
         principal_control_realm_id: principal_control_realm_id(),
     }
 }

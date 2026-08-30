@@ -39,7 +39,7 @@ impl RunnableJob for AgentKeyPairCommitJob {
             .map_err(|_| JobError::fail(anyhow::anyhow!("event_id_digest_mismatch")))?;
 
         // A queued retry can outlive discovery of collision evidence. Check
-        // quarantine before performing the external Principal-Server commit.
+        // quarantine before performing the external Station commit.
         let mut preflight_repo = state.repository().await.map_err(JobError::retry)?;
         let authorization = preflight_repo
             .agent_key_authorization()
@@ -60,7 +60,7 @@ impl RunnableJob for AgentKeyPairCommitJob {
         let request = PrincipalAgentKeyPairCommitRequest::new(
             self.idempotency_key().to_owned(),
             self.request_digest().to_owned(),
-            self.principal_server_name().to_owned(),
+            self.station_name().to_owned(),
             self.body().clone(),
         );
         state

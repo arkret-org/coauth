@@ -12,8 +12,6 @@ use coauth_oauth_types::scope;
 use salvo::prelude::*;
 use serde::Serialize;
 
-use crate::handlers::arkret;
-
 #[derive(Debug, Serialize)]
 struct DiscoveryDocument {
     #[serde(flatten)]
@@ -26,12 +24,6 @@ struct DiscoveryDocument {
     #[serde(rename = "org.arkret.api_endpoint")]
     arkret_api_endpoint: String,
 
-    #[serde(rename = "org.arkret.server_describe")]
-    arkret_server_describe: String,
-
-    #[serde(rename = "org.arkret.service_id")]
-    arkret_service_id: arkret_identifiers::DidCoreId,
-
     #[serde(rename = "org.arkret.did_binding_methods")]
     arkret_did_binding_methods: Vec<String>,
 
@@ -41,20 +33,9 @@ struct DiscoveryDocument {
     #[serde(rename = "org.arkret.admin_audience")]
     arkret_admin_audience: String,
 
-    #[serde(rename = "org.arkret.principal_servers")]
-    arkret_principal_servers: Vec<PrincipalServerMetadata>,
-
     #[serde(rename = "org.arkret.identity_registry")]
     #[serde(skip_serializing_if = "Option::is_none")]
     arkret_identity_registry: Option<IdentityRegistryMetadata>,
-}
-
-#[derive(Debug, Serialize)]
-struct PrincipalServerMetadata {
-    name: String,
-    audience: Option<arkret_identifiers::DidCoreId>,
-    endpoint: String,
-    service_id: Option<arkret_identifiers::DidCoreId>,
 }
 
 #[derive(Debug, Serialize)]
@@ -150,8 +131,8 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
         scope::COAUTH_ADMIN.to_string(),
         scope::ARKRET_ADMIN.to_string(),
         scope::ARKRET_CLIENT.to_string(),
-        scope::ARKRET_PRINCIPAL_SERVER.to_string(),
-        scope::ARKRET_PRINCIPAL_SERVER_SESSION_BIND.to_string(),
+        scope::ARKRET_STATION.to_string(),
+        scope::ARKRET_STATION_SESSION_BIND.to_string(),
     ]);
 
     let response_types_supported = Some(vec![
@@ -275,22 +256,6 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
         ..ProviderMetadata::default()
     };
 
-    let arkret_principal_servers = arkret_config
-        .principal_servers
-        .iter()
-        .filter_map(|server| {
-            // Only publish Principal Servers with an accepted, verified
-            // audience pin; unenrolled endpoints never appear in discovery.
-            let service_id =
-                crate::services::principal_server_trust::effective_audience_shared(server)?;
-            Some(PrincipalServerMetadata {
-                name: server.name.clone(),
-                audience: Some(service_id.clone()),
-                endpoint: server.endpoint.to_string(),
-                service_id: Some(service_id),
-            })
-        })
-        .collect();
     let arkret_identity_registry =
         arkret_config
             .identity_registry
@@ -311,18 +276,15 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
             "session_end".to_owned(),
         ],
         arkret_api_endpoint: url_builder.absolute_url("/_arkret").to_string(),
-        arkret_server_describe: url_builder.absolute_url("/_arkret/describe").to_string(),
-        arkret_service_id: arkret::service_id_for(&arkret_config),
         arkret_did_binding_methods: vec!["session_grant".to_owned()],
         arkret_supported_scopes: vec![
             scope::COAUTH_ADMIN.to_string(),
             scope::ARKRET_ADMIN.to_string(),
             scope::ARKRET_CLIENT.to_string(),
-            scope::ARKRET_PRINCIPAL_SERVER.to_string(),
-            scope::ARKRET_PRINCIPAL_SERVER_SESSION_BIND.to_string(),
+            scope::ARKRET_STATION.to_string(),
+            scope::ARKRET_STATION_SESSION_BIND.to_string(),
         ],
         arkret_admin_audience: arkret::required_audience_for(url_builder, &arkret_config),
-        arkret_principal_servers,
         arkret_identity_registry,
     })
 }
@@ -406,22 +368,18 @@ mod tests {
         assert!(scopes.iter().any(|scope| scope == "urn:coauth:admin"));
         assert!(scopes.iter().any(|scope| scope == "urn:arkret:admin:*"));
         assert!(scopes.iter().any(|scope| scope == "urn:arkret:client:*"));
+        assert!(scopes.iter().any(|scope| scope == "urn:arkret:station:*"));
         assert!(
             scopes
                 .iter()
-                .any(|scope| scope == "urn:arkret:principal-server:*")
-        );
-        assert!(
-            scopes
-                .iter()
-                .any(|scope| scope == "urn:arkret:principal-server:session.bind")
+                .any(|scope| scope == "urn:arkret:station:session.bind")
         );
 
         let arkret_scopes = body["org.arkret.supported_scopes"].as_array().unwrap();
         assert!(
             arkret_scopes
                 .iter()
-                .any(|scope| scope == "urn:arkret:principal-server:session.bind")
+                .any(|scope| scope == "urn:arkret:station:session.bind")
         );
 
         let claims = body["claims_supported"].as_array().unwrap();

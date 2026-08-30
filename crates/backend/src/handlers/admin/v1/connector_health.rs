@@ -31,8 +31,8 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<ConnectorHe
             .into_iter()
             .map(|(name, result)| {
                 let provider_ref = registry.get(name);
-                let principal_authority = provider_ref
-                    .map(|p| p.principal_authority().to_owned())
+                let account_id = provider_ref
+                    .map(|p| p.account_id().to_owned())
                     .unwrap_or_default();
                 let (status, error) = match result {
                     Ok(()) => (ConnectorHealthStatus::Healthy, None),
@@ -40,24 +40,21 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<ConnectorHe
                 };
                 ConnectorHealthRow {
                     provider: name.to_owned(),
-                    principal_authority,
+                    account_id,
                     status,
                     error,
                 }
             })
             .collect()
     } else {
-        let principal_server = depot.principal_server()?;
-        let (status, error) = match principal_server
-            .is_handle_available("__health_check__")
-            .await
-        {
+        let station = depot.station()?;
+        let (status, error) = match station.is_handle_available("__health_check__").await {
             Ok(_) => (ConnectorHealthStatus::Healthy, None),
             Err(e) => (ConnectorHealthStatus::Unhealthy, Some(e.to_string())),
         };
         vec![ConnectorHealthRow {
             provider: "principal".to_owned(),
-            principal_authority: principal_server.principal_authority().to_owned(),
+            account_id: station.account_id().to_owned(),
             status,
             error,
         }]

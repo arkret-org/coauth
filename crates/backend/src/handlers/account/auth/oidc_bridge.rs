@@ -62,7 +62,7 @@ pub(crate) struct OidcCodeExchangeInput {
     pub state: String,
     /// `proof.nonce` — bound to the authorization request and id_token.
     pub nonce: String,
-    /// `proof.audience` — the requested principal-server audience.
+    /// `proof.audience` — the requested station audience.
     pub requested_audience: Option<String>,
 }
 
@@ -127,7 +127,7 @@ fn validate_returned_nonce(grant_nonce: Option<&str>, expected_nonce: &str) -> R
 
 fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url, String> {
     let base = url::Url::parse(principal_endpoint)
-        .map_err(|error| format!("invalid principal server endpoint: {error}"))?;
+        .map_err(|error| format!("invalid Station endpoint: {error}"))?;
     base.join(soland_contracts::ACCOUNT_PROJECTION_PATH)
         .map_err(|error| format!("invalid principal account register endpoint: {error}"))
 }
@@ -137,12 +137,12 @@ fn soland_account_localparts_endpoint(
     principal_id: &str,
 ) -> Result<url::Url, String> {
     let mut endpoint = url::Url::parse(principal_endpoint)
-        .map_err(|error| format!("invalid principal server endpoint: {error}"))?;
+        .map_err(|error| format!("invalid Station endpoint: {error}"))?;
     endpoint.set_query(None);
     endpoint.set_fragment(None);
     endpoint
         .path_segments_mut()
-        .map_err(|_| "principal server endpoint cannot be a base URL".to_owned())?
+        .map_err(|_| "Station endpoint cannot be a base URL".to_owned())?
         .clear()
         .push("_soland")
         .push("accounts")
@@ -566,7 +566,7 @@ pub(crate) async fn authenticate_local_handoff_code(
         .session_grant_target_for_configured_audience(
             &url_builder,
             &arkret_config,
-            crate::services::principal_server_trust::shared(),
+            crate::services::station_trust::shared(),
             input.requested_audience.as_deref(),
         )
         .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
@@ -915,7 +915,7 @@ async fn exchange_oidc_code(
             .session_grant_target_for_requested_audience(
                 &url_builder,
                 &arkret_config,
-                crate::services::principal_server_trust::shared(),
+                crate::services::station_trust::shared(),
                 input.requested_audience.as_deref(),
             )
             .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
@@ -1360,7 +1360,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
         dependencies: vec![
             IntegrationManifestDependency {
                 service: "soland".to_owned(),
-                purpose: "principal_server_session_exchange".to_owned(),
+                purpose: "station_session_exchange".to_owned(),
                 required_contract: "arkret.rest.principal_bridge.v1".to_owned(),
                 discovery_path: "/_arkret/describe".to_owned(),
                 mode: "remote_service_contract".to_owned(),

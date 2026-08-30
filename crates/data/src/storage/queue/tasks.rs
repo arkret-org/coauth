@@ -110,7 +110,7 @@ impl InsertableJob for ProcessNotificationDeliveriesJob {
 }
 
 /// An exact-body durable delivery of an authority-signed account-status
-/// publication to one Principal Server.
+/// publication to one Station.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AccountStatusPublicationJob {
     destination_name: String,
@@ -139,7 +139,7 @@ impl AccountStatusPublicationJob {
         }
     }
 
-    /// Configured Principal Server target selected when the job was created.
+    /// Configured Station target selected when the job was created.
     #[must_use]
     pub fn destination_name(&self) -> &str {
         &self.destination_name
@@ -175,13 +175,13 @@ impl InsertableJob for AccountStatusPublicationJob {
 }
 
 /// A durable job that delivers one controller-approved Agent key
-/// authorization to the configured Principal Server.
+/// authorization to the configured Station.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AgentKeyPairCommitJob {
     idempotency_key: String,
     authorized_event_id: String,
     request_digest: String,
-    principal_server_name: String,
+    station_name: String,
     body: AgentKeyPairRequestBody,
 }
 
@@ -192,14 +192,14 @@ impl AgentKeyPairCommitJob {
         idempotency_key: String,
         authorized_event_id: String,
         request_digest: String,
-        principal_server_name: String,
+        station_name: String,
         body: AgentKeyPairRequestBody,
     ) -> Self {
         Self {
             idempotency_key,
             authorized_event_id,
             request_digest,
-            principal_server_name,
+            station_name,
             body,
         }
     }
@@ -223,10 +223,10 @@ impl AgentKeyPairCommitJob {
     }
 
     #[must_use]
-    /// Configured name of the authoritative Principal Server selected during
+    /// Configured name of the authoritative Station selected during
     /// the pre-commit Agent lookup.
-    pub fn principal_server_name(&self) -> &str {
-        &self.principal_server_name
+    pub fn station_name(&self) -> &str {
+        &self.station_name
     }
 
     /// Exact standard operation request received from the client.
@@ -240,7 +240,7 @@ impl InsertableJob for AgentKeyPairCommitJob {
     const QUEUE_NAME: &'static str = "principal-agent-key-pair-commit";
 }
 
-/// A job to provision the user on the `PrincipalServer`.
+/// A job to provision the user on the `Station`.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProvisionUserJob {
     user_id: Ulid,
@@ -252,7 +252,7 @@ pub struct ProvisionUserJob {
 }
 
 impl ProvisionUserJob {
-    /// Create a new job to provision the user on the `PrincipalServer`.
+    /// Create a new job to provision the user on the `Station`.
     #[must_use]
     pub fn new(user: &User) -> Self {
         Self {
@@ -288,7 +288,7 @@ impl ProvisionUserJob {
         self
     }
 
-    /// Mark the user as an admin on the `PrincipalServer`.
+    /// Mark the user as an admin on the `Station`.
     #[must_use]
     pub fn set_admin(mut self) -> Self {
         self.admin = true;
@@ -307,7 +307,7 @@ impl ProvisionUserJob {
         self.set_avatar_url.as_deref()
     }
 
-    /// Whether the user should be made admin on the `PrincipalServer`.
+    /// Whether the user should be made admin on the `Station`.
     #[must_use]
     pub fn is_admin(&self) -> bool {
         self.admin
@@ -324,7 +324,7 @@ impl InsertableJob for ProvisionUserJob {
     const QUEUE_NAME: &'static str = "provision-user";
 }
 
-/// A job which syncs the list of devices of a user with the `PrincipalServer`
+/// A job which syncs the list of devices of a user with the `Station`
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SyncDevicesJob {
     user_id: Ulid,
@@ -332,14 +332,14 @@ pub struct SyncDevicesJob {
 
 impl SyncDevicesJob {
     /// Create a new job to sync the list of devices of a user with the
-    /// `PrincipalServer`
+    /// `Station`
     #[must_use]
     pub fn new(user: &User) -> Self {
         Self { user_id: user.id }
     }
 
     /// Create a new job to sync the list of devices of a user with the
-    /// `PrincipalServer` for the given user ID
+    /// `Station` for the given user ID
     ///
     /// This is useful to use in cases where the [`User`] object isn't loaded
     #[must_use]
@@ -371,7 +371,7 @@ impl DeactivateUserJob {
     /// # Parameters
     ///
     /// * `user` - The user to deactivate
-    /// * `principal_erase` - Whether to erase the user from the `PrincipalServer`
+    /// * `principal_erase` - Whether to erase the user from the `Station`
     #[must_use]
     pub fn new(user: &User, principal_erase: bool) -> Self {
         Self {
@@ -386,7 +386,7 @@ impl DeactivateUserJob {
         self.user_id
     }
 
-    /// Whether to erase the user from the `PrincipalServer`
+    /// Whether to erase the user from the `Station`
     #[must_use]
     pub fn principal_erase(&self) -> bool {
         self.principal_erase

@@ -6,7 +6,7 @@ use clap::Parser;
 use coauth_backend::lifecycle::LifecycleManager;
 use coauth_backend::util::{
     database_url_from_config, diesel_pool_from_config, notification_center_from_config,
-    principal_server_connection_from_config, site_config_from_config, templates_from_config,
+    site_config_from_config, station_connection_from_config, templates_from_config,
     test_mailer_in_background,
 };
 use coauth_config::{AppConfig, ConfigurationSection};
@@ -79,7 +79,7 @@ impl Options {
         )
         .await
         .context("could not initialize Provider-backed service identity")?;
-        coauth_backend::services::principal_server_trust::preflight_and_spawn(
+        coauth_backend::services::station_trust::preflight_and_spawn(
             PgRepositoryFactory::new(db_pool.clone()),
             app_cfg.arkret.clone(),
             arkret_http_client.clone(),
@@ -87,11 +87,11 @@ impl Options {
             coauth_config::runtime_var("COAUTH_FIRST_PROVISIONING")
                 .is_ok_and(|value| value.trim() == "1"),
             lifecycle.soft_shutdown_token(),
-            coauth_backend::services::principal_server_trust::DEFAULT_REFRESH_INTERVAL,
+            coauth_backend::services::station_trust::DEFAULT_REFRESH_INTERVAL,
         )
         .await
-        .context("principal-server trust preflight failed")?;
-        let (principal_conn, _registry) = principal_server_connection_from_config(
+        .context("station trust preflight failed")?;
+        let (principal_conn, _registry) = station_connection_from_config(
             &site_cfg,
             PgRepositoryFactory::new(db_pool.clone()).boxed(),
             app_cfg.arkret.clone(),

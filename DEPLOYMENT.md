@@ -4,7 +4,7 @@
 
 ## Overview
 
-`coauth` is the organization-deploy auth / DID-binding service that complements `soland` (Principal Server). This guide covers the supported deployment paths.
+`coauth` is the organization-deploy auth / DID-binding service that complements `soland` (Station). This guide covers the supported deployment paths.
 
 ## Prerequisites
 
@@ -30,7 +30,7 @@ database:
   uri: ${COAUTH_DATABASE_URI}
 arkret:
   trust_domain: ak:trust_domain:acme.example
-  principal_servers:
+  stations:
   - name: soland
     endpoint: https://soland.acme.example/
     embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}

@@ -12,12 +12,11 @@ use super::*;
 use crate::app_state::DepotExt as _;
 use crate::handlers::common::DepotExt;
 
-const CLAIMED_PROFILE_IDS: &[&str] = &[arkret_wire::ProfileId::AUTH_SERVER_V1];
+const CLAIMED_PROFILE_IDS: &[&str] = &[];
 
 pub(crate) const SUPPORTED_OPERATION_BUNDLES: &[&str] = &[
-    "ak.operation_bundle.auth_server.account_authority.v1",
-    "ak.operation_bundle.auth_server.describe.v1",
-    "ak.operation_bundle.auth_server.http_core.v1",
+    "ak.operation_bundle.station.account_authority.v1",
+    "ak.operation_bundle.station.account_authority_support.v1",
 ];
 
 pub(crate) fn supports_advertised_http_operation(
@@ -30,7 +29,7 @@ pub(crate) fn supports_advertised_http_operation(
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct PrincipalServerDescriptor {
+struct StationDescriptor {
     name: String,
     audience: Option<arkret_identifiers::DidCoreId>,
     endpoint: String,
@@ -57,7 +56,7 @@ struct ServiceBoundaryDescriptor {
     authoritative_for: Vec<&'static str>,
     not_authoritative_for: Vec<&'static str>,
     delegated_to: Vec<&'static str>,
-    principal_server_authorization: &'static str,
+    station_authorization: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -142,10 +141,10 @@ fn service_boundary_descriptor() -> ServiceBoundaryDescriptor {
             "did_document_registry",
             "did_key_log",
             "identity_registry_receipt",
-            "principal_server_write_authorization",
+            "station_write_authorization",
         ],
-        delegated_to: vec!["identity_registry", "principal_server_authorization_engine"],
-        principal_server_authorization: "server_name writes are decided by the downstream authorization engine from session grants, capabilities, and Space policy.",
+        delegated_to: vec!["identity_registry", "station_authorization_engine"],
+        station_authorization: "server_name writes are decided by the downstream authorization engine from session grants, capabilities, and Space policy.",
     }
 }
 
@@ -249,10 +248,10 @@ fn build_verified_profile_descriptors(
 
 /// Build the SDK-canonical `auth_metadata` block for coauth's describe.
 ///
-/// coauth is the deployment's Auth Server / Account Authority. It advertises
+/// coauth is the deployment-private Account Authority implementation. It advertises
 /// one `oidc` auth method (its own issuer + discovery) whose `grant_exchange`
 /// creates the AccountHandoff that later authenticates session issuance. When the
-/// deployment fronts principal servers, it also publishes the
+/// deployment fronts Stations, it also publishes the
 /// `account_authority` block so clients derive every `/_arkret/gate/account/*`
 /// request from `gate_account_base_url`.
 ///
@@ -295,7 +294,7 @@ fn build_auth_metadata(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -
     extra.insert("admin_audience".to_owned(), json!(admin_audience));
     extra.insert(
         "session_grant_scope".to_owned(),
-        json!(PRINCIPAL_SERVER_SESSION_BIND_SCOPE),
+        json!(STATION_SESSION_BIND_SCOPE),
     );
     if issuer_did_for(arkret_config).method() == "web" {
         extra.insert("service_id_history_evidence_kind".to_owned(), json!("none"));
@@ -372,13 +371,12 @@ pub(crate) fn service_describe_response(
     loaded_verified_profiles: &[arkret_models_discovery::VerifiedProfileArtifactEntry],
     development_mode: bool,
 ) -> ServiceDescribe {
-    let principal_servers: Vec<PrincipalServerDescriptor> = arkret_config
-        .principal_servers
+    let stations: Vec<StationDescriptor> = arkret_config
+        .stations
         .iter()
         .map(|server| {
-            let service_id =
-                crate::services::principal_server_trust::effective_audience_shared(server);
-            PrincipalServerDescriptor {
+            let service_id = crate::services::station_trust::effective_audience_shared(server);
+            StationDescriptor {
                 name: server.name.clone(),
                 audience: service_id.clone(),
                 endpoint: server.endpoint.to_string(),
@@ -392,13 +390,6 @@ pub(crate) fn service_describe_response(
     } else {
         build_verified_profile_descriptors(loaded_verified_profiles)
     };
-    let mut claimed_profile = ClaimedProfileEntry::self_claimed(CLAIMED_PROFILE_IDS[0]);
-    claimed_profile.notes = Some(
-        "Auth-server-shaped profile: issues short-lived audience-bound ak.session.grant, exposes \
-         ak.server.read.describe.v1, MAY expose ak.policy.check. NOT an identity registry (DID \
-         resolution is delegated; see interop_surfaces)."
-            .to_owned(),
-    );
     let interop_surfaces = [
         (
             arkret_wire::ServiceOperationId::ROOT_IDENTITY_REGISTRY_READ_DESCRIBE_V1,
@@ -430,20 +421,24 @@ pub(crate) fn service_describe_response(
     let mut extensions = std::collections::BTreeMap::new();
     extensions.insert(
         "x_coauth_service_roles".to_owned(),
-        serde_json::json!(["auth_server", "identity_resolver", "account_registry"]),
+        serde_json::json!([
+            "account_authority_process",
+            "identity_resolver",
+            "account_registry"
+        ]),
     );
     extensions.insert(
         "x_coauth_admin_audience".to_owned(),
         serde_json::json!(admin_audience),
     );
-    if !principal_servers.is_empty() {
+    if !stations.is_empty() {
         extensions.insert(
-            "x_coauth_principal_servers".to_owned(),
-            serde_json::to_value(&principal_servers).unwrap_or(serde_json::Value::Null),
+            "x_coauth_stations".to_owned(),
+            serde_json::to_value(&stations).unwrap_or(serde_json::Value::Null),
         );
         extensions.insert(
-            "x_coauth_principal_server_delegation_targets".to_owned(),
-            serde_json::to_value(&principal_servers).unwrap_or(serde_json::Value::Null),
+            "x_coauth_station_delegation_targets".to_owned(),
+            serde_json::to_value(&stations).unwrap_or(serde_json::Value::Null),
         );
     }
     extensions.insert(
@@ -481,7 +476,7 @@ pub(crate) fn service_describe_response(
         },
         trust_domain: arkret_wire::TrustDomainId::new(trust_domain_for(url_builder, arkret_config))
             .expect("validated coauth trust domain"),
-        service_kind: arkret_wire::ServiceKind::AuthServer,
+        service_kind: arkret_wire::ServiceKind::Station,
         protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
         supported_profiles: Vec::new(),
         profile_bindings: std::collections::BTreeMap::default(),
@@ -502,7 +497,7 @@ pub(crate) fn service_describe_response(
         plaintext_visibility: PlaintextVisibility::none(),
         privacy_derivation: None,
         receive_policy_constraints: None,
-        claimed_profiles: vec![claimed_profile],
+        claimed_profiles: Vec::new(),
         verified_profiles,
         interop_surfaces,
         invite_addressing: None,
@@ -538,7 +533,7 @@ pub async fn server_describe(
     req: &Request,
 ) -> Result<Json<ServiceDescribe>, ArkretRouteError> {
     if let Some(service_kind) = req.query::<String>("service_kind")
-        && service_kind != arkret_wire::ServiceKind::AuthServer.as_str()
+        && service_kind != arkret_wire::ServiceKind::Station.as_str()
     {
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,

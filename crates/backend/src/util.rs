@@ -608,7 +608,7 @@ pub async fn load_policy_factory_dynamic_data(
 /// Backed by coauth's own Postgres (`users`) via `repository_factory` — see
 /// [`crate::services::principal_facade::DbConnectorAdmin`]. Replaces the
 /// former in-memory mock, which lost all state on restart.
-pub fn principal_server_connection_from_config(
+pub fn station_connection_from_config(
     site_config: &SiteConfig,
     repository_factory: BoxRepositoryFactory,
     arkret_config: ArkretConfig,

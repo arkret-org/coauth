@@ -5,7 +5,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::{Args, Parser, Subcommand};
 use coauth_backend::util::{database_url_from_config, diesel_pool_from_config};
 use coauth_config::{
-    ConfigurationSection, IdentityRegistryConfig, PrincipalServerConfig, RootConfig, SyncConfig,
+    ConfigurationSection, IdentityRegistryConfig, RootConfig, StationConfig, SyncConfig,
 };
 use coauth_data::SystemClock;
 use figment::Figment;
@@ -168,7 +168,7 @@ fn apply_generated_config_options(
             .unwrap_or_else(|| DEV_PUBLIC_BASE.parse().expect("valid dev public base"));
         config.http.public_base_url = public_base_url.clone();
         config.http.issuer = Some(public_base_url);
-        config.arkret.principal_servers = vec![PrincipalServerConfig {
+        config.arkret.stations = vec![StationConfig {
             name: "soland-dev".to_owned(),
             endpoint: DEV_SOLAND_URL.parse().expect("valid dev soland URL"),
             service_id: None,
@@ -225,14 +225,14 @@ mod tests {
         apply_generated_config_options(&mut config, &options)
             .expect("dev config options should apply");
 
-        let principal_server = config
+        let station = config
             .arkret
-            .principal_servers
+            .stations
             .first()
             .expect("dev config should include Soland");
-        assert_eq!(principal_server.endpoint.as_str(), DEV_SOLAND_URL);
+        assert_eq!(station.endpoint.as_str(), DEV_SOLAND_URL);
         let serialized = serde_json::to_value(&config).expect("dev config should serialize");
-        let serialized_server = &serialized["arkret"]["principal_servers"][0];
+        let serialized_server = &serialized["arkret"]["stations"][0];
         assert!(serialized_server.get("audience").is_none());
         assert!(serialized_server.get("did").is_none());
 

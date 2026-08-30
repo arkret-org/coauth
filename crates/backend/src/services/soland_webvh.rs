@@ -1,4 +1,4 @@
-//! Submission of client-signed DID operations to an authoritative Principal Server.
+//! Submission of client-signed DID operations to an authoritative Station.
 
 use arkret_models_identity::{DidOperationSubmitOutcome, DidOperationSubmitRequestBody};
 use thiserror::Error;
@@ -9,13 +9,13 @@ use crate::outbound_http;
 /// Errors produced while forwarding a client-signed DID operation.
 #[derive(Debug, Error)]
 pub enum SolandWebvhError {
-    #[error("principal-server endpoint is not a valid URL: {0}")]
+    #[error("station endpoint is not a valid URL: {0}")]
     InvalidEndpoint(#[from] url::ParseError),
-    #[error("principal-server DID operation submit request failed: {0}")]
+    #[error("station DID operation submit request failed: {0}")]
     Http(#[from] reqwest::Error),
-    #[error("principal-server DID operation body could not be serialized canonically: {0}")]
+    #[error("station DID operation body could not be serialized canonically: {0}")]
     Canonical(String),
-    #[error("principal-server returned status {status}: {body}")]
+    #[error("station returned status {status}: {body}")]
     SubmitRejected { status: u16, body: String },
 }
 

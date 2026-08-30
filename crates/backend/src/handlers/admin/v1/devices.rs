@@ -506,7 +506,7 @@ mod tests {
             runtime_service_identity: coauth_config::RuntimeServiceIdentity::fixture(
                 "did:web:auth.example",
             ),
-            // Session-grant audiences are Principal Server core DIDs.
+            // Session-grant audiences are Station core DIDs.
             admin_audience: Some("ak:did_core:web:principal.example.com".to_owned()),
             ..coauth_config::ArkretConfig::default()
         };
@@ -515,11 +515,11 @@ mod tests {
             coauth_jose::jwk::JsonWebKeyPublicParameters::from(&session_private),
         );
         let principal_id = "ak:did_core:web:alice.example";
-        let principal_server_id =
+        let station_id =
             crate::handlers::arkret::required_audience_for(&state.url_builder, &grant_config);
-        let principal_authority = arkret_wire::PrincipalAuthorityKey::new(
+        let account_id = arkret_wire::AccountId::new(
             arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
-            arkret_identifiers::DidCoreId::new(principal_server_id).unwrap(),
+            arkret_identifiers::DidCoreId::new(station_id).unwrap(),
         );
         // The revoke cascade selects grants active at the wall clock, so the
         // seeded grant has to be minted against the same clock; one minted at
@@ -534,10 +534,10 @@ mod tests {
             &browser_session,
             session_public,
             principal_id,
-            &principal_authority,
+            &account_id,
             arkret_identifiers::DeviceId::new(device_id.to_owned()).unwrap(),
             vec![
-                crate::handlers::arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
+                crate::handlers::arkret::STATION_SESSION_BIND_SCOPE.to_owned(),
                 format!("urn:arkret:client:device:{device_id}"),
             ],
         )

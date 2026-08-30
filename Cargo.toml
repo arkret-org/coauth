@@ -325,7 +325,7 @@ sha2 = { version = "0.10.9", features = ["oid"] }
 signature = { version = "2.2.0", features = ["std", "rand_core"] }
 socket2 = "0.6.4"
 # soland deployment-internal S2S contracts (capability fanout DTOs shared
-# with the principal server; SOL-DRY-03).
+# with the Station; SOL-DRY-03).
 soland-contracts = { path = "../soland/crates/contracts" }
 spki = { version = "0.7.3", features = ["std"] }
 subtle = "2.6.1"

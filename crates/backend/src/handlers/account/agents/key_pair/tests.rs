@@ -86,7 +86,7 @@ fn valid_authorize_event_typed(pairing_request_id: &str) -> arkret_wire::Event {
             "realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG"
         },
         "actor_id": AGENT,
-        "principal_server_id": "ak:did_core:web:auth.example",
+        "station_id": "ak:did_core:web:auth.example",
         "executed_by": CONTROLLER,
         "authorization_ref": format!("{AGENT_FULL}#managed-controller"),
         "actor_seq": 1,

@@ -75,10 +75,10 @@ pub enum UpstreamLinkWorkflowError {
     #[error("policy denied the suggested username")]
     PolicyDeniedHandle { handle: String, detail: String },
 
-    #[error("username not available on principal server")]
+    #[error("username not available on Station")]
     HandleUnavailable { handle: String },
 
-    #[error("principal server admin call failed")]
+    #[error("Station admin call failed")]
     ConnectorAdmin(#[source] AnyhowError),
 
     #[error(transparent)]
@@ -96,7 +96,7 @@ impl UpstreamLinkWorkflowError {
         Self::Internal(AnyhowError::new(error))
     }
 
-    fn principal_server(error: AnyhowError) -> Self {
+    fn station(error: AnyhowError) -> Self {
         Self::ConnectorAdmin(error)
     }
 }
@@ -237,7 +237,7 @@ pub async fn load_upstream_link_state(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     policy: &mut PolicyInstance,
     site_config: &SiteConfig,
     user_agent: Option<String>,
@@ -341,7 +341,7 @@ pub async fn load_upstream_link_state(
                 rng,
                 clock,
                 url_builder,
-                principal_server,
+                station,
                 policy,
                 site_config,
                 user_agent,
@@ -360,7 +360,7 @@ pub async fn submit_upstream_link_action(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     policy: &mut PolicyInstance,
     site_config: &SiteConfig,
     user_agent: Option<String>,
@@ -414,7 +414,7 @@ pub async fn submit_upstream_link_action(
 
             let field_errors = validate_registration_action(
                 repo,
-                principal_server,
+                station,
                 policy,
                 site_config,
                 ip_address,
@@ -469,7 +469,7 @@ async fn load_upstream_registration_screen(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     policy: &mut PolicyInstance,
     site_config: &SiteConfig,
     user_agent: Option<String>,
@@ -489,11 +489,11 @@ async fn load_upstream_registration_screen(
         OptionalPostAuthAction::from(post_auth_action.clone()).next_relative_url(url_builder);
 
     // If we have a suggested username, run pre-checks (policy, conflicts,
-    // PrincipalServer availability)
+    // Station availability)
     let username = match pre_check_handle(
         repo,
         clock,
-        principal_server,
+        station,
         policy,
         &provider,
         &link,
@@ -609,13 +609,13 @@ enum HandlePreCheckResult {
 /// Pre-check a suggested username from the upstream provider.
 ///
 /// This runs policy checks, user conflict resolution (using the provider's
-/// `on_conflict` setting), and `PrincipalServer` availability checks on the
+/// `on_conflict` setting), and `Station` availability checks on the
 /// suggested username.
 #[allow(clippy::too_many_arguments)]
 async fn pre_check_handle(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     policy: &mut PolicyInstance,
     provider: &UpstreamOAuthProvider,
     link: &UpstreamOAuthLink,
@@ -775,18 +775,18 @@ async fn pre_check_handle(
         });
     }
 
-    // Check PrincipalServer availability
-    let is_available = principal_server
+    // Check Station availability
+    let is_available = station
         .is_handle_available(&username)
         .await
-        .map_err(UpstreamLinkWorkflowError::principal_server)?;
+        .map_err(UpstreamLinkWorkflowError::station)?;
 
     if !is_available {
         if !forced_or_required {
             tracing::warn!(
                 upstream_oauth_provider.id = %provider.id,
                 upstream_oauth_link.id = %link.id,
-                "Upstream provider returned a username {username:?} which isn't available on the principal_server. As the username is just a suggestion, it was ignored."
+                "Upstream provider returned a username {username:?} which isn't available on the station. As the username is just a suggestion, it was ignored."
             );
             return Ok(HandlePreCheckResult::Available(None));
         }
@@ -950,7 +950,7 @@ fn resolve_registration_attributes(
 
 async fn validate_registration_action(
     repo: &mut BoxRepository,
-    principal_server: &dyn ConnectorAdmin,
+    station: &dyn ConnectorAdmin,
     policy: &mut PolicyInstance,
     site_config: &SiteConfig,
     ip_address: Option<IpAddr>,
@@ -965,10 +965,10 @@ async fn validate_registration_action(
         field_errors.handle = Some("required".to_owned());
     } else {
         let already_exists = repo.user().exists(username).await?
-            || !principal_server
+            || !station
                 .is_handle_available(username)
                 .await
-                .map_err(UpstreamLinkWorkflowError::principal_server)?;
+                .map_err(UpstreamLinkWorkflowError::station)?;
         if already_exists {
             field_errors.handle = Some("exists".to_owned());
         }

@@ -68,9 +68,9 @@ mod errors;
 /// PostgreSQL notification template version repository.
 pub mod notification_template;
 pub mod policy_data;
-/// PostgreSQL Principal Server trust enrollment repository.
-pub mod principal_server_trust;
 pub(crate) mod repository;
+/// PostgreSQL Station trust enrollment repository.
+pub mod station_trust;
 pub(crate) mod telemetry;
 /// Test utilities for creating temporary test databases.
 ///

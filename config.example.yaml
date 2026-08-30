@@ -94,7 +94,7 @@ arkret:
   deployment_profile: organization
   principal_method: did:webvh
   # Coauth resolves and persists its own service DID through the trusted
-  # principal_servers[] Provider below. Operators never copy a DID here.
+  # stations[] Provider below. Operators never copy a DID here.
   # Deployment trust-domain identifier injected into Realm policy and the
   # server-describe document. Wire form: ak:trust_domain:<scope> where <scope>
   # matches [a-z0-9._:-]{1,128}. Changing it invalidates existing recovery
@@ -105,23 +105,23 @@ arkret:
   # by the REST auth bridge login/exchange paths and rotated through
   # /_arkret/gate/account/session-grants/refresh. Default: 28800 (8h). The grant
   # is the device-session refresh credential; the access bearers minted from it
-  # are short-lived (capped Principal-Server side), so a multi-hour grant gives a
+  # are short-lived (capped Station side), so a multi-hour grant gives a
   # normal working session without long-lived bearers. Range [60, 86400].
   session_grant_ttl: 28800
   # Keep false during rollout; set true in production after service signing
   # keys and JWKS publication are operational.
   audit_signature_fail_closed: false
-  principal_servers:
+  stations:
     # service_id is the optional explicit identity pin. When omitted, run
-    # `coauth principal-server trust bootstrap --name <name>` once to verify
+    # `coauth station trust bootstrap --name <name>` once to verify
     # the identity chain online and persist the pin before the server will
-    # accept this Principal Server's audiences.
+    # accept this Station's audiences.
   - name: soland-example
     endpoint: https://local.host/
     session_grant_introspection_bearer: ${SOLAND_SESSION_GRANT_INTROSPECTION_BEARER}
     embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
   # Standalone identity Providers use the same standard operations. Configure
-  # this instead of a registration-capable principal server, or set
+  # this instead of a registration-capable Station, or set
   # identity_provider when more than one candidate exists.
   # identity_services:
   # - name: identity-example
