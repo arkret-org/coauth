@@ -55,8 +55,8 @@ use crate::outbound_http;
 /// Root-relative describe path served by every Arkret Station.
 pub(crate) const DESCRIBE_PATH: &str = "_arkret/describe";
 
-/// Revalidation-interval floor: faster than this just hammers the Principal
-/// Server's describe surface.
+/// Revalidation-interval floor: faster than this just hammers the Station's
+/// describe surface.
 const MIN_REFRESH_INTERVAL: Duration = Duration::from_mins(1);
 
 /// Revalidation-interval ceiling. Keeping this well below

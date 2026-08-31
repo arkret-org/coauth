@@ -122,8 +122,7 @@ impl ConnectorProvisionRequest {
     }
 }
 
-/// One exact account-status publication delivery to a configured Principal
-/// Server.
+/// One exact account-status publication delivery to a configured Station.
 #[derive(Debug, Clone)]
 pub struct PrincipalAccountStatusPublicationRequest {
     destination_name: String,

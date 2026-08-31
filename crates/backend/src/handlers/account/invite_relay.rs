@@ -7,8 +7,8 @@
 //! Per the Move/Anchor/Lattice spec (`arkret-spec` 2026-05-08,
 //! `consent-model.md` §3-§9), before an actor (coauth admin / inkson UI /
 //! sodmin operator) can deliver an invite to a target principal, coauth
-//! must consult the holder's consent-grant cell on the target's principal
-//! server (`soland`). The previous task added the read+gate helper in
+//! must consult the holder's consent-grant cell at the target Station
+//! (`soland`). The read+gate helper in
 //! `consent_cell_query`; this handler is the call-site that uses it.
 //!
 //! ## Strand
@@ -96,6 +96,60 @@ pub struct InviteRelayRequestBody {
 
 fn default_require_consent() -> bool {
     true
+}
+
+fn relay_station_identity(
+    config: &coauth_config::ArkretConfig,
+    resolver: &crate::services::station_trust::StationTrustResolver,
+    target: &Url,
+) -> Option<DidCoreId> {
+    use arkret_models_identity::service_identity::CanonicalServiceUrl;
+
+    let target_key = CanonicalServiceUrl::canonicalize(target.as_str()).ok()?;
+    config
+        .stations
+        .iter()
+        .find_map(|station| {
+            let endpoint = CanonicalServiceUrl::canonicalize(station.endpoint.as_str()).ok()?;
+            (endpoint == target_key)
+                .then(|| crate::services::station_trust::effective_audience(station, resolver))
+                .flatten()
+        })
+        .or_else(|| resolver.resolve(target))
+}
+
+fn validated_relay_account(
+    delivery: &arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBody,
+    expected_principal: &DidCoreId,
+    target_station: &DidCoreId,
+) -> Result<arkret_wire::AccountId, RouteError> {
+    delivery
+        .validate_minimal()
+        .map_err(|error| RouteError::BadRequest(format!("invalid_invite_delivery: {error}")))?;
+    if delivery.invite_event.kind != arkret_wire::EventKind::InviteCreate {
+        return Err(RouteError::BadRequest(
+            "invalid_invite_event_kind".to_owned(),
+        ));
+    }
+    let payload: arkret_models_collaboration::governance::membership_invite::InviteCreatePayload =
+        serde_json::from_value(
+            serde_json::to_value(&delivery.invite_event.payload).map_err(|error| {
+                RouteError::BadRequest(format!("invalid_invite_payload: {error}"))
+            })?,
+        )
+        .map_err(|error| RouteError::BadRequest(format!("invalid_invite_payload: {error}")))?;
+    let account_id = &delivery.invite_address.account_id;
+    // A transport address cannot retarget the signed invite to another Account,
+    // including the same principal at a different Station.
+    if payload.invitee_account_id != *account_id
+        || account_id.principal_id != *expected_principal
+        || account_id.station_id != *target_station
+    {
+        return Err(RouteError::BadRequest(
+            "invite_delivery_account_mismatch".to_owned(),
+        ));
+    }
+    Ok(account_id.clone())
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -304,17 +358,6 @@ pub async fn post_invite_relay(
         return Err(RouteError::BadRequest("untrusted_principal_url".into()));
     }
 
-    if let Some(delivery) = params.invite_delivery.as_ref() {
-        delivery
-            .validate_minimal()
-            .map_err(|error| RouteError::BadRequest(format!("invalid_invite_delivery: {error}")))?;
-        if delivery.invite_address.subject_id != params.target_holder_principal_id {
-            return Err(RouteError::BadRequest(
-                "invite_delivery_subject_mismatch".to_owned(),
-            ));
-        }
-    }
-
     let service_id = arkret::owning_station_id_for(&arkret_config);
     let trust_domain = arkret_identifiers::TrustDomainId::new(arkret::trust_domain_for(
         &url_builder,
@@ -322,7 +365,25 @@ pub async fn post_invite_relay(
     ))
     .map_err(|error| RouteError::Internal(Box::new(error)))?;
     let destination_id = match params.invite_delivery.as_ref() {
-        Some(delivery) => delivery.invite_address.recipient_id.clone(),
+        Some(delivery) => {
+            let target = principal_url
+                .as_ref()
+                .ok_or_else(|| RouteError::BadRequest("config_required".to_owned()))?;
+            let target_station = relay_station_identity(
+                &arkret_config,
+                crate::services::station_trust::shared(),
+                target,
+            )
+            .ok_or_else(|| {
+                RouteError::BadRequest("target_station_identity_unavailable".to_owned())
+            })?;
+            validated_relay_account(
+                delivery,
+                &params.target_holder_principal_id,
+                &target_station,
+            )?
+            .station_id
+        }
         None => service_id.clone(),
     };
     let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
@@ -416,7 +477,7 @@ mod tests {
         arkret_models_collaboration::governance::membership_invite::InviteCreatePayload::new(
             arkret_wire::AccountId::new(
                 arkret_identifiers::DidCoreId::new("ak:did_core:web:holder".to_owned()).unwrap(),
-                arkret_identifiers::DidCoreId::new("ak:did_core:web:station.example".to_owned())
+                arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned())
                     .unwrap(),
             ),
             arkret_identifiers::Hash::new(
@@ -480,6 +541,76 @@ mod tests {
             "grant_dots": ["ak:event:AQgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI:0"],
             "revoked_dots": [],
         })
+    }
+
+    #[test]
+    fn relay_account_binds_signed_invitee_address_and_station() {
+        let delivery = invite_delivery();
+        let holder = core_id("ak:did_core:web:holder");
+        let station = core_id("ak:did_core:web:auth.example");
+        assert_eq!(
+            validated_relay_account(&delivery, &holder, &station).unwrap(),
+            delivery.invite_address.account_id,
+        );
+        let foreign_station = core_id("ak:did_core:web:other-station.example");
+        assert!(validated_relay_account(&delivery, &holder, &foreign_station).is_err());
+        assert!(
+            validated_relay_account(
+                &delivery,
+                &core_id("ak:did_core:web:other-holder"),
+                &station
+            )
+            .is_err()
+        );
+
+        let mut retargeted = delivery;
+        retargeted.invite_address.account_id.station_id = foreign_station.clone();
+        assert!(
+            validated_relay_account(&retargeted, &holder, &foreign_station).is_err(),
+            "changing only the transport Account must not retarget the signed invite"
+        );
+        retargeted.invite_event.payload.insert(
+            "invitee_account_id".into(),
+            serde_json::to_value(&retargeted.invite_address.account_id).unwrap(),
+        );
+        assert!(
+            validated_relay_account(&retargeted, &holder, &station).is_err(),
+            "matching Event/address still cannot borrow another Station's route"
+        );
+    }
+
+    #[test]
+    fn relay_route_identity_requires_an_exact_configured_or_verified_endpoint() {
+        let resolver = crate::services::station_trust::StationTrustResolver::new();
+        let mut config = coauth_config::ArkretConfig::default();
+        let target = Url::parse("https://station.example/").unwrap();
+        assert!(relay_station_identity(&config, &resolver, &target).is_none());
+        let station = core_id("ak:did_core:web:auth.example");
+        config.stations.push(coauth_config::StationConfig {
+            name: "target".into(),
+            endpoint: target.clone(),
+            service_id: Some(station.clone()),
+            session_grant_introspection_bearer: None,
+            embedded_webvh_registration_bearer: None,
+        });
+        assert_eq!(
+            relay_station_identity(&config, &resolver, &target),
+            Some(station)
+        );
+        assert!(
+            relay_station_identity(
+                &config,
+                &resolver,
+                &Url::parse("https://station.example:8443/").unwrap()
+            )
+            .is_none(),
+            "a host allowlist is not a Station identity binding"
+        );
+        config.stations[0].service_id = None;
+        assert!(
+            relay_station_identity(&config, &resolver, &target).is_none(),
+            "an endpoint URL without a trusted identity must fail closed"
+        );
     }
 
     /// Allow path: cell returns a matching grant tag → forward succeeds.
