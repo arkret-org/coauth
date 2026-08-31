@@ -138,26 +138,35 @@ fn invite_delivery_target(
 
     // The signed invite selects the complete account. Configuration resolves
     // that account's Station; it must never fill in or replace its identity.
-    let station = config
-        .stations
-        .iter()
-        .find(|station| {
-            station_trust::effective_audience(station, resolver)
-                .is_some_and(|service_id| service_id == account_id.station_id)
-        })
-        .ok_or_else(|| RouteError::BadRequest("invite_delivery_station_unknown".to_owned()))?;
-    let endpoint = CanonicalServiceUrl::canonicalize(station.endpoint.as_str())
-        .map_err(|error| RouteError::Internal(Box::new(error)))?;
-    if let Some(requested_endpoint) = requested_endpoint {
-        let requested = CanonicalServiceUrl::canonicalize(requested_endpoint.as_str())
-            .map_err(|_| RouteError::BadRequest("invalid_principal_url".to_owned()))?;
-        if requested != endpoint {
-            return Err(RouteError::BadRequest(
-                "invite_delivery_station_mismatch".to_owned(),
-            ));
+    let requested = requested_endpoint
+        .map(|endpoint| CanonicalServiceUrl::canonicalize(endpoint.as_str()))
+        .transpose()
+        .map_err(|_| RouteError::BadRequest("invalid_principal_url".to_owned()))?;
+    let mut known_station = false;
+    for station in &config.stations {
+        if !station_trust::effective_audience(station, resolver)
+            .is_some_and(|service_id| service_id == account_id.station_id)
+        {
+            continue;
+        }
+        known_station = true;
+        let endpoint = CanonicalServiceUrl::canonicalize(station.endpoint.as_str())
+            .map_err(|error| RouteError::Internal(Box::new(error)))?;
+        if requested
+            .as_ref()
+            .is_none_or(|requested| requested == &endpoint)
+        {
+            return Ok(endpoint.as_url());
         }
     }
-    Ok(endpoint.as_url())
+    Err(RouteError::BadRequest(
+        if known_station {
+            "invite_delivery_station_mismatch"
+        } else {
+            "invite_delivery_station_unknown"
+        }
+        .to_owned(),
+    ))
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -693,6 +702,45 @@ mod tests {
                 &delivery,
                 &holder,
                 Some(&endpoint),
+                &config,
+                "invite_delivery_station_mismatch",
+            );
+        }
+    }
+
+    #[test]
+    fn relay_destination_accepts_each_configured_endpoint_for_the_signed_station() {
+        let delivery = invite_delivery();
+        let holder = core_id("ak:did_core:web:holder");
+        let mut config = relay_config();
+        let mut alternate = config.stations[1].clone();
+        alternate.name = "recipient-alternate".into();
+        alternate.endpoint = Url::parse("https://auth.example:8443/alternate/").unwrap();
+        config.stations.push(alternate.clone());
+        let resolver = StationTrustResolver::new();
+        assert_eq!(
+            invite_delivery_target(&delivery, &holder, None, &config, &resolver).unwrap(),
+            config.stations[1].endpoint,
+        );
+        assert_eq!(
+            invite_delivery_target(
+                &delivery,
+                &holder,
+                Some(&alternate.endpoint),
+                &config,
+                &resolver,
+            )
+            .unwrap(),
+            alternate.endpoint,
+        );
+        for endpoint in [
+            "https://auth.example:8443/other/",
+            "https://auth.example:8444/alternate/",
+        ] {
+            assert_target_rejected(
+                &delivery,
+                &holder,
+                Some(&Url::parse(endpoint).unwrap()),
                 &config,
                 "invite_delivery_station_mismatch",
             );
