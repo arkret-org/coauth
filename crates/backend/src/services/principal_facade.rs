@@ -86,13 +86,9 @@ impl DbConnectorAdmin {
 }
 
 fn default_station(arkret_config: &ArkretConfig) -> Result<&StationConfig, anyhow::Error> {
-    match arkret_config.stations.as_slice() {
-        [server] => Ok(server),
-        [] => anyhow::bail!("no Station is configured for account-status publication"),
-        _ => anyhow::bail!(
-            "account-status publication destination is ambiguous; configure exactly one Station"
-        ),
-    }
+    arkret_config.owning_station().context(
+        "account-status publication has no configured owning Station or its selection is ambiguous",
+    )
 }
 
 /// Resolve the verified owning Station identity delegated to this private
@@ -544,7 +540,7 @@ mod tests {
             default_station(&empty)
                 .unwrap_err()
                 .to_string()
-                .contains("no Station")
+                .contains("no configured owning Station")
         );
 
         let ambiguous = coauth_config::ArkretConfig {
@@ -557,6 +553,22 @@ mod tests {
                 .to_string()
                 .contains("ambiguous")
         );
+    }
+
+    #[test]
+    fn account_status_destination_uses_the_owning_station_among_peers() {
+        let mut config = coauth_config::ArkretConfig {
+            owning_station: Some("b".to_owned()),
+            stations: vec![station("a"), station("b")],
+            ..coauth_config::ArkretConfig::default()
+        };
+        assert_eq!(default_station(&config).unwrap().name, "b");
+        config.stations.reverse();
+        assert_eq!(default_station(&config).unwrap().name, "b");
+        config.owning_station = Some("missing".to_owned());
+        assert!(default_station(&config).is_err());
+        config.stations.truncate(1);
+        assert!(default_station(&config).is_err());
     }
 
     #[test]

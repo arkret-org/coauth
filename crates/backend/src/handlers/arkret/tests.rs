@@ -196,6 +196,10 @@ fn debug_dpop_grant_outcome_carries_typed_local_account_id() {
         grant_jwt: "header.payload.signature".to_owned(),
         dpop_jkt: "test-jkt".to_owned(),
         local_account_id: local_account_id.clone(),
+        account_id: test_account_id(
+            "ak:did_core:web:test-principal",
+            "ak:did_core:web:test-audience",
+        ),
         audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:test-audience").unwrap(),
         scopes: vec!["ak.self.account.read.describe.v1".to_owned()],
         expires_at: "2026-08-29T12:00:00.000Z".to_owned(),
@@ -204,6 +208,14 @@ fn debug_dpop_grant_outcome_carries_typed_local_account_id() {
 
     let encoded = serde_json::to_value(&outcome).unwrap();
     assert_eq!(encoded["local_account_id"], local_account_id.as_str());
+    assert_eq!(
+        encoded["account_id"]["principal_id"],
+        "ak:did_core:web:test-principal"
+    );
+    assert_eq!(
+        encoded["account_id"]["station_id"],
+        "ak:did_core:web:test-audience"
+    );
     let decoded: DebugIssueDpopGrantOutcome = serde_json::from_value(encoded.clone()).unwrap();
     assert_eq!(decoded.local_account_id, local_account_id);
 
