@@ -7,8 +7,8 @@
 //! Per the Move/Anchor/Lattice spec (`arkret-spec` 2026-05-08,
 //! `consent-model.md` §3-§9), before an actor (coauth admin / inkson UI /
 //! sodmin operator) can deliver an invite to a target principal, coauth
-//! must consult the holder's consent-grant cell on the target's principal
-//! server (`soland`). The previous task added the read+gate helper in
+//! must consult the holder's consent-grant cell at the target Station
+//! (`soland`). The read+gate helper in
 //! `consent_cell_query`; this handler is the call-site that uses it.
 //!
 //! ## Strand
@@ -614,6 +614,66 @@ mod tests {
                 "invite_delivery_account_mismatch",
             );
         }
+
+        let mut retargeted = delivery.clone();
+        retargeted.invite_address.account_id.station_id =
+            config.stations[0].service_id.clone().unwrap();
+        assert_target_rejected(
+            &retargeted,
+            &holder,
+            None,
+            &config,
+            "invite_delivery_account_mismatch",
+        );
+        retargeted.invite_event.payload.insert(
+            "invitee_account_id".into(),
+            serde_json::to_value(&retargeted.invite_address.account_id).unwrap(),
+        );
+        assert_target_rejected(
+            &retargeted,
+            &holder,
+            Some(&config.stations[1].endpoint),
+            &config,
+            "invite_delivery_station_mismatch",
+        );
+    }
+
+    #[test]
+    fn relay_destination_enforces_invite_kind_and_closed_payload_extensions() {
+        let delivery = invite_delivery();
+        let config = relay_config();
+        let holder = core_id("ak:did_core:web:holder");
+        let resolver = StationTrustResolver::new();
+        let mut wrong_kind = delivery.clone();
+        wrong_kind.invite_event.kind = EventKind::ViewCreate;
+        assert_target_rejected(
+            &wrong_kind,
+            &holder,
+            None,
+            &config,
+            "invalid_invite_event_kind",
+        );
+        for field in ["unknown", "x_", "x_Invalid"] {
+            let mut invalid = delivery.clone();
+            invalid
+                .invite_event
+                .payload
+                .insert(field.into(), serde_json::json!(true));
+            let error =
+                invite_delivery_target(&invalid, &holder, None, &config, &resolver).unwrap_err();
+            assert!(
+                matches!(error, RouteError::BadRequest(message) if message.starts_with("invalid_invite_payload:"))
+            );
+        }
+        let mut extended = delivery;
+        extended
+            .invite_event
+            .payload
+            .insert("x_vendor".into(), serde_json::json!({"enabled": true}));
+        assert_eq!(
+            invite_delivery_target(&extended, &holder, None, &config, &resolver).unwrap(),
+            config.stations[1].endpoint,
+        );
     }
 
     #[test]
@@ -668,7 +728,7 @@ mod tests {
             "invite_delivery_station_unknown",
         );
         let resolver = StationTrustResolver::new();
-        resolver.insert_for_test(&config.stations[1].endpoint, "did:web:auth.example");
+        resolver.insert_for_test(&config.stations[1].endpoint, "ak:did_core:web:auth.example");
         assert_eq!(
             invite_delivery_target(
                 &delivery,

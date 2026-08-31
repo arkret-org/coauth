@@ -217,8 +217,8 @@ pub async fn introspect_session_grant(
 
     // SEC-SG-ENUM: a Station caller may only introspect grants for an
     // audience_id it is authorized for. A grant minted for any other audience_id is
-    // reported as an audience_id mismatch (with no grant metadata) so a Principal
-    // Server cannot probe grants belonging to other audiences.
+    // reported as an audience_id mismatch (with no grant metadata) so a Station
+    // cannot probe grants belonging to other audiences.
     if let Some(allowed) = caller.allowed_audiences.as_deref()
         && !allowed
             .iter()

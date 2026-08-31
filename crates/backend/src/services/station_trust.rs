@@ -55,8 +55,8 @@ use crate::outbound_http;
 /// Root-relative describe path served by every Arkret Station.
 pub(crate) const DESCRIBE_PATH: &str = "_arkret/describe";
 
-/// Revalidation-interval floor: faster than this just hammers the Principal
-/// Server's describe surface.
+/// Revalidation-interval floor: faster than this just hammers the Station's
+/// describe surface.
 const MIN_REFRESH_INTERVAL: Duration = Duration::from_mins(1);
 
 /// Revalidation-interval ceiling. Keeping this well below
@@ -195,9 +195,7 @@ impl StationTrustResolver {
     /// Test/seed helper: insert a resolved value directly without a probe.
     #[cfg(test)]
     pub fn insert_for_test(&self, endpoint: &Url, service_id: impl Into<String>) {
-        let did = Did::new(service_id.into()).expect("valid test Station DID");
-        let service_id =
-            arkret_identifiers::project_did_to_core_id(&did).expect("valid test Station core ID");
+        let service_id = DidCoreId::new(service_id.into()).expect("valid test Station core ID");
         self.note_verified_at(endpoint, service_id, Instant::now());
     }
 }
