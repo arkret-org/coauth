@@ -36,7 +36,7 @@ arkret-models-discovery = { workspace = true }
 arkret-models-identity = { workspace = true }
 arkret-policy = { workspace = true }
 arkret-retry = { workspace = true }
-arkret-schema = { workspace = true, features = ["embedded-artifacts"] }
+arkret-schema = { workspace = true }
 arkret-signatures = { workspace = true, features = ["signer", "service-identity"] }
 arkret-wire = { workspace = true }
 async-trait = { workspace = true }

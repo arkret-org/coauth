@@ -1068,9 +1068,7 @@ fn content_capability_scope_token(token: &str) -> Result<bool, AgentAuthRejectio
     if AGENT_CONTENT_SCOPE_ACTIONS.contains(&token) && !service_surface_scope_token(token) {
         return Ok(true);
     }
-    arkret_schema::embedded_capability_action(token)
-        .map(|descriptor| descriptor.is_some())
-        .map_err(|_| AgentAuthRejection::ProofInvalid)
+    Ok(arkret_schema::capability_action(token).is_some())
 }
 
 fn realm_resource_scope_token(token: &str) -> bool {

@@ -1,4 +1,3 @@
-use crate::handlers::arkret;
 use coauth_config::ArkretConfig;
 use coauth_data::{SiteConfig, UrlBuilder};
 use coauth_iana::oauth::{
@@ -12,6 +11,8 @@ use coauth_oauth_types::requests::{Display, GrantType, Prompt, ResponseMode};
 use coauth_oauth_types::scope;
 use salvo::prelude::*;
 use serde::Serialize;
+
+use crate::handlers::arkret;
 
 #[derive(Debug, Serialize)]
 struct DiscoveryDocument {
