@@ -99,12 +99,6 @@ impl UrlBuilder {
         self.issuer.clone()
     }
 
-    /// OIDC discovery document URL.
-    #[must_use]
-    pub fn oidc_discovery(&self) -> Url {
-        self.absolute_url_for_issuer("/.well-known/openid-configuration")
-    }
-
     /// OAuth authorization endpoint.
     #[must_use]
     pub fn oauth_authorization_endpoint(&self) -> Url {
@@ -185,12 +179,6 @@ impl UrlBuilder {
         let mut url = self.absolute_url("/account/password/recovery");
         url.set_query(Some(&format!("ticket={ticket}")));
         url
-    }
-
-    /// Create an absolute URL using the issuer base (for OIDC discovery).
-    fn absolute_url_for_issuer(&self, path: &str) -> Url {
-        let path = path.trim_start_matches('/');
-        self.issuer.join(path).unwrap()
     }
 }
 
