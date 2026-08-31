@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::Ulid;
 pub use crate::storage::accountability::*;
 
-/// Durable accountability grant issued for a Personal Agent capability set.
+/// Durable accountability grant issued for an Agent capability set.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccountabilityGrant {
     /// Storage row id.

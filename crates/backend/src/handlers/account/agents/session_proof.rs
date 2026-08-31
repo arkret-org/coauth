@@ -710,36 +710,7 @@ fn validate_authoritative_agent_session_evidence(
     }
 
     let key_actions = parse_agent_key_scope_actions(&authorization.agent_key_scope)?;
-    let provision_actions = &key_state.requested_scope.actions;
-    let mut capabilities = Vec::new();
-    if provision_actions.iter().any(|action| {
-        matches!(
-            action.as_str(),
-            arkret_wire::ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT_V1
-                | arkret_wire::ServiceOperationId::SELF_EVENTS_READ_FRONTIER_V1
-                | arkret_wire::CapabilityActionId::SELF_EVENTS_READ_SCAN_V1
-                | arkret_wire::CapabilityActionId::SELF_EVENTS_STREAM_SUBSCRIBE_V1
-                | arkret_wire::CapabilityActionId::MESSAGE_CREATE
-                | arkret_wire::CapabilityActionId::REACTION_ADD
-        )
-    }) {
-        capabilities
-            .push(arkret_schema::agent_runtime_scope::AgentRuntimeCapability::InteractiveChat);
-    }
-    if provision_actions.iter().any(|action| {
-        matches!(
-            action.as_str(),
-            arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE_V1
-                | arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1
-                | arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_REVOKE_V1
-                | arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST_V1
-                | arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK_V1
-        )
-    }) {
-        capabilities.push(arkret_schema::agent_runtime_scope::AgentRuntimeCapability::E2ee);
-    }
     let deficiency = arkret_schema::agent_runtime_scope::assess_agent_runtime_scopes(
-        capabilities,
         &key_state.requested_scope.actions,
         &key_actions,
         session_scope,

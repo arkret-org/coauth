@@ -98,7 +98,7 @@ pub async fn record_admin_operation_signed(
 
 /// Record a signed service-originated admin audit row.
 ///
-/// Internal service endpoints such as the Personal Agent accountability-grant
+/// Internal service endpoints such as the Agent accountability-grant
 /// issuer are authenticated with static service bearers, so there is no
 /// `User` row to pass into [`record_admin_operation_signed`]. The audit table
 /// does not currently foreign-key `admin_user_id`, so we derive a stable

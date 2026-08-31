@@ -474,7 +474,7 @@ fn account_api_subrouters() -> (Router, Router) {
                         .push(Router::with_path("respond").post(strand::respond_strand)),
                 ),
         )
-        // AKP-0008 personal-agent controller approval. Internal
+        // AKP-0008 agent controller approval. Internal
         // server-to-server endpoint: accepts only soland / sodmin
         // static bearers. Issues a `accountability_grant` payload
         // referencing the agent principal + capability set.

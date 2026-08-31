@@ -517,7 +517,7 @@ fn validate_controller_authorize_event(
     let expected_agent_id = parse_actor_id(agent_id, "agent_id")?;
     if event.actor_id != arkret_wire::ActorId::service(expected_agent_id.clone()) {
         return Err(AppError::forbidden(
-            "authorize_event.event.actor_id must equal the managed Agent DID",
+            "authorize_event.event.actor_id must equal the Agent DID",
         ));
     }
     let controller_id = event

@@ -1,7 +1,7 @@
-//! AKP-0008 personal-agent controller-approval endpoints.
+//! AKP-0008 agent controller-approval endpoints.
 //!
 //! Phase P2 (B-A / `_before_todos.md` §1.4): when a controller approves
-//! provisioning of a native Personal Agent, coauth (as the controller's
+//! provisioning of an Agent, coauth (as the controller's
 //! accountability domain) issues a typed `accountability_grant` credential
 //! to soland referencing the agent's principal id and the capability set
 //! covered by the grant. soland's reducer is the persistence authority;

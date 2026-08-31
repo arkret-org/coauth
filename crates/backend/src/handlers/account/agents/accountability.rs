@@ -6,7 +6,7 @@
 //! revokes every grant a revoked controller DID issued and records the durable
 //! subject marker this endpoint fails closed on.
 //!
-//! When a controller approves provisioning of a native Personal Agent, coauth
+//! When a controller approves provisioning of an Agent, coauth
 //! issues a typed `accountability_grant` credential to soland referencing the
 //! agent's principal id and the capability set covered by the grant. soland's
 //! reducer is the persistence authority; coauth is only the signed-grant

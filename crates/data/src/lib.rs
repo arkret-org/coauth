@@ -34,7 +34,7 @@ pub mod account;
 pub mod account_handoff;
 /// Durable Account Authority issuer-ledger types.
 pub use storage::account_status::{AccountStatusAppendOutcome, AccountStatusLedgerRepository};
-/// Durable accountability grants for Personal Agent capability approval.
+/// Durable accountability grants for Agent capability approval.
 pub mod accountability;
 /// Durable agent key authorizations + agent-key-proof replay table (AKP-0008).
 pub mod agent_key;
