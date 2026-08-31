@@ -10,8 +10,6 @@ use arkret_canonical::canonical_json_bytes;
 use arkret_models_collaboration::account_lifecycle::{
     AccountStatusPublicationOutcome, AccountStatusPublicationRequestBody,
 };
-use arkret_models_collaboration::event_query::PeerEventsFrontierRequestBody;
-use arkret_models_collaboration::event_sync::EventsFrontierFederationPeerState;
 use arkret_models_collaboration::governance::erasure::ErasureReceiptResource;
 use arkret_models_collaboration::governance::invite_addressing::{
     InviteDeliveryOutcome, InviteDeliveryRequestBody,
@@ -200,44 +198,6 @@ impl<'a> PeerProtocolClient<'a> {
             .validate_for_request(request)
             .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
         Ok(outcome)
-    }
-
-    /// Read the peer Event frontier through its registered HTTP QUERY binding.
-    pub async fn read_events_frontier(
-        &self,
-        request: &PeerEventsFrontierRequestBody,
-    ) -> Result<EventsFrontierFederationPeerState, PeerProtocolClientError> {
-        let url = self.join_absolute("/_arkret/peer/events/frontier")?;
-        let body_bytes = canonical_json_bytes(request)
-            .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
-        let signed = self.signed_request(
-            "QUERY",
-            &url,
-            ServiceOperationId::PEER_EVENTS_READ_FRONTIER_V1,
-            Some(&body_bytes),
-            None,
-        )?;
-        let query_method = reqwest::Method::from_bytes(b"QUERY")
-            .map_err(|error| PeerProtocolClientError::InvalidUrl(error.to_string()))?;
-        let response = outbound_http::send_with_policy(
-            outbound_http::soland_policy("peer_events_read_frontier")
-                .with_timeout(Duration::from_secs(5)),
-            || {
-                let mut builder = self
-                    .http_client
-                    .request(query_method.clone(), url.clone())
-                    .header(reqwest::header::CONTENT_TYPE, "application/json")
-                    .body(body_bytes.clone());
-                for (name, value) in &signed.headers {
-                    builder = builder.header(name.as_str(), value.as_str());
-                }
-                builder
-            },
-        )
-        .await
-        .map_err(|error| PeerProtocolClientError::Http(error.to_string()))?;
-
-        parse_json_response(response).await
     }
 
     fn join_absolute(&self, path: &str) -> Result<Url, PeerProtocolClientError> {
