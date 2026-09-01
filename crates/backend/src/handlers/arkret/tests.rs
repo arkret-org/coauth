@@ -135,6 +135,14 @@ fn test_keystore() -> Keystore {
     Keystore::new(JsonWebKeySet::new(vec![ed25519]))
 }
 
+fn test_account_authority_keystore() -> Keystore {
+    let mut rng = ChaChaRng::seed_from_u64(43);
+    let account_authority =
+        coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+            .with_kid(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID);
+    Keystore::new(JsonWebKeySet::new(vec![account_authority]))
+}
+
 fn test_account_id(principal_id: &str, station_id: &str) -> arkret_wire::AccountId {
     arkret_wire::AccountId::new(
         arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
@@ -1684,7 +1692,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     let clock = MockClock::default();
     let now = clock.now();
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
-    let key_store = test_keystore();
+    let key_store = test_account_authority_keystore();
 
     // Subject is the client-created webvh principal DID, passed by the caller.
     let subject_id = "ak:did_core:webvh:zQmExampleScid:soland.example";

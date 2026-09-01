@@ -84,7 +84,7 @@ pub(crate) fn issue_handle_claim(
             )));
         }
     };
-    let signing_key = ed25519_dalek::SigningKey::from_bytes(
+    let signing_key = ed25519_dalek_3::SigningKey::from_bytes(
         &key_store
             .account_authority_seed()
             .map_err(|error| SessionGrantError::Other(error.into()))?,
@@ -176,7 +176,7 @@ fn handle_claim_proof(
     created_at: DateTime<Utc>,
     audience: Option<&str>,
     verification_method: arkret_wire::DidUrl,
-    signing_key: &ed25519_dalek::SigningKey,
+    signing_key: &ed25519_dalek_3::SigningKey,
 ) -> Result<PayloadProof, SessionGrantError> {
     let domain = match proof_purpose {
         PayloadProofPurpose::IssuerAttestation | PayloadProofPurpose::HolderAcceptance => {
