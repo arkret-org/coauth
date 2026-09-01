@@ -34,6 +34,47 @@ fn test_now() -> DateTime<Utc> {
         .with_timezone(&Utc)
 }
 
+#[test]
+fn pairing_scope_precheck_returns_key_reason_before_queueing() {
+    let provision = [
+        "ak.self.events.stream.subscribe.v1",
+        "ak.self.events.read.scan.v1",
+        "ak.self.events.read.frontier.v1",
+        "ak.self.seals.read.frontier.v1",
+        "ak.self.events.command.submit.v1",
+    ]
+    .map(str::to_owned);
+    let key_without_seal = [
+        "ak.self.events.stream.subscribe.v1",
+        "ak.self.events.read.scan.v1",
+        "ak.self.events.read.frontier.v1",
+        "ak.self.events.command.submit.v1",
+    ]
+    .map(str::to_owned);
+
+    let error = super::super::session_proof::validate_agent_runtime_key_scope_layers(
+        &provision,
+        &key_without_seal,
+    )
+    .expect_err("incomplete key ceiling must reject before queued authorization persistence");
+    assert_eq!(
+        error,
+        AgentAuthRejection::AgentKeyScopeReauthorizationRequired
+    );
+
+    let provision_without_seal = key_without_seal.clone();
+    let unknown_key = ["ak.self.events.read.future_unregistered.v1".to_owned()];
+    let error = super::super::session_proof::validate_agent_runtime_key_scope_layers(
+        &provision_without_seal,
+        &unknown_key,
+    )
+    .expect_err("provision deficiency must have priority over a lower-layer unknown action");
+    assert_eq!(
+        error,
+        AgentAuthRejection::AgentProvisionScopeMigrationRequired
+    );
+}
+
 fn authoritative_key_state() -> arkret_models_collaboration::agent_operations::KeyState {
     serde_json::from_value(json!({
         "agent_id": AGENT,
@@ -43,6 +84,10 @@ fn authoritative_key_state() -> arkret_models_collaboration::agent_operations::K
         "requested_scope": {
             "actions": [
                 "ak.self.events.stream.subscribe.v1",
+                "ak.self.events.read.scan.v1",
+                "ak.self.events.read.frontier.v1",
+                "ak.self.seals.read.frontier.v1",
+                "ak.self.events.command.submit.v1",
                 "ak.event.read"
             ],
             "resources": []
@@ -103,6 +148,10 @@ fn valid_authorize_event_typed(pairing_request_id: &str) -> arkret_wire::Event {
             "agent_key_scope": {
                 "actions": [
                     "ak.self.events.stream.subscribe.v1",
+                    "ak.self.events.read.scan.v1",
+                    "ak.self.events.read.frontier.v1",
+                    "ak.self.seals.read.frontier.v1",
+                    "ak.self.events.command.submit.v1",
                     "ak.event.read"
                 ],
                 "resources": []

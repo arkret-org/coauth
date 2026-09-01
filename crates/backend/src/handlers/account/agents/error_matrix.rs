@@ -196,6 +196,22 @@ impl AgentAuthRejection {
     }
 }
 
+pub(super) fn agent_runtime_scope_rejection(
+    layer: arkret_schema::agent_runtime_scope::AgentRuntimeScopeLayer,
+) -> AgentAuthRejection {
+    match layer {
+        arkret_schema::agent_runtime_scope::AgentRuntimeScopeLayer::Provision => {
+            AgentAuthRejection::AgentProvisionScopeMigrationRequired
+        }
+        arkret_schema::agent_runtime_scope::AgentRuntimeScopeLayer::KeyAuthorization => {
+            AgentAuthRejection::AgentKeyScopeReauthorizationRequired
+        }
+        arkret_schema::agent_runtime_scope::AgentRuntimeScopeLayer::Session => {
+            AgentAuthRejection::AgentSessionScopeRefreshRequired
+        }
+    }
+}
+
 /// AUTH-3 — revocation freshness window. When an agent is paused, any
 /// outstanding session tokens MUST fail closed within this window even
 /// before the reducer fan-out catches up. Default 30 s per spec discussion,

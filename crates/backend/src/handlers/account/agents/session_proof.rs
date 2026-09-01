@@ -51,32 +51,6 @@ fn agent_session_refresh_request_digest(
 /// this regardless of the (human-oriented) `arkret.session_grant_ttl`.
 pub const AGENT_SESSION_MAX_TTL: chrono::Duration = chrono::Duration::minutes(15);
 
-const AGENT_SERVICE_SCOPE_ACTIONS: &[&str] = &[
-    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_DESCRIBE_V1,
-    arkret_wire::ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT_V1,
-    arkret_wire::ServiceOperationId::SELF_EVENTS_RESOURCE_GET_V1,
-    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_RESOLVE_V1,
-    arkret_wire::CapabilityActionId::SELF_EVENTS_READ_SCAN_V1,
-    arkret_wire::CapabilityActionId::SELF_EVENTS_STREAM_SUBSCRIBE_V1,
-    arkret_wire::ServiceOperationId::SELF_EVENTS_READ_FRONTIER_V1,
-    arkret_wire::ServiceOperationId::SELF_SEALS_READ_FRONTIER_V1,
-    arkret_wire::ServiceOperationId::SELF_AUTHORIZATION_LEASES_COMMAND_ISSUE_V1,
-    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE_V1,
-    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1,
-    arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_REVOKE_V1,
-    arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST_V1,
-    arkret_wire::ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK_V1,
-    arkret_wire::ServiceOperationId::SELF_SIGNAL_COMMAND_SEND_V1,
-];
-
-/// Content actions which are valid members of the closed
-/// `agent_key_scope.actions` object but are not service operation ids.
-const AGENT_CONTENT_SCOPE_ACTIONS: &[&str] = &[
-    arkret_wire::CapabilityActionId::EVENT_READ,
-    arkret_wire::CapabilityActionId::MESSAGE_CREATE,
-    arkret_wire::CapabilityActionId::REACTION_ADD,
-];
-
 /// Outcome of validating an `agent_key_proof` session-grant request.
 pub struct AgentSessionAuthorization {
     /// Agent principal DID the proof authenticated.
@@ -675,27 +649,77 @@ fn validate_authoritative_agent_session_evidence(
         return Err(AgentAuthRejection::AgentRequestedScopeCommitmentInvalid);
     }
 
-    let key_actions = parse_agent_key_scope_actions(&authorization.agent_key_scope)?;
-    let deficiency = arkret_schema::agent_runtime_scope::assess_agent_runtime_scopes(
+    let key_actions = parse_agent_key_scope_actions(&authorization.agent_key_scope)?
+        .into_iter()
+        .collect::<Vec<_>>();
+    validate_agent_runtime_session_scope_layers(
         &key_state.requested_scope.actions,
         &key_actions,
         session_scope,
     )
-    .map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
-    if let Some(deficiency) = deficiency {
-        return Err(match deficiency.layer {
-            arkret_schema::agent_runtime_scope::AgentRuntimeScopeLayer::Provision => {
-                AgentAuthRejection::AgentProvisionScopeMigrationRequired
-            }
-            arkret_schema::agent_runtime_scope::AgentRuntimeScopeLayer::KeyAuthorization => {
-                AgentAuthRejection::AgentKeyScopeReauthorizationRequired
-            }
-            arkret_schema::agent_runtime_scope::AgentRuntimeScopeLayer::Session => {
-                AgentAuthRejection::AgentSessionScopeRefreshRequired
-            }
-        });
+}
+
+fn validate_registered_agent_scope_actions(
+    actions: &[String],
+    layer: arkret_schema::agent_runtime_scope::AgentRuntimeScopeLayer,
+) -> Result<(), AgentAuthRejection> {
+    if actions.iter().any(|action| {
+        arkret_wire::ServiceOperationId::from_wire(action).is_none()
+            && arkret_schema::capability_action(action).is_none()
+    }) {
+        return Err(super::error_matrix::agent_runtime_scope_rejection(layer));
     }
     Ok(())
+}
+
+pub(super) fn validate_agent_runtime_key_scope_layers(
+    provision_scope: &[String],
+    key_scope: &[String],
+) -> Result<(), AgentAuthRejection> {
+    use arkret_schema::agent_runtime_scope::AgentRuntimeScopeLayer;
+
+    validate_registered_agent_scope_actions(provision_scope, AgentRuntimeScopeLayer::Provision)?;
+    let provision_deficiency =
+        arkret_schema::agent_runtime_scope::assess_agent_runtime_provision_scope(provision_scope)
+            .map_err(|_| AgentAuthRejection::AgentProvisionScopeMigrationRequired)?;
+    if let Some(value) = provision_deficiency {
+        return Err(super::error_matrix::agent_runtime_scope_rejection(
+            value.layer,
+        ));
+    }
+    validate_registered_agent_scope_actions(key_scope, AgentRuntimeScopeLayer::KeyAuthorization)?;
+    let deficiency = arkret_schema::agent_runtime_scope::assess_agent_runtime_key_scopes(
+        provision_scope,
+        key_scope,
+    )
+    .map_err(|_| AgentAuthRejection::AgentProvisionScopeMigrationRequired)?;
+    deficiency.map_or(Ok(()), |value| {
+        Err(super::error_matrix::agent_runtime_scope_rejection(
+            value.layer,
+        ))
+    })
+}
+
+fn validate_agent_runtime_session_scope_layers(
+    provision_scope: &[String],
+    key_scope: &[String],
+    session_scope: &[String],
+) -> Result<(), AgentAuthRejection> {
+    use arkret_schema::agent_runtime_scope::AgentRuntimeScopeLayer;
+
+    validate_agent_runtime_key_scope_layers(provision_scope, key_scope)?;
+    validate_registered_agent_scope_actions(session_scope, AgentRuntimeScopeLayer::Session)?;
+    let deficiency = arkret_schema::agent_runtime_scope::assess_agent_runtime_scopes(
+        provision_scope,
+        key_scope,
+        session_scope,
+    )
+    .map_err(|_| AgentAuthRejection::AgentProvisionScopeMigrationRequired)?;
+    deficiency.map_or(Ok(()), |value| {
+        Err(super::error_matrix::agent_runtime_scope_rejection(
+            value.layer,
+        ))
+    })
 }
 
 #[derive(Debug, Clone, Default)]
@@ -958,10 +982,8 @@ fn parse_agent_key_scope_actions(
 }
 
 fn registered_agent_session_scope_token(token: &str) -> Result<bool, AgentAuthRejection> {
-    if service_surface_scope_token(token) {
-        return Ok(true);
-    }
-    content_capability_scope_token(token)
+    Ok(arkret_wire::ServiceOperationId::from_wire(token).is_some()
+        || arkret_schema::capability_action(token).is_some())
 }
 
 fn normalize_requested_scope(scope: &[String]) -> Vec<String> {
@@ -993,33 +1015,19 @@ fn normalize_string_set(values: &[String]) -> BTreeSet<String> {
 }
 
 fn service_surface_scope_token(token: &str) -> bool {
-    AGENT_SERVICE_SCOPE_ACTIONS.contains(&token) || applet_service_scope_token(token)
-}
-
-fn applet_service_scope_token(token: &str) -> bool {
-    token == arkret_wire::ServiceOperationId::EDGE_APPLET_READ_DESCRIBE_V1
-        || token == arkret_wire::ServiceOperationId::EDGE_APPLET_COMMAND_TRANSACTION_V1
+    arkret_wire::ServiceOperationId::from_wire(token).is_some()
+        || arkret_schema::capability_action(token)
+            .is_some_and(|descriptor| descriptor.category == "service")
 }
 
 fn content_capability_scope_token(token: &str) -> Result<bool, AgentAuthRejection> {
-    if AGENT_CONTENT_SCOPE_ACTIONS.contains(&token) && !service_surface_scope_token(token) {
-        return Ok(true);
-    }
-    Ok(arkret_schema::capability_action(token).is_some())
+    Ok(arkret_schema::capability_action(token)
+        .is_some_and(|descriptor| descriptor.category != "service"))
 }
 
 fn realm_resource_scope_token(token: &str) -> bool {
-    token.starts_with("ak.self.events.")
-        || token.starts_with("ak.applet.")
-        || token.starts_with("ak.event.")
-        || token.starts_with("ak.message.")
-        || token.starts_with("ak.reaction.")
-        || token.starts_with("ak.strand.")
-        || token.starts_with("ak.space.")
-        || token.starts_with("ak.blob.")
-        || token.starts_with("ak.call.")
-        || token.starts_with("ak.morph.")
-        || token.starts_with("ak.relation.")
+    arkret_schema::capability_action(token)
+        .is_some_and(|descriptor| descriptor.event_mapping_kind != "non_event_surface")
 }
 
 fn scope_request_has_resource_selectors(scope_request: &AgentScopeRequestInput) -> bool {
@@ -1563,11 +1571,28 @@ mod tests {
     }
 
     fn canonical_agent_key_scope() -> String {
-        let actions = AGENT_SERVICE_SCOPE_ACTIONS
-            .iter()
-            .chain(AGENT_CONTENT_SCOPE_ACTIONS)
-            .copied()
-            .collect::<BTreeSet<_>>();
+        let actions = [
+            "ak.event.read",
+            "ak.message.create",
+            "ak.reaction.add",
+            "ak.self.authorization_leases.command.issue.v1",
+            "ak.self.device_messages.command.ack.v1",
+            "ak.self.device_messages.read.list.v1",
+            "ak.self.events.command.submit.v1",
+            "ak.self.events.read.describe.v1",
+            "ak.self.events.read.frontier.v1",
+            "ak.self.events.read.resolve.v1",
+            "ak.self.events.read.scan.v1",
+            "ak.self.events.resource.get.v1",
+            "ak.self.events.stream.subscribe.v1",
+            "ak.self.keys.keypackages.command.consume.v1",
+            "ak.self.keys.keypackages.command.revoke.v1",
+            "ak.self.keys.keypackages.upload.create.v1",
+            "ak.self.seals.read.frontier.v1",
+            "ak.self.signal.command.send.v1",
+        ]
+        .into_iter()
+        .collect::<BTreeSet<_>>();
         serde_json::json!({"actions": actions, "resources": []}).to_string()
     }
 

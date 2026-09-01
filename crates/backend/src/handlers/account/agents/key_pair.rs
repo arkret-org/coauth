@@ -304,8 +304,6 @@ pub async fn post_agent_key_pair(
         .verify(&transcript, &signature)
         .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
 
-    let mut repo = depot.repo().await?;
-
     let authorize_event = validate_controller_authorize_event(
         &body.authorize_event.event,
         agent_id.as_str(),
@@ -317,6 +315,12 @@ pub async fn post_agent_key_pair(
         authoritative_key_state,
         now,
     )?;
+    super::session_proof::validate_agent_runtime_key_scope_layers(
+        &authoritative_key_state.requested_scope.actions,
+        &authorize_event.payload.agent_key_scope.actions,
+    )
+    .map_err(AgentAuthRejection::into_app_error)?;
+    let mut repo = depot.repo().await?;
 
     // `pair_agent_key` validates the current Station pairing handle
     // above and the controller-signed authorization here. Accountability-grant

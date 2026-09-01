@@ -86,7 +86,7 @@ mod tests {
                 "ak:did_core:web:{label}-controller.example"
             ))
             .unwrap(),
-            agent_key_scope: r#"{"actions":["ak.self.events.stream.subscribe.v1"],"resources":[]}"#
+            agent_key_scope: r#"{"actions":["ak.self.events.stream.subscribe.v1","ak.self.events.read.scan.v1","ak.self.events.read.frontier.v1","ak.self.seals.read.frontier.v1","ak.self.events.command.submit.v1"],"resources":[]}"#
                 .to_owned(),
             audience: vec!["did:web:soland.test".to_owned()],
             issued_at: clock.now(),
