@@ -17,6 +17,6 @@ sources:
   - https://github.com/arkret-org/coauth
 maintainers:
   - name: Arkret Authors
-icon: https://arkret.dev/icon.png
+icon: https://arkret.org/icon.png
 annotations:
   category: Security
