@@ -10,7 +10,7 @@ repository.workspace = true
 publish.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-# ULID's random generator uses getrandom 0.3; browser builds must select its
+# ULID's random generator uses getrandom 0.4; browser builds must select its
 # Web Crypto backend explicitly.
 getrandom = { workspace = true, features = ["wasm_js"] }
 
