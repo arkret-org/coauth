@@ -58,15 +58,7 @@ pub fn AccountPage() -> Element {
                     };
                 }
             };
-            let profile = user
-                .profile
-                .clone()
-                .unwrap_or(crate::api::types::UserProfile {
-                    display_name: principal.display_name.clone(),
-                    avatar_url: None,
-                    preferred_locale: None,
-                    updated_at: String::new(),
-                });
+            let profile = user.profile.clone();
 
             // Seed the account tier now that the profile is known. Until this
             // point the SPA has only had the device cache to go on, so the

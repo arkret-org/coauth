@@ -1,107 +1,24 @@
-use coauth_account_types::LinkedAccount;
+use coauth_account_types::{
+    AnonymousViewer as AnonymousData, BrowserSession as BrowserSessionData,
+    EmailConnection as EmailListData, EmailEdge as EmailEdgeData, LinkedAccount,
+    PrincipalUser as PrincipalUserData, UserEmail as EmailData, Viewer as ViewerData,
+    ViewerOutcome, ViewerSession as ViewerSessionData, ViewerUser,
+    ViewerUserProfile as UserProfileData,
+};
 use coauth_data::RepositoryAccess;
 use coauth_data::account::AccountSecuritySummary;
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use serde::Serialize;
 
-use super::site_config::{SiteConfigOutcome, from_site_config};
+use super::site_config::from_site_config;
 use super::{
-    DepotExt, NodeType, RouteError, UserAgentInfo, extract_bound_activity_tracker,
-    extract_session_info, get_requester, make_clock, parse_user_agent,
+    DepotExt, NodeType, RouteError, extract_bound_activity_tracker, extract_session_info,
+    get_requester, make_clock, parse_user_agent,
 };
 use crate::handlers::account::service::connections::load_linked_accounts;
 use crate::handlers::arkret;
 use crate::services::user_profile::load_viewer_profile;
-
-// ── Response types ─────────────────────────────────────────────
-
-#[derive(Serialize, ToSchema)]
-struct ViewerOutcome {
-    viewer: ViewerData,
-    viewer_session: ViewerSessionData,
-    site_config: SiteConfigOutcome,
-}
-
-#[derive(Serialize, ToSchema)]
-#[serde(tag = "__typename")]
-#[allow(clippy::large_enum_variant)]
-enum ViewerData {
-    User(ViewerUser),
-    Anonymous(AnonymousData),
-}
-
-#[derive(Serialize, ToSchema)]
-struct ViewerUser {
-    id: String,
-    username: String,
-    #[salvo(schema(value_type = String))]
-    principal_id: arkret_identifiers::DidCoreId,
-    handle: String,
-    can_request_admin: bool,
-    has_password: bool,
-    profile: UserProfileData,
-    principal: Option<PrincipalUserData>,
-    emails: Option<EmailListData>,
-    linked_accounts: Option<Vec<LinkedAccount>>,
-}
-
-#[derive(Serialize, ToSchema)]
-struct AnonymousData {
-    id: String,
-}
-
-#[derive(Serialize, ToSchema)]
-#[serde(tag = "__typename")]
-#[allow(clippy::large_enum_variant)]
-enum ViewerSessionData {
-    BrowserSession(BrowserSessionData),
-    Anonymous(AnonymousData),
-}
-
-#[derive(Serialize, ToSchema)]
-struct BrowserSessionData {
-    id: String,
-    user: Option<ViewerUser>,
-    user_agent: Option<UserAgentInfo>,
-    last_active_ip: Option<String>,
-    last_active_at: Option<String>,
-    created_at: Option<String>,
-}
-
-#[derive(Serialize, ToSchema)]
-struct PrincipalUserData {
-    principal_address: String,
-    display_name: Option<String>,
-}
-
-#[derive(Serialize, ToSchema)]
-struct UserProfileData {
-    display_name: Option<String>,
-    avatar_url: Option<String>,
-    preferred_locale: Option<String>,
-    updated_at: String,
-}
-
-#[derive(Serialize, ToSchema)]
-struct EmailListData {
-    total_count: i64,
-    edges: Vec<EmailEdgeData>,
-}
-
-#[derive(Serialize, ToSchema)]
-struct EmailEdgeData {
-    cursor: String,
-    node: EmailData,
-}
-
-#[derive(Serialize, ToSchema)]
-struct EmailData {
-    id: String,
-    email: String,
-    confirmed_at: Option<String>,
-    is_primary: bool,
-}
 
 // ── GET /_coauth/self/viewer ─────────────────────────────────────────
 
@@ -155,7 +72,7 @@ pub async fn get_viewer(
                     },
                 })
                 .collect();
-            let total = email_edges.len() as i64;
+            let total = email_edges.len() as i32;
 
             let has_password = profile.has_password;
             let principal_id =
@@ -186,7 +103,7 @@ pub async fn get_viewer(
             let viewer_user = ViewerUser {
                 id: NodeType::User.serialize(user.id),
                 username: user.localpart.clone(),
-                principal_id,
+                principal_id: principal_id.to_string(),
                 handle: arkret::user_handle(&url_builder, user),
                 can_request_admin: user.can_request_admin,
                 has_password,
@@ -207,6 +124,8 @@ pub async fn get_viewer(
                     edges: email_edges,
                 }),
                 linked_accounts: Some(linked_accounts),
+                browser_sessions: None,
+                app_sessions: None,
             };
 
             let browser_session_data = BrowserSessionData {
@@ -220,6 +139,8 @@ pub async fn get_viewer(
                 created_at: Some(arkret_canonical::format_timestamp_canonical(
                     session.created_at,
                 )),
+                last_authentication: None,
+                display_name: None,
             };
 
             (

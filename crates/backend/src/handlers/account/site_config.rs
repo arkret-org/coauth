@@ -1,27 +1,8 @@
+pub use coauth_account_types::SiteConfigOutcome;
 use coauth_data::SiteConfig;
-use salvo::oapi::ToSchema;
 use salvo::prelude::*;
-use serde::Serialize;
 
 use super::{DepotExt, RouteError};
-
-#[derive(Serialize, ToSchema)]
-pub struct SiteConfigOutcome {
-    pub id: Option<String>,
-    pub email_change_allowed: bool,
-    pub password_login_enabled: bool,
-    pub account_deactivation_allowed: bool,
-    pub display_name_change_allowed: bool,
-    pub password_registration_enabled: bool,
-    pub registration_email_delivery_bypass_allowed: bool,
-    pub bootstrap_admin_token_enabled: bool,
-    pub minimum_password_complexity: u8,
-    pub imprint: Option<String>,
-    pub tos_uri: Option<String>,
-    pub policy_uri: Option<String>,
-    pub admin_portal_url: Option<String>,
-    pub plan_management_iframe_uri: Option<String>,
-}
 
 /// Build a [`SiteConfigOutcome`] from the domain [`SiteConfig`].
 #[must_use]

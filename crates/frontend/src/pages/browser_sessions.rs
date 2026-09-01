@@ -29,8 +29,8 @@ pub fn BrowserSessions() -> Element {
                 None => return rsx! { p { "Not authenticated." } },
             };
 
-            let user = match &session.user {
-                Some(u) => u,
+            let user = match result.viewer.as_user() {
+                Some(user) => user,
                 None => return rsx! { p { "User data unavailable." } },
             };
 

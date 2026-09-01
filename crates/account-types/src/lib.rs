@@ -161,6 +161,262 @@ pub struct ViewerInfo {
     pub display_name: Option<String>,
 }
 
+// ── Combined viewer response ───────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct ViewerOutcome {
+    pub viewer: Viewer,
+    pub viewer_session: ViewerSession,
+    pub site_config: SiteConfigOutcome,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+#[serde(tag = "__typename")]
+#[allow(clippy::large_enum_variant)]
+pub enum Viewer {
+    User(ViewerUser),
+    Anonymous(AnonymousViewer),
+}
+
+impl Viewer {
+    #[must_use]
+    pub const fn as_user(&self) -> Option<&ViewerUser> {
+        match self {
+            Self::User(user) => Some(user),
+            Self::Anonymous(_) => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct AnonymousViewer {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct ViewerUser {
+    pub id: String,
+    pub username: String,
+    pub principal_id: String,
+    pub handle: String,
+    pub can_request_admin: bool,
+    pub has_password: bool,
+    pub profile: ViewerUserProfile,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub principal: Option<PrincipalUser>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub emails: Option<EmailConnection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub linked_accounts: Option<Vec<LinkedAccount>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser_sessions: Option<BrowserSessionConnection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_sessions: Option<AppSessionConnection>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct PrincipalUser {
+    pub principal_address: String,
+    pub display_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct ViewerUserProfile {
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
+    pub preferred_locale: Option<String>,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+#[serde(tag = "__typename")]
+#[allow(clippy::large_enum_variant)]
+pub enum ViewerSession {
+    BrowserSession(BrowserSession),
+    Anonymous(AnonymousViewer),
+}
+
+impl ViewerSession {
+    #[must_use]
+    pub const fn as_browser_session(&self) -> Option<&BrowserSession> {
+        match self {
+            Self::BrowserSession(session) => Some(session),
+            Self::Anonymous(_) => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct BrowserSession {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user: Option<ViewerUser>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_agent: Option<UserAgent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_active_ip: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_active_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_authentication: Option<AuthenticationInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct UserAgent {
+    pub name: Option<String>,
+    pub model: Option<String>,
+    pub os: Option<String>,
+    pub device_type: DeviceType,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum DeviceType {
+    Pc,
+    Mobile,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct AuthenticationInfo {
+    pub id: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+#[serde(tag = "__typename")]
+pub enum AppSession {
+    OAuthSession(OAuthSession),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct OAuthSession {
+    pub id: String,
+    pub scope: Option<String>,
+    pub client: Option<OAuthClient>,
+    pub user_agent: Option<UserAgent>,
+    pub last_active_ip: Option<String>,
+    pub last_active_at: Option<String>,
+    pub created_at: Option<String>,
+    pub display_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct OAuthClient {
+    pub id: String,
+    pub client_id: String,
+    pub client_name: Option<String>,
+    pub client_uri: Option<String>,
+    pub logo_uri: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+#[serde(tag = "__typename")]
+#[allow(clippy::large_enum_variant)]
+pub enum Session {
+    BrowserSession(BrowserSession),
+    OAuthSession(OAuthSession),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct UserEmail {
+    pub id: String,
+    pub email: String,
+    pub confirmed_at: Option<String>,
+    pub is_primary: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct EmailConnection {
+    pub total_count: i32,
+    pub edges: Vec<EmailEdge>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct EmailEdge {
+    pub cursor: String,
+    pub node: UserEmail,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct BrowserSessionConnection {
+    pub total_count: i32,
+    pub edges: Vec<BrowserSessionEdge>,
+    pub page_info: PageInfo,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct BrowserSessionEdge {
+    pub cursor: String,
+    pub node: BrowserSession,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct AppSessionConnection {
+    pub total_count: i32,
+    pub edges: Vec<AppSessionEdge>,
+    pub page_info: PageInfo,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct AppSessionEdge {
+    pub cursor: String,
+    pub node: AppSession,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct SiteConfigOutcome {
+    pub id: Option<String>,
+    pub email_change_allowed: bool,
+    pub password_login_enabled: bool,
+    pub account_deactivation_allowed: bool,
+    pub display_name_change_allowed: bool,
+    pub password_registration_enabled: bool,
+    pub registration_email_delivery_bypass_allowed: bool,
+    pub bootstrap_admin_token_enabled: bool,
+    pub minimum_password_complexity: u8,
+    pub imprint: Option<String>,
+    pub tos_uri: Option<String>,
+    pub policy_uri: Option<String>,
+    pub admin_portal_url: Option<String>,
+    pub plan_management_iframe_uri: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct BootstrapAdminStatus {
+    pub has_admin: bool,
+    pub token_configured: bool,
+    pub setup_required: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 #[serde(rename_all = "snake_case")]
@@ -412,5 +668,27 @@ mod tests {
         let encoded = serde_json::to_vec(&request).unwrap();
         let decoded: RegisterInput = serde_json::from_slice(&encoded).unwrap();
         assert_eq!(decoded, request);
+    }
+
+    #[test]
+    fn viewer_user_rejects_a_missing_password_contract_field() {
+        let mut value = serde_json::json!({
+            "id": "user:01KVVVKSMNEAFSMKH4HCXD1E7T",
+            "username": "alice",
+            "principal_id": "ak:did_core:webvh:z6mkfixturealice",
+            "handle": "alice:auth.example",
+            "can_request_admin": false,
+            "has_password": true,
+            "profile": {
+                "display_name": "Alice",
+                "avatar_url": null,
+                "preferred_locale": "en",
+                "updated_at": "2026-09-01T00:00:00.000Z"
+            }
+        });
+        serde_json::from_value::<ViewerUser>(value.clone()).expect("complete viewer user");
+
+        value.as_object_mut().unwrap().remove("has_password");
+        assert!(serde_json::from_value::<ViewerUser>(value).is_err());
     }
 }

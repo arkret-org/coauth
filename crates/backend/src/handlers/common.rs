@@ -22,7 +22,6 @@ use coauth_principal::ConnectorAdmin;
 use rand_chacha::ChaChaRng;
 use rand_core::{CryptoRngCore, SeedableRng};
 use salvo::prelude::*;
-use serde::Serialize;
 use ulid::Ulid;
 
 use crate::handlers::passwords::PasswordManager;
@@ -446,13 +445,7 @@ pub fn make_rng_from(rng: &mut (dyn CryptoRngCore + Send)) -> ChaChaRng {
 
 // ── User-agent parsing helper ──────────────────────────────────
 
-#[derive(Serialize, Clone, salvo::oapi::ToSchema)]
-pub struct UserAgentInfo {
-    pub name: Option<String>,
-    pub model: Option<String>,
-    pub os: Option<String>,
-    pub device_type: &'static str,
-}
+pub type UserAgentInfo = coauth_account_types::UserAgent;
 
 #[must_use]
 pub fn parse_user_agent(ua: &str) -> UserAgentInfo {
@@ -475,9 +468,9 @@ pub fn parse_user_agent(ua: &str) -> UserAgentInfo {
     };
 
     let device_type = match category {
-        "pc" => "PC",
-        "smartphone" | "mobilephone" => "MOBILE",
-        _ => "UNKNOWN",
+        "pc" => coauth_account_types::DeviceType::Pc,
+        "smartphone" | "mobilephone" => coauth_account_types::DeviceType::Mobile,
+        _ => coauth_account_types::DeviceType::Unknown,
     };
 
     UserAgentInfo {

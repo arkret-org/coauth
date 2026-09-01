@@ -39,7 +39,7 @@ pub fn AccountSettings() -> Element {
                 .map(|ec| ec.edges.iter().map(|e| e.node.clone()).collect())
                 .unwrap_or_default();
             let email_count = user.emails.as_ref().map_or(0, |ec| ec.total_count);
-            let has_password = user.has_password.unwrap_or(false);
+            let has_password = user.has_password;
             let linked_accounts: Vec<LinkedAccount> =
                 user.linked_accounts.clone().unwrap_or_default();
             let email_change_allowed = result.site_config.email_change_allowed;
