@@ -136,19 +136,12 @@ fn soland_account_localparts_endpoint(
     principal_endpoint: &str,
     principal_id: &str,
 ) -> Result<url::Url, String> {
-    let mut endpoint = url::Url::parse(principal_endpoint)
+    let endpoint = url::Url::parse(principal_endpoint)
         .map_err(|error| format!("invalid Station endpoint: {error}"))?;
-    endpoint.set_query(None);
-    endpoint.set_fragment(None);
-    endpoint
-        .path_segments_mut()
-        .map_err(|_| "Station endpoint cannot be a base URL".to_owned())?
-        .clear()
-        .push("_soland")
-        .push("accounts")
-        .push(principal_id)
-        .push("localparts");
-    Ok(endpoint)
+    let principal_id = DidCoreId::new(principal_id.to_owned())
+        .map_err(|error| format!("invalid principal id: {error}"))?;
+    soland_contracts::account_localparts_endpoint(endpoint, &principal_id)
+        .map_err(|error| error.to_string())
 }
 
 fn soland_account_register_body(

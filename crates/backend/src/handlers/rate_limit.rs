@@ -398,8 +398,6 @@ struct LimiterInner {
     phone_authentication_attempt_per_session: KeyedLimiter<Ulid>,
     directory_lookup_per_requester: KeyedLimiter<RequesterFingerprint>,
     identity_resolution_per_requester: KeyedLimiter<RequesterFingerprint>,
-    identity_resolution_config: RateLimiterConfiguration,
-    directory_lookup_config: RateLimiterConfiguration,
     did_binding_per_requester: KeyedLimiter<RequesterFingerprint>,
     did_binding_per_account: KeyedLimiter<Ulid>,
     failed_login: FailedLoginTracker,
@@ -447,8 +445,6 @@ impl LimiterInner {
             identity_resolution_per_requester: KeyedLimiter::from_config(
                 &config.identity_resolution.per_ip,
             )?,
-            identity_resolution_config: config.identity_resolution.per_ip,
-            directory_lookup_config: config.directory_lookup.per_ip,
             did_binding_per_requester: KeyedLimiter::from_config(&config.did_binding.per_ip)?,
             did_binding_per_account: KeyedLimiter::from_config(&config.did_binding.per_account)?,
             failed_login: FailedLoginTracker::new(&config.login.lockout),
@@ -776,49 +772,6 @@ impl Limiter {
         Ok(())
     }
 
-    /// Describe the public lookup quotas enforced by this limiter. The wire
-    /// declaration is derived from the same config snapshot as the buckets.
-    pub fn advertised_public_lookup_policy(&self) -> arkret_models_discovery::RateLimitPolicy {
-        fn entry(
-            operation_id: &str,
-            config: RateLimiterConfiguration,
-        ) -> arkret_models_discovery::RateLimitEntry {
-            let (limit, period) = config
-                .to_limit_and_period()
-                .expect("validated rate limiter configuration");
-            arkret_models_discovery::RateLimitEntry {
-                operation_id: Some(operation_id.to_owned()),
-                rate_limit_scope: Some(arkret_models_discovery::RateLimitScope::Single(
-                    "ip".to_owned(),
-                )),
-                window_seconds: Some(
-                    period.as_secs_f64().ceil().clamp(1.0, f64::from(u32::MAX)) as u32
-                ),
-                max_requests: Some(u32::try_from(limit).unwrap_or(u32::MAX)),
-                ..arkret_models_discovery::RateLimitEntry::default()
-            }
-        }
-
-        arkret_models_discovery::RateLimitPolicy {
-            policy_version: Some("1".to_owned()),
-            entries: vec![
-                entry(
-                    arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE_V1,
-                    self.inner.identity_resolution_config,
-                ),
-                entry(
-                    arkret_wire::ServiceOperationId::ROOT_IDENTITY_DOCUMENT_RESOURCE_GET_V1,
-                    self.inner.identity_resolution_config,
-                ),
-                entry(
-                    arkret_wire::ServiceOperationId::FIND_DIRECTORY_READ_RESOLVE_HANDLE_V1,
-                    self.inner.directory_lookup_config,
-                ),
-            ],
-            ..arkret_models_discovery::RateLimitPolicy::default()
-        }
-    }
-
     /// Per-IP gate for the unauthenticated device-link user-code lookup
     /// (`device_link_get`, COA-COR-03). The endpoint maps a user code to a
     /// pending device-authorization grant_id with no attempt counter; a per-IP
@@ -997,7 +950,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_identity_resolution_limiter_and_advertisement() {
+    async fn test_identity_resolution_limiter() {
         let limiter = Limiter::new(&RateLimitingConfig::default()).unwrap();
         let requester = RequesterFingerprint::new([203, 0, 113, 12].into());
 
@@ -1005,15 +958,6 @@ mod tests {
             assert!(limiter.check_identity_resolution(requester).await.is_ok());
         }
         assert!(limiter.check_identity_resolution(requester).await.is_err());
-
-        let policy = limiter.advertised_public_lookup_policy();
-        assert_eq!(policy.entries.len(), 3);
-        assert!(policy.entries.iter().any(|entry| {
-            entry.operation_id.as_deref()
-                == Some(arkret_wire::ServiceOperationId::ROOT_IDENTITY_READ_RESOLVE_V1)
-                && entry.window_seconds == Some(60)
-                && entry.max_requests == Some(60)
-        }));
     }
 
     fn test_user(name: &str) -> User {
