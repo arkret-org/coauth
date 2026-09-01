@@ -298,6 +298,7 @@ pub(crate) fn issue_recovery_session_grant_for_audience(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[cfg(debug_assertions)]
 pub(crate) fn issue_test_session_grant_for_audience(
     issuance_seed: &SessionGrantIssuanceSeed,
     clock: &dyn Clock,

@@ -282,7 +282,7 @@ fn account_api_subrouters() -> (Router, Router) {
         )
         .push(Router::with_path("{**rest}").goal(arkret_not_found));
 
-    let mut coauth_router = Router::with_path("/_coauth")
+    let coauth_router = Router::with_path("/_coauth")
         .hoop(public_oidc_browser_cors())
         // Product-private surface only. Protocol-standard Arkret endpoints
         // are served solely under `/_arkret` above — clients speaking the
@@ -484,12 +484,14 @@ fn account_api_subrouters() -> (Router, Router) {
         );
 
     #[cfg(debug_assertions)]
-    if arkret::test_endpoints_enabled() {
-        coauth_router = coauth_router.push(
+    let coauth_router = if arkret::test_endpoints_enabled() {
+        coauth_router.push(
             Router::with_path("account/test/debug/issue-dpop-grant")
                 .post(arkret::debug_issue_dpop_grant),
-        );
-    }
+        )
+    } else {
+        coauth_router
+    };
 
     (arkret_router, coauth_router)
 }

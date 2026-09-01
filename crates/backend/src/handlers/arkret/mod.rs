@@ -27,6 +27,7 @@ mod tests;
 use anyhow::Error as AnyhowError;
 use arkret_wire::ErrorEnvelope;
 use coauth_config::ArkretConfig;
+#[cfg(debug_assertions)]
 use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
 use coauth_data::{RepositoryAccess, UrlBuilder, User};
 use coauth_jose::constraints::Constrainable;
@@ -34,6 +35,7 @@ use coauth_jose::jwt::JwtSignatureError;
 use coauth_keystore::WrongAlgorithmError;
 use coauth_oauth_types::scope::Scope;
 use salvo::prelude::*;
+#[cfg(debug_assertions)]
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -981,6 +983,7 @@ pub(crate) fn parse_local_handle(url_builder: &UrlBuilder, handle: &str) -> Opti
 /// caller wants the grant bound to; we trust it because this endpoint
 /// is gated behind `debug_assertions` / a `COAUTH_ENABLE_TEST_ENDPOINTS`
 /// env var.
+#[cfg(debug_assertions)]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct DebugIssueDpopGrantRequestBody {
     pub actor_id: String,
@@ -992,6 +995,7 @@ pub struct DebugIssueDpopGrantRequestBody {
     pub scopes: Option<Vec<String>>,
 }
 
+#[cfg(debug_assertions)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DebugIssueDpopGrantOutcome {
     pub grant_id: String,
@@ -1007,8 +1011,10 @@ pub struct DebugIssueDpopGrantOutcome {
 }
 
 /// Byte-preserving response used by the live issuer-ledger fault seam.
+#[cfg(debug_assertions)]
 pub struct DebugIssueDpopGrantCanonicalJson(Vec<u8>);
 
+#[cfg(debug_assertions)]
 impl Scribe for DebugIssueDpopGrantCanonicalJson {
     fn render(self, response: &mut Response) {
         response.headers_mut().insert(
@@ -1024,6 +1030,7 @@ impl Scribe for DebugIssueDpopGrantCanonicalJson {
 /// Returns true when test-only endpoints are explicitly allowed at runtime.
 /// The route is only mounted in debug builds, and this env gate must still
 /// be enabled there.
+#[cfg(debug_assertions)]
 #[must_use]
 pub fn test_endpoints_enabled() -> bool {
     matches!(
@@ -1038,6 +1045,7 @@ pub fn test_endpoints_enabled() -> bool {
 /// session-grant seed used by the cotest e2e harness. Returns a fully
 /// signed grant whose `cnf.jkt` matches the thumbprint of the supplied
 /// `dpop_jwk`. Gated by [`test_endpoints_enabled`].
+#[cfg(debug_assertions)]
 #[handler]
 pub async fn debug_issue_dpop_grant(
     req: &mut Request,
