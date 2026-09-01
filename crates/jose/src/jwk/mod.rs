@@ -274,13 +274,6 @@ impl<P> JsonWebKey<P> {
         self
     }
 
-    /// Set the `alg` field of this [`JsonWebKey`].
-    #[must_use]
-    pub fn with_alg(mut self, alg: JsonWebSignatureAlg) -> Self {
-        self.alg = Some(alg);
-        self
-    }
-
     /// Set the `kid` field of this [`JsonWebKey`].
     #[must_use]
     pub fn with_kid(mut self, kid: impl Into<String>) -> Self {
@@ -413,45 +406,6 @@ where
         }
 
         Ok(())
-    }
-
-    /// Set the `use` field and validate the resulting key metadata.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the updated metadata becomes inconsistent.
-    pub fn try_with_use(mut self, value: JsonWebKeyUse) -> Result<Self, JsonWebKeyValidationError> {
-        self.r#use = Some(value);
-        self.validate()?;
-        Ok(self)
-    }
-
-    /// Set the `key_ops` field and validate the resulting key metadata.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the updated metadata becomes inconsistent.
-    pub fn try_with_key_ops(
-        mut self,
-        key_ops: Vec<JsonWebKeyOperation>,
-    ) -> Result<Self, JsonWebKeyValidationError> {
-        self.key_ops = Some(key_ops);
-        self.validate()?;
-        Ok(self)
-    }
-
-    /// Set the `alg` field and validate the resulting key metadata.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the updated metadata becomes inconsistent.
-    pub fn try_with_alg(
-        mut self,
-        alg: JsonWebSignatureAlg,
-    ) -> Result<Self, JsonWebKeyValidationError> {
-        self.alg = Some(alg);
-        self.validate()?;
-        Ok(self)
     }
 }
 
@@ -672,6 +626,18 @@ mod tests {
             .unwrap()
     }
 
+    fn with_metadata<P>(
+        mut key: JsonWebKey<P>,
+        use_: Option<JsonWebKeyUse>,
+        key_ops: Option<Vec<JsonWebKeyOperation>>,
+        alg: Option<JsonWebSignatureAlg>,
+    ) -> JsonWebKey<P> {
+        key.r#use = use_;
+        key.key_ops = key_ops;
+        key.alg = alg;
+        key
+    }
+
     #[test]
     fn load_google_keys() {
         let jwks = serde_json::json!({
@@ -746,19 +712,16 @@ mod tests {
         let public_jwks = load_public_keys();
         let p521 = p521_public_key(&public_jwks);
 
-        let valid = p521
-            .clone()
-            .try_with_alg(JsonWebSignatureAlg::Es512)
-            .unwrap()
-            .try_with_use(JsonWebKeyUse::Sig)
-            .unwrap()
-            .try_with_key_ops(vec![JsonWebKeyOperation::Verify])
-            .unwrap();
+        let valid = with_metadata(
+            p521.clone(),
+            Some(JsonWebKeyUse::Sig),
+            Some(vec![JsonWebKeyOperation::Verify]),
+            Some(JsonWebSignatureAlg::Es512),
+        );
         valid.validate().unwrap();
 
-        let err = p521
-            .clone()
-            .try_with_alg(JsonWebSignatureAlg::Ed25519)
+        let err = with_metadata(p521.clone(), None, None, Some(JsonWebSignatureAlg::Ed25519))
+            .validate()
             .unwrap_err();
         assert!(matches!(
             err,
@@ -768,12 +731,14 @@ mod tests {
             }
         ));
 
-        let err = p521
-            .clone()
-            .try_with_use(JsonWebKeyUse::Sig)
-            .unwrap()
-            .try_with_key_ops(vec![JsonWebKeyOperation::Encrypt])
-            .unwrap_err();
+        let err = with_metadata(
+            p521.clone(),
+            Some(JsonWebKeyUse::Sig),
+            Some(vec![JsonWebKeyOperation::Encrypt]),
+            None,
+        )
+        .validate()
+        .unwrap_err();
         assert!(matches!(
             err,
             JsonWebKeyValidationError::IncompatibleUseAndKeyOperation {
@@ -782,12 +747,14 @@ mod tests {
             }
         ));
 
-        let err = p521
-            .clone()
-            .try_with_alg(JsonWebSignatureAlg::Es512)
-            .unwrap()
-            .try_with_key_ops(vec![JsonWebKeyOperation::Encrypt])
-            .unwrap_err();
+        let err = with_metadata(
+            p521.clone(),
+            None,
+            Some(vec![JsonWebKeyOperation::Encrypt]),
+            Some(JsonWebSignatureAlg::Es512),
+        )
+        .validate()
+        .unwrap_err();
         assert!(matches!(
             err,
             JsonWebKeyValidationError::IncompatibleAlgorithmAndKeyOperation {
@@ -796,24 +763,30 @@ mod tests {
             }
         ));
 
-        let err = p521
-            .clone()
-            .try_with_key_ops(vec![
+        let err = with_metadata(
+            p521.clone(),
+            None,
+            Some(vec![
                 JsonWebKeyOperation::Verify,
                 JsonWebKeyOperation::Encrypt,
-            ])
-            .unwrap_err();
+            ]),
+            None,
+        )
+        .validate()
+        .unwrap_err();
         assert!(matches!(
             err,
             JsonWebKeyValidationError::MixedKeyOperations { .. }
         ));
 
-        let err = p521
-            .clone()
-            .try_with_use(JsonWebKeyUse::Enc)
-            .unwrap()
-            .try_with_alg(JsonWebSignatureAlg::Es512)
-            .unwrap_err();
+        let err = with_metadata(
+            p521.clone(),
+            Some(JsonWebKeyUse::Enc),
+            None,
+            Some(JsonWebSignatureAlg::Es512),
+        )
+        .validate()
+        .unwrap_err();
         assert!(matches!(
             err,
             JsonWebKeyValidationError::IncompatibleUseAndAlgorithm {
@@ -826,23 +799,24 @@ mod tests {
     #[test]
     fn validated_key_selection_skips_invalid_metadata() {
         let public_jwks = load_public_keys();
-        let p521 = p521_public_key(&public_jwks)
-            .try_with_alg(JsonWebSignatureAlg::Es512)
-            .unwrap()
-            .try_with_use(JsonWebKeyUse::Sig)
-            .unwrap()
-            .try_with_key_ops(vec![JsonWebKeyOperation::Verify])
-            .unwrap();
-        let ed25519 = ed25519_public_key(&public_jwks)
-            .try_with_alg(JsonWebSignatureAlg::Ed25519)
-            .unwrap()
-            .try_with_use(JsonWebKeyUse::Sig)
-            .unwrap()
-            .try_with_key_ops(vec![JsonWebKeyOperation::Verify])
-            .unwrap();
-        let invalid = p521_public_key(&public_jwks)
-            .with_kid("invalid-es256")
-            .with_alg(JsonWebSignatureAlg::Es256);
+        let p521 = with_metadata(
+            p521_public_key(&public_jwks),
+            Some(JsonWebKeyUse::Sig),
+            Some(vec![JsonWebKeyOperation::Verify]),
+            Some(JsonWebSignatureAlg::Es512),
+        );
+        let ed25519 = with_metadata(
+            ed25519_public_key(&public_jwks),
+            Some(JsonWebKeyUse::Sig),
+            Some(vec![JsonWebKeyOperation::Verify]),
+            Some(JsonWebSignatureAlg::Ed25519),
+        );
+        let invalid = with_metadata(
+            p521_public_key(&public_jwks).with_kid("invalid-es256"),
+            None,
+            None,
+            Some(JsonWebSignatureAlg::Es256),
+        );
         let jwks = PublicJsonWebKeySet::new(vec![invalid, ed25519, p521.clone()]);
 
         let candidate = jwks
@@ -865,18 +839,18 @@ mod tests {
     #[test]
     fn available_signing_algorithms_respects_use_and_explicit_alg() {
         let public_jwks = load_public_keys();
-        let enc_only = p521_public_key(&public_jwks)
-            .try_with_use(JsonWebKeyUse::Enc)
-            .unwrap()
-            .try_with_key_ops(vec![JsonWebKeyOperation::Encrypt])
-            .unwrap();
-        let sig_only = ed25519_public_key(&public_jwks)
-            .try_with_use(JsonWebKeyUse::Sig)
-            .unwrap()
-            .try_with_alg(JsonWebSignatureAlg::Ed25519)
-            .unwrap()
-            .try_with_key_ops(vec![JsonWebKeyOperation::Verify])
-            .unwrap();
+        let enc_only = with_metadata(
+            p521_public_key(&public_jwks),
+            Some(JsonWebKeyUse::Enc),
+            Some(vec![JsonWebKeyOperation::Encrypt]),
+            None,
+        );
+        let sig_only = with_metadata(
+            ed25519_public_key(&public_jwks),
+            Some(JsonWebKeyUse::Sig),
+            Some(vec![JsonWebKeyOperation::Verify]),
+            Some(JsonWebSignatureAlg::Ed25519),
+        );
         let jwks = PublicJsonWebKeySet::new(vec![enc_only, sig_only]);
 
         assert_eq!(

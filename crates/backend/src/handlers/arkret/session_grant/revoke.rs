@@ -735,7 +735,7 @@ pub async fn revoke_session_grant_endpoint(
 mod tests {
     use chrono::{Duration, Utc};
     use coauth_config::{ArkretConfig, DeploymentProfileConfig, PrincipalMethodConfig};
-    use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
+    use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse};
     use coauth_jose::jwk::JsonWebKeyPublicParameters;
     use coauth_keystore::{JsonWebKeySet, Keystore, PrivateKey};
     use coauth_oauth_types::scope::Scope;
@@ -770,7 +770,6 @@ mod tests {
             &coauth_keystore::JsonWebKey::new(JsonWebKeyPublicParameters::from(&session_key))
                 .with_use(JsonWebKeyUse::Sig)
                 .with_key_ops(vec![JsonWebKeyOperation::Verify])
-                .with_alg(JsonWebSignatureAlg::Ed25519)
                 .with_kid("agent-revoke-session-key"),
         )
         .unwrap();

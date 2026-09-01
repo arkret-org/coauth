@@ -146,7 +146,6 @@ fn test_session_public_jwk(session_key: &PrivateKey, kid: impl Into<String>) -> 
     JsonWebKey::new(JsonWebKeyPublicParameters::from(session_key))
         .with_use(JsonWebKeyUse::Sig)
         .with_key_ops(vec![JsonWebKeyOperation::Verify])
-        .with_alg(JsonWebSignatureAlg::Ed25519)
         .with_kid(kid)
 }
 

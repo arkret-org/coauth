@@ -16,50 +16,12 @@
 //! Source: arkret-spec
 //! `spec/v1/artifacts/registry/capability-action-registry.json`.
 //!
-//! Action semantics come from the storage-neutral domain model. Response DTOs
-//! are owned here and are populated through explicit domain-to-wire mapping.
+//! Action semantics and the response grant shape come from the storage-neutral
+//! domain model; this crate owns only the admin request and envelope types.
 
-use chrono::{DateTime, Utc};
-pub use coauth_data_model::{CapabilityActionId, CapabilityRiskTier};
+pub use coauth_data_model::{CapabilityActionId, CapabilityRiskTier, CircleCapabilityGrant};
 use coauth_data_model::{circle_action_requires_allowed_circle_ids, is_circle_capability_action};
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "schema",
-    derive(schemars::JsonSchema, salvo::oapi::ToSchema)
-)]
-pub struct CircleCapabilityGrant {
-    pub id: String,
-    pub subject: String,
-    pub realm_id: String,
-    #[cfg_attr(feature = "schema", schemars(with = "String"))]
-    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub action: CapabilityActionId,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub allowed_circle_ids: Vec<String>,
-    #[cfg_attr(feature = "schema", schemars(with = "String"))]
-    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub granted_by: arkret_identifiers::DidCoreId,
-    pub granted_at: DateTime<Utc>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revoked_at: Option<DateTime<Utc>>,
-}
-
-impl From<coauth_data_model::CircleCapabilityGrant> for CircleCapabilityGrant {
-    fn from(value: coauth_data_model::CircleCapabilityGrant) -> Self {
-        Self {
-            id: value.id,
-            subject: value.subject,
-            realm_id: value.realm_id,
-            action: value.action,
-            allowed_circle_ids: value.allowed_circle_ids,
-            granted_by: value.granted_by,
-            granted_at: value.granted_at,
-            revoked_at: value.revoked_at,
-        }
-    }
-}
 
 /// Request body for `POST /_coauth/admin/circles/capabilities`.
 #[derive(Debug, Clone, Serialize, Deserialize)]

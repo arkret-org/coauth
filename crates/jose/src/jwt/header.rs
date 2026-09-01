@@ -77,12 +77,6 @@ impl JsonWebSignatureHeader {
     }
 
     #[must_use]
-    pub fn with_jwk(mut self, jwk: PublicJsonWebKey) -> Self {
-        self.jwk = Some(Box::new(jwk));
-        self
-    }
-
-    #[must_use]
     pub fn kid(&self) -> Option<&str> {
         self.kid.as_deref()
     }
@@ -96,12 +90,6 @@ impl JsonWebSignatureHeader {
     #[must_use]
     pub fn typ(&self) -> Option<&str> {
         self.typ.as_deref()
-    }
-
-    #[must_use]
-    pub fn with_typ(mut self, typ: String) -> Self {
-        self.typ = Some(typ);
-        self
     }
 
     #[must_use]

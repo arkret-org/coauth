@@ -1617,11 +1617,13 @@ mod tests {
 
     fn dpop_proof(signing: &SigningKey, jti: String) -> String {
         let verifying = signing.verifying_key();
-        let public = PublicJsonWebKey::new(JsonWebKeyPublicParameters::from(&verifying))
-            .with_alg(JsonWebSignatureAlg::Ed25519);
-        let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::Ed25519)
-            .with_typ("dpop+jwt".to_owned())
-            .with_jwk(public);
+        let public = PublicJsonWebKey::new(JsonWebKeyPublicParameters::from(&verifying));
+        let header: JsonWebSignatureHeader = serde_json::from_value(serde_json::json!({
+            "alg": JsonWebSignatureAlg::Ed25519,
+            "typ": "dpop+jwt",
+            "jwk": public,
+        }))
+        .expect("DPoP header");
         let signer = AsymmetricSigningKey::ed25519(signing.clone());
         let claims = arkret_signatures::dpop::VerifiedDpopClaims {
             jti,

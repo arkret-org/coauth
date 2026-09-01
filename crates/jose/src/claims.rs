@@ -669,7 +669,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for OneOrMany<T> {
 // Standard claim constants
 // ===========================================================================
 
-/// Claims defined in RFC 7519 sec. 4.1
+/// Claims consumed by coauth from RFC 7519 sec. 4.1
 /// <https://www.rfc-editor.org/rfc/rfc7519.html#section-4.1>
 mod rfc7519 {
     use super::{Claim, Contains, Equality, OneOrMany, TimeNotAfter, TimeNotBefore, Timestamp};
@@ -677,7 +677,6 @@ mod rfc7519 {
     pub const ISS: Claim<String, Equality<str>> = Claim::new("iss");
     pub const SUB: Claim<String> = Claim::new("sub");
     pub const AUD: Claim<OneOrMany<String>, Contains<String>> = Claim::new("aud");
-    pub const NBF: Claim<Timestamp, TimeNotBefore> = Claim::new("nbf");
     pub const EXP: Claim<Timestamp, TimeNotAfter> = Claim::new("exp");
     // `iat` is validated with `TimeNotBefore`, which only rejects tokens whose
     // issuance time lies in the future (clock-skew sanity). It deliberately
@@ -688,12 +687,10 @@ mod rfc7519 {
     pub const JTI: Claim<String> = Claim::new("jti");
 }
 
-/// Claims defined in OIDC Core sec. 2 and sec. 5.1
+/// Claims consumed by coauth from OIDC Core sec. 2 and sec. 5.1
 /// <https://openid.net/specs/openid-connect-core-1_0.html#IDToken>
 /// <https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims>
 mod oidc_core {
-    use url::Url;
-
     use super::{Claim, Equality, Timestamp, TokenHash};
 
     /// Time of end-user authentication. OIDC requires it as an integer
@@ -705,13 +702,6 @@ mod oidc_core {
     pub const NONCE: Claim<String, Equality<str>> = Claim::new("nonce");
     pub const AT_HASH: Claim<String, TokenHash> = Claim::new("at_hash");
     pub const C_HASH: Claim<String, TokenHash> = Claim::new("c_hash");
-
-    pub const NAME: Claim<String> = Claim::new("name");
-    pub const PROFILE: Claim<Url> = Claim::new("profile");
-    // Security review 2026-05-31: string is intentional for claim extraction.
-    // Email syntax and deliverability validation belong at account/profile
-    // boundaries; JOSE keeps OIDC claim values lossless.
-    pub const EMAIL: Claim<String> = Claim::new("email");
 }
 
 /// Claims defined in OpenID.FrontChannel
@@ -737,6 +727,8 @@ mod tests {
     use base64ct::{Base64UrlUnpadded, Encoding};
     use chrono::TimeZone;
     use sha2::{Digest, Sha512};
+
+    const NBF: Claim<Timestamp, TimeNotBefore> = Claim::new("nbf");
 
     use super::*;
 

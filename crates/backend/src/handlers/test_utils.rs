@@ -18,7 +18,6 @@ use coauth_data::{
     AppVersion, BoxRepository, RepositoryAccess, RepositoryError, RepositoryFactory, SiteConfig,
     SystemClock, TokenType, UrlBuilder,
 };
-use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_keystore::{Encrypter, JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
 use coauth_messaging::NotificationCenter;
 use coauth_messaging::email::{Mailer, Transport as MailTransport};
@@ -458,8 +457,7 @@ impl TestState {
             .unwrap();
         let rsa = JsonWebKey::new(rsa).with_kid("test-rsa");
         let ed25519 = JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(43)))
-            .with_kid("test-ed25519")
-            .with_alg(JsonWebSignatureAlg::Ed25519);
+            .with_kid("test-ed25519");
         // Server-to-server payloads (account-status records, peer requests) are
         // signed with the explicitly designated Account Authority key, so a
         // deployment without one cannot publish at all.
