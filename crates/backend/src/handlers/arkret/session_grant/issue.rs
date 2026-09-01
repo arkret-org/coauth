@@ -1348,15 +1348,14 @@ pub(crate) fn map_oidc_exchange_error(
 
 #[cfg(test)]
 mod tests {
-    use ed25519_dalek::SigningKey;
-    use rand_core::OsRng;
+    use ed25519_dalek_3::SigningKey;
 
     use super::*;
     use crate::handlers::account::auth::DpopSessionBinding;
     use crate::handlers::account::auth::oidc_bridge::OidcExchangeError;
 
     fn test_dpop_binding(proof_jwt: &str) -> DpopSessionBinding {
-        let signing = SigningKey::generate(&mut OsRng);
+        let signing = SigningKey::from_bytes(&[0x73; 32]);
         let public_jwk = arkret_signatures::jwk::JsonWebKey::from_ed25519_verifying_key(
             &signing.verifying_key(),
         );

@@ -221,16 +221,16 @@ mod tests {
             .next()
             .unwrap();
         let access_token = AccessToken {
-            id: Ulid::new(),
+            id: Ulid::generate(),
             state: AccessTokenState::Valid,
-            session_id: Ulid::new(),
+            session_id: Ulid::generate(),
             access_token: "access-token-value".to_owned(),
             created_at: now,
             expires_at: Some(now + Duration::try_minutes(5).unwrap()),
             first_used_at: None,
         };
         let authentication = Authentication {
-            id: Ulid::new(),
+            id: Ulid::generate(),
             created_at: now - Duration::try_minutes(2).unwrap(),
             authentication_method: AuthenticationMethod::Unknown,
         };

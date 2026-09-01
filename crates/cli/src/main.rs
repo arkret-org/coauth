@@ -44,7 +44,11 @@ impl SentryTransportAdapter {
 
 impl sentry::TransportFactory for SentryTransportAdapter {
     fn create_transport(&self, opts: &sentry::ClientOptions) -> Arc<dyn sentry::Transport> {
-        let inner = sentry::transports::ReqwestHttpTransport::with_client(opts, self.http.clone());
+        let transport_options = sentry::TransportOptions::try_from_client_options(opts)
+            .expect("Sentry transport requires a configured DSN");
+        let inner = sentry::transports::ReqwestHttpTransportOptions::from(transport_options)
+            .with_client(self.http.clone())
+            .build();
         Arc::new(inner)
     }
 }
@@ -148,17 +152,13 @@ async fn execute_command(
     }
 
     // Sentry initialisation
-    let sentry_guard = sentry::init((
-        tel_cfg.sentry.dsn.as_deref(),
-        sentry::ClientOptions {
-            transport: Some(Arc::new(SentryTransportAdapter::create())),
-            environment: tel_cfg.sentry.environment.clone().map(Into::into),
-            release: Some(VERSION.into()),
-            sample_rate: tel_cfg.sentry.sample_rate.unwrap_or(1.0),
-            traces_sample_rate: tel_cfg.sentry.traces_sample_rate.unwrap_or(0.0),
-            ..Default::default()
-        },
-    ));
+    let mut sentry_options = sentry::ClientOptions::new()
+        .sample_rate(tel_cfg.sentry.sample_rate.unwrap_or(1.0))
+        .traces_sample_rate(tel_cfg.sentry.traces_sample_rate.unwrap_or(0.0));
+    sentry_options.transport = Some(Arc::new(SentryTransportAdapter::create()));
+    sentry_options.environment = tel_cfg.sentry.environment.clone().map(Into::into);
+    sentry_options.release = Some(VERSION.into());
+    let sentry_guard = sentry::init((tel_cfg.sentry.dsn.as_deref(), sentry_options));
 
     let sentry_layer = sentry_guard.is_enabled().then(|| {
         sentry_tracing::layer().event_filter(|md| {

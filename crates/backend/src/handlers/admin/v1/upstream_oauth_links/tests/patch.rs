@@ -12,7 +12,7 @@ async fn test_patch_upstream_oauth_link_updates_subject_user_and_name() {
     let token = state.token_with_scope("urn:coauth:admin").await;
     let mut rng = ChaChaRng::seed_from_u64(unique);
     let mut repo = state.repository().await.unwrap();
-    let suffix = Ulid::new().to_string().to_lowercase();
+    let suffix = Ulid::generate().to_string().to_lowercase();
 
     let alice = repo
         .user()
@@ -95,7 +95,7 @@ async fn test_patch_upstream_oauth_link_rejects_duplicate_subject() {
     let token = state.token_with_scope("urn:coauth:admin").await;
     let mut rng = ChaChaRng::seed_from_u64(unique);
     let mut repo = state.repository().await.unwrap();
-    let suffix = Ulid::new().to_string().to_lowercase();
+    let suffix = Ulid::generate().to_string().to_lowercase();
 
     let alice = repo
         .user()

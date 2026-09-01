@@ -663,7 +663,7 @@ impl TestState {
             .add(
                 &mut rng,
                 &clock,
-                format!("admin{}", Ulid::new().to_string().to_lowercase()),
+                format!("admin{}", Ulid::generate().to_string().to_lowercase()),
             )
             .await
             .unwrap();
@@ -756,7 +756,7 @@ impl TestState {
             .add(
                 &mut rng,
                 &clock,
-                format!("oauth{}", Ulid::new().to_string().to_lowercase()),
+                format!("oauth{}", Ulid::generate().to_string().to_lowercase()),
             )
             .await
             .unwrap();

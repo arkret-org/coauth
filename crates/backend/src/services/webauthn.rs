@@ -1002,8 +1002,8 @@ mod tests {
             .await;
         assert!(matches!(expired_result, Err(WebauthnError::NoChallenge(_))));
 
-        let credential_a = Ulid::new();
-        let credential_b = Ulid::new();
+        let credential_a = Ulid::generate();
+        let credential_b = Ulid::generate();
         let mut conn = pool.get().await.unwrap();
         for (id, credential_id) in [
             (credential_a, b"credential-a".as_slice()),

@@ -220,7 +220,7 @@ mod tests {
         state.clock.advance(Duration::seconds(unique as i64));
         let mut rng = ChaChaRng::seed_from_u64(unique);
         let mut repo = state.repository().await.unwrap();
-        let username = format!("alice{}", Ulid::new().to_string().to_lowercase());
+        let username = format!("alice{}", Ulid::generate().to_string().to_lowercase());
 
         let user = repo
             .user()

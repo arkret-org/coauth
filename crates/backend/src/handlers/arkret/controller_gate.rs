@@ -173,9 +173,10 @@ pub async fn issue_controller_gate_attestation(
                 .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?,
         },
     };
+    let sdk_signing_key = ed25519_dalek_3::SigningKey::from_bytes(&signing_key.to_bytes());
     arkret_signatures::agent_evidence::sign_controller_account_gate_attestation(
         &mut attestation,
-        signing_key,
+        &sdk_signing_key,
     )
     .map_err(|_| ArkretRouteError::Internal("controller gate signing failed".into()))?;
     let outcome = ControllerAccountGateAttestationIssueOutcome {
@@ -297,7 +298,7 @@ async fn authenticate_agent_authority_request(
         .ed25519_bytes()
         .map_err(|_| not_found())?;
     let public_key =
-        ed25519_dalek::VerifyingKey::from_bytes(&key_bytes).map_err(|_| not_found())?;
+        ed25519_dalek_3::VerifyingKey::from_bytes(&key_bytes).map_err(|_| not_found())?;
 
     let source = required_header(req, "source-service-id")?;
     let destination = required_header(req, "destination-service-id")?;

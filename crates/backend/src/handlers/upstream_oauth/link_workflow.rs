@@ -1226,7 +1226,7 @@ mod tests {
         claims_imports: provider::ClaimsImports,
     ) -> UpstreamOAuthProvider {
         UpstreamOAuthProvider {
-            id: Ulid::new(),
+            id: Ulid::generate(),
             oidc_issuer_uri: Some("https://example.com/".to_owned()),
             human_name: Some("Example Ltd.".to_owned()),
             brand_name: None,
@@ -1260,16 +1260,16 @@ mod tests {
     ) -> UpstreamOAuthAuthorizationSession {
         let now = Utc::now();
         UpstreamOAuthAuthorizationSession {
-            id: Ulid::new(),
+            id: Ulid::generate(),
             state: UpstreamOAuthAuthorizationSessionState::Completed {
                 completed_at: now,
-                link_id: Ulid::new(),
+                link_id: Ulid::generate(),
                 id_token: None,
                 id_token_claims: None,
                 extra_callback_parameters: None,
                 userinfo: Some(id_token_claims),
             },
-            provider_id: Ulid::new(),
+            provider_id: Ulid::generate(),
             state_str: "state".to_owned(),
             code_challenge_verifier: None,
             nonce: Some("nonce".to_owned()),

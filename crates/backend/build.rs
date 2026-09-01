@@ -1,7 +1,7 @@
-use vergen_gitcl::{Emitter, RustcBuilder};
+use vergen_gitcl::{Emitter, Rustc};
 
 fn main() -> anyhow::Result<()> {
-    let rustc = RustcBuilder::default().semver(true).build()?;
+    let rustc = Rustc::builder().semver(true).build();
 
     Emitter::default().add_instructions(&rustc)?.emit()?;
 

@@ -67,6 +67,7 @@ der = { workspace = true }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
 ed25519-dalek = { workspace = true }
+ed25519-dalek-3 = { workspace = true }
 elliptic-curve = { workspace = true }
 email_address = { workspace = true }
 form_urlencoded = { workspace = true }
@@ -104,7 +105,9 @@ pkcs8 = { workspace = true }
 psl = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+rand_chacha_10 = { workspace = true }
 rand_core = { workspace = true }
+rand_core_10 = { workspace = true }
 reqwest = { workspace = true }
 rsa = { workspace = true }
 rustls = { workspace = true }

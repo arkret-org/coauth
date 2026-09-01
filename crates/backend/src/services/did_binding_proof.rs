@@ -491,7 +491,7 @@ mod tests {
     fn jwk_verification_method(
         id: &str,
         controller: &str,
-        verifying_key: &ed25519_dalek::VerifyingKey,
+        verifying_key: &[u8; 32],
     ) -> crate::handlers::arkret::VerificationMethod {
         serde_json::from_value(serde_json::json!({
             "id": id,
@@ -500,7 +500,7 @@ mod tests {
             "publicKeyJwk": {
                 "kty": "OKP",
                 "crv": "Ed25519",
-                "x": Base64UrlUnpadded::encode_string(verifying_key.as_bytes()),
+                "x": Base64UrlUnpadded::encode_string(verifying_key),
             }
         }))
         .unwrap()
@@ -508,12 +508,12 @@ mod tests {
 
     #[test]
     fn detached_jws_against_method_accepts_sdk_signed_kid_less_proof() {
-        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+        let signing_key = ed25519_dalek_3::SigningKey::from_bytes(&[7u8; 32]);
         let method_id = "did:webvh:QmTest:service.example#notary-key";
         let methods = vec![jwk_verification_method(
             method_id,
             "did:webvh:QmTest:service.example",
-            &signing_key.verifying_key(),
+            &signing_key.verifying_key().to_bytes(),
         )];
         let payload = br#"{"context":"ak.proof.device_revocation_gate_decision.v1"}"#;
         // The exact signer the Station uses for gate receipts.
@@ -523,12 +523,12 @@ mod tests {
 
     #[test]
     fn detached_jws_against_method_rejects_unknown_method() {
-        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[8u8; 32]);
+        let signing_key = ed25519_dalek_3::SigningKey::from_bytes(&[8u8; 32]);
         let method_id = "did:webvh:QmTest:service.example#notary-key";
         let methods = vec![jwk_verification_method(
             method_id,
             "did:webvh:QmTest:service.example",
-            &signing_key.verifying_key(),
+            &signing_key.verifying_key().to_bytes(),
         )];
         let payload = b"payload";
         let jws = arkret_signatures::jws::sign_jws_ed25519(payload, &signing_key).unwrap();
@@ -544,12 +544,12 @@ mod tests {
 
     #[test]
     fn detached_jws_against_method_rejects_tampered_payload() {
-        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[9u8; 32]);
+        let signing_key = ed25519_dalek_3::SigningKey::from_bytes(&[9u8; 32]);
         let method_id = "did:webvh:QmTest:service.example#notary-key";
         let methods = vec![jwk_verification_method(
             method_id,
             "did:webvh:QmTest:service.example",
-            &signing_key.verifying_key(),
+            &signing_key.verifying_key().to_bytes(),
         )];
         let jws = arkret_signatures::jws::sign_jws_ed25519(b"payload", &signing_key).unwrap();
         assert!(
@@ -564,7 +564,7 @@ mod tests {
         let methods = vec![jwk_verification_method(
             method_id,
             "did:webvh:QmTest:service.example",
-            &signing_key.verifying_key(),
+            &signing_key.verifying_key().to_bytes(),
         )];
         let payload = b"payload";
         let sign_with_kid = |kid: &str| {

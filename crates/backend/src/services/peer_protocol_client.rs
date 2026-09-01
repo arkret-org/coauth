@@ -509,7 +509,7 @@ mod tests {
         assert!(header("Signature").unwrap().starts_with("sig1=:"));
 
         let service_key =
-            ed25519_dalek::SigningKey::from_bytes(&keystore.account_authority_seed().unwrap());
+            ed25519_dalek_3::SigningKey::from_bytes(&keystore.account_authority_seed().unwrap());
         let policy = arkret_signatures::http_signature::SignatureVerificationPolicy::new(vec![
             Component::Method,
             Component::TargetUri,

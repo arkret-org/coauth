@@ -865,8 +865,8 @@ fn did_plc_document_url(did: &str) -> Result<Url, DidResolveError> {
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone as _, Utc};
-    use rand::SeedableRng as _;
-    use rand_chacha::ChaCha20Rng;
+    use rand_chacha_10::ChaCha20Rng;
+    use rand_core_10::SeedableRng as _;
 
     use super::*;
 

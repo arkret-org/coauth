@@ -183,6 +183,8 @@ fn verify_request(
     .require_content_digest(true)
     .max_clock_skew_seconds(300)
     .max_validity_window_seconds(300);
+    let sdk_public_key = ed25519_dalek_3::VerifyingKey::from_bytes(&public_key.to_bytes())
+        .map_err(|_| not_found())?;
     verify_signed_canonical_json_message(
         req.method().as_str(),
         target_uri.as_str(),
@@ -191,7 +193,7 @@ fn verify_request(
         headers,
         req.headers().contains_key("content-encoding"),
         canonical_body,
-        public_key,
+        &sdk_public_key,
         &policy,
         crate::handlers::make_clock().now().timestamp(),
     )

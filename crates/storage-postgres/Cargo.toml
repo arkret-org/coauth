@@ -49,6 +49,7 @@ uuid = { workspace = true }
 [dev-dependencies]
 arkret-signatures = { workspace = true }
 ed25519-dalek = { workspace = true }
+ed25519-dalek-3 = { workspace = true }
 
 [lints]
 workspace = true

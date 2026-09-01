@@ -471,7 +471,7 @@ mod tests {
             .add(
                 &mut rng,
                 &clock,
-                format!("erase{}", Ulid::new().to_string().to_lowercase()),
+                format!("erase{}", Ulid::generate().to_string().to_lowercase()),
             )
             .await
             .unwrap();
@@ -872,7 +872,7 @@ mod tests {
             .add(
                 &mut rng,
                 &clock,
-                format!("erase{}", Ulid::new().to_string().to_lowercase()),
+                format!("erase{}", Ulid::generate().to_string().to_lowercase()),
             )
             .await
             .unwrap();

@@ -414,7 +414,7 @@ mod tests {
     ) -> (coauth_data::UserRecoverySession, String) {
         let mut rng = state.rng();
         let mut repo = state.repository().await.unwrap();
-        let username = format!("recover-{}", Ulid::new().to_string().to_lowercase());
+        let username = format!("recover-{}", Ulid::generate().to_string().to_lowercase());
 
         // The recovery-status handler reads the wall clock, so the ticket
         // validity window has to be anchored to the same clock; a ticket
@@ -446,7 +446,7 @@ mod tests {
                 &clock,
                 &session,
                 &user_email,
-                format!("ticket-{}", Ulid::new().to_string().to_lowercase()),
+                format!("ticket-{}", Ulid::generate().to_string().to_lowercase()),
             )
             .await
             .unwrap();

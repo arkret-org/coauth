@@ -301,7 +301,7 @@ mod tests {
         let unique = unique_test_nonce();
         state.clock.advance(Duration::seconds(unique as i64));
         let token = state.token_with_scope("urn:coauth:admin").await;
-        let username = format!("alice{}", Ulid::new().to_string().to_lowercase());
+        let username = format!("alice{}", Ulid::generate().to_string().to_lowercase());
         let mut rng = ChaChaRng::seed_from_u64(unique);
 
         let mut repo = state.repository().await.unwrap();
@@ -352,7 +352,7 @@ mod tests {
         let unique = unique_test_nonce();
         state.clock.advance(Duration::seconds(unique as i64));
         let token = state.token_with_scope("urn:coauth:admin").await;
-        let username = format!("alice{}", Ulid::new().to_string().to_lowercase());
+        let username = format!("alice{}", Ulid::generate().to_string().to_lowercase());
         let mut rng = ChaChaRng::seed_from_u64(unique);
 
         let mut repo = state.repository().await.unwrap();

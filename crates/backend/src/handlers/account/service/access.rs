@@ -303,7 +303,7 @@ mod lockout_wiring_tests {
         };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
 
-        let localpart = format!("lockout-{}", Ulid::new().to_string().to_lowercase());
+        let localpart = format!("lockout-{}", Ulid::generate().to_string().to_lowercase());
         let mut repo = state.repository().await.unwrap();
         let user = repo
             .user()

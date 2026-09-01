@@ -75,8 +75,8 @@ broken_intra_doc_links = "deny"
 # directly above the entry they describe.
 
 aead = { version = "0.5.2", features = ["std"] }
-anyhow = "1.0.102"
-arc-swap = "1.9.1"
+anyhow = "1.0.104"
+arc-swap = "1.9.2"
 argon2 = { version = "0.5.3", features = ["password-hash", "std"] }
 # Arkret v1 protocol SDK pieces are consumed from their direct owner crates.
 # `arkret-signatures` (with the `signer` feature) provides the production
@@ -100,19 +100,19 @@ arkret-schema = { version = "0.3.0", path = "../arkret-rust-sdk/crates/schema", 
 arkret-signatures = { version = "0.3.0", path = "../arkret-rust-sdk/crates/signatures", default-features = false, features = ["collaboration", "service-identity", "signer", "webvh"] }
 arkret-wire = { version = "0.3.0", path = "../arkret-rust-sdk/crates/wire", default-features = false }
 assert_matches = "1.5.0"
-async-trait = "0.1.89"
-base64 = "0.22.1"
+async-trait = "0.1.92"
+base64 = "0.23.1"
 base64ct = { version = "1.8.3", features = ["std"] }
-bcrypt = "0.19.1"
-bytes = "1.11.1"
-camino = { version = "1.2.2", features = ["serde1"] }
+bcrypt = "0.19.3"
+bytes = "1.12.1"
+camino = { version = "1.2.5", features = ["serde1"] }
 cedar-policy = "4"
 chacha20poly1305 = { version = "0.10.1", features = ["std"] }
 chrono = { version = "0.4.45", default-features = false, features = [
     "serde",
     "clock",
 ] }
-clap = { version = "4.6.1", features = ["derive"] }
+clap = { version = "4.6.6", features = ["derive"] }
 coauth-account-types = { version = "=0.3.0", path = "crates/account-types" }
 coauth-admin-types = { version = "=0.3.0", path = "crates/admin-types" }
 coauth-backend = { version = "=0.3.0", path = "crates/backend" }
@@ -131,14 +131,14 @@ coauth-principal = { version = "=0.3.0", path = "crates/principal" }
 coauth-storage-postgres = { version = "=0.3.0", path = "crates/storage-postgres" }
 coauth-tasks = { version = "=0.3.0", path = "crates/tasks" }
 coauth-templates = { version = "=0.3.0", path = "crates/templates" }
-console = "0.16.3"
+console = "0.16.4"
 const-oid = { version = "0.9.6", features = ["std"] }
 cookie = { version = "0.18", features = ["private", "key-expansion"] }
 cookie_store = { version = "0.22.1", default-features = false, features = [
     "serde_json",
 ] }
 crc = "3.4.0"
-cron = "0.16"
+cron = "0.17"
 deadpool = { version = "0.13", features = ["rt_tokio_1"] }
 der = { version = "0.7.10", features = ["std", "pem"] }
 dialoguer = { version = "0.12.0", default-features = false, features = [
@@ -160,7 +160,7 @@ diesel-async = { version = "0.9", features = [
 ] }
 diesel_migrations = "2.3"
 digest = "0.10.7"
-dioxus = { version = "0.7.9", default-features = false, features = [
+dioxus = { version = "0.7.10", default-features = false, features = [
     "minimal",
     "web",
     "router",
@@ -170,12 +170,13 @@ dioxus = { version = "0.7.9", default-features = false, features = [
 dotenvy = "0.15.7"
 ecdsa = { version = "0.16.9", features = ["signing", "verifying"] }
 ed25519-dalek = { version = "2.2.0", features = ["rand_core", "pkcs8"] }
+ed25519-dalek-3 = { package = "ed25519-dalek", version = "3.0.0" }
 elliptic-curve = { version = "0.13.8", features = ["std", "pem", "sec1"] }
 email_address = { version = "0.2.9", default-features = false }
 figment = { version = "0.10.19", features = ["env", "yaml", "test"] }
 fluent-bundle = "0.16"
 form_urlencoded = "1.2.2"
-futures-util = "0.3.32"
+futures-util = "0.3.34"
 # NOTE: pinned to 0.14 because the entire RustCrypto stack we depend on
 # transitively (digest 0.10, sha2 0.10, hmac 0.12, aead 0.5, aes-gcm 0.10,
 # chacha20poly1305 0.10) still re-exports `generic_array 0.14`. The crates
@@ -193,9 +194,9 @@ gloo-timers = { version = "0.4", features = ["futures"] }
 headers = "0.4.1"
 hex = "0.4.3"
 hmac = "0.12.1"
-http = "1.4.2"
-http-body = "1.0.1"
-hyper = { version = "1.10.1", features = ["client", "server", "http1", "http2"] }
+http = "1.5.0"
+http-body = "1.1.0"
+hyper = { version = "1.11.1", features = ["client", "server", "http1", "http2"] }
 hyper-util = { version = "0.1.20", features = [
     "client",
     "server",
@@ -205,53 +206,53 @@ hyper-util = { version = "0.1.20", features = [
     "http2",
     "tokio",
 ] }
-icu_calendar = { version = "2.2.1", features = ["compiled_data"] }
-icu_datetime = { version = "2.2.0", features = ["compiled_data"] }
-icu_experimental = { version = "0.5.0", features = ["compiled_data"] }
-icu_locid = { package = "icu_locale_core", version = "2.2.0", features = ["alloc"] }
-icu_locid_transform = { package = "icu_locale", version = "2.2.0", features = ["compiled_data"] }
-icu_normalizer = { version = "2.2.0", features = ["compiled_data"] }
+icu_calendar = { version = "2.3.0", features = ["compiled_data"] }
+icu_datetime = { version = "2.3.0", features = ["compiled_data"] }
+icu_experimental = { version = "0.6.0", features = ["compiled_data"] }
+icu_locid = { package = "icu_locale_core", version = "2.3.0", features = ["alloc"] }
+icu_locid_transform = { package = "icu_locale", version = "2.3.1", features = ["compiled_data"] }
+icu_normalizer = { version = "2.3.0", features = ["compiled_data"] }
 indoc = "2.0.7"
-insta = { version = "1.47.2", features = ["yaml", "json"] }
+insta = { version = "1.48.0", features = ["yaml", "json"] }
 ipnetwork = { version = "0.21", features = ["serde"] }
-itertools = "0.14.0"
+itertools = "0.15.0"
 js-sys = "0.3"
 k256 = { version = "0.13.4", features = ["std"] }
 language-tags = { version = "0.3.2", features = ["serde"] }
 listenfd = "1.0.2"
-mail-builder = { version = "0.4.4", default-features = false }
-mail-send = { version = "0.6.1", default-features = false, features = [
+mail-builder = { version = "0.5.0", default-features = false }
+mail-send = { version = "0.6.2", default-features = false, features = [
     "builder",
     "aws-lc-rs",
     "tls12",
 ] }
 mime = "0.3.17"
-minijinja = { version = "2.20.0", features = [
+minijinja = { version = "2.24.0", features = [
     "urlencode",
     "loader",
     "json",
     "speedups",
     "unstable_machinery",
 ] }
-minijinja-contrib = { version = "2.20.0", features = ["pycompat"] }
+minijinja-contrib = { version = "2.24.0", features = ["pycompat"] }
 opendal = { version = "0.58", features = ["services-fs", "services-s3"] }
-opentelemetry = { version = "0.31.0", features = ["trace", "metrics"] }
-opentelemetry-http = { version = "0.31.0", features = ["reqwest"] }
-opentelemetry-instrumentation-process = "0.1.2"
-opentelemetry-instrumentation-tokio = "0.1.2"
-opentelemetry-jaeger-propagator = "0.31.0"
-opentelemetry-otlp = { version = "0.31.1", default-features = false, features = [
+opentelemetry = { version = "0.32.0", features = ["trace", "metrics"] }
+opentelemetry-http = { version = "0.32.0", features = ["reqwest"] }
+opentelemetry-instrumentation-process = "0.2.0"
+opentelemetry-instrumentation-tokio = "0.2.0"
+opentelemetry-jaeger-propagator = "0.32.0"
+opentelemetry-otlp = { version = "0.32.0", default-features = false, features = [
     "trace",
     "metrics",
     "http-proto",
 ] }
-opentelemetry-prometheus-text-exporter = "0.2.1"
-opentelemetry-resource-detectors = "0.10.0"
-opentelemetry-semantic-conventions = { version = "0.31.0", features = [
+opentelemetry-prometheus-text-exporter = "0.3.0"
+opentelemetry-resource-detectors = "0.12.0"
+opentelemetry-semantic-conventions = { version = "0.32.1", features = [
     "semconv_experimental",
 ] }
-opentelemetry-stdout = { version = "0.31.0", features = ["trace", "metrics"] }
-opentelemetry_sdk = { version = "0.31.0", features = [
+opentelemetry-stdout = { version = "0.32.0", features = ["trace", "metrics"] }
+opentelemetry_sdk = { version = "0.32.1", features = [
     "experimental_trace_batch_span_processor_with_async_runtime",
     "experimental_metrics_periodicreader_with_async_runtime",
     "rt-tokio",
@@ -269,11 +270,13 @@ pem-rfc7468 = { version = "0.7.0", features = ["std"] }
 pin-project-lite = "0.2.17"
 pkcs1 = { version = "0.7.5", features = ["std"] }
 pkcs8 = { version = "0.10.2", features = ["std", "pkcs5", "encryption", "pem"] }
-psl = "2.1.212"
+psl = "2.1.226"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
+rand_chacha_10 = { package = "rand_chacha", version = "0.10.0" }
 rand_core = { version = "0.6.4", features = ["std"] }
-regex = "1.12.4"
+rand_core_10 = { package = "rand_core", version = "0.10.1" }
+regex = "1.13.1"
 reqwest = { version = "0.13.4", default-features = false, features = [
     "http2",
     "rustls-no-provider",
@@ -283,8 +286,8 @@ reqwest = { version = "0.13.4", default-features = false, features = [
     "socks",
 ] }
 rsa = { version = "0.9.10", features = ["std", "pem"] }
-rustls = "0.23.40"
-rustls-pki-types = "1.14.1"
+rustls = "0.23.43"
+rustls-pki-types = "1.15.1"
 rustls-platform-verifier = "0.7.0"
 salvo = { version = "=0.96.0", default-features = false, features = [
     "fix-http1-request-uri",
@@ -301,37 +304,37 @@ salvo = { version = "=0.96.0", default-features = false, features = [
     "logging",
     "rate-limiter",
 ] }
-schemars = { version = "1.2.1", features = [
+schemars = { version = "1.2.2", features = [
     "url2",
     "chrono04",
     "preserve_order",
 ] }
 sd-notify = "0.5.0"
 sec1 = { version = "0.7.3", features = ["std"] }
-sentry = { version = "0.48.2", default-features = false, features = [
+sentry = { version = "0.49.2", default-features = false, features = [
     "backtrace",
     "contexts",
     "panic",
     "reqwest",
 ] }
-sentry-tracing = "0.48.2"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.150", features = ["preserve_order"] }
+sentry-tracing = "0.49.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
 serde_urlencoded = "0.7.1"
-serde_with = { version = "3.21.0", features = ["hex", "chrono"] }
+serde_with = { version = "3.22.0", features = ["hex", "chrono"] }
 serde_yaml_ng = "0.10.0"
 sha1 = "0.10.6"
 sha2 = { version = "0.10.9", features = ["oid"] }
 signature = { version = "2.2.0", features = ["std", "rand_core"] }
-socket2 = "0.6.4"
+socket2 = "0.6.5"
 # soland deployment-internal S2S contracts (capability fanout DTOs shared
 # with the Station; SOL-DRY-03).
 soland-contracts = { path = "../soland/crates/contracts" }
 spki = { version = "0.7.3", features = ["std"] }
 subtle = "2.6.1"
-thiserror = "2.0.18"
+thiserror = "2.0.20"
 time = "0.3"
-tokio = { version = "1.52.3", default-features = false, features = [
+tokio = { version = "1.53.1", default-features = false, features = [
     "fs",
     "io-std",
     "io-util",
@@ -350,16 +353,16 @@ tokio-postgres = { version = "0.7", features = [
 ] }
 tokio-rustls = "0.26.4"
 tokio-test = "0.4.5"
-tokio-util = { version = "0.7.18", features = ["rt"] }
+tokio-util = { version = "0.7.19", features = ["rt"] }
 tracing = "0.1.44"
 tracing-appender = "0.2.5"
-tracing-opentelemetry = { version = "0.32.1", default-features = false }
+tracing-opentelemetry = { version = "0.33.0", default-features = false }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-ulid = { version = "1.2", features = ["serde", "uuid"] }
+ulid = { version = "3.0", features = ["serde", "uuid"] }
 unic-langid = "0.9"
 url = { version = "2.5.8", features = ["serde"] }
-uuid = { version = "1.23.3", features = ["v5", "v7"] }
-vergen-gitcl = { version = "9.1.0", features = ["rustc"] }
+uuid = { version = "1.26.0", features = ["v5", "v7"] }
+vergen-gitcl = { version = "10.0.3", features = ["rustc"] }
 walkdir = "2.5.0"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
@@ -390,9 +393,9 @@ webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation"]
 webauthn-rs-proto = "0.5"
 wiremock = "0.6.5"
 woothee = "0.13.0"
-writeable = "0.6.3"
+writeable = "0.6.4"
 x509-cert = "0.2.5"
-zeroize = "1.8.2"
+zeroize = "1.9.0"
 zxcvbn = "3.1.1"
 
 # A few profile opt-level tweaks to make the test suite run faster.

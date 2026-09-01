@@ -38,7 +38,7 @@ use crate::services::principal_facade::DbConnectorAdmin;
 
 fn client_with_auth_method(method: Option<OAuthClientAuthenticationMethod>) -> Client {
     Client {
-        id: Ulid::new(),
+        id: Ulid::generate(),
         client_id: "client".to_owned(),
         metadata_digest: None,
         encrypted_client_secret: None,

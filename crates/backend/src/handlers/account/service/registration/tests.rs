@@ -13,7 +13,7 @@ use super::*;
 
 fn sample_registration(created_at: DateTime<Utc>) -> UserRegistration {
     UserRegistration {
-        id: Ulid::new(),
+        id: Ulid::generate(),
         localpart: "alice".into(),
         display_name: None,
         avatar_url: None,
@@ -121,9 +121,9 @@ async fn prepare_admin_bootstrap_stops_granting_after_first_admin_exists() {
 fn workflow_snapshot_tracks_pending_email_verification() {
     let created_at = Utc.with_ymd_and_hms(2026, 3, 30, 12, 0, 0).unwrap();
     let email_authentication = UserEmailAuthentication {
-        id: Ulid::new(),
+        id: Ulid::generate(),
         user_session_id: None,
-        user_registration_id: Some(Ulid::new()),
+        user_registration_id: Some(Ulid::generate()),
         email: "alice@example.com".into(),
         created_at: created_at + Duration::minutes(1),
         completed_at: None,
@@ -168,9 +168,9 @@ fn workflow_snapshot_tracks_completed_registration() {
     let email_verified_at = created_at + Duration::minutes(2);
 
     let email_authentication = UserEmailAuthentication {
-        id: Ulid::new(),
+        id: Ulid::generate(),
         user_session_id: None,
-        user_registration_id: Some(Ulid::new()),
+        user_registration_id: Some(Ulid::generate()),
         email: "alice@example.com".into(),
         created_at: created_at + Duration::minutes(1),
         completed_at: Some(email_verified_at),

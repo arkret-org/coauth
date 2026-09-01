@@ -369,7 +369,7 @@ pub async fn auth_start(
     // Keep one opaque binding for the lifetime of the browser ceremony window.
     // Rotating it on every start would invalidate a ceremony already open in
     // another tab. Each ceremony still has its own single-use server-side id.
-    let binding = load_browser_binding(req, depot)?.unwrap_or_else(|| Ulid::new().to_string());
+    let binding = load_browser_binding(req, depot)?.unwrap_or_else(|| Ulid::generate().to_string());
     let start = depot
         .webauthn_service()
         .map_err(AppError::from)?
@@ -492,7 +492,7 @@ mod tests {
         created_at: chrono::DateTime<chrono::Utc>,
     ) -> Authentication {
         Authentication {
-            id: Ulid::new(),
+            id: Ulid::generate(),
             created_at,
             authentication_method,
         }
@@ -503,13 +503,13 @@ mod tests {
         let now = chrono::Utc::now();
         for authentication_method in [
             AuthenticationMethod::Password {
-                user_password_id: Ulid::new(),
+                user_password_id: Ulid::generate(),
             },
             AuthenticationMethod::UpstreamOAuth {
-                upstream_oauth_session_id: Ulid::new(),
+                upstream_oauth_session_id: Ulid::generate(),
             },
             AuthenticationMethod::Passkey {
-                webauthn_credential_id: Ulid::new(),
+                webauthn_credential_id: Ulid::generate(),
             },
         ] {
             assert!(is_recent_authentication(
@@ -529,7 +529,7 @@ mod tests {
         assert!(!is_recent_authentication(
             &authentication(
                 AuthenticationMethod::Password {
-                    user_password_id: Ulid::new(),
+                    user_password_id: Ulid::generate(),
                 },
                 now - RECENT_AUTH_MAX_AGE - Duration::milliseconds(1),
             ),
@@ -538,7 +538,7 @@ mod tests {
         assert!(!is_recent_authentication(
             &authentication(
                 AuthenticationMethod::Password {
-                    user_password_id: Ulid::new(),
+                    user_password_id: Ulid::generate(),
                 },
                 now + Duration::milliseconds(1),
             ),

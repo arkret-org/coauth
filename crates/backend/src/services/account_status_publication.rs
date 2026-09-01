@@ -109,7 +109,7 @@ pub async fn author_transition_plan(
     let record = arkret_signatures::account_status::sign_account_status_record(
         unsigned,
         binding.binding_receipt.proof.verification_method.clone(),
-        &ed25519_dalek::SigningKey::from_bytes(&signing_seed),
+        &ed25519_dalek_3::SigningKey::from_bytes(&signing_seed),
     )
     .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
 

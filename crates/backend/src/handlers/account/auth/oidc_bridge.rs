@@ -1680,13 +1680,13 @@ mod tests {
                 "invalid_authorization_code",
             ),
             (
-                AuthorizationCodeExchangeError::InvalidGrant(Ulid::new()),
+                AuthorizationCodeExchangeError::InvalidGrant(Ulid::generate()),
                 "invalid_authorization_code",
             ),
             (
                 AuthorizationCodeExchangeError::AlreadyExchanged {
-                    grant_id: Ulid::new(),
-                    session_id: Ulid::new(),
+                    grant_id: Ulid::generate(),
+                    session_id: Ulid::generate(),
                     beyond_reuse_window: false,
                 },
                 "invalid_authorization_code",
@@ -1700,22 +1700,22 @@ mod tests {
                 "invalid_request",
             ),
             (
-                AuthorizationCodeExchangeError::UnauthorizedClient(Ulid::new()),
+                AuthorizationCodeExchangeError::UnauthorizedClient(Ulid::generate()),
                 "invalid_client",
             ),
             (
                 AuthorizationCodeExchangeError::UnexpectedClient {
-                    was: Ulid::new(),
-                    expected: Ulid::new(),
+                    was: Ulid::generate(),
+                    expected: Ulid::generate(),
                 },
                 "invalid_client",
             ),
             (
-                AuthorizationCodeExchangeError::NoSuchOAuthSession(Ulid::new()),
+                AuthorizationCodeExchangeError::NoSuchOAuthSession(Ulid::generate()),
                 "internal_error",
             ),
             (
-                AuthorizationCodeExchangeError::NoSuchBrowserSession(Ulid::new()),
+                AuthorizationCodeExchangeError::NoSuchBrowserSession(Ulid::generate()),
                 "internal_error",
             ),
             (
