@@ -1704,7 +1704,12 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     )
     .expect("handle claim must mint with the test keystore");
     assert_eq!(
-        material.payload.subject_account_id.principal_id.as_str(),
+        material
+            .payload
+            .claim
+            .subject_account_id
+            .principal_id
+            .as_str(),
         subject_id
     );
 
@@ -1717,7 +1722,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     assert_eq!(material.payload.schema, "ak.schema.handle_claim.v1");
     let payload_value = serde_json::to_value(&material.payload).unwrap();
     assert!(payload_value.get("type").is_none());
-    let handle = &material.payload.handle;
+    let handle = &material.payload.claim.handle;
     assert_eq!(handle.canonical(), canonical);
     assert!(
         handle.canonical().contains(':'),
@@ -1732,35 +1737,42 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
         "handle MUST NOT be an acct: alias"
     );
     assert!(
-        material.payload.handle_aliases.contains(&acct),
+        material.payload.claim.handle_aliases.contains(&acct),
         "handle_aliases MUST carry the acct: interop form"
     );
     assert_eq!(
-        material.payload.audience.as_deref(),
+        material.payload.claim.audience.as_deref(),
         Some("did:web:space.example")
     );
-    // `claim_digest` moved off the spec-aligned payload onto the
-    // material wrapper (audit-chain anchor only).
     assert!(material.claim_digest.starts_with("sha256:"));
-    assert!(payload_value.get("claim_digest").is_none());
-    assert!(material.expires_at > now);
-    assert_eq!(material.payload.proofs.len(), 1);
     assert_eq!(
-        material.payload.proofs[0].audience,
+        material.payload.claim_digest.as_str(),
+        material.claim_digest
+    );
+    assert!(material.expires_at > now);
+    assert_eq!(material.payload.claim.proofs.len(), 2);
+    assert_eq!(
+        material.payload.claim.proofs[0].audience,
         Some(arkret_wire::Audience::Single(
             "did:web:space.example".to_owned()
         ))
     );
-    assert_eq!(material.payload.proofs[0].jws, material.claim_jwt);
-    // HC-COAUTH-1 — coauth only stamps allow-listed claim_kind values.
-    assert_eq!(
-        material.payload.claim_kind,
-        Some(arkret_models_identity::HandleClaimKind::HandleBinding)
+    assert!(
+        material
+            .payload
+            .claim
+            .proofs
+            .iter()
+            .all(|proof| !proof.jws.is_empty())
     );
+    assert!(matches!(
+        material.payload.claim.claim,
+        arkret_models_identity::HandleClaimVariant::HandleBinding
+    ));
 }
 
 #[test]
-fn issue_handle_claim_accepts_organization_handle_claim_kind() {
+fn issue_handle_claim_rejects_organization_kind_without_organization_id() {
     use coauth_data::clock::MockClock;
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
     let arkret_config = test_arkret_config();
@@ -1775,7 +1787,7 @@ fn issue_handle_claim_accepts_organization_handle_claim_kind() {
             .unwrap(),
         owning_station_id_for(&arkret_config),
     );
-    let material = issue_handle_claim(
+    let error = issue_handle_claim(
         &clock,
         &url_builder,
         &arkret_config,
@@ -1785,9 +1797,6 @@ fn issue_handle_claim_accepts_organization_handle_claim_kind() {
         arkret_models_identity::HandleClaimKind::OrganizationHandle,
         "did:web:space.example".to_owned(),
     )
-    .expect("organization_handle claim_kind must be accepted");
-    assert_eq!(
-        material.payload.claim_kind,
-        Some(arkret_models_identity::HandleClaimKind::OrganizationHandle)
-    );
+    .expect_err("organization_handle requires its closed organization_id variant");
+    assert!(error.to_string().contains("organization_id"));
 }

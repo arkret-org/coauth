@@ -1,25 +1,20 @@
-use std::collections::BTreeMap;
-
 use arkret_identifiers::Hash;
 use arkret_models_identity::{
-    Handle, HandleBindingState, HandleClaim as HandleClaimPayload, HandleClaimKind,
+    Handle, HandleClaim as HandleClaimPayload, HandleClaimCore, HandleClaimKind, HandleClaimStatus,
+    HandleClaimVariant, HandleVisibility, handle_claim_proof_signing_bytes,
 };
-use arkret_wire::{Audience, PayloadProof, proof_kind};
+use arkret_wire::{Audience, PayloadProof, PayloadProofPurpose, SchemaId, proof_kind};
 use chrono::{DateTime, Duration, Utc};
 use coauth_config::ArkretConfig;
 use coauth_data::{Clock, UrlBuilder, User};
-use coauth_jose::constraints::Constrainable;
-use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
-use coauth_keystore::Keystore;
+use coauth_keystore::{ACCOUNT_AUTHORITY_KEY_ID, Keystore};
 
 use super::*;
 
-/// Output of [`issue_handle_claim`]. Carries the signed JWT, the raw
-/// payload (so the caller can persist or echo it), and the wire-level
-/// claim digest used as the audit-chain anchor.
+/// Output of [`issue_handle_claim`]. Carries the signed payload and the
+/// wire-level claim digest used as the audit-chain anchor.
 #[derive(Debug, Clone)]
 pub struct HandleClaimMaterial {
-    pub claim_jwt: String,
     pub payload: HandleClaimPayload,
     pub claim_digest: String,
     pub expires_at: DateTime<Utc>,
@@ -81,78 +76,138 @@ pub(crate) fn issue_handle_claim(
     let now = clock.now();
     let expires_at = now + Duration::try_minutes(HANDLE_CLAIM_TTL_MINUTES).unwrap();
 
-    // Build the payload sans proofs so we can hash it deterministically.
-    // The proof block then carries that hash; the JWT signs the complete
-    // payload.
-    let payload_no_proofs = HandleClaimPayload {
-        schema: arkret_wire::SchemaId::HANDLE_CLAIM_V1.to_owned(),
+    let claim = match claim_kind {
+        HandleClaimKind::HandleBinding => HandleClaimVariant::HandleBinding,
+        HandleClaimKind::OrganizationHandle => {
+            return Err(SessionGrantError::Other(anyhow::anyhow!(
+                "organization HandleClaim issuance requires an explicit organization_id"
+            )));
+        }
+    };
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(
+        &key_store
+            .account_authority_seed()
+            .map_err(|error| SessionGrantError::Other(error.into()))?,
+    );
+    let verification_method =
+        did_url_for_handle_claim(format!("{issuer_did}#{ACCOUNT_AUTHORITY_KEY_ID}"))?;
+    let placeholder_digest = hash_for_handle_claim(format!("sha256:{}", "0".repeat(64)))?;
+    let placeholder = handle_claim_proof(
+        placeholder_digest,
+        PayloadProofPurpose::IssuerAttestation,
+        now,
+        Some(&audience),
+        verification_method.clone(),
+        &signing_key,
+    )?;
+    let mut core = HandleClaimCore {
+        schema: HandleClaimCore::SCHEMA.to_owned(),
         handle,
-        handle_aliases: aliases.clone(),
+        handle_aliases: aliases,
         subject_account_id: account_id.clone(),
-        issuer_id,
-        vouching_id: None,
-        binding_state: HandleBindingState::Verified,
-        claim_kind: Some(claim_kind),
-        visibility: None,
+        issuer_id: issuer_id.clone(),
+        claim,
+        visibility: HandleVisibility::Restricted,
         audience: Some(audience.clone()),
-        challenge: None,
-        claim_scope: BTreeMap::new(),
-        claims: Vec::new(),
-        created_at: now,
+        issued_at: now,
         expires_at: Some(expires_at),
-        verified_at: None,
         source_refs: Vec::new(),
-        proofs: Vec::new(),
+        proofs: [placeholder.clone(), placeholder],
     };
-    // PROOF-1 (spec 7157ee8 §3.2): the signing transcript MUST cover the
-    // canonical `handle` field, not the retired `handle_uri`. The digest
-    // input mirrors the wire shape of `HandleClaimPayload` exactly so
-    // downstream verifiers can reproduce the hash from the on-the-wire
-    // claim without renaming.
-    let claim_digest = arkret_canonical::canonical_sha256(&payload_no_proofs)?;
-
-    let (alg, key) = crate::services::preferred_service_signing_key(key_store)
-        .ok_or(SessionGrantError::NoSigningKey)?;
-    let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
-    let verification_method = did_url_for_handle_claim(format!("{issuer_did}#{key_id}"))?;
-    let proof_payload_digest = hash_for_handle_claim(claim_digest.clone())?;
-
-    let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
-    let signer = key_store.signer_for_algorithm(&alg)?;
-    let unsigned_payload = HandleClaimPayload {
-        proofs: vec![PayloadProof {
-            kind: proof_kind::DETACHED_JWS.to_owned(),
-            verification_method: verification_method.clone(),
-            payload_digest: proof_payload_digest.clone(),
-            created_at: now,
-            domain: None,
-            audience: Some(Audience::Single(audience.clone())),
-            proof_purpose: None,
-            // Placeholder — overwritten with the detached JWS below.
-            jws: String::new(),
-        }],
-        ..payload_no_proofs.clone()
+    let claim_digest = core.claim_digest()?;
+    core.proofs = [
+        handle_claim_proof(
+            claim_digest.clone(),
+            PayloadProofPurpose::IssuerAttestation,
+            now,
+            Some(&audience),
+            verification_method.clone(),
+            &signing_key,
+        )?,
+        handle_claim_proof(
+            claim_digest.clone(),
+            PayloadProofPurpose::HolderAcceptance,
+            now,
+            Some(&audience),
+            verification_method.clone(),
+            &signing_key,
+        )?,
+    ];
+    let fresh_until = now + Duration::try_minutes(5).unwrap();
+    let mut final_payload = HandleClaimPayload {
+        schema: SchemaId::HANDLE_CLAIM_V1.to_owned(),
+        claim: core,
+        claim_digest: claim_digest.clone(),
+        status: HandleClaimStatus::Verified,
+        as_of: now,
+        verifier_id: issuer_id,
+        verified_at: Some(now),
+        revocation: None,
+        revocation_digest: None,
+        fresh_until,
+        status_proof: handle_claim_proof(
+            claim_digest.clone(),
+            PayloadProofPurpose::StatusAttestation,
+            now,
+            Some(&audience),
+            verification_method.clone(),
+            &signing_key,
+        )?,
     };
-    let claim_jwt = Jwt::sign(header, unsigned_payload.clone(), &*signer)?.into_string();
-
-    let final_payload = HandleClaimPayload {
-        proofs: vec![PayloadProof {
-            kind: proof_kind::DETACHED_JWS.to_owned(),
-            verification_method,
-            payload_digest: proof_payload_digest,
-            created_at: now,
-            domain: None,
-            audience: Some(Audience::Single(audience.clone())),
-            proof_purpose: None,
-            jws: claim_jwt.clone(),
-        }],
-        ..payload_no_proofs
-    };
-
+    final_payload.status_proof = handle_claim_proof(
+        final_payload.status_digest()?,
+        PayloadProofPurpose::StatusAttestation,
+        now,
+        Some(&audience),
+        verification_method,
+        &signing_key,
+    )?;
+    final_payload.validate()?;
     Ok(HandleClaimMaterial {
-        claim_jwt,
         payload: final_payload,
-        claim_digest,
+        claim_digest: claim_digest.to_string(),
         expires_at,
     })
+}
+
+fn handle_claim_proof(
+    payload_digest: Hash,
+    proof_purpose: PayloadProofPurpose,
+    created_at: DateTime<Utc>,
+    audience: Option<&str>,
+    verification_method: arkret_wire::DidUrl,
+    signing_key: &ed25519_dalek::SigningKey,
+) -> Result<PayloadProof, SessionGrantError> {
+    let domain = match proof_purpose {
+        PayloadProofPurpose::IssuerAttestation | PayloadProofPurpose::HolderAcceptance => {
+            arkret_models_identity::HANDLE_CLAIM_PROOF_DOMAIN
+        }
+        PayloadProofPurpose::StatusAttestation => {
+            arkret_models_identity::HANDLE_CLAIM_STATUS_DOMAIN
+        }
+        PayloadProofPurpose::RevocationAuthorization => {
+            arkret_models_identity::HANDLE_CLAIM_REVOCATION_DOMAIN
+        }
+        PayloadProofPurpose::GovernanceAuthorization => {
+            return Err(SessionGrantError::Other(anyhow::anyhow!(
+                "invalid HandleClaim proof purpose"
+            )));
+        }
+    };
+    let mut proof = PayloadProof {
+        kind: proof_kind::DETACHED_JWS.to_owned(),
+        verification_method,
+        payload_digest,
+        created_at,
+        domain: Some(domain.to_owned()),
+        audience: audience.map(|value| Audience::Single(value.to_owned())),
+        proof_purpose: Some(proof_purpose),
+        jws: String::new(),
+    };
+    proof.jws = arkret_signatures::jws::sign_jws_ed25519(
+        &handle_claim_proof_signing_bytes(&proof)?,
+        signing_key,
+    )
+    .map_err(|error| SessionGrantError::Other(anyhow::anyhow!(error)))?;
+    Ok(proof)
 }

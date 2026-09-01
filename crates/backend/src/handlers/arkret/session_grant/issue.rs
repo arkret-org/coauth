@@ -575,6 +575,12 @@ async fn issue_account_handoff_session_grant(
                 "principal binding is missing",
             )
         })?;
+    if proof.account_id != binding.account_id {
+        repo.cancel().await.ok();
+        return Err(proof_invalid(
+            "accepted-device proof account_id does not match the accepted AccountHandoff binding",
+        ));
+    }
     let browser_session_id = handoff.browser_session_id.ok_or_else(|| {
         ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
@@ -651,7 +657,7 @@ async fn issue_account_handoff_session_grant(
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         audience_id: body.audience_id.clone(),
         granted_scope: material.scopes.clone(),
-        scope_details: None,
+        previous_session_grant_id: None,
     };
     let canonical_outcome = arkret_canonical::canonical_json_bytes(&wire_outcome)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
@@ -876,7 +882,7 @@ async fn issue_recovery_session_grant(
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         audience_id: body.audience_id.clone(),
         granted_scope: material.scopes.clone(),
-        scope_details: None,
+        previous_session_grant_id: None,
     };
     let canonical_outcome = arkret_canonical::canonical_json_bytes(&wire_outcome)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
@@ -1154,12 +1160,9 @@ async fn issue_agent_key_proof_session_grant(
     )
     .map_err(map_session_grant_material_error)?;
 
-    // grant_id / session_public_key / audience_id are SessionGrantOutcome
-    // top-level fields (mirroring SessionGrantRefreshOutcome), NOT entries in
-    // `scope_details`. The wire `scope_details` carries only the spec-typed
-    // agent overlay (AKP-0008 §4.6); the JWT-internal scope details with the
-    // canonical constraint projection are already baked into the minted grant
-    // above.
+    // Grant identity, session key and audience are typed SessionGrantOutcome
+    // fields. Scope details remain only in signed JWT/introspection claims;
+    // the issue response never carries an unsigned authorization mirror.
     let grant_id = material.grant_id.clone();
     let wire_audience = material.audience_id.clone();
 
@@ -1175,7 +1178,7 @@ async fn issue_agent_key_proof_session_grant(
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         audience_id: wire_audience,
         granted_scope: material.scopes.clone(),
-        scope_details: Some(authorization.wire_scope_details),
+        previous_session_grant_id: None,
     };
     let canonical_outcome = arkret_canonical::canonical_json_bytes(&wire_outcome)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;

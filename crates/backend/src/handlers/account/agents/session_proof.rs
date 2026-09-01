@@ -91,15 +91,8 @@ pub struct AgentSessionAuthorization {
     /// Materialized `scope_details` overlay baked into the session-grant JWT
     /// payload (canonical resource constraints + optional participation
     /// entries). This is the JWT-internal shape soland enforces against; it is
-    /// NOT the `SessionGrantOutcome.scope_details` wire DTO.
+    /// not an unsigned field in the `SessionGrantOutcome` wire DTO.
     pub scope_details: serde_json::Map<String, serde_json::Value>,
-    /// Spec-typed `SessionGrantOutcome.scope_details` overlay returned on the
-    /// wire (`service-operation-dtos.schema.json#/$defs/SessionGrantOutcome`,
-    /// `additionalProperties:false`, agent-only four fields). Distinct from the
-    /// JWT-internal `scope_details` above, which carries the canonical
-    /// constraint projection soland needs.
-    pub wire_scope_details:
-        arkret_models_collaboration::session_grant_bodies::SessionGrantScopeDetails,
     /// Capped agent session TTL (≤ 15 min).
     pub ttl: chrono::Duration,
 }
@@ -571,32 +564,6 @@ pub async fn validate_agent_session_proof(
         );
     }
 
-    // Spec-typed wire overlay returned in `SessionGrantOutcome.scope_details`.
-    // Only the four agent-only fields the spec allows
-    // (`additionalProperties:false`): realm_ids / strand_ids / track_names /
-    // participation. The controller/resource/policy projection and canonical
-    // constraints ride the JWT-internal `scope_details` above, never the wire
-    // DTO. `track_names` mirrors the materialized `allowed_tracks`.
-    let wire_realm_ids = effective_scope
-        .realm_ids
-        .iter()
-        .map(|id| arkret_identifiers::RealmId::new(id.clone()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    let wire_strand_ids = effective_scope
-        .strand_ids
-        .iter()
-        .map(|id| arkret_identifiers::StrandId::new(id.clone()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    let wire_scope_details =
-        arkret_models_collaboration::session_grant_bodies::SessionGrantScopeDetails {
-            realm_ids: wire_realm_ids,
-            strand_ids: wire_strand_ids,
-            track_names: effective_scope.allowed_tracks.clone(),
-            agent_participation_entries: scope_request.participation.clone(),
-        };
-
     // TTL: cap to the spec ceiling (≤ 15 min), never wider than the
     // (human-oriented) configured grant TTL.
     let configured = arkret_config.session_grant_ttl;
@@ -611,7 +578,6 @@ pub async fn validate_agent_session_proof(
         controller_id,
         granted_scope: effective_scope.granted_scope,
         scope_details,
-        wire_scope_details,
         ttl,
     })
 }

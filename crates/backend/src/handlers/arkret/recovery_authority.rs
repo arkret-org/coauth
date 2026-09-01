@@ -140,10 +140,16 @@ pub async fn issue_recovery_completion_grant_endpoint(
         &mut prerequisite_repo,
         handoff.local_account_id,
         &handoff.audience_id,
-        receipt.principal_id.as_str(),
+        receipt.account_id.principal_id.as_str(),
     )
     .await?;
     let account_id = principal_binding.account_id.clone();
+    if receipt.account_id != account_id {
+        prerequisite_repo.cancel().await.ok();
+        return Err(signature_invalid(
+            "terminal receipt account_id does not match the accepted AccountHandoff binding",
+        ));
+    }
     verify_station_completion_signatures(
         depot,
         &mut prerequisite_repo,
@@ -298,7 +304,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             .iter()
             .map(|operation| operation.as_str().to_owned())
             .collect(),
-        Some(&receipt.principal_id),
+        Some(&receipt.account_id.principal_id),
         &account_id,
         handoff.cnf_jkt.clone(),
         device_binding,
@@ -314,7 +320,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         session_public_key: initial.session_public_key.clone(),
         audience_id: initial.audience_id.clone(),
         granted_scope: material.scopes.clone(),
-        scope_details: None,
+        previous_session_grant_id: None,
     };
     let outcome = IssueRecoveryCompletionGrantOutcome {
         transaction_id: request.transaction_id.clone(),
@@ -455,7 +461,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             transaction_id: request.transaction_id.to_string(),
             transaction_request_digest: request.transaction_request_digest.to_string(),
             local_account_id: handoff.local_account_id,
-            principal_id: receipt.principal_id.clone(),
+            principal_id: receipt.account_id.principal_id.clone(),
             device_id: initial.device_id.to_string(),
             device_authorization_event_id: request.device_authorization_event_id.to_string(),
             result_model_generation_ref: generation,
@@ -507,7 +513,7 @@ fn validate_completion_evidence(
     if receipt.outcome != RecoveryReceiptOutcome::Completed
         || receipt.transaction_id != request.transaction_id
         || receipt.transaction_request_digest != request.transaction_request_digest
-        || receipt.principal_id != attestation.principal_id
+        || receipt.account_id != attestation.account_id
         || receipt.recovery_session_id != attestation.recovery_session_id
         || receipt.receipt_id != attestation.terminal_receipt_id
         || receipt_digest != attestation.terminal_receipt_digest

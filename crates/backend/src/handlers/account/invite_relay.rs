@@ -256,15 +256,24 @@ pub async fn relay_invite_with(
         return Err(RouteError::BadRequest("config_required".into()));
     };
 
-    let lookup = query_consent_cell(
-        Some(principal_url),
-        target_holder_principal_id,
-        consent_id,
-        peer_principal_id,
-        scope,
-        http_client,
-    )
-    .await;
+    let lookup = if let Some(delivery) = invite_delivery {
+        let peer = arkret_models_collaboration::account_lifecycle::ConsentPeer::Actor {
+            actor_id: delivery.invite_event.actor_id.clone(),
+        };
+        query_consent_cell(
+            Some(principal_url),
+            target_holder_principal_id,
+            consent_id,
+            &peer,
+            scope,
+            http_client,
+        )
+        .await
+    } else {
+        crate::handlers::account::consent_cell_query::ConsentLookup::Unknown {
+            reason: "exact_peer_actor_required",
+        }
+    };
 
     let decision = evaluate_invite_gate(&lookup, peer_principal_id, scope, consent_required);
     debug!(

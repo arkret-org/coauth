@@ -284,15 +284,10 @@ pub async fn evaluate_batch_invite_gate(
         };
     };
 
-    let lookup = query_consent_cell(
-        Some(principal_url),
-        &gate.target_holder_principal_id,
-        &gate.consent_id,
-        &gate.peer_principal_id,
-        gate.scope,
-        http_client,
-    )
-    .await;
+    let _ = (principal_url, http_client);
+    let lookup = crate::handlers::account::consent_cell_query::ConsentLookup::Unknown {
+        reason: "exact_peer_actor_required",
+    };
 
     let decision = evaluate_invite_gate(
         &lookup,

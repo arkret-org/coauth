@@ -628,7 +628,7 @@ pub async fn account_register_endpoint(
         session_public_key: initial.session_public_key.clone(),
         audience_id: initial.audience_id.clone(),
         granted_scope: material.scopes.clone(),
-        scope_details: None,
+        previous_session_grant_id: None,
     };
     let outcome = AccountRegisterOutcome {
         principal_id: body.principal_id.clone(),

@@ -1,6 +1,6 @@
 use arkret_identifiers::DeviceId;
 use arkret_models_collaboration::session_grant_bodies::{
-    HumanSessionGrantRefreshRequest, SessionGrantRefreshOutcome, SessionGrantRefreshRequestBody,
+    HumanSessionGrantRefreshRequest, SessionGrantOutcome, SessionGrantRefreshRequestBody,
     session_grant_refresh_request_digest,
 };
 use arkret_models_identity::{SessionGrantCredentialClass, SessionGrantProofKind};
@@ -78,7 +78,7 @@ fn validate_human_refresh_before_reservation(
 ) -> Result<(), ArkretRouteError> {
     let proof = &body.accepted_device_possession_proof;
     if proof.predecessor_session_grant_id != prior_grant.grant_id
-        || proof.principal_id != prior_payload.account_id.principal_id
+        || proof.account_id != prior_payload.account_id
         || proof.device_id != body.device_id
         || proof.holder_jkt != holder_jkt
     {
@@ -624,19 +624,19 @@ pub async fn refresh_session_grant(
         )
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
         let audience_id = new_material.audience_id.clone();
-        let outcome = SessionGrantRefreshOutcome {
+        let outcome = SessionGrantOutcome {
             session_grant_id: new_material.grant_id.clone(),
             account_id: new_material.account_id.clone(),
-            grant_jwt: new_material.grant_jwt.clone(),
+            device_id: Some(device_id.clone()),
+            session_grant: new_material.grant_jwt.clone(),
             session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
                 &new_material.session_public_key,
             )
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
             expires_at: new_material.expires_at_timestamp,
             audience_id,
-            scopes: new_material.scopes.clone(),
-            dpop_jkt: verification.jkt.clone(),
-            previous_session_grant_id: prior_grant.grant_id.clone(),
+            granted_scope: new_material.scopes.clone(),
+            previous_session_grant_id: Some(prior_grant.grant_id.clone()),
         };
         let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
@@ -877,6 +877,8 @@ pub async fn refresh_session_grant(
             "device authorization generation changed before refresh",
         ));
     }
+    let device_id = arkret_identifiers::DeviceId::new(device_id.to_owned())
+        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let new_material = issue_session_grant_for_audience(
         &issuance_seed,
         &*clock,
@@ -886,8 +888,7 @@ pub async fn refresh_session_grant(
         crate::services::dpop::session_public_jwk(&verification.public_jwk)
             .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         audience_id,
-        arkret_identifiers::DeviceId::new(device_id.to_owned())
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        device_id.clone(),
         scopes,
         Some(&prior_grant.subject_id),
         &principal_binding.account_id,
@@ -899,19 +900,19 @@ pub async fn refresh_session_grant(
 
     let response_audience = new_material.audience_id.clone();
 
-    let outcome = SessionGrantRefreshOutcome {
+    let outcome = SessionGrantOutcome {
         session_grant_id: new_material.grant_id.clone(),
         account_id: new_material.account_id.clone(),
-        grant_jwt: new_material.grant_jwt.clone(),
+        device_id: Some(device_id),
+        session_grant: new_material.grant_jwt.clone(),
         session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
             &new_material.session_public_key,
         )
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
         expires_at: new_material.expires_at_timestamp,
         audience_id: response_audience,
-        scopes: new_material.scopes.clone(),
-        dpop_jkt: verification.jkt.clone(),
-        previous_session_grant_id: prior_grant.grant_id.clone(),
+        granted_scope: new_material.scopes.clone(),
+        previous_session_grant_id: Some(prior_grant.grant_id.clone()),
     };
     let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
