@@ -285,7 +285,7 @@ mod tests {
             realm_frontier_digest: None,
             organization_policy_ref: None,
             issuer_id: organization_id(),
-            issuer_role: RealmOrganizationIssuerRole::OrganizationPrincipalId,
+            issuer_role: RealmOrganizationIssuerRole::Organization,
             delegation_ref: None,
             executed_by: None,
         }

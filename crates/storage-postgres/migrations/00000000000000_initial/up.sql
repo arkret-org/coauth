@@ -337,7 +337,7 @@ CREATE TABLE public.handle_audit_log (
 CREATE TABLE public.invite_quarantine_queue (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     peer_principal_id text NOT NULL,
-    target_holder_principal_id text NOT NULL,
+    target_holder_id text NOT NULL,
     consent_id text NOT NULL,
     scope text NOT NULL,
     requesting_admin_localpart text,
@@ -350,7 +350,7 @@ CREATE TABLE public.invite_quarantine_queue (
     CONSTRAINT invite_quarantine_queue_peer_principal_id_shape CHECK ((peer_principal_id LIKE 'ak:did_core:%'::text)),
     CONSTRAINT invite_quarantine_queue_scope_non_empty CHECK ((btrim(scope) <> ''::text)),
     CONSTRAINT invite_quarantine_queue_status_known CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text]))),
-    CONSTRAINT invite_quarantine_queue_target_holder_principal_id_shape CHECK ((target_holder_principal_id LIKE 'ak:did_core:%'::text))
+    CONSTRAINT invite_quarantine_queue_target_holder_id_shape CHECK ((target_holder_id LIKE 'ak:did_core:%'::text))
 );
 
 CREATE TABLE public.notification_deliveries (
@@ -1710,7 +1710,7 @@ CREATE INDEX idx_identity_binding_challenges_expiry ON public.identity_binding_c
 
 CREATE INDEX invite_quarantine_queue_consent_id_idx ON public.invite_quarantine_queue USING btree (consent_id);
 
-CREATE INDEX invite_quarantine_queue_holder_principal_id_idx ON public.invite_quarantine_queue USING btree (target_holder_principal_id);
+CREATE INDEX invite_quarantine_queue_holder_id_idx ON public.invite_quarantine_queue USING btree (target_holder_id);
 
 CREATE INDEX invite_quarantine_queue_status_created_idx ON public.invite_quarantine_queue USING btree (status, created_at DESC);
 

@@ -388,7 +388,7 @@ diesel::table! {
     invite_quarantine_queue (id) {
         id -> Uuid,
         peer_principal_id -> Text,
-        target_holder_principal_id -> Text,
+        target_holder_id -> Text,
         consent_id -> Text,
         scope -> Text,
         requesting_admin_localpart -> Nullable<Text>,
