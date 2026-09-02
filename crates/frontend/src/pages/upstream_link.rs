@@ -1,47 +1,13 @@
-use coauth_account_types::{UpstreamLinkActionOutcome, UpstreamLinkFieldErrors};
+use coauth_account_types::{
+    UpstreamLinkActionOutcome, UpstreamLinkFieldErrors, UpstreamLinkState as LinkState,
+};
 use dioxus::prelude::*;
-use serde::Deserialize;
 
 use crate::api::{api_get, api_post};
 use crate::components::layout::Layout;
 use crate::components::loading::LoadingSpinner;
 
 // ── API types ───────────────────────────────────────────────────
-
-#[derive(Debug, Deserialize, Clone, PartialEq)]
-#[serde(tag = "state", rename_all = "snake_case")]
-pub enum LinkState {
-    Redirect {
-        redirect_url: String,
-    },
-    SuggestLink {
-        provider_name: Option<String>,
-        upstream_subject: Option<String>,
-    },
-    LinkMismatch {
-        existing_handle: String,
-    },
-    Register {
-        suggested_handle: Option<String>,
-        handle_forced: bool,
-        suggested_display_name: Option<String>,
-        display_name_forced: bool,
-        suggested_email: Option<String>,
-        email_forced: bool,
-        provider_name: Option<String>,
-        has_tos: bool,
-    },
-    AccountDeactivated {
-        username: String,
-    },
-    AccountLocked {
-        username: String,
-    },
-    Error {
-        code: String,
-        description: String,
-    },
-}
 
 // ── Component ───────────────────────────────────────────────────
 
@@ -127,20 +93,20 @@ fn LinkStateView(id: String, state: LinkState) -> Element {
                 has_tos,
             }
         },
-        LinkState::AccountDeactivated { username } => rsx! {
+        LinkState::AccountDeactivated { handle } => rsx! {
             div { class: "login-page",
                 div { class: "login-container",
                     h1 { class: "heading-md login-title", "Account Deactivated" }
-                    p { class: "text-secondary", "The account " strong { "{username}" } " has been deactivated." }
+                    p { class: "text-secondary", "The account " strong { "{handle}" } " has been deactivated." }
                     p { class: "text-secondary", "Please contact your administrator for assistance." }
                 }
             }
         },
-        LinkState::AccountLocked { username } => rsx! {
+        LinkState::AccountLocked { handle } => rsx! {
             div { class: "login-page",
                 div { class: "login-container",
                     h1 { class: "heading-md login-title", "Account Locked" }
-                    p { class: "text-secondary", "The account " strong { "{username}" } " has been locked." }
+                    p { class: "text-secondary", "The account " strong { "{handle}" } " has been locked." }
                     p { class: "text-secondary", "Please contact your administrator for assistance." }
                 }
             }

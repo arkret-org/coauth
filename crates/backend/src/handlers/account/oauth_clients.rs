@@ -1,27 +1,15 @@
-use salvo::oapi::ToSchema;
+use coauth_account_types::OAuthClientDetail;
 use salvo::prelude::*;
-use serde::Serialize;
 
 use super::{DepotExt, NodeType, RouteError};
 use crate::handlers::account::service::connections::{OAuthClientLookupError, load_oauth_client};
-
-#[derive(Serialize, ToSchema)]
-pub struct OAuthClientOutcome {
-    pub id: String,
-    pub client_id: String,
-    pub client_name: Option<String>,
-    pub client_uri: Option<String>,
-    pub tos_uri: Option<String>,
-    pub policy_uri: Option<String>,
-    pub logo_uri: Option<String>,
-}
 
 /// GET /_coauth/self/oauth-clients/:id
 #[endpoint]
 pub async fn get_client(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<OAuthClientOutcome>, RouteError> {
+) -> Result<Json<OAuthClientDetail>, RouteError> {
     let id = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?;
@@ -34,7 +22,7 @@ pub async fn get_client(
         .await
         .map_err(map_client_lookup_error)?;
 
-    Ok(Json(OAuthClientOutcome {
+    Ok(Json(OAuthClientDetail {
         id: NodeType::OAuthClient.serialize(client.id),
         client_id: client.client_id.clone(),
         client_name: client.client_name.clone(),

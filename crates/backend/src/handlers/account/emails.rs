@@ -1,4 +1,5 @@
 use arkret_locale::UiLocale;
+use coauth_account_types::EmailAuthStatusOutcome;
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -47,13 +48,6 @@ pub struct RemoveEmailOutcome {
 }
 
 // ── GET /_coauth/account/email-auth/:id ─────────────────────────────────
-
-#[derive(Serialize, ToSchema)]
-pub struct EmailAuthStatusOutcome {
-    pub id: String,
-    pub email: String,
-    pub completed_at: Option<String>,
-}
 
 #[endpoint]
 pub async fn get_email_auth(

@@ -1,4 +1,7 @@
-use salvo::oapi::ToSchema;
+use coauth_account_types::{
+    PatchViewerProfileOutcome, PrincipalUser as PrincipalUserData,
+    ViewerUserProfile as ViewerProfileData,
+};
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -21,26 +24,6 @@ pub struct PatchViewerProfileInput {
     pub avatar_url: Option<Option<String>>,
     #[serde(default, with = "serde_with::rust::double_option")]
     pub preferred_locale: Option<Option<String>>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct PatchViewerProfileOutcome {
-    pub profile: ViewerProfileData,
-    pub principal: PrincipalUserData,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct ViewerProfileData {
-    pub display_name: Option<String>,
-    pub avatar_url: Option<String>,
-    pub preferred_locale: Option<String>,
-    pub updated_at: String,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct PrincipalUserData {
-    pub principal_address: String,
-    pub display_name: Option<String>,
 }
 
 #[endpoint]

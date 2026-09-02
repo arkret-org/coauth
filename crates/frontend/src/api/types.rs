@@ -1,10 +1,12 @@
 pub use coauth_account_types::{
     AppSession, BootstrapAdminStatus, BrowserSession, ChangeRegistrationEmailOutcome,
-    ChannelAvailability, ChannelPreference, DeviceLinkOutcome, DeviceType, LinkedAccount,
-    LinkedAccountsOutcome, NotificationPreferencesOutcome, OAuthSession, PrincipalUser,
-    RecoveryStatusOutcome, RecoveryTicketStatusOutcome, RegisterInput, RegisterOutcome, Session,
-    SiteConfigOutcome as SiteConfig, UnlinkOutcome, UpdateNotificationPreferencesOutcome,
-    UserEmail, ViewerOutcome, ViewerUserProfile as UserProfile,
+    ChannelAvailability, ChannelPreference, DeviceLinkOutcome, DeviceType,
+    EmailAuthStatusOutcome as UserEmailAuthentication, LinkedAccount, LinkedAccountsOutcome,
+    NotificationPreferencesOutcome, OAuthClientDetail, OAuthSession, PatchViewerProfileOutcome,
+    PrincipalUser, RecoveryStatusOutcome, RecoveryTicketStatusOutcome, RegisterInput,
+    RegisterOutcome, SecuritySummaryOutcome, Session, SiteConfigOutcome as SiteConfig,
+    UnlinkOutcome, UpdateNotificationPreferencesOutcome, UserEmail, ViewerOutcome,
+    ViewerUserProfile as UserProfile,
 };
 use serde::{Deserialize, Serialize};
 
@@ -40,12 +42,6 @@ pub struct PasswordRecoveryTrustBoundary {
     pub device_trust_reset: bool,
     pub trusted_recovery_service_used: bool,
     pub device_trust_recovery_required: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct PatchViewerProfileOutcome {
-    pub profile: UserProfile,
-    pub principal: PrincipalUser,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -115,28 +111,10 @@ pub enum DeactivateUserStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct OAuthClientDetail {
-    pub id: String,
-    pub client_id: String,
-    pub client_name: Option<String>,
-    pub client_uri: Option<String>,
-    pub tos_uri: Option<String>,
-    pub policy_uri: Option<String>,
-    pub logo_uri: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ResendRecoveryEmailPayload {
     pub status: String,
     #[serde(default)]
     pub progress_url: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct UserEmailAuthentication {
-    pub id: String,
-    pub email: String,
-    pub completed_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -238,17 +216,6 @@ pub struct OAuthApprovalSubmitOutcome {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct DeviceApprovalOutcome {
     pub status: String,
-}
-
-// ── Security summary (GET /_coauth/self/viewer/security) ───────────
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct SecuritySummaryOutcome {
-    pub has_password: bool,
-    pub active_sessions_count: usize,
-    pub linked_providers_count: usize,
-    pub verified_emails_count: usize,
-    pub verified_phones_count: usize,
 }
 
 // ── Linked accounts list (GET /_coauth/self/linked-accounts) ───────

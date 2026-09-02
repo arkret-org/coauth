@@ -84,6 +84,44 @@ pub enum UpstreamLinkActionOutcome {
     },
 }
 
+/// Current state returned by `GET /_coauth/self/upstream-oauth/link/:id`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+#[cfg_attr(feature = "schema", salvo(schema(name = LinkState)))]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum UpstreamLinkState {
+    Redirect {
+        redirect_url: String,
+    },
+    SuggestLink {
+        provider_name: Option<String>,
+        upstream_subject: Option<String>,
+    },
+    LinkMismatch {
+        existing_handle: String,
+    },
+    Register {
+        suggested_handle: Option<String>,
+        handle_forced: bool,
+        suggested_display_name: Option<String>,
+        display_name_forced: bool,
+        suggested_email: Option<String>,
+        email_forced: bool,
+        provider_name: Option<String>,
+        has_tos: bool,
+    },
+    AccountDeactivated {
+        handle: String,
+    },
+    AccountLocked {
+        handle: String,
+    },
+    Error {
+        code: String,
+        description: String,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 pub struct LoginReqBody {
@@ -232,6 +270,50 @@ pub struct ViewerUserProfile {
     pub avatar_url: Option<String>,
     pub preferred_locale: Option<String>,
     pub updated_at: String,
+}
+
+/// Response from `PATCH /_coauth/self/viewer/profile`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct PatchViewerProfileOutcome {
+    pub profile: ViewerUserProfile,
+    pub principal: PrincipalUser,
+}
+
+/// Response from `GET /_coauth/account/email-auth/:id`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct EmailAuthStatusOutcome {
+    pub id: String,
+    pub email: String,
+    pub completed_at: Option<String>,
+}
+
+/// Response from `GET /_coauth/self/oauth-clients/:id`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+#[cfg_attr(feature = "schema", salvo(schema(name = OAuthClientOutcome)))]
+pub struct OAuthClientDetail {
+    pub id: String,
+    pub client_id: String,
+    pub client_name: Option<String>,
+    pub client_uri: Option<String>,
+    pub tos_uri: Option<String>,
+    pub policy_uri: Option<String>,
+    pub logo_uri: Option<String>,
+}
+
+/// Response from `GET /_coauth/self/viewer/security` and the same security
+/// projection embedded in the viewer overview.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+#[cfg_attr(feature = "schema", salvo(schema(name = SecuritySummaryData)))]
+pub struct SecuritySummaryOutcome {
+    pub has_password: bool,
+    pub active_sessions_count: usize,
+    pub linked_providers_count: usize,
+    pub verified_emails_count: usize,
+    pub verified_phones_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -690,5 +772,35 @@ mod tests {
 
         value.as_object_mut().unwrap().remove("has_password");
         assert!(serde_json::from_value::<ViewerUser>(value).is_err());
+    }
+
+    #[test]
+    fn shared_account_responses_keep_required_fields_strict() {
+        let value = serde_json::json!({ "id": "oauth_client:01K", "client_id": "web" });
+        serde_json::from_value::<OAuthClientDetail>(value.clone()).expect("complete client");
+
+        let mut missing_client_id = value;
+        missing_client_id
+            .as_object_mut()
+            .unwrap()
+            .remove("client_id");
+        assert!(serde_json::from_value::<OAuthClientDetail>(missing_client_id).is_err());
+    }
+
+    #[test]
+    fn upstream_link_account_state_uses_handle() {
+        let state = serde_json::json!({ "state": "account_deactivated", "handle": "alice" });
+        assert_eq!(
+            serde_json::from_value::<UpstreamLinkState>(state).unwrap(),
+            UpstreamLinkState::AccountDeactivated {
+                handle: "alice".to_owned()
+            }
+        );
+        assert!(
+            serde_json::from_value::<UpstreamLinkState>(
+                serde_json::json!({ "state": "account_locked", "username": "alice" })
+            )
+            .is_err()
+        );
     }
 }

@@ -1,9 +1,9 @@
 use coauth_account_types::{
     AnonymousViewer as AnonymousData, BrowserSession as BrowserSessionData,
     EmailConnection as EmailListData, EmailEdge as EmailEdgeData, LinkedAccount,
-    PrincipalUser as PrincipalUserData, UserEmail as EmailData, Viewer as ViewerData,
-    ViewerOutcome, ViewerSession as ViewerSessionData, ViewerUser,
-    ViewerUserProfile as UserProfileData,
+    PrincipalUser as PrincipalUserData, SecuritySummaryOutcome as SecuritySummaryData,
+    UserEmail as EmailData, Viewer as ViewerData, ViewerOutcome,
+    ViewerSession as ViewerSessionData, ViewerUser, ViewerUserProfile as UserProfileData,
 };
 use coauth_data::RepositoryAccess;
 use coauth_data::account::AccountSecuritySummary;
@@ -198,7 +198,7 @@ pub async fn get_security_summary(
 
     repo.cancel().await?;
 
-    Ok(Json(SecuritySummaryData::from(&summary)))
+    Ok(Json(security_summary_data(&summary)))
 }
 
 // ── Response types for viewer overview ─────────────────────
@@ -208,16 +208,6 @@ pub async fn get_security_summary(
 pub struct ViewerUserSummary {
     pub id: String,
     pub has_password: bool,
-}
-
-/// Security summary data exposed in the overview.
-#[derive(Serialize, ToSchema)]
-pub struct SecuritySummaryData {
-    pub has_password: bool,
-    pub active_sessions_count: usize,
-    pub linked_providers_count: usize,
-    pub verified_emails_count: usize,
-    pub verified_phones_count: usize,
 }
 
 /// Summary of contact points for the overview.
@@ -250,15 +240,13 @@ pub struct ViewerOverviewOutcome {
     pub workflows: WorkflowsSummary,
 }
 
-impl From<&AccountSecuritySummary> for SecuritySummaryData {
-    fn from(s: &AccountSecuritySummary) -> Self {
-        Self {
-            has_password: s.has_password,
-            active_sessions_count: s.active_sessions_count,
-            linked_providers_count: s.linked_providers_count,
-            verified_emails_count: s.verified_emails_count,
-            verified_phones_count: s.verified_phones_count,
-        }
+fn security_summary_data(summary: &AccountSecuritySummary) -> SecuritySummaryData {
+    SecuritySummaryData {
+        has_password: summary.has_password,
+        active_sessions_count: summary.active_sessions_count,
+        linked_providers_count: summary.linked_providers_count,
+        verified_emails_count: summary.verified_emails_count,
+        verified_phones_count: summary.verified_phones_count,
     }
 }
 
@@ -307,7 +295,7 @@ pub async fn get_viewer_overview(
             id: NodeType::User.serialize(user_id),
             has_password: security.has_password,
         },
-        security: SecuritySummaryData::from(&security),
+        security: security_summary_data(&security),
         contacts: ContactsSummary {
             total: contacts.len(),
             verified: verified_contacts,

@@ -5,7 +5,7 @@
 
 use std::sync::LazyLock;
 
-use coauth_account_types::UpstreamLinkActionOutcome;
+use coauth_account_types::{UpstreamLinkActionOutcome, UpstreamLinkState as LinkState};
 use opentelemetry::metrics::Counter;
 use opentelemetry::{Key, KeyValue};
 use salvo::oapi::ToSchema;
@@ -40,39 +40,6 @@ static REGISTRATION_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
         .build()
 });
 const PROVIDER: Key = Key::from_static_str("provider");
-
-/// The possible states of an upstream OAuth link.
-#[derive(Serialize, ToSchema)]
-#[serde(tag = "state", rename_all = "snake_case")]
-pub enum LinkState {
-    /// Redirect: session already linked and matches current user, or auto-login
-    /// succeeded.
-    Redirect { redirect_url: String },
-    /// User is logged in, upstream not linked: suggest linking.
-    SuggestLink {
-        provider_name: Option<String>,
-        upstream_subject: Option<String>,
-    },
-    /// User is logged in, but upstream is linked to a different user.
-    LinkMismatch { existing_handle: String },
-    /// No session, no link: show registration form.
-    Register {
-        suggested_handle: Option<String>,
-        handle_forced: bool,
-        suggested_display_name: Option<String>,
-        display_name_forced: bool,
-        suggested_email: Option<String>,
-        email_forced: bool,
-        provider_name: Option<String>,
-        has_tos: bool,
-    },
-    /// Account is deactivated.
-    AccountDeactivated { handle: String },
-    /// Account is locked.
-    AccountLocked { handle: String },
-    /// An error occurred.
-    Error { code: String, description: String },
-}
 
 #[derive(Serialize, ToSchema)]
 pub struct LinkOutcome {
