@@ -1753,8 +1753,9 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
         Some("did:web:space.example")
     );
     assert!(material.claim_digest.starts_with("sha256:"));
+    // The status view carries no digest mirror; it is recomputed from `claim`.
     assert_eq!(
-        material.payload.claim_digest.as_str(),
+        material.payload.claim_digest().unwrap().as_str(),
         material.claim_digest
     );
     assert!(material.expires_at > now);

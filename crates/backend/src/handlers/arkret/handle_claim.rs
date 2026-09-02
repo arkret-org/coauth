@@ -137,13 +137,11 @@ pub(crate) fn issue_handle_claim(
     let mut final_payload = HandleClaimPayload {
         schema: SchemaId::HANDLE_CLAIM_V1.to_owned(),
         claim: core,
-        claim_digest: claim_digest.clone(),
         status: HandleClaimStatus::Verified,
         as_of: now,
         verifier_id: issuer_id,
         verified_at: Some(now),
         revocation: None,
-        revocation_digest: None,
         fresh_until,
         status_proof: handle_claim_proof(
             claim_digest.clone(),
