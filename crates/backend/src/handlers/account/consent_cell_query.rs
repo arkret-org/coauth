@@ -268,19 +268,23 @@ pub enum InviteGateDecision {
     Quarantine,
 }
 
-/// Pure function: turn a `(ConsentLookup, peer, scope, consent_required)`
-/// tuple into a gate decision. No I/O, easy to unit-test and reuse from
-/// other invite-style handlers.
+/// Pure function: turn a `(ConsentLookup, scope, consent_required)` tuple into
+/// a gate decision. No I/O, easy to unit-test and reuse from other
+/// invite-style handlers.
+///
+/// The peer half of the match is not re-checked here: `query_consent_cell`
+/// asks the holder Station for one exact `peer`, so a lookup that comes back
+/// `Known` is already the cell for that peer and nothing else. Only the scope
+/// tag is left to decide.
 #[must_use]
 pub fn evaluate_invite_gate(
     lookup: &ConsentLookup,
-    peer_principal_id: &DidCoreId,
     scope: ConsentScope,
     consent_required: bool,
 ) -> InviteGateDecision {
     match lookup {
         ConsentLookup::Known(state) if state.granted => {
-            // Spec §6.1: tag matches `peer=requester, scope=invite|any`.
+            // Spec §6.1: `scope=invite|any` on the peer-scoped cell.
             let want_scoped = format!("scope={scope}");
             let want_any = "scope=any";
             if state
@@ -599,12 +603,7 @@ mod tests {
             tags: vec!["peer=ak:did_core:web:peer;scope=invite".into()],
         });
         assert_eq!(
-            evaluate_invite_gate(
-                &lookup,
-                &core_id("ak:did_core:web:peer"),
-                ConsentScope::Invite,
-                true,
-            ),
+            evaluate_invite_gate(&lookup, ConsentScope::Invite, true,),
             InviteGateDecision::Allow,
         );
     }
@@ -617,12 +616,7 @@ mod tests {
             tags: vec!["peer=ak:did_core:web:peer;scope=any".into()],
         });
         assert_eq!(
-            evaluate_invite_gate(
-                &lookup,
-                &core_id("ak:did_core:web:peer"),
-                ConsentScope::Invite,
-                true,
-            ),
+            evaluate_invite_gate(&lookup, ConsentScope::Invite, true,),
             InviteGateDecision::Allow,
         );
     }
@@ -633,12 +627,7 @@ mod tests {
             reason: "station_url_not_configured",
         };
         assert_eq!(
-            evaluate_invite_gate(
-                &lookup,
-                &core_id("ak:did_core:web:peer"),
-                ConsentScope::Invite,
-                true,
-            ),
+            evaluate_invite_gate(&lookup, ConsentScope::Invite, true,),
             InviteGateDecision::ConsentRequired,
         );
     }
@@ -649,12 +638,7 @@ mod tests {
             reason: "station_unreachable",
         };
         assert_eq!(
-            evaluate_invite_gate(
-                &lookup,
-                &core_id("ak:did_core:web:peer"),
-                ConsentScope::Invite,
-                false,
-            ),
+            evaluate_invite_gate(&lookup, ConsentScope::Invite, false,),
             InviteGateDecision::Quarantine,
         );
     }
@@ -667,12 +651,7 @@ mod tests {
             tags: vec![],
         });
         assert_eq!(
-            evaluate_invite_gate(
-                &lookup,
-                &core_id("ak:did_core:web:peer"),
-                ConsentScope::Invite,
-                true,
-            ),
+            evaluate_invite_gate(&lookup, ConsentScope::Invite, true,),
             InviteGateDecision::ConsentRequired,
         );
     }
@@ -685,12 +664,7 @@ mod tests {
             tags: vec!["peer=did:web:other;scope=invite".into()],
         });
         assert_eq!(
-            evaluate_invite_gate(
-                &lookup,
-                &core_id("ak:did_core:web:peer"),
-                ConsentScope::Invite,
-                true,
-            ),
+            evaluate_invite_gate(&lookup, ConsentScope::Invite, true,),
             InviteGateDecision::ConsentRequired,
         );
     }

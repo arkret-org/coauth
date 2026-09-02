@@ -19,9 +19,7 @@ use tracing::{debug, warn};
 use url::Url;
 
 use super::AccountRecord;
-use crate::handlers::account::consent_cell_query::{
-    InviteGateDecision, evaluate_invite_gate, query_consent_cell,
-};
+use crate::handlers::account::consent_cell_query::{InviteGateDecision, evaluate_invite_gate};
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::model::UserRegistrationToken;
 use crate::handlers::admin::response::SingleOutcome;
@@ -289,12 +287,7 @@ pub async fn evaluate_batch_invite_gate(
         reason: "exact_peer_actor_required",
     };
 
-    let decision = evaluate_invite_gate(
-        &lookup,
-        &gate.peer_principal_id,
-        gate.scope,
-        gate.consent_required,
-    );
+    let decision = evaluate_invite_gate(&lookup, gate.scope, gate.consent_required);
     match decision {
         InviteGateDecision::Allow => BatchInviteGateOutcome::Allow,
         InviteGateDecision::ConsentRequired => BatchInviteGateOutcome::ConsentRequired,

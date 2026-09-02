@@ -275,7 +275,7 @@ pub async fn relay_invite_with(
         }
     };
 
-    let decision = evaluate_invite_gate(&lookup, peer_principal_id, scope, consent_required);
+    let decision = evaluate_invite_gate(&lookup, scope, consent_required);
     debug!(
         ?decision,
         consent_id, peer_principal_id = %peer_principal_id, scope = %scope, "invite-relay gate decision"
