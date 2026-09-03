@@ -39,6 +39,11 @@ bootstrap 在线完整验证 Station 身份链（WebVH 历史、service-identity
 绑定、resolution record 与 endpoint binding)，随后持久化验证后的 pin 并写入
 审计。它是幂等的：身份未变时重复执行不会改动 pin。
 
+Coauth HTTP 服务不会等待这项验证完成才开始监听。它会先发布 OIDC discovery、
+公开 JWKS 和健康检查端点，让全新的 Station 能够取得 Account Authority 公钥；
+后台验证成功前，业务路由统一返回 `503`，`/readyz` 也保持未就绪。独立 Worker
+仍会在处理任务前执行同步 preflight。
+
 发生合法的身份 genesis（新 SCID）后，显式替换 pin:
 
 ```console

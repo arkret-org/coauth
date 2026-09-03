@@ -1,5 +1,6 @@
-//! Station trust resolution: three-layer pin resolution, mandatory
-//! online startup preflight, one-time bootstrap and explicit replacement.
+//! Station trust resolution: three-layer pin resolution, asynchronous server
+//! startup verification, mandatory worker preflight, one-time bootstrap and
+//! explicit replacement.
 //!
 //! ## Why
 //!
@@ -10,7 +11,7 @@
 //! 1. the explicit config pin (`stations[].service_id`);
 //! 2. the persisted trust enrollment written by an explicit `coauth station trust bootstrap` /
 //!    `replace` (or the narrowly scoped development auto-enrollment);
-//! 3. nothing — startup refuses to bind the business listener and points at the bootstrap command.
+//! 3. nothing — business routes remain unavailable and point at the bootstrap command.
 //!
 //! A remote describe response only ever *confirms* a pin. It can never
 //! create or replace one outside the explicit bootstrap/replace operations.
@@ -18,13 +19,14 @@
 //! ## Concurrency
 //!
 //! The request-path cache is a bounded `std::sync::RwLock<HashMap>` keyed by
-//! canonical endpoint. It is populated by [`preflight_and_spawn`] before any
-//! business listener binds and refreshed by the background revalidation task,
-//! so synchronous audience checks never perform I/O. Correctness never
-//! depends on the cache: a missing or expired entry fails closed, and the
-//! revalidation task fatally shuts the process down once a verified value
-//! exceeds [`MAX_TRUSTED_AUDIENCE_AGE`] without refresh, or immediately on a
-//! cryptographic identity conflict.
+//! canonical endpoint. Servers populate it asynchronously while exposing only
+//! discovery, JWKS and health; workers populate it with
+//! [`preflight_and_spawn`] before processing jobs. It is refreshed by the
+//! background revalidation task, so synchronous audience checks never perform
+//! I/O. Correctness never depends on the cache: a missing or expired entry
+//! fails closed, and the revalidation task fatally shuts the process down once
+//! a verified value exceeds [`MAX_TRUSTED_AUDIENCE_AGE`] without refresh, or
+//! immediately on a cryptographic identity conflict.
 
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
@@ -66,6 +68,14 @@ const MAX_REFRESH_INTERVAL: Duration = Duration::from_hours(1);
 
 /// Default revalidation cadence used at server startup.
 pub const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_mins(5);
+
+/// Retry cadence while the owning Station has not completed its own startup.
+///
+/// Coauth must publish OIDC discovery and its public JWKS before a fresh
+/// Station can authorize the Account Authority key in its DID document.  The
+/// business surface remains fail-closed until this retry loop verifies every
+/// configured Station.
+pub const DEFAULT_INITIAL_RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Maximum age of a verified audience. Once this age is reached, request-path
 /// lookups return `None` and the background revalidation task treats the
@@ -222,6 +232,28 @@ pub fn effective_audience(
 #[must_use]
 pub fn effective_audience_shared(server: &StationConfig) -> Option<DidCoreId> {
     effective_audience(server, shared())
+}
+
+/// Whether every configured Station has been verified online in this process
+/// and the owning Station identity has been delegated to the Account
+/// Authority runtime.
+///
+/// An empty Station list needs no trust gate. A configured static `service_id`
+/// is not sufficient here: readiness requires fresh endpoint verification,
+/// represented by the resolver cache populated by the verifier.
+#[must_use]
+pub fn is_ready(arkret_config: &ArkretConfig) -> bool {
+    if arkret_config.stations.is_empty() {
+        return true;
+    }
+    arkret_config
+        .stations
+        .iter()
+        .all(|server| shared().resolve(&server.endpoint).is_some())
+        && arkret_config
+            .runtime_owning_station_identity
+            .get()
+            .is_some()
 }
 
 /// Canonical cache/storage key for an endpoint.
@@ -780,13 +812,19 @@ pub async fn bootstrap(
     {
         Ok(verified) => verified,
         Err(error) => {
-            record_failure_audit(
-                repository_factory,
-                &server.name,
-                server.service_id.clone(),
-                error.to_string(),
-            )
-            .await;
+            // The asynchronous server bootstrap retries ordinary outages.
+            // Recording every 5-second 502/timeout would turn expected startup
+            // ordering into an unbounded audit-log write loop. Evidence and
+            // policy failures remain durable audit events.
+            if !error.is_transient_network() {
+                record_failure_audit(
+                    repository_factory,
+                    &server.name,
+                    server.service_id.clone(),
+                    error.to_string(),
+                )
+                .await;
+            }
             return Err(error.into());
         }
     };
@@ -1082,6 +1120,88 @@ pub async fn preflight_and_spawn(
         }
     });
     Ok(())
+}
+
+/// Start Station trust verification without delaying the HTTP listener.
+///
+/// This is the server startup path. A fresh Station needs Coauth's public JWK
+/// before it can finish provisioning, so requiring the Station to be online
+/// before Coauth binds creates a cold-start cycle. The router exposes only
+/// discovery, JWKS and health while [`is_ready`] is false; all business
+/// requests fail closed with 503.
+///
+/// Workers still use [`preflight_and_spawn`], because they expose no bootstrap
+/// HTTP surface and must not process jobs before Station trust is ready.
+pub fn spawn_preflight_and_revalidation(
+    repository_factory: PgRepositoryFactory,
+    arkret_config: ArkretConfig,
+    http_client: reqwest::Client,
+    development_mode: bool,
+    first_provisioning: bool,
+    soft_shutdown: CancellationToken,
+    initial_retry_interval: Duration,
+    refresh_interval: Duration,
+) {
+    let initial_retry_interval = initial_retry_interval.max(Duration::from_secs(1));
+    let refresh_interval = refresh_interval.clamp(MIN_REFRESH_INTERVAL, MAX_REFRESH_INTERVAL);
+    let resolver = shared().clone();
+    tokio::spawn(async move {
+        loop {
+            let mut failure = None;
+            for server in &arkret_config.stations {
+                if let Err(error) = preflight_server(
+                    &repository_factory,
+                    &arkret_config,
+                    &http_client,
+                    server,
+                    development_mode,
+                    first_provisioning,
+                )
+                .await
+                {
+                    failure = Some((server, error));
+                    break;
+                }
+            }
+
+            match failure {
+                None => {
+                    tracing::info!("Station trust is ready; enabling Coauth business routes");
+                    break;
+                }
+                Some((server, error)) => {
+                    tracing::warn!(
+                        name = %server.name,
+                        endpoint = %server.endpoint,
+                        %error,
+                        retry_seconds = initial_retry_interval.as_secs(),
+                        "Station trust is not ready; Coauth bootstrap routes remain available",
+                    );
+                }
+            }
+
+            tokio::select! {
+                () = tokio::time::sleep(initial_retry_interval) => {}
+                () = soft_shutdown.cancelled() => return,
+            }
+        }
+
+        loop {
+            tokio::select! {
+                () = tokio::time::sleep(refresh_interval) => {
+                    revalidate_all(
+                        &repository_factory,
+                        &arkret_config,
+                        &http_client,
+                        &resolver,
+                        &soft_shutdown,
+                    )
+                    .await;
+                }
+                () = soft_shutdown.cancelled() => return,
+            }
+        }
+    });
 }
 
 fn delegate_owning_station_identity(

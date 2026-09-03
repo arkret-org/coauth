@@ -308,15 +308,13 @@ impl Options {
             };
             s.init_metrics();
             s.init_metadata_cache();
-            // Mandatory Station trust preflight: resolve the
-            // effective audience pin (explicit config pin, else persisted
-            // trust enrollment), verify every Station's identity
-            // chain online, and only then allow the business listeners below
-            // to bind. Any missing pin, unreachable server, invalid evidence,
-            // rollback or identity mismatch aborts startup with a non-zero
-            // exit code; the spawned background revalidation fatally shuts
-            // the process down on a runtime identity conflict.
-            coauth_backend::services::station_trust::preflight_and_spawn(
+            // Publish OIDC discovery and JWKS before waiting for the owning
+            // Station. A fresh Station needs the Account Authority public key
+            // from those endpoints to mint its DID, so an online preflight
+            // before binding would create a cold-start cycle. The backend
+            // router keeps every business route fail-closed with 503 until
+            // this background verifier installs the owning Station identity.
+            coauth_backend::services::station_trust::spawn_preflight_and_revalidation(
                 PgRepositoryFactory::new(pool.clone()),
                 s.arkret_config.clone(),
                 s.http_client.clone(),
@@ -325,10 +323,9 @@ impl Options {
                     || coauth_config::runtime_var("COAUTH_FIRST_PROVISIONING")
                         .is_ok_and(|value| value.trim() == "1"),
                 shutdown.soft_shutdown_token(),
+                coauth_backend::services::station_trust::DEFAULT_INITIAL_RETRY_INTERVAL,
                 coauth_backend::services::station_trust::DEFAULT_REFRESH_INTERVAL,
-            )
-            .await
-            .context("station trust preflight failed")?;
+            );
             s
         };
 

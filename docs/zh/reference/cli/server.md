@@ -27,6 +27,14 @@ coauth server [选项] -c <配置文件>
 5. **Worker 启动** — 启动后台任务 Worker（除非使用 `--no-worker`）
 6. **HTTP 监听** — 开始接受连接
 
+HTTP 监听不等待 Station trust 验证完成。OIDC discovery、公开 JWKS 和健康检查
+端点会立即可用；后台验证成功前，业务路由返回 `503`，`/readyz` 返回未就绪。
+
+## 健康与就绪检查
+
+服务通过 `/health` 和 `/healthz` 提供存活检查，通过 `/readyz` 提供就绪检查。
+`/readyz` 会检查 PostgreSQL、公开 JWKS 所需签名密钥以及 Station trust 是否就绪。
+
 ## 优雅关闭
 
 服务支持通过 `SIGTERM` 或 `SIGINT`（Ctrl+C）信号进行优雅关闭：

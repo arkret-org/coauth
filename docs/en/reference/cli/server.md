@@ -40,8 +40,9 @@ The server supports graceful shutdown via `SIGTERM` or `SIGINT` (Ctrl+C):
 ### Health and readiness checks
 
 The server exposes `/health` and `/healthz` for liveness checks, and
-`/readyz` for readiness. `/readyz` verifies that Postgres is reachable and
-that the configured signing keys can produce a public JWKS.
+`/readyz` for readiness. `/readyz` verifies that Postgres is reachable, that
+the configured signing keys can produce a public JWKS, and that configured
+Station trust is ready.
 
 ### Example: systemd service
 

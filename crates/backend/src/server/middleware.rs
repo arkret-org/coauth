@@ -15,6 +15,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::app_state::AppState;
 use crate::listener::ConnectionInfo;
+use crate::services::station_trust;
 
 pub(crate) const ARKRET_REQUEST_ID_HEADER: &str = "x-arkret-request-id";
 
@@ -454,6 +455,70 @@ impl Handler for InjectAppState {
     ) {
         depot.insert("app_state", self.0.clone());
         ctrl.call_next(req, depot, res).await;
+    }
+}
+
+/// Keep Coauth's business surface closed until its owning Station has been
+/// verified, while still exposing the two public documents a fresh Station
+/// needs in order to finish provisioning.
+#[derive(Clone)]
+pub(super) struct StationTrustGate(pub(super) AppState);
+
+fn is_station_trust_bootstrap_path(path: &str) -> bool {
+    [
+        "/.well-known/openid-configuration",
+        "/oauth/keys.json",
+        "/health",
+        "/healthz",
+        "/livez",
+        "/readyz",
+    ]
+    .iter()
+    .any(|allowed| path == *allowed || path.ends_with(allowed))
+}
+
+#[salvo::async_trait]
+impl Handler for StationTrustGate {
+    async fn handle(
+        &self,
+        req: &mut Request,
+        depot: &mut Depot,
+        res: &mut Response,
+        ctrl: &mut FlowCtrl,
+    ) {
+        if station_trust::is_ready(&self.0.arkret_config)
+            || is_station_trust_bootstrap_path(req.uri().path())
+        {
+            ctrl.call_next(req, depot, res).await;
+            return;
+        }
+
+        res.status_code(StatusCode::SERVICE_UNAVAILABLE);
+        res.headers_mut()
+            .insert("retry-after", HeaderValue::from_static("5"));
+        res.render(Json(serde_json::json!({
+            "ok": false,
+            "errcode": "station_trust_unavailable",
+            "error": "owning Station trust is not ready",
+            "retry_after_seconds": 5,
+        })));
+        ctrl.skip_rest();
+    }
+}
+
+#[cfg(test)]
+mod station_trust_gate_tests {
+    use super::is_station_trust_bootstrap_path;
+
+    #[test]
+    fn permits_only_bootstrap_and_health_paths() {
+        assert!(is_station_trust_bootstrap_path(
+            "/.well-known/openid-configuration"
+        ));
+        assert!(is_station_trust_bootstrap_path("/oauth/keys.json"));
+        assert!(is_station_trust_bootstrap_path("/prefix/readyz"));
+        assert!(!is_station_trust_bootstrap_path("/oauth/token"));
+        assert!(!is_station_trust_bootstrap_path("/_arkret/gate/account"));
     }
 }
 

@@ -8,10 +8,12 @@ use coauth_config::ArkretConfig;
 use coauth_keystore::Keystore;
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use http::HeaderValue;
 use salvo::prelude::*;
 use tracing::{Instrument, info_span};
 
 use crate::salvo_utils::InternalError;
+use crate::services::station_trust;
 
 /// Process liveness must not depend on PostgreSQL or signing-key readiness.
 #[handler]
@@ -22,31 +24,44 @@ pub async fn livez() -> &'static str {
 #[handler]
 pub async fn get(depot: &Depot) -> Result<Json<serde_json::Value>, InternalError> {
     check_postgres(depot).await?;
-    Ok(Json(health_payload(depot)))
+    Ok(Json(health_payload(depot, true)))
 }
 
 #[handler]
 pub async fn readyz(
     depot: &Depot,
-    _res: &mut Response,
+    res: &mut Response,
 ) -> Result<Json<serde_json::Value>, InternalError> {
     check_postgres(depot).await?;
     check_jwks(depot)?;
-    Ok(Json(health_payload(depot)))
+    let station_trust_ready = station_trust_ready(depot);
+    if !station_trust_ready {
+        res.status_code(StatusCode::SERVICE_UNAVAILABLE);
+        res.headers_mut()
+            .insert("retry-after", HeaderValue::from_static("5"));
+    }
+    Ok(Json(health_payload(depot, station_trust_ready)))
 }
 
-fn health_payload(depot: &Depot) -> serde_json::Value {
+fn health_payload(depot: &Depot, ok: bool) -> serde_json::Value {
     let owning_station = depot
         .get::<ArkretConfig>("arkret_config")
         .ok()
         .and_then(|config| config.owning_station())
         .map(|station| station.name.clone());
     serde_json::json!({
-        "ok": true,
+        "ok": ok,
         "service": "coauth",
         "component_role": "station_account_authority",
         "owning_station": owning_station,
+        "station_trust": if station_trust_ready(depot) { "ready" } else { "waiting" },
     })
+}
+
+fn station_trust_ready(depot: &Depot) -> bool {
+    depot
+        .get::<ArkretConfig>("arkret_config")
+        .is_ok_and(station_trust::is_ready)
 }
 
 async fn check_postgres(depot: &Depot) -> Result<(), InternalError> {

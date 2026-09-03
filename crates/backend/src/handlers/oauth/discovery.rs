@@ -33,7 +33,8 @@ struct DiscoveryDocument {
     arkret_supported_scopes: Vec<String>,
 
     #[serde(rename = "org.arkret.admin_audience")]
-    arkret_admin_audience: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    arkret_admin_audience: Option<String>,
 
     #[serde(rename = "org.arkret.identity_registry")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -65,6 +66,21 @@ static DISCOVERY: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::
 #[handler]
 #[tracing::instrument(name = "handlers.oauth.discovery.get", skip_all)]
 pub async fn get(depot: &Depot) -> Json<serde_json::Value> {
+    let arkret_config = depot
+        .get::<ArkretConfig>("arkret_config")
+        .cloned()
+        .unwrap_or_default();
+    // During cold start the owning Station identity is deliberately absent.
+    // Serve an uncached standard OIDC document so Soland can discover JWKS;
+    // once trust is ready, cache the complete document including Arkret's
+    // Station-scoped admin audience.
+    if discovery_admin_audience(&arkret_config).is_none() {
+        let Json(response) = build_response(depot);
+        return Json(
+            serde_json::to_value(response)
+                .expect("serializing the discovery document into a Value should never fail"),
+        );
+    }
     // Populate the cache from the depot values on first request; clone the
     // cached JSON value on every subsequent request.
     let value = DISCOVERY.get_or_init(|| {
@@ -73,6 +89,15 @@ pub async fn get(depot: &Depot) -> Json<serde_json::Value> {
             .expect("serializing the discovery document into a Value should never fail")
     });
     Json(value.clone())
+}
+
+fn discovery_admin_audience(arkret_config: &ArkretConfig) -> Option<String> {
+    arkret_config.admin_audience.clone().or_else(|| {
+        arkret_config
+            .runtime_owning_station_identity
+            .get()
+            .map(|identity| identity.station_id.to_string())
+    })
 }
 
 /// Build the discovery document from the depot values, without caching.
@@ -286,7 +311,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
             scope::ARKRET_STATION.to_string(),
             scope::ARKRET_STATION_SESSION_BIND.to_string(),
         ],
-        arkret_admin_audience: arkret::required_audience_for(url_builder, &arkret_config),
+        arkret_admin_audience: discovery_admin_audience(&arkret_config),
         arkret_identity_registry,
     })
 }
@@ -358,6 +383,20 @@ mod tests {
         assert_eq!(userinfo_algs.len(), 2);
         assert!(userinfo_algs.contains(&"ES512"));
         assert!(userinfo_algs.contains(&"Ed25519"));
+    }
+
+    #[tokio::test]
+    async fn cold_start_discovery_serves_jwks_without_station_identity() {
+        crate::handlers::test_utils::setup();
+
+        let mut depot = test_depot();
+        depot.insert("arkret_config", ArkretConfig::default());
+        let Json(response) = build_response(&depot);
+        let body = serde_json::to_value(response).unwrap();
+
+        assert_eq!(body["issuer"], "https://example.com/");
+        assert_eq!(body["jwks_uri"], "https://example.com/oauth/keys.json");
+        assert!(body.get("org.arkret.admin_audience").is_none());
     }
 
     #[tokio::test]

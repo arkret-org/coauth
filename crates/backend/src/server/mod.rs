@@ -20,7 +20,9 @@ pub(crate) mod routers;
 pub(crate) use middleware::{
     ARKRET_REQUEST_ID_HEADER, arkret_operation_selector_middleware, arkret_request_id_middleware,
 };
-use middleware::{InjectAppState, RequestTimeout, favicon_handler, public_oidc_browser_cors};
+use middleware::{
+    InjectAppState, RequestTimeout, StationTrustGate, favicon_handler, public_oidc_browser_cors,
+};
 pub use middleware::{
     cache_control_middleware, log_response_middleware, override_response_csp,
     override_response_frame_options, security_headers_middleware, sentry_middleware,
@@ -95,7 +97,8 @@ pub fn build_router(
 
     // Add state injection middleware at the top level
     router = router
-        .hoop(InjectAppState(state))
+        .hoop(InjectAppState(state.clone()))
+        .hoop(StationTrustGate(state))
         .hoop(salvo::http::request::SecureMaxSize::new(max_body_bytes));
 
     if let Some(duration) = request_timeout {

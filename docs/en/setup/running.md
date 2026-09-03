@@ -70,7 +70,9 @@ The service exposes `/health`, `/healthz`, and `/readyz` on the internal
 listener (default `localhost:8091`). `/health` and `/healthz` return
 `200 OK` with body `ok` when the configured Postgres pool is reachable.
 `/readyz` also checks that the public JWKS can be materialized from the
-configured signing keys.
+configured signing keys and that configured Station trust is ready. During a
+cold start, OIDC discovery and `/oauth/keys.json` remain available while other
+business routes return `503` until Station verification succeeds.
 
 ```sh
 curl --fail http://localhost:8091/health

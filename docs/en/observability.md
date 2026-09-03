@@ -115,8 +115,9 @@ The `health` resource exposes three probe endpoints:
 
 - `/health`: liveness-style check; verifies the Postgres pool is reachable.
 - `/healthz`: alias of `/health`.
-- `/readyz`: readiness check; verifies Postgres is reachable and the public
-  JWKS can be materialized from the configured signing keys.
+- `/readyz`: readiness check; verifies Postgres is reachable, the public JWKS
+  can be materialized from the configured signing keys, and every configured
+  Station has completed online trust verification.
 
 Use `/healthz` for liveness and `/readyz` for readiness in orchestrators.
 

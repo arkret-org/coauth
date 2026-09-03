@@ -46,6 +46,13 @@ and endpoint bindings) and persists the verified pin plus an audit entry.
 It is idempotent: re-running it with an unchanged identity succeeds without
 altering the pin.
 
+The Coauth HTTP server does not wait for this verification before binding. It
+publishes OIDC discovery, its public JWKS and health endpoints first so a fresh
+Station can obtain the Account Authority key. Business routes remain
+fail-closed with `503`, and `/readyz` remains unavailable, until background
+verification succeeds. Task workers still require the synchronous preflight
+before processing jobs.
+
 After a legitimate identity genesis (new SCID), replace the pin explicitly:
 
 ```console
