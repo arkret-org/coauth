@@ -13,7 +13,7 @@ use crate::handlers::arkret::{
 };
 use crate::handlers::common::DepotExt as _;
 use crate::services::did_binding_proof::verify_detached_jws_against_method;
-use crate::services::peer_protocol_client::PeerProtocolClient;
+use crate::services::peer_protocol_client::{PeerProtocolClient, PeerProtocolClientError};
 
 pub(crate) async fn acquire_human_device_binding(
     depot: &Depot,
@@ -83,7 +83,7 @@ pub(crate) async fn acquire_human_device_binding(
     let outcome = client
         .post_device_revocation_gate_check(&request)
         .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        .map_err(map_gate_peer_error)?;
     verify_gate_receipt(depot, &outcome).await?;
 
     match outcome.decision_receipt.decision {
@@ -190,4 +190,61 @@ fn gate_protocol_error(error: impl ToString) -> ArkretRouteError {
             error.to_string()
         ),
     )
+}
+
+fn map_gate_peer_error(error: PeerProtocolClientError) -> ArkretRouteError {
+    match error {
+        error @ PeerProtocolClientError::Status(400..=499) => ArkretRouteError::coded(
+            StatusCode::BAD_GATEWAY,
+            arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            format!("origin Station rejected the device revocation gate request: {error}"),
+        ),
+        error @ (PeerProtocolClientError::Status(_) | PeerProtocolClientError::Response(_)) => {
+            ArkretRouteError::coded(
+                StatusCode::BAD_GATEWAY,
+                arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                format!(
+                    "origin Station returned an invalid device revocation gate response: {error}"
+                ),
+            )
+        }
+        error @ (PeerProtocolClientError::Http(_)
+        | PeerProtocolClientError::BaseUrlNotConfigured) => ArkretRouteError::coded(
+            StatusCode::SERVICE_UNAVAILABLE,
+            arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
+            format!("origin Station device revocation gate is unavailable: {error}"),
+        ),
+        error => ArkretRouteError::Internal(Box::new(error)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn peer_client_rejection_is_not_rendered_as_an_internal_error() {
+        let error = map_gate_peer_error(PeerProtocolClientError::Status(400));
+        assert!(matches!(
+            error,
+            ArkretRouteError::Coded {
+                status: StatusCode::BAD_GATEWAY,
+                code: arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn peer_transport_failure_is_service_unavailable() {
+        let error = map_gate_peer_error(PeerProtocolClientError::Http("offline".to_owned()));
+        assert!(matches!(
+            error,
+            ArkretRouteError::Coded {
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                code: arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
+                ..
+            }
+        ));
+    }
 }
