@@ -263,8 +263,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         }
     };
 
-    let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)?;
     let session_public_key: coauth_jose::jwk::PublicJsonWebKey =
         serde_json::from_str(initial.session_public_key.as_str())
             .map_err(|error| signature_invalid(error.to_string()))?;
@@ -309,8 +308,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         handoff.cnf_jkt.clone(),
         device_binding,
         SessionGrantProofKind::AccountHandoff,
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    )?;
     let wire_grant = SessionGrantOutcome {
         account_id: material.account_id.clone(),
         device_id: Some(initial.device_id.clone()),
@@ -324,12 +322,10 @@ pub async fn issue_recovery_completion_grant_endpoint(
     };
     let outcome = IssueRecoveryCompletionGrantOutcome {
         transaction_id: request.transaction_id.clone(),
-        session_grant_outcome: serde_json::to_value(wire_grant)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        session_grant_outcome: serde_json::to_value(wire_grant)?,
         issued_at: issuance_seed.not_before,
     };
-    let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)?;
 
     // The deployment permits reactivation, but only here: the terminal PCR
     // recovery evidence, replacement-device generation check, AccountStatus
@@ -409,8 +405,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         "transaction_id": request.transaction_id.to_string(),
         "terminal_receipt_id": receipt.receipt_id.to_string(),
         "device_authorization_event_id": request.device_authorization_event_id.to_string(),
-        "result_model_generation_ref": serde_json::to_value(request.result_model_generation_ref)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        "result_model_generation_ref": serde_json::to_value(request.result_model_generation_ref)?,
     });
     let authorization_ref = format!("account-handoff:{}", handoff.id);
     let committed = repo
@@ -453,8 +448,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         }
     }
 
-    let generation = serde_json::to_value(request.result_model_generation_ref)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let generation = serde_json::to_value(request.result_model_generation_ref)?;
     let inserted = repo
         .recovery_authority()
         .insert_completion_issuance(NewRecoveryCompletionGrantIssuance {

@@ -160,7 +160,7 @@ async fn query_consent_cell_scope(
     http_client: &reqwest::Client,
 ) -> ConsentScopeLookup {
     let path = "_arkret/self/consent/cell";
-    let mut url = match base.join(&path) {
+    let mut url = match base.join(path) {
         Ok(u) => u,
         Err(error) => {
             warn!(
@@ -290,7 +290,7 @@ pub fn evaluate_invite_gate(
             if state
                 .tags
                 .iter()
-                .any(|t| t == &want_scoped || t == &want_any)
+                .any(|t| t == &want_scoped || t == want_any)
             {
                 InviteGateDecision::Allow
             } else if consent_required {
@@ -314,30 +314,6 @@ pub fn evaluate_invite_gate(
                 InviteGateDecision::Quarantine
             }
         }
-    }
-}
-
-// `urlencoding` is not in the dependency graph; replicate the tiny piece we
-// need with a private adapter so we don't pull in a new crate.
-mod urlencoding {
-    /// Percent-encode a path segment. Matches the small subset of RFC 3986
-    /// `pchar` that the consent cell id uses (`a-z A-Z 0-9 . - _ : *`).
-    pub fn encode_path(s: &str) -> String {
-        let mut out = String::with_capacity(s.len());
-        for b in s.bytes() {
-            let safe = matches!(
-                b,
-                b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9'
-                    | b'.' | b'-' | b'_' | b'~' | b':' | b'*'
-            );
-            if safe {
-                out.push(b as char);
-            } else {
-                use std::fmt::Write as _;
-                let _ = write!(out, "%{b:02X}");
-            }
-        }
-        out
     }
 }
 
@@ -427,10 +403,7 @@ mod tests {
                 "Arkret-Operation",
                 arkret_wire::ServiceOperationId::SELF_CONSENT_RESOURCE_GET_V1,
             ))
-            .and(query_param(
-                "peer",
-                &serde_json::to_string(&peer()).unwrap(),
-            ))
+            .and(query_param("peer", serde_json::to_string(&peer()).unwrap()))
             .and(query_param("consent_scope", "invite"))
             .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("invite")))
             .expect(1)
@@ -469,10 +442,7 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path_regex(r"^/_arkret/self/consent/cell$"))
-            .and(query_param(
-                "peer",
-                &serde_json::to_string(&peer()).unwrap(),
-            ))
+            .and(query_param("peer", serde_json::to_string(&peer()).unwrap()))
             .and(query_param("consent_scope", "invite"))
             .respond_with(ResponseTemplate::new(200).set_body_json(cell))
             .expect(1)

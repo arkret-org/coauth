@@ -12,10 +12,7 @@ use salvo::prelude::*;
 use serde::Serialize;
 
 use super::site_config::from_site_config;
-use super::{
-    DepotExt, NodeType, RouteError, extract_bound_activity_tracker, extract_session_info,
-    get_requester, make_clock, parse_user_agent,
-};
+use super::{DepotExt, NodeType, RouteError, make_clock, parse_user_agent};
 use crate::handlers::account::service::connections::load_linked_accounts;
 use crate::handlers::arkret;
 use crate::services::user_profile::load_viewer_profile;
@@ -29,19 +26,14 @@ pub async fn get_viewer(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<ViewerOutcome>, RouteError> {
-    let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let station = depot.station()?;
     let clock = make_clock();
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
     let (requester, mut repo) =
-        get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     let (viewer, viewer_session) = match &requester.entity {
         super::RequestingEntity::BrowserSession(session) => {
@@ -179,15 +171,10 @@ pub async fn get_security_summary(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<SecuritySummaryData>, RouteError> {
-    let repo_factory = depot.repo_factory()?;
     let clock = make_clock();
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
     let (requester, mut repo) =
-        get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     let user = match &requester.entity {
         super::RequestingEntity::BrowserSession(session) => &session.user,
@@ -260,15 +247,10 @@ pub async fn get_viewer_overview(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<ViewerOverviewOutcome>, RouteError> {
-    let repo_factory = depot.repo_factory()?;
     let clock = make_clock();
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
     let (requester, mut repo) =
-        get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     let user = match &requester.entity {
         super::RequestingEntity::BrowserSession(session) => &session.user,

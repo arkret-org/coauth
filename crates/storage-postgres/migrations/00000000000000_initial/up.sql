@@ -1224,7 +1224,6 @@ CREATE TABLE public.user_session_authentications (
     user_password_id uuid,
     upstream_oauth_authorization_session_id uuid,
     webauthn_credential_id uuid,
-    authentication_source text,
     created_at timestamp with time zone NOT NULL,
     CONSTRAINT user_session_authentications_single_method_check CHECK (
         num_nonnulls(

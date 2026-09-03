@@ -205,6 +205,36 @@ impl From<coauth_data::RepositoryError> for ArkretRouteError {
     }
 }
 
+/// Declare `From<$error> for ArkretRouteError` mapping onto
+/// [`ArkretRouteError::Internal`].
+///
+/// Only failures that a well-formed request can never provoke belong here:
+/// canonicalisation and serialisation of server-built values, wire validation
+/// of an outcome this process just constructed, and identifier construction
+/// from server-side material. Anything derived from the request body or a
+/// remote peer MUST keep an explicit `map_err` that picks the right 4xx code —
+/// a bare `?` on such a value would silently answer `500` where the registry
+/// requires `param_invalid`, `schema_violation` or a peer-specific code.
+macro_rules! internal_route_error_from {
+    ($($error:ty),+ $(,)?) => {
+        $(
+            impl From<$error> for ArkretRouteError {
+                fn from(value: $error) -> Self {
+                    Self::Internal(Box::new(value))
+                }
+            }
+        )+
+    };
+}
+
+internal_route_error_from!(
+    arkret_canonical::CanonicalError,
+    arkret_identifiers::IdentifierError,
+    arkret_wire::WireError,
+    serde_json::Error,
+    SessionGrantError,
+);
+
 impl From<crate::AppError> for ArkretRouteError {
     fn from(value: crate::AppError) -> Self {
         let status = value.status();
@@ -238,6 +268,24 @@ impl From<crate::AppError> for ArkretRouteError {
             _ => Self::coded(status, arkret_wire::ErrorCode::INTERNAL_ERROR, message),
         }
     }
+}
+
+/// Resolve the `kid` of the preferred service signing key.
+///
+/// A session-grant reservation stamps the operation with the key that will
+/// later sign the credential, so the reservation and the issuance cannot drift
+/// onto different keys. A keystore without a usable key is a deployment
+/// misconfiguration, never a request failure, which is why both arms collapse
+/// onto [`SessionGrantError::NoSigningKey`].
+pub(crate) fn preferred_signing_key_id(
+    key_store: &coauth_keystore::Keystore,
+) -> Result<String, ArkretRouteError> {
+    let (_, signing_key) = crate::services::preferred_service_signing_key(key_store)
+        .ok_or(SessionGrantError::NoSigningKey)?;
+    Ok(signing_key
+        .kid()
+        .ok_or(SessionGrantError::NoSigningKey)?
+        .to_owned())
 }
 
 /// Authorization decision for a session-grant administrative endpoint.
@@ -367,8 +415,7 @@ pub(crate) async fn require_session_grant_caller(
             let access = repo
                 .oauth_access_token()
                 .find_by_token(token)
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+                .await?
                 .ok_or_else(|| ArkretRouteError::Unauthorized("unknown access token".to_owned()))?;
             // SEC-SG-EXPIRY / REL-04: reject revoked or expired access tokens.
             if !access.is_valid(now) {
@@ -380,8 +427,7 @@ pub(crate) async fn require_session_grant_caller(
             let session = repo
                 .oauth_session()
                 .lookup(access.session_id)
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+                .await?
                 .ok_or_else(|| {
                     ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                         "access token references missing session",
@@ -400,8 +446,7 @@ pub(crate) async fn require_session_grant_caller(
             let access = repo
                 .personal_access_token()
                 .find_by_token(token)
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+                .await?
                 .ok_or_else(|| ArkretRouteError::Unauthorized("unknown access token".to_owned()))?;
             // SEC-SG-EXPIRY / REL-04: reject revoked or expired personal tokens.
             if !access.is_valid(now) {
@@ -413,8 +458,7 @@ pub(crate) async fn require_session_grant_caller(
             let session = repo
                 .personal_session()
                 .lookup(access.session_id)
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+                .await?
                 .ok_or_else(|| {
                     ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                         "access token references missing session",
@@ -1096,8 +1140,7 @@ pub async fn debug_issue_dpop_grant(
     let binding = repo
         .principal_did()
         .get_by_principal_id_and_audience(body.actor_id.trim(), audience_id.as_str())
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .await?
         .ok_or_else(|| {
             ArkretRouteError::coded(
                 StatusCode::PRECONDITION_FAILED,
@@ -1108,8 +1151,7 @@ pub async fn debug_issue_dpop_grant(
     let user = repo
         .user()
         .lookup(binding.user_id)
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .await?
         .ok_or(ArkretRouteError::NotFound)?;
     binding.account_id.validate().map_err(|error| {
         ArkretRouteError::coded(
@@ -1131,8 +1173,7 @@ pub async fn debug_issue_dpop_grant(
         "test_operation": "issue_dpop_grant",
         "request": body,
         "holder_jkt": jkt,
-    }))
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    }))?;
     let canonical_intent_digest: [u8; 32] = arkret_canonical::sha256_bytes(&canonical_intent);
     let request_identity = format!("cotest:sha256:{}", hex::encode(canonical_intent_digest));
     let not_before = arkret_canonical::normalize_timestamp_canonical(clock.now());
@@ -1164,8 +1205,7 @@ pub async fn debug_issue_dpop_grant(
                 retained_until: expires_at + chrono::Duration::days(7),
             },
         )
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        .await?;
     let operation = match reserved {
         coauth_data::SessionGrantReserveOutcome::Reserved(operation) => operation,
         coauth_data::SessionGrantReserveOutcome::Pending(operation)
@@ -1215,27 +1255,23 @@ pub async fn debug_issue_dpop_grant(
     let browser_session = repo
         .browser_session()
         .add(&mut rng, &*clock, &user, user_agent)
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        .await?;
 
     let material = issue_test_session_grant_for_audience(
-        &SessionGrantIssuanceSeed::from_operation(&operation)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        &SessionGrantIssuanceSeed::from_operation(&operation)?,
         &*clock,
         &arkret_config,
         &key_store,
         &browser_session,
         public_jwk,
         audience_id,
-        arkret_identifiers::DeviceId::new(body.device_id.clone())
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        arkret_identifiers::DeviceId::new(body.device_id.clone())?,
         scopes,
         Some(&principal_id),
         &account_id,
         jkt.clone(),
         arkret_models_identity::SessionGrantDeviceBinding {
-            device_id: arkret_identifiers::DeviceId::new(body.device_id.clone())
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            device_id: arkret_identifiers::DeviceId::new(body.device_id.clone())?,
             authorization_event_id: arkret_identifiers::EventId::new(
                 "ak:event:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e",
             )
@@ -1243,8 +1279,7 @@ pub async fn debug_issue_dpop_grant(
             model_generation_ref: 1,
         },
         arkret_models_identity::SessionGrantProofKind::AccountHandoff,
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    )?;
     let outcome = DebugIssueDpopGrantOutcome {
         grant_id: material.grant_id.to_string(),
         grant_jwt: material.grant_jwt.clone(),
@@ -1256,8 +1291,7 @@ pub async fn debug_issue_dpop_grant(
         expires_at: material.expires_at.clone(),
         principal_id,
     };
-    let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)?;
     let checkpoint = serde_json::json!({
         "kind": "cotest_issue_dpop_grant",
         "request_identity": request_identity,
@@ -1274,8 +1308,7 @@ pub async fn debug_issue_dpop_grant(
         Some(browser_session.id),
         &material,
     )
-    .await
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    .await?;
     let chaos_committed = matches!(
         &committed,
         coauth_data::SessionGrantCommitOutcome::Committed(_)

@@ -10,7 +10,6 @@ use super::{
     DepotExt, NodeType, RouteError, extract_bound_activity_tracker, extract_session_info,
     get_requester, make_clock, make_rng,
 };
-use crate::handlers::RequesterFingerprint;
 use crate::handlers::account::service::password::{ChangePasswordError, change_password};
 use crate::handlers::account::service::recovery::{
     AccountRecoveryCompletion, AccountRecoveryTrustBoundary, CompleteAccountRecoveryError,
@@ -88,18 +87,14 @@ pub async fn set_password(
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
-    let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let password_manager = depot.password_manager()?;
     let limiter = depot.limiter()?;
     let clock = make_clock();
     let mut rng = make_rng();
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
-    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+    let (requester, repo) =
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     let user_id = NodeType::User.extract_ulid(&input.user_id)?;
 
@@ -266,10 +261,7 @@ pub async fn set_password_by_recovery(
     // COA-SEC-05: per-IP gate so a held ticket cannot drive repeated
     // password-hash computation. Mirrors the start/resend recovery paths, which
     // already rate-limit; the completion endpoint previously had none.
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let requester = activity_tracker
-        .ip()
-        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
+    let requester = extract_bound_activity_tracker(req, depot).requester_fingerprint();
     if let Err(error) = limiter.check_account_recovery_completion(requester).await {
         tracing::warn!(error = &error as &dyn std::error::Error);
         return Ok(Json(SetPasswordOutcome::status("RATE_LIMITED")));

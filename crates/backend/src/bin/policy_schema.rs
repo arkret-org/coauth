@@ -11,7 +11,7 @@
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-use coauth_policy::model::{
+use coauth_backend::policy::{
     AuthorizationGrantInput, ClientRegistrationInput, EmailInput, RegisterInput,
 };
 use schemars::JsonSchema;

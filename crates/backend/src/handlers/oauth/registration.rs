@@ -11,7 +11,6 @@ use coauth_oauth_types::registration::{
     ClientMetadata, ClientMetadataVerificationError, ClientRegistrationResponse, Localized,
     VerifiedClientMetadata,
 };
-use coauth_policy::{EvaluationResult, PolicyFactory, PolicyInstance};
 use opentelemetry::metrics::Counter;
 use opentelemetry::{Key, KeyValue};
 use psl::Psl;
@@ -26,6 +25,7 @@ use tracing::info;
 use url::Url;
 
 use crate::handlers::METER;
+use crate::policy::{EvaluationResult, PolicyFactory, PolicyInstance};
 
 static REGISTRATION_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER
@@ -55,8 +55,8 @@ pub(crate) enum RouteError {
 }
 
 impl_from_error_for_route!(coauth_data::RepositoryError);
-impl_from_error_for_route!(coauth_policy::LoadError);
-impl_from_error_for_route!(coauth_policy::EvaluationError);
+impl_from_error_for_route!(crate::policy::LoadError);
+impl_from_error_for_route!(crate::policy::EvaluationError);
 impl_from_error_for_route!(coauth_keystore::aead::Error);
 impl_from_error_for_route!(serde_json::Error);
 
@@ -284,9 +284,9 @@ async fn handle_post(
     }
 
     let res = policy
-        .evaluate_client_registration(coauth_policy::ClientRegistrationInput {
+        .evaluate_client_registration(crate::policy::ClientRegistrationInput {
             client_metadata: &metadata,
-            requester: coauth_policy::Requester {
+            requester: crate::policy::Requester {
                 ip_address: activity_tracker.ip(),
                 user_agent,
                 ..Default::default()

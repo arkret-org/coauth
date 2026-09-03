@@ -44,10 +44,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 use url::Url;
 
-use super::{
-    DepotExt, RouteError, extract_bound_activity_tracker, extract_session_info, get_requester,
-    make_clock,
-};
+use super::{DepotExt, RouteError, make_clock};
 use crate::handlers::account::consent_cell_query::{
     InviteGateDecision, evaluate_invite_gate, query_consent_cell,
 };
@@ -144,8 +141,8 @@ fn invite_delivery_target(
         .map_err(|_| RouteError::BadRequest("invalid_principal_url".to_owned()))?;
     let mut known_station = false;
     for station in &config.stations {
-        if !station_trust::effective_audience(station, resolver)
-            .is_some_and(|service_id| service_id == account_id.station_id)
+        if station_trust::effective_audience(station, resolver)
+            .is_none_or(|service_id| service_id != account_id.station_id)
         {
             continue;
         }
@@ -336,13 +333,9 @@ pub async fn post_invite_relay(
     // (the `/_coauth` parent router only mounts CORS). Mirror the standard
     // `self/` auth pattern (`viewer`, `sessions`): require an authenticated
     // requester, then bind the relay to that identity.
-    let repo_factory = depot.repo_factory()?;
     let clock = make_clock();
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-    let repo = repo_factory.create().await?;
     let (requester, mut repo) =
-        get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     let user = requester.user().ok_or(RouteError::Unauthorized)?;
 

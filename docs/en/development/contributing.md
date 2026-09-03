@@ -66,13 +66,10 @@ Most of them can be updated from the repository root by running:
 - `sh ./misc/update.sh` on macOS/Linux
 - `pwsh -File ./misc/update.ps1` on Windows
 
-Translations are hand-maintained Fluent files under `translations/`. To list the
-translation keys the templates actually reference, run the scanner and compare
-its output against `translations/en.ftl`:
-
-```bash
-cargo run -p coauth-i18n-scan -- ./templates/
-```
+Translations are hand-maintained Fluent files under `translations/`. The
+templates that reference them live under `templates/`; keep the key set in
+`translations/en.ftl` and `translations/zh.ftl` in step with the `_()` calls
+there.
 
 Make sure your code adheres to our Rust code style by running:
 

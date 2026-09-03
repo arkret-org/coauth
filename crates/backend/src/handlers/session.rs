@@ -9,7 +9,8 @@
 use coauth_data::oauth::OAuthSessionFilter;
 use coauth_data::personal::PersonalSessionFilter;
 use coauth_data::{BoxRepository, RepositoryError, User};
-use coauth_policy::model::SessionCounts;
+
+use crate::policy::model::SessionCounts;
 
 /// Count all active sessions belonging to the given user, for use in
 /// session-limit enforcement.

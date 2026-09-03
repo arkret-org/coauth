@@ -32,3 +32,25 @@ pub use types::{
 pub(crate) use types::{
     SessionGrantIssuanceSeed, SessionGrantRecord, SessionGrantTarget, account_lifecycle_status,
 };
+
+/// Map a stored grant lifecycle onto the wire replay state, or `None` when the
+/// grant is still `Active` and therefore has no terminal state to report.
+///
+/// The `Active` arm is deliberately left to the caller: `issue`/`revoke` reach
+/// this code only after an `!= Active` guard and treat it as unreachable, while
+/// `refresh`'s ledger outcome can legitimately carry an active predecessor and
+/// answers `session_grant_replay_expired` instead. Collapsing the two into one
+/// helper would force one of those two behaviours onto the other.
+pub(crate) const fn replay_terminal_state(
+    state: coauth_data::SessionGrantLifecycleState,
+) -> Option<arkret_wire::SessionGrantReplayTerminalState> {
+    match state {
+        coauth_data::SessionGrantLifecycleState::Revoked => {
+            Some(arkret_wire::SessionGrantReplayTerminalState::Revoked)
+        }
+        coauth_data::SessionGrantLifecycleState::Superseded => {
+            Some(arkret_wire::SessionGrantReplayTerminalState::Superseded)
+        }
+        coauth_data::SessionGrantLifecycleState::Active => None,
+    }
+}

@@ -25,7 +25,7 @@ pub fn OAuthSessionCard(session: OAuthSessionData) -> Element {
     let device_type = session
         .user_agent
         .as_ref()
-        .map_or(DeviceType::Unknown, |ua| ua.device_type.clone());
+        .map_or(DeviceType::Unknown, |ua| ua.device_type);
     let name = session_display_name(&session);
     let client_name = session
         .client

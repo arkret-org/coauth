@@ -21,7 +21,6 @@ use coauth_data::user::{
     PrincipalDidRepository as _, UserRepository as _, VerifiedPrincipalDidBindingInput,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
-use coauth_jose::constraints::Constrainable as _;
 use salvo::prelude::*;
 use signature::RandomizedSigner as _;
 
@@ -34,8 +33,7 @@ use super::session_grant::{
     persist_session_grant,
 };
 use super::{
-    ArkretRouteError, DepotExt, SessionGrantError, owning_station_did_for, owning_station_id_for,
-    trust_domain_for,
+    ArkretRouteError, DepotExt, owning_station_did_for, owning_station_id_for, trust_domain_for,
 };
 use crate::handlers::account::auth::oidc_bridge::{
     VerifiedPrincipalIdentity, ensure_soland_account_registered,
@@ -190,12 +188,7 @@ pub async fn account_register_endpoint(
         .ok_or_else(|| failed_precondition("originating browser session no longer exists"))?;
     prerequisite_repo.cancel().await.ok();
     let key_store = depot.key_store()?;
-    let (_, session_signing_key) = crate::services::preferred_service_signing_key(&key_store)
-        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
-    let session_signing_key_id = session_signing_key
-        .kid()
-        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?
-        .to_owned();
+    let session_signing_key_id = super::preferred_signing_key_id(&key_store)?;
     let validated = arkret_signatures::webvh::verify_identity_creation_control_proof(
         &identity_creation.did_operation,
         &identity_creation.control_proof,
@@ -322,9 +315,7 @@ pub async fn account_register_endpoint(
     pcr_request
         .validate()
         .map_err(|error| proof_invalid(error.to_string()))?;
-    let pcr_request_digest = pcr_request
-        .canonical_request_digest()
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let pcr_request_digest = pcr_request.canonical_request_digest()?;
     let pcr_outcome = if matches!(
         context.lease.state,
         IdentityCreationLeaseState::Reserved | IdentityCreationLeaseState::DidPublished
@@ -333,8 +324,7 @@ pub async fn account_register_endpoint(
         let trust_domain = arkret_identifiers::TrustDomainId::new(trust_domain_for(
             &depot.url_builder()?,
             &config,
-        ))
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        ))?;
         let http_client = depot.http_client()?;
         let key_store = depot.key_store()?;
         let peer = PeerProtocolClient::new(
@@ -427,8 +417,7 @@ pub async fn account_register_endpoint(
                     error.to_owned(),
                 ))
             })?,
-            payload_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            payload_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: now,
             domain: None,
             audience: None,
@@ -491,10 +480,8 @@ pub async fn account_register_endpoint(
                             accepted_id: station.service_id.clone(),
                             binding_version: 1,
                             binding_frontier_digest: arkret_identifiers::Hash::new(
-                                arkret_canonical::canonical_sha256(&receipt)
-                                    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-                            )
-                            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+                                arkret_canonical::canonical_sha256(&receipt)?,
+                            )?,
                             account_id: account_id.clone(),
                             principal_control_realm_id: identity_creation
                                 .control_proof
@@ -581,8 +568,7 @@ pub async fn account_register_endpoint(
         now,
         now + depot.arkret_config()?.session_grant_ttl,
         session_signing_key_id,
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    )?;
     let initial = &identity_creation.initial_session;
     let session_public_key: coauth_jose::jwk::PublicJsonWebKey =
         serde_json::from_str(initial.session_public_key.as_str())
@@ -616,8 +602,7 @@ pub async fn account_register_endpoint(
         grant.cnf_jkt.clone(),
         device_binding,
         arkret_models_identity::SessionGrantProofKind::AccountHandoff,
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    )?;
     persist_session_grant(&mut repo, &mut *rng, &*clock, &browser_session, &material).await?;
     let session_grant_outcome = SessionGrantOutcome {
         account_id: material.account_id.clone(),
@@ -647,8 +632,7 @@ pub async fn account_register_endpoint(
         .validate_against_request(&body)
         .inspect_err(|error| {
             tracing::error!(%error, "identity-creation outcome validation failed");
-        })
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        })?;
     let completion = repo
         .account_handoff()
         .mark_completed(&context, &request_digest, &outcome, now)
@@ -742,18 +726,13 @@ fn sign_account_binding_receipt(
     receipt: &mut AccountBindingReceipt,
     key_store: &coauth_keystore::Keystore,
 ) -> Result<(), ArkretRouteError> {
-    let payload_digest = receipt
-        .canonical_payload_digest()
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let payload_digest = receipt.canonical_payload_digest()?;
     receipt.proof.payload_digest = payload_digest.clone();
-    let payload = receipt
-        .canonical_proof_binding_bytes()
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let payload = receipt.canonical_proof_binding_bytes()?;
     let algorithm = JsonWebSignatureAlg::Ed25519;
     let header = coauth_jose::jwt::JsonWebSignatureHeader::new(algorithm)
         .with_kid(receipt.proof.verification_method.to_string());
-    let protected =
-        serde_json::to_vec(&header).map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let protected = serde_json::to_vec(&header)?;
     let protected = Base64UrlUnpadded::encode_string(&protected);
     let payload = Base64UrlUnpadded::encode_string(&payload);
     let signing_input = format!("{protected}.{payload}");
@@ -770,19 +749,16 @@ fn sign_account_binding_receipt(
         "{protected}..{}",
         Base64UrlUnpadded::encode_string(&signature)
     );
-    receipt
-        .validate_shape()
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
+    Ok(receipt.validate_shape()?)
 }
 
 fn canonical_register_request_digest(
     body: &AccountRegisterRequestBody,
 ) -> Result<arkret_identifiers::Hash, ArkretRouteError> {
-    arkret_identifiers::Hash::new(
+    Ok(arkret_identifiers::Hash::new(
         arkret_canonical::canonical_sha256(body)
             .map_err(|_| schema_violation("account register body is not canonicalizable"))?,
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
+    )?)
 }
 
 fn validate_registry_outcome(

@@ -5,10 +5,7 @@ use coauth_account_types::{
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use super::{
-    DepotExt, RouteError, extract_bound_activity_tracker, extract_session_info, get_requester,
-    make_clock, make_rng,
-};
+use super::{DepotExt, RouteError, make_clock, make_rng};
 use crate::handlers::account::service::profile::{
     AccountProfileError, DeactivateAccountOutcome, deactivate_current_account,
 };
@@ -36,16 +33,11 @@ pub async fn patch_profile(
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
-    let repo_factory = depot.repo_factory()?;
     let station = depot.station()?;
     let clock = make_clock();
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
     let (requester, mut repo) =
-        get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     let preferred_locale = coauth_data::parse_locale_preference_patch(input.preferred_locale)
         .map_err(|tag| {
@@ -104,7 +96,6 @@ pub async fn deactivate_user(
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
-    let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let password_manager = depot.password_manager()?;
     let station = depot.station()?;
@@ -114,11 +105,8 @@ pub async fn deactivate_user(
     let clock = make_clock();
     let mut rng = make_rng();
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
-    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+    let (requester, repo) =
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     let status = match deactivate_current_account(
         repo,

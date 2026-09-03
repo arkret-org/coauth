@@ -11,10 +11,7 @@ use coauth_account_types::{
 use salvo::prelude::*;
 use serde::Deserialize;
 
-use super::{
-    DepotExt, RouteError, extract_bound_activity_tracker, extract_session_info, get_requester,
-    make_clock, make_rng,
-};
+use super::{DepotExt, RouteError, make_clock, make_rng};
 use crate::services::user_profile::{
     self, NotificationPreferenceState, notification_channel_from_key, notification_channel_key,
 };
@@ -37,16 +34,11 @@ pub async fn get_notification_preferences(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<NotificationPreferencesOutcome>, RouteError> {
-    let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let clock = make_clock();
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
     let (requester, mut repo) =
-        get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
     let user = requester.user().ok_or(RouteError::Unauthorized)?;
 
     let data = user_profile::load_notification_preferences(&mut repo, &config, user)
@@ -83,17 +75,12 @@ pub async fn patch_notification_preferences(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<UpdateNotificationPreferencesOutcome>, RouteError> {
-    let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let clock = make_clock();
     let mut rng = make_rng();
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
     let (requester, mut repo) =
-        get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
     let user = requester.user().ok_or(RouteError::Unauthorized)?;
 
     let body: PatchNotificationPreferencesRequestBody = req

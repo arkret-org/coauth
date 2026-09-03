@@ -30,11 +30,9 @@ impl Scribe for CanonicalJsonResponse {
 fn redact_session_grant_intent(
     body: &SessionGrantRequestBody,
 ) -> Result<serde_json::Value, ArkretRouteError> {
-    let mut value =
-        serde_json::to_value(body).map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let mut value = serde_json::to_value(body)?;
     let hash_value = |value: &serde_json::Value| -> Result<String, ArkretRouteError> {
-        let bytes = arkret_canonical::canonical_json_bytes(value)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        let bytes = arkret_canonical::canonical_json_bytes(value)?;
         Ok(arkret_canonical::sha256_digest(bytes))
     };
     if let Some(proof) = value
@@ -125,8 +123,7 @@ async fn reserve_issue_operation(
             Some(crate::handlers::account::agents::AGENT_SESSION_MAX_TTL),
         ),
     };
-    let identity_bytes = arkret_canonical::canonical_json_bytes(&identity_material)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let identity_bytes = arkret_canonical::canonical_json_bytes(&identity_material)?;
     let request_identity = arkret_canonical::sha256_digest(identity_bytes);
     let clock = crate::handlers::make_clock();
     let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
@@ -143,12 +140,7 @@ async fn reserve_issue_operation(
         ));
     }
     let signing_key_store = depot.key_store()?;
-    let (_, signing_key) = crate::services::preferred_service_signing_key(&signing_key_store)
-        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
-    let signing_key_id = signing_key
-        .kid()
-        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?
-        .to_owned();
+    let signing_key_id = super::super::preferred_signing_key_id(&signing_key_store)?;
     // Tombstones must outlive both the issued credential and ordinary delayed
     // retry horizons. A committed operation can still retain its canonical
     // outcome longer in storage policy; this is the minimum requested here.
@@ -177,8 +169,7 @@ async fn reserve_issue_operation(
                 retained_until,
             },
         )
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        .await?;
 
     match reserved {
         SessionGrantReserveOutcome::Reserved(operation) => {
@@ -198,8 +189,7 @@ async fn reserve_issue_operation(
             let grant = repo
                 .oauth_session_grant()
                 .lookup_by_grant_id(grant_id)
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+                .await?
                 .ok_or_else(|| {
                     ArkretRouteError::coded(
                         StatusCode::SERVICE_UNAVAILABLE,
@@ -213,15 +203,8 @@ async fn reserve_issue_operation(
                 ));
             }
             if grant.lifecycle_state != coauth_data::SessionGrantLifecycleState::Active {
-                let state = match grant.lifecycle_state {
-                    coauth_data::SessionGrantLifecycleState::Revoked => {
-                        arkret_wire::SessionGrantReplayTerminalState::Revoked
-                    }
-                    coauth_data::SessionGrantLifecycleState::Superseded => {
-                        arkret_wire::SessionGrantReplayTerminalState::Superseded
-                    }
-                    coauth_data::SessionGrantLifecycleState::Active => unreachable!(),
-                };
+                let state = super::replay_terminal_state(grant.lifecycle_state)
+                    .expect("lifecycle state checked to be terminal above");
                 return Err(ArkretRouteError::session_grant_replay_terminal(
                     grant.grant_id,
                     state,
@@ -489,8 +472,7 @@ fn validate_human_issue_proof_before_reservation(
         ));
     }
     let handoff_digest =
-        arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(handoff_token.as_bytes()))
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(handoff_token.as_bytes()))?;
     if proof.account_handoff_grant_digest != handoff_digest {
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
@@ -621,8 +603,7 @@ async fn issue_account_handoff_session_grant(
         now,
     )
     .await?;
-    let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)?;
     let granted_scope = arkret_models_identity::STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
         .map(|operation| operation.as_str().to_owned())
         .to_vec();
@@ -632,10 +613,8 @@ async fn issue_account_handoff_session_grant(
         &depot.arkret_config()?,
         &depot.key_store()?,
         &browser_session,
-        crate::services::dpop::session_public_jwk(&dpop.public_jwk)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-        DidCoreId::new(handoff_audience.clone())
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        crate::services::dpop::session_public_jwk(&dpop.public_jwk)?,
+        DidCoreId::new(handoff_audience.clone())?,
         device_id.clone(),
         granted_scope,
         Some(&binding.principal_id),
@@ -653,14 +632,12 @@ async fn issue_account_handoff_session_grant(
         session_grant_id: material.grant_id.clone(),
         session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
             &material.session_public_key,
-        )
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        )?,
         audience_id: body.audience_id.clone(),
         granted_scope: material.scopes.clone(),
         previous_session_grant_id: None,
     };
-    let canonical_outcome = arkret_canonical::canonical_json_bytes(&wire_outcome)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let canonical_outcome = arkret_canonical::canonical_json_bytes(&wire_outcome)?;
 
     // Commit the issuer_id-ledger operation, handoff consumption and HTTP DPoP
     // JTI in one transaction so response loss can replay the exact canonical
@@ -703,8 +680,7 @@ async fn issue_account_handoff_session_grant(
         Some(browser_session_id),
         &material,
     )
-    .await
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    .await?;
     match committed {
         SessionGrantCommitOutcome::Committed(_) => {
             if !repo
@@ -841,8 +817,7 @@ async fn issue_recovery_session_grant(
     let handoff_expires_at = handoff.expires_at;
     repo.cancel().await.ok();
 
-    let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)?;
     if issuance_seed.expires_at > handoff_expires_at {
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
@@ -857,15 +832,12 @@ async fn issue_recovery_session_grant(
         &issuance_seed,
         &depot.arkret_config()?,
         &depot.key_store()?,
-        crate::services::dpop::session_public_jwk(&dpop.public_jwk)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-        DidCoreId::new(handoff_audience.clone())
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        crate::services::dpop::session_public_jwk(&dpop.public_jwk)?,
+        DidCoreId::new(handoff_audience.clone())?,
         body.device_id.clone(),
         granted_scope,
         &binding.principal_id,
-        LocalAccountId::new(handoff_local_account_id.to_string())
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        LocalAccountId::new(handoff_local_account_id.to_string())?,
         &binding.account_id,
         dpop.jkt.clone(),
     )
@@ -878,14 +850,12 @@ async fn issue_recovery_session_grant(
         session_grant_id: material.grant_id.clone(),
         session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
             &material.session_public_key,
-        )
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        )?,
         audience_id: body.audience_id.clone(),
         granted_scope: material.scopes.clone(),
         previous_session_grant_id: None,
     };
-    let canonical_outcome = arkret_canonical::canonical_json_bytes(&wire_outcome)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let canonical_outcome = arkret_canonical::canonical_json_bytes(&wire_outcome)?;
 
     let mut rng = crate::handlers::make_rng();
     let commit_now = arkret_canonical::normalize_timestamp_canonical(clock.now());
@@ -924,8 +894,7 @@ async fn issue_recovery_session_grant(
         Some(browser_session.id),
         &material,
     )
-    .await
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    .await?;
     match committed {
         SessionGrantCommitOutcome::Committed(_) => {
             if !repo
@@ -1098,8 +1067,7 @@ async fn issue_agent_key_proof_session_grant(
             authorization.controller_id.as_str(),
             audience_id.as_str(),
         )
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .await?
         .ok_or_else(|| {
             ArkretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
@@ -1108,11 +1076,7 @@ async fn issue_agent_key_proof_session_grant(
             )
         })?;
     let controller_user_id = controller_binding.user_id;
-    let user = repo
-        .user()
-        .lookup(controller_user_id)
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let user = repo.user().lookup(controller_user_id).await?;
     let controller_blocked =
         user.is_none_or(|user| user.locked_at.is_some() || user.deactivated_at.is_some());
     if controller_blocked {
@@ -1137,23 +1101,20 @@ async fn issue_agent_key_proof_session_grant(
     let session_public_key = serde_json::to_string(&dpop_binding.public_jwk).map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(error))
     })?;
-    let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)?;
     let material = mint_agent_session_grant(
         &issuance_seed,
         &arkret_config,
         &key_store,
         &authorization.agent_id,
-        LocalAccountId::new(controller_user_id.to_string())
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        LocalAccountId::new(controller_user_id.to_string())?,
         &body.device_id,
         audience_id,
         authorization.granted_scope.clone(),
         dpop_binding.jkt.clone(),
         session_public_key,
         authorization.scope_details.clone(),
-        arkret_identifiers::EventId::new(body.agent_key_authorization_ref.clone())
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        arkret_identifiers::EventId::new(body.agent_key_authorization_ref.clone())?,
         body.proof.verification_method.clone(),
         now,
         expires_at,
@@ -1174,14 +1135,12 @@ async fn issue_agent_key_proof_session_grant(
         session_grant_id: grant_id,
         session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
             &material.session_public_key,
-        )
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        )?,
         audience_id: wire_audience,
         granted_scope: material.scopes.clone(),
         previous_session_grant_id: None,
     };
-    let canonical_outcome = arkret_canonical::canonical_json_bytes(&wire_outcome)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let canonical_outcome = arkret_canonical::canonical_json_bytes(&wire_outcome)?;
     let checkpoint = serde_json::json!({
         "kind": "agent_key_proof",
         "agent_key_authorization_ref": body.agent_key_authorization_ref,
@@ -1201,8 +1160,7 @@ async fn issue_agent_key_proof_session_grant(
         None,
         &material,
     )
-    .await
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    .await?;
     match committed {
         SessionGrantCommitOutcome::Committed(_) => {
             let inserted = repo
@@ -1211,8 +1169,7 @@ async fn issue_agent_key_proof_session_grant(
                     &dpop_binding.jti,
                     clock.now(),
                 ))
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+                .await?;
             if !inserted {
                 repo.cancel().await.ok();
                 return Err(ArkretRouteError::coded(
@@ -1221,9 +1178,7 @@ async fn issue_agent_key_proof_session_grant(
                     "reason_code=proof_invalid; agent DPoP JTI was already consumed",
                 ));
             }
-            repo.save()
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+            repo.save().await?;
             super::super::test_chaos::maybe_delay_post_commit(
                 "session_grant_issue_post_commit_pre_response",
                 &operation.request_identity,

@@ -9,6 +9,7 @@ use coauth_data::personal::session::PersonalSession;
 use coauth_data::{BrowserSession, Clock, Session};
 
 use crate::handlers::activity_tracker::ActivityTracker;
+use crate::handlers::rate_limit::RequesterFingerprint;
 
 /// An activity tracker with an IP address bound to it.
 #[derive(Clone)]
@@ -28,6 +29,17 @@ impl BoundActivityTracker {
     #[must_use]
     pub fn ip(&self) -> Option<IpAddr> {
         self.ip
+    }
+
+    /// Rate-limiter key for the bound client IP.
+    ///
+    /// A request whose client IP could not be inferred collapses onto
+    /// [`RequesterFingerprint::EMPTY`], so an un-attributable caller shares one
+    /// bucket instead of escaping the limit entirely.
+    #[must_use]
+    pub fn requester_fingerprint(&self) -> RequesterFingerprint {
+        self.ip
+            .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new)
     }
 
     /// Record activity in an OAuth session.

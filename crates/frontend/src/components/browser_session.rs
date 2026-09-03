@@ -31,7 +31,7 @@ pub fn BrowserSessionCard(session: BrowserSessionData, is_current: Option<bool>)
     let device_type = session
         .user_agent
         .as_ref()
-        .map_or(DeviceType::Unknown, |ua| ua.device_type.clone());
+        .map_or(DeviceType::Unknown, |ua| ua.device_type);
     let name = session_display_name(&session);
     let os = session.user_agent.as_ref().and_then(|ua| ua.os.clone());
 

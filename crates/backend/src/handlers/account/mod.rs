@@ -7,6 +7,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use coauth_data::{BoxRepository, Clock, SiteConfig, User};
+use salvo::prelude::{Depot, Request};
 use ulid::Ulid;
 
 use crate::handlers::BoundActivityTracker;
@@ -45,6 +46,25 @@ pub mod users;
 pub mod viewer;
 
 // ── Helper: extract requester from session cookie ──────────────
+
+/// Open the standard `self/` endpoint preamble: bind the activity tracker to
+/// the client IP, read the session cookie, create a repository and resolve the
+/// authenticated requester from it.
+///
+/// The four statements are order-dependent — [`get_requester`] records browser
+/// activity through the bound tracker and needs the cookie-derived
+/// [`SessionInfo`] — so they are kept together here rather than repeated at
+/// every call site.
+pub async fn authenticated_requester(
+    req: &Request,
+    depot: &Depot,
+    clock: &impl Clock,
+) -> Result<(Requester, BoxRepository), RouteError> {
+    let activity_tracker = extract_bound_activity_tracker(req, depot);
+    let session_info = extract_session_info(req, depot);
+    let repo = depot.repo().await?;
+    get_requester(clock, &activity_tracker, repo, &session_info).await
+}
 
 pub async fn get_requester(
     clock: &impl Clock,

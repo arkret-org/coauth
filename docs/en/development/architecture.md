@@ -38,8 +38,7 @@ This includes:
  - [`coauth-email-types`][coauth-email-types]: Email wire types shared by the sender and the templates
  - [`coauth-messaging`][coauth-messaging]: Email/SMS transport implementations
  - [`coauth-templates`][coauth-templates]: Server-rendered template registry and render context
- - [`coauth-i18n`][coauth-i18n] / [`coauth-i18n-scan`][coauth-i18n-scan]: Fluent translation loading, and the opt-in CLI scanner for translation keys in MiniJinja templates
- - [`coauth-policy`][coauth-policy]: Policy engine abstraction layer; the shipped backend is Cedar
+ - [`coauth-i18n`][coauth-i18n]: Fluent translation loading
  - [`coauth-principal`][coauth-principal]: Station client types and helpers
  - [`coauth-keystore`][coauth-keystore]: Key material storage and encryption
  - [`coauth-iana`][coauth-iana]: Hand-maintained enums for the IANA JOSE and OAuth registries, declared through the crate's `open_enum!` / `closed_enum!` macros
@@ -58,8 +57,6 @@ This includes:
 [coauth-messaging]: ../rustdoc/coauth_messaging/index.html
 [coauth-templates]: ../rustdoc/coauth_templates/index.html
 [coauth-i18n]: ../rustdoc/coauth_i18n/index.html
-[coauth-i18n-scan]: ../rustdoc/coauth_i18n_scan/index.html
-[coauth-policy]: ../rustdoc/coauth_policy/index.html
 [coauth-principal]: ../rustdoc/coauth_principal/index.html
 [coauth-keystore]: ../rustdoc/coauth_keystore/index.html
 [coauth-iana]: ../rustdoc/coauth_iana/index.html

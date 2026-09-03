@@ -287,8 +287,7 @@ async fn verify_cross_session_lifecycle_proof(
             current_grant.subject_id.as_str(),
             current_grant.audience_id.as_str(),
         )
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .await?
         .ok_or_else(|| lifecycle_proof_invalid("accepted principal binding is missing"))?;
     let resolution = crate::services::did_binding::ordinary_read_document(
         url_builder,
@@ -391,8 +390,7 @@ pub async fn revoke_session_grant_endpoint(
     let current_grant = repo
         .oauth_session_grant()
         .lookup_by_grant_jwt(&presented_grant_jwt)
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .await?
         .ok_or_else(session_grant_not_found)?;
     if presented_claims.grant_id != current_grant.grant_id
         || presented_claims.issuer_id != current_grant.issuer_id
@@ -472,8 +470,7 @@ pub async fn revoke_session_grant_endpoint(
             let target = repo
                 .oauth_session_grant()
                 .lookup_by_grant_id(target_session_grant_id)
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+                .await?
                 .filter(|grant| {
                     grant_is_owned_by_current_principal(grant, current_principal_id.as_str())
                 })
@@ -499,16 +496,14 @@ pub async fn revoke_session_grant_endpoint(
             subject_id: current_principal_id.clone(),
         },
     };
-    let mut redacted_body =
-        serde_json::to_value(&body).map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let mut redacted_body = serde_json::to_value(&body)?;
     if let Some(proof) = redacted_body
         .get_mut("proof")
         .and_then(serde_json::Value::as_object_mut)
     {
         for field in ["challenge", "signature"] {
             if let Some(secret) = proof.get(field) {
-                let bytes = arkret_canonical::canonical_json_bytes(secret)
-                    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+                let bytes = arkret_canonical::canonical_json_bytes(secret)?;
                 proof.insert(
                     field.to_owned(),
                     serde_json::Value::String(format!(
@@ -524,8 +519,7 @@ pub async fn revoke_session_grant_endpoint(
         "holder_jkt": dpop.jkt,
         "selector": operation_selector,
         "request": redacted_body,
-    }))
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    }))?;
     let canonical_intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_intent).into();
     let proof_identity = body
         .proof
@@ -562,8 +556,7 @@ pub async fn revoke_session_grant_endpoint(
                 retained_until: proof_expires_at + Duration::days(7),
             },
         )
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        .await?;
     let operation = match reserved {
         SessionGrantReserveOutcome::Reserved(operation) => operation,
         SessionGrantReserveOutcome::Pending(operation)
@@ -618,15 +611,8 @@ pub async fn revoke_session_grant_endpoint(
                 current_grant.grant_id,
             ));
         }
-        let state = match current_grant.lifecycle_state {
-            coauth_data::SessionGrantLifecycleState::Revoked => {
-                arkret_wire::SessionGrantReplayTerminalState::Revoked
-            }
-            coauth_data::SessionGrantLifecycleState::Superseded => {
-                arkret_wire::SessionGrantReplayTerminalState::Superseded
-            }
-            coauth_data::SessionGrantLifecycleState::Active => unreachable!(),
-        };
+        let state = super::replay_terminal_state(current_grant.lifecycle_state)
+            .expect("lifecycle state checked to be terminal above");
         return Err(ArkretRouteError::session_grant_replay_terminal(
             current_grant.grant_id,
             state,
@@ -638,8 +624,7 @@ pub async fn revoke_session_grant_endpoint(
             &dpop.claims.jti,
             now,
         ))
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        .await?;
     if !inserted {
         repo.cancel().await.ok();
         return Err(lifecycle_proof_invalid(
@@ -679,8 +664,7 @@ pub async fn revoke_session_grant_endpoint(
             },
             durable_selector,
         )
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        .await?;
     let chaos_committed = matches!(&committed, SessionGrantRevokeOutcome::Revoked { .. });
     let response = match committed {
         SessionGrantRevokeOutcome::Revoked { operation, .. } => {

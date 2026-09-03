@@ -21,7 +21,6 @@ use salvo::prelude::*;
 use ulid::Ulid;
 use webauthn_rs::prelude::{PublicKeyCredential, RegisterPublicKeyCredential};
 
-use crate::handlers::RequesterFingerprint;
 use crate::handlers::account::{
     extract_bound_activity_tracker, extract_session_info, make_clock, make_rng,
 };
@@ -203,9 +202,7 @@ async fn enforce_passkey_rate_limit(
     depot: &Depot,
     user: &User,
 ) -> Result<(), AppError> {
-    let requester = extract_bound_activity_tracker(req, depot)
-        .ip()
-        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
+    let requester = extract_bound_activity_tracker(req, depot).requester_fingerprint();
     depot
         .limiter()
         .map_err(AppError::from)?

@@ -4,10 +4,7 @@ use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use super::{
-    DepotExt, NodeType, RouteError, extract_bound_activity_tracker, extract_session_info,
-    get_requester, make_clock, make_rng,
-};
+use super::{DepotExt, NodeType, RouteError, make_clock, make_rng};
 use crate::handlers::account::service::contacts::{
     CompleteEmailVerificationError, LoadEmailVerificationStatusError, RemoveUserEmailError,
     ResendEmailVerificationError, StartEmailVerificationError, complete_email_verification,
@@ -100,17 +97,13 @@ pub async fn start_email_auth(
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
-    let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let password_manager = depot.password_manager()?;
     let limiter = depot.limiter()?;
     let clock = make_clock();
     let mut rng = make_rng();
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
-    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+    let (requester, repo) =
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     // Resolved after the requester so the recipient's own stored preference is
     // the top tier: a verification mail is read later, on whatever device they
@@ -200,16 +193,12 @@ pub async fn complete_email_auth(
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
-    let repo_factory = depot.repo_factory()?;
     let limiter = depot.limiter()?;
     let clock = make_clock();
     let mut rng = make_rng();
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
-    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+    let (requester, repo) =
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     match complete_email_verification(
         repo,
@@ -269,15 +258,11 @@ pub async fn resend_email_auth_code(
         .await
         .unwrap_or(ResendEmailAuthInput { language: None });
 
-    let repo_factory = depot.repo_factory()?;
     let limiter = depot.limiter()?;
     let clock = make_clock();
     let mut rng = make_rng();
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
-    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+    let (requester, repo) =
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     // Resolved after the requester so the recipient's own stored preference is
     // the top tier: a verification mail is read later, on whatever device they
@@ -343,17 +328,13 @@ pub async fn remove_email(
         .await
         .unwrap_or(RemoveEmailInput { password: None });
 
-    let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let password_manager = depot.password_manager()?;
     let clock = make_clock();
     let mut rng = make_rng();
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
-    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+    let (requester, repo) =
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     match remove_user_email(
         repo,

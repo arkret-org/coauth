@@ -50,8 +50,7 @@ pub async fn patch_primary_handle_preference(
         Some(
             repo.user_primary_handle_preference()
                 .verified_handle_claim(user.id, handle, clock.now())
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+                .await?
                 .ok_or_else(|| {
                     ArkretRouteError::BadRequest(
                         "primary_handle_not_verified_for_holder".to_owned(),
@@ -74,12 +73,9 @@ pub async fn patch_primary_handle_preference(
                 user.id,
             ),
         )
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        .await?;
 
-    repo.save()
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    repo.save().await?;
 
     Ok(Json(PrimaryHandlePreferenceOutcome {
         primary_handle: preference.handle,

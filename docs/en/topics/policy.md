@@ -81,7 +81,7 @@ permit(
 
 ## Custom backend
 
-You can implement your own policy backend by implementing the `PolicyProviderFactory` and `PolicyEvaluator` traits from `coauth-policy`, and constructing a `PolicyFactory` via `PolicyFactory::from_provider()`.
+You can implement your own policy backend by implementing the `PolicyProviderFactory` and `PolicyEvaluator` traits from `coauth_backend::policy`, and constructing a `PolicyFactory` via `PolicyFactory::from_provider()`.
 
 ## Actions
 

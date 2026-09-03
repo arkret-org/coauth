@@ -6,7 +6,6 @@ use coauth_data::user::{
 };
 use coauth_data::{BoxRepository, Clock, RepositoryAccess, UserRegistration};
 use coauth_email_types::Address;
-use coauth_policy::PolicyFactory;
 use coauth_principal::ConnectorAdmin;
 use rand_chacha::rand_core::CryptoRngCore;
 use ulid::Ulid;
@@ -16,6 +15,7 @@ use super::*;
 use crate::handlers::notification_dispatch::{NotificationIntent, schedule_notification};
 use crate::handlers::passwords::PasswordManager;
 use crate::handlers::{Limiter, RequesterFingerprint};
+use crate::policy::PolicyFactory;
 
 pub async fn start_password_registration(
     mut repo: BoxRepository,
@@ -223,11 +223,11 @@ pub async fn begin_password_registration(
             .await
             .map_err(AnyhowError::from)?;
         let result = policy
-            .evaluate_register(coauth_policy::RegisterInput {
-                registration_method: coauth_policy::RegistrationMethod::Password,
+            .evaluate_register(crate::policy::RegisterInput {
+                registration_method: crate::policy::RegistrationMethod::Password,
                 handle: &request.handle,
                 email: email.as_deref(),
-                requester: coauth_policy::Requester {
+                requester: crate::policy::Requester {
                     ip_address: request.ip_address,
                     user_agent: request.user_agent.clone(),
                     ..Default::default()

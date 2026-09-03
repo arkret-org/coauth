@@ -7,7 +7,6 @@ use coauth_data::{
 use coauth_keystore::Keystore;
 use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
 use coauth_oauth_types::requests::{AccessTokenRequest, AccessTokenResponse};
-use coauth_policy::PolicyInstance;
 use coauth_principal::ConnectorAdmin;
 use coauth_templates::Templates;
 use opentelemetry::metrics::Counter;
@@ -24,6 +23,7 @@ use super::token_service::{
     RefreshTokenExchangeError,
 };
 use crate::handlers::METER;
+use crate::policy::PolicyInstance;
 use crate::salvo_utils::client_authorization::{
     ClientAuthorization, CredentialsVerificationError, CredentialsVerificationParams,
 };
@@ -88,7 +88,7 @@ pub(crate) enum RouteError {
     ClientIDMismatch { expected: Ulid, actual: Ulid },
 
     #[error("policy denied the request: {0}")]
-    DeniedByPolicy(coauth_policy::EvaluationResult),
+    DeniedByPolicy(crate::policy::EvaluationResult),
 
     #[error("unsupported grant type")]
     UnsupportedGrantType,
@@ -365,7 +365,7 @@ async fn handle_post(
         .expect("BoxRepositoryFactory not found in depot");
     let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
     let policy_factory = depot
-        .get::<Arc<coauth_policy::PolicyFactory>>("policy_factory")
+        .get::<Arc<crate::policy::PolicyFactory>>("policy_factory")
         .expect("PolicyFactory not found in depot");
 
     #[allow(clippy::box_default)] // Box::default() doesn't apply to dyn Clock+Send

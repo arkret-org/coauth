@@ -326,15 +326,11 @@ pub(crate) async fn authenticate_local_handoff_code(
     clock: &impl coauth_data::Clock,
     input: &OidcCodeExchangeInput,
 ) -> Result<LocalHandoffAuthentication, OidcExchangeError> {
-    let url_builder = depot
-        .url_builder()
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
-    let arkret_config = depot
-        .arkret_config()
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+    let url_builder = depot.url_builder().map_err(exchange_internal_error)?;
+    let arkret_config = depot.arkret_config().map_err(exchange_internal_error)?;
     let upstream_oidc = depot
         .upstream_oidc_service()
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+        .map_err(exchange_internal_error)?;
 
     // This helper only serves the local issuer; the caller routes federated
     // issuers to `exchange_oidc_code_for_account_handoff`.
@@ -373,7 +369,7 @@ pub(crate) async fn authenticate_local_handoff_code(
         .oauth_authorization_grant()
         .find_by_code(input.authorization_code.trim())
         .await
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+        .map_err(exchange_internal_error)?
         .ok_or_else(|| {
             OidcExchangeError::new(
                 "invalid_authorization_code",
@@ -431,7 +427,7 @@ pub(crate) async fn authenticate_local_handoff_code(
         .oauth_client()
         .lookup(authz_grant.client_id)
         .await
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+        .map_err(exchange_internal_error)?
         .ok_or_else(|| {
             OidcExchangeError::new(
                 "invalid_authorization_code",
@@ -498,10 +494,7 @@ pub(crate) async fn authenticate_local_handoff_code(
             // a separate repository (it only touches the session row, so the
             // lock order cannot cycle).
             if beyond_reuse_window {
-                let kill_repo = depot
-                    .repo()
-                    .await
-                    .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+                let kill_repo = depot.repo().await.map_err(exchange_internal_error)?;
                 end_session_on_code_reuse(kill_repo, clock, session_id)
                     .await
                     .map_err(|error| {
@@ -609,45 +602,24 @@ fn map_local_authorization_code_error(error: AuthorizationCodeExchangeError) -> 
     }
 }
 
-async fn exchange_oidc_code(
-    req: &mut Request,
-    depot: &Depot,
-    _dpop_binding: DpopSessionBinding,
-    input: OidcCodeExchangeInput,
-) -> Result<OidcHandoffExchangeSuccess, OidcExchangeError> {
-    let mut rng = make_rng();
-    let clock = make_clock();
-    let url_builder = depot
-        .url_builder()
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
-    let arkret_config = depot
-        .arkret_config()
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
-    let key_store = depot
-        .key_store()
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
-    let encrypter = depot
-        .encrypter()
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
-    let upstream_oidc = depot
-        .upstream_oidc_service()
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
-    let http_client = depot
-        .get::<reqwest::Client>("http_client")
-        .cloned()
-        .map_err(|_| OidcExchangeError::new("internal_error", "http_client not found in depot"))?;
-    let service_activity_tracker = depot
-        .get::<crate::handlers::ActivityTracker>("activity_tracker")
-        .cloned()
-        .map_err(|_| {
-            OidcExchangeError::new("internal_error", "activity_tracker not found in depot")
-        })?;
-    let mut repo = depot
-        .repo()
-        .await
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+/// Wrap a depot-resolution or repository failure as the exchange's
+/// `internal_error`.
+///
+/// Every dependency this endpoint pulls out of the depot is placed there by
+/// `server::routers` at boot, so a miss is a wiring bug rather than anything
+/// the caller can influence.
+fn exchange_internal_error(error: impl std::fmt::Display) -> OidcExchangeError {
+    OidcExchangeError::new("internal_error", error.to_string())
+}
 
-    // --- structural validation of the proof / body fields ---------------
+/// Reject an `oidc_code_exchange` body that cannot describe a PKCE-bound
+/// authorization-code redemption, before any depot dependency or repository
+/// transaction is touched.
+///
+/// Returns the two parsed absolute URIs the exchange needs downstream.
+fn validate_oidc_code_exchange_input(
+    input: &OidcCodeExchangeInput,
+) -> Result<(url::Url, url::Url), OidcExchangeError> {
     if input.code_verifier.trim().is_empty() {
         return Err(OidcExchangeError::proof_invalid(
             "code_verifier is required and the authorization_code must have been issued with PKCE",
@@ -669,12 +641,41 @@ async fn exchange_oidc_code(
     })?;
     let issuer = url::Url::parse(input.issuer.trim())
         .map_err(|_| OidcExchangeError::proof_invalid("issuer must be a valid absolute URI"))?;
+    Ok((redirect_uri, issuer))
+}
+
+async fn exchange_oidc_code(
+    req: &mut Request,
+    depot: &Depot,
+    _dpop_binding: DpopSessionBinding,
+    input: OidcCodeExchangeInput,
+) -> Result<OidcHandoffExchangeSuccess, OidcExchangeError> {
+    let (redirect_uri, issuer) = validate_oidc_code_exchange_input(&input)?;
+
+    let mut rng = make_rng();
+    let clock = make_clock();
+    let url_builder = depot.url_builder().map_err(exchange_internal_error)?;
+    let arkret_config = depot.arkret_config().map_err(exchange_internal_error)?;
+    let key_store = depot.key_store().map_err(exchange_internal_error)?;
+    let encrypter = depot.encrypter().map_err(exchange_internal_error)?;
+    let upstream_oidc = depot
+        .upstream_oidc_service()
+        .map_err(exchange_internal_error)?;
+    let http_client = depot
+        .get::<reqwest::Client>("http_client")
+        .cloned()
+        .map_err(|_| exchange_internal_error("http_client not found in depot"))?;
+    let service_activity_tracker = depot
+        .get::<crate::handlers::ActivityTracker>("activity_tracker")
+        .cloned()
+        .map_err(|_| exchange_internal_error("activity_tracker not found in depot"))?;
+    let mut repo = depot.repo().await.map_err(exchange_internal_error)?;
 
     let enabled_upstream_providers = repo
         .upstream_oauth_provider()
         .all_enabled()
         .await
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+        .map_err(exchange_internal_error)?;
     let exchange_mode = upstream_oidc
         .exchange_mode_for_issuer(
             &url_builder,
@@ -823,7 +824,7 @@ async fn exchange_oidc_code(
             .upstream_oauth_link()
             .find_by_subject(&provider, upstream_subject.as_str())
             .await
-            .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+            .map_err(exchange_internal_error)?
             .ok_or_else(|| {
                 // Do not reflect the upstream subject identifier in the
                 // client-facing envelope; it is an internal value.
@@ -853,7 +854,7 @@ async fn exchange_oidc_code(
             .user()
             .lookup(user_id)
             .await
-            .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+            .map_err(exchange_internal_error)?
             .ok_or_else(|| {
                 OidcExchangeError::new(
                     "internal_error",
@@ -903,7 +904,7 @@ async fn exchange_oidc_code(
             .browser_session()
             .add(&mut rng, &*clock, &user, user_agent)
             .await
-            .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+            .map_err(exchange_internal_error)?;
         let grant_target = upstream_oidc
             .session_grant_target_for_requested_audience(
                 &url_builder,
@@ -917,9 +918,7 @@ async fn exchange_oidc_code(
             browser_session_id: Some(browser_session.id),
             audience: grant_target.audience,
         };
-        repo.save()
-            .await
-            .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+        repo.save().await.map_err(exchange_internal_error)?;
         let _ = &service_activity_tracker;
         return Ok(success);
     }
@@ -929,7 +928,7 @@ async fn exchange_oidc_code(
         .oauth_authorization_grant()
         .find_by_code(input.authorization_code.trim())
         .await
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+        .map_err(exchange_internal_error)?
         .ok_or_else(|| {
             OidcExchangeError::new(
                 "invalid_authorization_code",
@@ -992,7 +991,7 @@ async fn exchange_oidc_code(
         .oauth_client()
         .lookup(authz_grant.client_id)
         .await
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+        .map_err(exchange_internal_error)?
         .ok_or_else(|| {
             OidcExchangeError::new(
                 "invalid_authorization_code",
@@ -1058,9 +1057,7 @@ async fn exchange_oidc_code(
         .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
     // Release the repository session before the nested HTTP request back into
     // coauth's own token endpoint, which needs its own repo access.
-    repo.cancel()
-        .await
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+    repo.cancel().await.map_err(exchange_internal_error)?;
     let oauth_token_http_response = oauth_token_http_request
         .send_traced()
         .await
@@ -1143,10 +1140,7 @@ async fn exchange_oidc_code(
         .json()
         .await
         .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
-    let mut repo = depot
-        .repo()
-        .await
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+    let mut repo = depot.repo().await.map_err(exchange_internal_error)?;
 
     let oauth_session_id = exchangeable_oauth_session_id.ok_or_else(|| {
         OidcExchangeError::new(
@@ -1158,7 +1152,7 @@ async fn exchange_oidc_code(
         .oauth_session()
         .lookup(oauth_session_id)
         .await
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+        .map_err(exchange_internal_error)?
         .ok_or_else(|| {
             OidcExchangeError::new(
                 "internal_error",
@@ -1187,7 +1181,7 @@ async fn exchange_oidc_code(
         .browser_session()
         .lookup(user_session_id)
         .await
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+        .map_err(exchange_internal_error)?
         .ok_or_else(|| {
             OidcExchangeError::new(
                 "invalid_authorization_code",
@@ -1294,9 +1288,7 @@ async fn exchange_oidc_code(
     }
     // Release the repo before validating userinfo through the local HTTP
     // endpoint, which also needs repo-backed token/session access.
-    repo.cancel()
-        .await
-        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+    repo.cancel().await.map_err(exchange_internal_error)?;
     let (oauth_userinfo, _userinfo_response_signed) = upstream_oidc
         .fetch_local_oidc_userinfo(
             &http_client,

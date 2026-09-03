@@ -29,7 +29,6 @@ coauth 是 Station 内部的部署私有 Account Authority 组件，负责账号
 | `coauth-data` | 存储中立的领域类型与仓储端口 |
 | `coauth-storage-postgres` | PostgreSQL 实现（Diesel schema 与迁移） |
 | `coauth-backend` | HTTP 适配层（REST/OAuth/Admin/`_arkret`）与服务实现 |
-| `coauth-policy` | 策略引擎（Cedar） |
 | `coauth-tasks` | 后台任务与工作流调度 |
 
 ### 通知与消息
@@ -70,7 +69,6 @@ coauth 是 Station 内部的部署私有 Account Authority 组件，负责账号
 |-------|------|
 | `coauth-frontend` | Dioxus 前端（Rust SPA） |
 | `coauth-i18n` | 国际化 |
-| `coauth-i18n-scan` | MiniJinja 模板翻译 key 的按需 CLI 扫描器 |
 
 ### 基础设施
 

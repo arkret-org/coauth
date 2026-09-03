@@ -38,7 +38,7 @@ const PROVIDER: Key = Key::from_static_str("provider");
 const RESULT: Key = Key::from_static_str("result");
 const ALLOW_NON_STANDARD_UPSTREAM_OAUTH_ENV: &str = "COAUTH_ALLOW_NON_STANDARD_UPSTREAM_OAUTH";
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct Params {
     #[serde(skip_serializing_if = "Option::is_none")]
     state: Option<String>,
@@ -245,6 +245,21 @@ fn audit_non_standard_token_source(
     );
 }
 
+/// Read the callback parameters from wherever the provider's `response_mode`
+/// puts them: a form body for `form_post`, the query string otherwise.
+///
+/// An unparseable payload yields the empty [`Params`] rather than an error so
+/// the handler can answer with the `response_mode`-specific diagnostic below
+/// instead of a generic body-parse failure.
+async fn callback_params(req: &mut Request, method: &http::Method) -> Params {
+    let parsed = if method == http::Method::POST {
+        req.parse_form().await
+    } else {
+        req.parse_queries()
+    };
+    parsed.unwrap_or_default()
+}
+
 #[handler]
 #[tracing::instrument(name = "handlers.upstream_oauth.callback.handler", skip_all)]
 #[allow(clippy::too_many_arguments)]
@@ -270,28 +285,7 @@ pub async fn handler(
     let cookie_jar = depot.cookie_jar(req)?;
     let method = req.method().clone();
 
-    // For POST requests, parse from form body; for GET requests, parse from query
-    let params: Params = if method == http::Method::POST {
-        req.parse_form().await.unwrap_or_else(|_| Params {
-            state: None,
-            did_repost_to_itself: false,
-            code: None,
-            error: None,
-            error_description: None,
-            error_uri: None,
-            extra_callback_parameters: None,
-        })
-    } else {
-        req.parse_queries().unwrap_or_else(|_| Params {
-            state: None,
-            did_repost_to_itself: false,
-            code: None,
-            error: None,
-            error_description: None,
-            error_uri: None,
-            extra_callback_parameters: None,
-        })
-    };
+    let params = callback_params(req, &method).await;
 
     let provider = repo
         .upstream_oauth_provider()

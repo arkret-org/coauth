@@ -19,6 +19,8 @@ pub mod listener;
 /// OpenID Connect client library.
 pub mod oidc_client;
 mod outbound_http;
+/// Policy evaluation abstraction layer; the shipped backend is Cedar.
+pub mod policy;
 /// Salvo web-framework utilities: middleware, extractors, and helpers.
 pub mod salvo_utils;
 pub mod server;

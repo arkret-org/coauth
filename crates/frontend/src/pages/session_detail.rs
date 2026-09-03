@@ -40,7 +40,7 @@ fn SessionDetailView(node: Session) -> Element {
             let device_type = session
                 .user_agent
                 .as_ref()
-                .map_or(DeviceType::Unknown, |ua| ua.device_type.clone());
+                .map_or(DeviceType::Unknown, |ua| ua.device_type);
             let name = session
                 .display_name
                 .clone()
@@ -105,7 +105,7 @@ fn SessionDetailView(node: Session) -> Element {
             let device_type = session
                 .user_agent
                 .as_ref()
-                .map_or(DeviceType::Unknown, |ua| ua.device_type.clone());
+                .map_or(DeviceType::Unknown, |ua| ua.device_type);
             let name = session
                 .display_name
                 .clone()

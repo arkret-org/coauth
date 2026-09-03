@@ -20,6 +20,9 @@ fn introspection_grant_record(
 ) -> Result<SessionGrantIntrospectGrant, ArkretRouteError> {
     // The thumbprint is derived from the signed session_public_key; it is not
     // duplicated as an independently authorable claim or database column.
+    // `JwtDecodeError` deliberately has no `From` for `ArkretRouteError`:
+    // `refresh.rs` decodes a caller-supplied `grant_jwt` and must answer
+    // `400`, while this decode runs on a row we persisted ourselves.
     let parsed_jwt = Jwt::<SignedSessionGrantClaims>::try_from(grant.grant_jwt.as_str())
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     parsed_jwt.payload().validate().map_err(|error| {
@@ -69,8 +72,7 @@ fn introspection_grant_record(
         revocation_ref,
         session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
             &grant.session_public_key,
-        )
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        )?,
         cnf_jkt,
         credential_class: parsed_payload.credential_class,
         holder_binding: parsed_payload.holder_binding,
@@ -187,25 +189,21 @@ pub async fn introspect_session_grant(
         SessionGrantIntrospectRequestBody::ById(body) => (
             repo.oauth_session_grant()
                 .lookup_by_grant_id(&body.id)
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+                .await?,
             body.audience_id,
             body.proof,
         ),
         SessionGrantIntrospectRequestBody::ByJwt(body) => (
             repo.oauth_session_grant()
                 .lookup_by_grant_jwt(&body.grant_jwt)
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+                .await?,
             body.audience_id,
             body.proof,
         ),
     };
 
     let Some(grant) = grant else {
-        repo.cancel()
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        repo.cancel().await?;
         return Ok(Json(SessionGrantIntrospectOutcome {
             active: false,
             status: SessionGrantIntrospectStatus::NotFound,
@@ -224,9 +222,7 @@ pub async fn introspect_session_grant(
             .iter()
             .any(|audience_id| audience_id == grant.audience_id.as_str())
     {
-        repo.cancel()
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        repo.cancel().await?;
         return Ok(Json(SessionGrantIntrospectOutcome {
             active: false,
             status: SessionGrantIntrospectStatus::AudienceMismatch,
@@ -237,10 +233,7 @@ pub async fn introspect_session_grant(
     }
 
     let browser_session = if let Some(browser_session_id) = grant.browser_session_id {
-        repo.browser_session()
-            .lookup(browser_session_id)
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        repo.browser_session().lookup(browser_session_id).await?
     } else {
         None
     };
@@ -249,8 +242,7 @@ pub async fn introspect_session_grant(
         let mut principal_ids = repo.principal_did();
         principal_ids
             .get_by_principal_id_and_audience(grant.subject_id.as_str(), grant.audience_id.as_str())
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+            .await?
             .map(|binding| binding.user_id)
     } else {
         None
@@ -259,10 +251,7 @@ pub async fn introspect_session_grant(
     let user = if let Some(browser_session) = browser_session.as_ref() {
         Some(browser_session.user.clone())
     } else if let Some(user_id) = bound_user_id {
-        repo.user()
-            .lookup(user_id)
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        repo.user().lookup(user_id).await?
     } else {
         None
     };
@@ -343,11 +332,11 @@ pub async fn introspect_session_grant(
                     .map(ToOwned::to_owned)
             });
             let authorization = match authorization_ref.as_deref() {
-                Some(authorization_ref) => repo
-                    .agent_key_authorization()
-                    .lookup_by_event_id(authorization_ref)
-                    .await
-                    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+                Some(authorization_ref) => {
+                    repo.agent_key_authorization()
+                        .lookup_by_event_id(authorization_ref)
+                        .await?
+                }
                 None => None,
             };
             let key_alive = lifecycle_alive
@@ -382,9 +371,7 @@ pub async fn introspect_session_grant(
     // `session-grants/refresh` endpoint's job (revoke-old + issue-new), NOT
     // introspection's — revoking here made the grant single-use at the first
     // Station exchange and silently broke the refresh chain.
-    repo.cancel()
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    repo.cancel().await?;
 
     Ok(Json(SessionGrantIntrospectOutcome {
         active,

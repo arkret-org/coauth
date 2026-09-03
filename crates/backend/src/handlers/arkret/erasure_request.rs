@@ -279,11 +279,8 @@ pub(crate) async fn accept_erasure_request(
         recorded_at: now,
         withdrawal_window_ends_at: None,
     };
-    outcome
-        .validate()
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    outcome.validate()?;
+    let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)?;
 
     // ── Durable intent record. The insert races both on request_id and on
     // the single live-intent slot per user; losing either race re-applies

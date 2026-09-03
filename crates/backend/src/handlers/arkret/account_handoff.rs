@@ -630,9 +630,7 @@ pub async fn account_onboarding_snapshot(
         binding,
         goal,
     };
-    snapshot
-        .validate()
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    snapshot.validate()?;
     let (binding_state, lease_state) = match &snapshot.binding {
         AccountHandoffBinding::IdentityCreationActive {
             identity_creation_lease,
@@ -657,8 +655,7 @@ fn redacted_handoff_intent(
     body: &AccountHandoffRequestBody,
     holder_jkt: &str,
 ) -> Result<Vec<u8>, ArkretRouteError> {
-    let mut request =
-        serde_json::to_value(body).map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let mut request = serde_json::to_value(body)?;
     let proof = request
         .get_mut("proof")
         .and_then(serde_json::Value::as_object_mut)
@@ -674,24 +671,25 @@ fn redacted_handoff_intent(
         "nonce",
     ] {
         if let Some(value) = proof.get(field) {
-            let bytes = arkret_canonical::canonical_json_bytes(value)
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+            let bytes = arkret_canonical::canonical_json_bytes(value)?;
             proof.insert(
                 field.to_owned(),
                 serde_json::Value::String(sha256_hash(&bytes)?.to_string()),
             );
         }
     }
-    arkret_canonical::canonical_json_bytes(&serde_json::json!({
-        "request": request,
-        "holder_jkt": holder_jkt,
-    }))
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
+    Ok(arkret_canonical::canonical_json_bytes(
+        &serde_json::json!({
+            "request": request,
+            "holder_jkt": holder_jkt,
+        }),
+    )?)
 }
 
 fn sha256_hash(bytes: &[u8]) -> Result<arkret_identifiers::Hash, ArkretRouteError> {
-    arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(bytes))
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
+    Ok(arkret_identifiers::Hash::new(
+        arkret_canonical::sha256_digest(bytes),
+    )?)
 }
 
 fn authorized_checkpoint(
@@ -783,8 +781,7 @@ async fn finalize_handoff_creation(
         })
         .await?;
     let outcome = creation_to_outcome(creation, account_handle, account_subject, preferred_locale)?;
-    let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)?;
     let outcome_digest = sha256_hash(&canonical_outcome)?;
     let committed = repo
         .account_handoff()
@@ -1024,9 +1021,7 @@ pub async fn issue_identity_abandonment_challenge(
         IdentityAbandonmentChallengeIssue::Issued(challenge)
         | IdentityAbandonmentChallengeIssue::Replay(challenge) => {
             let outcome = challenge.wire_outcome();
-            outcome
-                .validate()
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+            outcome.validate()?;
             if outcome.audience_id != audience {
                 repo.cancel().await.ok();
                 return Err(failed_precondition(
@@ -1312,8 +1307,7 @@ fn verify_handoff_holder_signature(
     body: &AccountHandoffRequestBody,
     dpop_binding: &DpopSessionBinding,
 ) -> Result<(), ArkretRouteError> {
-    let jwk = serde_json::to_value(&dpop_binding.public_jwk)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let jwk = serde_json::to_value(&dpop_binding.public_jwk)?;
     let public_key = arkret_signatures::proof::PublicKeyMaterial::Jwk { value: jwk };
     let signing_bytes = body
         .proof
@@ -1348,9 +1342,7 @@ fn creation_to_outcome(
         allowed_operations: grant.allowed_operations,
         binding,
     };
-    outcome
-        .validate()
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    outcome.validate()?;
     Ok(outcome)
 }
 
@@ -1420,10 +1412,7 @@ pub(crate) fn account_subject(
         "local_account_id": local_account_id.to_string(),
     });
     let mut bytes = b"ak.account-subject.v1\n".to_vec();
-    bytes.extend(
-        arkret_canonical::canonical_json_bytes(&value)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-    );
+    bytes.extend(arkret_canonical::canonical_json_bytes(&value)?);
     sha256_hash(&bytes)
 }
 
@@ -1442,8 +1431,7 @@ fn canonical_account_handle(
                 return Err(ArkretRouteError::Internal(Box::new(public_error)));
             };
             let trust_domain_candidate = format!("{localpart}:{scope}");
-            Handle::prepare(&trust_domain_candidate)
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
+            Ok(Handle::prepare(&trust_domain_candidate)?)
         }
     }
 }

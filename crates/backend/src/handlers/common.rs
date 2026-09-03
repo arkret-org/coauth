@@ -17,7 +17,6 @@ use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, BrowserSession, RepositoryError,
     Session, SiteConfig, SystemClock, UrlBuilder, User,
 };
-use coauth_policy::PolicyFactory;
 use coauth_principal::ConnectorAdmin;
 use rand_chacha::ChaChaRng;
 use rand_core::{CryptoRngCore, SeedableRng};
@@ -26,6 +25,7 @@ use ulid::Ulid;
 
 use crate::handlers::passwords::PasswordManager;
 use crate::handlers::{BoundActivityTracker, Limiter, RequesterFingerprint};
+use crate::policy::PolicyFactory;
 use crate::salvo_utils::cookies::CookieJar;
 use crate::salvo_utils::{SessionInfo, SessionInfoExt};
 use crate::services::dpop::DpopVerifier;

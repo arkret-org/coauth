@@ -85,7 +85,7 @@ permit(
 
 ## 自定义后端
 
-你可以通过实现 `coauth-policy` 中的 `PolicyProviderFactory` 和 `PolicyEvaluator` Trait 来创建自定义策略后端，然后通过 `PolicyFactory::from_provider()` 注入到系统中。
+你可以通过实现 `coauth_backend::policy` 中的 `PolicyProviderFactory` 和 `PolicyEvaluator` Trait 来创建自定义策略后端，然后通过 `PolicyFactory::from_provider()` 注入到系统中。
 
 ## 策略评估点
 

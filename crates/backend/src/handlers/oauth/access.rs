@@ -13,7 +13,6 @@ use coauth_data::{
 };
 use coauth_keystore::Keystore;
 use coauth_oauth_types::requests::AuthorizationResponse;
-use coauth_policy::{PolicyFactory, PolicyInstance};
 use coauth_principal::ConnectorAdmin;
 use thiserror::Error;
 use ulid::Ulid;
@@ -21,6 +20,7 @@ use ulid::Ulid;
 use crate::handlers::oauth::authorization::callback::CallbackDestination;
 use crate::handlers::oauth::generate_id_token;
 use crate::handlers::session::count_user_sessions_for_limiting;
+use crate::policy::{PolicyFactory, PolicyInstance};
 
 /// Rich consent information carrying the full domain objects.
 ///
@@ -142,7 +142,7 @@ pub async fn load_authorization_consent(
         browser_session,
         &client,
         &grant.scope,
-        coauth_policy::GrantType::AuthorizationCode,
+        crate::policy::GrantType::AuthorizationCode,
         requester_ip,
         user_agent,
     )
@@ -202,7 +202,7 @@ pub async fn accept_authorization_consent(
         browser_session,
         &client,
         &grant.scope,
-        coauth_policy::GrantType::AuthorizationCode,
+        crate::policy::GrantType::AuthorizationCode,
         requester_ip,
         user_agent,
     )
@@ -320,7 +320,7 @@ pub async fn load_device_consent(
         browser_session,
         &client,
         &grant.scope,
-        coauth_policy::GrantType::DeviceCode,
+        crate::policy::GrantType::DeviceCode,
         requester_ip,
         user_agent,
     )
@@ -373,7 +373,7 @@ pub async fn submit_device_consent(
         browser_session,
         &client,
         &grant.scope,
-        coauth_policy::GrantType::DeviceCode,
+        crate::policy::GrantType::DeviceCode,
         requester_ip,
         user_agent,
     )
@@ -414,7 +414,7 @@ async fn has_policy_violation(
     browser_session: &BrowserSession,
     client: &Client,
     scope: &coauth_oauth_types::scope::Scope,
-    grant_type: coauth_policy::GrantType,
+    grant_type: crate::policy::GrantType,
     requester_ip: Option<IpAddr>,
     user_agent: Option<String>,
 ) -> Result<bool, OAuthAccessError> {
@@ -426,13 +426,13 @@ async fn has_policy_violation(
     let session_counts = count_user_sessions_for_limiting(repo, &browser_session.user).await?;
 
     let eval_result = policy
-        .evaluate_authorization_grant(coauth_policy::AuthorizationGrantInput {
+        .evaluate_authorization_grant(crate::policy::AuthorizationGrantInput {
             user: Some(&browser_session.user),
             client,
             session_counts: Some(session_counts),
             scope,
             grant_type,
-            requester: coauth_policy::Requester {
+            requester: crate::policy::Requester {
                 ip_address: requester_ip,
                 user_agent,
                 ..Default::default()

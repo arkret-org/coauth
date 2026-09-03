@@ -2,11 +2,11 @@
 
 use coauth_data::{BoxRepository, Client, Clock, SiteConfig, TokenType};
 use coauth_oauth_types::requests::{AccessTokenResponse, ClientCredentialsGrant, GrantType};
-use coauth_policy::PolicyInstance;
 
 use super::ClientCredentialsGrantError;
 use crate::handlers::BoundActivityTracker;
 use crate::oidc_client::types::scope::ScopeToken;
+use crate::policy::PolicyInstance;
 
 /// Handle a client credentials grant.
 ///
@@ -38,13 +38,13 @@ pub async fn handle_client_credentials(
 
     // Make the request go through the policy engine
     let res = policy
-        .evaluate_authorization_grant(coauth_policy::AuthorizationGrantInput {
+        .evaluate_authorization_grant(crate::policy::AuthorizationGrantInput {
             user: None,
             client,
             session_counts: None,
             scope: &scope,
-            grant_type: coauth_policy::GrantType::ClientCredentials,
-            requester: coauth_policy::Requester {
+            grant_type: crate::policy::GrantType::ClientCredentials,
+            requester: crate::policy::Requester {
                 ip_address: activity_tracker.ip(),
                 user_agent: user_agent.clone(),
                 ..Default::default()

@@ -15,9 +15,6 @@ use coauth_data::{
     UrlBuilder, User, UserRegistration,
 };
 use coauth_jose::jwt::Jwt;
-use coauth_policy::{
-    PolicyInstance, RegisterInput, RegistrationMethod, Requester as PolicyRequester,
-};
 use coauth_principal::ConnectorAdmin;
 use minijinja::Environment;
 use rand_core::RngCore;
@@ -27,6 +24,9 @@ use ulid::Ulid;
 use crate::handlers::post_auth::OptionalPostAuthAction;
 use crate::handlers::upstream_oauth::UpstreamSessionsCookie;
 use crate::handlers::upstream_oauth::template::{AttributeMappingContext, environment};
+use crate::policy::{
+    PolicyInstance, RegisterInput, RegistrationMethod, Requester as PolicyRequester,
+};
 use crate::salvo_utils::SessionInfo;
 
 const DEFAULT_HANDLE_TEMPLATE: &str = "{{ user.preferred_username }}";

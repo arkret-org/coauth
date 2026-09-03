@@ -66,8 +66,8 @@ impl Scribe for RouteError {
 impl_from_error_for_route!(coauth_data::RepositoryError);
 impl_from_error_for_route!(coauth_templates::TemplateError);
 impl_from_error_for_route!(self::callback::CallbackDestinationError);
-impl_from_error_for_route!(coauth_policy::LoadError);
-impl_from_error_for_route!(coauth_policy::EvaluationError);
+impl_from_error_for_route!(crate::policy::LoadError);
+impl_from_error_for_route!(crate::policy::EvaluationError);
 
 impl From<crate::handlers::common::RouteError> for RouteError {
     fn from(e: crate::handlers::common::RouteError) -> Self {

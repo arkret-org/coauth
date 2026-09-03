@@ -1517,6 +1517,7 @@ dependencies = [
  "bcrypt",
  "bytes",
  "camino",
+ "cedar-policy",
  "chrono",
  "coauth-account-types",
  "coauth-admin-types",
@@ -1529,7 +1530,6 @@ dependencies = [
  "coauth-keystore",
  "coauth-messaging",
  "coauth-oauth-types",
- "coauth-policy",
  "coauth-principal",
  "coauth-storage-postgres",
  "coauth-tasks",
@@ -1754,19 +1754,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "coauth-i18n-scan"
-version = "0.3.0"
-dependencies = [
- "camino",
- "clap",
- "minijinja",
- "serde_json",
- "tracing",
- "tracing-subscriber",
- "walkdir",
-]
-
-[[package]]
 name = "coauth-iana"
 version = "0.3.0"
 dependencies = [
@@ -1882,24 +1869,6 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.20",
  "url",
-]
-
-[[package]]
-name = "coauth-policy"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "cedar-policy",
- "chrono",
- "coauth-data",
- "coauth-oauth-types",
- "schemars 1.2.2",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
 ]
 
 [[package]]

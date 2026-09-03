@@ -17,8 +17,8 @@ $configJson | Set-Content -Path $configSchema -Encoding utf8NoBOM
 $oldOutDir = $env:OUT_DIR
 $env:OUT_DIR = $policiesSchemaDir
 try {
-    Write-Host "+ cargo run -q -p coauth-policy --bin schema"
-    & cargo run -q -p coauth-policy --bin schema
+    Write-Host "+ cargo run -q -p coauth-backend --bin policy_schema"
+    & cargo run -q -p coauth-backend --bin policy_schema
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }

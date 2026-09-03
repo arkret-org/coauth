@@ -45,12 +45,12 @@ use cedar_policy::{Authorizer, Context, Decision, Entities, EntityUid, PolicySet
 use chrono::{Datelike, Timelike};
 use coauth_data::{Clock, PolicyData, SystemClock};
 
-use crate::model::{
+use crate::policy::model::{
     AuthorizationGrantInput, ClientRegistrationInput, EmailInput, EvaluationResult, RegisterInput,
     Violation,
 };
-use crate::provider::{PolicyEvaluator, PolicyProviderFactory};
-use crate::{EvaluationError, InstantiateError, LoadError};
+use crate::policy::provider::{PolicyEvaluator, PolicyProviderFactory};
+use crate::policy::{EvaluationError, InstantiateError, LoadError};
 
 /// Cedar policy provider factory.
 ///

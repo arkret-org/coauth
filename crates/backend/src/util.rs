@@ -14,7 +14,6 @@ use coauth_data::{
 use coauth_messaging::NotificationCenter;
 use coauth_messaging::email::{Mailer, SmtpCredentials, SmtpMode, Transport as MailTransport};
 use coauth_messaging::sms::{SmsSender, SmsTransport};
-use coauth_policy::PolicyFactory;
 use coauth_principal::{ConnectorAdmin, ConnectorRegistry};
 use coauth_templates::{SiteConfigExt, Templates};
 use diesel_async::pooled_connection::deadpool::{
@@ -29,6 +28,7 @@ use tokio_util::task::TaskTracker;
 use tracing::Instrument;
 
 use crate::handlers::passwords::PasswordManager;
+use crate::policy::PolicyFactory;
 
 fn cleanup_pooled_postgres_connection() -> DieselPoolHook<AsyncPgConnection> {
     DieselPoolHook::async_fn(|conn: &mut AsyncPgConnection, _metrics| {

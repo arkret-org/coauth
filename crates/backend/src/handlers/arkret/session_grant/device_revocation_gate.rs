@@ -59,14 +59,17 @@ pub(crate) async fn acquire_human_device_binding(
 
     let source_id = owning_station_id_for(&config);
     let trust_domain =
-        arkret_identifiers::TrustDomainId::new(trust_domain_for(&depot.url_builder()?, &config))
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        arkret_identifiers::TrustDomainId::new(trust_domain_for(&depot.url_builder()?, &config))?;
     let identity = KeyPackagesClaimServiceBinding {
         source_id,
         destination_id: account_id.station_id.clone(),
     };
     let http_client = depot.http_client()?;
     let key_store = depot.key_store()?;
+    // `PeerProtocolClientError` deliberately has no `From` for
+    // `ArkretRouteError`: `account_register.rs::map_peer_error` maps the same
+    // type onto registry codes, so a blanket `?` conversion here would be the
+    // wrong default. The gate treats a transport-level failure as internal.
     let client = PeerProtocolClient::new(
         Some(&destination.endpoint),
         &http_client,

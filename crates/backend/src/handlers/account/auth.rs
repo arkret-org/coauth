@@ -28,7 +28,7 @@ use crate::handlers::account::service::access::{
     PasswordLoginOutcome, PasswordLoginRequestBody, load_enabled_upstream_providers,
     login_with_password, logout_browser_session,
 };
-use crate::handlers::{METER, RequesterFingerprint, arkret};
+use crate::handlers::{METER, arkret};
 use crate::salvo_utils::session::SessionInfoExt;
 use crate::services::dpop::{DpopError, dpop_header_from_request, dpop_htu};
 
@@ -132,9 +132,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     let station = depot.station()?;
     let repo = depot.repo().await?;
     let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let requester = activity_tracker
-        .ip()
-        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
+    let requester = activity_tracker.requester_fingerprint();
     let cookie_jar = depot.cookie_jar(req)?;
     let user_agent = req
         .headers()

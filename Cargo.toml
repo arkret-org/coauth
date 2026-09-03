@@ -126,7 +126,6 @@ coauth-jose = { version = "=0.3.0", path = "crates/jose" }
 coauth-keystore = { version = "=0.3.0", path = "crates/keystore" }
 coauth-messaging = { version = "=0.3.0", path = "crates/messaging" }
 coauth-oauth-types = { version = "=0.3.0", path = "crates/oauth-types" }
-coauth-policy = { version = "=0.3.0", path = "crates/policy" }
 coauth-principal = { version = "=0.3.0", path = "crates/principal" }
 coauth-storage-postgres = { version = "=0.3.0", path = "crates/storage-postgres" }
 coauth-tasks = { version = "=0.3.0", path = "crates/tasks" }

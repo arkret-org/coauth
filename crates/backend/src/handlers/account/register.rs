@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use super::{DepotExt, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
-use crate::handlers::RequesterFingerprint;
 use crate::handlers::account::service::registration::{
     BeginPasswordRegistrationError, BeginPasswordRegistrationRequestBody,
     BeginPasswordRegistrationResult, EmailAvailabilityCheck, LoadRegistrationProgressError,
@@ -61,9 +60,7 @@ pub async fn post_register(
     let mut rng = make_rng();
 
     let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let requester = activity_tracker
-        .ip()
-        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
+    let requester = activity_tracker.requester_fingerprint();
     let user_agent = req
         .headers()
         .get("user-agent")
@@ -323,10 +320,7 @@ pub async fn post_resend_verification(
         None, None,
     );
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let requester = activity_tracker
-        .ip()
-        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
+    let requester = extract_bound_activity_tracker(req, depot).requester_fingerprint();
 
     let repo = repo_factory.create().await?;
 
@@ -392,10 +386,7 @@ pub async fn post_change_email(
         None, None,
     );
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let requester = activity_tracker
-        .ip()
-        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
+    let requester = extract_bound_activity_tracker(req, depot).requester_fingerprint();
 
     let repo = repo_factory.create().await?;
 

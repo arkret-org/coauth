@@ -106,8 +106,7 @@ fn validate_human_refresh_before_reservation(
         &body.device_id,
         &audience_id,
         holder_jkt,
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    )?;
     if proof.session_intent_digest != expected_digest {
         return Err(refresh_proof_invalid(
             "accepted-device refresh proof session intent digest mismatch",
@@ -231,8 +230,7 @@ pub async fn refresh_session_grant(
     let prior_grant = repo
         .oauth_session_grant()
         .lookup_by_grant_jwt(grant_jwt)
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .await?
         .ok_or_else(|| {
             ArkretRouteError::coded(
                 StatusCode::NOT_FOUND,
@@ -311,8 +309,7 @@ pub async fn refresh_session_grant(
         prior_grant.grant_id,
         request_digest.as_str()
     );
-    let mut redacted =
-        serde_json::to_value(&body).map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let mut redacted = serde_json::to_value(&body)?;
     for proof_field in [
         "accepted_device_possession_proof",
         "agent_session_refresh_proof",
@@ -329,8 +326,7 @@ pub async fn refresh_session_grant(
     let canonical_intent = arkret_canonical::canonical_json_bytes(&serde_json::json!({
         "request": redacted,
         "holder_jkt": verification.jkt,
-    }))
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    }))?;
     let canonical_intent_digest: [u8; 32] = arkret_canonical::sha256_bytes(&canonical_intent);
     let grant_not_before = arkret_canonical::normalize_timestamp_canonical(now);
     let ttl = if prior_payload.proof_kind == Some(SessionGrantProofKind::AgentKeyProof) {
@@ -341,11 +337,7 @@ pub async fn refresh_session_grant(
         arkret_config.session_grant_ttl
     };
     let grant_expires_at = grant_not_before + ttl;
-    let (_, signing_key) = crate::services::preferred_service_signing_key(&key_store)
-        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
-    let signing_key_id = signing_key
-        .kid()
-        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
+    let signing_key_id = super::super::preferred_signing_key_id(&key_store)?;
     let reserved = repo
         .oauth_session_grant()
         .reserve_operation(
@@ -365,12 +357,11 @@ pub async fn refresh_session_grant(
                 session_id: Some(&prior_payload.session_id),
                 grant_not_before: Some(grant_not_before),
                 grant_expires_at: Some(grant_expires_at),
-                signing_key_id: Some(signing_key_id),
+                signing_key_id: Some(&signing_key_id),
                 retained_until: grant_expires_at + chrono::Duration::days(7),
             },
         )
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        .await?;
     let operation = match reserved {
         SessionGrantReserveOutcome::Reserved(operation) => operation,
         SessionGrantReserveOutcome::Pending(operation)
@@ -389,8 +380,7 @@ pub async fn refresh_session_grant(
             let successor = repo
                 .oauth_session_grant()
                 .lookup_by_grant_id(result_grant_id)
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+                .await?
                 .ok_or_else(|| {
                     ArkretRouteError::coded(
                         StatusCode::SERVICE_UNAVAILABLE,
@@ -405,15 +395,8 @@ pub async fn refresh_session_grant(
                 ));
             }
             if successor.lifecycle_state != coauth_data::SessionGrantLifecycleState::Active {
-                let state = match successor.lifecycle_state {
-                    coauth_data::SessionGrantLifecycleState::Revoked => {
-                        arkret_wire::SessionGrantReplayTerminalState::Revoked
-                    }
-                    coauth_data::SessionGrantLifecycleState::Superseded => {
-                        arkret_wire::SessionGrantReplayTerminalState::Superseded
-                    }
-                    coauth_data::SessionGrantLifecycleState::Active => unreachable!(),
-                };
+                let state = super::replay_terminal_state(successor.lifecycle_state)
+                    .expect("lifecycle state checked to be terminal above");
                 repo.cancel().await.ok();
                 return Err(ArkretRouteError::session_grant_replay_terminal(
                     successor.grant_id,
@@ -464,15 +447,8 @@ pub async fn refresh_session_grant(
     }
     if prior_grant.lifecycle_state != coauth_data::SessionGrantLifecycleState::Active {
         repo.cancel().await.ok();
-        let state = match prior_grant.lifecycle_state {
-            coauth_data::SessionGrantLifecycleState::Revoked => {
-                arkret_wire::SessionGrantReplayTerminalState::Revoked
-            }
-            coauth_data::SessionGrantLifecycleState::Superseded => {
-                arkret_wire::SessionGrantReplayTerminalState::Superseded
-            }
-            coauth_data::SessionGrantLifecycleState::Active => unreachable!(),
-        };
+        let state = super::replay_terminal_state(prior_grant.lifecycle_state)
+            .expect("lifecycle state checked to be terminal above");
         return Err(ArkretRouteError::session_grant_replay_terminal(
             prior_grant.grant_id,
             state,
@@ -559,8 +535,7 @@ pub async fn refresh_session_grant(
                 authorization.accountable_principal_id.as_str(),
                 prior_grant.audience_id.as_str(),
             )
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+            .await?
             .ok_or_else(|| {
                 ArkretRouteError::coded(
                     StatusCode::UNAUTHORIZED,
@@ -569,11 +544,7 @@ pub async fn refresh_session_grant(
                 )
             })?;
         let controller_user_id = controller_binding.user_id;
-        let user = repo
-            .user()
-            .lookup(controller_user_id)
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        let user = repo.user().lookup(controller_user_id).await?;
         let controller_blocked =
             user.is_none_or(|user| user.locked_at.is_some() || user.deactivated_at.is_some());
         if controller_blocked {
@@ -593,25 +564,21 @@ pub async fn refresh_session_grant(
         let scope_details = prior_payload.scope_details.clone().ok_or_else(|| {
             refresh_proof_invalid("Agent session grant is missing its authorization scope binding")
         })?;
-        let session_public_key = serde_json::to_string(&verification.public_jwk)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-        let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        let session_public_key = serde_json::to_string(&verification.public_jwk)?;
+        let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)?;
         let new_material = mint_agent_session_grant(
             &issuance_seed,
             &arkret_config,
             &key_store,
             &prior_payload.account_id.principal_id,
-            LocalAccountId::new(controller_user_id.to_string())
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            LocalAccountId::new(controller_user_id.to_string())?,
             &device_id,
             prior_grant.audience_id.clone(),
             scopes,
             verification.jkt.clone(),
             session_public_key,
             scope_details,
-            arkret_identifiers::EventId::new(authorization.authorized_event_id.clone())
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            arkret_identifiers::EventId::new(authorization.authorized_event_id.clone())?,
             arkret_wire::DidUrl::new(authorization.verification_method.clone()).map_err(
                 |error| {
                     ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
@@ -621,8 +588,7 @@ pub async fn refresh_session_grant(
             )?,
             issuance_seed.not_before,
             issuance_seed.expires_at,
-        )
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        )?;
         let audience_id = new_material.audience_id.clone();
         let outcome = SessionGrantOutcome {
             session_grant_id: new_material.grant_id.clone(),
@@ -631,23 +597,20 @@ pub async fn refresh_session_grant(
             session_grant: new_material.grant_jwt.clone(),
             session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
                 &new_material.session_public_key,
-            )
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+            )?,
             expires_at: new_material.expires_at_timestamp,
             audience_id,
             granted_scope: new_material.scopes.clone(),
             previous_session_grant_id: Some(prior_grant.grant_id.clone()),
         };
-        let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)?;
         let inserted = repo
             .dpop_replay()
             .consume_jti(crate::services::dpop::dpop_replay_record(
                 &verification.claims.jti,
                 now,
             ))
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+            .await?;
         if !inserted {
             repo.cancel().await.ok();
             return Err(refresh_proof_invalid(
@@ -684,8 +647,7 @@ pub async fn refresh_session_grant(
                     successor: new_session_grant_record(None, &new_material),
                 },
             )
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+            .await?;
         repo.save().await?;
         if matches!(&committed, LedgerRefreshOutcome::Committed { .. }) {
             super::super::test_chaos::maybe_delay_post_commit(
@@ -707,18 +669,10 @@ pub async fn refresh_session_grant(
                     )
                 }),
             LedgerRefreshOutcome::PredecessorTerminal(grant) => {
-                let state = match grant.lifecycle_state {
-                    coauth_data::SessionGrantLifecycleState::Revoked => {
-                        arkret_wire::SessionGrantReplayTerminalState::Revoked
-                    }
-                    coauth_data::SessionGrantLifecycleState::Superseded => {
-                        arkret_wire::SessionGrantReplayTerminalState::Superseded
-                    }
-                    coauth_data::SessionGrantLifecycleState::Active => {
-                        return Err(ArkretRouteError::session_grant_replay_expired(
-                            grant.grant_id,
-                        ));
-                    }
+                let Some(state) = super::replay_terminal_state(grant.lifecycle_state) else {
+                    return Err(ArkretRouteError::session_grant_replay_expired(
+                        grant.grant_id,
+                    ));
                 };
                 Err(ArkretRouteError::session_grant_replay_terminal(
                     grant.grant_id,
@@ -745,8 +699,7 @@ pub async fn refresh_session_grant(
     let browser_session = repo
         .browser_session()
         .lookup(browser_session_id)
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .await?
         .ok_or_else(|| {
             ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                 "session grant references missing browser session",
@@ -760,9 +713,7 @@ pub async fn refresh_session_grant(
     // forever, defeating logout. Refuse rotation once the session is finished:
     // re-authentication (a fresh browser session) is then required.
     if browser_session.finished_at.is_some() {
-        repo.cancel()
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        repo.cancel().await?;
         return Err(ArkretRouteError::coded(
             StatusCode::BAD_REQUEST,
             arkret_wire::ErrorCode::SESSION_LOGGED_OUT,
@@ -797,9 +748,7 @@ pub async fn refresh_session_grant(
         }
     };
     if let Some(code) = lifecycle_code {
-        repo.cancel()
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        repo.cancel().await?;
         return Err(ArkretRouteError::coded(
             super::account_lifecycle_status(
                 code,
@@ -844,8 +793,7 @@ pub async fn refresh_session_grant(
         .iter()
         .map(|scope| scope.as_str().to_owned())
         .collect();
-    let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)?;
     let proof_kind = prior_payload.proof_kind.ok_or_else(|| {
         refresh_proof_invalid("session-grant refresh predecessor is missing proof_kind")
     })?;
@@ -859,8 +807,7 @@ pub async fn refresh_session_grant(
     let device_binding = acquire_human_device_binding(
         depot,
         &principal_binding.account_id,
-        arkret_identifiers::DeviceId::new(device_id.to_owned())
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        arkret_identifiers::DeviceId::new(device_id.to_owned())?,
         arkret_wire::DeviceRevocationGateActionClass::SessionGrantRefresh,
         Some(expected_device_binding),
         Some(arkret_wire::AcceptedDevicePossessionProof::Refresh(
@@ -877,16 +824,14 @@ pub async fn refresh_session_grant(
             "device authorization generation changed before refresh",
         ));
     }
-    let device_id = arkret_identifiers::DeviceId::new(device_id.to_owned())
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let device_id = arkret_identifiers::DeviceId::new(device_id.to_owned())?;
     let new_material = issue_session_grant_for_audience(
         &issuance_seed,
         &*clock,
         &arkret_config,
         &key_store,
         &browser_session,
-        crate::services::dpop::session_public_jwk(&verification.public_jwk)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        crate::services::dpop::session_public_jwk(&verification.public_jwk)?,
         audience_id,
         device_id.clone(),
         scopes,
@@ -895,8 +840,7 @@ pub async fn refresh_session_grant(
         verification.jkt.clone(),
         device_binding,
         proof_kind,
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    )?;
 
     let response_audience = new_material.audience_id.clone();
 
@@ -907,23 +851,20 @@ pub async fn refresh_session_grant(
         session_grant: new_material.grant_jwt.clone(),
         session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
             &new_material.session_public_key,
-        )
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
+        )?,
         expires_at: new_material.expires_at_timestamp,
         audience_id: response_audience,
         granted_scope: new_material.scopes.clone(),
         previous_session_grant_id: Some(prior_grant.grant_id.clone()),
     };
-    let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)?;
     let inserted = repo
         .dpop_replay()
         .consume_jti(crate::services::dpop::dpop_replay_record(
             &verification.claims.jti,
             now,
         ))
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        .await?;
     if !inserted {
         repo.cancel().await.ok();
         return Err(refresh_proof_invalid(
@@ -931,9 +872,8 @@ pub async fn refresh_session_grant(
         ));
     }
     let proof_expires_at = proof.expires_at;
-    let proof_digest = arkret_wire::AcceptedDevicePossessionProof::Refresh(proof.clone())
-        .proof_digest()
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let proof_digest =
+        arkret_wire::AcceptedDevicePossessionProof::Refresh(proof.clone()).proof_digest()?;
     let authorization_ref = format!("device-refresh:{proof_digest}");
     let checkpoint = serde_json::json!({
         "kind": "human_device_refresh",
@@ -961,8 +901,7 @@ pub async fn refresh_session_grant(
                 successor: new_session_grant_record(Some(browser_session.id), &new_material),
             },
         )
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        .await?;
     repo.save().await?;
     if matches!(&committed, LedgerRefreshOutcome::Committed { .. }) {
         super::super::test_chaos::maybe_delay_post_commit(
@@ -989,15 +928,8 @@ pub async fn refresh_session_grant(
                     grant.grant_id,
                 ));
             }
-            let state = match grant.lifecycle_state {
-                coauth_data::SessionGrantLifecycleState::Revoked => {
-                    arkret_wire::SessionGrantReplayTerminalState::Revoked
-                }
-                coauth_data::SessionGrantLifecycleState::Superseded => {
-                    arkret_wire::SessionGrantReplayTerminalState::Superseded
-                }
-                coauth_data::SessionGrantLifecycleState::Active => unreachable!(),
-            };
+            let state = super::replay_terminal_state(grant.lifecycle_state)
+                .expect("lifecycle state checked to be terminal above");
             Err(ArkretRouteError::session_grant_replay_terminal(
                 grant.grant_id,
                 state,

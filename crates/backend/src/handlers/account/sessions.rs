@@ -4,8 +4,7 @@ use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    DepotExt, NodeType, RouteError, UserAgentInfo, extract_bound_activity_tracker,
-    extract_session_info, get_requester, make_clock, make_rng, parse_user_agent,
+    DepotExt, NodeType, RouteError, UserAgentInfo, make_clock, make_rng, parse_user_agent,
 };
 use crate::handlers::account::service::sessions::{
     AccountSessionError, OAuthSessionDetailData,
@@ -103,12 +102,9 @@ pub async fn list_oauth_sessions(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<OAuthSessionList>, RouteError> {
-    let repo_factory = depot.repo_factory()?;
     let clock = make_clock();
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-    let repo = repo_factory.create().await?;
-    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+    let (requester, repo) =
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     let limit = req.query::<usize>("limit").unwrap_or(50).clamp(1, 100);
     let mut pagination = Pagination::first(limit);
@@ -147,14 +143,10 @@ pub async fn get_session(
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?;
 
-    let repo_factory = depot.repo_factory()?;
     let clock = make_clock();
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
-    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+    let (requester, repo) =
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     let (node_type, ulid) = NodeType::deserialize(&id)?;
 
@@ -232,14 +224,10 @@ pub async fn end_browser_session(
         .ok_or(RouteError::BadRequest("missing id".into()))?;
     let ulid = NodeType::BrowserSession.extract_ulid(&id)?;
 
-    let repo_factory = depot.repo_factory()?;
     let clock = make_clock();
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
-    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+    let (requester, repo) =
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     end_browser_session_service(repo, &requester, &clock, ulid)
         .await
@@ -260,15 +248,11 @@ pub async fn end_oauth_session(
         .ok_or(RouteError::BadRequest("missing id".into()))?;
     let ulid = NodeType::OAuthSession.extract_ulid(&id)?;
 
-    let repo_factory = depot.repo_factory()?;
     let clock = make_clock();
     let mut rng = make_rng();
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
-    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+    let (requester, repo) =
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     end_oauth_session_service(repo, &requester, &mut rng, &clock, ulid)
         .await
@@ -304,15 +288,11 @@ pub async fn set_oauth_session_name(
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
-    let repo_factory = depot.repo_factory()?;
     let station = depot.station()?;
     let clock = make_clock();
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
-    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+    let (requester, repo) =
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     set_oauth_session_human_name(
         repo,

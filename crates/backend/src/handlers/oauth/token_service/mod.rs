@@ -176,7 +176,7 @@ pub enum ClientCredentialsGrantError {
     UnauthorizedClient(Ulid),
 
     #[error("policy denied the request: {0}")]
-    DeniedByPolicy(coauth_policy::EvaluationResult),
+    DeniedByPolicy(crate::policy::EvaluationResult),
 
     #[error(transparent)]
     Repository(#[from] RepositoryError),
@@ -185,8 +185,8 @@ pub enum ClientCredentialsGrantError {
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
 }
 
-impl From<coauth_policy::EvaluationError> for ClientCredentialsGrantError {
-    fn from(e: coauth_policy::EvaluationError) -> Self {
+impl From<crate::policy::EvaluationError> for ClientCredentialsGrantError {
+    fn from(e: crate::policy::EvaluationError) -> Self {
         Self::Internal(Box::new(e))
     }
 }

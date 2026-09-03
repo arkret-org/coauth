@@ -78,11 +78,8 @@ pub async fn list_session_grants(
     let page = repo
         .oauth_session_grant()
         .list(filter, Pagination::first(100))
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    repo.cancel()
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        .await?;
+    repo.cancel().await?;
 
     Ok(Json(SessionGrantListOutcome {
         grants: page
@@ -120,16 +117,14 @@ pub async fn revoke_session_grant(
     let grant = repo
         .oauth_session_grant()
         .lookup(id)
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .await?
         .ok_or(ArkretRouteError::NotFound)?;
     let issuer_id = grant.issuer_id.clone();
 
     let canonical_intent = arkret_canonical::canonical_json_bytes(&serde_json::json!({
         "operation": "admin_revoke_session_grant",
         "grant_id": grant.grant_id,
-    }))
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    }))?;
     let canonical_intent_digest: [u8; 32] = arkret_canonical::sha256_bytes(&canonical_intent);
     let request_identity = format!("admin-revoke:{}", grant.grant_id);
     let now = clock.now();
@@ -158,8 +153,7 @@ pub async fn revoke_session_grant(
                 retained_until: now + chrono::Duration::days(7),
             },
         )
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        .await?;
     let operation = match reserved {
         coauth_data::SessionGrantReserveOutcome::Reserved(operation) => Some(operation),
         coauth_data::SessionGrantReserveOutcome::Pending(operation)
@@ -207,8 +201,7 @@ pub async fn revoke_session_grant(
                 },
                 coauth_data::SessionGrantRevokeSelector::Grant(&grant.grant_id),
             )
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+            .await?;
         if matches!(
             outcome,
             coauth_data::SessionGrantRevokeOutcome::Indeterminate(_)
@@ -224,12 +217,9 @@ pub async fn revoke_session_grant(
     let grant = repo
         .oauth_session_grant()
         .lookup(id)
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .await?
         .ok_or(ArkretRouteError::NotFound)?;
-    repo.save()
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    repo.save().await?;
 
     Ok(Json(SessionGrantRevokeOutcome {
         grant: grant.into(),

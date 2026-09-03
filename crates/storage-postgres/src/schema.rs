@@ -463,7 +463,6 @@ diesel::table! {
         user_password_id -> Nullable<Uuid>,
         upstream_oauth_authorization_session_id -> Nullable<Uuid>,
         webauthn_credential_id -> Nullable<Uuid>,
-        authentication_source -> Nullable<Text>,
         created_at -> Timestamptz,
     }
 }

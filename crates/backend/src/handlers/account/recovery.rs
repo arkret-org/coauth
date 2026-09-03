@@ -12,7 +12,6 @@ use salvo::prelude::*;
 use ulid::Ulid;
 
 use super::{DepotExt, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
-use crate::handlers::RequesterFingerprint;
 use crate::handlers::account::service::recovery::{
     LoadAccountRecoverySessionError, ResendAccountRecoveryError, StartAccountRecoveryError,
     load_account_recovery_session, recovery_session_status, resend_account_recovery,
@@ -46,9 +45,7 @@ pub async fn post_recovery_start(
     let mut rng = make_rng();
 
     let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let requester = activity_tracker
-        .ip()
-        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
+    let requester = activity_tracker.requester_fingerprint();
     let user_agent = req
         .headers()
         .get("user-agent")
@@ -187,10 +184,7 @@ pub async fn post_recovery_resend(
     let clock = make_clock();
     let mut rng = make_rng();
 
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let requester = activity_tracker
-        .ip()
-        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
+    let requester = extract_bound_activity_tracker(req, depot).requester_fingerprint();
 
     if !site_config.account_recovery_allowed {
         return Ok(Json(ResendRecoveryOutcome {

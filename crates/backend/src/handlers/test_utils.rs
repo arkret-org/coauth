@@ -22,7 +22,6 @@ use coauth_keystore::{Encrypter, JsonWebKey, JsonWebKeySet, Keystore, PrivateKey
 use coauth_messaging::NotificationCenter;
 use coauth_messaging::email::{Mailer, Transport as MailTransport};
 use coauth_oauth_types::scope::Scope;
-use coauth_policy::PolicyFactory;
 use coauth_principal::ConnectorAdmin;
 use coauth_storage_postgres::PgRepositoryFactory;
 use coauth_tasks::QueueWorker;
@@ -48,6 +47,7 @@ use crate::handlers::passwords::{Hasher, PasswordManager};
 use crate::handlers::upstream_oauth::cache::MetadataCache;
 use crate::handlers::upstream_oauth::jwks_cache::JwksCache;
 use crate::handlers::{ActivityTracker, Limiter};
+use crate::policy::PolicyFactory;
 use crate::salvo_utils::cookies::{CookieJar, CookieManager};
 use crate::services::account_claims::account_claims_service;
 use crate::services::did_resolver::default_did_resolver_service;

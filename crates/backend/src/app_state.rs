@@ -4,7 +4,6 @@ use coauth_config::ArkretConfig;
 use coauth_data::{AppVersion, BoxRepositoryFactory, RepositoryFactory, SiteConfig, UrlBuilder};
 use coauth_i18n::Translator;
 use coauth_keystore::{Encrypter, Keystore};
-use coauth_policy::PolicyFactory;
 use coauth_principal::{ConnectorAdmin, ConnectorRegistry};
 use coauth_storage_postgres::PgRepositoryFactory;
 use coauth_templates::Templates;
@@ -17,6 +16,7 @@ use tracing::Instrument;
 
 use crate::handlers::passwords::PasswordManager;
 use crate::handlers::{ActivityTracker, CookieManager, JwksCache, Limiter, MetadataCache};
+use crate::policy::PolicyFactory;
 use crate::services::account_claims::account_claims_service;
 use crate::services::did_resolver::default_did_resolver_service;
 use crate::services::dpop::{DpopVerifier, RepositoryJtiStore};

@@ -14,7 +14,6 @@ use super::{
     DepotExt, RouteError, extract_bound_activity_tracker, extract_session_info, make_clock,
     make_rng,
 };
-use crate::handlers::RequesterFingerprint;
 use crate::handlers::oauth::access::{
     ConsentScreen, DeviceConsentAction, DeviceConsentStatus, OAuthAccessError,
     accept_authorization_consent, load_authorization_consent, load_device_consent,
@@ -302,10 +301,7 @@ pub async fn device_link_get(
     // device-authorization user code cannot be brute-force enumerated. A
     // throttled requester gets the same `invalid` shape as a bad code, so the
     // limit is not itself an enumeration oracle.
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let requester = activity_tracker
-        .ip()
-        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
+    let requester = extract_bound_activity_tracker(req, depot).requester_fingerprint();
     if let Err(error) = limiter.check_device_link_lookup(requester).await {
         tracing::warn!(error = &error as &dyn std::error::Error);
         res.render(Json(DeviceLinkOutcome {

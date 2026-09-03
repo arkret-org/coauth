@@ -80,12 +80,9 @@ async fn terminate_auth_side_session_by_grant_jwt(
     let Some(grant) = repo
         .oauth_session_grant()
         .lookup_by_grant_jwt(grant_jwt)
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+        .await?
     else {
-        repo.cancel()
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        repo.cancel().await?;
         return Ok(success_outcome());
     };
     let issuer_id = grant.issuer_id.clone();
@@ -96,8 +93,7 @@ async fn terminate_auth_side_session_by_grant_jwt(
             "sha256:{}",
             hex::encode(sha2::Sha256::digest(grant_jwt.as_bytes()))
         ),
-    }))
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    }))?;
     let canonical_intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_intent).into();
     let request_identity = format!(
         "auth-session-logout:{}",
@@ -129,8 +125,7 @@ async fn terminate_auth_side_session_by_grant_jwt(
                 retained_until: now + chrono::Duration::days(7),
             },
         )
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        .await?;
     let operation = match reserved {
         coauth_data::SessionGrantReserveOutcome::Reserved(operation) => Some(operation),
         coauth_data::SessionGrantReserveOutcome::Pending(operation)
@@ -178,8 +173,7 @@ async fn terminate_auth_side_session_by_grant_jwt(
                 },
                 coauth_data::SessionGrantRevokeSelector::Grant(&grant.grant_id),
             )
-            .await
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+            .await?;
         if matches!(
             committed,
             coauth_data::SessionGrantRevokeOutcome::Indeterminate(_)
@@ -197,21 +191,15 @@ async fn terminate_auth_side_session_by_grant_jwt(
         let unfinished_session = {
             repo.browser_session()
                 .lookup(browser_session_id)
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
+                .await?
                 .filter(|session| session.finished_at.is_none())
         };
         if let Some(session) = unfinished_session {
-            repo.browser_session()
-                .finish(&*clock, session)
-                .await
-                .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+            repo.browser_session().finish(&*clock, session).await?;
         }
     }
 
-    repo.save()
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    repo.save().await?;
 
     Ok(success_outcome())
 }

@@ -7,10 +7,10 @@
 use async_trait::async_trait;
 use coauth_data::PolicyData;
 
-use crate::model::{
+use crate::policy::model::{
     AuthorizationGrantInput, ClientRegistrationInput, EmailInput, EvaluationResult, RegisterInput,
 };
-use crate::{EvaluationError, InstantiateError, LoadError};
+use crate::policy::{EvaluationError, InstantiateError, LoadError};
 
 /// A policy evaluator instance capable of evaluating different policy types.
 ///

@@ -7,10 +7,7 @@ use coauth_account_types::{LinkedAccount, LinkedAccountsOutcome, UnlinkOutcome};
 use salvo::prelude::*;
 use ulid::Ulid;
 
-use super::{
-    DepotExt, RouteError, extract_bound_activity_tracker, extract_session_info, get_requester,
-    make_clock,
-};
+use super::{RouteError, make_clock};
 use crate::handlers::account::service::connections::{
     LinkedAccountError, list_linked_accounts as list_linked_accounts_service, unlink_linked_account,
 };
@@ -23,13 +20,9 @@ pub async fn list_linked_accounts(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<LinkedAccountsOutcome>, RouteError> {
-    let repo_factory = depot.repo_factory()?;
     let clock = make_clock();
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
-    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+    let (requester, repo) =
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     let accounts: Vec<LinkedAccount> = list_linked_accounts_service(repo, &requester, 100)
         .await
@@ -57,13 +50,9 @@ pub async fn unlink_account(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<UnlinkOutcome>, RouteError> {
-    let repo_factory = depot.repo_factory()?;
     let clock = make_clock();
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
-    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+    let (requester, repo) =
+        crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
     let id: Ulid = req
         .param::<String>("id")

@@ -61,8 +61,7 @@ pub async fn issue_controller_gate_attestation(
     let canonical_intent = arkret_canonical::canonical_json_bytes(&request)
         .map_err(|error| schema_violation(error.to_string()))?;
     let canonical_intent_digest =
-        arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(&canonical_intent))
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(&canonical_intent))?;
     let clock = crate::handlers::make_clock();
     let now = clock
         .now()
@@ -141,16 +140,13 @@ pub async fn issue_controller_gate_attestation(
         binding_version: binding.binding_version,
         binding_frontier_digest: binding.binding_frontier_digest,
     };
-    let basis_digest = arkret_identifiers::Hash::new(
-        arkret_canonical::canonical_sha256(&serde_json::json!({
+    let basis_digest =
+        arkret_identifiers::Hash::new(arkret_canonical::canonical_sha256(&serde_json::json!({
             "principal_id": &request.principal_id,
             "accepted_id": &request.agent_authority_id,
             "status": status,
             "basis": &basis,
-        }))
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        }))?)?;
     let mut attestation = ControllerAccountGateAttestation {
         schema: NonEmptyString::new(
             arkret_wire::SchemaId::CONTROLLER_ACCOUNT_GATE_ATTESTATION_V1.to_owned(),
@@ -183,11 +179,9 @@ pub async fn issue_controller_gate_attestation(
         request_id: request.request_id.clone(),
         controller_account_gate_attestation: attestation,
     };
-    let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)?;
     let outcome_digest =
-        arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(&canonical_outcome))
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+        arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(&canonical_outcome))?;
     let committed = repo
         .account_handoff()
         .commit_controller_gate_attestation(

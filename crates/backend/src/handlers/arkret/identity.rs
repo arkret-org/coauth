@@ -14,7 +14,6 @@ use coauth_data::RepositoryAccess;
 use salvo::prelude::*;
 
 use super::*;
-use crate::handlers::RequesterFingerprint;
 use crate::handlers::common::{DepotExt, extract_bound_activity_tracker};
 use crate::services::did_binding;
 
@@ -122,9 +121,7 @@ async fn enforce_identity_resolution_rate_limit(
     depot: &Depot,
 ) -> Result<(), ArkretRouteError> {
     let limiter = depot.limiter()?;
-    let requester = extract_bound_activity_tracker(req, depot)
-        .ip()
-        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
+    let requester = extract_bound_activity_tracker(req, depot).requester_fingerprint();
     limiter
         .check_identity_resolution(requester)
         .await
@@ -152,10 +149,7 @@ pub async fn directory_resolve_handle(
     let key_store = depot.key_store()?;
     let binding_store = depot.verified_did_binding_store()?;
     let limiter = depot.limiter()?;
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let requester = activity_tracker
-        .ip()
-        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
+    let requester = extract_bound_activity_tracker(req, depot).requester_fingerprint();
     limiter
         .check_directory_lookup(requester)
         .await
@@ -175,20 +169,14 @@ pub async fn directory_resolve_handle(
     };
 
     let mut repo = depot.repo().await?;
-    let Some(user) = repo
-        .user()
-        .find_by_handle(&handle)
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?
-    else {
+    let Some(user) = repo.user().find_by_handle(&handle).await? else {
         return Err(directory_resolve_not_found(started_at).await);
     };
 
     // Resolve only a verified principal binding. Unbound accounts have no
     // principal identity and remain undiscoverable.
-    let principal_binding = principal_did_binding_for_user(&mut repo, &arkret_config, &user)
-        .await
-        .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
+    let principal_binding =
+        principal_did_binding_for_user(&mut repo, &arkret_config, &user).await?;
     let Some(principal_binding) = principal_binding else {
         return Err(directory_resolve_not_found(started_at).await);
     };
@@ -322,11 +310,7 @@ fn did_document_object(
     document: DidDocument,
 ) -> Result<BTreeMap<String, serde_json::Value>, ArkretRouteError> {
     parse_did_field("did_document.id", document.id.clone())?;
-    serde_json::from_value(
-        serde_json::to_value(document)
-            .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?,
-    )
-    .map_err(|error| ArkretRouteError::Internal(Box::new(error)))
+    Ok(serde_json::from_value(serde_json::to_value(document)?)?)
 }
 
 #[cfg(test)]
