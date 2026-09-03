@@ -65,18 +65,27 @@ frontend-hot:
     dx serve -p coauth-frontend --hot-reload
 
 # Build the frontend for production (output → dist/)
-frontend-build:
+frontend-build: && (_dx-dist "release")
     dx build -p coauth-frontend --release
-    {{ if os() == "windows" { "$public = Join-Path (cargo metadata --format-version 1 --no-deps | ConvertFrom-Json).target_directory 'dx/coauth-frontend/release/web/public'; if (Test-Path dist) { Remove-Item -Recurse -Force dist }; Copy-Item -Recurse $public dist" } else { "target_dir=$(cargo metadata --format-version 1 --no-deps | sed -e 's/.*\"target_directory\":\"//' -e 's/\".*//'); rm -rf dist && cp -r \"$target_dir/dx/coauth-frontend/release/web/public\" dist" } }}
 
 # Build backend-served frontend assets from the current source tree.
 # Uses a debug build on purpose: `dx build --release` always invokes wasm-opt,
 # whose bundled binaryen binary crashes on Windows (exit 0xc0000409) and prints
 # a scary ERROR during `just dev`/`just backend`. Debug builds skip wasm-opt
 # entirely and are perfectly fine for locally serving the dev frontend.
-frontend-assets:
+frontend-assets: && (_dx-dist "debug")
     dx build -p coauth-frontend
-    {{ if os() == "windows" { "$public = Join-Path (cargo metadata --format-version 1 --no-deps | ConvertFrom-Json).target_directory 'dx/coauth-frontend/debug/web/public'; if (Test-Path dist) { Remove-Item -Recurse -Force dist }; Copy-Item -Recurse $public dist" } else { "target_dir=$(cargo metadata --format-version 1 --no-deps | sed -e 's/.*\"target_directory\":\"//' -e 's/\".*//'); rm -rf dist && cp -r \"$target_dir/dx/coauth-frontend/debug/web/public\" dist" } }}
+
+# Replace `dist/` with the `dx build` bundle for the given profile.
+#
+# `dx` writes below cargo's target directory, and the workspace-level
+# `../.cargo/config.toml` moves that directory outside this repository
+# (`build.target-dir` = a shared tree for all sibling repos). A hard-coded
+# `target/dx/...` therefore resolves to nothing and the copy fails. Ask cargo
+# where its target directory actually is; that answer is correct with or
+# without the shared configuration.
+_dx-dist profile:
+    {{ if os() == "windows" { '$target = (cargo metadata --format-version 1 --no-deps | ConvertFrom-Json).target_directory; $public = Join-Path $target "dx/coauth-frontend/' + profile + '/web/public"; if (-not (Test-Path -LiteralPath $public)) { throw "dx build output not found: $public" }; if (Test-Path dist) { Remove-Item -Recurse -Force dist }; Copy-Item -Recurse $public dist' } else { 'public="$(cargo metadata --format-version 1 --no-deps | sed -n "s/.*\"target_directory\":\"\([^\"]*\)\".*/\1/p")/dx/coauth-frontend/' + profile + '/web/public"; test -d "$public" || { echo "dx build output not found: $public" >&2; exit 1; }; rm -rf dist && cp -r "$public" dist' } }}
 
 # ── Build ────────────────────────────────────────────────────
 
@@ -174,6 +183,13 @@ doctor *ARGS:
 config-generate *ARGS:
     cargo run -p coauth -- config generate {{ARGS}}
 
-# Clean all build artifacts
+# Clean this repository's build artifacts.
+#
+# NOT a bare `cargo clean`. The workspace-level `../.cargo/config.toml` points
+# `build.target-dir` at one directory shared by every sibling repository, and
+# `cargo clean` obeys it: it would delete inkson's, soland's and the SDK's
+# artifacts too. `-p` restricts the purge to the crates defined here. Add new
+# crates to this list; a stale name fails loudly with `did not match any
+# packages`.
 clean:
-    cargo clean
+    cargo clean         -p coauth -p coauth-frontend -p coauth-backend -p coauth-config         -p coauth-account-types -p coauth-admin-types -p coauth-data-model         -p coauth-data -p coauth-email-types -p coauth-i18n -p coauth-iana         -p coauth-jose -p coauth-keystore -p coauth-messaging         -p coauth-oauth-types -p coauth-principal -p coauth-storage-postgres         -p coauth-tasks -p coauth-templates
