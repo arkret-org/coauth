@@ -51,6 +51,10 @@ impl SecretsConfig {
             spawn_ec_keygen(&mut rng, "ec_k256", PrivateKey::generate_ec_k256).await?;
         let ed25519_key =
             spawn_ec_keygen(&mut rng, "ed25519", PrivateKey::generate_ed25519).await?;
+        let audit_signing_key =
+            spawn_ec_keygen(&mut rng, "ed25519", PrivateKey::generate_ed25519).await?;
+        let session_grant_key =
+            spawn_ec_keygen(&mut rng, "ed25519", PrivateKey::generate_ed25519).await?;
         Ok(Self {
             encryption: EncryptionKey::Value({
                 let mut key = [0u8; 32];
@@ -64,6 +68,11 @@ impl SecretsConfig {
                 into_key_config(ec_p521_key)?,
                 into_key_config(ec_k256_key)?,
                 into_key_config_with_kid(ed25519_key, coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID)?,
+                into_key_config_with_kid(audit_signing_key, coauth_keystore::AUDIT_SIGNING_KEY_ID)?,
+                into_key_config_with_kid(
+                    session_grant_key,
+                    coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID,
+                )?,
             ]),
             keys_dir: None,
         })

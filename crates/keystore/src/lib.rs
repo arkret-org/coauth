@@ -649,6 +649,51 @@ pub enum AccountAuthorityKeyError {
     WrongKeyType,
 }
 
+/// Stable key identifier reserved for signing admin audit rows.
+///
+/// Selected by name, never by algorithm. `JsonWebKeySet::find_key` returns the
+/// *last* key matching its constraints, so an algorithm-only lookup hands the
+/// audit signer to whichever Ed25519 key happens to sit last in the configured
+/// list - and adding any Ed25519 key to a deployment silently re-points it.
+/// Audit rows are verified by the `kid` recorded in their signature, so the
+/// signer has to be a key chosen on purpose and kept stable.
+pub const AUDIT_SIGNING_KEY_ID: &str = "coauth-audit-signing-v1";
+
+/// Stable key identifier reserved for signing `ak.session.grant` credentials.
+///
+/// Grants are verified through this deployment's published JWKS by the `kid`
+/// in their JWT header, so any published key *can* verify. What must not drift
+/// is *which* key signs: an algorithm-only lookup returns the last matching key
+/// in the configured list, so adding or reordering an Ed25519 key silently
+/// moved grant issuance onto a key designated for something else entirely.
+pub const SESSION_GRANT_SIGNING_KEY_ID: &str = "coauth-session-grant-v1";
+
+/// Signature algorithms this deployment will sign service credentials with,
+/// most preferred first.
+const SERVICE_SIGNING_ALG_PREFERENCE: [JsonWebSignatureAlg; 10] = [
+    JsonWebSignatureAlg::Ed25519,
+    JsonWebSignatureAlg::Es512,
+    JsonWebSignatureAlg::Es384,
+    JsonWebSignatureAlg::Es256,
+    JsonWebSignatureAlg::Rs512,
+    JsonWebSignatureAlg::Rs384,
+    JsonWebSignatureAlg::Rs256,
+    JsonWebSignatureAlg::Ps512,
+    JsonWebSignatureAlg::Ps384,
+    JsonWebSignatureAlg::Ps256,
+];
+
+/// Invalid audit signing key selection from the configured key backend.
+#[derive(Debug, Error)]
+pub enum AuditSigningKeyError {
+    #[error("no key with kid `{AUDIT_SIGNING_KEY_ID}` is configured")]
+    Missing,
+    #[error("more than one key with kid `{AUDIT_SIGNING_KEY_ID}` is configured")]
+    Ambiguous,
+    #[error("key `{AUDIT_SIGNING_KEY_ID}` must be Ed25519")]
+    WrongKeyType,
+}
+
 impl Keystore {
     /// Create a keystore out of a JSON Web Key Set
     #[must_use]
@@ -722,6 +767,86 @@ impl Keystore {
         }
 
         Ok(signer)
+    }
+
+    /// Return the explicitly designated Ed25519 seed used to sign admin audit
+    /// rows.
+    pub fn audit_signing_seed(&self) -> Result<[u8; 32], AuditSigningKeyError> {
+        let mut candidates = self
+            .inner
+            .iter()
+            .filter(|jwk| jwk.kid() == Some(AUDIT_SIGNING_KEY_ID));
+        let candidate = candidates.next().ok_or(AuditSigningKeyError::Missing)?;
+        if candidates.next().is_some() {
+            return Err(AuditSigningKeyError::Ambiguous);
+        }
+        match candidate.params() {
+            PrivateKey::OkpEd25519(key) => Ok(key.to_bytes()),
+            _ => Err(AuditSigningKeyError::WrongKeyType),
+        }
+    }
+
+    /// Return the signer designated for admin audit rows.
+    ///
+    /// Audit signing must use this selector instead of the algorithm-only one
+    /// for the same reason the Account Authority does: the configured list may
+    /// legitimately hold several Ed25519 keys, and which one signs the audit
+    /// trail must not depend on their order.
+    pub fn audit_signer(&self) -> Result<Arc<AsymmetricSigningKey>, AuditSigningKeyError> {
+        let seed = self.audit_signing_seed()?;
+        let alg = JsonWebSignatureAlg::Ed25519;
+        let cache_key = (AUDIT_SIGNING_KEY_ID.to_owned(), alg);
+
+        if let Ok(cache) = self.signer_cache.read()
+            && let Some(signer) = cache.get(&cache_key)
+        {
+            return Ok(Arc::clone(signer));
+        }
+
+        let signer = Arc::new(AsymmetricSigningKey::ed25519(
+            ed25519_dalek::SigningKey::from_bytes(&seed),
+        ));
+        if let Ok(mut cache) = self.signer_cache.write() {
+            let entry = cache
+                .entry(cache_key)
+                .or_insert_with(|| Arc::clone(&signer));
+            return Ok(Arc::clone(entry));
+        }
+
+        Ok(signer)
+    }
+
+    /// The key that signs `ak.session.grant` credentials, with the algorithm to
+    /// sign them under.
+    ///
+    /// Prefers the key designated by [`SESSION_GRANT_SIGNING_KEY_ID`], picking
+    /// the most preferred algorithm that key can actually sign with. A
+    /// deployment configured before that kid existed has none, and refusing to
+    /// issue grants would take its logins down on upgrade, so it falls back to
+    /// the historical algorithm-order selection - which is what it was already
+    /// getting. Configure the designated key to stop new keys from moving grant
+    /// issuance around underneath the deployment.
+    pub fn session_grant_signing_key(
+        &self,
+    ) -> Option<(JsonWebSignatureAlg, &JsonWebKey<PrivateKey>)> {
+        if let Some(key) = self
+            .inner
+            .iter()
+            .find(|jwk| jwk.kid() == Some(SESSION_GRANT_SIGNING_KEY_ID))
+        {
+            // Capability-tested rather than inferred: the algorithm chosen here
+            // is the one the signing path will build a signer for.
+            return SERVICE_SIGNING_ALG_PREFERENCE
+                .iter()
+                .find(|alg| key.params().signing_key_for_alg(alg).is_ok())
+                .map(|alg| (alg.clone(), key));
+        }
+
+        SERVICE_SIGNING_ALG_PREFERENCE.iter().find_map(|alg| {
+            self.inner
+                .signing_key_for_algorithm(alg)
+                .map(|key| (alg.clone(), key))
+        })
     }
 
     /// Get a signer for the given algorithm, reusing a previously built signer

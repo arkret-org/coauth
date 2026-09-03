@@ -65,6 +65,18 @@ secrets:
   # derivation. Retain this key across database restore or replacement.
   - kid: coauth-service-identity-v1
     key: ${COAUTH_SERVICE_IDENTITY_KEY_ED25519_PEM}
+  # Stable, distinct Ed25519 key that signs `ak.session.grant` credentials.
+  # Selected by this kid so adding or reordering other keys cannot move grant
+  # issuance onto a different key. Retain it while any issued grant is still
+  # valid: clients resolve it from the published JWKS by the kid in the grant.
+  - kid: coauth-session-grant-v1
+    key: ${COAUTH_SESSION_GRANT_KEY_ED25519_PEM}
+  # Stable, distinct Ed25519 key that signs admin audit rows. Selected by this
+  # kid, never by algorithm, so adding or reordering other Ed25519 keys cannot
+  # change which key the audit trail is verified against. Retain it: rows
+  # already written name it in their signature.
+  - kid: coauth-audit-signing-v1
+    key: ${COAUTH_AUDIT_SIGNING_KEY_ED25519_PEM}
   # Stable, distinct Ed25519 key delegated only to B-model first-device
   # enrollment. Retain it across process and database replacement.
   - kid: coauth-device-enrollment-v1

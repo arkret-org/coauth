@@ -290,15 +290,18 @@ fn sign_admin_operation_log(
     let canonical =
         canonical_json_bytes(&transcript).map_err(|e| SignError::Canonical(e.to_string()))?;
 
-    let (alg, key) = audit_signature_algorithms()
-        .into_iter()
-        .find_map(|alg| keystore.signing_key_for_algorithm(&alg).map(|k| (alg, k)))
-        .ok_or(SignError::NoSigningKey)?;
-
-    let kid = key.kid().ok_or(SignError::NoSigningKey)?;
-    let signer = keystore
-        .signer_for_algorithm(&alg)
-        .map_err(|_| SignError::KeyAlgMismatch)?;
+    // The signer is the key designated for audit rows, chosen by `kid`. An
+    // algorithm-only lookup returned the last matching key in the configured
+    // list, so the audit trail changed signer whenever an Ed25519 key was
+    // added or reordered - and the `kid` written into every row silently
+    // changed with it. Verification still walks `audit_signature_algorithms`
+    // so rows signed before this key existed keep verifying.
+    let kid = coauth_keystore::AUDIT_SIGNING_KEY_ID;
+    let signer = keystore.audit_signer().map_err(|error| match error {
+        coauth_keystore::AuditSigningKeyError::Missing
+        | coauth_keystore::AuditSigningKeyError::Ambiguous => SignError::NoSigningKey,
+        coauth_keystore::AuditSigningKeyError::WrongKeyType => SignError::KeyAlgMismatch,
+    })?;
 
     let mut rng = ChaChaRng::from_rng(rand_core::OsRng).map_err(|_| SignError::Sign)?;
     let raw = signer
@@ -362,7 +365,8 @@ mod tests {
 
     fn test_keystore() -> Keystore {
         let mut rng = ChaChaRng::seed_from_u64(7);
-        let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("audit-test");
+        let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+            .with_kid(coauth_keystore::AUDIT_SIGNING_KEY_ID);
         Keystore::new(JsonWebKeySet::new(vec![key]))
     }
 
@@ -402,6 +406,48 @@ mod tests {
         let mut log = test_log(None);
         log.audit_signature = Some(sign_admin_operation_log(&keystore, service_did, &log).unwrap());
         (keystore, log)
+    }
+
+    /// The keyset legitimately holds several Ed25519 keys. Before the signer
+    /// was designated by kid, `find_key` returned the last algorithm match, so
+    /// whichever Ed25519 key sat last in the configuration signed the audit
+    /// trail - and adding or reordering keys silently changed the `kid` every
+    /// row records. Both orders must now name the designated key.
+    #[test]
+    fn audit_signer_is_the_designated_key_regardless_of_key_order() {
+        let service_did = test_service_did();
+        // Private keys are not `Clone`; rebuild each from its seed per order.
+        let key = |seed: u64, kid: &str| {
+            let mut rng = ChaChaRng::seed_from_u64(seed);
+            JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid(kid)
+        };
+        let designated = coauth_keystore::AUDIT_SIGNING_KEY_ID;
+
+        for order in [
+            [("other-a", 11u64), (designated, 12), ("other-z", 13)],
+            [("other-z", 13), (designated, 12), ("other-a", 11)],
+        ] {
+            let keys = order.iter().map(|(kid, seed)| key(*seed, kid)).collect();
+            let keystore = Keystore::new(JsonWebKeySet::new(keys));
+            let log = test_log(None);
+            let signature = sign_admin_operation_log(&keystore, &service_did, &log).unwrap();
+            let parsed = parse_audit_signature(&signature).unwrap();
+            assert_eq!(parsed.kid, coauth_keystore::AUDIT_SIGNING_KEY_ID);
+            let mut signed = log;
+            signed.audit_signature = Some(signature);
+            assert_eq!(
+                verify_admin_operation_signature(&signed, &keystore, &service_did),
+                AuditSignatureStatus::Verified
+            );
+        }
+
+        // No designated key at all: the row is reported unsignable rather than
+        // signed by whichever key happens to be around.
+        let keystore = Keystore::new(JsonWebKeySet::new(vec![key(14, "stray")]));
+        assert!(matches!(
+            sign_admin_operation_log(&keystore, &service_did, &test_log(None)),
+            Err(SignError::NoSigningKey)
+        ));
     }
 
     #[test]

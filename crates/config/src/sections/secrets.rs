@@ -372,6 +372,14 @@ mod tests {
                 .iter()
                 .any(|key| key.kid() == Some(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID))
         );
+        // The audit signer is designated by name; a generated config must not
+        // leave it to fall back to "whichever Ed25519 key is last".
+        assert!(key_store.audit_signing_seed().is_ok());
+        assert!(
+            key_store
+                .iter()
+                .any(|key| key.kid() == Some(coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID))
+        );
     }
 
     #[tokio::test]

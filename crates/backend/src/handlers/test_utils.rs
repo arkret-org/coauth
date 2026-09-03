@@ -467,7 +467,23 @@ impl TestState {
         let account_authority_key =
             JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(44)))
                 .with_kid(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID);
-        let jwks = JsonWebKeySet::new(vec![rsa, ed25519, account_authority_key]);
+        // Admin audit rows are signed with the key designated for them; without
+        // it every signed-audit path would write unsigned rows and warn.
+        let audit_signing_key =
+            JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(45)))
+                .with_kid(coauth_keystore::AUDIT_SIGNING_KEY_ID);
+        // Session grants are signed by the key designated for them, so the
+        // fixture pins it rather than letting key order decide.
+        let session_grant_key =
+            JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(46)))
+                .with_kid(coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID);
+        let jwks = JsonWebKeySet::new(vec![
+            rsa,
+            ed25519,
+            account_authority_key,
+            audit_signing_key,
+            session_grant_key,
+        ]);
         let key_store = Keystore::new(jwks);
 
         let encrypter = Encrypter::new(&[0x42; 32]);

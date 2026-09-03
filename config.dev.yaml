@@ -95,6 +95,21 @@ secrets:
       oUQDQgAEeibK9H46/WG0q0u+AhrnALVQeK4ny5XDhEiEQG5iNbewL8Vkzbl/w9xQ
       VBcGmfUG9zJBQYztKW5Eqc7M+62eBQ==
       -----END EC PRIVATE KEY-----
+  - kid: coauth-account-authority-v1
+    key: |
+      -----BEGIN PRIVATE KEY-----
+      MC4CAQAwBQYDK2VwBCIEIAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJ
+      -----END PRIVATE KEY-----
+  - kid: coauth-session-grant-v1
+    key: |
+      -----BEGIN PRIVATE KEY-----
+      MC4CAQAwBQYDK2VwBCIEIAsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsL
+      -----END PRIVATE KEY-----
+  - kid: coauth-audit-signing-v1
+    key: |
+      -----BEGIN PRIVATE KEY-----
+      MC4CAQAwBQYDK2VwBCIEIAoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoK
+      -----END PRIVATE KEY-----
   - kid: coauth-service-identity-v1
     key: |
       -----BEGIN PRIVATE KEY-----

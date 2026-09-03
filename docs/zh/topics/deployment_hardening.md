@@ -15,6 +15,17 @@ IP 地址、User-Agent 与 schema 版本。管理审计的读取 / 导出接口�
 - `invalid` —— 签名存在但已与行内容不匹配。
 - `key_unavailable` —— 该行引用的服务 DID/kid 本进程无法验证。
 
+`ak.session.grant` 由 kid 为 `coauth-session-grant-v1` 的密钥签名，同样按名字
+选取。未配置该密钥的旧部署回落到历史的按算法选取（即升级前的行为），签发不会
+中断；配置它之后，新增或重排其它密钥不再改变签发用的密钥与 grant 头部的 kid。
+轮换时把退役公钥保留在 JWKS 中直到相关 grant 全部过期。
+
+审计行由 `secrets.keys` 中 kid 为 `coauth-audit-signing-v1` 的 Ed25519 密钥
+签名。它按名字选取，不按算法：密钥集按算法查找返回的是**最后一个**匹配项，
+按算法选会让审计签名者随任何一把 Ed25519 密钥的增删或重排而悄悄变化，
+而每一行签名里记录的 kid 也随之改变。没有配置这把密钥时，行按 fail-open
+规则写为 `unsigned`（`fail_closed: true` 时拒绝写入）。
+
 签名密钥灰度期间保持 `arkret.audit_signature_fail_closed: false`。对生产
 受监管业务，先发布服务 JWKS，确认审计流对新行报告 `verified`，再设为
 `arkret.audit_signature_fail_closed: true`，使 coauth 在无法产出已签名审计行

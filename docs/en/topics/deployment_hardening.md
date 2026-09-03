@@ -17,6 +17,22 @@ read/export surfaces return `signature_status`:
 - `key_unavailable` — the row references a service DID/kid that this process
   cannot verify.
 
+`ak.session.grant` credentials are signed with the key whose kid is
+`coauth-session-grant-v1`, also selected by name. A deployment configured
+before that kid existed falls back to the historical algorithm-order selection
+- exactly what it had before - so issuance never stops on upgrade; once the key
+is configured, adding or reordering other keys no longer changes the signing
+key or the kid clients read out of a grant. Keep a retired public key in the
+JWKS until every grant it signed has expired.
+
+Audit rows are signed with the Ed25519 key whose kid is
+`coauth-audit-signing-v1` in `secrets.keys`. It is selected by name, never by
+algorithm: an algorithm lookup returns the *last* matching key, so selecting
+by algorithm would let the audit signer change silently whenever an Ed25519
+key is added or reordered, and the kid recorded in every row's signature would
+change with it. Without this key, rows are written `unsigned` under the
+fail-open rule (or rejected when `fail_closed: true`).
+
 Keep `arkret.audit_signature_fail_closed: false` while rolling out signing
 keys. For production regulated workloads, publish the service JWKS, verify the
 audit feed reports `verified` for new rows, then set
