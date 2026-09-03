@@ -7,7 +7,7 @@ use arkret_wire::{Audience, PayloadProof, PayloadProofPurpose, SchemaId, proof_k
 use chrono::{DateTime, Duration, Utc};
 use coauth_config::ArkretConfig;
 use coauth_data::{Clock, UrlBuilder, User};
-use coauth_keystore::{ACCOUNT_AUTHORITY_KEY_ID, Keystore};
+use coauth_keystore::Keystore;
 
 use super::*;
 
@@ -89,8 +89,14 @@ pub(crate) fn issue_handle_claim(
             .account_authority_seed()
             .map_err(|error| SessionGrantError::Other(error.into()))?,
     );
-    let verification_method =
-        did_url_for_handle_claim(format!("{issuer_did}#{ACCOUNT_AUTHORITY_KEY_ID}"))?;
+    // `issuer_did` is the owning Station; the Station's DID document authorizes
+    // this Account Authority under the shared fragment, not under coauth's
+    // internal keystore `kid`. A verifier resolves the fragment from that
+    // document, so the keystore name would be unresolvable there.
+    let verification_method = did_url_for_handle_claim(format!(
+        "{issuer_did}#{}",
+        crate::services::peer_protocol_client::ACCOUNT_AUTHORITY_VERIFICATION_METHOD_FRAGMENT
+    ))?;
     let placeholder_digest = hash_for_handle_claim(format!("sha256:{}", "0".repeat(64)))?;
     let placeholder = handle_claim_proof(
         placeholder_digest,

@@ -18,7 +18,6 @@ use coauth_data::account_handoff::{
 };
 use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
 use coauth_data::{Clock as _, RepositoryAccess as _};
-use coauth_jose::constraints::Constrainable as _;
 use salvo::prelude::*;
 
 use super::{ArkretRouteError, owning_station_id_for};
@@ -118,23 +117,18 @@ pub async fn issue_controller_gate_attestation(
     let authority_did = super::owning_station_did_for(&depot.arkret_config()?);
     let authority_id = owning_station_id_for(&depot.arkret_config()?);
     let key_store = depot.key_store()?;
-    let signing_jwk = key_store
-        .signing_key_for_algorithm(&coauth_iana::jose::JsonWebSignatureAlg::Ed25519)
-        .ok_or_else(|| ArkretRouteError::Internal("no Ed25519 service signing key".into()))?;
-    let signing_key_id = signing_jwk
-        .kid()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| {
-            ArkretRouteError::Internal("Ed25519 service signing key has no kid".into())
-        })?;
-    let signing_key = match signing_jwk.params() {
-        coauth_keystore::PrivateKey::OkpEd25519(key) => key.as_ref(),
-        _ => {
-            return Err(ArkretRouteError::Internal(
-                "invalid Ed25519 service signing key".into(),
-            ));
-        }
-    };
+    // The attestation is signed as the owning Station, and soland verifies it
+    // by resolving `verification_method` out of the Station's DID document.
+    // That document authorizes exactly one method for this Account Authority,
+    // holding the designated Account Authority key. Selecting "an Ed25519
+    // key" by algorithm returned whichever key sat last in the keystore and
+    // wrote its `kid` as the fragment - a method that exists in no DID
+    // document, so the attestation could never verify.
+    let signing_seed = key_store.account_authority_seed().map_err(|error| {
+        ArkretRouteError::Internal(format!("Account Authority signing key: {error}").into())
+    })?;
+    let signing_key_id =
+        crate::services::peer_protocol_client::ACCOUNT_AUTHORITY_VERIFICATION_METHOD_FRAGMENT;
     let expires_at = now + GATE_TTL;
     let basis = ControllerAccountGateBasis::AccountBindingDefault {
         binding_version: binding.binding_version,
@@ -169,7 +163,7 @@ pub async fn issue_controller_gate_attestation(
                 .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?,
         },
     };
-    let sdk_signing_key = ed25519_dalek_3::SigningKey::from_bytes(&signing_key.to_bytes());
+    let sdk_signing_key = ed25519_dalek_3::SigningKey::from_bytes(&signing_seed);
     arkret_signatures::agent_evidence::sign_controller_account_gate_attestation(
         &mut attestation,
         &sdk_signing_key,

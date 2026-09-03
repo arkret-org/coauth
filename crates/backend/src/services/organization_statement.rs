@@ -37,7 +37,6 @@ use arkret_policy::{
 use arkret_wire::{DidCoreId, DidUrl, Hash, NonEmptyString, ObjectRef, RealmId};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::organization_control::OrganizationDelegation;
-use coauth_jose::constraints::Constrainable as _;
 use coauth_keystore::Keystore;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng as _;
@@ -121,11 +120,23 @@ where
 
     // Resolve the signing key + verification method up front so the statement can
     // be built before signing.
-    let (alg, key) = crate::services::preferred_service_signing_key(key_store)
-        .ok_or(OrganizationStatementError::NoSigningKey)?;
-    let key_id = key.kid().ok_or(OrganizationStatementError::NoSigningKey)?;
-    let verification_method = DidUrl::new(format!("{service_did}#{key_id}"))
-        .map_err(|error| OrganizationStatementError::Canonical(error.to_owned()))?;
+    // `service_did` is the owning Station, whose DID document authorizes this
+    // Account Authority under one fragment holding the designated key. The
+    // verifier resolves the method from that document, so an algorithm-chosen
+    // key named by its keystore `kid` is unverifiable by construction.
+    let signer = key_store
+        .account_authority_signer()
+        .map_err(|error| match error {
+            coauth_keystore::AccountAuthorityKeyError::WrongKeyType => {
+                OrganizationStatementError::KeyAlgMismatch
+            }
+            _ => OrganizationStatementError::NoSigningKey,
+        })?;
+    let verification_method = DidUrl::new(format!(
+        "{service_did}#{}",
+        crate::services::peer_protocol_client::ACCOUNT_AUTHORITY_VERIFICATION_METHOD_FRAGMENT
+    ))
+    .map_err(|error| OrganizationStatementError::Canonical(error.to_owned()))?;
 
     // Build the statement with a placeholder proof. The canonical signing bytes
     // are produced by the SDK (shared with soland's verifier) and exclude
@@ -162,9 +173,6 @@ where
     let canonical = realm_organization_statement_signing_bytes(&payload)
         .map_err(|e| OrganizationStatementError::Canonical(e.to_string()))?;
 
-    let signer = key_store
-        .signer_for_algorithm(&alg)
-        .map_err(|_| OrganizationStatementError::KeyAlgMismatch)?;
     let mut rng =
         ChaChaRng::from_rng(rand_core::OsRng).map_err(|_| OrganizationStatementError::Sign)?;
     let raw = signer
@@ -264,9 +272,14 @@ mod tests {
         use rand_core::SeedableRng;
 
         let mut rng = ChaChaRng::seed_from_u64(42);
-        let ed25519 =
+        // The statement is signed as the Station, so the designated Account
+        // Authority key must be present; an unrelated Ed25519 key sits first
+        // to show it is never the one picked.
+        let stray =
             JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("service-signing");
-        Keystore::new(JsonWebKeySet::new(vec![ed25519]))
+        let account_authority = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+            .with_kid(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID);
+        Keystore::new(JsonWebKeySet::new(vec![stray, account_authority]))
     }
 
     fn base_request() -> OrganizationStatementRequest {
@@ -325,7 +338,17 @@ mod tests {
             payload.authorization.proof,
             SignatureMaterial::NonEmptyString(ref s) if !s.is_empty()
         ));
-        assert!(payload.authorization.verification_method.contains('#'));
+        assert!(
+            payload
+                .authorization
+                .verification_method
+                .ends_with(&format!(
+                    "#{}",
+                    crate::services::peer_protocol_client::ACCOUNT_AUTHORITY_VERIFICATION_METHOD_FRAGMENT
+                )),
+            "the statement must name the Station-authorized Account Authority method, got {}",
+            payload.authorization.verification_method
+        );
     }
 
     #[test]

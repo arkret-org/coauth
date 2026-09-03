@@ -36,6 +36,47 @@ mod tests {
         depot
     }
 
+    /// The Station reads this deployment's Account Authority signing key out of
+    /// the published keyset, selecting it by `kid`, and authorizes it in its own
+    /// DID document as `#account-authority`. That makes three things a
+    /// cross-deployment contract rather than an internal detail: the key is
+    /// published at all, it carries `ACCOUNT_AUTHORITY_KEY_ID` verbatim, and it
+    /// is an Ed25519 OKP key whose `x` is the raw public key. Dropping any of
+    /// them leaves a Station unable to mint an identity that can ever verify
+    /// this Authority.
+    #[tokio::test]
+    async fn jwks_publishes_the_account_authority_key_under_its_stable_kid() {
+        crate::handlers::test_utils::setup();
+
+        let mut rng = ChaChaRng::seed_from_u64(7);
+        let authority = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+            .with_kid(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID);
+        let keystore = Keystore::new(JsonWebKeySet::new(vec![authority]));
+        let mut depot = Depot::new();
+        depot.insert("keystore", keystore);
+
+        let Json(jwks) = get_inner(&depot);
+        let body = serde_json::to_value(jwks).unwrap();
+        let key = body["keys"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|key| key["kid"].as_str() == Some(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID))
+            .expect("the Account Authority key is published under its stable kid");
+
+        assert_eq!(key["kty"].as_str(), Some("OKP"));
+        assert_eq!(key["crv"].as_str(), Some("Ed25519"));
+        assert!(
+            key["d"].is_null(),
+            "the private half must never be published"
+        );
+
+        use base64ct::{Base64UrlUnpadded, Encoding as _};
+        let raw = Base64UrlUnpadded::decode_vec(key["x"].as_str().expect("x is a string"))
+            .expect("x is base64url");
+        assert_eq!(raw.len(), 32, "x is the raw Ed25519 public key");
+    }
+
     #[tokio::test]
     async fn jwks_exposes_p521_and_ed25519_public_keys() {
         crate::handlers::test_utils::setup();

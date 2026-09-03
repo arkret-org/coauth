@@ -35,7 +35,11 @@ use url::Url;
 use crate::outbound_http;
 
 const SIGNATURE_LABEL: &str = "sig1";
-pub(crate) const ACCOUNT_AUTHORITY_VERIFICATION_METHOD_FRAGMENT: &str = "account-authority";
+/// The fragment the owning Station authorizes this Account Authority under.
+/// Every proof coauth issues as the Station names `{station_did}#<this>`;
+/// the SDK owns the spelling so Station and Authority cannot drift.
+pub(crate) const ACCOUNT_AUTHORITY_VERIFICATION_METHOD_FRAGMENT: &str =
+    arkret_models_identity::service_identity::ACCOUNT_AUTHORITY_ASSERTION_METHOD_FRAGMENT;
 const SIGNATURE_WINDOW_SECONDS: i64 = 300;
 const SOURCE_SERVICE_ID_HEADER: &str = "Source-Service-ID";
 const DESTINATION_SERVICE_ID_HEADER: &str = "Destination-Service-ID";
