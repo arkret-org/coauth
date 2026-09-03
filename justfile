@@ -67,7 +67,7 @@ frontend-hot:
 # Build the frontend for production (output → dist/)
 frontend-build:
     dx build -p coauth-frontend --release
-    {{ if os() == "windows" { "if (Test-Path dist) { Remove-Item -Recurse -Force dist }; Copy-Item -Recurse target/dx/coauth-frontend/release/web/public dist" } else { "rm -rf dist && cp -r target/dx/coauth-frontend/release/web/public dist" } }}
+    {{ if os() == "windows" { "$public = Join-Path (cargo metadata --format-version 1 --no-deps | ConvertFrom-Json).target_directory 'dx/coauth-frontend/release/web/public'; if (Test-Path dist) { Remove-Item -Recurse -Force dist }; Copy-Item -Recurse $public dist" } else { "target_dir=$(cargo metadata --format-version 1 --no-deps | sed -e 's/.*\"target_directory\":\"//' -e 's/\".*//'); rm -rf dist && cp -r \"$target_dir/dx/coauth-frontend/release/web/public\" dist" } }}
 
 # Build backend-served frontend assets from the current source tree.
 # Uses a debug build on purpose: `dx build --release` always invokes wasm-opt,
@@ -76,7 +76,7 @@ frontend-build:
 # entirely and are perfectly fine for locally serving the dev frontend.
 frontend-assets:
     dx build -p coauth-frontend
-    {{ if os() == "windows" { "if (Test-Path dist) { Remove-Item -Recurse -Force dist }; Copy-Item -Recurse target/dx/coauth-frontend/debug/web/public dist" } else { "rm -rf dist && cp -r target/dx/coauth-frontend/debug/web/public dist" } }}
+    {{ if os() == "windows" { "$public = Join-Path (cargo metadata --format-version 1 --no-deps | ConvertFrom-Json).target_directory 'dx/coauth-frontend/debug/web/public'; if (Test-Path dist) { Remove-Item -Recurse -Force dist }; Copy-Item -Recurse $public dist" } else { "target_dir=$(cargo metadata --format-version 1 --no-deps | sed -e 's/.*\"target_directory\":\"//' -e 's/\".*//'); rm -rf dist && cp -r \"$target_dir/dx/coauth-frontend/debug/web/public\" dist" } }}
 
 # ── Build ────────────────────────────────────────────────────
 
