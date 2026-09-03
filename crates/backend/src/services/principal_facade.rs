@@ -400,7 +400,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
         );
         let resource = match client.get_erasure_receipt(&receipt_id).await {
             Ok(resource) => resource,
-            Err(PeerProtocolClientError::Status(404)) => return Ok(None),
+            Err(PeerProtocolClientError::Status { status: 404, .. }) => return Ok(None),
             Err(error) => return Err(error.into()),
         };
         let package = resource.package;

@@ -159,7 +159,7 @@ diesel-async = { version = "0.9", features = [
 ] }
 diesel_migrations = "2.3"
 digest = "0.10.7"
-dioxus = { version = "0.7.10", default-features = false, features = [
+dioxus = { version = "=0.7.10", default-features = false, features = [
     "minimal",
     "web",
     "router",

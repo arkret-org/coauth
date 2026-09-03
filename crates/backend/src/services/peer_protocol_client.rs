@@ -59,8 +59,17 @@ pub enum PeerProtocolClientError {
     Sign,
     #[error("HTTP send failed: {0}")]
     Http(String),
-    #[error("peer protocol server returned status {0}")]
-    Status(u16),
+    #[error(
+        "peer protocol server returned status {status}{problem_suffix}",
+        problem_suffix = problem
+            .as_ref()
+            .map(|problem| format!(": {}: {}", problem.code(), problem.detail))
+            .unwrap_or_default()
+    )]
+    Status {
+        status: u16,
+        problem: Option<arkret_wire::Problem>,
+    },
     #[error("peer protocol response body invalid: {0}")]
     Response(String),
 }
@@ -409,7 +418,15 @@ where
 {
     let status = response.status();
     if !status.is_success() {
-        return Err(PeerProtocolClientError::Status(status.as_u16()));
+        let problem = response
+            .json::<arkret_wire::Problem>()
+            .await
+            .ok()
+            .filter(|problem| problem.status == status.as_u16());
+        return Err(PeerProtocolClientError::Status {
+            status: status.as_u16(),
+            problem,
+        });
     }
     response
         .json()

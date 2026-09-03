@@ -83,7 +83,7 @@ pub(crate) async fn acquire_human_device_binding(
     let outcome = client
         .post_device_revocation_gate_check(&request)
         .await
-        .map_err(map_gate_peer_error)?;
+        .map_err(map_peer_gate_error)?;
     verify_gate_receipt(depot, &outcome).await?;
 
     match outcome.decision_receipt.decision {
@@ -107,6 +107,42 @@ pub(crate) async fn acquire_human_device_binding(
             arkret_wire::ErrorCode::DEVICE_REVOKED,
             "device authorization is revoked or generation-fenced",
         )),
+    }
+}
+
+fn map_peer_gate_error(error: PeerProtocolClientError) -> ArkretRouteError {
+    match error {
+        PeerProtocolClientError::Status {
+            status,
+            problem: Some(problem),
+        } if (400..500).contains(&status) => {
+            let status = StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_REQUEST);
+            let code = arkret_wire::ErrorCode::from_wire(problem.code())
+                .map(arkret_wire::ErrorCode::as_str)
+                .unwrap_or(arkret_wire::ErrorCode::SCHEMA_VIOLATION);
+            ArkretRouteError::coded(status, code, problem.detail)
+        }
+        PeerProtocolClientError::Status { status, .. } if (400..500).contains(&status) => {
+            let status = StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_REQUEST);
+            ArkretRouteError::coded(
+                status,
+                arkret_wire::ErrorCode::SCHEMA_VIOLATION,
+                "origin Station rejected the device revocation gate request",
+            )
+        }
+        PeerProtocolClientError::Status { .. }
+        | PeerProtocolClientError::Http(_)
+        | PeerProtocolClientError::BaseUrlNotConfigured => ArkretRouteError::coded(
+            StatusCode::BAD_GATEWAY,
+            arkret_wire::ErrorCode::UPSTREAM_UNAVAILABLE,
+            "origin Station device revocation gate is unavailable",
+        ),
+        PeerProtocolClientError::Response(error) => ArkretRouteError::coded(
+            StatusCode::BAD_GATEWAY,
+            arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            format!("origin Station returned an invalid device revocation gate response: {error}"),
+        ),
+        other => ArkretRouteError::Internal(Box::new(other)),
     }
 }
 
@@ -192,57 +228,41 @@ fn gate_protocol_error(error: impl ToString) -> ArkretRouteError {
     )
 }
 
-fn map_gate_peer_error(error: PeerProtocolClientError) -> ArkretRouteError {
-    match error {
-        error @ PeerProtocolClientError::Status(400..=499) => ArkretRouteError::coded(
-            StatusCode::BAD_GATEWAY,
-            arkret_wire::ErrorCode::FAILED_PRECONDITION,
-            format!("origin Station rejected the device revocation gate request: {error}"),
-        ),
-        error @ (PeerProtocolClientError::Status(_) | PeerProtocolClientError::Response(_)) => {
-            ArkretRouteError::coded(
-                StatusCode::BAD_GATEWAY,
-                arkret_wire::ErrorCode::FAILED_PRECONDITION,
-                format!(
-                    "origin Station returned an invalid device revocation gate response: {error}"
-                ),
-            )
-        }
-        error @ (PeerProtocolClientError::Http(_)
-        | PeerProtocolClientError::BaseUrlNotConfigured) => ArkretRouteError::coded(
-            StatusCode::SERVICE_UNAVAILABLE,
-            arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
-            format!("origin Station device revocation gate is unavailable: {error}"),
-        ),
-        error => ArkretRouteError::Internal(Box::new(error)),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn peer_client_rejection_is_not_rendered_as_an_internal_error() {
-        let error = map_gate_peer_error(PeerProtocolClientError::Status(400));
+    fn peer_problem_4xx_keeps_status_and_registered_code() {
+        let error = map_peer_gate_error(PeerProtocolClientError::Status {
+            status: 400,
+            problem: Some(arkret_wire::Problem::new(
+                arkret_wire::ErrorCode::SCHEMA_VIOLATION,
+                400,
+                "accepted-device possession proof is invalid",
+            )),
+        });
         assert!(matches!(
             error,
             ArkretRouteError::Coded {
-                status: StatusCode::BAD_GATEWAY,
-                code: arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                status: StatusCode::BAD_REQUEST,
+                code: arkret_wire::ErrorCode::SCHEMA_VIOLATION,
                 ..
             }
         ));
     }
 
     #[test]
-    fn peer_transport_failure_is_service_unavailable() {
-        let error = map_gate_peer_error(PeerProtocolClientError::Http("offline".to_owned()));
+    fn peer_5xx_is_an_attributable_upstream_failure() {
+        let error = map_peer_gate_error(PeerProtocolClientError::Status {
+            status: 503,
+            problem: None,
+        });
         assert!(matches!(
             error,
             ArkretRouteError::Coded {
-                status: StatusCode::SERVICE_UNAVAILABLE,
-                code: arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
+                status: StatusCode::BAD_GATEWAY,
+                code: arkret_wire::ErrorCode::UPSTREAM_UNAVAILABLE,
                 ..
             }
         ));

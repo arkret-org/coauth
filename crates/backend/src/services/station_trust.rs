@@ -442,7 +442,7 @@ pub async fn verify_station_identity(
             description.service_kind.as_str().to_owned(),
         ));
     }
-    if description.protocol_version != arkret_wire::PROTOCOL_VERSION {
+    if description.protocol_version.as_str() != arkret_wire::PROTOCOL_VERSION {
         return Err(TrustVerificationError::InvalidEvidence(format!(
             "unsupported protocol version {:?}",
             description.protocol_version

@@ -180,12 +180,10 @@ pub async fn directory_resolve_handle(
     let Some(principal_binding) = principal_binding else {
         return Err(directory_resolve_not_found(started_at).await);
     };
-    let principal_id = principal_binding.principal_id.clone();
-
     let verified = body
-        .expected_principal_id
+        .expected_account_id
         .as_ref()
-        .is_some_and(|expected| expected == &principal_id);
+        .is_some_and(|expected| expected == &principal_binding.account_id);
     if !verified {
         return Err(directory_resolve_not_found(started_at).await);
     }
@@ -235,7 +233,9 @@ pub async fn directory_resolve_handle(
         handle: canonical_handle,
         verified,
         claims: Some(vec![claim_material.payload.clone()]),
-        source_refs: vec![claim_material.claim_digest],
+        // The claim digest is not an Event identifier. This Authority has no
+        // resolvable source Event for the locally issued claim.
+        source_refs: Vec::new(),
         expires_at: Some(claim_material.expires_at),
     }))
 }
@@ -295,7 +295,7 @@ fn directory_resolve_request_has_disclosure_gate(body: &DirectoryResolveHandleRe
         .is_some_and(|challenge| !challenge.trim().is_empty());
 
     intent_allowed
-        && body.expected_principal_id.is_some()
+        && body.expected_account_id.is_some()
         && body.requester_id.is_some()
         && challenge_present
         && !body.proofs.is_empty()
