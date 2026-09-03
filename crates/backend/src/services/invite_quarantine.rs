@@ -74,7 +74,7 @@ pub struct InviteQuarantineRecord {
     pub id: Uuid,
     pub created_at: DateTime<Utc>,
     pub peer_principal_id: DidCoreId,
-    pub target_holder_id: DidCoreId,
+    pub target_holder_principal_id: DidCoreId,
     pub consent_id: String,
     pub scope: String,
     pub requesting_admin_localpart: Option<String>,
@@ -92,7 +92,7 @@ pub struct InviteQuarantineRecord {
 #[derive(Clone, Debug)]
 pub struct EnqueueInviteQuarantine {
     pub peer_principal_id: DidCoreId,
-    pub target_holder_id: DidCoreId,
+    pub target_holder_principal_id: DidCoreId,
     pub consent_id: String,
     pub scope: String,
     pub requesting_admin_localpart: Option<String>,
@@ -139,7 +139,7 @@ struct InviteQuarantineRow {
     #[diesel(sql_type = Text)]
     peer_principal_id: DidCoreId,
     #[diesel(sql_type = Text)]
-    target_holder_id: DidCoreId,
+    target_holder_principal_id: DidCoreId,
     #[diesel(sql_type = Text)]
     consent_id: String,
     #[diesel(sql_type = Text)]
@@ -164,7 +164,7 @@ impl InviteQuarantineRow {
             id: self.id,
             created_at: self.created_at,
             peer_principal_id: self.peer_principal_id,
-            target_holder_id: self.target_holder_id,
+            target_holder_principal_id: self.target_holder_principal_id,
             consent_id: self.consent_id,
             scope: self.scope,
             requesting_admin_localpart: self.requesting_admin_localpart,
@@ -196,7 +196,7 @@ impl PgInviteQuarantineService {
             INSERT INTO invite_quarantine_queue (
                 id,
                 peer_principal_id,
-                target_holder_id,
+                target_holder_principal_id,
                 consent_id,
                 scope,
                 requesting_admin_localpart,
@@ -208,7 +208,7 @@ impl PgInviteQuarantineService {
                 id,
                 created_at,
                 peer_principal_id,
-                target_holder_id,
+                target_holder_principal_id,
                 consent_id,
                 scope,
                 requesting_admin_localpart,
@@ -220,7 +220,7 @@ impl PgInviteQuarantineService {
         )
         .bind::<DieselUuid, _>(id)
         .bind::<Text, _>(input.peer_principal_id.as_str())
-        .bind::<Text, _>(input.target_holder_id.as_str())
+        .bind::<Text, _>(input.target_holder_principal_id.as_str())
         .bind::<Text, _>(input.consent_id)
         .bind::<Text, _>(input.scope)
         .bind::<Nullable<Text>, _>(input.requesting_admin_localpart)
@@ -244,7 +244,7 @@ impl PgInviteQuarantineService {
                 id,
                 created_at,
                 peer_principal_id,
-                target_holder_id,
+                target_holder_principal_id,
                 consent_id,
                 scope,
                 requesting_admin_localpart,
@@ -275,7 +275,7 @@ impl PgInviteQuarantineService {
                 id,
                 created_at,
                 peer_principal_id,
-                target_holder_id,
+                target_holder_principal_id,
                 consent_id,
                 scope,
                 requesting_admin_localpart,
@@ -319,7 +319,7 @@ impl PgInviteQuarantineService {
                 id,
                 created_at,
                 peer_principal_id,
-                target_holder_id,
+                target_holder_principal_id,
                 consent_id,
                 scope,
                 requesting_admin_localpart,
@@ -420,7 +420,7 @@ mod tests {
             id: Uuid::now_v7(),
             created_at: Utc::now(),
             peer_principal_id: "ak:did_core:web:p".parse().unwrap(),
-            target_holder_id: "ak:did_core:web:h".parse().unwrap(),
+            target_holder_principal_id: "ak:did_core:web:h".parse().unwrap(),
             consent_id: "c-1".into(),
             scope: "invite".into(),
             requesting_admin_localpart: None,
@@ -436,7 +436,7 @@ mod tests {
     fn enqueue_dto_carries_payload() {
         let dto = EnqueueInviteQuarantine {
             peer_principal_id: DidCoreId::new("ak:did_core:web:peer").unwrap(),
-            target_holder_id: DidCoreId::new("ak:did_core:web:holder").unwrap(),
+            target_holder_principal_id: DidCoreId::new("ak:did_core:web:holder").unwrap(),
             consent_id: "c-1".into(),
             scope: "invite".into(),
             requesting_admin_localpart: Some("admin".into()),

@@ -15,7 +15,7 @@ but they are reserved implementation details rather than a callable public API.
 ### `POST /_coauth/self/agents/{id}/accountability-grant`
 
 This internal AKP-0008 endpoint issues an accountability grant linking a human
-controller DID to an agent principal id and a canonical set of `ak.agent.*`
+controller principal DID to an agent principal id and a canonical set of `ak.agent.*`
 capabilities.
 
 The endpoint is server-to-server only:
@@ -25,14 +25,14 @@ The endpoint is server-to-server only:
 - browser sessions and end-user OAuth tokens are rejected;
 - the path `{id}` must be the agent principal DID, percent-encoded as a single
   URL path segment;
-- the `controller_id` is normalized before use;
+- the `controller_principal_id` is normalized before use;
 - each requested capability must be registered in the local `ak.agent.*`
   capability registry.
 
 On success coauth persists the accountability grant, writes a signed admin audit
 row, and schedules a soland fan-out job. Duplicate active grants for the same
 controller, agent, and capability fingerprint are rejected. Previously revoked
-controller DIDs or agent principals are also rejected.
+controller principal DIDs or agent principals are also rejected.
 
 ## Deferred Surface
 

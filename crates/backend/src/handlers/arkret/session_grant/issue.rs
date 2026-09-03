@@ -1064,7 +1064,7 @@ async fn issue_agent_key_proof_session_grant(
     let controller_binding = repo
         .principal_did()
         .get_by_principal_id_and_audience(
-            authorization.controller_id.as_str(),
+            authorization.controller_principal_id.as_str(),
             audience_id.as_str(),
         )
         .await?

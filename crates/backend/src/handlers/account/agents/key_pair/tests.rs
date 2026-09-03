@@ -78,7 +78,10 @@ fn pairing_scope_precheck_returns_key_reason_before_queueing() {
 fn authoritative_key_state() -> arkret_models_collaboration::agent_operations::KeyState {
     serde_json::from_value(json!({
         "agent_id": AGENT,
-        "controller_id": CONTROLLER,
+        "controller_account_id": {
+            "principal_id": CONTROLLER,
+            "station_id": AUDIENCE
+        },
         "principal_control_realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG",
         "controller_authorization_ref": format!("{AGENT_FULL}#managed-controller"),
         "requested_scope": {
@@ -112,7 +115,7 @@ fn valid_signing_key_binding_core()
         "public_key_digest": SIGNING_KEY_PUBLIC_KEY_DIGEST,
         "issued_at": "2026-07-06T00:00:00.000Z",
         "expires_at": "2026-07-06T00:10:00.000Z",
-        "controller_id": CONTROLLER
+        "controller_principal_id": CONTROLLER
     }))
     .unwrap()
 }
@@ -211,7 +214,7 @@ fn valid_signing_key_binding_for(
         "agent_key_authorize_event_id": event_id,
         "issued_at": "2026-07-06T00:00:00.000Z",
         "expires_at": "2026-07-06T00:10:00.000Z",
-        "controller_id": CONTROLLER,
+        "controller_principal_id": CONTROLLER,
         "controller_proof": {
             "kind": "detached_jws",
             "verification_method": "did:web:controller.example#key-1",
@@ -379,6 +382,29 @@ fn authorize_event_accepts_distinct_runtime_and_signing_key_public_key_digests()
         test_now(),
     )
     .expect("the raw signing-key disclosure must map back to the runtime JWK digest");
+}
+
+#[test]
+fn authorize_event_rejects_same_controller_principal_at_another_station() {
+    let binding = valid_signing_key_binding();
+    let mut envelope = valid_authorize_event(PAIRING_REQUEST_ID);
+    envelope["executed_by"]["account_id"]["station_id"] =
+        json!("ak:did_core:web:other-station.example");
+
+    let err = validate_controller_authorize_event(
+        &authorize_event(envelope),
+        AGENT,
+        VM,
+        &valid_public_key_typed(),
+        &binding,
+        PAIRING_REQUEST_ID,
+        AUDIENCE,
+        &authoritative_key_state(),
+        test_now(),
+    )
+    .expect_err("same controller principal at another Station must fail exact AccountId binding");
+
+    assert!(err.message().contains("controller account"));
 }
 
 #[test]

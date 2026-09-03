@@ -1215,7 +1215,10 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
             },
             "key_state": {
                 "agent_id": "ak:did_core:web:agent.example",
-                "controller_id": "ak:did_core:web:controller.example",
+                "controller_account_id": {
+                    "principal_id": "ak:did_core:web:controller.example",
+                    "station_id": "ak:did_core:web:station.example"
+                },
                 "principal_control_realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG",
                 "controller_authorization_ref": "did:web:agent.example#managed-controller",
                 "requested_scope": {
@@ -1248,8 +1251,8 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     let authorization_event_id = "ak:event:AQilOsNi6WF7kBMfOVLw4LjFp75pXSq5WJ0WMmJw3kgK";
     let scope_details = serde_json::Map::from_iter([
         (
-            "controller_id".to_owned(),
-            serde_json::json!("did:web:alice.example"),
+            "controller_principal_id".to_owned(),
+            serde_json::json!("ak:did_core:web:alice.example"),
         ),
         (
             "agent_key_authorization_ref".to_owned(),

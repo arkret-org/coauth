@@ -158,9 +158,9 @@ pub struct BatchInviteConsentGate {
     #[schemars(with = "String")]
     pub peer_principal_id: DidCoreId,
 
-    /// DID of the target holder whose consent cell governs the invite.
+    /// Principal DID of the target holder whose consent cell governs the invite.
     #[schemars(with = "String")]
-    pub target_holder_id: DidCoreId,
+    pub target_holder_principal_id: DidCoreId,
 
     /// Consent-cell identifier per spec §6.
     pub consent_id: String,
@@ -433,7 +433,7 @@ pub async fn batch_invite(
                 let enqueue_result = queue
                     .enqueue(EnqueueInviteQuarantine {
                         peer_principal_id: gate.peer_principal_id.clone(),
-                        target_holder_id: gate.target_holder_id.clone(),
+                        target_holder_principal_id: gate.target_holder_principal_id.clone(),
                         consent_id: gate.consent_id.clone(),
                         scope: gate.scope.to_string(),
                         requesting_admin_localpart: admin_user
@@ -504,7 +504,7 @@ mod consent_gate_tests {
     fn gate_for(consent_id: &str, peer: &str, holder: &str) -> BatchInviteConsentGate {
         BatchInviteConsentGate {
             peer_principal_id: DidCoreId::new(peer).unwrap(),
-            target_holder_id: DidCoreId::new(holder).unwrap(),
+            target_holder_principal_id: DidCoreId::new(holder).unwrap(),
             consent_id: consent_id.to_owned(),
             scope: ConsentScope::Invite,
             target_principal_url: None,

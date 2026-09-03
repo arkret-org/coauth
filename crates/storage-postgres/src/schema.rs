@@ -100,7 +100,7 @@ diesel::table! {
         id -> Uuid,
         accountability_grant_id -> Text,
         agent_id -> Text,
-        controller_id -> Text,
+        controller_principal_id -> Text,
         capabilities -> Array<Text>,
         capabilities_digest -> Text,
         reason -> Nullable<Text>,
@@ -388,7 +388,7 @@ diesel::table! {
     invite_quarantine_queue (id) {
         id -> Uuid,
         peer_principal_id -> Text,
-        target_holder_id -> Text,
+        target_holder_principal_id -> Text,
         consent_id -> Text,
         scope -> Text,
         requesting_admin_localpart -> Nullable<Text>,

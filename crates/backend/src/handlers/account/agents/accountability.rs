@@ -3,7 +3,7 @@
 //! Revocation is not issued here: a grant loses effect through the controller
 //! lifecycle cascade in
 //! [`crate::handlers::admin::v1::account_dids::remove_account_did`], which
-//! revokes every grant a revoked controller DID issued and records the durable
+//! revokes every grant a revoked controller principal DID issued and records the durable
 //! subject marker this endpoint fails closed on.
 //!
 //! When a controller approves provisioning of an Agent, coauth
@@ -66,7 +66,7 @@ pub struct AccountabilityGrantRequestBody {
     /// Stable Arkret id of the controller issuing the grant.
     #[schemars(with = "String")]
     #[salvo(schema(value_type = String))]
-    pub controller_id: DidCoreId,
+    pub controller_principal_id: DidCoreId,
 
     /// Capability actions covered by the grant. Each entry must be a
     /// registered `ak.agent.*` action from `capability-action-registry.json`;
@@ -85,7 +85,7 @@ pub struct AccountabilityGrantRequestBody {
 /// AKP-0008 (`id-kind-registry.json`): the wire shape carries the
 /// Coauth-local `ak:local_ref:accountability_grant:<uuid7>` row handle, the
 /// `agent_id`, the canonical capability list, and the issuer
-/// controller DID. coauth rejects actions outside the registered
+/// controller principal DID. coauth rejects actions outside the registered
 /// `ak.agent.*` set before issuing the response; soland still verifies
 /// the grant on ingest.
 ///
@@ -105,10 +105,10 @@ pub struct AccountabilityGrantOutcome {
     #[salvo(schema(value_type = String))]
     pub agent_id: DidCoreId,
 
-    /// Controller DID this grant attributes accountability to.
+    /// Controller principal DID this grant attributes accountability to.
     #[schemars(with = "String")]
     #[salvo(schema(value_type = String))]
-    pub controller_id: DidCoreId,
+    pub controller_principal_id: DidCoreId,
 
     /// Capability actions covered by this grant.
     pub capabilities: Vec<String>,
@@ -155,7 +155,7 @@ pub async fn post_accountability_grant(
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
 
-    let controller_id = body.controller_id;
+    let controller_principal_id = body.controller_principal_id;
 
     let capabilities = normalize_capabilities(body.capabilities)?;
 
@@ -167,7 +167,7 @@ pub async fn post_accountability_grant(
     let response = AccountabilityGrantOutcome {
         accountability_grant_id: accountability_grant_id.clone(),
         agent_id: agent_id.clone(),
-        controller_id: controller_id.clone(),
+        controller_principal_id: controller_principal_id.clone(),
         capabilities: capabilities.clone(),
         reason: body.reason.clone(),
         issued_at,
@@ -175,7 +175,7 @@ pub async fn post_accountability_grant(
 
     let raw_payload_digest = canonical_digest(&response)?;
     let capabilities_digest =
-        accountability_capabilities_digest(&agent_id, &controller_id, &capabilities)?;
+        accountability_capabilities_digest(&agent_id, &controller_principal_id, &capabilities)?;
     let idempotency_key = accountability_grant_idempotency_key(&accountability_grant_id);
     let service_id = owning_station_id_for(&arkret_config);
     let fanout_payload = build_soland_fanout_payload(
@@ -188,11 +188,14 @@ pub async fn post_accountability_grant(
     let mut repo = depot.repo().await?;
     if repo
         .accountability_grant()
-        .subject_revoked(AccountabilitySubjectKind::ControllerId, &controller_id)
+        .subject_revoked(
+            AccountabilitySubjectKind::ControllerPrincipalId,
+            &controller_principal_id,
+        )
         .await?
     {
         return Err(AppError::forbidden(
-            "controller DID is revoked for accountability grants",
+            "controller principal DID is revoked for accountability grants",
         ));
     }
     if repo
@@ -206,7 +209,7 @@ pub async fn post_accountability_grant(
     }
     if repo
         .accountability_grant()
-        .find_active_by_fingerprint(&agent_id, &controller_id, &capabilities_digest)
+        .find_active_by_fingerprint(&agent_id, &controller_principal_id, &capabilities_digest)
         .await?
         .is_some()
     {
@@ -223,7 +226,7 @@ pub async fn post_accountability_grant(
             NewAccountabilityGrant {
                 accountability_grant_id: accountability_grant_id.clone(),
                 agent_id: agent_id.clone(),
-                controller_id: controller_id.clone(),
+                controller_principal_id: controller_principal_id.clone(),
                 capabilities: capabilities.clone(),
                 capabilities_digest,
                 reason: body.reason.clone(),
@@ -247,7 +250,7 @@ pub async fn post_accountability_grant(
         "operation": "accountability_grant_issued",
         "accountability_grant_id": &grant.accountability_grant_id,
         "agent_id": &grant.agent_id,
-        "controller_id": &controller_id,
+        "controller_principal_id": &controller_principal_id,
         "capabilities": &capabilities,
         "reason": &grant.reason,
         "issued_at": issued_at,
@@ -325,19 +328,19 @@ pub(super) fn normalize_capabilities(capabilities: Vec<String>) -> Result<Vec<St
 struct CapabilityDigestInput<'a> {
     kind: &'a str,
     agent_id: &'a DidCoreId,
-    controller_id: &'a DidCoreId,
+    controller_principal_id: &'a DidCoreId,
     capabilities: &'a [String],
 }
 
 pub(super) fn accountability_capabilities_digest(
     agent_id: &DidCoreId,
-    controller_id: &DidCoreId,
+    controller_principal_id: &DidCoreId,
     capabilities: &[String],
 ) -> Result<String, AppError> {
     canonical_digest(&CapabilityDigestInput {
         kind: "org.arkret.coauth.accountability_grant.capabilities.v1",
         agent_id,
-        controller_id,
+        controller_principal_id,
         capabilities,
     })
 }

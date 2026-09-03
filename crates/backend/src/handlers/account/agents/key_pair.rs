@@ -370,7 +370,7 @@ pub async fn post_agent_key_pair(
                 verification_method: body.verification_method.to_string(),
                 public_key: public_key_value.clone(),
                 accountable_principal_id: arkret_identifiers::DidCoreId::new(
-                    authorize_event.controller_id.clone(),
+                    authorize_event.controller_principal_id.clone(),
                 )
                 .map_err(|err| AppError::internal_box(Box::new(err)))?,
                 agent_key_scope,
@@ -412,7 +412,7 @@ pub async fn post_agent_key_pair(
         "operation": "agent_key_authorize_issued",
         "authorized_event_id": &authorized_event_id,
         "agent_id": &agent_id,
-        "controller_id": &authorize_event.controller_id,
+        "controller_principal_id": &authorize_event.controller_principal_id,
         "verification_method": &body.verification_method,
         "audience_id": &pop.audience_id,
         "issued_at": issued_at,
@@ -498,7 +498,7 @@ pub async fn post_agent_key_pair(
 /// silently stops matching.
 #[derive(Debug)]
 struct ValidatedAuthorizeEvent {
-    controller_id: String,
+    controller_principal_id: String,
     payload: AgentKeyAuthorizePayload,
 }
 
@@ -518,23 +518,27 @@ fn validate_controller_authorize_event(
     let payload = AgentKeyAuthorizePayload::try_from(event)
         .map_err(|error| AppError::bad_request(format!("authorize_event.event {error}")))?;
 
-    let expected_agent_id = parse_actor_id(agent_id, "agent_id")?;
+    let expected_agent_id = parse_principal_id(agent_id, "agent_id")?;
     if event.actor_id != arkret_wire::ActorId::service(expected_agent_id.clone()) {
         return Err(AppError::forbidden(
             "authorize_event.event.actor_id must equal the Agent DID",
         ));
     }
-    let controller_id = event
+    let controller_account_id = event
         .executed_by
         .as_ref()
-        .map(arkret_wire::ActorId::signing_principal_id)
-        .map(arkret_identifiers::DidCoreId::as_str)
-        .ok_or_else(|| AppError::bad_request("authorize_event.event.executed_by is required"))?;
+        .and_then(arkret_wire::ActorId::as_account_id)
+        .ok_or_else(|| {
+            AppError::bad_request(
+                "authorize_event.event.executed_by must be the controller account actor",
+            )
+        })?;
+    let controller_principal_id = controller_account_id.principal_id.as_str();
     if authoritative_key_state.agent_id != expected_agent_id
-        || authoritative_key_state.controller_id.as_str() != controller_id
+        || &authoritative_key_state.controller_account_id != controller_account_id
     {
         return Err(AppError::forbidden(
-            "authorize_event controller does not match the authoritative Agent binding",
+            "authorize_event controller account does not match the authoritative Agent binding",
         ));
     }
     if event.realm_id.as_str() != authoritative_key_state.principal_control_realm_id.as_str() {
@@ -553,7 +557,7 @@ fn validate_controller_authorize_event(
             "authorize_event.event.authorization_ref must match the authoritative controller delegation",
         ));
     }
-    ensure_authorize_event_has_controller_signature(event, controller_id)?;
+    ensure_authorize_event_has_controller_signature(event, controller_principal_id)?;
 
     if payload.agent_id.as_str() != agent_id {
         return Err(AppError::bad_request(
@@ -565,12 +569,12 @@ fn validate_controller_authorize_event(
             "authorize_event.event.payload.verification_method must match the request",
         ));
     }
-    if parse_actor_id(
+    if parse_principal_id(
         payload.accountable_principal_id.as_str(),
         "authorize_event.event.payload.accountable_principal_id",
     )?
     .as_str()
-        != controller_id
+        != controller_principal_id
     {
         return Err(AppError::forbidden(
             "authorize_event.event.payload.accountable_principal_id must match executed_by",
@@ -602,7 +606,7 @@ fn validate_controller_authorize_event(
         || signing_key_binding.verification_method != verification_method
         || signing_key_binding.agent_key_authorize_event_id.as_str() != event.event_id.as_str()
         || signing_key_binding.public_key_digest != validated_key_material.authorization_digest
-        || signing_key_binding.controller_id.as_str() != controller_id
+        || signing_key_binding.controller_principal_id.as_str() != controller_principal_id
     {
         return Err(AppError::bad_request(
             "signing_key_binding does not match the pairing authorization",
@@ -682,7 +686,7 @@ fn validate_controller_authorize_event(
     let approved_by_matches_controller = approval
         .approved_by
         .as_ref()
-        .is_some_and(|approved_by| approved_by.as_str() == controller_id);
+        .is_some_and(|approved_by| approved_by.as_str() == controller_principal_id);
     if !approved_by_matches_controller {
         return Err(AppError::forbidden(
             "authorize_event.event.payload.approval_evidence.approved_by must match executed_by",
@@ -690,7 +694,7 @@ fn validate_controller_authorize_event(
     }
 
     Ok(ValidatedAuthorizeEvent {
-        controller_id: payload.accountable_principal_id.to_string(),
+        controller_principal_id: payload.accountable_principal_id.to_string(),
         payload,
     })
 }
@@ -760,7 +764,7 @@ fn ensure_body_pairing_request_id_present(pairing_request_id: &str) -> Result<()
 
 fn ensure_authorize_event_has_controller_signature(
     event: &arkret_wire::Event,
-    controller_id: &str,
+    controller_principal_id: &str,
 ) -> Result<(), AppError> {
     if event.proofs.is_empty() {
         return Err(AppError::bad_request(
@@ -772,12 +776,13 @@ fn ensure_authorize_event_has_controller_signature(
         .iter()
         .filter_map(|proof| proof.as_producer())
         .any(|proof| {
-            verification_method_controller_actor_id(&proof.verification_method)
-                .is_some_and(|proof_controller| proof_controller.as_str() == controller_id)
+            verification_method_controller_principal_id(&proof.verification_method).is_some_and(
+                |proof_controller| proof_controller.as_str() == controller_principal_id,
+            )
         });
     if !signed_by_controller {
         return Err(AppError::bad_request(
-            "authorize_event proof verification_method must be controlled by actor_id",
+            "authorize_event proof verification_method controller must match executed_by.account_id.principal_id",
         ));
     }
     Ok(())
@@ -793,12 +798,15 @@ fn verification_method_controller(verification_method: &str) -> &str {
         .unwrap_or("")
 }
 
-fn parse_actor_id(actor_id: &str, field: &str) -> Result<arkret_identifiers::DidCoreId, AppError> {
-    arkret_identifiers::DidCoreId::new(actor_id.to_owned())
+fn parse_principal_id(
+    principal_id: &str,
+    field: &str,
+) -> Result<arkret_identifiers::DidCoreId, AppError> {
+    arkret_identifiers::DidCoreId::new(principal_id.to_owned())
         .map_err(|error| AppError::bad_request(format!("{field} invalid: {error}")))
 }
 
-fn verification_method_controller_actor_id(
+fn verification_method_controller_principal_id(
     verification_method: &str,
 ) -> Option<arkret_identifiers::DidCoreId> {
     let did = arkret_identifiers::Did::new(

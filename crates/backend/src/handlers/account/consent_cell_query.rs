@@ -61,8 +61,8 @@ pub struct ConsentState {
 ///
 /// * `station_url` — base URL of the holder's soland deployment. `None` means soland is not wired
 ///   into this coauth instance and the gate degrades to `ConsentLookup::Unknown`.
-/// * `holder_id` — the authenticated self principal, retained only for diagnostics; the wire
-///   resource derives its holder from the authenticated session.
+/// * `holder_principal_id` — the target holder principal used only for local diagnostics. It is not
+///   transmitted; the destination derives the wire holder from its authenticated session.
 /// * `consent_id` — the consent-cell identifier per spec §6.
 /// * `peer` / `scope` — the standard self consent resource key. The helper also probes `scope=any`
 ///   when `scope` is more specific, preserving the invite-gate wildcard semantics.
@@ -70,7 +70,7 @@ pub struct ConsentState {
 ///   callers can share the global pool.
 pub async fn query_consent_cell(
     station_url: Option<&Url>,
-    holder_id: &DidCoreId,
+    holder_principal_id: &DidCoreId,
     consent_id: &str,
     peer: &ConsentPeer,
     scope: ConsentScope,
@@ -92,7 +92,15 @@ pub async fn query_consent_cell(
     }
 
     for candidate_scope in scopes {
-        match query_consent_cell_scope(base, holder_id, peer, candidate_scope, http_client).await {
+        match query_consent_cell_scope(
+            base,
+            holder_principal_id,
+            peer,
+            candidate_scope,
+            http_client,
+        )
+        .await
+        {
             ConsentScopeLookup::Active { cell_id } => {
                 let tag = format!("scope={candidate_scope}");
                 debug!(
@@ -154,7 +162,7 @@ enum ConsentScopeLookup {
 
 async fn query_consent_cell_scope(
     base: &Url,
-    holder_id: &DidCoreId,
+    holder_principal_id: &DidCoreId,
     peer: &ConsentPeer,
     scope: ConsentScope,
     http_client: &reqwest::Client,
@@ -165,7 +173,7 @@ async fn query_consent_cell_scope(
         Err(error) => {
             warn!(
                 ?error,
-                holder_id = %holder_id,
+                holder_principal_id = %holder_principal_id,
                 "failed to build consent-cell URL"
             );
             return ConsentScopeLookup::Unknown {
@@ -227,7 +235,7 @@ async fn query_consent_cell_scope(
             cell_id = %parsed.cell_id,
             response_peer = ?parsed.peer,
             response_scope = parsed.consent_scope.as_str(),
-            holder_id = %holder_id,
+            holder_principal_id = %holder_principal_id,
             peer = ?peer,
             scope = %scope,
             "consent cell query: response key mismatch"

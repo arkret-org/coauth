@@ -14,8 +14,8 @@
 //! ## Strand
 //!
 //! 1. The inviter signs an invite payload (out of band) and POSTs it to `POST
-//!    /_coauth/self/account/invites/relay` along with `(target_principal_url, target_holder_id,
-//!    consent_id, scope)`.
+//!    /_coauth/self/account/invites/relay` along with `(target_principal_url,
+//!    target_holder_principal_id, consent_id, scope)`.
 //! 2. Coauth queries the target's consent cell via `consent_cell_query::query_consent_cell`.
 //! 3. Coauth runs `evaluate_invite_gate(...)` to translate the lookup + `consent_required` policy
 //!    bit into an `Allow / ConsentRequired / Quarantine` decision.
@@ -74,9 +74,10 @@ pub struct InviteRelayRequestBody {
     #[serde(default)]
     pub target_principal_url: Option<Url>,
 
-    /// DID of the holder whose cell we're consulting. Embedded in the
-    /// `X-Arkret-Holder-Did` header on the soland query.
-    pub target_holder_id: DidCoreId,
+    /// Principal DID of the target holder whose cell is consulted. This value
+    /// remains local diagnostic context; the destination derives the wire
+    /// holder from its authenticated session.
+    pub target_holder_principal_id: DidCoreId,
 
     /// Consent-cell identifier per spec §6.
     pub consent_id: String,
@@ -101,7 +102,7 @@ fn default_require_consent() -> bool {
 
 fn invite_delivery_target(
     delivery: &InviteDeliveryRequestBody,
-    target_holder_id: &DidCoreId,
+    target_holder_principal_id: &DidCoreId,
     requested_endpoint: Option<&Url>,
     config: &ArkretConfig,
     resolver: &StationTrustResolver,
@@ -121,7 +122,7 @@ fn invite_delivery_target(
     let payload: InviteCreatePayload = serde_json::from_value(payload_value)
         .map_err(|error| RouteError::BadRequest(format!("invalid_invite_payload: {error}")))?;
     let account_id = &delivery.invite_address.account_id;
-    if &account_id.principal_id != target_holder_id {
+    if &account_id.principal_id != target_holder_principal_id {
         return Err(RouteError::BadRequest(
             "invite_delivery_subject_mismatch".to_owned(),
         ));
@@ -237,7 +238,7 @@ pub fn relay_outcome_to_response(outcome: &RelayOutcome) -> (StatusCode, InviteR
 /// decisions are reported via `Ok(RelayOutcome::*)`.
 pub async fn relay_invite_with(
     target_principal_url: Option<&Url>,
-    target_holder_id: &DidCoreId,
+    target_holder_principal_id: &DidCoreId,
     consent_id: &str,
     peer_principal_id: &DidCoreId,
     scope: ConsentScope,
@@ -258,7 +259,7 @@ pub async fn relay_invite_with(
         };
         query_consent_cell(
             Some(principal_url),
-            target_holder_id,
+            target_holder_principal_id,
             consent_id,
             &peer,
             scope,
@@ -356,7 +357,7 @@ pub async fn post_invite_relay(
     let principal_url = match params.invite_delivery.as_ref() {
         Some(delivery) => Some(invite_delivery_target(
             delivery,
-            &params.target_holder_id,
+            &params.target_holder_principal_id,
             params.target_principal_url.as_ref(),
             &arkret_config,
             station_trust::shared(),
@@ -413,7 +414,7 @@ pub async fn post_invite_relay(
 
     let outcome = relay_invite_with(
         principal_url.as_ref(),
-        &params.target_holder_id,
+        &params.target_holder_principal_id,
         &params.consent_id,
         &params.inviter_id,
         params.scope,

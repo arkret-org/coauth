@@ -171,7 +171,10 @@ fn grant_payload(grant: &SessionGrant) -> Option<SignedSessionGrantClaims> {
         .map(|jwt| jwt.payload().clone())
 }
 
-fn grant_is_agent_delegated_to_controller(grant: &SessionGrant, controller_id: &str) -> bool {
+fn grant_is_agent_delegated_to_controller(
+    grant: &SessionGrant,
+    controller_principal_id: &str,
+) -> bool {
     let Some(payload) = grant_payload(grant) else {
         return false;
     };
@@ -181,9 +184,9 @@ fn grant_is_agent_delegated_to_controller(grant: &SessionGrant, controller_id: &
     payload
         .scope_details
         .as_ref()
-        .and_then(|details| details.get("controller_id"))
+        .and_then(|details| details.get("controller_principal_id"))
         .and_then(serde_json::Value::as_str)
-        .is_some_and(|value| value == controller_id)
+        .is_some_and(|value| value == controller_principal_id)
 }
 
 fn grant_is_owned_by_current_principal(grant: &SessionGrant, principal_id: &str) -> bool {
@@ -746,7 +749,7 @@ mod tests {
         }
     }
 
-    fn agent_session_grant(controller_id: &str) -> SessionGrant {
+    fn agent_session_grant(controller_principal_id: &str) -> SessionGrant {
         let now = Utc::now();
         let mut session_rng = ChaChaRng::seed_from_u64(0x4e18);
         let session_key = PrivateKey::generate_ed25519(&mut session_rng);
@@ -777,7 +780,10 @@ mod tests {
             "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_owned(),
             session_public_key,
             serde_json::Map::from_iter([
-                ("controller_id".to_owned(), serde_json::json!(controller_id)),
+                (
+                    "controller_principal_id".to_owned(),
+                    serde_json::json!(controller_principal_id),
+                ),
                 (
                     "resources".to_owned(),
                     serde_json::json!({

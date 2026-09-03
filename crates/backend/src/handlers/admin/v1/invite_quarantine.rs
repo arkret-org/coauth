@@ -21,7 +21,7 @@
 //! ## Why approve does not auto-mint
 //!
 //! The original `batch_invite` only minted registration tokens; the
-//! consent decision context (peer DID, target holder DID) lives in the
+//! consent decision context (peer DID, target holder principal DID) lives in the
 //! queue row but the *registration policy* (count, `usage_limit`, expiry)
 //! is in the `payload` JSON. Re-issuing requires the admin to confirm
 //! those parameters via a fresh batch-invite call. The "approve"
@@ -81,7 +81,7 @@ pub struct InviteQuarantineEntry {
     pub peer_principal_id: DidCoreId,
     #[schemars(with = "String")]
     #[salvo(schema(value_type = String))]
-    pub target_holder_id: DidCoreId,
+    pub target_holder_principal_id: DidCoreId,
     pub consent_id: String,
     pub scope: String,
     pub requesting_admin_localpart: Option<String>,
@@ -99,7 +99,7 @@ impl From<InviteQuarantineRecord> for InviteQuarantineEntry {
             id: r.id.to_string(),
             created_at: r.created_at,
             peer_principal_id: r.peer_principal_id,
-            target_holder_id: r.target_holder_id,
+            target_holder_principal_id: r.target_holder_principal_id,
             consent_id: r.consent_id,
             scope: r.scope,
             requesting_admin_localpart: r.requesting_admin_localpart,
@@ -316,7 +316,7 @@ pub async fn resolve_invite_quarantine(
             "quarantine_id": record.id.to_string(),
             "decision": op_label.split('.').next_back().unwrap_or(""),
             "peer_principal_id": &record.peer_principal_id,
-            "target_holder_id": &record.target_holder_id,
+            "target_holder_principal_id": &record.target_holder_principal_id,
             "consent_id": &record.consent_id,
             "scope": &record.scope,
             "note": body.note,
@@ -396,7 +396,7 @@ mod tests {
             id,
             created_at: now,
             peer_principal_id: DidCoreId::new("ak:did_core:web:peer").unwrap(),
-            target_holder_id: DidCoreId::new("ak:did_core:web:holder").unwrap(),
+            target_holder_principal_id: DidCoreId::new("ak:did_core:web:holder").unwrap(),
             consent_id: "c-99".into(),
             scope: "invite".into(),
             requesting_admin_localpart: Some("admin1".into()),
@@ -408,7 +408,10 @@ mod tests {
         let entry = InviteQuarantineEntry::from(rec);
         assert_eq!(entry.id, id.to_string());
         assert_eq!(entry.peer_principal_id.as_str(), "ak:did_core:web:peer");
-        assert_eq!(entry.target_holder_id.as_str(), "ak:did_core:web:holder");
+        assert_eq!(
+            entry.target_holder_principal_id.as_str(),
+            "ak:did_core:web:holder"
+        );
         assert_eq!(entry.consent_id, "c-99");
         assert_eq!(entry.scope, "invite");
         assert_eq!(entry.requesting_admin_localpart.as_deref(), Some("admin1"));

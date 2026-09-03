@@ -473,7 +473,7 @@ pub async fn remove_account_did(
     repo.principal_did()
         .remove_for_user_and_core(&user, &did)
         .await?;
-    let controller_id = arkret_identifiers::project_did_to_core_id(
+    let controller_principal_id = arkret_identifiers::project_did_to_core_id(
         &arkret_identifiers::Did::new(did.clone())
             .map_err(|error| AppError::bad_request(format!("did_invalid: {error}")))?,
     )
@@ -487,8 +487,8 @@ pub async fn remove_account_did(
         .accountability_grant()
         .revoke_for_subject(
             &clock,
-            AccountabilitySubjectKind::ControllerId,
-            &controller_id,
+            AccountabilitySubjectKind::ControllerPrincipalId,
+            &controller_principal_id,
             DID_BINDING_REVOKED_OPERATION,
         )
         .await?;
@@ -496,8 +496,8 @@ pub async fn remove_account_did(
         .mark_subject_revoked(
             &mut rng,
             &clock,
-            AccountabilitySubjectKind::ControllerId,
-            &controller_id,
+            AccountabilitySubjectKind::ControllerPrincipalId,
+            &controller_principal_id,
             DID_BINDING_REVOKED_OPERATION,
         )
         .await?;

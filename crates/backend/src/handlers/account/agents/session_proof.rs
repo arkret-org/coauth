@@ -55,9 +55,10 @@ pub const AGENT_SESSION_MAX_TTL: chrono::Duration = chrono::Duration::minutes(15
 pub struct AgentSessionAuthorization {
     /// Agent principal DID the proof authenticated.
     pub agent_id: arkret_identifiers::DidCoreId,
-    /// Controller principal DID accountable for the agent (spec
-    /// `controller_id`, e.g. agent_pause/resume/deactivate payloads).
-    pub controller_id: arkret_identifiers::DidCoreId,
+    /// Controller principal DID accountable for the agent. Lifecycle payloads
+    /// derive controller authority from the containing Event instead of
+    /// carrying a duplicate controller field.
+    pub controller_principal_id: arkret_identifiers::DidCoreId,
     /// Effective granted scope. Service-surface tokens are intersected with the
     /// authorized key scope and policy/resource constraints; content capability
     /// tokens are additionally intersected with active capability grants.
@@ -442,7 +443,7 @@ pub async fn validate_agent_session_proof(
         return Err(AgentSessionProofError::HumanApprovalRequired(details));
     }
 
-    let controller_id = authorization.accountable_principal_id.clone();
+    let controller_principal_id = authorization.accountable_principal_id.clone();
     // The controller-authored accountability Event is validated by the
     // authoritative Agent projection. It is not a Realm capability grant and
     // therefore contributes no content actions or resource selectors here.
@@ -494,8 +495,8 @@ pub async fn validate_agent_session_proof(
 
     let mut scope_details = serde_json::Map::from_iter([
         (
-            "controller_id".to_owned(),
-            serde_json::json!(&controller_id),
+            "controller_principal_id".to_owned(),
+            serde_json::json!(&controller_principal_id),
         ),
         // Issuing key authorization, retained so introspection can fail the
         // grant closed at use time once the key is revoked (pause /
@@ -549,7 +550,7 @@ pub async fn validate_agent_session_proof(
 
     Ok(AgentSessionAuthorization {
         agent_id: body.principal_id.clone(),
-        controller_id,
+        controller_principal_id,
         granted_scope: effective_scope.granted_scope,
         scope_details,
         ttl,
@@ -616,16 +617,6 @@ fn validate_authoritative_agent_session_evidence(
         .key_state
         .as_ref()
         .ok_or(AgentAuthRejection::PolicyUnavailable)?;
-    if view.agent.agent_id.as_str() != authorization.agent_id
-        || key_state.agent_id.as_str() != authorization.agent_id
-        || key_state.controller_id.as_str() != authorization.accountable_principal_id.as_str()
-        || !key_state.active_authorizations.iter().any(|active| {
-            active.authorized_event_ref.as_str() == authorization.authorized_event_id
-                && active.verification_method.as_str() == authorization.verification_method
-        })
-    {
-        return Err(AgentAuthRejection::ProofInvalid);
-    }
 
     // A delivered pair request is verifier-private evidence that the
     // Station validated the controller-signed disclosure against the
@@ -634,6 +625,26 @@ fn validate_authoritative_agent_session_evidence(
     let paired_request: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody =
         serde_json::from_value(authorization.soland_fanout_payload.clone())
             .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
+    let controller_account_id = paired_request
+        .authorize_event
+        .event
+        .executed_by
+        .as_ref()
+        .and_then(arkret_wire::ActorId::as_account_id)
+        .ok_or(AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
+    if view.agent.agent_id.as_str() != authorization.agent_id
+        || key_state.agent_id.as_str() != authorization.agent_id
+        || &key_state.controller_account_id != controller_account_id
+        || controller_account_id.principal_id.as_str()
+            != authorization.accountable_principal_id.as_str()
+        || !key_state.active_authorizations.iter().any(|active| {
+            active.authorized_event_ref.as_str() == authorization.authorized_event_id
+                && active.verification_method.as_str() == authorization.verification_method
+        })
+    {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
+
     let disclosure = &paired_request.requested_scope_disclosure;
     disclosure
         .validate()
@@ -643,7 +654,8 @@ fn validate_authoritative_agent_session_evidence(
         || paired_request.authorize_event.event.event_id.as_str()
             != authorization.authorized_event_id
         || disclosure.agent_id.as_str() != authorization.agent_id
-        || disclosure.controller_id.as_str() != authorization.accountable_principal_id.as_str()
+        || disclosure.controller_principal_id.as_str()
+            != authorization.accountable_principal_id.as_str()
         || disclosure.requested_scope != key_state.requested_scope
     {
         return Err(AgentAuthRejection::AgentRequestedScopeCommitmentInvalid);
@@ -1484,7 +1496,10 @@ mod tests {
                 },
                 "key_state": {
                     "agent_id": "ak:did_core:web:agent.example",
-                    "controller_id": "ak:did_core:web:controller.example",
+                    "controller_account_id": {
+                        "principal_id": "ak:did_core:web:controller.example",
+                        "station_id": "ak:did_core:web:station.example"
+                    },
                     "principal_control_realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG",
                     "controller_authorization_ref": "did:web:agent.example#managed-controller",
                     "requested_scope": {
