@@ -185,13 +185,16 @@ fn assert_session_grant_jwt_omits_server_identity_metadata(raw_payload: &serde_j
     }
 }
 
-fn assert_subject_id_occurs_once(raw_payload: &serde_json::Value, subject_id: &str) {
-    assert_eq!(raw_payload["subject_id"].as_str(), Some(subject_id));
+fn assert_principal_id_occurs_once(raw_payload: &serde_json::Value, principal_id: &str) {
+    assert_eq!(
+        raw_payload["account_id"]["principal_id"].as_str(),
+        Some(principal_id)
+    );
     let serialized = serde_json::to_string(raw_payload).expect("payload JSON must serialize");
     assert_eq!(
-        serialized.matches(subject_id).count(),
+        serialized.matches(principal_id).count(),
         1,
-        "session grant JWT must carry the subject_id exactly once"
+        "session grant JWT must carry the principal id exactly once"
     );
 }
 
@@ -452,7 +455,7 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
     );
     let raw_payload = jwt_payload_value(&grant.grant_jwt);
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
-    assert_subject_id_occurs_once(&raw_payload, payload.account_id.principal_id.as_str());
+    assert_principal_id_occurs_once(&raw_payload, payload.account_id.principal_id.as_str());
     assert!(raw_payload.get("session_public_key").is_some());
     assert!(raw_payload.get("cnf").is_none());
     assert!(
