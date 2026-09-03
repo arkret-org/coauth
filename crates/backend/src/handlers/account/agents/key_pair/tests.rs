@@ -130,9 +130,11 @@ fn valid_authorize_event_typed(pairing_request_id: &str) -> arkret_wire::Event {
             "kind": "realm",
             "realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG"
         },
-        "actor_id": AGENT,
-        "station_id": "ak:did_core:web:auth.example",
-        "executed_by": CONTROLLER,
+        "actor_id": {"kind": "service", "service_id": AGENT},
+        "executed_by": {"kind": "account", "account_id": {
+            "principal_id": CONTROLLER,
+            "station_id": AUDIENCE
+        }},
         "authorization_ref": format!("{AGENT_FULL}#managed-controller"),
         "actor_seq": 1,
         "created_at": "2026-07-06T00:00:00.000Z",

@@ -570,7 +570,7 @@ mod tests {
         let lookup = ConsentLookup::Known(ConsentState {
             consent_id: "c-1".into(),
             granted: true,
-            tags: vec!["peer=ak:did_core:web:peer;scope=invite".into()],
+            tags: vec!["scope=invite".into()],
         });
         assert_eq!(
             evaluate_invite_gate(&lookup, ConsentScope::Invite, true,),
@@ -583,7 +583,7 @@ mod tests {
         let lookup = ConsentLookup::Known(ConsentState {
             consent_id: "c-1".into(),
             granted: true,
-            tags: vec!["peer=ak:did_core:web:peer;scope=any".into()],
+            tags: vec!["scope=any".into()],
         });
         assert_eq!(
             evaluate_invite_gate(&lookup, ConsentScope::Invite, true,),
@@ -627,11 +627,11 @@ mod tests {
     }
 
     #[test]
-    fn invite_gate_rejects_when_tag_present_but_peer_mismatch() {
+    fn invite_gate_rejects_when_scope_tag_is_malformed() {
         let lookup = ConsentLookup::Known(ConsentState {
             consent_id: "c-1".into(),
             granted: true,
-            tags: vec!["peer=did:web:other;scope=invite".into()],
+            tags: vec!["invite".into()],
         });
         assert_eq!(
             evaluate_invite_gate(&lookup, ConsentScope::Invite, true,),

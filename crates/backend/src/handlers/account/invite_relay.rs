@@ -81,8 +81,7 @@ pub struct InviteRelayRequestBody {
     /// Consent-cell identifier per spec §6.
     pub consent_id: String,
 
-    /// Tag scope to match against the consent cell's `OrSet` tags
-    /// (`peer=...;scope=<scope>` or `peer=...;scope=any`).
+    /// Scope to match against the exact peer-keyed consent cell.
     pub scope: ConsentScope,
 
     /// Mirror of the holder's `ak.realm.policy_bundle` payload path
@@ -445,6 +444,10 @@ mod tests {
         DidCoreId::new(value).unwrap()
     }
 
+    fn principal_url() -> Url {
+        Url::parse("https://station.example/").unwrap()
+    }
+
     fn test_keystore() -> coauth_keystore::Keystore {
         use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
         use rand_chacha::rand_core::SeedableRng as _;
@@ -793,13 +796,15 @@ mod tests {
     }
 
     fn active_cell(scope: &str) -> serde_json::Value {
+        let peer = arkret_models_collaboration::account_lifecycle::ConsentPeer::Actor {
+            actor_id: invite_delivery().invite_event.actor_id,
+        };
         serde_json::json!({
             "cell_id": arkret_wire::subject_cell(
                 arkret_wire::CellFamilyId::CONSENT_GRANT_V1,
                 &format!("c-{scope}"),
             ),
-            "holder_id": "ak:did_core:web:holder",
-            "peer_principal_id": "ak:did_core:web:inviter",
+            "peer": peer,
             "consent_scope": scope,
             "state": "active",
             "updated_at": "2026-05-01T00:00:00.000Z",
@@ -818,8 +823,16 @@ mod tests {
 
         // Cell-query mock: granted with matching peer/scope tag.
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
-            .and(query_param("peer", "ak:did_core:web:inviter"))
+            .and(path_regex(r"^/_arkret/self/consent/cell$"))
+            .and(query_param(
+                "peer",
+                serde_json::to_string(
+                    &arkret_models_collaboration::account_lifecycle::ConsentPeer::Actor {
+                        actor_id: invite_delivery().invite_event.actor_id,
+                    },
+                )
+                .unwrap(),
+            ))
             .and(query_param("consent_scope", "invite"))
             .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("invite")))
             .expect(1)
@@ -871,25 +884,13 @@ mod tests {
         assert_eq!(body.forwarded_ok, Some(true));
     }
 
-    /// `ConsentRequired` path: cell missing (404) + `consent_required=true`
-    /// → no forward attempt, decision is `ConsentRequired`.
+    /// A principal-only request cannot identify the exact actor variant and
+    /// fails closed when consent is required.
     #[tokio::test]
-    async fn relay_returns_consent_required_when_no_consent() {
+    async fn relay_requires_exact_peer_actor_when_consent_is_required() {
         setup();
-        let server = MockServer::start().await;
         let client = reqwest::Client::new();
-
-        Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
-            .respond_with(ResponseTemplate::new(404))
-            .expect(2)
-            .mount(&server)
-            .await;
-
-        // No POST mock — if this fires, wiremock will return 404 and we'd
-        // see forwarded_ok=false. The Allow branch must not execute.
-
-        let base = Url::parse(&format!("{}/", server.uri())).unwrap();
+        let base = principal_url();
 
         let outcome = relay_invite_with(
             Some(&base),
@@ -911,21 +912,13 @@ mod tests {
         assert_eq!(body.status, "consent_required");
     }
 
-    /// Quarantine path: soland returns 500 (Unknown) and policy does not
-    /// require consent → the relay defers via Quarantine, 202.
+    /// A principal-only request is quarantined when policy does not require
+    /// consent and the exact actor variant is unavailable.
     #[tokio::test]
-    async fn relay_quarantines_when_consent_unknown_and_not_required() {
+    async fn relay_quarantines_unknown_peer_actor_when_consent_is_not_required() {
         setup();
-        let server = MockServer::start().await;
         let client = reqwest::Client::new();
-
-        Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
-            .respond_with(ResponseTemplate::new(500))
-            .mount(&server)
-            .await;
-
-        let base = Url::parse(&format!("{}/", server.uri())).unwrap();
+        let base = principal_url();
 
         let outcome = relay_invite_with(
             Some(&base),
@@ -984,7 +977,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cell$"))
             .and(query_param("consent_scope", "invite"))
             .respond_with(ResponseTemplate::new(404))
             .expect(1)
@@ -992,7 +985,7 @@ mod tests {
             .await;
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cell$"))
             .and(query_param("consent_scope", "any"))
             .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("any")))
             .expect(1)
@@ -1042,46 +1035,5 @@ mod tests {
         let (status, body) = relay_outcome_to_response(&outcome);
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body.forwarded_ok, Some(false));
-    }
-
-    /// Allow path with no forward target supplied (gate-only mode) →
-    /// `Forwarded { forwarded_ok: true }` and no POST is made.
-    #[tokio::test]
-    async fn relay_allow_without_forward_target_is_gate_only_success() {
-        setup();
-        let server = MockServer::start().await;
-        let client = reqwest::Client::new();
-
-        Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
-            .and(query_param("peer", "ak:did_core:web:inviter"))
-            .and(query_param("consent_scope", "invite"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("invite")))
-            .expect(1)
-            .mount(&server)
-            .await;
-
-        // Intentionally no POST mock — the handler must NOT attempt a
-        // forward. Wiremock fails the test on unexpected requests if we
-        // mounted one, but absence of the mock + `expect(1)` on the GET
-        // already makes the constraint clear.
-
-        let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-
-        let outcome = relay_invite_with(
-            Some(&base),
-            &core_id("ak:did_core:web:holder"),
-            "c-allow",
-            &core_id("ak:did_core:web:inviter"),
-            ConsentScope::Invite,
-            true,
-            None, // no forward target
-            None, // no payload
-            &client,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(outcome, RelayOutcome::Forwarded { forwarded_ok: true });
     }
 }

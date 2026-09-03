@@ -564,7 +564,7 @@ mod tests {
             .await;
         assert_eq!(mismatch.status_code, Some(StatusCode::UNPROCESSABLE_ENTITY));
 
-        let unadvertised = TestClient::post("http://local/_arkret/gate/account/logout")
+        let registered_logout = TestClient::post("http://local/_arkret/gate/account/logout")
             .add_header(
                 "Arkret-Operation",
                 arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_LOGOUT_V1,
@@ -572,10 +572,7 @@ mod tests {
             )
             .send(&service)
             .await;
-        assert_eq!(
-            unadvertised.status_code,
-            Some(StatusCode::UNPROCESSABLE_ENTITY)
-        );
+        assert_eq!(registered_logout.status_code, Some(StatusCode::NO_CONTENT));
 
         let accepted = TestClient::get("http://local/_arkret/describe")
             .add_header(

@@ -165,8 +165,8 @@ pub struct BatchInviteConsentGate {
     /// Consent-cell identifier per spec §6.
     pub consent_id: String,
 
-    /// Tag scope to match against the holder's `OrSet` tags. Defaults to
-    /// `invite` (matches `peer=...;scope=invite` and `peer=...;scope=any`).
+    /// Scope to match against the exact peer-keyed consent cell. Defaults to
+    /// `invite` (also accepting a cell whose scope is `any`).
     #[serde(default = "default_invite_scope")]
     #[schemars(with = "String")]
     pub scope: ConsentScope,
@@ -487,16 +487,12 @@ pub async fn batch_invite(
 mod consent_gate_tests {
     //! Unit tests for the `batch_invite` consent gate (Allow /
     //! `ConsentRequired` / Quarantine). Exercises
-    //! `evaluate_batch_invite_gate` end-to-end with a wiremock-backed
-    //! soland stub, mirroring the per-recipient relay tests.
+    //! `evaluate_batch_invite_gate` end-to-end.
     //!
     //! The full Salvo handler is covered by integration tests in
     //! `accounts::tests`; here we only need to confirm the gate logic
-    //! routes the three outcomes correctly given the station
-    //! response.
+    //! routes the three outcomes correctly.
     use coauth_config::ArkretConfig;
-    use wiremock::matchers::{method, path_regex, query_param};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
     use crate::handlers::test_utils::setup;
@@ -516,21 +512,8 @@ mod consent_gate_tests {
         }
     }
 
-    fn active_cell(peer: &str, scope: &str) -> serde_json::Value {
-        serde_json::json!({
-            "cell_id": arkret_wire::subject_cell(
-                arkret_wire::CellFamilyId::CONSENT_GRANT_V1,
-                &format!("c-{scope}"),
-            ),
-            "holder_id": "ak:did_core:web:holder",
-            "peer_principal_id": peer,
-            "consent_scope": scope,
-            "state": "active",
-            "updated_at": "2026-05-01T00:00:00.000Z",
-            "active_grant_dots": ["ak:event:AQgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI:0"],
-            "grant_dots": ["ak:event:AQgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI:0"],
-            "revoked_dots": [],
-        })
+    fn principal_url() -> Url {
+        Url::parse("https://station.example/").unwrap()
     }
 
     /// No gate metadata at all -> Allow local registration-token minting.
@@ -542,106 +525,36 @@ mod consent_gate_tests {
         assert_eq!(outcome, BatchInviteGateOutcome::Allow);
     }
 
-    /// Gate metadata + matching consent tag → Allow.
+    /// A principal-only batch gate cannot reconstruct the exact Account or
+    /// Service actor variant, so it fails closed before making a lookup.
     #[tokio::test]
-    async fn batch_invite_gate_allows_when_consent_granted() {
+    async fn batch_invite_gate_requires_an_exact_peer_actor() {
         setup();
-        let server = MockServer::start().await;
         let client = reqwest::Client::new();
 
-        Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
-            .and(query_param("peer", "ak:did_core:web:peer"))
-            .and(query_param("consent_scope", "invite"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(active_cell("ak:did_core:web:peer", "invite")),
-            )
-            .expect(1)
-            .mount(&server)
-            .await;
-
-        let base = Url::parse(&format!("{}/", server.uri())).unwrap();
         let mut gate = gate_for("c-allow", "ak:did_core:web:peer", "ak:did_core:web:holder");
-        gate.target_principal_url = Some(base);
-
-        let outcome = evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
-        assert_eq!(outcome, BatchInviteGateOutcome::Allow);
-    }
-
-    /// Cell missing (404) + `consent_required=true` → `ConsentRequired`.
-    #[tokio::test]
-    async fn batch_invite_gate_returns_consent_required_when_missing() {
-        setup();
-        let server = MockServer::start().await;
-        let client = reqwest::Client::new();
-
-        Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
-            .respond_with(ResponseTemplate::new(404))
-            .expect(2)
-            .mount(&server)
-            .await;
-
-        let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let mut gate = gate_for(
-            "c-missing",
-            "ak:did_core:web:peer",
-            "ak:did_core:web:holder",
-        );
-        gate.target_principal_url = Some(base);
-        gate.consent_required = true;
+        gate.target_principal_url = Some(principal_url());
 
         let outcome = evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
         assert_eq!(outcome, BatchInviteGateOutcome::ConsentRequired);
     }
 
-    /// soland 500 (Unknown) + `consent_required=false` → Quarantined.
+    /// Missing exact peer actor + `consent_required=false` → Quarantined.
     #[tokio::test]
     async fn batch_invite_gate_quarantines_when_unknown_and_not_required() {
         setup();
-        let server = MockServer::start().await;
         let client = reqwest::Client::new();
 
-        Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
-            .respond_with(ResponseTemplate::new(500))
-            .mount(&server)
-            .await;
-
-        let base = Url::parse(&format!("{}/", server.uri())).unwrap();
         let mut gate = gate_for(
             "c-unknown",
             "ak:did_core:web:peer",
             "ak:did_core:web:holder",
         );
-        gate.target_principal_url = Some(base);
+        gate.target_principal_url = Some(principal_url());
         gate.consent_required = false;
 
         let outcome = evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
         assert_eq!(outcome, BatchInviteGateOutcome::Quarantined);
-    }
-
-    /// Tag present but peer DID mismatch → `ConsentRequired` (require=true).
-    #[tokio::test]
-    async fn batch_invite_gate_rejects_when_peer_mismatch() {
-        setup();
-        let server = MockServer::start().await;
-        let client = reqwest::Client::new();
-
-        Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
-            .respond_with(ResponseTemplate::new(404))
-            .expect(2)
-            .mount(&server)
-            .await;
-
-        let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let mut gate = gate_for("c-other", "ak:did_core:web:peer", "ak:did_core:web:holder");
-        gate.target_principal_url = Some(base);
-
-        let outcome = evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
-        assert_eq!(outcome, BatchInviteGateOutcome::ConsentRequired);
     }
 
     /// Gate metadata supplied but no principal URL anywhere +

@@ -508,7 +508,7 @@ mod tests {
         assert!(
             header("Signature-Input")
                 .unwrap()
-                .contains("keyid=\"did:web:auth.example#service-key\"")
+                .contains("keyid=\"did:web:auth.example#account-authority\"")
         );
         assert!(header("Signature").unwrap().starts_with("sig1=:"));
 
