@@ -667,6 +667,9 @@ fn reserved_signing_key<'a>(
 )> {
     use coauth_iana::jose::JsonWebSignatureAlg;
 
+    let key = key_store
+        .iter()
+        .find(|key| key.kid() == Some(signing_key_id))?;
     [
         JsonWebSignatureAlg::Ed25519,
         JsonWebSignatureAlg::Es512,
@@ -680,10 +683,35 @@ fn reserved_signing_key<'a>(
         JsonWebSignatureAlg::Ps256,
     ]
     .into_iter()
-    .find_map(|alg| {
-        key_store
-            .signing_key_for_algorithm(&alg)
-            .filter(|key| key.kid() == Some(signing_key_id))
-            .map(|key| (alg, key))
-    })
+    .find(|alg| key.params().signing_key_for_alg(alg).is_ok())
+    .map(|alg| (alg, key))
+}
+
+#[cfg(test)]
+mod reserved_signing_key_tests {
+    use coauth_jose::constraints::Constrainable as _;
+    use coauth_keystore::{JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
+    use rand_chacha::ChaChaRng;
+    use rand_core::SeedableRng as _;
+
+    use super::reserved_signing_key;
+
+    fn ed25519(seed: u64, kid: &str) -> JsonWebKey<PrivateKey> {
+        JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(seed))).with_kid(kid)
+    }
+
+    #[test]
+    fn reservation_lookup_uses_kid_before_algorithm() {
+        let designated = coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID;
+        for keys in [
+            vec![ed25519(1, designated), ed25519(2, "later-ed25519")],
+            vec![ed25519(2, "earlier-ed25519"), ed25519(1, designated)],
+        ] {
+            let key_store = Keystore::new(JsonWebKeySet::new(keys));
+            let (algorithm, key) = reserved_signing_key(&key_store, designated)
+                .expect("the reserved key is present and usable");
+            assert_eq!(algorithm, coauth_iana::jose::JsonWebSignatureAlg::Ed25519);
+            assert_eq!(key.kid(), Some(designated));
+        }
+    }
 }

@@ -61,6 +61,11 @@ secrets:
   - key: ${COAUTH_SIGNING_KEY_ES256_PEM}
   - key: ${COAUTH_SIGNING_KEY_ES384_PEM}
   - key: ${COAUTH_SIGNING_KEY_ES256K_PEM}
+  # Private Account Authority signer delegated by the owning Station under
+  # `#account-authority`. Soland reads its public half from this service's JWKS
+  # while provisioning the Station DID.
+  - kid: coauth-account-authority-v1
+    key: ${COAUTH_ACCOUNT_AUTHORITY_KEY_ED25519_PEM}
   # Stable Ed25519 key used for Coauth's own did:webvh signing and control-key
   # derivation. Retain this key across database restore or replacement.
   - kid: coauth-service-identity-v1
