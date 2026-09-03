@@ -19,6 +19,11 @@ telemetry:
     endpoint: http://127.0.0.1:4318/v1/metrics
 ```
 
+`propagators` 可选 `tracecontext` 与 `baggage`。不支持 Jaeger 原生传播格式
+（`uber-trace-id`）：该格式已被 OpenTelemetry 规范弃用，且 Jaeger 自 1.35
+起即支持 W3C Trace Context。像下面的 collector 配置那样通过 OTLP 把 trace
+发给 Jaeger，此处保留 `tracecontext` 即可。
+
 下面这个本地 collector 配置接收来自 `coauth` 的 OTLP/HTTP，
 并将 trace 转发到 Jaeger。`debug` exporter 在确认 metric 是
 否抵达 collector 时很有用。

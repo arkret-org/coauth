@@ -7,6 +7,11 @@ use url::Url;
 use super::ConfigurationSection;
 
 /// Trace-context propagation format for distributed tracing
+///
+/// Jaeger-native propagation (`uber-trace-id`) is intentionally absent: the
+/// format is deprecated by the OpenTelemetry specification and Jaeger itself
+/// speaks W3C Trace Context since 1.35. Point Jaeger at the OTLP exporter and
+/// keep `tracecontext` here.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Propagator {
@@ -14,8 +19,6 @@ pub enum Propagator {
     TraceContext,
     /// W3C Baggage specification
     Baggage,
-    /// Jaeger-native propagation headers
-    Jaeger,
 }
 
 /// Default OTLP collector endpoint used when none is explicitly configured

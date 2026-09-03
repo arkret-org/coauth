@@ -239,7 +239,6 @@ opentelemetry = { version = "0.32.0", features = ["trace", "metrics"] }
 opentelemetry-http = { version = "0.32.0", features = ["reqwest"] }
 opentelemetry-instrumentation-process = "0.2.0"
 opentelemetry-instrumentation-tokio = "0.2.0"
-opentelemetry-jaeger-propagator = "0.32.0"
 opentelemetry-otlp = { version = "0.32.0", default-features = false, features = [
     "trace",
     "metrics",

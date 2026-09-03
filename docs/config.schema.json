@@ -1612,7 +1612,7 @@
       ]
     },
     "Propagator": {
-      "description": "Trace-context propagation format for distributed tracing",
+      "description": "Trace-context propagation format for distributed tracing\n\nJaeger-native propagation (`uber-trace-id`) is intentionally absent: the\nformat is deprecated by the OpenTelemetry specification and Jaeger itself\nspeaks W3C Trace Context since 1.35. Point Jaeger at the OTLP exporter and\nkeep `tracecontext` here.",
       "oneOf": [
         {
           "description": "W3C Trace Context specification",
@@ -1623,11 +1623,6 @@
           "description": "W3C Baggage specification",
           "type": "string",
           "const": "baggage"
-        },
-        {
-          "description": "Jaeger-native propagation headers",
-          "type": "string",
-          "const": "jaeger"
         }
       ]
     },
