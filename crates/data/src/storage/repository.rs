@@ -129,882 +129,246 @@ pub trait RepositoryTransaction {
     fn cancel(self: Box<Self>) -> BoxFuture<'static, Result<(), Self::Error>>;
 }
 
-/// Access the various repositories the backend implements.
+/// Declare the [`RepositoryAccess`] trait and its two forwarding
+/// implementations from a single list of accessors.
 ///
-/// All the methods return a boxed trait object, which can be used to access a
-/// particular repository. The lifetime of the returned object is bound to the
-/// lifetime of the whole repository, so that only one mutable reference to the
-/// repository is used at a time.
+/// Each accessor appears in four places that have to agree exactly: the trait
+/// declaration, the [`MapErr`] wrapper that re-types the backend error, the
+/// `Box<R>` forwarder that keeps `BoxRepository` object-safe, and the backend's
+/// own implementation in `coauth-storage-postgres`. The first three are
+/// mechanical in the same way — same signature, same `dyn` return type, only
+/// the body differs — so they are generated here and the list below is the one
+/// place a new repository has to be registered on this side.
 ///
-/// When adding a new repository, you should add a new method to this trait, and
-/// update the implementations for [`crate::MapErr`] and [`Box<R>`] below.
-///
-/// Note: this used to have generic associated types to avoid boxing all the
-/// repository traits, but that was removed because it made almost impossible to
-/// box the trait object. This might be a shortcoming of the initial
-/// implementation of generic associated types, and might be fixed in the
-/// future.
-pub trait RepositoryAccess: Send {
-    /// The backend-specific error type used by each repository.
-    type Error: std::error::Error + Send + Sync + 'static;
+/// The accessors deliberately stay one-per-repository rather than collapsing
+/// into a generic `fn repo::<T>()`: a generic method is not `dyn`-safe, and
+/// `BoxRepository` type erasure is what keeps `coauth-backend` free of a
+/// diesel dependency.
+macro_rules! repository_access {
+    ($(
+        $(#[$meta:meta])*
+        $name:ident: $($repo:ident)::+
+    ),* $(,)?) => {
+        /// Access the various repositories the backend implements.
+        ///
+        /// All the methods return a boxed trait object, which can be used to
+        /// access a particular repository. The lifetime of the returned object
+        /// is bound to the lifetime of the whole repository, so that only one
+        /// mutable reference to the repository is used at a time.
+        ///
+        /// When adding a new repository, add an entry to the
+        /// `repository_access!` list below and implement the accessor on the
+        /// storage backend; the wrapper implementations are generated.
+        pub trait RepositoryAccess: Send {
+            /// The backend-specific error type used by each repository.
+            type Error: std::error::Error + Send + Sync + 'static;
 
-    /// Get an [`AccountRepository`]
-    fn account<'c>(&'c mut self) -> Box<dyn AccountRepository<Error = Self::Error> + 'c>;
+            $(
+                $(#[$meta])*
+                fn $name<'c>(&'c mut self)
+                -> ::std::boxed::Box<dyn $($repo)::+ <Error = Self::Error> + 'c>;
+            )*
+        }
 
-    /// Get an [`AccountHandoffRepository`].
-    fn account_handoff<'c>(
-        &'c mut self,
-    ) -> Box<dyn AccountHandoffRepository<Error = Self::Error> + 'c>;
+        impl<R, F, E> RepositoryAccess for $crate::MapErr<R, F>
+        where
+            R: RepositoryAccess,
+            R::Error: 'static,
+            F: FnMut(R::Error) -> E + Send + Sync + 'static,
+            E: std::error::Error + Send + Sync + 'static,
+        {
+            type Error = E;
 
-    /// Get the Account Authority issuer ledger.
-    fn account_status_ledger<'c>(
-        &'c mut self,
-    ) -> Box<dyn crate::AccountStatusLedgerRepository<Error = Self::Error> + 'c>;
+            $(
+                fn $name<'c>(&'c mut self)
+                -> ::std::boxed::Box<dyn $($repo)::+ <Error = Self::Error> + 'c> {
+                    ::std::boxed::Box::new($crate::MapErr::new(
+                        self.inner.$name(),
+                        &mut self.mapper,
+                    ))
+                }
+            )*
+        }
 
-    /// Get an [`AccountabilityGrantRepository`]
-    fn accountability_grant<'c>(
-        &'c mut self,
-    ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c>;
+        impl<R: RepositoryAccess + ?Sized> RepositoryAccess for ::std::boxed::Box<R> {
+            type Error = R::Error;
 
-    /// Get an [`AgentKeyAuthorizationRepository`]
-    fn agent_key_authorization<'c>(
-        &'c mut self,
-    ) -> Box<dyn AgentKeyAuthorizationRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`CircleCapabilityGrantRepository`].
-    fn circle_capability_grant<'c>(
-        &'c mut self,
-    ) -> Box<dyn CircleCapabilityGrantRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`CollaborationCapabilityGrantRepository`].
-    fn collaboration_capability_grant<'c>(
-        &'c mut self,
-    ) -> Box<dyn CollaborationCapabilityGrantRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`OrganizationControlRepository`].
-    fn organization_control<'c>(
-        &'c mut self,
-    ) -> Box<dyn OrganizationControlRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`VerifiedDidBindingRepository`].
-    fn verified_did_binding<'c>(
-        &'c mut self,
-    ) -> Box<dyn VerifiedDidBindingRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`DpopReplayRepository`].
-    fn dpop_replay<'c>(&'c mut self) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`UserErasureRequestRepository`].
-    fn user_erasure_request<'c>(
-        &'c mut self,
-    ) -> Box<dyn UserErasureRequestRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`RecoveryAuthorityRepository`].
-    fn recovery_authority<'c>(
-        &'c mut self,
-    ) -> Box<dyn RecoveryAuthorityRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`UpstreamOAuthLinkRepository`]
-    fn upstream_oauth_link<'c>(
-        &'c mut self,
-    ) -> Box<dyn UpstreamOAuthLinkRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`UpstreamOAuthProviderRepository`]
-    fn upstream_oauth_provider<'c>(
-        &'c mut self,
-    ) -> Box<dyn UpstreamOAuthProviderRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`UpstreamOAuthSessionRepository`]
-    fn upstream_oauth_session<'c>(
-        &'c mut self,
-    ) -> Box<dyn UpstreamOAuthSessionRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`UserRepository`]
-    fn user<'c>(&'c mut self) -> Box<dyn UserRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`UserEmailRepository`]
-    fn user_email<'c>(&'c mut self) -> Box<dyn UserEmailRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`UserPhoneRepository`]
-    fn user_phone<'c>(&'c mut self) -> Box<dyn UserPhoneRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`UserPasswordRepository`]
-    fn user_password<'c>(&'c mut self)
-    -> Box<dyn UserPasswordRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`UserRecoveryRepository`]
-    fn user_recovery<'c>(&'c mut self)
-    -> Box<dyn UserRecoveryRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`UserRegistrationRepository`]
-    fn user_registration<'c>(
-        &'c mut self,
-    ) -> Box<dyn UserRegistrationRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`UserRegistrationTokenRepository`]
-    fn user_registration_token<'c>(
-        &'c mut self,
-    ) -> Box<dyn UserRegistrationTokenRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`UserTermsRepository`]
-    fn user_terms<'c>(&'c mut self) -> Box<dyn UserTermsRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`UserPrimaryHandlePreferenceRepository`].
-    fn user_primary_handle_preference<'c>(
-        &'c mut self,
-    ) -> Box<dyn UserPrimaryHandlePreferenceRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`PrincipalDidRepository`]
-    fn principal_did<'c>(&'c mut self)
-    -> Box<dyn PrincipalDidRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`BrowserSessionRepository`]
-    fn browser_session<'c>(
-        &'c mut self,
-    ) -> Box<dyn BrowserSessionRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`AppSessionRepository`]
-    fn app_session<'c>(&'c mut self) -> Box<dyn AppSessionRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`AuditRepository`]
-    fn audit<'c>(&'c mut self) -> Box<dyn AuditRepository<Error = Self::Error> + 'c>;
-
-    /// Get an append-only handle audit log repository (T3.2).
-    fn handle_audit<'c>(
-        &'c mut self,
-    ) -> Box<dyn coauth_data::audit::HandleAuditRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`NotificationRepository`]
-    fn notification<'c>(&'c mut self) -> Box<dyn NotificationRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`OAuthClientRepository`]
-    fn oauth_client<'c>(&'c mut self) -> Box<dyn OAuthClientRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`OAuthAuthorizationGrantRepository`]
-    fn oauth_authorization_grant<'c>(
-        &'c mut self,
-    ) -> Box<dyn OAuthAuthorizationGrantRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`OAuthSessionRepository`]
-    fn oauth_session<'c>(&'c mut self)
-    -> Box<dyn OAuthSessionRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`SessionGrantRepository`]
-    fn oauth_session_grant<'c>(
-        &'c mut self,
-    ) -> Box<dyn SessionGrantRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`OAuthAccessTokenRepository`]
-    fn oauth_access_token<'c>(
-        &'c mut self,
-    ) -> Box<dyn OAuthAccessTokenRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`OAuthRefreshTokenRepository`]
-    fn oauth_refresh_token<'c>(
-        &'c mut self,
-    ) -> Box<dyn OAuthRefreshTokenRepository<Error = Self::Error> + 'c>;
-
-    /// Get an [`OAuthDeviceCodeGrantRepository`]
-    fn oauth_device_code_grant<'c>(
-        &'c mut self,
-    ) -> Box<dyn OAuthDeviceCodeGrantRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`PersonalAccessTokenRepository`]
-    fn personal_access_token<'c>(
-        &'c mut self,
-    ) -> Box<dyn PersonalAccessTokenRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`PersonalSessionRepository`]
-    fn personal_session<'c>(
-        &'c mut self,
-    ) -> Box<dyn PersonalSessionRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`QueueWorkerRepository`]
-    fn queue_worker<'c>(&'c mut self) -> Box<dyn QueueWorkerRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`QueueJobRepository`]
-    fn queue_job<'c>(&'c mut self) -> Box<dyn QueueJobRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`QueueScheduleRepository`]
-    fn queue_schedule<'c>(
-        &'c mut self,
-    ) -> Box<dyn QueueScheduleRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`PolicyDataRepository`]
-    fn policy_data<'c>(&'c mut self) -> Box<dyn PolicyDataRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`StationTrustRepository`]
-    fn station_trust<'c>(&'c mut self)
-    -> Box<dyn StationTrustRepository<Error = Self::Error> + 'c>;
-
-    /// Get a [`NotificationTemplateRepository`]
-    fn notification_template<'c>(
-        &'c mut self,
-    ) -> Box<dyn NotificationTemplateRepository<Error = Self::Error> + 'c>;
+            $(
+                fn $name<'c>(&'c mut self)
+                -> ::std::boxed::Box<dyn $($repo)::+ <Error = Self::Error> + 'c> {
+                    (**self).$name()
+                }
+            )*
+        }
+    };
 }
 
-/// Implementations of the [`RepositoryAccess`], [`RepositoryTransaction`] and
-/// [`Repository`] for the [`crate::MapErr`] wrapper and [`Box<R>`]
-mod impls {
-    use futures_util::future::BoxFuture;
-    use futures_util::{FutureExt, TryFutureExt};
+repository_access! {
+    /// Get an [`AccountRepository`]
+    account: AccountRepository,
 
-    use super::RepositoryAccess;
-    use crate::account::AccountRepository;
-    use crate::account_handoff::AccountHandoffRepository;
-    use crate::accountability::AccountabilityGrantRepository;
-    use crate::agent_key::AgentKeyAuthorizationRepository;
-    use crate::app_session::AppSessionRepository;
-    use crate::audit::AuditRepository;
-    use crate::circle_capability::CircleCapabilityGrantRepository;
-    use crate::collaboration_capability::CollaborationCapabilityGrantRepository;
-    use crate::did_binding::VerifiedDidBindingRepository;
-    use crate::dpop_replay::DpopReplayRepository;
-    use crate::erasure_request::UserErasureRequestRepository;
-    use crate::notification::NotificationRepository;
-    use crate::oauth::{
-        OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
-        OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
-        SessionGrantRepository,
-    };
-    use crate::organization_control::OrganizationControlRepository;
-    use crate::personal::{PersonalAccessTokenRepository, PersonalSessionRepository};
-    use crate::policy_data::PolicyDataRepository;
-    use crate::queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository};
-    use crate::storage::notification_template::NotificationTemplateRepository;
-    use crate::storage::recovery_authority::RecoveryAuthorityRepository;
-    use crate::storage::station_trust::StationTrustRepository;
-    use crate::upstream_oauth::{
-        UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
-        UpstreamOAuthSessionRepository,
-    };
-    use crate::user::{
-        BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository,
-        UserPasswordRepository, UserPhoneRepository, UserPrimaryHandlePreferenceRepository,
-        UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
-        UserTermsRepository,
-    };
-    use crate::{AccountStatusLedgerRepository, MapErr, Repository, RepositoryTransaction};
+    /// Get an [`AccountHandoffRepository`].
+    account_handoff: AccountHandoffRepository,
 
-    // --- Repository ---
-    impl<R, F, E1, E2> Repository<E2> for MapErr<R, F>
-    where
-        R: Repository<E1> + RepositoryAccess<Error = E1> + RepositoryTransaction<Error = E1>,
-        F: FnMut(E1) -> E2 + Send + Sync + 'static,
-        E1: std::error::Error + Send + Sync + 'static,
-        E2: std::error::Error + Send + Sync + 'static,
-    {
+    /// Get the Account Authority issuer ledger.
+    account_status_ledger: crate::AccountStatusLedgerRepository,
+
+    /// Get an [`AccountabilityGrantRepository`]
+    accountability_grant: AccountabilityGrantRepository,
+
+    /// Get an [`AgentKeyAuthorizationRepository`]
+    agent_key_authorization: AgentKeyAuthorizationRepository,
+
+    /// Get a [`CircleCapabilityGrantRepository`].
+    circle_capability_grant: CircleCapabilityGrantRepository,
+
+    /// Get a [`CollaborationCapabilityGrantRepository`].
+    collaboration_capability_grant: CollaborationCapabilityGrantRepository,
+
+    /// Get an [`OrganizationControlRepository`].
+    organization_control: OrganizationControlRepository,
+
+    /// Get a [`VerifiedDidBindingRepository`].
+    verified_did_binding: VerifiedDidBindingRepository,
+
+    /// Get a [`DpopReplayRepository`].
+    dpop_replay: DpopReplayRepository,
+
+    /// Get a [`UserErasureRequestRepository`].
+    user_erasure_request: UserErasureRequestRepository,
+
+    /// Get a [`RecoveryAuthorityRepository`].
+    recovery_authority: RecoveryAuthorityRepository,
+
+    /// Get an [`UpstreamOAuthLinkRepository`]
+    upstream_oauth_link: UpstreamOAuthLinkRepository,
+
+    /// Get an [`UpstreamOAuthProviderRepository`]
+    upstream_oauth_provider: UpstreamOAuthProviderRepository,
+
+    /// Get an [`UpstreamOAuthSessionRepository`]
+    upstream_oauth_session: UpstreamOAuthSessionRepository,
+
+    /// Get an [`UserRepository`]
+    user: UserRepository,
+
+    /// Get an [`UserEmailRepository`]
+    user_email: UserEmailRepository,
+
+    /// Get an [`UserPhoneRepository`]
+    user_phone: UserPhoneRepository,
+
+    /// Get an [`UserPasswordRepository`]
+    user_password: UserPasswordRepository,
+
+    /// Get an [`UserRecoveryRepository`]
+    user_recovery: UserRecoveryRepository,
+
+    /// Get an [`UserRegistrationRepository`]
+    user_registration: UserRegistrationRepository,
+
+    /// Get an [`UserRegistrationTokenRepository`]
+    user_registration_token: UserRegistrationTokenRepository,
+
+    /// Get an [`UserTermsRepository`]
+    user_terms: UserTermsRepository,
+
+    /// Get a [`UserPrimaryHandlePreferenceRepository`].
+    user_primary_handle_preference: UserPrimaryHandlePreferenceRepository,
+
+    /// Get a [`PrincipalDidRepository`]
+    principal_did: PrincipalDidRepository,
+
+    /// Get a [`BrowserSessionRepository`]
+    browser_session: BrowserSessionRepository,
+
+    /// Get a [`AppSessionRepository`]
+    app_session: AppSessionRepository,
+
+    /// Get an [`AuditRepository`]
+    audit: AuditRepository,
+
+    /// Get an append-only handle audit log repository (T3.2).
+    handle_audit: coauth_data::audit::HandleAuditRepository,
+
+    /// Get a [`NotificationRepository`]
+    notification: NotificationRepository,
+
+    /// Get an [`OAuthClientRepository`]
+    oauth_client: OAuthClientRepository,
+
+    /// Get an [`OAuthAuthorizationGrantRepository`]
+    oauth_authorization_grant: OAuthAuthorizationGrantRepository,
+
+    /// Get an [`OAuthSessionRepository`]
+    oauth_session: OAuthSessionRepository,
+
+    /// Get a [`SessionGrantRepository`]
+    oauth_session_grant: SessionGrantRepository,
+
+    /// Get an [`OAuthAccessTokenRepository`]
+    oauth_access_token: OAuthAccessTokenRepository,
+
+    /// Get an [`OAuthRefreshTokenRepository`]
+    oauth_refresh_token: OAuthRefreshTokenRepository,
+
+    /// Get an [`OAuthDeviceCodeGrantRepository`]
+    oauth_device_code_grant: OAuthDeviceCodeGrantRepository,
+
+    /// Get a [`PersonalAccessTokenRepository`]
+    personal_access_token: PersonalAccessTokenRepository,
+
+    /// Get a [`PersonalSessionRepository`]
+    personal_session: PersonalSessionRepository,
+
+    /// Get a [`QueueWorkerRepository`]
+    queue_worker: QueueWorkerRepository,
+
+    /// Get a [`QueueJobRepository`]
+    queue_job: QueueJobRepository,
+
+    /// Get a [`QueueScheduleRepository`]
+    queue_schedule: QueueScheduleRepository,
+
+    /// Get a [`PolicyDataRepository`]
+    policy_data: PolicyDataRepository,
+
+    /// Get a [`StationTrustRepository`]
+    station_trust: StationTrustRepository,
+
+    /// Get a [`NotificationTemplateRepository`]
+    notification_template: NotificationTemplateRepository,
+}
+
+use futures_util::{FutureExt, TryFutureExt};
+
+use crate::MapErr;
+
+// --- Repository ---
+impl<R, F, E1, E2> Repository<E2> for MapErr<R, F>
+where
+    R: Repository<E1> + RepositoryAccess<Error = E1> + RepositoryTransaction<Error = E1>,
+    F: FnMut(E1) -> E2 + Send + Sync + 'static,
+    E1: std::error::Error + Send + Sync + 'static,
+    E2: std::error::Error + Send + Sync + 'static,
+{
+}
+
+// --- RepositoryTransaction --
+impl<R, F, E> RepositoryTransaction for MapErr<R, F>
+where
+    R: RepositoryTransaction,
+    R::Error: 'static,
+    F: FnMut(R::Error) -> E + Send + Sync + 'static,
+    E: std::error::Error,
+{
+    type Error = E;
+
+    fn save(self: Box<Self>) -> BoxFuture<'static, Result<(), Self::Error>> {
+        Box::new(self.inner).save().map_err(self.mapper).boxed()
     }
 
-    // --- RepositoryTransaction --
-    impl<R, F, E> RepositoryTransaction for MapErr<R, F>
-    where
-        R: RepositoryTransaction,
-        R::Error: 'static,
-        F: FnMut(R::Error) -> E + Send + Sync + 'static,
-        E: std::error::Error,
-    {
-        type Error = E;
-
-        fn save(self: Box<Self>) -> BoxFuture<'static, Result<(), Self::Error>> {
-            Box::new(self.inner).save().map_err(self.mapper).boxed()
-        }
-
-        fn cancel(self: Box<Self>) -> BoxFuture<'static, Result<(), Self::Error>> {
-            Box::new(self.inner).cancel().map_err(self.mapper).boxed()
-        }
-    }
-
-    // --- RepositoryAccess --
-    impl<R, F, E> RepositoryAccess for MapErr<R, F>
-    where
-        R: RepositoryAccess,
-        R::Error: 'static,
-        F: FnMut(R::Error) -> E + Send + Sync + 'static,
-        E: std::error::Error + Send + Sync + 'static,
-    {
-        type Error = E;
-
-        fn account<'c>(&'c mut self) -> Box<dyn AccountRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.account(), &mut self.mapper))
-        }
-
-        fn account_handoff<'c>(
-            &'c mut self,
-        ) -> Box<dyn AccountHandoffRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.account_handoff(), &mut self.mapper))
-        }
-
-        fn account_status_ledger<'c>(
-            &'c mut self,
-        ) -> Box<dyn AccountStatusLedgerRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.account_status_ledger(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn accountability_grant<'c>(
-            &'c mut self,
-        ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.accountability_grant(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn agent_key_authorization<'c>(
-            &'c mut self,
-        ) -> Box<dyn AgentKeyAuthorizationRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.agent_key_authorization(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn circle_capability_grant<'c>(
-            &'c mut self,
-        ) -> Box<dyn CircleCapabilityGrantRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.circle_capability_grant(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn organization_control<'c>(
-            &'c mut self,
-        ) -> Box<dyn OrganizationControlRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.organization_control(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn collaboration_capability_grant<'c>(
-            &'c mut self,
-        ) -> Box<dyn CollaborationCapabilityGrantRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.collaboration_capability_grant(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn verified_did_binding<'c>(
-            &'c mut self,
-        ) -> Box<dyn VerifiedDidBindingRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.verified_did_binding(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn dpop_replay<'c>(
-            &'c mut self,
-        ) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.dpop_replay(), &mut self.mapper))
-        }
-
-        fn user_erasure_request<'c>(
-            &'c mut self,
-        ) -> Box<dyn UserErasureRequestRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.user_erasure_request(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn recovery_authority<'c>(
-            &'c mut self,
-        ) -> Box<dyn RecoveryAuthorityRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.recovery_authority(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn upstream_oauth_link<'c>(
-            &'c mut self,
-        ) -> Box<dyn UpstreamOAuthLinkRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.upstream_oauth_link(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn upstream_oauth_provider<'c>(
-            &'c mut self,
-        ) -> Box<dyn UpstreamOAuthProviderRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.upstream_oauth_provider(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn upstream_oauth_session<'c>(
-            &'c mut self,
-        ) -> Box<dyn UpstreamOAuthSessionRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.upstream_oauth_session(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn user<'c>(&'c mut self) -> Box<dyn UserRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.user(), &mut self.mapper))
-        }
-
-        fn user_email<'c>(&'c mut self) -> Box<dyn UserEmailRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.user_email(), &mut self.mapper))
-        }
-
-        fn user_phone<'c>(&'c mut self) -> Box<dyn UserPhoneRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.user_phone(), &mut self.mapper))
-        }
-
-        fn user_password<'c>(
-            &'c mut self,
-        ) -> Box<dyn UserPasswordRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.user_password(), &mut self.mapper))
-        }
-
-        fn user_recovery<'c>(
-            &'c mut self,
-        ) -> Box<dyn crate::user::UserRecoveryRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.user_recovery(), &mut self.mapper))
-        }
-
-        fn user_registration<'c>(
-            &'c mut self,
-        ) -> Box<dyn UserRegistrationRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.user_registration(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn user_registration_token<'c>(
-            &'c mut self,
-        ) -> Box<dyn UserRegistrationTokenRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.user_registration_token(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn user_terms<'c>(&'c mut self) -> Box<dyn UserTermsRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.user_terms(), &mut self.mapper))
-        }
-
-        fn user_primary_handle_preference<'c>(
-            &'c mut self,
-        ) -> Box<dyn UserPrimaryHandlePreferenceRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.user_primary_handle_preference(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn principal_did<'c>(
-            &'c mut self,
-        ) -> Box<dyn PrincipalDidRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.principal_did(), &mut self.mapper))
-        }
-
-        fn browser_session<'c>(
-            &'c mut self,
-        ) -> Box<dyn BrowserSessionRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.browser_session(), &mut self.mapper))
-        }
-
-        fn app_session<'c>(
-            &'c mut self,
-        ) -> Box<dyn AppSessionRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.app_session(), &mut self.mapper))
-        }
-
-        fn audit<'c>(&'c mut self) -> Box<dyn AuditRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.audit(), &mut self.mapper))
-        }
-
-        fn handle_audit<'c>(
-            &'c mut self,
-        ) -> Box<dyn coauth_data::audit::HandleAuditRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.handle_audit(), &mut self.mapper))
-        }
-
-        fn notification<'c>(
-            &'c mut self,
-        ) -> Box<dyn NotificationRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.notification(), &mut self.mapper))
-        }
-
-        fn oauth_client<'c>(
-            &'c mut self,
-        ) -> Box<dyn OAuthClientRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.oauth_client(), &mut self.mapper))
-        }
-
-        fn oauth_authorization_grant<'c>(
-            &'c mut self,
-        ) -> Box<dyn OAuthAuthorizationGrantRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.oauth_authorization_grant(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn oauth_session<'c>(
-            &'c mut self,
-        ) -> Box<dyn OAuthSessionRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.oauth_session(), &mut self.mapper))
-        }
-
-        fn oauth_session_grant<'c>(
-            &'c mut self,
-        ) -> Box<dyn SessionGrantRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.oauth_session_grant(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn oauth_access_token<'c>(
-            &'c mut self,
-        ) -> Box<dyn OAuthAccessTokenRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.oauth_access_token(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn oauth_refresh_token<'c>(
-            &'c mut self,
-        ) -> Box<dyn OAuthRefreshTokenRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.oauth_refresh_token(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn oauth_device_code_grant<'c>(
-            &'c mut self,
-        ) -> Box<dyn OAuthDeviceCodeGrantRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.oauth_device_code_grant(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn personal_access_token<'c>(
-            &'c mut self,
-        ) -> Box<dyn PersonalAccessTokenRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.personal_access_token(),
-                &mut self.mapper,
-            ))
-        }
-
-        fn personal_session<'c>(
-            &'c mut self,
-        ) -> Box<dyn PersonalSessionRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.personal_session(), &mut self.mapper))
-        }
-
-        fn queue_worker<'c>(
-            &'c mut self,
-        ) -> Box<dyn QueueWorkerRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.queue_worker(), &mut self.mapper))
-        }
-
-        fn queue_job<'c>(&'c mut self) -> Box<dyn QueueJobRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.queue_job(), &mut self.mapper))
-        }
-
-        fn queue_schedule<'c>(
-            &'c mut self,
-        ) -> Box<dyn QueueScheduleRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.queue_schedule(), &mut self.mapper))
-        }
-
-        fn policy_data<'c>(
-            &'c mut self,
-        ) -> Box<dyn PolicyDataRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.policy_data(), &mut self.mapper))
-        }
-
-        fn station_trust<'c>(
-            &'c mut self,
-        ) -> Box<dyn StationTrustRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.station_trust(), &mut self.mapper))
-        }
-
-        fn notification_template<'c>(
-            &'c mut self,
-        ) -> Box<dyn NotificationTemplateRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(
-                self.inner.notification_template(),
-                &mut self.mapper,
-            ))
-        }
-    }
-
-    impl<R: RepositoryAccess + ?Sized> RepositoryAccess for Box<R> {
-        type Error = R::Error;
-
-        fn account<'c>(&'c mut self) -> Box<dyn AccountRepository<Error = Self::Error> + 'c> {
-            (**self).account()
-        }
-
-        fn account_handoff<'c>(
-            &'c mut self,
-        ) -> Box<dyn AccountHandoffRepository<Error = Self::Error> + 'c> {
-            (**self).account_handoff()
-        }
-
-        fn account_status_ledger<'c>(
-            &'c mut self,
-        ) -> Box<dyn AccountStatusLedgerRepository<Error = Self::Error> + 'c> {
-            (**self).account_status_ledger()
-        }
-
-        fn accountability_grant<'c>(
-            &'c mut self,
-        ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c> {
-            (**self).accountability_grant()
-        }
-
-        fn agent_key_authorization<'c>(
-            &'c mut self,
-        ) -> Box<dyn AgentKeyAuthorizationRepository<Error = Self::Error> + 'c> {
-            (**self).agent_key_authorization()
-        }
-
-        fn circle_capability_grant<'c>(
-            &'c mut self,
-        ) -> Box<dyn CircleCapabilityGrantRepository<Error = Self::Error> + 'c> {
-            (**self).circle_capability_grant()
-        }
-
-        fn organization_control<'c>(
-            &'c mut self,
-        ) -> Box<dyn OrganizationControlRepository<Error = Self::Error> + 'c> {
-            (**self).organization_control()
-        }
-
-        fn collaboration_capability_grant<'c>(
-            &'c mut self,
-        ) -> Box<dyn CollaborationCapabilityGrantRepository<Error = Self::Error> + 'c> {
-            (**self).collaboration_capability_grant()
-        }
-
-        fn verified_did_binding<'c>(
-            &'c mut self,
-        ) -> Box<dyn VerifiedDidBindingRepository<Error = Self::Error> + 'c> {
-            (**self).verified_did_binding()
-        }
-
-        fn dpop_replay<'c>(
-            &'c mut self,
-        ) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c> {
-            (**self).dpop_replay()
-        }
-
-        fn user_erasure_request<'c>(
-            &'c mut self,
-        ) -> Box<dyn UserErasureRequestRepository<Error = Self::Error> + 'c> {
-            (**self).user_erasure_request()
-        }
-
-        fn recovery_authority<'c>(
-            &'c mut self,
-        ) -> Box<dyn RecoveryAuthorityRepository<Error = Self::Error> + 'c> {
-            (**self).recovery_authority()
-        }
-
-        fn upstream_oauth_link<'c>(
-            &'c mut self,
-        ) -> Box<dyn UpstreamOAuthLinkRepository<Error = Self::Error> + 'c> {
-            (**self).upstream_oauth_link()
-        }
-
-        fn upstream_oauth_provider<'c>(
-            &'c mut self,
-        ) -> Box<dyn UpstreamOAuthProviderRepository<Error = Self::Error> + 'c> {
-            (**self).upstream_oauth_provider()
-        }
-
-        fn upstream_oauth_session<'c>(
-            &'c mut self,
-        ) -> Box<dyn UpstreamOAuthSessionRepository<Error = Self::Error> + 'c> {
-            (**self).upstream_oauth_session()
-        }
-
-        fn user<'c>(&'c mut self) -> Box<dyn UserRepository<Error = Self::Error> + 'c> {
-            (**self).user()
-        }
-
-        fn user_email<'c>(&'c mut self) -> Box<dyn UserEmailRepository<Error = Self::Error> + 'c> {
-            (**self).user_email()
-        }
-
-        fn user_phone<'c>(&'c mut self) -> Box<dyn UserPhoneRepository<Error = Self::Error> + 'c> {
-            (**self).user_phone()
-        }
-
-        fn user_password<'c>(
-            &'c mut self,
-        ) -> Box<dyn UserPasswordRepository<Error = Self::Error> + 'c> {
-            (**self).user_password()
-        }
-
-        fn user_recovery<'c>(
-            &'c mut self,
-        ) -> Box<dyn crate::user::UserRecoveryRepository<Error = Self::Error> + 'c> {
-            (**self).user_recovery()
-        }
-
-        fn user_registration<'c>(
-            &'c mut self,
-        ) -> Box<dyn UserRegistrationRepository<Error = Self::Error> + 'c> {
-            (**self).user_registration()
-        }
-
-        fn user_registration_token<'c>(
-            &'c mut self,
-        ) -> Box<dyn UserRegistrationTokenRepository<Error = Self::Error> + 'c> {
-            (**self).user_registration_token()
-        }
-
-        fn user_terms<'c>(&'c mut self) -> Box<dyn UserTermsRepository<Error = Self::Error> + 'c> {
-            (**self).user_terms()
-        }
-
-        fn principal_did<'c>(
-            &'c mut self,
-        ) -> Box<dyn PrincipalDidRepository<Error = Self::Error> + 'c> {
-            (**self).principal_did()
-        }
-
-        fn user_primary_handle_preference<'c>(
-            &'c mut self,
-        ) -> Box<dyn UserPrimaryHandlePreferenceRepository<Error = Self::Error> + 'c> {
-            (**self).user_primary_handle_preference()
-        }
-
-        fn browser_session<'c>(
-            &'c mut self,
-        ) -> Box<dyn BrowserSessionRepository<Error = Self::Error> + 'c> {
-            (**self).browser_session()
-        }
-
-        fn app_session<'c>(
-            &'c mut self,
-        ) -> Box<dyn AppSessionRepository<Error = Self::Error> + 'c> {
-            (**self).app_session()
-        }
-
-        fn audit<'c>(&'c mut self) -> Box<dyn AuditRepository<Error = Self::Error> + 'c> {
-            (**self).audit()
-        }
-
-        fn handle_audit<'c>(
-            &'c mut self,
-        ) -> Box<dyn coauth_data::audit::HandleAuditRepository<Error = Self::Error> + 'c> {
-            (**self).handle_audit()
-        }
-
-        fn notification<'c>(
-            &'c mut self,
-        ) -> Box<dyn NotificationRepository<Error = Self::Error> + 'c> {
-            (**self).notification()
-        }
-
-        fn oauth_client<'c>(
-            &'c mut self,
-        ) -> Box<dyn OAuthClientRepository<Error = Self::Error> + 'c> {
-            (**self).oauth_client()
-        }
-
-        fn oauth_authorization_grant<'c>(
-            &'c mut self,
-        ) -> Box<dyn OAuthAuthorizationGrantRepository<Error = Self::Error> + 'c> {
-            (**self).oauth_authorization_grant()
-        }
-
-        fn oauth_session<'c>(
-            &'c mut self,
-        ) -> Box<dyn OAuthSessionRepository<Error = Self::Error> + 'c> {
-            (**self).oauth_session()
-        }
-
-        fn oauth_session_grant<'c>(
-            &'c mut self,
-        ) -> Box<dyn SessionGrantRepository<Error = Self::Error> + 'c> {
-            (**self).oauth_session_grant()
-        }
-
-        fn oauth_access_token<'c>(
-            &'c mut self,
-        ) -> Box<dyn OAuthAccessTokenRepository<Error = Self::Error> + 'c> {
-            (**self).oauth_access_token()
-        }
-
-        fn oauth_refresh_token<'c>(
-            &'c mut self,
-        ) -> Box<dyn OAuthRefreshTokenRepository<Error = Self::Error> + 'c> {
-            (**self).oauth_refresh_token()
-        }
-
-        fn oauth_device_code_grant<'c>(
-            &'c mut self,
-        ) -> Box<dyn OAuthDeviceCodeGrantRepository<Error = Self::Error> + 'c> {
-            (**self).oauth_device_code_grant()
-        }
-
-        fn personal_access_token<'c>(
-            &'c mut self,
-        ) -> Box<dyn PersonalAccessTokenRepository<Error = Self::Error> + 'c> {
-            (**self).personal_access_token()
-        }
-
-        fn personal_session<'c>(
-            &'c mut self,
-        ) -> Box<dyn PersonalSessionRepository<Error = Self::Error> + 'c> {
-            (**self).personal_session()
-        }
-
-        fn queue_worker<'c>(
-            &'c mut self,
-        ) -> Box<dyn QueueWorkerRepository<Error = Self::Error> + 'c> {
-            (**self).queue_worker()
-        }
-
-        fn queue_job<'c>(&'c mut self) -> Box<dyn QueueJobRepository<Error = Self::Error> + 'c> {
-            (**self).queue_job()
-        }
-
-        fn queue_schedule<'c>(
-            &'c mut self,
-        ) -> Box<dyn QueueScheduleRepository<Error = Self::Error> + 'c> {
-            (**self).queue_schedule()
-        }
-
-        fn policy_data<'c>(
-            &'c mut self,
-        ) -> Box<dyn PolicyDataRepository<Error = Self::Error> + 'c> {
-            (**self).policy_data()
-        }
-
-        fn station_trust<'c>(
-            &'c mut self,
-        ) -> Box<dyn StationTrustRepository<Error = Self::Error> + 'c> {
-            (**self).station_trust()
-        }
-
-        fn notification_template<'c>(
-            &'c mut self,
-        ) -> Box<dyn NotificationTemplateRepository<Error = Self::Error> + 'c> {
-            (**self).notification_template()
-        }
+    fn cancel(self: Box<Self>) -> BoxFuture<'static, Result<(), Self::Error>> {
+        Box::new(self.inner).cancel().map_err(self.mapper).boxed()
     }
 }

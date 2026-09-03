@@ -21,8 +21,7 @@ impl<'c> PgAccountStatusLedgerRepository<'c> {
     }
 
     fn decode(value: serde_json::Value) -> Result<AccountStatusRecord, DatabaseError> {
-        let record: AccountStatusRecord =
-            serde_json::from_value(value).map_err(DatabaseError::to_invalid_operation)?;
+        let record: AccountStatusRecord = serde_json::from_value(value)?;
         record
             .validate_shape()
             .map_err(DatabaseError::to_invalid_operation)?;
@@ -131,16 +130,14 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
             });
         }
 
-        let status_seq =
-            i64::try_from(record.status_seq).map_err(DatabaseError::to_invalid_operation)?;
+        let status_seq = i64::try_from(record.status_seq)?;
         diesel::insert_into(account_status_records::table)
             .values(NewRecord {
                 account_authority_id: record.account_authority_id.to_string(),
                 local_account_id: local_account_id.to_string(),
                 status_seq,
                 record_id: record.account_status_record_id.to_string(),
-                record: serde_json::to_value(record)
-                    .map_err(DatabaseError::to_invalid_operation)?,
+                record: serde_json::to_value(record)?,
                 issued_at: record.issued_at,
             })
             .execute(self.conn)
@@ -181,7 +178,7 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
         from_status_seq: u64,
         limit: u16,
     ) -> Result<Vec<AccountStatusRecord>, Self::Error> {
-        let from = i64::try_from(from_status_seq).map_err(DatabaseError::to_invalid_operation)?;
+        let from = i64::try_from(from_status_seq)?;
         let values = account_status_records::table
             .filter(account_status_records::account_authority_id.eq(account_authority_id))
             .filter(account_status_records::local_account_id.eq(local_account_id))

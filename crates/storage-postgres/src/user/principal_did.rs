@@ -335,14 +335,11 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             audience_id: audience_id.clone(),
             verified_did: verified_did.to_string(),
             verified_version_id: verified_version_id.clone(),
-            binding_receipt: serde_json::to_value(&binding_receipt)
-                .map_err(|_| DatabaseError::invalid_operation())?,
+            binding_receipt: serde_json::to_value(&binding_receipt)?,
             accepted_id: accepted_id.clone(),
-            binding_version: i64::try_from(binding_version)
-                .map_err(|_| DatabaseError::invalid_operation())?,
+            binding_version: i64::try_from(binding_version)?,
             binding_frontier_digest: binding_frontier_digest.to_string(),
-            account_id: serde_json::to_value(&account_id)
-                .map_err(|_| DatabaseError::invalid_operation())?,
+            account_id: serde_json::to_value(&account_id)?,
             principal_control_realm_id: principal_control_realm_id.to_string(),
             created_at: now,
             updated_at: now,
@@ -357,15 +354,12 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             .set((
                 principal_did_bindings::verified_did.eq(verified_did.to_string()),
                 principal_did_bindings::verified_version_id.eq(verified_version_id),
-                principal_did_bindings::binding_receipt.eq(serde_json::to_value(&binding_receipt)
-                    .map_err(|_| DatabaseError::invalid_operation())?),
+                principal_did_bindings::binding_receipt.eq(serde_json::to_value(&binding_receipt)?),
                 principal_did_bindings::accepted_id.eq(&accepted_id),
-                principal_did_bindings::binding_version.eq(i64::try_from(binding_version)
-                    .map_err(|_| DatabaseError::invalid_operation())?),
+                principal_did_bindings::binding_version.eq(i64::try_from(binding_version)?),
                 principal_did_bindings::binding_frontier_digest
                     .eq(binding_frontier_digest.to_string()),
-                principal_did_bindings::account_id.eq(serde_json::to_value(&account_id)
-                    .map_err(|_| DatabaseError::invalid_operation())?),
+                principal_did_bindings::account_id.eq(serde_json::to_value(&account_id)?),
                 principal_did_bindings::principal_control_realm_id
                     .eq(principal_control_realm_id.to_string()),
                 principal_did_bindings::updated_at.eq(now),

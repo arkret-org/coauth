@@ -89,239 +89,179 @@ pub trait InsertableJob: Serialize + Send {
     const QUEUE_NAME: &'static str;
 }
 
-/// A [`QueueJobRepository`] is used to schedule jobs to be executed by a
-/// worker.
-#[async_trait]
-pub trait QueueJobRepository: Send + Sync {
-    /// The error type returned by the repository.
-    type Error;
+repository_impl! {
+    /// A [`QueueJobRepository`] is used to schedule jobs to be executed by a
+    /// worker.
+    pub trait QueueJobRepository {
+        /// The error type returned by the repository.
+        type Error;
 
-    /// Schedule a job to be executed as soon as possible by a worker.
-    ///
-    /// # Parameters
-    ///
-    /// * `rng` - The random number generator used to generate a new job ID
-    /// * `clock` - The clock used to generate timestamps
-    /// * `queue_name` - The name of the queue to schedule the job on
-    /// * `payload` - The payload of the job
-    /// * `metadata` - Arbitrary metadata about the job scheduled immediately.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the underlying repository fails.
-    async fn schedule(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        queue_name: &str,
-        payload: serde_json::Value,
-        metadata: serde_json::Value,
-    ) -> Result<(), Self::Error>;
+        /// Schedule a job to be executed as soon as possible by a worker.
+        ///
+        /// # Parameters
+        ///
+        /// * `rng` - The random number generator used to generate a new job ID
+        /// * `clock` - The clock used to generate timestamps
+        /// * `queue_name` - The name of the queue to schedule the job on
+        /// * `payload` - The payload of the job
+        /// * `metadata` - Arbitrary metadata about the job scheduled immediately.
+        ///
+        /// # Errors
+        ///
+        /// Returns an error if the underlying repository fails.
+        async fn schedule(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            queue_name: &str,
+            payload: serde_json::Value,
+            metadata: serde_json::Value,
+        ) -> Result<(), Self::Error>;
 
-    /// Schedule a job to be executed at a later date by a worker.
-    ///
-    /// # Parameters
-    ///
-    /// * `rng` - The random number generator used to generate a new job ID
-    /// * `clock` - The clock used to generate timestamps
-    /// * `queue_name` - The name of the queue to schedule the job on
-    /// * `payload` - The payload of the job
-    /// * `metadata` - Arbitrary metadata about the job scheduled immediately.
-    /// * `scheduled_at` - The date and time to schedule the job for
-    /// * `schedule_name` - The name of the recurring schedule which scheduled this job
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the underlying repository fails.
-    #[allow(clippy::too_many_arguments)]
-    async fn schedule_later(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        queue_name: &str,
-        payload: serde_json::Value,
-        metadata: serde_json::Value,
-        scheduled_at: DateTime<Utc>,
-        schedule_name: Option<&str>,
-    ) -> Result<(), Self::Error>;
+        /// Schedule a job to be executed at a later date by a worker.
+        ///
+        /// # Parameters
+        ///
+        /// * `rng` - The random number generator used to generate a new job ID
+        /// * `clock` - The clock used to generate timestamps
+        /// * `queue_name` - The name of the queue to schedule the job on
+        /// * `payload` - The payload of the job
+        /// * `metadata` - Arbitrary metadata about the job scheduled immediately.
+        /// * `scheduled_at` - The date and time to schedule the job for
+        /// * `schedule_name` - The name of the recurring schedule which scheduled this job
+        ///
+        /// # Errors
+        ///
+        /// Returns an error if the underlying repository fails.
+        #[allow(clippy::too_many_arguments)]
+        async fn schedule_later(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            queue_name: &str,
+            payload: serde_json::Value,
+            metadata: serde_json::Value,
+            scheduled_at: DateTime<Utc>,
+            schedule_name: Option<&str>,
+        ) -> Result<(), Self::Error>;
 
-    /// Reserve multiple jobs from multiple queues
-    ///
-    /// # Parameters
-    ///
-    /// * `clock` - The clock used to generate timestamps
-    /// * `worker` - The worker that is reserving the jobs
-    /// * `queues` - The queues to reserve jobs from
-    /// * `count` - The number of jobs to reserve
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the underlying repository fails.
-    async fn reserve(
-        &mut self,
-        clock: &dyn Clock,
-        worker: &Worker,
-        queues: &[&str],
-        count: usize,
-    ) -> Result<Vec<Job>, Self::Error>;
+        /// Reserve multiple jobs from multiple queues
+        ///
+        /// # Parameters
+        ///
+        /// * `clock` - The clock used to generate timestamps
+        /// * `worker` - The worker that is reserving the jobs
+        /// * `queues` - The queues to reserve jobs from
+        /// * `count` - The number of jobs to reserve
+        ///
+        /// # Errors
+        ///
+        /// Returns an error if the underlying repository fails.
+        async fn reserve(
+            &mut self,
+            clock: &dyn Clock,
+            worker: &Worker,
+            queues: &[&str],
+            count: usize,
+        ) -> Result<Vec<Job>, Self::Error>;
 
-    /// Mark a job as completed
-    ///
-    /// # Parameters
-    ///
-    /// * `clock` - The clock used to generate timestamps
-    /// * `id` - The ID of the job to mark as completed
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the underlying repository fails.
-    async fn mark_as_completed(&mut self, clock: &dyn Clock, id: Ulid) -> Result<(), Self::Error>;
+        /// Mark a job as completed
+        ///
+        /// # Parameters
+        ///
+        /// * `clock` - The clock used to generate timestamps
+        /// * `id` - The ID of the job to mark as completed
+        ///
+        /// # Errors
+        ///
+        /// Returns an error if the underlying repository fails.
+        async fn mark_as_completed(&mut self, clock: &dyn Clock, id: Ulid) -> Result<(), Self::Error>;
 
-    /// Marks a job as failed.
-    ///
-    /// # Parameters
-    ///
-    /// * `clock` - The clock used to generate timestamps
-    /// * `id` - The ID of the job to mark as failed
-    /// * `reason` - The reason for the failure
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the underlying repository fails.
-    async fn mark_as_failed(
-        &mut self,
-        clock: &dyn Clock,
-        id: Ulid,
-        reason: &str,
-    ) -> Result<(), Self::Error>;
+        /// Marks a job as failed.
+        ///
+        /// # Parameters
+        ///
+        /// * `clock` - The clock used to generate timestamps
+        /// * `id` - The ID of the job to mark as failed
+        /// * `reason` - The reason for the failure
+        ///
+        /// # Errors
+        ///
+        /// Returns an error if the underlying repository fails.
+        async fn mark_as_failed(
+            &mut self,
+            clock: &dyn Clock,
+            id: Ulid,
+            reason: &str,
+        ) -> Result<(), Self::Error>;
 
-    /// Retry a job.
-    ///
-    /// # Parameters
-    ///
-    /// * `rng` - The random number generator used to generate a new job ID
-    /// * `clock` - The clock used to generate timestamps
-    /// * `id` - The ID of the job to reschedule
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the underlying repository fails.
-    async fn retry(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        id: Ulid,
-        delay: Duration,
-    ) -> Result<(), Self::Error>;
+        /// Retry a job.
+        ///
+        /// # Parameters
+        ///
+        /// * `rng` - The random number generator used to generate a new job ID
+        /// * `clock` - The clock used to generate timestamps
+        /// * `id` - The ID of the job to reschedule
+        ///
+        /// # Errors
+        ///
+        /// Returns an error if the underlying repository fails.
+        async fn retry(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            id: Ulid,
+            delay: Duration,
+        ) -> Result<(), Self::Error>;
 
-    /// Mark all scheduled jobs past their scheduled date as available to be
-    /// executed.
-    ///
-    /// Returns the number of jobs that were marked as available.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the underlying repository fails.
-    async fn schedule_available_jobs(&mut self, clock: &dyn Clock) -> Result<usize, Self::Error>;
+        /// Mark all scheduled jobs past their scheduled date as available to be
+        /// executed.
+        ///
+        /// Returns the number of jobs that were marked as available.
+        ///
+        /// # Errors
+        ///
+        /// Returns an error if the underlying repository fails.
+        async fn schedule_available_jobs(&mut self, clock: &dyn Clock) -> Result<usize, Self::Error>;
 
-    /// Mark running jobs owned by shut-down workers as failed so they can be
-    /// retried by the queue runtime.
-    ///
-    /// Returns the jobs that were marked as failed.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the underlying repository fails.
-    async fn mark_abandoned_jobs_as_failed(
-        &mut self,
-        clock: &dyn Clock,
-        reason: &str,
-    ) -> Result<Vec<AbandonedJob>, Self::Error>;
+        /// Mark running jobs owned by shut-down workers as failed so they can be
+        /// retried by the queue runtime.
+        ///
+        /// Returns the jobs that were marked as failed.
+        ///
+        /// # Errors
+        ///
+        /// Returns an error if the underlying repository fails.
+        async fn mark_abandoned_jobs_as_failed(
+            &mut self,
+            clock: &dyn Clock,
+            reason: &str,
+        ) -> Result<Vec<AbandonedJob>, Self::Error>;
 
-    /// Cleanup old completed and failed jobs
-    ///
-    /// This will delete jobs with status 'completed' or 'failed' and IDs up to
-    /// and including `until`. Uses ULID cursor-based pagination for efficiency.
-    ///
-    /// Returns the number of jobs deleted and the cursor for the next batch
-    ///
-    /// # Parameters
-    ///
-    /// * `since`: The cursor to start from (exclusive), or `None` to start from the beginning
-    /// * `until`: The maximum ULID to delete (inclusive upper bound)
-    /// * `limit`: The maximum number of jobs to delete in this batch
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn cleanup(
-        &mut self,
-        since: Option<Ulid>,
-        until: Ulid,
-        limit: usize,
-    ) -> Result<(usize, Option<Ulid>), Self::Error>;
+        /// Cleanup old completed and failed jobs
+        ///
+        /// This will delete jobs with status 'completed' or 'failed' and IDs up to
+        /// and including `until`. Uses ULID cursor-based pagination for efficiency.
+        ///
+        /// Returns the number of jobs deleted and the cursor for the next batch
+        ///
+        /// # Parameters
+        ///
+        /// * `since`: The cursor to start from (exclusive), or `None` to start from the beginning
+        /// * `until`: The maximum ULID to delete (inclusive upper bound)
+        /// * `limit`: The maximum number of jobs to delete in this batch
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn cleanup(
+            &mut self,
+            since: Option<Ulid>,
+            until: Ulid,
+            limit: usize,
+        ) -> Result<(usize, Option<Ulid>), Self::Error>;
+    }
 }
-
-repository_impl!(QueueJobRepository:
-    async fn schedule(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        queue_name: &str,
-        payload: serde_json::Value,
-        metadata: serde_json::Value,
-    ) -> Result<(), Self::Error>;
-
-    async fn schedule_later(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        queue_name: &str,
-        payload: serde_json::Value,
-        metadata: serde_json::Value,
-        scheduled_at: DateTime<Utc>,
-        schedule_name: Option<&str>,
-    ) -> Result<(), Self::Error>;
-
-    async fn reserve(
-        &mut self,
-        clock: &dyn Clock,
-        worker: &Worker,
-        queues: &[&str],
-        count: usize,
-    ) -> Result<Vec<Job>, Self::Error>;
-
-    async fn mark_as_completed(&mut self, clock: &dyn Clock, id: Ulid) -> Result<(), Self::Error>;
-
-    async fn mark_as_failed(&mut self,
-        clock: &dyn Clock,
-        id: Ulid,
-        reason: &str,
-    ) -> Result<(), Self::Error>;
-
-    async fn retry(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        id: Ulid,
-        delay: Duration,
-    ) -> Result<(), Self::Error>;
-
-    async fn schedule_available_jobs(&mut self, clock: &dyn Clock) -> Result<usize, Self::Error>;
-
-    async fn mark_abandoned_jobs_as_failed(
-        &mut self,
-        clock: &dyn Clock,
-        reason: &str,
-    ) -> Result<Vec<AbandonedJob>, Self::Error>;
-
-    async fn cleanup(
-        &mut self,
-        since: Option<Ulid>,
-        until: Ulid,
-        limit: usize,
-    ) -> Result<(usize, Option<Ulid>), Self::Error>;
-);
 
 /// Extension trait for [`QueueJobRepository`] to help adding a job to the queue
 /// through the [`InsertableJob`] trait. This isn't in the

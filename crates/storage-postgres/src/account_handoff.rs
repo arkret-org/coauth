@@ -368,8 +368,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         .await?;
         for row in rows {
             let mut outcome: arkret_models_identity::AccountHandoffOutcome =
-                serde_json::from_slice(&row.canonical_outcome)
-                    .map_err(|_| DatabaseError::invalid_operation())?;
+                serde_json::from_slice(&row.canonical_outcome)?;
             let arkret_models_identity::AccountHandoffBinding::IdentityCreationActive {
                 identity_creation_lease,
             } = &mut outcome.binding
@@ -381,8 +380,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
             }
             identity_creation_lease.reserved_identity = None;
             identity_creation_lease.expires_at = abandoned_at;
-            let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)
-                .map_err(|_| DatabaseError::invalid_operation())?;
+            let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)?;
             let outcome_digest = format!("sha256:{:x}", sha2::Sha256::digest(&canonical_outcome));
             let updated = diesel::sql_query(
                 "UPDATE account_handoff_creation_attempts SET canonical_outcome = $2, \
@@ -633,8 +631,7 @@ struct PrincipalRow {
 fn principal_from_row(
     row: PrincipalRow,
 ) -> Result<(arkret_identifiers::DidCoreId, arkret_identifiers::Did), DatabaseError> {
-    let did = arkret_identifiers::Did::new(row.verified_did)
-        .map_err(|_| DatabaseError::invalid_operation())?;
+    let did = arkret_identifiers::Did::new(row.verified_did)?;
     ensure_did_projects_to_principal(&did, &row.principal_id)?;
     Ok((row.principal_id, did))
 }
@@ -748,16 +745,14 @@ fn controller_gate_issuance_from_row(
 ) -> Result<ControllerGateAttestationIssuance, DatabaseError> {
     Ok(ControllerGateAttestationIssuance {
         request_id: arkret_identifiers::RequestId::from_uuid(row.request_id),
-        canonical_intent_digest: arkret_identifiers::Hash::new(row.canonical_intent_digest)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        canonical_intent_digest: arkret_identifiers::Hash::new(row.canonical_intent_digest)?,
         principal_id: row.principal_id,
         agent_authority_id: row.agent_authority_id,
         canonical_outcome: row.canonical_outcome,
         outcome_digest: row
             .outcome_digest
             .map(arkret_identifiers::Hash::new)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
+            .transpose()?,
         attestation_expires_at: row.attestation_expires_at,
         retained_until: row.retained_until,
         created_at: row.created_at,
@@ -777,20 +772,15 @@ fn creation_attempt_from_row(
     row: HandoffCreationAttemptRow,
 ) -> Result<AccountHandoffCreationAttempt, DatabaseError> {
     Ok(AccountHandoffCreationAttempt {
-        request_id: arkret_identifiers::RequestId::new(format!("ak:request:{}", row.request_id))
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        request_digest: arkret_identifiers::Hash::new(row.request_digest)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        canonical_intent_digest: arkret_identifiers::Hash::new(row.canonical_intent_digest)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        request_id: arkret_identifiers::RequestId::new(format!("ak:request:{}", row.request_id))?,
+        request_digest: arkret_identifiers::Hash::new(row.request_digest)?,
+        canonical_intent_digest: arkret_identifiers::Hash::new(row.canonical_intent_digest)?,
         canonical_intent: row.canonical_intent,
         holder_jkt: row.holder_jkt,
         issuer: row.issuer,
         client_id: row.client_id,
-        authorization_code_digest: arkret_identifiers::Hash::new(row.authorization_code_digest)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        dpop_jti_digest: arkret_identifiers::Hash::new(row.dpop_jti_digest)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        authorization_code_digest: arkret_identifiers::Hash::new(row.authorization_code_digest)?,
+        dpop_jti_digest: arkret_identifiers::Hash::new(row.dpop_jti_digest)?,
         state: AccountHandoffCreationAttemptState::try_from(row.state.as_str())
             .map_err(|_| DatabaseError::invalid_operation())?,
         authorization_checkpoint: row
@@ -802,8 +792,7 @@ fn creation_attempt_from_row(
         outcome_digest: row
             .outcome_digest
             .map(arkret_identifiers::Hash::new)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
+            .transpose()?,
         retained_until: row.retained_until,
         created_at: row.created_at,
         authorized_at: row.authorized_at,
@@ -823,10 +812,8 @@ fn handoff_from_row(row: HandoffRow) -> Result<AccountHandoffGrant, DatabaseErro
     }
     Ok(AccountHandoffGrant {
         id: Ulid::from(row.id),
-        request_id: arkret_identifiers::RequestId::new(format!("ak:request:{}", row.request_id))
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        request_digest: arkret_identifiers::Hash::new(row.request_digest)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        request_id: arkret_identifiers::RequestId::new(format!("ak:request:{}", row.request_id))?,
+        request_digest: arkret_identifiers::Hash::new(row.request_digest)?,
         local_account_id: Ulid::from(row.local_account_id),
         browser_session_id: row.browser_session_id.map(Ulid::from),
         audience_id: row.audience_id,
@@ -896,8 +883,7 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
     ) {
         (None, None, None) => None,
         (Some(principal_id), Some(operation_digest), Some(did_operation)) => {
-            let did_operation = serde_json::from_value(did_operation)
-                .map_err(|_| DatabaseError::invalid_operation())?;
+            let did_operation = serde_json::from_value(did_operation)?;
             let reserved =
                 arkret_models_identity::ReservedIdentityCreation::from_operation(did_operation)
                     .map_err(|_| DatabaseError::invalid_operation())?;
@@ -921,10 +907,8 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
             Some(IdentityCreationRegisterLedger {
                 handoff_grant_id: Ulid::from(handoff_grant_id),
                 challenge_id,
-                request_digest: arkret_identifiers::Hash::new(request_digest)
-                    .map_err(|_| DatabaseError::invalid_operation())?,
-                outcome: serde_json::from_value(outcome)
-                    .map_err(|_| DatabaseError::invalid_operation())?,
+                request_digest: arkret_identifiers::Hash::new(request_digest)?,
+                outcome: serde_json::from_value(outcome)?,
             })
         }
         _ => return Err(DatabaseError::invalid_operation()),
@@ -934,7 +918,7 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
         audience_id: row.audience_id,
         lease_id: row.lease_id,
         holder_jkt: row.holder_jkt,
-        fence: u64::try_from(row.fence).map_err(|_| DatabaseError::invalid_operation())?,
+        fence: u64::try_from(row.fence)?,
         expires_at: row.expires_at,
         reserved_identity,
         state: IdentityCreationLeaseState::try_from(row.state.as_str())
@@ -947,28 +931,23 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
         head_event_digest: row
             .head_event_digest
             .map(arkret_identifiers::Hash::new)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
+            .transpose()?,
         registration_did_evidence: row
             .registration_did_evidence
             .map(serde_json::from_value)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
+            .transpose()?,
         pcr_genesis_request_digest: row
             .pcr_genesis_request_digest
             .map(arkret_identifiers::Hash::new)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
+            .transpose()?,
         pcr_genesis_receipt: row
             .pcr_genesis_receipt
             .map(serde_json::from_value)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
+            .transpose()?,
         binding_receipt: row
             .binding_receipt
             .map(serde_json::from_value)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
+            .transpose()?,
         register_ledger,
         created_at: row.created_at,
         updated_at: row.updated_at,
@@ -1084,37 +1063,30 @@ struct DidBindingChallengeRow {
 fn did_binding_challenge_from_row(
     row: DidBindingChallengeRow,
 ) -> Result<DidBindingChallengeRecord, DatabaseError> {
-    let did =
-        arkret_identifiers::Did::new(row.did).map_err(|_| DatabaseError::invalid_operation())?;
+    let did = arkret_identifiers::Did::new(row.did)?;
     ensure_did_projects_to_principal(&did, &row.principal_id)?;
     Ok(DidBindingChallengeRecord {
         input: DidBindingChallengeInput {
             request_id: arkret_identifiers::RequestId::new(format!(
                 "ak:request:{}",
                 row.request_id
-            ))
-            .map_err(|_| DatabaseError::invalid_operation())?,
-            request_digest: arkret_identifiers::Hash::new(row.request_digest)
-                .map_err(|_| DatabaseError::invalid_operation())?,
+            ))?,
+            request_digest: arkret_identifiers::Hash::new(row.request_digest)?,
             issuing_handoff_grant_id: Ulid::from(row.issuing_handoff_grant_id),
             local_account_id: Ulid::from(row.local_account_id),
-            account_subject: arkret_identifiers::Hash::new(row.account_subject)
-                .map_err(|_| DatabaseError::invalid_operation())?,
+            account_subject: arkret_identifiers::Hash::new(row.account_subject)?,
             principal_id: row.principal_id,
             did,
             did_version_id: row.did_version_id,
-            log_head_digest: arkret_identifiers::Hash::new(row.log_head_digest)
-                .map_err(|_| DatabaseError::invalid_operation())?,
-            control_key_digest: arkret_identifiers::Hash::new(row.control_key_digest)
-                .map_err(|_| DatabaseError::invalid_operation())?,
+            log_head_digest: arkret_identifiers::Hash::new(row.log_head_digest)?,
+            control_key_digest: arkret_identifiers::Hash::new(row.control_key_digest)?,
             witness_evidence: row.witness_evidence,
             challenge_id: row.challenge_id,
             challenge: row.challenge,
             dpop_jkt: row.dpop_jkt,
             audience_id: row.audience_id,
             origin: row.origin,
-            trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)
-                .map_err(|_| DatabaseError::invalid_operation())?,
+            trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)?,
             issued_at: row.issued_at,
             expires_at: row.expires_at,
         },
@@ -1122,13 +1094,11 @@ fn did_binding_challenge_from_row(
         register_request_digest: row
             .register_request_digest
             .map(arkret_identifiers::Hash::new)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
+            .transpose()?,
         register_outcome: row
             .register_outcome
             .map(serde_json::from_value)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?
+            .transpose()?
             .map(Box::new),
     })
 }
@@ -1183,44 +1153,33 @@ fn abandonment_challenge_from_row(
     row: AbandonmentChallengeRow,
 ) -> Result<IdentityAbandonmentChallengeRecord, DatabaseError> {
     Ok(IdentityAbandonmentChallengeRecord {
-        request_id: arkret_identifiers::RequestId::new(format!("ak:request:{}", row.request_id))
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        request_digest: arkret_identifiers::Hash::new(row.request_digest)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        request_id: arkret_identifiers::RequestId::new(format!("ak:request:{}", row.request_id))?,
+        request_digest: arkret_identifiers::Hash::new(row.request_digest)?,
         issuing_handoff_grant_id: Ulid::from(row.issuing_handoff_grant_id),
         local_account_id: Ulid::from(row.local_account_id),
         audience_id: row.audience_id,
-        account_subject: arkret_identifiers::Hash::new(row.account_subject)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        account_subject: arkret_identifiers::Hash::new(row.account_subject)?,
         holder_jkt: row.holder_jkt,
         lease_id: row.lease_id,
-        lease_fence: u64::try_from(row.lease_fence)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        lease_fence: u64::try_from(row.lease_fence)?,
         principal_id: row.principal_id,
         did_version_id: row.did_version_id,
         challenge_id: row.challenge_id,
         challenge: row.challenge,
         origin: row.origin,
-        trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)?,
         issued_at: row.issued_at,
         expires_at: row.expires_at,
         consumed_at: row.consumed_at,
         confirmation_request_id: row
             .confirmation_request_id
             .map(|id| arkret_identifiers::RequestId::new(format!("ak:request:{id}")))
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
+            .transpose()?,
         confirmation_request_digest: row
             .confirmation_request_digest
             .map(arkret_identifiers::Hash::new)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        outcome: row
-            .outcome
-            .map(serde_json::from_value)
-            .transpose()
-            .map_err(|_| DatabaseError::invalid_operation())?,
+            .transpose()?,
+        outcome: row.outcome.map(serde_json::from_value).transpose()?,
     })
 }
 
@@ -1228,49 +1187,38 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
     if row.purpose != "account_binding_and_pcr_genesis" {
         return Err(DatabaseError::invalid_operation());
     }
-    let did =
-        arkret_identifiers::Did::new(row.did).map_err(|_| DatabaseError::invalid_operation())?;
+    let did = arkret_identifiers::Did::new(row.did)?;
     ensure_did_projects_to_principal(&did, &row.principal_id)?;
     Ok(IdentityBindingChallengeRecord {
-        request_id: arkret_identifiers::RequestId::new(format!("ak:request:{}", row.request_id))
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        request_digest: arkret_identifiers::Hash::new(row.request_digest)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        request_id: arkret_identifiers::RequestId::new(format!("ak:request:{}", row.request_id))?,
+        request_digest: arkret_identifiers::Hash::new(row.request_digest)?,
         local_account_id: Ulid::from(row.local_account_id),
         challenge_id: row.challenge_id,
         challenge: row.challenge,
         purpose: arkret_models_identity::IdentityBindingPurpose::AccountBindingAndPcrGenesis,
-        account_subject: arkret_identifiers::Hash::new(row.account_subject)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        account_subject: arkret_identifiers::Hash::new(row.account_subject)?,
         principal_id: row.principal_id,
         did,
-        operation_digest: arkret_identifiers::Hash::new(row.operation_digest)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        operation_digest: arkret_identifiers::Hash::new(row.operation_digest)?,
         did_version_id: row.did_version_id,
-        log_head_digest: arkret_identifiers::Hash::new(row.log_head_digest)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        control_key_digest: arkret_identifiers::Hash::new(row.control_key_digest)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        pcr_realm_id: arkret_identifiers::RealmId::new(row.pcr_realm_id)
-            .map_err(|_| DatabaseError::invalid_operation())?,
-        realm_create_payload_digest: arkret_identifiers::Hash::new(row.realm_create_payload_digest)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        log_head_digest: arkret_identifiers::Hash::new(row.log_head_digest)?,
+        control_key_digest: arkret_identifiers::Hash::new(row.control_key_digest)?,
+        pcr_realm_id: arkret_identifiers::RealmId::new(row.pcr_realm_id)?,
+        realm_create_payload_digest: arkret_identifiers::Hash::new(
+            row.realm_create_payload_digest,
+        )?,
         founding_authorize_payload_digest: arkret_identifiers::Hash::new(
             row.founding_authorize_payload_digest,
-        )
-        .map_err(|_| DatabaseError::invalid_operation())?,
+        )?,
         initial_session_request_digest: arkret_identifiers::Hash::new(
             row.initial_session_request_digest,
-        )
-        .map_err(|_| DatabaseError::invalid_operation())?,
+        )?,
         lease_id: row.lease_id,
-        lease_fence: u64::try_from(row.lease_fence)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        lease_fence: u64::try_from(row.lease_fence)?,
         dpop_jkt: row.dpop_jkt,
         audience_id: row.audience_id,
         origin: row.origin,
-        trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)
-            .map_err(|_| DatabaseError::invalid_operation())?,
+        trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)?,
         issued_at: row.issued_at,
         expires_at: row.expires_at,
         consumed_at: row.consumed_at,
@@ -1509,9 +1457,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         )
         .bind::<SqlUuid, _>(request_id.uuid())
         .bind::<Text, _>(canonical_intent_digest.as_str())
-        .bind::<Jsonb, _>(
-            serde_json::to_value(checkpoint).map_err(|_| DatabaseError::invalid_operation())?,
-        )
+        .bind::<Jsonb, _>(serde_json::to_value(checkpoint)?)
         .bind::<Timestamptz, _>(now)
         .execute(self.conn)
         .await?;
@@ -2007,16 +1953,11 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(input.audience_id.as_str())
         .bind::<Text, _>(reserved.principal_id.as_str())
         .bind::<Text, _>(reserved.operation_digest.as_str())
-        .bind::<Jsonb, _>(
-            serde_json::to_value(&reserved.did_operation)
-                .map_err(|_| DatabaseError::invalid_operation())?,
-        )
+        .bind::<Jsonb, _>(serde_json::to_value(&reserved.did_operation)?)
         .bind::<Timestamptz, _>(input.lease_expires_at)
         .bind::<Timestamptz, _>(input.issued_at)
         .bind::<Text, _>(&input.lease_id)
-        .bind::<BigInt, _>(
-            i64::try_from(input.lease_fence).map_err(|_| DatabaseError::invalid_operation())?,
-        )
+        .bind::<BigInt, _>(i64::try_from(input.lease_fence)?)
         .bind::<Text, _>(&input.holder_jkt)
         .execute(self.conn)
         .await?;
@@ -2031,9 +1972,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<SqlUuid, _>(Uuid::from(input.local_account_id))
         .bind::<Text, _>(input.audience_id.as_str())
         .bind::<Text, _>(&input.lease_id)
-        .bind::<BigInt, _>(
-            i64::try_from(input.lease_fence).map_err(|_| DatabaseError::invalid_operation())?,
-        )
+        .bind::<BigInt, _>(i64::try_from(input.lease_fence)?)
         .bind::<Text, _>(input.operation_digest.as_str())
         .execute(self.conn)
         .await?;
@@ -2064,7 +2003,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(input.founding_authorize_payload_digest.as_str())
         .bind::<Text, _>(input.initial_session_request_digest.as_str())
         .bind::<Text, _>(&input.lease_id)
-        .bind::<BigInt, _>(i64::try_from(input.lease_fence).map_err(|_| DatabaseError::invalid_operation())?)
+        .bind::<BigInt, _>(i64::try_from(input.lease_fence)?)
         .bind::<Text, _>(&input.holder_jkt)
         .bind::<Text, _>(input.audience_id.as_str())
         .bind::<Text, _>(&input.origin)
@@ -2258,9 +2197,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         )
         .bind::<Timestamptz, _>(now)
         .bind::<Text, _>(request_digest.as_str())
-        .bind::<Jsonb, _>(
-            serde_json::to_value(outcome).map_err(|_| DatabaseError::invalid_operation())?,
-        )
+        .bind::<Jsonb, _>(serde_json::to_value(outcome)?)
         .bind::<Text, _>(challenge_id)
         .bind::<SqlUuid, _>(Uuid::from(grant.id))
         .execute(self.conn)
@@ -2378,9 +2315,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(input.account_subject.as_str())
         .bind::<Text, _>(&input.holder_jkt)
         .bind::<Text, _>(&input.lease_id)
-        .bind::<BigInt, _>(
-            i64::try_from(input.lease_fence).map_err(|_| DatabaseError::invalid_operation())?,
-        )
+        .bind::<BigInt, _>(i64::try_from(input.lease_fence)?)
         .bind::<Text, _>(input.principal_id.as_str())
         .bind::<Text, _>(&input.did_version_id)
         .bind::<Text, _>(&input.challenge_id)
@@ -2548,8 +2483,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             did_version_id: input.did_version_id.clone(),
             abandoned_at: now,
         };
-        let outcome_value =
-            serde_json::to_value(&outcome).map_err(|_| DatabaseError::invalid_operation())?;
+        let outcome_value = serde_json::to_value(&outcome)?;
         let tombstones = diesel::sql_query(
             "INSERT INTO identity_orphan_anchor_tombstones \
              (principal_id, did_version_id, account_subject, abandonment_request_id, abandoned_at) \
@@ -2589,9 +2523,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<SqlUuid, _>(Uuid::from(input.local_account_id))
         .bind::<Text, _>(input.audience_id.as_str())
         .bind::<Text, _>(&input.lease_id)
-        .bind::<BigInt, _>(
-            i64::try_from(input.lease_fence).map_err(|_| DatabaseError::invalid_operation())?,
-        )
+        .bind::<BigInt, _>(i64::try_from(input.lease_fence)?)
         .bind::<Text, _>(&input.holder_jkt)
         .execute(self.conn)
         .await?;
@@ -2767,8 +2699,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             }
             _ => return Ok(false),
         }
-        let registry_receipt = serde_json::to_value(registry_receipt)
-            .map_err(|_| DatabaseError::invalid_operation())?;
+        let registry_receipt = serde_json::to_value(registry_receipt)?;
         let updated = diesel::sql_query(
             "UPDATE identity_creation_leases SET state = 'did_published', registry_receipt = $1, \
              head_event_digest = $2, registration_did_evidence = $3, updated_at = $4 \
@@ -2778,17 +2709,12 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         )
         .bind::<Jsonb, _>(registry_receipt)
         .bind::<Text, _>(head_event_digest.as_str())
-        .bind::<Jsonb, _>(
-            serde_json::to_value(registration_did_evidence)
-                .map_err(|_| DatabaseError::invalid_operation())?,
-        )
+        .bind::<Jsonb, _>(serde_json::to_value(registration_did_evidence)?)
         .bind::<Timestamptz, _>(now)
         .bind::<SqlUuid, _>(Uuid::from(context.grant.local_account_id))
         .bind::<Text, _>(&context.grant.audience_id)
         .bind::<Text, _>(&context.lease.lease_id)
-        .bind::<BigInt, _>(
-            i64::try_from(context.lease.fence).map_err(|_| DatabaseError::invalid_operation())?,
-        )
+        .bind::<BigInt, _>(i64::try_from(context.lease.fence)?)
         .bind::<Text, _>(&context.grant.cnf_jkt)
         .bind::<Text, _>(context.challenge.operation_digest.as_str())
         .execute(self.conn)
@@ -2850,8 +2776,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
                     && stored == received,
             );
         }
-        let receipt =
-            serde_json::to_value(receipt).map_err(|_| DatabaseError::invalid_operation())?;
+        let receipt = serde_json::to_value(receipt)?;
         let updated = diesel::sql_query(
             "UPDATE identity_creation_leases SET state = 'pcr_accepted', \
              pcr_genesis_request_digest = $1, pcr_genesis_receipt = $2, updated_at = $3 \
@@ -2864,9 +2789,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<SqlUuid, _>(Uuid::from(context.grant.local_account_id))
         .bind::<Text, _>(&context.grant.audience_id)
         .bind::<Text, _>(&context.lease.lease_id)
-        .bind::<BigInt, _>(
-            i64::try_from(context.lease.fence).map_err(|_| DatabaseError::invalid_operation())?,
-        )
+        .bind::<BigInt, _>(i64::try_from(context.lease.fence)?)
         .bind::<Text, _>(&context.grant.cnf_jkt)
         .execute(self.conn)
         .await?;
@@ -2916,8 +2839,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         {
             return Ok(false);
         }
-        let receipt = serde_json::to_value(binding_receipt)
-            .map_err(|_| DatabaseError::invalid_operation())?;
+        let receipt = serde_json::to_value(binding_receipt)?;
         let updated = diesel::sql_query(
             "UPDATE identity_creation_leases SET state = 'account_bound', binding_receipt = $1, \
              updated_at = $2 WHERE local_account_id = $3 AND audience_id = $4 \
@@ -2929,9 +2851,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<SqlUuid, _>(Uuid::from(context.grant.local_account_id))
         .bind::<Text, _>(&context.grant.audience_id)
         .bind::<Text, _>(&context.lease.lease_id)
-        .bind::<BigInt, _>(
-            i64::try_from(context.lease.fence).map_err(|_| DatabaseError::invalid_operation())?,
-        )
+        .bind::<BigInt, _>(i64::try_from(context.lease.fence)?)
         .bind::<Text, _>(&context.grant.cnf_jkt)
         .bind::<Text, _>(context.challenge.operation_digest.as_str())
         .execute(self.conn)
@@ -2995,8 +2915,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(IdentityCreationBindingCommit::Stale);
         }
 
-        let outcome =
-            serde_json::to_value(outcome).map_err(|_| DatabaseError::invalid_operation())?;
+        let outcome = serde_json::to_value(outcome)?;
         let updated = diesel::sql_query(
             "UPDATE identity_creation_leases SET state = 'completed', \
              register_handoff_grant_id = $1, register_challenge_id = $2, \
@@ -3013,9 +2932,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<SqlUuid, _>(Uuid::from(context.grant.local_account_id))
         .bind::<Text, _>(&context.grant.audience_id)
         .bind::<Text, _>(&context.lease.lease_id)
-        .bind::<BigInt, _>(
-            i64::try_from(context.lease.fence).map_err(|_| DatabaseError::invalid_operation())?,
-        )
+        .bind::<BigInt, _>(i64::try_from(context.lease.fence)?)
         .bind::<Text, _>(&context.grant.cnf_jkt)
         .bind::<Text, _>(context.challenge.operation_digest.as_str())
         .execute(self.conn)

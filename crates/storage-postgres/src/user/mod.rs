@@ -5,7 +5,6 @@ use arkret_locale::UiLocale;
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::pagination::PaginationDirection;
 use coauth_data::user::{UserFilter, UserRepository};
 use coauth_data::{Clock, Pagination, User, UserPatch, UserProfilePatch, new_id};
 use diesel::prelude::*;
@@ -531,26 +530,7 @@ impl UserRepository for PgUserRepository<'_> {
             query = query.filter(users::localpart.ilike(pattern));
         }
 
-        // Apply pagination
-        if let Some(after) = pagination.after {
-            query = query.filter(users::id.gt(Uuid::from(after)));
-        }
-        if let Some(before) = pagination.before {
-            query = query.filter(users::id.lt(Uuid::from(before)));
-        }
-
-        match pagination.direction {
-            PaginationDirection::Forward => {
-                query = query
-                    .order(users::id.asc())
-                    .limit((pagination.count + 1) as i64);
-            }
-            PaginationDirection::Backward => {
-                query = query
-                    .order(users::id.desc())
-                    .limit((pagination.count + 1) as i64);
-            }
-        }
+        query = crate::paginate_by_id!(query, pagination, users::id);
 
         let rows: Vec<User> = query
             .load::<UserRow>(self.conn)

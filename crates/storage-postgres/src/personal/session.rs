@@ -2,7 +2,7 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::pagination::{Node, PaginationDirection};
+use coauth_data::pagination::Node;
 use coauth_data::personal::session::{PersonalSession, PersonalSessionOwner, SessionState};
 use coauth_data::personal::{
     PersonalAccessToken, PersonalSessionFilter, PersonalSessionRepository, PersonalSessionState,
@@ -496,26 +496,7 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
             }
         }
 
-        // Apply pagination
-        if let Some(after) = pagination.after {
-            query = query.filter(personal_sessions::id.gt(Uuid::from(after)));
-        }
-        if let Some(before) = pagination.before {
-            query = query.filter(personal_sessions::id.lt(Uuid::from(before)));
-        }
-
-        match pagination.direction {
-            PaginationDirection::Forward => {
-                query = query
-                    .order(personal_sessions::id.asc())
-                    .limit((pagination.count + 1) as i64);
-            }
-            PaginationDirection::Backward => {
-                query = query
-                    .order(personal_sessions::id.desc())
-                    .limit((pagination.count + 1) as i64);
-            }
-        }
+        query = crate::paginate_by_id!(query, pagination, personal_sessions::id);
 
         let edges: Vec<PersonalSessionAndAccessTokenRow> = query.load(self.conn).await?;
 

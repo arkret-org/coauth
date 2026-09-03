@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::{Clock, UserRegistrationToken};
 use rand_core::RngCore;
@@ -97,217 +96,175 @@ impl UserRegistrationTokenFilter {
     }
 }
 
-/// A [`UserRegistrationTokenRepository`] helps interacting with
-/// [`UserRegistrationToken`] saved in the storage backend
-#[async_trait]
-pub trait UserRegistrationTokenRepository: Send + Sync {
-    /// The error type returned by the repository
-    type Error;
+repository_impl! {
+    /// A [`UserRegistrationTokenRepository`] helps interacting with
+    /// [`UserRegistrationToken`] saved in the storage backend
+    pub trait UserRegistrationTokenRepository {
+        /// The error type returned by the repository
+        type Error;
 
-    /// Lookup a [`UserRegistrationToken`] by its ID
-    ///
-    /// Returns `None` if no [`UserRegistrationToken`] was found
-    ///
-    /// # Parameters
-    ///
-    /// * `id`: The ID of the [`UserRegistrationToken`] to lookup
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn lookup(&mut self, id: Ulid) -> Result<Option<UserRegistrationToken>, Self::Error>;
+        /// Lookup a [`UserRegistrationToken`] by its ID
+        ///
+        /// Returns `None` if no [`UserRegistrationToken`] was found
+        ///
+        /// # Parameters
+        ///
+        /// * `id`: The ID of the [`UserRegistrationToken`] to lookup
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn lookup(&mut self, id: Ulid) -> Result<Option<UserRegistrationToken>, Self::Error>;
 
-    /// Lookup a [`UserRegistrationToken`] by its token string
-    ///
-    /// Returns `None` if no [`UserRegistrationToken`] was found
-    ///
-    /// # Parameters
-    ///
-    /// * `token`: The token string to lookup
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn find_by_token(
-        &mut self,
-        token: &str,
-    ) -> Result<Option<UserRegistrationToken>, Self::Error>;
+        /// Lookup a [`UserRegistrationToken`] by its token string
+        ///
+        /// Returns `None` if no [`UserRegistrationToken`] was found
+        ///
+        /// # Parameters
+        ///
+        /// * `token`: The token string to lookup
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn find_by_token(
+            &mut self,
+            token: &str,
+        ) -> Result<Option<UserRegistrationToken>, Self::Error>;
 
-    /// Create a new [`UserRegistrationToken`]
-    ///
-    /// Returns the newly created [`UserRegistrationToken`]
-    ///
-    /// # Parameters
-    ///
-    /// * `rng`: The random number generator to use
-    /// * `clock`: The clock used to generate timestamps
-    /// * `token`: The token string
-    /// * `usage_limit`: Optional limit on how many times the token can be used
-    /// * `expires_at`: Optional expiration time for the token
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        token: String,
-        usage_limit: Option<u32>,
-        expires_at: Option<DateTime<Utc>>,
-    ) -> Result<UserRegistrationToken, Self::Error>;
+        /// Create a new [`UserRegistrationToken`]
+        ///
+        /// Returns the newly created [`UserRegistrationToken`]
+        ///
+        /// # Parameters
+        ///
+        /// * `rng`: The random number generator to use
+        /// * `clock`: The clock used to generate timestamps
+        /// * `token`: The token string
+        /// * `usage_limit`: Optional limit on how many times the token can be used
+        /// * `expires_at`: Optional expiration time for the token
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn add(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            token: String,
+            usage_limit: Option<u32>,
+            expires_at: Option<DateTime<Utc>>,
+        ) -> Result<UserRegistrationToken, Self::Error>;
 
-    /// Increment the usage count of a [`UserRegistrationToken`]
-    ///
-    /// Returns the updated [`UserRegistrationToken`]
-    ///
-    /// # Parameters
-    ///
-    /// * `clock`: The clock used to generate timestamps
-    /// * `token`: The [`UserRegistrationToken`] to update
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn use_token(
-        &mut self,
-        clock: &dyn Clock,
-        token: UserRegistrationToken,
-    ) -> Result<UserRegistrationToken, Self::Error>;
+        /// Increment the usage count of a [`UserRegistrationToken`]
+        ///
+        /// Returns the updated [`UserRegistrationToken`]
+        ///
+        /// # Parameters
+        ///
+        /// * `clock`: The clock used to generate timestamps
+        /// * `token`: The [`UserRegistrationToken`] to update
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn use_token(
+            &mut self,
+            clock: &dyn Clock,
+            token: UserRegistrationToken,
+        ) -> Result<UserRegistrationToken, Self::Error>;
 
-    /// Revoke a [`UserRegistrationToken`]
-    ///
-    /// # Parameters
-    ///
-    /// * `clock`: The clock used to generate timestamps
-    /// * `token`: The [`UserRegistrationToken`] to delete
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn revoke(
-        &mut self,
-        clock: &dyn Clock,
-        token: UserRegistrationToken,
-    ) -> Result<UserRegistrationToken, Self::Error>;
+        /// Revoke a [`UserRegistrationToken`]
+        ///
+        /// # Parameters
+        ///
+        /// * `clock`: The clock used to generate timestamps
+        /// * `token`: The [`UserRegistrationToken`] to delete
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn revoke(
+            &mut self,
+            clock: &dyn Clock,
+            token: UserRegistrationToken,
+        ) -> Result<UserRegistrationToken, Self::Error>;
 
-    /// Unrevoke a previously revoked [`UserRegistrationToken`]
-    ///
-    /// # Parameters
-    ///
-    /// * `token`: The [`UserRegistrationToken`] to unrevoke
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn unrevoke(
-        &mut self,
-        token: UserRegistrationToken,
-    ) -> Result<UserRegistrationToken, Self::Error>;
+        /// Unrevoke a previously revoked [`UserRegistrationToken`]
+        ///
+        /// # Parameters
+        ///
+        /// * `token`: The [`UserRegistrationToken`] to unrevoke
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn unrevoke(
+            &mut self,
+            token: UserRegistrationToken,
+        ) -> Result<UserRegistrationToken, Self::Error>;
 
-    /// Set the expiration time of a [`UserRegistrationToken`]
-    ///
-    /// # Parameters
-    ///
-    /// * `token`: The [`UserRegistrationToken`] to update
-    /// * `expires_at`: The new expiration time, or `None` to remove the expiration
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn set_expiry(
-        &mut self,
-        token: UserRegistrationToken,
-        expires_at: Option<DateTime<Utc>>,
-    ) -> Result<UserRegistrationToken, Self::Error>;
+        /// Set the expiration time of a [`UserRegistrationToken`]
+        ///
+        /// # Parameters
+        ///
+        /// * `token`: The [`UserRegistrationToken`] to update
+        /// * `expires_at`: The new expiration time, or `None` to remove the expiration
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn set_expiry(
+            &mut self,
+            token: UserRegistrationToken,
+            expires_at: Option<DateTime<Utc>>,
+        ) -> Result<UserRegistrationToken, Self::Error>;
 
-    /// Set the usage limit of a [`UserRegistrationToken`]
-    ///
-    /// # Parameters
-    ///
-    /// * `token`: The [`UserRegistrationToken`] to update
-    /// * `usage_limit`: The new usage limit, or `None` to remove the limit
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn set_usage_limit(
-        &mut self,
-        token: UserRegistrationToken,
-        usage_limit: Option<u32>,
-    ) -> Result<UserRegistrationToken, Self::Error>;
+        /// Set the usage limit of a [`UserRegistrationToken`]
+        ///
+        /// # Parameters
+        ///
+        /// * `token`: The [`UserRegistrationToken`] to update
+        /// * `usage_limit`: The new usage limit, or `None` to remove the limit
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn set_usage_limit(
+            &mut self,
+            token: UserRegistrationToken,
+            usage_limit: Option<u32>,
+        ) -> Result<UserRegistrationToken, Self::Error>;
 
-    /// List [`UserRegistrationToken`]s based on the provided filter
-    ///
-    /// Returns a list of matching [`UserRegistrationToken`]s
-    ///
-    /// # Parameters
-    ///
-    /// * `filter`: The filter to apply
-    /// * `pagination`: The pagination parameters
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn list(
-        &mut self,
-        filter: UserRegistrationTokenFilter,
-        pagination: crate::Pagination,
-    ) -> Result<crate::Page<UserRegistrationToken>, Self::Error>;
+        /// List [`UserRegistrationToken`]s based on the provided filter
+        ///
+        /// Returns a list of matching [`UserRegistrationToken`]s
+        ///
+        /// # Parameters
+        ///
+        /// * `filter`: The filter to apply
+        /// * `pagination`: The pagination parameters
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn list(
+            &mut self,
+            filter: UserRegistrationTokenFilter,
+            pagination: crate::Pagination,
+        ) -> Result<crate::Page<UserRegistrationToken>, Self::Error>;
 
-    /// Count [`UserRegistrationToken`]s based on the provided filter
-    ///
-    /// Returns the number of matching [`UserRegistrationToken`]s
-    ///
-    /// # Parameters
-    ///
-    /// * `filter`: The filter to apply
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn count(&mut self, filter: UserRegistrationTokenFilter) -> Result<usize, Self::Error>;
+        /// Count [`UserRegistrationToken`]s based on the provided filter
+        ///
+        /// Returns the number of matching [`UserRegistrationToken`]s
+        ///
+        /// # Parameters
+        ///
+        /// * `filter`: The filter to apply
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn count(&mut self, filter: UserRegistrationTokenFilter) -> Result<usize, Self::Error>;
+    }
 }
-
-repository_impl!(UserRegistrationTokenRepository:
-    async fn lookup(&mut self, id: Ulid) -> Result<Option<UserRegistrationToken>, Self::Error>;
-    async fn find_by_token(&mut self, token: &str) -> Result<Option<UserRegistrationToken>, Self::Error>;
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        token: String,
-        usage_limit: Option<u32>,
-        expires_at: Option<DateTime<Utc>>,
-    ) -> Result<UserRegistrationToken, Self::Error>;
-    async fn use_token(
-        &mut self,
-        clock: &dyn Clock,
-        token: UserRegistrationToken,
-    ) -> Result<UserRegistrationToken, Self::Error>;
-    async fn revoke(
-        &mut self,
-        clock: &dyn Clock,
-        token: UserRegistrationToken,
-    ) -> Result<UserRegistrationToken, Self::Error>;
-    async fn unrevoke(
-        &mut self,
-        token: UserRegistrationToken,
-    ) -> Result<UserRegistrationToken, Self::Error>;
-    async fn set_expiry(
-        &mut self,
-        token: UserRegistrationToken,
-        expires_at: Option<DateTime<Utc>>,
-    ) -> Result<UserRegistrationToken, Self::Error>;
-    async fn set_usage_limit(
-        &mut self,
-        token: UserRegistrationToken,
-        usage_limit: Option<u32>,
-    ) -> Result<UserRegistrationToken, Self::Error>;
-    async fn list(
-        &mut self,
-        filter: UserRegistrationTokenFilter,
-        pagination: crate::Pagination,
-    ) -> Result<crate::Page<UserRegistrationToken>, Self::Error>;
-    async fn count(&mut self, filter: UserRegistrationTokenFilter) -> Result<usize, Self::Error>;
-);

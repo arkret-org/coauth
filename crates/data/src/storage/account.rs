@@ -7,7 +7,6 @@
 //! can use [`AccountRepository`] to get a coherent view suitable for the user
 //! portal.
 
-use async_trait::async_trait;
 use coauth_data::{AccountContactPoint, AccountIdentityBinding, AccountSecurityEvent};
 use ulid::Ulid;
 
@@ -33,78 +32,64 @@ pub struct AccountSecuritySummary {
     pub recent_security_events: Vec<AccountSecurityEvent>,
 }
 
-/// Unified read-only repository for account-level aggregates.
-///
-/// This trait assembles data that is physically stored across several tables
-/// (emails, phones, upstream links, sessions, passwords, audit events) into
-/// coherent domain views.
-#[async_trait]
-pub trait AccountRepository: Send + Sync {
-    /// The error type returned by the repository.
-    type Error;
+repository_impl! {
+    /// Unified read-only repository for account-level aggregates.
+    ///
+    /// This trait assembles data that is physically stored across several tables
+    /// (emails, phones, upstream links, sessions, passwords, audit events) into
+    /// coherent domain views.
+    pub trait AccountRepository {
+        /// The error type returned by the repository.
+        type Error;
 
-    /// List all contact points (emails and phones) for a user.
-    ///
-    /// The returned list is ordered by creation time, with the primary
-    /// contact point for each channel listed first.
-    ///
-    /// # Parameters
-    ///
-    /// * `user_id`: The ID of the user whose contact points to list
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn list_contact_points(
-        &mut self,
-        user_id: Ulid,
-    ) -> Result<Vec<AccountContactPoint>, Self::Error>;
+        /// List all contact points (emails and phones) for a user.
+        ///
+        /// The returned list is ordered by creation time, with the primary
+        /// contact point for each channel listed first.
+        ///
+        /// # Parameters
+        ///
+        /// * `user_id`: The ID of the user whose contact points to list
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn list_contact_points(
+            &mut self,
+            user_id: Ulid,
+        ) -> Result<Vec<AccountContactPoint>, Self::Error>;
 
-    /// List all identity bindings (upstream OAuth links, Station
-    /// links, etc.) for a user.
-    ///
-    /// # Parameters
-    ///
-    /// * `user_id`: The ID of the user whose identity bindings to list
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn list_identity_bindings(
-        &mut self,
-        user_id: Ulid,
-    ) -> Result<Vec<AccountIdentityBinding>, Self::Error>;
+        /// List all identity bindings (upstream OAuth links, Station
+        /// links, etc.) for a user.
+        ///
+        /// # Parameters
+        ///
+        /// * `user_id`: The ID of the user whose identity bindings to list
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn list_identity_bindings(
+            &mut self,
+            user_id: Ulid,
+        ) -> Result<Vec<AccountIdentityBinding>, Self::Error>;
 
-    /// Get a security summary for a user.
-    ///
-    /// This aggregates password status, session counts, verified contact
-    /// counts, linked provider counts, and recent security events into a
-    /// single response.
-    ///
-    /// # Parameters
-    ///
-    /// * `user_id`: The ID of the user whose security summary to retrieve
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn security_summary(
-        &mut self,
-        user_id: Ulid,
-    ) -> Result<AccountSecuritySummary, Self::Error>;
+        /// Get a security summary for a user.
+        ///
+        /// This aggregates password status, session counts, verified contact
+        /// counts, linked provider counts, and recent security events into a
+        /// single response.
+        ///
+        /// # Parameters
+        ///
+        /// * `user_id`: The ID of the user whose security summary to retrieve
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn security_summary(
+            &mut self,
+            user_id: Ulid,
+        ) -> Result<AccountSecuritySummary, Self::Error>;
+    }
 }
-
-repository_impl!(AccountRepository:
-    async fn list_contact_points(
-        &mut self,
-        user_id: Ulid,
-    ) -> Result<Vec<AccountContactPoint>, Self::Error>;
-    async fn list_identity_bindings(
-        &mut self,
-        user_id: Ulid,
-    ) -> Result<Vec<AccountIdentityBinding>, Self::Error>;
-    async fn security_summary(
-        &mut self,
-        user_id: Ulid,
-    ) -> Result<AccountSecuritySummary, Self::Error>;
-);

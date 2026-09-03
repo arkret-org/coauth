@@ -102,7 +102,7 @@ impl PolicyDataRepository for PgPolicyDataRepository<'_> {
 
     #[tracing::instrument(name = "db.policy_data.prune", skip_all, err)]
     async fn prune(&mut self, keep: usize) -> Result<usize, Self::Error> {
-        let offset = i64::try_from(keep).map_err(DatabaseError::to_invalid_operation)?;
+        let offset = i64::try_from(keep)?;
 
         // Get the IDs of entries to delete (all except the `keep` most recent)
         let ids_to_delete: Vec<Uuid> = policy_data::table

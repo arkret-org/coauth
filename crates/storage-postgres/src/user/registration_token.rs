@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::pagination::{Node, PaginationDirection};
+use coauth_data::pagination::Node;
 use coauth_data::user::{UserRegistrationTokenFilter, UserRegistrationTokenRepository};
 use coauth_data::{Clock, Page, Pagination, UserRegistrationToken, new_id};
 use diesel::prelude::*;
@@ -194,26 +194,7 @@ impl UserRegistrationTokenRepository for PgUserRegistrationTokenRepository<'_> {
 
         let mut query = apply_token_filter!(query, filter);
 
-        // Apply pagination cursors
-        if let Some(after) = pagination.after {
-            query = query.filter(user_registration_tokens::id.gt(Uuid::from(after)));
-        }
-        if let Some(before) = pagination.before {
-            query = query.filter(user_registration_tokens::id.lt(Uuid::from(before)));
-        }
-
-        match pagination.direction {
-            PaginationDirection::Forward => {
-                query = query
-                    .order(user_registration_tokens::id.asc())
-                    .limit((pagination.count + 1) as i64);
-            }
-            PaginationDirection::Backward => {
-                query = query
-                    .order(user_registration_tokens::id.desc())
-                    .limit((pagination.count + 1) as i64);
-            }
-        }
+        query = crate::paginate_by_id!(query, pagination, user_registration_tokens::id);
 
         let rows: Vec<UserRegistrationTokenRow> = query.load(self.conn).await?;
         let page = pagination
@@ -310,10 +291,7 @@ impl UserRegistrationTokenRepository for PgUserRegistrationTokenRepository<'_> {
         let created_at = clock.now();
         let id = new_id(created_at, rng);
 
-        let usage_limit_i32 = usage_limit
-            .map(i32::try_from)
-            .transpose()
-            .map_err(DatabaseError::to_invalid_operation)?;
+        let usage_limit_i32 = usage_limit.map(i32::try_from).transpose()?;
 
         let new_token = NewUserRegistrationToken {
             id: Uuid::from(id),
@@ -372,9 +350,7 @@ impl UserRegistrationTokenRepository for PgUserRegistrationTokenRepository<'_> {
         .await
         .map(|r| r.times_used)?;
 
-        let new_times_used = new_times_used
-            .try_into()
-            .map_err(DatabaseError::to_invalid_operation)?;
+        let new_times_used = new_times_used.try_into()?;
 
         Ok(UserRegistrationToken {
             times_used: new_times_used,
@@ -474,10 +450,7 @@ impl UserRegistrationTokenRepository for PgUserRegistrationTokenRepository<'_> {
         mut token: UserRegistrationToken,
         usage_limit: Option<u32>,
     ) -> Result<UserRegistrationToken, Self::Error> {
-        let usage_limit_i32 = usage_limit
-            .map(i32::try_from)
-            .transpose()
-            .map_err(DatabaseError::to_invalid_operation)?;
+        let usage_limit_i32 = usage_limit.map(i32::try_from).transpose()?;
 
         let rows_affected =
             diesel::update(user_registration_tokens::table.find(Uuid::from(token.id)))

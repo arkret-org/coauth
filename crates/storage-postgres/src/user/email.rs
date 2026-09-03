@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::pagination::{Node, PaginationDirection};
+use coauth_data::pagination::Node;
 use coauth_data::user::{UserEmailFilter, UserEmailRepository};
 use coauth_data::{
     BrowserSession, Clock, Page, Pagination, UpstreamOAuthAuthorizationSession, User, UserEmail,
@@ -256,26 +256,7 @@ impl UserEmailRepository for PgUserEmailRepository<'_> {
             query = query.filter(lower(user_emails::email).eq(email.to_lowercase()));
         }
 
-        // Apply pagination
-        if let Some(after) = pagination.after {
-            query = query.filter(user_emails::id.gt(Uuid::from(after)));
-        }
-        if let Some(before) = pagination.before {
-            query = query.filter(user_emails::id.lt(Uuid::from(before)));
-        }
-
-        match pagination.direction {
-            PaginationDirection::Forward => {
-                query = query
-                    .order(user_emails::id.asc())
-                    .limit((pagination.count + 1) as i64);
-            }
-            PaginationDirection::Backward => {
-                query = query
-                    .order(user_emails::id.desc())
-                    .limit((pagination.count + 1) as i64);
-            }
-        }
+        query = crate::paginate_by_id!(query, pagination, user_emails::id);
 
         let edges: Vec<UserEmailLookup> = query.load(self.conn).await?;
         let page = pagination.process(edges).map(UserEmail::from);

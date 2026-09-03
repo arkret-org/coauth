@@ -1,7 +1,6 @@
 //! Collaboration capability grant repository.
 
 use arkret_identifiers::DidCoreId;
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::Clock;
 use coauth_data::collaboration_capability::{CapabilityActionId, CollaborationCapabilityGrant};
@@ -41,59 +40,38 @@ pub struct CollaborationCapabilityRevokeFanout {
     pub revoke_event_id: String,
 }
 
-/// Repository for durable collaboration capability grants.
-#[async_trait]
-pub trait CollaborationCapabilityGrantRepository: Send + Sync {
-    /// Backend error type.
-    type Error;
+repository_impl! {
+    /// Repository for durable collaboration capability grants.
+    pub trait CollaborationCapabilityGrantRepository {
+        /// Backend error type.
+        type Error;
 
-    /// Insert a new non-revoked grant.
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewCollaborationCapabilityGrant,
-    ) -> Result<CollaborationCapabilityGrant, Self::Error>;
+        /// Insert a new non-revoked grant.
+        async fn add(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            params: NewCollaborationCapabilityGrant,
+        ) -> Result<CollaborationCapabilityGrant, Self::Error>;
 
-    /// List all non-revoked grants.
-    async fn list_active(&mut self) -> Result<Vec<CollaborationCapabilityGrant>, Self::Error>;
+        /// List all non-revoked grants.
+        async fn list_active(&mut self) -> Result<Vec<CollaborationCapabilityGrant>, Self::Error>;
 
-    /// List non-revoked grants for an exact subject/realm/action triple.
-    async fn list_active_for_subject_action(
-        &mut self,
-        subject: &str,
-        realm_id: &str,
-        action: CapabilityActionId,
-    ) -> Result<Vec<CollaborationCapabilityGrant>, Self::Error>;
+        /// List non-revoked grants for an exact subject/realm/action triple.
+        async fn list_active_for_subject_action(
+            &mut self,
+            subject: &str,
+            realm_id: &str,
+            action: CapabilityActionId,
+        ) -> Result<Vec<CollaborationCapabilityGrant>, Self::Error>;
 
-    /// Revoke an active grant by row id. Returns `None` when the grant is
-    /// absent or already revoked.
-    async fn revoke_by_id(
-        &mut self,
-        clock: &dyn Clock,
-        grant_id: &str,
-        fanout: CollaborationCapabilityRevokeFanout,
-    ) -> Result<Option<CollaborationCapabilityGrant>, Self::Error>;
+        /// Revoke an active grant by row id. Returns `None` when the grant is
+        /// absent or already revoked.
+        async fn revoke_by_id(
+            &mut self,
+            clock: &dyn Clock,
+            grant_id: &str,
+            fanout: CollaborationCapabilityRevokeFanout,
+        ) -> Result<Option<CollaborationCapabilityGrant>, Self::Error>;
+    }
 }
-
-repository_impl!(CollaborationCapabilityGrantRepository:
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewCollaborationCapabilityGrant,
-    ) -> Result<CollaborationCapabilityGrant, Self::Error>;
-    async fn list_active(&mut self) -> Result<Vec<CollaborationCapabilityGrant>, Self::Error>;
-    async fn list_active_for_subject_action(
-        &mut self,
-        subject: &str,
-        realm_id: &str,
-        action: CapabilityActionId,
-    ) -> Result<Vec<CollaborationCapabilityGrant>, Self::Error>;
-    async fn revoke_by_id(
-        &mut self,
-        clock: &dyn Clock,
-        grant_id: &str,
-        fanout: CollaborationCapabilityRevokeFanout,
-    ) -> Result<Option<CollaborationCapabilityGrant>, Self::Error>;
-);

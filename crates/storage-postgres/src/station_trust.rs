@@ -346,7 +346,7 @@ impl StationTrustRepository for PgStationTrustRepository<'_> {
         enrollment_name: &str,
         limit: usize,
     ) -> Result<Vec<StationTrustAudit>, Self::Error> {
-        let limit = i64::try_from(limit).map_err(DatabaseError::to_invalid_operation)?;
+        let limit = i64::try_from(limit)?;
         station_trust_audits::table
             .filter(station_trust_audits::enrollment_name.eq(enrollment_name))
             .order(station_trust_audits::created_at.desc())

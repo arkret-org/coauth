@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::{
     Clock, NotificationDelivery, NotificationDeliveryFailure, NotificationDestination,
@@ -191,220 +190,132 @@ impl NewNotificationEventLog {
     }
 }
 
-/// Repository for persisted notification requests, deliveries, and audit logs.
-#[async_trait]
-pub trait NotificationRepository: Send + Sync {
-    /// The error type returned by the repository.
-    type Error;
+repository_impl! {
+    /// Repository for persisted notification requests, deliveries, and audit logs.
+    pub trait NotificationRepository {
+        /// The error type returned by the repository.
+        type Error;
 
-    /// Look up a logical notification request.
-    async fn lookup_request(
-        &mut self,
-        id: Ulid,
-    ) -> Result<Option<NotificationRequest>, Self::Error>;
+        /// Look up a logical notification request.
+        async fn lookup_request(
+            &mut self,
+            id: Ulid,
+        ) -> Result<Option<NotificationRequest>, Self::Error>;
 
-    /// Create a new logical notification request.
-    async fn add_request(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewNotificationRequest,
-    ) -> Result<NotificationRequest, Self::Error>;
+        /// Create a new logical notification request.
+        async fn add_request(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            params: NewNotificationRequest,
+        ) -> Result<NotificationRequest, Self::Error>;
 
-    /// Update the lifecycle status of an existing request.
-    async fn set_request_status(
-        &mut self,
-        clock: &dyn Clock,
-        notification_request: NotificationRequest,
-        status: NotificationRequestStatus,
-    ) -> Result<NotificationRequest, Self::Error>;
+        /// Update the lifecycle status of an existing request.
+        async fn set_request_status(
+            &mut self,
+            clock: &dyn Clock,
+            notification_request: NotificationRequest,
+            status: NotificationRequestStatus,
+        ) -> Result<NotificationRequest, Self::Error>;
 
-    /// Look up a concrete delivery.
-    async fn lookup_delivery(
-        &mut self,
-        id: Ulid,
-    ) -> Result<Option<NotificationDelivery>, Self::Error>;
+        /// Look up a concrete delivery.
+        async fn lookup_delivery(
+            &mut self,
+            id: Ulid,
+        ) -> Result<Option<NotificationDelivery>, Self::Error>;
 
-    /// Look up a delivery using the provider binding key and provider-side
-    /// message identifier.
-    async fn lookup_delivery_by_provider_message_id(
-        &mut self,
-        provider_binding_key: &str,
-        provider_message_id: &str,
-    ) -> Result<Option<NotificationDelivery>, Self::Error>;
+        /// Look up a delivery using the provider binding key and provider-side
+        /// message identifier.
+        async fn lookup_delivery_by_provider_message_id(
+            &mut self,
+            provider_binding_key: &str,
+            provider_message_id: &str,
+        ) -> Result<Option<NotificationDelivery>, Self::Error>;
 
-    /// List deliveries belonging to a request.
-    async fn list_deliveries(
-        &mut self,
-        notification_request: &NotificationRequest,
-    ) -> Result<Vec<NotificationDelivery>, Self::Error>;
+        /// List deliveries belonging to a request.
+        async fn list_deliveries(
+            &mut self,
+            notification_request: &NotificationRequest,
+        ) -> Result<Vec<NotificationDelivery>, Self::Error>;
 
-    /// Create a new delivery belonging to a request.
-    async fn add_delivery(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        notification_request: &NotificationRequest,
-        params: NewNotificationDelivery,
-    ) -> Result<NotificationDelivery, Self::Error>;
+        /// Create a new delivery belonging to a request.
+        async fn add_delivery(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            notification_request: &NotificationRequest,
+            params: NewNotificationDelivery,
+        ) -> Result<NotificationDelivery, Self::Error>;
 
-    /// Reserve a batch of due deliveries for processing.
-    async fn reserve_deliveries(
-        &mut self,
-        clock: &dyn Clock,
-        limit: usize,
-    ) -> Result<Vec<NotificationDelivery>, Self::Error>;
+        /// Reserve a batch of due deliveries for processing.
+        async fn reserve_deliveries(
+            &mut self,
+            clock: &dyn Clock,
+            limit: usize,
+        ) -> Result<Vec<NotificationDelivery>, Self::Error>;
 
-    /// Mark a reserved delivery as actively sending.
-    async fn mark_delivery_sending(
-        &mut self,
-        clock: &dyn Clock,
-        notification_delivery: NotificationDelivery,
-        provider_message_id: Option<String>,
-    ) -> Result<NotificationDelivery, Self::Error>;
+        /// Mark a reserved delivery as actively sending.
+        async fn mark_delivery_sending(
+            &mut self,
+            clock: &dyn Clock,
+            notification_delivery: NotificationDelivery,
+            provider_message_id: Option<String>,
+        ) -> Result<NotificationDelivery, Self::Error>;
 
-    /// Mark a delivery as successfully delivered.
-    async fn mark_delivery_delivered(
-        &mut self,
-        clock: &dyn Clock,
-        notification_delivery: NotificationDelivery,
-        provider_message_id: Option<String>,
-    ) -> Result<NotificationDelivery, Self::Error>;
+        /// Mark a delivery as successfully delivered.
+        async fn mark_delivery_delivered(
+            &mut self,
+            clock: &dyn Clock,
+            notification_delivery: NotificationDelivery,
+            provider_message_id: Option<String>,
+        ) -> Result<NotificationDelivery, Self::Error>;
 
-    /// Mark a delivery as failed, optionally scheduling a retry.
-    async fn mark_delivery_failed(
-        &mut self,
-        clock: &dyn Clock,
-        notification_delivery: NotificationDelivery,
-        failure: NotificationDeliveryFailure,
-        provider_message_id: Option<String>,
-        next_retry_at: Option<DateTime<Utc>>,
-    ) -> Result<NotificationDelivery, Self::Error>;
+        /// Mark a delivery as failed, optionally scheduling a retry.
+        async fn mark_delivery_failed(
+            &mut self,
+            clock: &dyn Clock,
+            notification_delivery: NotificationDelivery,
+            failure: NotificationDeliveryFailure,
+            provider_message_id: Option<String>,
+            next_retry_at: Option<DateTime<Utc>>,
+        ) -> Result<NotificationDelivery, Self::Error>;
 
-    /// Cancel a delivery so it is not attempted anymore.
-    async fn cancel_delivery(
-        &mut self,
-        clock: &dyn Clock,
-        notification_delivery: NotificationDelivery,
-    ) -> Result<NotificationDelivery, Self::Error>;
+        /// Cancel a delivery so it is not attempted anymore.
+        async fn cancel_delivery(
+            &mut self,
+            clock: &dyn Clock,
+            notification_delivery: NotificationDelivery,
+        ) -> Result<NotificationDelivery, Self::Error>;
 
-    /// Append an immutable notification audit event.
-    async fn append_event(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        notification_request: &NotificationRequest,
-        notification_delivery: Option<&NotificationDelivery>,
-        params: NewNotificationEventLog,
-    ) -> Result<NotificationEventLog, Self::Error>;
+        /// Append an immutable notification audit event.
+        async fn append_event(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            notification_request: &NotificationRequest,
+            notification_delivery: Option<&NotificationDelivery>,
+            params: NewNotificationEventLog,
+        ) -> Result<NotificationEventLog, Self::Error>;
 
-    /// List audit events for a logical notification request.
-    async fn list_events(
-        &mut self,
-        notification_request: &NotificationRequest,
-    ) -> Result<Vec<NotificationEventLog>, Self::Error>;
+        /// List audit events for a logical notification request.
+        async fn list_events(
+            &mut self,
+            notification_request: &NotificationRequest,
+        ) -> Result<Vec<NotificationEventLog>, Self::Error>;
 
-    /// List persisted per-channel preferences for a user.
-    async fn list_preferences(
-        &mut self,
-        user: &User,
-    ) -> Result<Vec<NotificationPreference>, Self::Error>;
+        /// List persisted per-channel preferences for a user.
+        async fn list_preferences(
+            &mut self,
+            user: &User,
+        ) -> Result<Vec<NotificationPreference>, Self::Error>;
 
-    /// Replace the persisted preferences for the given user.
-    async fn replace_preferences(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        user: &User,
-        preferences: Vec<(coauth_data::NotificationChannel, bool)>,
-    ) -> Result<Vec<NotificationPreference>, Self::Error>;
+        /// Replace the persisted preferences for the given user.
+        async fn replace_preferences(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            user: &User,
+            preferences: Vec<(coauth_data::NotificationChannel, bool)>,
+        ) -> Result<Vec<NotificationPreference>, Self::Error>;
+    }
 }
-
-repository_impl!(NotificationRepository:
-    async fn lookup_request(&mut self, id: Ulid) -> Result<Option<NotificationRequest>, Self::Error>;
-    async fn add_request(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewNotificationRequest,
-    ) -> Result<NotificationRequest, Self::Error>;
-    async fn set_request_status(
-        &mut self,
-        clock: &dyn Clock,
-        notification_request: NotificationRequest,
-        status: NotificationRequestStatus,
-    ) -> Result<NotificationRequest, Self::Error>;
-    async fn lookup_delivery(
-        &mut self,
-        id: Ulid,
-    ) -> Result<Option<NotificationDelivery>, Self::Error>;
-    async fn lookup_delivery_by_provider_message_id(
-        &mut self,
-        provider_binding_key: &str,
-        provider_message_id: &str,
-    ) -> Result<Option<NotificationDelivery>, Self::Error>;
-    async fn list_deliveries(
-        &mut self,
-        notification_request: &NotificationRequest,
-    ) -> Result<Vec<NotificationDelivery>, Self::Error>;
-    async fn add_delivery(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        notification_request: &NotificationRequest,
-        params: NewNotificationDelivery,
-    ) -> Result<NotificationDelivery, Self::Error>;
-    async fn reserve_deliveries(
-        &mut self,
-        clock: &dyn Clock,
-        limit: usize,
-    ) -> Result<Vec<NotificationDelivery>, Self::Error>;
-    async fn mark_delivery_sending(
-        &mut self,
-        clock: &dyn Clock,
-        notification_delivery: NotificationDelivery,
-        provider_message_id: Option<String>,
-    ) -> Result<NotificationDelivery, Self::Error>;
-    async fn mark_delivery_delivered(
-        &mut self,
-        clock: &dyn Clock,
-        notification_delivery: NotificationDelivery,
-        provider_message_id: Option<String>,
-    ) -> Result<NotificationDelivery, Self::Error>;
-    async fn mark_delivery_failed(
-        &mut self,
-        clock: &dyn Clock,
-        notification_delivery: NotificationDelivery,
-        failure: NotificationDeliveryFailure,
-        provider_message_id: Option<String>,
-        next_retry_at: Option<DateTime<Utc>>,
-    ) -> Result<NotificationDelivery, Self::Error>;
-    async fn cancel_delivery(
-        &mut self,
-        clock: &dyn Clock,
-        notification_delivery: NotificationDelivery,
-    ) -> Result<NotificationDelivery, Self::Error>;
-    async fn append_event(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        notification_request: &NotificationRequest,
-        notification_delivery: Option<&NotificationDelivery>,
-        params: NewNotificationEventLog,
-    ) -> Result<NotificationEventLog, Self::Error>;
-    async fn list_events(
-        &mut self,
-        notification_request: &NotificationRequest,
-    ) -> Result<Vec<NotificationEventLog>, Self::Error>;
-    async fn list_preferences(
-        &mut self,
-        user: &User,
-    ) -> Result<Vec<NotificationPreference>, Self::Error>;
-    async fn replace_preferences(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        user: &User,
-        preferences: Vec<(coauth_data::NotificationChannel, bool)>,
-    ) -> Result<Vec<NotificationPreference>, Self::Error>;
-);

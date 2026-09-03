@@ -1,6 +1,5 @@
 use std::net::IpAddr;
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::{BrowserSession, Client, Clock, Session, User};
 use coauth_oauth_types::scope::Scope;
@@ -229,333 +228,257 @@ impl<'a> OAuthSessionFilter<'a> {
     }
 }
 
-/// An [`OAuthSessionRepository`] helps interacting with [`Session`]
-/// saved in the storage backend
-#[async_trait]
-pub trait OAuthSessionRepository: Send + Sync {
-    /// The error type returned by the repository
-    type Error;
+repository_impl! {
+    /// An [`OAuthSessionRepository`] helps interacting with [`Session`]
+    /// saved in the storage backend
+    pub trait OAuthSessionRepository {
+        /// The error type returned by the repository
+        type Error;
 
-    /// Lookup an [`Session`] by its ID
-    ///
-    /// Returns `None` if no [`Session`] was found
-    ///
-    /// # Parameters
-    ///
-    /// * `id`: The ID of the [`Session`] to lookup
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn lookup(&mut self, id: Ulid) -> Result<Option<Session>, Self::Error>;
+        /// Lookup an [`Session`] by its ID
+        ///
+        /// Returns `None` if no [`Session`] was found
+        ///
+        /// # Parameters
+        ///
+        /// * `id`: The ID of the [`Session`] to lookup
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn lookup(&mut self, id: Ulid) -> Result<Option<Session>, Self::Error>;
 
-    /// Create a new [`Session`] with the given parameters
-    ///
-    /// Returns the newly created [`Session`]
-    ///
-    /// # Parameters
-    ///
-    /// * `rng`: The random number generator to use
-    /// * `clock`: The clock used to generate timestamps
-    /// * `client`: The [`Client`] which created the [`Session`]
-    /// * `user`: The [`User`] for which the session should be created, if any
-    /// * `user_session`: The [`BrowserSession`] of the user which completed the authorization, if
-    ///   any
-    /// * `scope`: The [`Scope`] of the [`Session`]
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        client: &Client,
-        user: Option<&User>,
-        user_session: Option<&BrowserSession>,
-        scope: Scope,
-    ) -> Result<Session, Self::Error>;
+        /// Create a new [`Session`] with the given parameters
+        ///
+        /// Returns the newly created [`Session`]
+        ///
+        /// # Parameters
+        ///
+        /// * `rng`: The random number generator to use
+        /// * `clock`: The clock used to generate timestamps
+        /// * `client`: The [`Client`] which created the [`Session`]
+        /// * `user`: The [`User`] for which the session should be created, if any
+        /// * `user_session`: The [`BrowserSession`] of the user which completed the authorization, if
+        ///   any
+        /// * `scope`: The [`Scope`] of the [`Session`]
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn add(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            client: &Client,
+            user: Option<&User>,
+            user_session: Option<&BrowserSession>,
+            scope: Scope,
+        ) -> Result<Session, Self::Error>;
 
-    /// Create a new [`Session`] out of a [`Client`] and a [`BrowserSession`]
-    ///
-    /// Returns the newly created [`Session`]
-    ///
-    /// # Parameters
-    ///
-    /// * `rng`: The random number generator to use
-    /// * `clock`: The clock used to generate timestamps
-    /// * `client`: The [`Client`] which created the [`Session`]
-    /// * `user_session`: The [`BrowserSession`] of the user which completed the authorization
-    /// * `scope`: The [`Scope`] of the [`Session`]
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn add_from_browser_session(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        client: &Client,
-        user_session: &BrowserSession,
-        scope: Scope,
-    ) -> Result<Session, Self::Error> {
-        self.add(
-            rng,
-            clock,
-            client,
-            Some(&user_session.user),
-            Some(user_session),
-            scope,
-        )
-        .await
-    }
-
-    /// Create a new [`Session`] for a [`Client`] using the client credentials
-    /// strand
-    ///
-    /// Returns the newly created [`Session`]
-    ///
-    /// # Parameters
-    ///
-    /// * `rng`: The random number generator to use
-    /// * `clock`: The clock used to generate timestamps
-    /// * `client`: The [`Client`] which created the [`Session`]
-    /// * `scope`: The [`Scope`] of the [`Session`]
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn add_from_client_credentials(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        client: &Client,
-        scope: Scope,
-    ) -> Result<Session, Self::Error> {
-        self.add(rng, clock, client, None, None, scope).await
-    }
-
-    /// Mark a [`Session`] as finished
-    ///
-    /// Returns the updated [`Session`]
-    ///
-    /// # Parameters
-    ///
-    /// * `clock`: The clock used to generate timestamps
-    /// * `session`: The [`Session`] to mark as finished
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn finish(&mut self, clock: &dyn Clock, session: Session)
-    -> Result<Session, Self::Error>;
-
-    /// Mark all the [`Session`] matching the given filter as finished
-    ///
-    /// Returns the number of sessions affected
-    ///
-    /// # Parameters
-    ///
-    /// * `clock`: The clock used to generate timestamps
-    /// * `filter`: The filter parameters
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn finish_bulk(
-        &mut self,
-        clock: &dyn Clock,
-        filter: OAuthSessionFilter<'_>,
-    ) -> Result<usize, Self::Error>;
-
-    /// List [`Session`]s matching the given filter and pagination parameters
-    ///
-    /// # Parameters
-    ///
-    /// * `filter`: The filter parameters
-    /// * `pagination`: The pagination parameters
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn list(
-        &mut self,
-        filter: OAuthSessionFilter<'_>,
-        pagination: Pagination,
-    ) -> Result<Page<Session>, Self::Error>;
-
-    /// Count [`Session`]s matching the given filter
-    ///
-    /// # Parameters
-    ///
-    /// * `filter`: The filter parameters
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn count(&mut self, filter: OAuthSessionFilter<'_>) -> Result<usize, Self::Error>;
-
-    /// Record a batch of [`Session`] activity
-    ///
-    /// # Parameters
-    ///
-    /// * `activity`: A list of tuples containing the session ID, the last activity timestamp and
-    ///   the IP address of the client
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn record_batch_activity(
-        &mut self,
-        activity: Vec<(Ulid, DateTime<Utc>, Option<IpAddr>)>,
-    ) -> Result<(), Self::Error>;
-
-    /// Record the user agent of a [`Session`]
-    ///
-    /// # Parameters
-    ///
-    /// * `session`: The [`Session`] to record the user agent for
-    /// * `user_agent`: The user agent to record
-    async fn record_user_agent(
-        &mut self,
-        session: Session,
-        user_agent: String,
-    ) -> Result<Session, Self::Error>;
-
-    /// Set the human name of a [`Session`]
-    ///
-    /// # Parameters
-    ///
-    /// * `session`: The [`Session`] to set the human name for
-    /// * `human_name`: The human name to set
-    async fn set_human_name(
-        &mut self,
-        session: Session,
-        human_name: Option<String>,
-    ) -> Result<Session, Self::Error>;
-
-    /// Cleanup finished [`Session`]s
-    ///
-    /// Deletes sessions finished between `since` and `until`. Returns the
-    /// number of deleted sessions and the timestamp of the last deleted
-    /// session for pagination.
-    ///
-    /// # Parameters
-    ///
-    /// * `since`: The earliest finish time to delete (exclusive). If `None`, starts from the
-    ///   beginning.
-    /// * `until`: The latest finish time to delete (exclusive)
-    /// * `limit`: Maximum number of sessions to delete in this batch
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn cleanup_finished(
-        &mut self,
-        since: Option<DateTime<Utc>>,
-        until: DateTime<Utc>,
-        limit: usize,
-    ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error>;
-
-    /// Clear IP addresses from sessions inactive since the threshold
-    ///
-    /// Sets `last_active_ip` to `NULL` for sessions where `last_active_at` is
-    /// before the threshold. Returns the number of sessions affected and the
-    /// last `last_active_at` timestamp processed for pagination.
-    ///
-    /// # Parameters
-    ///
-    /// * `since`: Only process sessions with `last_active_at` at or after this timestamp
-    ///   (exclusive). If `None`, starts from the beginning.
-    /// * `threshold`: Clear IPs for sessions with `last_active_at` before this time
-    /// * `limit`: Maximum number of sessions to update in this batch
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn cleanup_inactive_ips(
-        &mut self,
-        since: Option<DateTime<Utc>>,
-        threshold: DateTime<Utc>,
-        limit: usize,
-    ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error>;
-}
-
-repository_impl!(OAuthSessionRepository:
-    async fn lookup(&mut self, id: Ulid) -> Result<Option<Session>, Self::Error>;
-
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        client: &Client,
-        user: Option<&User>,
-        user_session: Option<&BrowserSession>,
-        scope: Scope,
-    ) -> Result<Session, Self::Error>;
-
-    async fn add_from_browser_session(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        client: &Client,
-        user_session: &BrowserSession,
-        scope: Scope,
-    ) -> Result<Session, Self::Error>;
-
-    async fn add_from_client_credentials(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        client: &Client,
-        scope: Scope,
-    ) -> Result<Session, Self::Error>;
-
-    async fn finish(&mut self, clock: &dyn Clock, session: Session)
+        /// Mark a [`Session`] as finished
+        ///
+        /// Returns the updated [`Session`]
+        ///
+        /// # Parameters
+        ///
+        /// * `clock`: The clock used to generate timestamps
+        /// * `session`: The [`Session`] to mark as finished
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn finish(&mut self, clock: &dyn Clock, session: Session)
         -> Result<Session, Self::Error>;
 
-    async fn finish_bulk(
-        &mut self,
-        clock: &dyn Clock,
-        filter: OAuthSessionFilter<'_>,
-    ) -> Result<usize, Self::Error>;
+        /// Mark all the [`Session`] matching the given filter as finished
+        ///
+        /// Returns the number of sessions affected
+        ///
+        /// # Parameters
+        ///
+        /// * `clock`: The clock used to generate timestamps
+        /// * `filter`: The filter parameters
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn finish_bulk(
+            &mut self,
+            clock: &dyn Clock,
+            filter: OAuthSessionFilter<'_>,
+        ) -> Result<usize, Self::Error>;
 
-    async fn list(
-        &mut self,
-        filter: OAuthSessionFilter<'_>,
-        pagination: Pagination,
-    ) -> Result<Page<Session>, Self::Error>;
+        /// List [`Session`]s matching the given filter and pagination parameters
+        ///
+        /// # Parameters
+        ///
+        /// * `filter`: The filter parameters
+        /// * `pagination`: The pagination parameters
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn list(
+            &mut self,
+            filter: OAuthSessionFilter<'_>,
+            pagination: Pagination,
+        ) -> Result<Page<Session>, Self::Error>;
 
-    async fn count(&mut self, filter: OAuthSessionFilter<'_>) -> Result<usize, Self::Error>;
+        /// Count [`Session`]s matching the given filter
+        ///
+        /// # Parameters
+        ///
+        /// * `filter`: The filter parameters
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn count(&mut self, filter: OAuthSessionFilter<'_>) -> Result<usize, Self::Error>;
 
-    async fn record_batch_activity(
-        &mut self,
-        activity: Vec<(Ulid, DateTime<Utc>, Option<IpAddr>)>,
-    ) -> Result<(), Self::Error>;
+        /// Record a batch of [`Session`] activity
+        ///
+        /// # Parameters
+        ///
+        /// * `activity`: A list of tuples containing the session ID, the last activity timestamp and
+        ///   the IP address of the client
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn record_batch_activity(
+            &mut self,
+            activity: Vec<(Ulid, DateTime<Utc>, Option<IpAddr>)>,
+        ) -> Result<(), Self::Error>;
 
-    async fn record_user_agent(
-        &mut self,
-        session: Session,
-        user_agent: String,
-    ) -> Result<Session, Self::Error>;
+        /// Record the user agent of a [`Session`]
+        ///
+        /// # Parameters
+        ///
+        /// * `session`: The [`Session`] to record the user agent for
+        /// * `user_agent`: The user agent to record
+        async fn record_user_agent(
+            &mut self,
+            session: Session,
+            user_agent: String,
+        ) -> Result<Session, Self::Error>;
 
-    async fn set_human_name(
-        &mut self,
-        session: Session,
-        human_name: Option<String>,
-    ) -> Result<Session, Self::Error>;
+        /// Set the human name of a [`Session`]
+        ///
+        /// # Parameters
+        ///
+        /// * `session`: The [`Session`] to set the human name for
+        /// * `human_name`: The human name to set
+        async fn set_human_name(
+            &mut self,
+            session: Session,
+            human_name: Option<String>,
+        ) -> Result<Session, Self::Error>;
 
-    async fn cleanup_finished(
-        &mut self,
-        since: Option<DateTime<Utc>>,
-        until: DateTime<Utc>,
-        limit: usize,
-    ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error>;
+        /// Cleanup finished [`Session`]s
+        ///
+        /// Deletes sessions finished between `since` and `until`. Returns the
+        /// number of deleted sessions and the timestamp of the last deleted
+        /// session for pagination.
+        ///
+        /// # Parameters
+        ///
+        /// * `since`: The earliest finish time to delete (exclusive). If `None`, starts from the
+        ///   beginning.
+        /// * `until`: The latest finish time to delete (exclusive)
+        /// * `limit`: Maximum number of sessions to delete in this batch
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn cleanup_finished(
+            &mut self,
+            since: Option<DateTime<Utc>>,
+            until: DateTime<Utc>,
+            limit: usize,
+        ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error>;
 
-    async fn cleanup_inactive_ips(
-        &mut self,
-        since: Option<DateTime<Utc>>,
-        threshold: DateTime<Utc>,
-        limit: usize,
-    ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error>;
-);
+        /// Clear IP addresses from sessions inactive since the threshold
+        ///
+        /// Sets `last_active_ip` to `NULL` for sessions where `last_active_at` is
+        /// before the threshold. Returns the number of sessions affected and the
+        /// last `last_active_at` timestamp processed for pagination.
+        ///
+        /// # Parameters
+        ///
+        /// * `since`: Only process sessions with `last_active_at` at or after this timestamp
+        ///   (exclusive). If `None`, starts from the beginning.
+        /// * `threshold`: Clear IPs for sessions with `last_active_at` before this time
+        /// * `limit`: Maximum number of sessions to update in this batch
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn cleanup_inactive_ips(
+            &mut self,
+            since: Option<DateTime<Utc>>,
+            threshold: DateTime<Utc>,
+            limit: usize,
+        ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error>;
+    }
+
+    defaults {
+            /// Create a new [`Session`] out of a [`Client`] and a [`BrowserSession`]
+            ///
+            /// Returns the newly created [`Session`]
+            ///
+            /// # Parameters
+            ///
+            /// * `rng`: The random number generator to use
+            /// * `clock`: The clock used to generate timestamps
+            /// * `client`: The [`Client`] which created the [`Session`]
+            /// * `user_session`: The [`BrowserSession`] of the user which completed the authorization
+            /// * `scope`: The [`Scope`] of the [`Session`]
+            ///
+            /// # Errors
+            ///
+            /// Returns [`Self::Error`] if the underlying repository fails
+            async fn add_from_browser_session(
+                &mut self,
+                rng: &mut (dyn RngCore + Send),
+                clock: &dyn Clock,
+                client: &Client,
+                user_session: &BrowserSession,
+                scope: Scope,
+            ) -> Result<Session, Self::Error> {
+                self.add(
+                    rng,
+                    clock,
+                    client,
+                    Some(&user_session.user),
+                    Some(user_session),
+                    scope,
+                )
+                .await
+            }
+
+            /// Create a new [`Session`] for a [`Client`] using the client credentials
+            /// strand
+            ///
+            /// Returns the newly created [`Session`]
+            ///
+            /// # Parameters
+            ///
+            /// * `rng`: The random number generator to use
+            /// * `clock`: The clock used to generate timestamps
+            /// * `client`: The [`Client`] which created the [`Session`]
+            /// * `scope`: The [`Scope`] of the [`Session`]
+            ///
+            /// # Errors
+            ///
+            /// Returns [`Self::Error`] if the underlying repository fails
+            async fn add_from_client_credentials(
+                &mut self,
+                rng: &mut (dyn RngCore + Send),
+                clock: &dyn Clock,
+                client: &Client,
+                scope: Scope,
+            ) -> Result<Session, Self::Error> {
+                self.add(rng, clock, client, None, None, scope).await
+            }
+    }
+}

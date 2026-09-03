@@ -1,6 +1,5 @@
 use arkret_identifiers::{DidCoreId, SessionGrantId};
 use arkret_models_identity::SessionGrantProofKind;
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_oauth_types::scope::Scope;
 use rand_core::RngCore;
@@ -331,209 +330,126 @@ pub enum SessionGrantRevokeOutcome {
     Indeterminate(SessionGrantOperation),
 }
 
-#[async_trait]
-/// Repository for persisted Arkret session grants.
-pub trait SessionGrantRepository: Send + Sync {
-    /// Repository-specific error type.
-    type Error;
+repository_impl! {
+    /// Repository for persisted Arkret session grants.
+    pub trait SessionGrantRepository {
+        /// Repository-specific error type.
+        type Error;
 
-    /// Reserve a stable request identity before consuming its authorization proof.
-    async fn reserve_operation(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        operation: NewSessionGrantOperation<'_>,
-    ) -> Result<SessionGrantReserveOutcome, Self::Error>;
+        /// Reserve a stable request identity before consuming its authorization proof.
+        async fn reserve_operation(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            operation: NewSessionGrantOperation<'_>,
+        ) -> Result<SessionGrantReserveOutcome, Self::Error>;
 
-    /// Persist an external one-shot authorization checkpoint before later commit.
-    async fn checkpoint_authorization(
-        &mut self,
-        clock: &dyn Clock,
-        operation_id: Ulid,
-        authorization: SessionGrantProofAuthorization<'_>,
-    ) -> Result<SessionGrantOperation, Self::Error>;
+        /// Persist an external one-shot authorization checkpoint before later commit.
+        async fn checkpoint_authorization(
+            &mut self,
+            clock: &dyn Clock,
+            operation_id: Ulid,
+            authorization: SessionGrantProofAuthorization<'_>,
+        ) -> Result<SessionGrantOperation, Self::Error>;
 
-    /// Atomically persist the exact JWT outcome and commit its operation.
-    async fn commit_issuance(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        operation_id: Ulid,
-        authorization: SessionGrantProofAuthorization<'_>,
-        outcome: SessionGrantExactOutcome<'_>,
-        grant: NewSessionGrant<'_>,
-    ) -> Result<SessionGrantCommitOutcome, Self::Error>;
+        /// Atomically persist the exact JWT outcome and commit its operation.
+        async fn commit_issuance(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            operation_id: Ulid,
+            authorization: SessionGrantProofAuthorization<'_>,
+            outcome: SessionGrantExactOutcome<'_>,
+            grant: NewSessionGrant<'_>,
+        ) -> Result<SessionGrantCommitOutcome, Self::Error>;
 
-    /// Atomically insert a successor, supersede its active predecessor, and commit replay state.
-    async fn commit_refresh(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        commit: SessionGrantRefreshCommit<'_>,
-    ) -> Result<SessionGrantRefreshOutcome, Self::Error>;
+        /// Atomically insert a successor, supersede its active predecessor, and commit replay state.
+        async fn commit_refresh(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            commit: SessionGrantRefreshCommit<'_>,
+        ) -> Result<SessionGrantRefreshOutcome, Self::Error>;
 
-    /// Atomically revoke an active grant and commit an exact-replay outcome.
-    async fn commit_revoke(
-        &mut self,
-        clock: &dyn Clock,
-        operation_id: Ulid,
-        authorization: SessionGrantProofAuthorization<'_>,
-        selector: SessionGrantRevokeSelector<'_>,
-    ) -> Result<SessionGrantRevokeOutcome, Self::Error>;
+        /// Atomically revoke an active grant and commit an exact-replay outcome.
+        async fn commit_revoke(
+            &mut self,
+            clock: &dyn Clock,
+            operation_id: Ulid,
+            authorization: SessionGrantProofAuthorization<'_>,
+            selector: SessionGrantRevokeSelector<'_>,
+        ) -> Result<SessionGrantRevokeOutcome, Self::Error>;
 
-    /// Look up a session grant by id.
-    async fn lookup(&mut self, id: Ulid) -> Result<Option<SessionGrant>, Self::Error>;
+        /// Look up a session grant by id.
+        async fn lookup(&mut self, id: Ulid) -> Result<Option<SessionGrant>, Self::Error>;
 
-    /// Look up a session grant by protocol-visible grant id.
-    async fn lookup_by_grant_id(
-        &mut self,
-        grant_id: &SessionGrantId,
-    ) -> Result<Option<SessionGrant>, Self::Error>;
+        /// Look up a session grant by protocol-visible grant id.
+        async fn lookup_by_grant_id(
+            &mut self,
+            grant_id: &SessionGrantId,
+        ) -> Result<Option<SessionGrant>, Self::Error>;
 
-    /// Look up a session grant by its signed JWT.
-    async fn lookup_by_grant_jwt(
-        &mut self,
-        grant_jwt: &str,
-    ) -> Result<Option<SessionGrant>, Self::Error>;
+        /// Look up a session grant by its signed JWT.
+        async fn lookup_by_grant_jwt(
+            &mut self,
+            grant_jwt: &str,
+        ) -> Result<Option<SessionGrant>, Self::Error>;
 
-    /// List session grants matching the supplied filter.
-    async fn list(
-        &mut self,
-        filter: SessionGrantFilter<'_>,
-        pagination: Pagination,
-    ) -> Result<Page<SessionGrant>, Self::Error>;
+        /// List session grants matching the supplied filter.
+        async fn list(
+            &mut self,
+            filter: SessionGrantFilter<'_>,
+            pagination: Pagination,
+        ) -> Result<Page<SessionGrant>, Self::Error>;
 
-    /// Mark a session grant as revoked.
-    async fn revoke(
-        &mut self,
-        clock: &dyn Clock,
-        grant: SessionGrant,
-    ) -> Result<SessionGrant, Self::Error>;
+        /// Mark a session grant as revoked.
+        async fn revoke(
+            &mut self,
+            clock: &dyn Clock,
+            grant: SessionGrant,
+        ) -> Result<SessionGrant, Self::Error>;
 
-    /// Atomically consume a grant: set `revoked_at` **only if** it is still
-    /// `NULL`, returning whether this call performed the revocation.
-    ///
-    /// This is the single-use rotation gate (account-lifecycle §4.1). The
-    /// conditional `UPDATE ... WHERE revoked_at IS NULL` row-locks the grant,
-    /// so two concurrent rotations of the same parent contend on that lock;
-    /// exactly one observes the row still active and gets `true`, the other
-    /// re-reads the now-committed `revoked_at` and gets `false`. Returning
-    /// `false` MUST be treated as `grant_already_consumed` — never minting a
-    /// second active child of one parent.
-    async fn revoke_if_active(&mut self, clock: &dyn Clock, id: Ulid) -> Result<bool, Self::Error>;
+        /// Atomically consume a grant: set `revoked_at` **only if** it is still
+        /// `NULL`, returning whether this call performed the revocation.
+        ///
+        /// This is the single-use rotation gate (account-lifecycle §4.1). The
+        /// conditional `UPDATE ... WHERE revoked_at IS NULL` row-locks the grant,
+        /// so two concurrent rotations of the same parent contend on that lock;
+        /// exactly one observes the row still active and gets `true`, the other
+        /// re-reads the now-committed `revoked_at` and gets `false`. Returning
+        /// `false` MUST be treated as `grant_already_consumed` — never minting a
+        /// second active child of one parent.
+        async fn revoke_if_active(&mut self, clock: &dyn Clock, id: Ulid) -> Result<bool, Self::Error>;
 
-    /// Revoke every still-active grant minted for `audience_id`, returning the
-    /// number of grants revoked. Used when a Station trust pin is
-    /// explicitly replaced: grants bound to the old audience_id must not
-    /// outlive the pin they were issued under.
-    async fn revoke_active_for_audience(
-        &mut self,
-        clock: &dyn Clock,
-        audience_id: &DidCoreId,
-    ) -> Result<usize, Self::Error>;
+        /// Revoke every still-active grant minted for `audience_id`, returning the
+        /// number of grants revoked. Used when a Station trust pin is
+        /// explicitly replaced: grants bound to the old audience_id must not
+        /// outlive the pin they were issued under.
+        async fn revoke_active_for_audience(
+            &mut self,
+            clock: &dyn Clock,
+            audience_id: &DidCoreId,
+        ) -> Result<usize, Self::Error>;
 
-    /// Delete session grants whose `expires_at` is strictly before `until`.
-    ///
-    /// Mirrors the time-cursor cleanup contract used elsewhere
-    /// (e.g. `oauth_session.cleanup_finished`): paginates through
-    /// matching rows in `expires_at` ascending order, returns the count
-    /// deleted in this batch and the latest `expires_at` processed so a
-    /// later call can resume from `since = next_cursor`.
-    ///
-    /// # Parameters
-    ///
-    /// * `since`: Only delete grants with `expires_at` at or after this timestamp. `None` starts
-    ///   from the beginning.
-    /// * `until`: Latest `expires_at` to delete (exclusive).
-    /// * `limit`: Maximum number of grants to delete in this batch.
-    async fn cleanup_expired(
-        &mut self,
-        since: Option<DateTime<Utc>>,
-        until: DateTime<Utc>,
-        limit: usize,
-    ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error>;
+        /// Delete session grants whose `expires_at` is strictly before `until`.
+        ///
+        /// Mirrors the time-cursor cleanup contract used elsewhere
+        /// (e.g. `oauth_session.cleanup_finished`): paginates through
+        /// matching rows in `expires_at` ascending order, returns the count
+        /// deleted in this batch and the latest `expires_at` processed so a
+        /// later call can resume from `since = next_cursor`.
+        ///
+        /// # Parameters
+        ///
+        /// * `since`: Only delete grants with `expires_at` at or after this timestamp. `None` starts
+        ///   from the beginning.
+        /// * `until`: Latest `expires_at` to delete (exclusive).
+        /// * `limit`: Maximum number of grants to delete in this batch.
+        async fn cleanup_expired(
+            &mut self,
+            since: Option<DateTime<Utc>>,
+            until: DateTime<Utc>,
+            limit: usize,
+        ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error>;
+    }
 }
-
-repository_impl!(SessionGrantRepository:
-    async fn reserve_operation(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        operation: NewSessionGrantOperation<'_>,
-    ) -> Result<SessionGrantReserveOutcome, Self::Error>;
-
-    async fn checkpoint_authorization(
-        &mut self,
-        clock: &dyn Clock,
-        operation_id: Ulid,
-        authorization: SessionGrantProofAuthorization<'_>,
-    ) -> Result<SessionGrantOperation, Self::Error>;
-
-    async fn commit_issuance(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        operation_id: Ulid,
-        authorization: SessionGrantProofAuthorization<'_>,
-        outcome: SessionGrantExactOutcome<'_>,
-        grant: NewSessionGrant<'_>,
-    ) -> Result<SessionGrantCommitOutcome, Self::Error>;
-
-    async fn commit_refresh(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        commit: SessionGrantRefreshCommit<'_>,
-    ) -> Result<SessionGrantRefreshOutcome, Self::Error>;
-
-    async fn commit_revoke(
-        &mut self,
-        clock: &dyn Clock,
-        operation_id: Ulid,
-        authorization: SessionGrantProofAuthorization<'_>,
-        selector: SessionGrantRevokeSelector<'_>,
-    ) -> Result<SessionGrantRevokeOutcome, Self::Error>;
-
-    async fn lookup(&mut self, id: Ulid) -> Result<Option<SessionGrant>, Self::Error>;
-
-    async fn lookup_by_grant_id(
-        &mut self,
-        grant_id: &SessionGrantId,
-    ) -> Result<Option<SessionGrant>, Self::Error>;
-
-    async fn lookup_by_grant_jwt(
-        &mut self,
-        grant_jwt: &str,
-    ) -> Result<Option<SessionGrant>, Self::Error>;
-
-    async fn list(
-        &mut self,
-        filter: SessionGrantFilter<'_>,
-        pagination: Pagination,
-    ) -> Result<Page<SessionGrant>, Self::Error>;
-
-    async fn revoke(
-        &mut self,
-        clock: &dyn Clock,
-        grant: SessionGrant,
-    ) -> Result<SessionGrant, Self::Error>;
-
-    async fn revoke_if_active(
-        &mut self,
-        clock: &dyn Clock,
-        id: Ulid,
-    ) -> Result<bool, Self::Error>;
-
-    async fn revoke_active_for_audience(
-        &mut self,
-        clock: &dyn Clock,
-        audience_id: &DidCoreId,
-    ) -> Result<usize, Self::Error>;
-
-    async fn cleanup_expired(
-        &mut self,
-        since: Option<DateTime<Utc>>,
-        until: DateTime<Utc>,
-        limit: usize,
-    ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error>;
-);

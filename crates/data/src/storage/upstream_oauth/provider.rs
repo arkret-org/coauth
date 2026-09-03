@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 
-use async_trait::async_trait;
 use coauth_data::upstream_oauth::provider;
 use coauth_data::{Clock, UpstreamOAuthProvider};
 use coauth_iana::jose::JsonWebSignatureAlg;
@@ -158,198 +157,155 @@ impl UpstreamOAuthProviderFilter<'_> {
     }
 }
 
-/// An [`UpstreamOAuthProviderRepository`] helps interacting with
-/// [`UpstreamOAuthProvider`] saved in the storage backend
-#[async_trait]
-pub trait UpstreamOAuthProviderRepository: Send + Sync {
-    /// The error type returned by the repository
-    type Error;
+repository_impl! {
+    /// An [`UpstreamOAuthProviderRepository`] helps interacting with
+    /// [`UpstreamOAuthProvider`] saved in the storage backend
+    pub trait UpstreamOAuthProviderRepository {
+        /// The error type returned by the repository
+        type Error;
 
-    /// Lookup an upstream OAuth provider by its ID
-    ///
-    /// Returns `None` if the provider was not found
-    ///
-    /// # Parameters
-    ///
-    /// * `id`: The ID of the provider to lookup
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn lookup(&mut self, id: Ulid) -> Result<Option<UpstreamOAuthProvider>, Self::Error>;
+        /// Lookup an upstream OAuth provider by its ID
+        ///
+        /// Returns `None` if the provider was not found
+        ///
+        /// # Parameters
+        ///
+        /// * `id`: The ID of the provider to lookup
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn lookup(&mut self, id: Ulid) -> Result<Option<UpstreamOAuthProvider>, Self::Error>;
 
-    /// Add a new upstream OAuth provider
-    ///
-    /// Returns the newly created provider
-    ///
-    /// # Parameters
-    ///
-    /// * `rng`: A random number generator
-    /// * `clock`: The clock used to generate timestamps
-    /// * `params`: The parameters of the provider to add
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: UpstreamOAuthProviderParams,
-    ) -> Result<UpstreamOAuthProvider, Self::Error>;
+        /// Add a new upstream OAuth provider
+        ///
+        /// Returns the newly created provider
+        ///
+        /// # Parameters
+        ///
+        /// * `rng`: A random number generator
+        /// * `clock`: The clock used to generate timestamps
+        /// * `params`: The parameters of the provider to add
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn add(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            params: UpstreamOAuthProviderParams,
+        ) -> Result<UpstreamOAuthProvider, Self::Error>;
 
-    /// Delete an upstream OAuth provider
-    ///
-    /// # Parameters
-    ///
-    /// * `provider`: The provider to delete
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn delete(&mut self, provider: UpstreamOAuthProvider) -> Result<(), Self::Error> {
-        self.delete_by_id(provider.id).await
+        /// Delete an upstream OAuth provider by its ID
+        ///
+        /// # Parameters
+        ///
+        /// * `id`: The ID of the provider to delete
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn delete_by_id(&mut self, id: Ulid) -> Result<(), Self::Error>;
+
+        /// Insert or update an upstream OAuth provider
+        ///
+        /// # Parameters
+        ///
+        /// * `clock`: The clock used to generate timestamps
+        /// * `id`: The ID of the provider to update
+        /// * `params`: The parameters of the provider to update
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn upsert(
+            &mut self,
+            clock: &dyn Clock,
+            id: Ulid,
+            params: UpstreamOAuthProviderParams,
+        ) -> Result<UpstreamOAuthProvider, Self::Error>;
+
+        /// Disable an upstream OAuth provider
+        ///
+        /// Returns the disabled provider
+        ///
+        /// # Parameters
+        ///
+        /// * `clock`: The clock used to generate timestamps
+        /// * `provider`: The provider to disable
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn disable(
+            &mut self,
+            clock: &dyn Clock,
+            provider: UpstreamOAuthProvider,
+        ) -> Result<UpstreamOAuthProvider, Self::Error>;
+
+        /// Re-enable a previously disabled upstream OAuth provider
+        ///
+        /// Clears `disabled_at`. Returns the updated provider.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn enable(
+            &mut self,
+            provider: UpstreamOAuthProvider,
+        ) -> Result<UpstreamOAuthProvider, Self::Error>;
+
+        /// List [`UpstreamOAuthProvider`] with the given filter and pagination
+        ///
+        /// # Parameters
+        ///
+        /// * `filter`: The filter to apply
+        /// * `pagination`: The pagination parameters
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn list(
+            &mut self,
+            filter: UpstreamOAuthProviderFilter<'_>,
+            pagination: Pagination,
+        ) -> Result<Page<UpstreamOAuthProvider>, Self::Error>;
+
+        /// Count the number of [`UpstreamOAuthProvider`] with the given filter
+        ///
+        /// # Parameters
+        ///
+        /// * `filter`: The filter to apply
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn count(
+            &mut self,
+            filter: UpstreamOAuthProviderFilter<'_>,
+        ) -> Result<usize, Self::Error>;
+
+        /// Get all enabled upstream OAuth providers
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn all_enabled(&mut self) -> Result<Vec<UpstreamOAuthProvider>, Self::Error>;
     }
 
-    /// Delete an upstream OAuth provider by its ID
-    ///
-    /// # Parameters
-    ///
-    /// * `id`: The ID of the provider to delete
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn delete_by_id(&mut self, id: Ulid) -> Result<(), Self::Error>;
-
-    /// Insert or update an upstream OAuth provider
-    ///
-    /// # Parameters
-    ///
-    /// * `clock`: The clock used to generate timestamps
-    /// * `id`: The ID of the provider to update
-    /// * `params`: The parameters of the provider to update
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn upsert(
-        &mut self,
-        clock: &dyn Clock,
-        id: Ulid,
-        params: UpstreamOAuthProviderParams,
-    ) -> Result<UpstreamOAuthProvider, Self::Error>;
-
-    /// Disable an upstream OAuth provider
-    ///
-    /// Returns the disabled provider
-    ///
-    /// # Parameters
-    ///
-    /// * `clock`: The clock used to generate timestamps
-    /// * `provider`: The provider to disable
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn disable(
-        &mut self,
-        clock: &dyn Clock,
-        provider: UpstreamOAuthProvider,
-    ) -> Result<UpstreamOAuthProvider, Self::Error>;
-
-    /// Re-enable a previously disabled upstream OAuth provider
-    ///
-    /// Clears `disabled_at`. Returns the updated provider.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn enable(
-        &mut self,
-        provider: UpstreamOAuthProvider,
-    ) -> Result<UpstreamOAuthProvider, Self::Error>;
-
-    /// List [`UpstreamOAuthProvider`] with the given filter and pagination
-    ///
-    /// # Parameters
-    ///
-    /// * `filter`: The filter to apply
-    /// * `pagination`: The pagination parameters
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn list(
-        &mut self,
-        filter: UpstreamOAuthProviderFilter<'_>,
-        pagination: Pagination,
-    ) -> Result<Page<UpstreamOAuthProvider>, Self::Error>;
-
-    /// Count the number of [`UpstreamOAuthProvider`] with the given filter
-    ///
-    /// # Parameters
-    ///
-    /// * `filter`: The filter to apply
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn count(
-        &mut self,
-        filter: UpstreamOAuthProviderFilter<'_>,
-    ) -> Result<usize, Self::Error>;
-
-    /// Get all enabled upstream OAuth providers
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn all_enabled(&mut self) -> Result<Vec<UpstreamOAuthProvider>, Self::Error>;
+    defaults {
+            /// Delete an upstream OAuth provider
+            ///
+            /// # Parameters
+            ///
+            /// * `provider`: The provider to delete
+            ///
+            /// # Errors
+            ///
+            /// Returns [`Self::Error`] if the underlying repository fails
+            async fn delete(&mut self, provider: UpstreamOAuthProvider) -> Result<(), Self::Error> {
+                self.delete_by_id(provider.id).await
+            }
+    }
 }
-
-repository_impl!(UpstreamOAuthProviderRepository:
-    async fn lookup(&mut self, id: Ulid) -> Result<Option<UpstreamOAuthProvider>, Self::Error>;
-
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: UpstreamOAuthProviderParams
-    ) -> Result<UpstreamOAuthProvider, Self::Error>;
-
-    async fn upsert(
-        &mut self,
-        clock: &dyn Clock,
-        id: Ulid,
-        params: UpstreamOAuthProviderParams
-    ) -> Result<UpstreamOAuthProvider, Self::Error>;
-
-    async fn delete(&mut self, provider: UpstreamOAuthProvider) -> Result<(), Self::Error>;
-
-    async fn delete_by_id(&mut self, id: Ulid) -> Result<(), Self::Error>;
-
-    async fn disable(
-        &mut self,
-        clock: &dyn Clock,
-        provider: UpstreamOAuthProvider
-    ) -> Result<UpstreamOAuthProvider, Self::Error>;
-
-    async fn enable(
-        &mut self,
-        provider: UpstreamOAuthProvider
-    ) -> Result<UpstreamOAuthProvider, Self::Error>;
-
-    async fn list(
-        &mut self,
-        filter: UpstreamOAuthProviderFilter<'_>,
-        pagination: Pagination
-    ) -> Result<Page<UpstreamOAuthProvider>, Self::Error>;
-
-    async fn count(
-        &mut self,
-        filter: UpstreamOAuthProviderFilter<'_>
-    ) -> Result<usize, Self::Error>;
-
-    async fn all_enabled(&mut self) -> Result<Vec<UpstreamOAuthProvider>, Self::Error>;
-);

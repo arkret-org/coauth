@@ -1,6 +1,5 @@
 //! Agent key authorization + agent-key-proof replay repository (AKP-0008).
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::Clock;
 use rand_core::RngCore;
@@ -86,117 +85,74 @@ pub struct AgentEventCollisionVariant {
     pub envelope: serde_json::Value,
 }
 
-/// Repository for durable agent key authorizations and the agent-key-proof
-/// single-use replay table.
-#[async_trait]
-pub trait AgentKeyAuthorizationRepository: Send + Sync {
-    /// Backend error type.
-    type Error;
+repository_impl! {
+    /// Repository for durable agent key authorizations and the agent-key-proof
+    /// single-use replay table.
+    pub trait AgentKeyAuthorizationRepository {
+        /// Backend error type.
+        type Error;
 
-    /// Insert a new durable agent key authorization.
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewAgentKeyAuthorization,
-    ) -> Result<AgentKeyAuthorization, Self::Error>;
+        /// Insert a new durable agent key authorization.
+        async fn add(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            params: NewAgentKeyAuthorization,
+        ) -> Result<AgentKeyAuthorization, Self::Error>;
 
-    /// Look up an authorization by its complete content-bound Event id.
-    async fn lookup_by_event_id(
-        &mut self,
-        authorized_event_id: &str,
-    ) -> Result<Option<AgentKeyAuthorization>, Self::Error>;
+        /// Look up an authorization by its complete content-bound Event id.
+        async fn lookup_by_event_id(
+            &mut self,
+            authorized_event_id: &str,
+        ) -> Result<Option<AgentKeyAuthorization>, Self::Error>;
 
-    /// List active (not revoked) authorizations for an agent principal.
-    async fn list_active_for_agent(
-        &mut self,
-        agent_id: &str,
-    ) -> Result<Vec<AgentKeyAuthorization>, Self::Error>;
+        /// List active (not revoked) authorizations for an agent principal.
+        async fn list_active_for_agent(
+            &mut self,
+            agent_id: &str,
+        ) -> Result<Vec<AgentKeyAuthorization>, Self::Error>;
 
-    /// Quarantine an accepted authorization and retain all verified variants
-    /// after a true full-hash Event collision.
-    async fn quarantine_event_collision(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        authorized_event_id: &str,
-        variants: &[AgentEventCollisionVariant],
-    ) -> Result<bool, Self::Error>;
+        /// Quarantine an accepted authorization and retain all verified variants
+        /// after a true full-hash Event collision.
+        async fn quarantine_event_collision(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            authorized_event_id: &str,
+            variants: &[AgentEventCollisionVariant],
+        ) -> Result<bool, Self::Error>;
 
-    /// Revoke every active authorization for an agent principal.
-    async fn revoke_for_agent(
-        &mut self,
-        clock: &dyn Clock,
-        agent_id: &str,
-        reason: &str,
-    ) -> Result<usize, Self::Error>;
+        /// Revoke every active authorization for an agent principal.
+        async fn revoke_for_agent(
+            &mut self,
+            clock: &dyn Clock,
+            agent_id: &str,
+            reason: &str,
+        ) -> Result<usize, Self::Error>;
 
-    /// Mark one authorization as delivered to Soland and atomically revoke
-    /// only the authorization Event ids observed in its signed supersedes set.
-    async fn mark_fanout_delivered_and_revoke(
-        &mut self,
-        clock: &dyn Clock,
-        authorized_event_id: &str,
-        superseded_event_ids: &[String],
-        revoked_reason: &str,
-    ) -> Result<bool, Self::Error>;
+        /// Mark one authorization as delivered to Soland and atomically revoke
+        /// only the authorization Event ids observed in its signed supersedes set.
+        async fn mark_fanout_delivered_and_revoke(
+            &mut self,
+            clock: &dyn Clock,
+            authorized_event_id: &str,
+            superseded_event_ids: &[String],
+            revoked_reason: &str,
+        ) -> Result<bool, Self::Error>;
 
-    /// Atomically consume an agent-key-proof challenge. Returns `true` when
-    /// this call won the single-use insert (the proof has not been seen before
-    /// within its replay window); `false` when the challenge was already
-    /// consumed (replay) and the caller MUST fail closed.
-    async fn consume_proof_challenge(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewAgentSessionProofReplay,
-    ) -> Result<bool, Self::Error>;
+        /// Atomically consume an agent-key-proof challenge. Returns `true` when
+        /// this call won the single-use insert (the proof has not been seen before
+        /// within its replay window); `false` when the challenge was already
+        /// consumed (replay) and the caller MUST fail closed.
+        async fn consume_proof_challenge(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            params: NewAgentSessionProofReplay,
+        ) -> Result<bool, Self::Error>;
 
-    /// Delete replay rows past their prune horizon. Returns the number of rows
-    /// removed.
-    async fn prune_expired_replay(&mut self, clock: &dyn Clock) -> Result<usize, Self::Error>;
+        /// Delete replay rows past their prune horizon. Returns the number of rows
+        /// removed.
+        async fn prune_expired_replay(&mut self, clock: &dyn Clock) -> Result<usize, Self::Error>;
+    }
 }
-
-repository_impl!(AgentKeyAuthorizationRepository:
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewAgentKeyAuthorization,
-    ) -> Result<AgentKeyAuthorization, Self::Error>;
-    async fn lookup_by_event_id(
-        &mut self,
-        authorized_event_id: &str,
-    ) -> Result<Option<AgentKeyAuthorization>, Self::Error>;
-    async fn list_active_for_agent(
-        &mut self,
-        agent_id: &str,
-    ) -> Result<Vec<AgentKeyAuthorization>, Self::Error>;
-    async fn quarantine_event_collision(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        authorized_event_id: &str,
-        variants: &[AgentEventCollisionVariant],
-    ) -> Result<bool, Self::Error>;
-    async fn revoke_for_agent(
-        &mut self,
-        clock: &dyn Clock,
-        agent_id: &str,
-        reason: &str,
-    ) -> Result<usize, Self::Error>;
-    async fn mark_fanout_delivered_and_revoke(
-        &mut self,
-        clock: &dyn Clock,
-        authorized_event_id: &str,
-        superseded_event_ids: &[String],
-        revoked_reason: &str,
-    ) -> Result<bool, Self::Error>;
-    async fn consume_proof_challenge(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewAgentSessionProofReplay,
-    ) -> Result<bool, Self::Error>;
-    async fn prune_expired_replay(&mut self, clock: &dyn Clock) -> Result<usize, Self::Error>;
-);

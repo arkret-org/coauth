@@ -1,7 +1,6 @@
 //! Circle capability grant repository.
 
 use arkret_identifiers::DidCoreId;
-use async_trait::async_trait;
 use coauth_data::Clock;
 use coauth_data::circle_capability::{CapabilityActionId, CircleCapabilityGrant};
 use rand_core::RngCore;
@@ -23,43 +22,29 @@ pub struct NewCircleCapabilityGrant {
     pub granted_by: DidCoreId,
 }
 
-/// Repository for durable Circle capability grants.
-#[async_trait]
-pub trait CircleCapabilityGrantRepository: Send + Sync {
-    /// Backend error type.
-    type Error;
+repository_impl! {
+    /// Repository for durable Circle capability grants.
+    pub trait CircleCapabilityGrantRepository {
+        /// Backend error type.
+        type Error;
 
-    /// Insert a new active grant.
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewCircleCapabilityGrant,
-    ) -> Result<CircleCapabilityGrant, Self::Error>;
+        /// Insert a new active grant.
+        async fn add(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            params: NewCircleCapabilityGrant,
+        ) -> Result<CircleCapabilityGrant, Self::Error>;
 
-    /// List all non-revoked grants.
-    async fn list_active(&mut self) -> Result<Vec<CircleCapabilityGrant>, Self::Error>;
+        /// List all non-revoked grants.
+        async fn list_active(&mut self) -> Result<Vec<CircleCapabilityGrant>, Self::Error>;
 
-    /// Revoke an active grant by row id. Returns `None` when the grant is
-    /// absent or already revoked.
-    async fn revoke_by_id(
-        &mut self,
-        clock: &dyn Clock,
-        grant_id: &str,
-    ) -> Result<Option<CircleCapabilityGrant>, Self::Error>;
+        /// Revoke an active grant by row id. Returns `None` when the grant is
+        /// absent or already revoked.
+        async fn revoke_by_id(
+            &mut self,
+            clock: &dyn Clock,
+            grant_id: &str,
+        ) -> Result<Option<CircleCapabilityGrant>, Self::Error>;
+    }
 }
-
-repository_impl!(CircleCapabilityGrantRepository:
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewCircleCapabilityGrant,
-    ) -> Result<CircleCapabilityGrant, Self::Error>;
-    async fn list_active(&mut self) -> Result<Vec<CircleCapabilityGrant>, Self::Error>;
-    async fn revoke_by_id(
-        &mut self,
-        clock: &dyn Clock,
-        grant_id: &str,
-    ) -> Result<Option<CircleCapabilityGrant>, Self::Error>;
-);

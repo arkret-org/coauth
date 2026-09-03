@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::pagination::{Node, PaginationDirection};
+use coauth_data::pagination::Node;
 use coauth_data::upstream_oauth::{UpstreamOAuthSessionFilter, UpstreamOAuthSessionRepository};
 use coauth_data::{
     BrowserSession, Clock, Page, Pagination, UpstreamOAuthAuthorizationSession,
@@ -367,26 +367,8 @@ impl UpstreamOAuthSessionRepository for PgUpstreamOAuthSessionRepository<'_> {
             );
         }
 
-        // Apply pagination
-        if let Some(after) = pagination.after {
-            query = query.filter(upstream_oauth_authorization_sessions::id.gt(Uuid::from(after)));
-        }
-        if let Some(before) = pagination.before {
-            query = query.filter(upstream_oauth_authorization_sessions::id.lt(Uuid::from(before)));
-        }
-
-        match pagination.direction {
-            PaginationDirection::Forward => {
-                query = query
-                    .order(upstream_oauth_authorization_sessions::id.asc())
-                    .limit((pagination.count + 1) as i64);
-            }
-            PaginationDirection::Backward => {
-                query = query
-                    .order(upstream_oauth_authorization_sessions::id.desc())
-                    .limit((pagination.count + 1) as i64);
-            }
-        }
+        query =
+            crate::paginate_by_id!(query, pagination, upstream_oauth_authorization_sessions::id);
 
         let edges: Vec<SessionLookup> = query.load(self.conn).await?;
 

@@ -15,7 +15,7 @@ use coauth_data::oauth::{
     SessionGrantReserveOutcome, SessionGrantRevokeOutcome, SessionGrantRevokeSelector,
     SessionGrantRevokeTarget,
 };
-use coauth_data::pagination::{Node, PaginationDirection};
+use coauth_data::pagination::Node;
 use coauth_data::{Clock, LocalAccountId, Page, Pagination, SessionGrant, new_id};
 use coauth_oauth_types::scope::{Scope, ScopeToken};
 use diesel::prelude::*;
@@ -439,8 +439,7 @@ fn validate_grant_material(
     operation: &SessionGrantOperation,
     grant: &NewSessionGrant<'_>,
 ) -> Result<(), DatabaseError> {
-    let preimage: SessionGrantIssuancePreimage = serde_json::from_slice(grant.issuance_preimage)
-        .map_err(|_| DatabaseError::invalid_operation())?;
+    let preimage: SessionGrantIssuancePreimage = serde_json::from_slice(grant.issuance_preimage)?;
     preimage
         .validate()
         .map_err(|_| DatabaseError::invalid_operation())?;
@@ -461,19 +460,15 @@ fn validate_grant_material(
     if signature_segment.is_empty() || jwt_parts.next().is_some() {
         return Err(DatabaseError::invalid_operation());
     }
-    let header_bytes = arkret_canonical::base64url_decode(header_segment)
-        .map_err(|_| DatabaseError::invalid_operation())?;
-    let header: Value =
-        serde_json::from_slice(&header_bytes).map_err(|_| DatabaseError::invalid_operation())?;
+    let header_bytes = arkret_canonical::base64url_decode(header_segment)?;
+    let header: Value = serde_json::from_slice(&header_bytes)?;
     let header_kid = header
         .as_object()
         .and_then(|header| header.get("kid"))
         .and_then(Value::as_str)
         .ok_or_else(DatabaseError::invalid_operation)?;
-    let claims_bytes = arkret_canonical::base64url_decode(claims_segment)
-        .map_err(|_| DatabaseError::invalid_operation())?;
-    let claims: SignedSessionGrantClaims =
-        serde_json::from_slice(&claims_bytes).map_err(|_| DatabaseError::invalid_operation())?;
+    let claims_bytes = arkret_canonical::base64url_decode(claims_segment)?;
+    let claims: SignedSessionGrantClaims = serde_json::from_slice(&claims_bytes)?;
     claims
         .validate()
         .map_err(|_| DatabaseError::invalid_operation())?;
@@ -606,11 +601,9 @@ fn validate_refresh_chain(
     successor: &NewSessionGrant<'_>,
 ) -> Result<(), DatabaseError> {
     let predecessor_preimage: SessionGrantIssuancePreimage =
-        serde_json::from_slice(&predecessor.issuance_preimage)
-            .map_err(|_| DatabaseError::invalid_operation())?;
+        serde_json::from_slice(&predecessor.issuance_preimage)?;
     let successor_preimage: SessionGrantIssuancePreimage =
-        serde_json::from_slice(successor.issuance_preimage)
-            .map_err(|_| DatabaseError::invalid_operation())?;
+        serde_json::from_slice(successor.issuance_preimage)?;
     let common_binding_mismatch = predecessor_preimage.issuer_id != successor_preimage.issuer_id
         || predecessor_preimage.account_id != successor_preimage.account_id
         || predecessor_preimage.audience_id != successor_preimage.audience_id
@@ -1060,9 +1053,9 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
             } => Some(serde_json::json!({
                 "predecessor_grant_id": predecessor_grant_id,
             })),
-            SessionGrantOperationDescriptor::Revoke { selector } => Some(
-                serde_json::to_value(selector).map_err(|_| DatabaseError::invalid_operation())?,
-            ),
+            SessionGrantOperationDescriptor::Revoke { selector } => {
+                Some(serde_json::to_value(selector)?)
+            }
         };
         let proof_kind = operation.proof_kind.map(proof_kind_wire).transpose()?;
         if (operation_kind == SessionGrantOperationKind::Issue) != proof_kind.is_some() {
@@ -1578,12 +1571,10 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 }
                 let retained_until = operation.retained_until.max(authorization.proof_expires_at);
                 let wire_outcome = WireSessionRevokeOutcome {
-                    revoked_count: u64::try_from(active_ids.len())
-                        .map_err(|_| DatabaseError::invalid_operation())?,
+                    revoked_count: u64::try_from(active_ids.len())?,
                     revoked_session_grant_ids: active_ids.clone(),
                 };
-                let canonical_response = arkret_canonical::canonical_json_bytes(&wire_outcome)
-                    .map_err(|_| DatabaseError::invalid_operation())?;
+                let canonical_response = arkret_canonical::canonical_json_bytes(&wire_outcome)?;
                 let response_digest = arkret_canonical::sha256_bytes(&canonical_response);
                 let target = match selector {
                     SessionGrantRevokeSelector::Grant(grant_id) => Some(grant_id),
@@ -1691,25 +1682,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
             filter
         );
 
-        if let Some(after) = pagination.after {
-            query = query.filter(oauth_session_grants::id.gt(Uuid::from(after)));
-        }
-        if let Some(before) = pagination.before {
-            query = query.filter(oauth_session_grants::id.lt(Uuid::from(before)));
-        }
-
-        match pagination.direction {
-            PaginationDirection::Forward => {
-                query = query
-                    .order(oauth_session_grants::id.asc())
-                    .limit((pagination.count + 1) as i64);
-            }
-            PaginationDirection::Backward => {
-                query = query
-                    .order(oauth_session_grants::id.desc())
-                    .limit((pagination.count + 1) as i64);
-            }
-        }
+        query = crate::paginate_by_id!(query, pagination, oauth_session_grants::id);
 
         let edges = query.load::<SessionGrantLookup>(self.conn).await?;
         pagination

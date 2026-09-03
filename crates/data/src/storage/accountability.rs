@@ -1,7 +1,6 @@
 //! Accountability grant repository.
 
 use arkret_identifiers::DidCoreId;
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::Clock;
 use rand_core::RngCore;
@@ -45,108 +44,65 @@ pub struct NewAccountabilityGrant {
     pub soland_fanout_dead_letter_reason: Option<String>,
 }
 
-/// Repository for durable accountability grants and their revocation index.
-#[async_trait]
-pub trait AccountabilityGrantRepository: Send + Sync {
-    /// Backend error type.
-    type Error;
+repository_impl! {
+    /// Repository for durable accountability grants and their revocation index.
+    pub trait AccountabilityGrantRepository {
+        /// Backend error type.
+        type Error;
 
-    /// Insert a new durable accountability grant.
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewAccountabilityGrant,
-    ) -> Result<AccountabilityGrant, Self::Error>;
+        /// Insert a new durable accountability grant.
+        async fn add(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            params: NewAccountabilityGrant,
+        ) -> Result<AccountabilityGrant, Self::Error>;
 
-    /// Look up a grant by its wire typed id.
-    async fn lookup_by_grant_id(
-        &mut self,
-        accountability_grant_id: &str,
-    ) -> Result<Option<AccountabilityGrant>, Self::Error>;
+        /// Look up a grant by its wire typed id.
+        async fn lookup_by_grant_id(
+            &mut self,
+            accountability_grant_id: &str,
+        ) -> Result<Option<AccountabilityGrant>, Self::Error>;
 
-    /// Find an active grant for the same controller, agent, and capability set.
-    async fn find_active_by_fingerprint(
-        &mut self,
-        agent_id: &DidCoreId,
-        controller_id: &DidCoreId,
-        capabilities_digest: &str,
-    ) -> Result<Option<AccountabilityGrant>, Self::Error>;
+        /// Find an active grant for the same controller, agent, and capability set.
+        async fn find_active_by_fingerprint(
+            &mut self,
+            agent_id: &DidCoreId,
+            controller_id: &DidCoreId,
+            capabilities_digest: &str,
+        ) -> Result<Option<AccountabilityGrant>, Self::Error>;
 
-    /// List active grants for a controller DID or agent principal id.
-    async fn list_active_for_subject(
-        &mut self,
-        subject_kind: AccountabilitySubjectKind,
-        subject_id: &DidCoreId,
-    ) -> Result<Vec<AccountabilityGrant>, Self::Error>;
+        /// List active grants for a controller DID or agent principal id.
+        async fn list_active_for_subject(
+            &mut self,
+            subject_kind: AccountabilitySubjectKind,
+            subject_id: &DidCoreId,
+        ) -> Result<Vec<AccountabilityGrant>, Self::Error>;
 
-    /// Revoke every active grant associated with a controller or agent subject.
-    async fn revoke_for_subject(
-        &mut self,
-        clock: &dyn Clock,
-        subject_kind: AccountabilitySubjectKind,
-        subject_id: &DidCoreId,
-        reason: &str,
-    ) -> Result<usize, Self::Error>;
+        /// Revoke every active grant associated with a controller or agent subject.
+        async fn revoke_for_subject(
+            &mut self,
+            clock: &dyn Clock,
+            subject_kind: AccountabilitySubjectKind,
+            subject_id: &DidCoreId,
+            reason: &str,
+        ) -> Result<usize, Self::Error>;
 
-    /// Record a subject-level revocation marker.
-    async fn mark_subject_revoked(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        subject_kind: AccountabilitySubjectKind,
-        subject_id: &DidCoreId,
-        reason: &str,
-    ) -> Result<AccountabilitySubjectRevocation, Self::Error>;
+        /// Record a subject-level revocation marker.
+        async fn mark_subject_revoked(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            subject_kind: AccountabilitySubjectKind,
+            subject_id: &DidCoreId,
+            reason: &str,
+        ) -> Result<AccountabilitySubjectRevocation, Self::Error>;
 
-    /// Return whether a subject has an active revocation marker.
-    async fn subject_revoked(
-        &mut self,
-        subject_kind: AccountabilitySubjectKind,
-        subject_id: &DidCoreId,
-    ) -> Result<bool, Self::Error>;
+        /// Return whether a subject has an active revocation marker.
+        async fn subject_revoked(
+            &mut self,
+            subject_kind: AccountabilitySubjectKind,
+            subject_id: &DidCoreId,
+        ) -> Result<bool, Self::Error>;
+    }
 }
-
-repository_impl!(AccountabilityGrantRepository:
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewAccountabilityGrant,
-    ) -> Result<AccountabilityGrant, Self::Error>;
-    async fn lookup_by_grant_id(
-        &mut self,
-        accountability_grant_id: &str,
-    ) -> Result<Option<AccountabilityGrant>, Self::Error>;
-    async fn find_active_by_fingerprint(
-        &mut self,
-        agent_id: &DidCoreId,
-        controller_id: &DidCoreId,
-        capabilities_digest: &str,
-    ) -> Result<Option<AccountabilityGrant>, Self::Error>;
-    async fn list_active_for_subject(
-        &mut self,
-        subject_kind: AccountabilitySubjectKind,
-        subject_id: &DidCoreId,
-    ) -> Result<Vec<AccountabilityGrant>, Self::Error>;
-    async fn revoke_for_subject(
-        &mut self,
-        clock: &dyn Clock,
-        subject_kind: AccountabilitySubjectKind,
-        subject_id: &DidCoreId,
-        reason: &str,
-    ) -> Result<usize, Self::Error>;
-    async fn mark_subject_revoked(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        subject_kind: AccountabilitySubjectKind,
-        subject_id: &DidCoreId,
-        reason: &str,
-    ) -> Result<AccountabilitySubjectRevocation, Self::Error>;
-    async fn subject_revoked(
-        &mut self,
-        subject_kind: AccountabilitySubjectKind,
-        subject_id: &DidCoreId,
-    ) -> Result<bool, Self::Error>;
-);

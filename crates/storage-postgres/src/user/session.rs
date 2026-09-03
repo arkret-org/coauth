@@ -2,7 +2,7 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::pagination::{Node, PaginationDirection};
+use coauth_data::pagination::Node;
 use coauth_data::user::{BrowserSessionFilter, BrowserSessionRepository};
 use coauth_data::{
     Authentication, AuthenticationMethod, BrowserSession, Clock, Page, Pagination, Password,
@@ -425,26 +425,7 @@ impl BrowserSessionRepository for PgBrowserSessionRepository<'_> {
 
         let mut query = apply_session_filter!(query, filter);
 
-        // Apply pagination cursors
-        if let Some(after) = pagination.after {
-            query = query.filter(user_sessions::id.gt(Uuid::from(after)));
-        }
-        if let Some(before) = pagination.before {
-            query = query.filter(user_sessions::id.lt(Uuid::from(before)));
-        }
-
-        match pagination.direction {
-            PaginationDirection::Forward => {
-                query = query
-                    .order(user_sessions::id.asc())
-                    .limit((pagination.count + 1) as i64);
-            }
-            PaginationDirection::Backward => {
-                query = query
-                    .order(user_sessions::id.desc())
-                    .limit((pagination.count + 1) as i64);
-            }
-        }
+        query = crate::paginate_by_id!(query, pagination, user_sessions::id);
 
         let session_rows: Vec<UserSessionRow> = query.load(self.conn).await?;
 

@@ -269,17 +269,15 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
     ) -> Result<OrganizationPrincipalControl, Self::Error> {
         let now = clock.now();
         let id = new_id(now, rng);
-        let supplied_realm_id = arkret_identifiers::RealmId::new(params.principal_control_realm_id)
-            .map_err(|_| DatabaseError::invalid_operation())?;
-        let create_event_id = arkret_identifiers::EventId::new(params.control_stream_ref)
-            .map_err(|_| DatabaseError::invalid_operation())?;
+        let supplied_realm_id =
+            arkret_identifiers::RealmId::new(params.principal_control_realm_id)?;
+        let create_event_id = arkret_identifiers::EventId::new(params.control_stream_ref)?;
         let principal_control_realm_id =
             arkret_identifiers::RealmId::from_event_id(&create_event_id);
         let organization_id = params.organization_id;
         let organization_did = params.organization_did;
         let projected_organization_id =
-            arkret_identifiers::project_did_to_core_id(&organization_did)
-                .map_err(|_| DatabaseError::invalid_operation())?;
+            arkret_identifiers::project_did_to_core_id(&organization_did)?;
         if organization_id != projected_organization_id {
             return Err(DatabaseError::invalid_operation());
         }

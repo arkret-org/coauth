@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use coauth_data::{
     BrowserSession, Clock, UpstreamOAuthAuthorizationSession, UpstreamOAuthLink,
     UpstreamOAuthProvider,
@@ -70,205 +69,156 @@ impl<'a> UpstreamOAuthSessionFilter<'a> {
     }
 }
 
-/// An [`UpstreamOAuthSessionRepository`] helps interacting with
-/// [`UpstreamOAuthAuthorizationSession`] saved in the storage backend
-#[async_trait]
-pub trait UpstreamOAuthSessionRepository: Send + Sync {
-    /// The error type returned by the repository
-    type Error;
+repository_impl! {
+    /// An [`UpstreamOAuthSessionRepository`] helps interacting with
+    /// [`UpstreamOAuthAuthorizationSession`] saved in the storage backend
+    pub trait UpstreamOAuthSessionRepository {
+        /// The error type returned by the repository
+        type Error;
 
-    /// Lookup a session by its ID
-    ///
-    /// Returns `None` if the session does not exist
-    ///
-    /// # Parameters
-    ///
-    /// * `id`: the ID of the session to lookup
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn lookup(
-        &mut self,
-        id: Ulid,
-    ) -> Result<Option<UpstreamOAuthAuthorizationSession>, Self::Error>;
+        /// Lookup a session by its ID
+        ///
+        /// Returns `None` if the session does not exist
+        ///
+        /// # Parameters
+        ///
+        /// * `id`: the ID of the session to lookup
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn lookup(
+            &mut self,
+            id: Ulid,
+        ) -> Result<Option<UpstreamOAuthAuthorizationSession>, Self::Error>;
 
-    /// Add a session to the database
-    ///
-    /// Returns the newly created session
-    ///
-    /// # Parameters
-    ///
-    /// * `rng`: the random number generator to use
-    /// * `clock`: the clock source
-    /// * `upstream_oauth_provider`: the upstream OAuth provider for which to create the session
-    /// * `state`: the authorization grant `state` parameter sent to the upstream OAuth provider
-    /// * `code_challenge_verifier`: the code challenge verifier used in this session, if PKCE is
-    ///   being used
-    /// * `nonce`: the `nonce` used in this session if in OIDC mode
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        upstream_oauth_provider: &UpstreamOAuthProvider,
-        state: String,
-        code_challenge_verifier: Option<String>,
-        nonce: Option<String>,
-    ) -> Result<UpstreamOAuthAuthorizationSession, Self::Error>;
+        /// Add a session to the database
+        ///
+        /// Returns the newly created session
+        ///
+        /// # Parameters
+        ///
+        /// * `rng`: the random number generator to use
+        /// * `clock`: the clock source
+        /// * `upstream_oauth_provider`: the upstream OAuth provider for which to create the session
+        /// * `state`: the authorization grant `state` parameter sent to the upstream OAuth provider
+        /// * `code_challenge_verifier`: the code challenge verifier used in this session, if PKCE is
+        ///   being used
+        /// * `nonce`: the `nonce` used in this session if in OIDC mode
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn add(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            upstream_oauth_provider: &UpstreamOAuthProvider,
+            state: String,
+            code_challenge_verifier: Option<String>,
+            nonce: Option<String>,
+        ) -> Result<UpstreamOAuthAuthorizationSession, Self::Error>;
 
-    /// Mark a session as completed and associate the given link
-    ///
-    /// Returns the updated session
-    ///
-    /// # Parameters
-    ///
-    /// * `clock`: the clock source
-    /// * `upstream_oauth_authorization_session`: the session to update
-    /// * `upstream_oauth_link`: the link to associate with the session
-    /// * `id_token`: the ID token returned by the upstream OAuth provider, if present
-    /// * `id_token_claims`: the claims contained in the ID token, if present
-    /// * `extra_callback_parameters`: the extra query parameters returned in the callback, if any
-    /// * `userinfo`: the user info returned by the upstream OAuth provider, if requested
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    #[expect(clippy::too_many_arguments)]
-    async fn complete_with_link(
-        &mut self,
-        clock: &dyn Clock,
-        upstream_oauth_authorization_session: UpstreamOAuthAuthorizationSession,
-        upstream_oauth_link: &UpstreamOAuthLink,
-        id_token: Option<String>,
-        id_token_claims: Option<serde_json::Value>,
-        extra_callback_parameters: Option<serde_json::Value>,
-        userinfo: Option<serde_json::Value>,
-    ) -> Result<UpstreamOAuthAuthorizationSession, Self::Error>;
+        /// Mark a session as completed and associate the given link
+        ///
+        /// Returns the updated session
+        ///
+        /// # Parameters
+        ///
+        /// * `clock`: the clock source
+        /// * `upstream_oauth_authorization_session`: the session to update
+        /// * `upstream_oauth_link`: the link to associate with the session
+        /// * `id_token`: the ID token returned by the upstream OAuth provider, if present
+        /// * `id_token_claims`: the claims contained in the ID token, if present
+        /// * `extra_callback_parameters`: the extra query parameters returned in the callback, if any
+        /// * `userinfo`: the user info returned by the upstream OAuth provider, if requested
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        #[expect(clippy::too_many_arguments)]
+        async fn complete_with_link(
+            &mut self,
+            clock: &dyn Clock,
+            upstream_oauth_authorization_session: UpstreamOAuthAuthorizationSession,
+            upstream_oauth_link: &UpstreamOAuthLink,
+            id_token: Option<String>,
+            id_token_claims: Option<serde_json::Value>,
+            extra_callback_parameters: Option<serde_json::Value>,
+            userinfo: Option<serde_json::Value>,
+        ) -> Result<UpstreamOAuthAuthorizationSession, Self::Error>;
 
-    /// Mark a session as consumed
-    ///
-    /// Returns the updated session
-    ///
-    /// # Parameters
-    ///
-    /// * `clock`: the clock source
-    /// * `upstream_oauth_authorization_session`: the session to consume
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn consume(
-        &mut self,
-        clock: &dyn Clock,
-        upstream_oauth_authorization_session: UpstreamOAuthAuthorizationSession,
-        browser_session: &BrowserSession,
-    ) -> Result<UpstreamOAuthAuthorizationSession, Self::Error>;
+        /// Mark a session as consumed
+        ///
+        /// Returns the updated session
+        ///
+        /// # Parameters
+        ///
+        /// * `clock`: the clock source
+        /// * `upstream_oauth_authorization_session`: the session to consume
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn consume(
+            &mut self,
+            clock: &dyn Clock,
+            upstream_oauth_authorization_session: UpstreamOAuthAuthorizationSession,
+            browser_session: &BrowserSession,
+        ) -> Result<UpstreamOAuthAuthorizationSession, Self::Error>;
 
-    /// List [`UpstreamOAuthAuthorizationSession`] with the given filter and
-    /// pagination
-    ///
-    /// # Parameters
-    ///
-    /// * `filter`: The filter to apply
-    /// * `pagination`: The pagination parameters
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn list(
-        &mut self,
-        filter: UpstreamOAuthSessionFilter<'_>,
-        pagination: Pagination,
-    ) -> Result<Page<UpstreamOAuthAuthorizationSession>, Self::Error>;
+        /// List [`UpstreamOAuthAuthorizationSession`] with the given filter and
+        /// pagination
+        ///
+        /// # Parameters
+        ///
+        /// * `filter`: The filter to apply
+        /// * `pagination`: The pagination parameters
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn list(
+            &mut self,
+            filter: UpstreamOAuthSessionFilter<'_>,
+            pagination: Pagination,
+        ) -> Result<Page<UpstreamOAuthAuthorizationSession>, Self::Error>;
 
-    /// Count the number of [`UpstreamOAuthAuthorizationSession`] with the given
-    /// filter
-    ///
-    /// # Parameters
-    ///
-    /// * `filter`: The filter to apply
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn count(&mut self, filter: UpstreamOAuthSessionFilter<'_>)
-    -> Result<usize, Self::Error>;
+        /// Count the number of [`UpstreamOAuthAuthorizationSession`] with the given
+        /// filter
+        ///
+        /// # Parameters
+        ///
+        /// * `filter`: The filter to apply
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn count(&mut self, filter: UpstreamOAuthSessionFilter<'_>)
+        -> Result<usize, Self::Error>;
 
-    /// Cleanup old authorization sessions that are not linked to a user session
-    ///
-    /// This will delete sessions with IDs up to and including `until`.
-    /// Authorization sessions with a user session linked must be kept around to
-    /// avoid breaking features like OIDC Backchannel Logout.
-    ///
-    /// Returns the number of sessions deleted and the cursor for the next batch
-    ///
-    /// # Parameters
-    ///
-    /// * `since`: The cursor to start from (exclusive), or `None` to start from the beginning
-    /// * `until`: The maximum ULID to delete (inclusive upper bound)
-    /// * `limit`: The maximum number of sessions to delete in this batch
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn cleanup_orphaned(
-        &mut self,
-        since: Option<Ulid>,
-        until: Ulid,
-        limit: usize,
-    ) -> Result<(usize, Option<Ulid>), Self::Error>;
+        /// Cleanup old authorization sessions that are not linked to a user session
+        ///
+        /// This will delete sessions with IDs up to and including `until`.
+        /// Authorization sessions with a user session linked must be kept around to
+        /// avoid breaking features like OIDC Backchannel Logout.
+        ///
+        /// Returns the number of sessions deleted and the cursor for the next batch
+        ///
+        /// # Parameters
+        ///
+        /// * `since`: The cursor to start from (exclusive), or `None` to start from the beginning
+        /// * `until`: The maximum ULID to delete (inclusive upper bound)
+        /// * `limit`: The maximum number of sessions to delete in this batch
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn cleanup_orphaned(
+            &mut self,
+            since: Option<Ulid>,
+            until: Ulid,
+            limit: usize,
+        ) -> Result<(usize, Option<Ulid>), Self::Error>;
+    }
 }
-
-repository_impl!(UpstreamOAuthSessionRepository:
-    async fn lookup(
-        &mut self,
-        id: Ulid,
-    ) -> Result<Option<UpstreamOAuthAuthorizationSession>, Self::Error>;
-
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        upstream_oauth_provider: &UpstreamOAuthProvider,
-        state: String,
-        code_challenge_verifier: Option<String>,
-        nonce: Option<String>,
-    ) -> Result<UpstreamOAuthAuthorizationSession, Self::Error>;
-
-    async fn complete_with_link(
-        &mut self,
-        clock: &dyn Clock,
-        upstream_oauth_authorization_session: UpstreamOAuthAuthorizationSession,
-        upstream_oauth_link: &UpstreamOAuthLink,
-        id_token: Option<String>,
-        id_token_claims: Option<serde_json::Value>,
-        extra_callback_parameters: Option<serde_json::Value>,
-        userinfo: Option<serde_json::Value>,
-    ) -> Result<UpstreamOAuthAuthorizationSession, Self::Error>;
-
-    async fn consume(
-        &mut self,
-        clock: &dyn Clock,
-        upstream_oauth_authorization_session: UpstreamOAuthAuthorizationSession,
-        browser_session: &BrowserSession,
-    ) -> Result<UpstreamOAuthAuthorizationSession, Self::Error>;
-
-    async fn list(
-        &mut self,
-        filter: UpstreamOAuthSessionFilter<'_>,
-        pagination: Pagination,
-    ) -> Result<Page<UpstreamOAuthAuthorizationSession>, Self::Error>;
-
-    async fn count(&mut self, filter: UpstreamOAuthSessionFilter<'_>) -> Result<usize, Self::Error>;
-
-    async fn cleanup_orphaned(
-        &mut self,
-        since: Option<Ulid>,
-        until: Ulid,
-        limit: usize,
-    ) -> Result<(usize, Option<Ulid>), Self::Error>;
-);

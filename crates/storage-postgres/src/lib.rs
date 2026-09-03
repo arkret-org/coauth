@@ -16,6 +16,52 @@ diesel::define_sql_function! {
     fn lower(x: diesel::sql_types::Text) -> diesel::sql_types::Text;
 }
 
+/// Apply a [`Pagination`] cursor window and its direction-dependent ordering
+/// to a boxed diesel query keyed on a ULID-valued `id` column.
+///
+/// Every paginated repository does the same three things, in the same order:
+/// clamp to the `after`/`before` cursor window, order by the key column in the
+/// direction being walked, and over-fetch one row so
+/// [`Pagination::process`] can tell whether another page exists. Writing that
+/// out per repository is what produced eleven byte-identical copies of the
+/// same `match pagination.direction` block.
+///
+/// The over-fetch of `count + 1` is load-bearing and belongs here rather than
+/// at the call site: [`Pagination::process`] pops the extra row and reports it
+/// as `has_next_page`/`has_previous_page`, so a caller that forgot the `+ 1`
+/// would silently lose the last row of every page.
+///
+/// [`Pagination`]: coauth_data::pagination::Pagination
+/// [`Pagination::process`]: coauth_data::pagination::Pagination::process
+macro_rules! paginate_by_id {
+    ($query:expr, $pagination:expr, $id_column:expr $(,)?) => {{
+        let mut query = $query;
+        if let Some(after) = $pagination.after {
+            query = query.filter($id_column.gt(::uuid::Uuid::from(after)));
+        }
+        if let Some(before) = $pagination.before {
+            query = query.filter($id_column.lt(::uuid::Uuid::from(before)));
+        }
+
+        match $pagination.direction {
+            ::coauth_data::pagination::PaginationDirection::Forward => {
+                query = query
+                    .order($id_column.asc())
+                    .limit(($pagination.count + 1) as i64);
+            }
+            ::coauth_data::pagination::PaginationDirection::Backward => {
+                query = query
+                    .order($id_column.desc())
+                    .limit(($pagination.count + 1) as i64);
+            }
+        }
+
+        query
+    }};
+}
+
+pub(crate) use paginate_by_id;
+
 /// PostgreSQL account aggregate repositories.
 pub mod account;
 pub mod account_handoff;

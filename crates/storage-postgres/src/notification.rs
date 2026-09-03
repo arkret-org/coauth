@@ -365,8 +365,7 @@ impl NotificationRepository for PgNotificationRepository<'_> {
         tracing::Span::current().record("notification_request.id", tracing::field::display(id));
 
         let scheduled_at = params.scheduled_at().unwrap_or(created_at);
-        let source =
-            serde_json::to_value(params.source()).map_err(DatabaseError::to_invalid_operation)?;
+        let source = serde_json::to_value(params.source())?;
 
         let row = NewNotificationRequestRow {
             id: Uuid::from(id),
@@ -565,8 +564,7 @@ impl NotificationRepository for PgNotificationRepository<'_> {
             id: Uuid::from(id),
             notification_request_id: Uuid::from(notification_request.id),
             channel: channel_to_db(params.channel()).to_owned(),
-            destination: serde_json::to_value(params.destination())
-                .map_err(DatabaseError::to_invalid_operation)?,
+            destination: serde_json::to_value(params.destination())?,
             provider_binding_key: params.provider_binding_key().map(ToOwned::to_owned),
             provider_message_id: None,
             attempt_count: 0,
@@ -795,8 +793,7 @@ impl NotificationRepository for PgNotificationRepository<'_> {
             notification_request_id: Uuid::from(notification_request.id),
             notification_delivery_id: notification_delivery.map(|delivery| Uuid::from(delivery.id)),
             kind: event_kind_to_db(params.kind()).to_owned(),
-            actor: serde_json::to_value(params.actor())
-                .map_err(DatabaseError::to_invalid_operation)?,
+            actor: serde_json::to_value(params.actor())?,
             summary: params.summary().map(ToOwned::to_owned),
             audit_context: params.audit_context().clone(),
             occurred_at,
@@ -940,8 +937,7 @@ async fn persist_delivery(
             .last_failure
             .as_ref()
             .map(serde_json::to_value)
-            .transpose()
-            .map_err(DatabaseError::to_invalid_operation)?),
+            .transpose()?),
         notification_deliveries::reserved_at.eq(notification_delivery.reserved_at),
         notification_deliveries::sent_at.eq(notification_delivery.sent_at),
         notification_deliveries::delivered_at.eq(notification_delivery.delivered_at),

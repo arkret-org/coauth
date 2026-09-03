@@ -1,6 +1,5 @@
 //! Repositories to interact with all kinds of sessions
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::{BrowserSession, Clock, Session, User};
 
@@ -128,72 +127,56 @@ impl<'a> AppSessionFilter<'a> {
     }
 }
 
-/// A [`AppSessionRepository`] helps interacting with
-/// OAuth [`Session`] saved in the storage backend
-#[async_trait]
-pub trait AppSessionRepository: Send + Sync {
-    /// The error type returned by the repository
-    type Error;
+repository_impl! {
+    /// A [`AppSessionRepository`] helps interacting with
+    /// OAuth [`Session`] saved in the storage backend
+    pub trait AppSessionRepository {
+        /// The error type returned by the repository
+        type Error;
 
-    /// List [`AppSession`] with the given filter and pagination
-    ///
-    /// Returns a page of [`AppSession`] matching the given filter
-    ///
-    /// # Parameters
-    ///
-    /// * `filter`: The filter to apply
-    /// * `pagination`: The pagination parameters
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn list(
-        &mut self,
-        filter: AppSessionFilter<'_>,
-        pagination: Pagination,
-    ) -> Result<Page<AppSession>, Self::Error>;
+        /// List [`AppSession`] with the given filter and pagination
+        ///
+        /// Returns a page of [`AppSession`] matching the given filter
+        ///
+        /// # Parameters
+        ///
+        /// * `filter`: The filter to apply
+        /// * `pagination`: The pagination parameters
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn list(
+            &mut self,
+            filter: AppSessionFilter<'_>,
+            pagination: Pagination,
+        ) -> Result<Page<AppSession>, Self::Error>;
 
-    /// Count the number of [`AppSession`] with the given filter
-    ///
-    /// # Parameters
-    ///
-    /// * `filter`: The filter to apply
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn count(&mut self, filter: AppSessionFilter<'_>) -> Result<usize, Self::Error>;
+        /// Count the number of [`AppSession`] with the given filter
+        ///
+        /// # Parameters
+        ///
+        /// * `filter`: The filter to apply
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn count(&mut self, filter: AppSessionFilter<'_>) -> Result<usize, Self::Error>;
 
-    /// Finishes any application sessions that are using the specified device's
-    /// ID.
-    ///
-    /// This is intended for logging in using an existing device ID (i.e.
-    /// replacing a device).
-    ///
-    /// Should be called *before* creating a new session for the device.
-    ///
-    /// Returns true if a session was finished.
-    async fn finish_sessions_to_replace_device(
-        &mut self,
-        clock: &dyn Clock,
-        user: &User,
-        device: &str,
-    ) -> Result<bool, Self::Error>;
+        /// Finishes any application sessions that are using the specified device's
+        /// ID.
+        ///
+        /// This is intended for logging in using an existing device ID (i.e.
+        /// replacing a device).
+        ///
+        /// Should be called *before* creating a new session for the device.
+        ///
+        /// Returns true if a session was finished.
+        async fn finish_sessions_to_replace_device(
+            &mut self,
+            clock: &dyn Clock,
+            user: &User,
+            device: &str,
+        ) -> Result<bool, Self::Error>;
+    }
 }
-
-repository_impl!(AppSessionRepository:
-    async fn list(
-        &mut self,
-        filter: AppSessionFilter<'_>,
-        pagination: Pagination,
-    ) -> Result<Page<AppSession>, Self::Error>;
-
-    async fn count(&mut self, filter: AppSessionFilter<'_>) -> Result<usize, Self::Error>;
-
-    async fn finish_sessions_to_replace_device(
-        &mut self,
-        clock: &dyn Clock,
-        user: &User,
-        device: &str,
-    ) -> Result<bool, Self::Error>;
-);

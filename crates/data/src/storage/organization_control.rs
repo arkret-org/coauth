@@ -4,7 +4,6 @@ use arkret_identifiers::{Did, DidCoreId, EventId, Hash};
 use arkret_models_collaboration::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
 };
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::Clock;
 use coauth_data::organization_control::{
@@ -84,120 +83,75 @@ pub struct NewOrganizationDelegation {
     pub created_by: DidCoreId,
 }
 
-/// Repository for organization principal control state and delegations.
-#[async_trait]
-pub trait OrganizationControlRepository: Send + Sync {
-    /// Backend error type.
-    type Error;
+repository_impl! {
+    /// Repository for organization principal control state and delegations.
+    pub trait OrganizationControlRepository {
+        /// Backend error type.
+        type Error;
 
-    /// Persist a freshly-bootstrapped organization principal control row. The
-    /// `(organization_id)` unique constraint surfaces a re-bootstrap attempt
-    /// as an error.
-    async fn bootstrap(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewOrganizationPrincipalControl,
-    ) -> Result<OrganizationPrincipalControl, Self::Error>;
+        /// Persist a freshly-bootstrapped organization principal control row. The
+        /// `(organization_id)` unique constraint surfaces a re-bootstrap attempt
+        /// as an error.
+        async fn bootstrap(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            params: NewOrganizationPrincipalControl,
+        ) -> Result<OrganizationPrincipalControl, Self::Error>;
 
-    /// Fetch the control row for a stable organization identity.
-    async fn get_control_by_id(
-        &mut self,
-        organization_id: &DidCoreId,
-    ) -> Result<Option<OrganizationPrincipalControl>, Self::Error>;
+        /// Fetch the control row for a stable organization identity.
+        async fn get_control_by_id(
+            &mut self,
+            organization_id: &DidCoreId,
+        ) -> Result<Option<OrganizationPrincipalControl>, Self::Error>;
 
-    /// Atomically replace the organization's control state with the state a
-    /// rotation declares. Returns `None` when the org is unknown.
-    async fn replace_control_state(
-        &mut self,
-        clock: &dyn Clock,
-        organization_id: &DidCoreId,
-        rotated: RotatedOrganizationControl,
-    ) -> Result<Option<OrganizationPrincipalControl>, Self::Error>;
+        /// Atomically replace the organization's control state with the state a
+        /// rotation declares. Returns `None` when the org is unknown.
+        async fn replace_control_state(
+            &mut self,
+            clock: &dyn Clock,
+            organization_id: &DidCoreId,
+            rotated: RotatedOrganizationControl,
+        ) -> Result<Option<OrganizationPrincipalControl>, Self::Error>;
 
-    /// Record a new active delegation. The `(delegation_ref)` unique
-    /// constraint surfaces duplicates as an error.
-    async fn add_delegation(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewOrganizationDelegation,
-    ) -> Result<OrganizationDelegation, Self::Error>;
+        /// Record a new active delegation. The `(delegation_ref)` unique
+        /// constraint surfaces duplicates as an error.
+        async fn add_delegation(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            params: NewOrganizationDelegation,
+        ) -> Result<OrganizationDelegation, Self::Error>;
 
-    /// Resolve a delegation by its `delegation_ref`.
-    async fn get_delegation_by_ref(
-        &mut self,
-        delegation_ref: &str,
-    ) -> Result<Option<OrganizationDelegation>, Self::Error>;
+        /// Resolve a delegation by its `delegation_ref`.
+        async fn get_delegation_by_ref(
+            &mut self,
+            delegation_ref: &str,
+        ) -> Result<Option<OrganizationDelegation>, Self::Error>;
 
-    /// List all delegations anchored to a stable organization identity, newest first.
-    async fn list_delegations_for_org(
-        &mut self,
-        organization_id: &DidCoreId,
-    ) -> Result<Vec<OrganizationDelegation>, Self::Error>;
+        /// List all delegations anchored to a stable organization identity, newest first.
+        async fn list_delegations_for_org(
+            &mut self,
+            organization_id: &DidCoreId,
+        ) -> Result<Vec<OrganizationDelegation>, Self::Error>;
 
-    /// Revoke an active delegation by `delegation_ref`. Returns `None` when the
-    /// delegation is absent or already revoked.
-    async fn revoke_delegation(
-        &mut self,
-        clock: &dyn Clock,
-        organization_id: &DidCoreId,
-        delegation_ref: &str,
-    ) -> Result<Option<OrganizationDelegation>, Self::Error>;
+        /// Revoke an active delegation by `delegation_ref`. Returns `None` when the
+        /// delegation is absent or already revoked.
+        async fn revoke_delegation(
+            &mut self,
+            clock: &dyn Clock,
+            organization_id: &DidCoreId,
+            delegation_ref: &str,
+        ) -> Result<Option<OrganizationDelegation>, Self::Error>;
 
-    /// Extend the validity window of an active delegation. Returns `None` when
-    /// the delegation is absent or revoked.
-    async fn renew_delegation(
-        &mut self,
-        clock: &dyn Clock,
-        organization_id: &DidCoreId,
-        delegation_ref: &str,
-        valid_until: Option<DateTime<Utc>>,
-    ) -> Result<Option<OrganizationDelegation>, Self::Error>;
+        /// Extend the validity window of an active delegation. Returns `None` when
+        /// the delegation is absent or revoked.
+        async fn renew_delegation(
+            &mut self,
+            clock: &dyn Clock,
+            organization_id: &DidCoreId,
+            delegation_ref: &str,
+            valid_until: Option<DateTime<Utc>>,
+        ) -> Result<Option<OrganizationDelegation>, Self::Error>;
+    }
 }
-
-repository_impl!(OrganizationControlRepository:
-    async fn bootstrap(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewOrganizationPrincipalControl,
-    ) -> Result<OrganizationPrincipalControl, Self::Error>;
-    async fn get_control_by_id(
-        &mut self,
-        organization_id: &DidCoreId,
-    ) -> Result<Option<OrganizationPrincipalControl>, Self::Error>;
-    async fn replace_control_state(
-        &mut self,
-        clock: &dyn Clock,
-        organization_id: &DidCoreId,
-        rotated: RotatedOrganizationControl,
-    ) -> Result<Option<OrganizationPrincipalControl>, Self::Error>;
-    async fn add_delegation(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewOrganizationDelegation,
-    ) -> Result<OrganizationDelegation, Self::Error>;
-    async fn get_delegation_by_ref(
-        &mut self,
-        delegation_ref: &str,
-    ) -> Result<Option<OrganizationDelegation>, Self::Error>;
-    async fn list_delegations_for_org(
-        &mut self,
-        organization_id: &DidCoreId,
-    ) -> Result<Vec<OrganizationDelegation>, Self::Error>;
-    async fn revoke_delegation(
-        &mut self,
-        clock: &dyn Clock,
-        organization_id: &DidCoreId,
-        delegation_ref: &str,
-    ) -> Result<Option<OrganizationDelegation>, Self::Error>;
-    async fn renew_delegation(
-        &mut self,
-        clock: &dyn Clock,
-        organization_id: &DidCoreId,
-        delegation_ref: &str,
-        valid_until: Option<DateTime<Utc>>,
-    ) -> Result<Option<OrganizationDelegation>, Self::Error>;
-);

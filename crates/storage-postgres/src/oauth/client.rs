@@ -424,11 +424,7 @@ impl OAuthClientRepository for PgOAuthClientRepository<'_> {
         let id = new_id(now, rng);
         tracing::Span::current().record("client.id", tracing::field::display(id));
 
-        let jwks_json = jwks
-            .as_ref()
-            .map(serde_json::to_value)
-            .transpose()
-            .map_err(DatabaseError::to_invalid_operation)?;
+        let jwks_json = jwks.as_ref().map(serde_json::to_value).transpose()?;
 
         let redirect_uris_array = redirect_uris.iter().map(Url::to_string).collect::<Vec<_>>();
 
@@ -521,11 +517,7 @@ impl OAuthClientRepository for PgOAuthClientRepository<'_> {
         jwks_uri: Option<Url>,
         redirect_uris: Vec<Url>,
     ) -> Result<Client, Self::Error> {
-        let jwks_json = jwks
-            .as_ref()
-            .map(serde_json::to_value)
-            .transpose()
-            .map_err(DatabaseError::to_invalid_operation)?;
+        let jwks_json = jwks.as_ref().map(serde_json::to_value).transpose()?;
 
         let client_auth_method_str = client_auth_method.to_string();
         let redirect_uris_array = redirect_uris.iter().map(Url::to_string).collect::<Vec<_>>();
@@ -880,8 +872,7 @@ impl OAuthClientRepository for PgOAuthClientRepository<'_> {
             );
         }
 
-        let new_value =
-            serde_json::to_value(&current).map_err(crate::DatabaseError::to_invalid_operation)?;
+        let new_value = serde_json::to_value(&current)?;
 
         diesel::update(oauth_clients::table.find(client_uuid))
             .set(oauth_clients::i18n.eq(new_value))

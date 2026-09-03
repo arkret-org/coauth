@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::pagination::{Node, PaginationDirection};
+use coauth_data::pagination::Node;
 use coauth_data::upstream_oauth::{UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository};
 use coauth_data::{
     Clock, Page, Pagination, UpstreamOAuthLink, UpstreamOAuthLinkPatch, UpstreamOAuthProvider,
@@ -315,26 +315,7 @@ impl UpstreamOAuthLinkRepository for PgUpstreamOAuthLinkRepository<'_> {
             query = query.filter(upstream_oauth_links::subject.eq(subject));
         }
 
-        // Apply pagination
-        if let Some(after) = pagination.after {
-            query = query.filter(upstream_oauth_links::id.gt(Uuid::from(after)));
-        }
-        if let Some(before) = pagination.before {
-            query = query.filter(upstream_oauth_links::id.lt(Uuid::from(before)));
-        }
-
-        match pagination.direction {
-            PaginationDirection::Forward => {
-                query = query
-                    .order(upstream_oauth_links::id.asc())
-                    .limit((pagination.count + 1) as i64);
-            }
-            PaginationDirection::Backward => {
-                query = query
-                    .order(upstream_oauth_links::id.desc())
-                    .limit((pagination.count + 1) as i64);
-            }
-        }
+        query = crate::paginate_by_id!(query, pagination, upstream_oauth_links::id);
 
         let edges: Vec<LinkLookup> = query.load(self.conn).await?;
 

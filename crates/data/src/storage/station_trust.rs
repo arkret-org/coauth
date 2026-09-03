@@ -6,7 +6,6 @@
 //! endpoint, plus the WebVH anti-rollback floor verified at enrollment time.
 //! Public `/_arkret/describe` responses can never create or replace them.
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rand_core::RngCore;
 use ulid::Ulid;
@@ -170,116 +169,74 @@ pub struct StationTrustAudit {
     pub created_at: DateTime<Utc>,
 }
 
-/// Repository accessor for Station trust enrollments and their
-/// append-only audit log.
-#[async_trait]
-pub trait StationTrustRepository: Send + Sync {
-    /// Backend error type.
-    type Error;
+repository_impl! {
+    /// Repository accessor for Station trust enrollments and their
+    /// append-only audit log.
+    pub trait StationTrustRepository {
+        /// Backend error type.
+        type Error;
 
-    /// Look up the enrollment for a canonical endpoint.
-    async fn find_by_endpoint(
-        &mut self,
-        canonical_endpoint: &str,
-    ) -> Result<Option<StationTrustEnrollment>, Self::Error>;
+        /// Look up the enrollment for a canonical endpoint.
+        async fn find_by_endpoint(
+            &mut self,
+            canonical_endpoint: &str,
+        ) -> Result<Option<StationTrustEnrollment>, Self::Error>;
 
-    /// Look up an enrollment by its operator-facing name.
-    async fn find_by_name(
-        &mut self,
-        name: &str,
-    ) -> Result<Option<StationTrustEnrollment>, Self::Error>;
+        /// Look up an enrollment by its operator-facing name.
+        async fn find_by_name(
+            &mut self,
+            name: &str,
+        ) -> Result<Option<StationTrustEnrollment>, Self::Error>;
 
-    /// Insert a new enrollment. Relies on the database unique constraints so
-    /// concurrent bootstraps converge on a single identity.
-    async fn enroll(
-        &mut self,
-        clock: &dyn Clock,
-        params: NewStationTrustEnrollment,
-    ) -> Result<StationTrustEnrollment, Self::Error>;
+        /// Insert a new enrollment. Relies on the database unique constraints so
+        /// concurrent bootstraps converge on a single identity.
+        async fn enroll(
+            &mut self,
+            clock: &dyn Clock,
+            params: NewStationTrustEnrollment,
+        ) -> Result<StationTrustEnrollment, Self::Error>;
 
-    /// Compare-and-swap replacement of an existing enrollment: the update
-    /// only applies when the stored `service_id` still equals
-    /// `expected_old_service_id`. Returns `false` when the expectation did
-    /// not match (concurrent replacement or drift).
-    async fn replace(
-        &mut self,
-        clock: &dyn Clock,
-        name: &str,
-        expected_old_service_id: &arkret_identifiers::DidCoreId,
-        params: NewStationTrustEnrollment,
-    ) -> Result<bool, Self::Error>;
+        /// Compare-and-swap replacement of an existing enrollment: the update
+        /// only applies when the stored `service_id` still equals
+        /// `expected_old_service_id`. Returns `false` when the expectation did
+        /// not match (concurrent replacement or drift).
+        async fn replace(
+            &mut self,
+            clock: &dyn Clock,
+            name: &str,
+            expected_old_service_id: &arkret_identifiers::DidCoreId,
+            params: NewStationTrustEnrollment,
+        ) -> Result<bool, Self::Error>;
 
-    /// Advance the anti-rollback floor and `last_verified_at` after a
-    /// successful online re-verification of the pinned identity. Returns
-    /// `false` when no enrollment exists for the endpoint.
-    async fn record_verification(
-        &mut self,
-        clock: &dyn Clock,
-        canonical_endpoint: &str,
-        method_history_head: &str,
-        version_id: &str,
-        resolution_record_digest: &str,
-    ) -> Result<bool, Self::Error>;
+        /// Advance the anti-rollback floor and `last_verified_at` after a
+        /// successful online re-verification of the pinned identity. Returns
+        /// `false` when no enrollment exists for the endpoint.
+        async fn record_verification(
+            &mut self,
+            clock: &dyn Clock,
+            canonical_endpoint: &str,
+            method_history_head: &str,
+            version_id: &str,
+            resolution_record_digest: &str,
+        ) -> Result<bool, Self::Error>;
 
-    /// Delete an enrollment (explicit operator revocation). Returns `false`
-    /// when no enrollment with that name exists.
-    async fn revoke(&mut self, name: &str) -> Result<bool, Self::Error>;
+        /// Delete an enrollment (explicit operator revocation). Returns `false`
+        /// when no enrollment with that name exists.
+        async fn revoke(&mut self, name: &str) -> Result<bool, Self::Error>;
 
-    /// Append an audit entry. There is no update or delete by design.
-    async fn record_audit(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewStationTrustAudit,
-    ) -> Result<StationTrustAudit, Self::Error>;
+        /// Append an audit entry. There is no update or delete by design.
+        async fn record_audit(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            params: NewStationTrustAudit,
+        ) -> Result<StationTrustAudit, Self::Error>;
 
-    /// List audit entries for one enrollment, newest first.
-    async fn list_audits(
-        &mut self,
-        enrollment_name: &str,
-        limit: usize,
-    ) -> Result<Vec<StationTrustAudit>, Self::Error>;
+        /// List audit entries for one enrollment, newest first.
+        async fn list_audits(
+            &mut self,
+            enrollment_name: &str,
+            limit: usize,
+        ) -> Result<Vec<StationTrustAudit>, Self::Error>;
+    }
 }
-
-repository_impl!(StationTrustRepository:
-    async fn find_by_endpoint(
-        &mut self,
-        canonical_endpoint: &str
-    ) -> Result<Option<StationTrustEnrollment>, Self::Error>;
-    async fn find_by_name(
-        &mut self,
-        name: &str
-    ) -> Result<Option<StationTrustEnrollment>, Self::Error>;
-    async fn enroll(
-        &mut self,
-        clock: &dyn Clock,
-        params: NewStationTrustEnrollment
-    ) -> Result<StationTrustEnrollment, Self::Error>;
-    async fn replace(
-        &mut self,
-        clock: &dyn Clock,
-        name: &str,
-        expected_old_service_id: &arkret_identifiers::DidCoreId,
-        params: NewStationTrustEnrollment
-    ) -> Result<bool, Self::Error>;
-    async fn record_verification(
-        &mut self,
-        clock: &dyn Clock,
-        canonical_endpoint: &str,
-        method_history_head: &str,
-        version_id: &str,
-        resolution_record_digest: &str
-    ) -> Result<bool, Self::Error>;
-    async fn revoke(&mut self, name: &str) -> Result<bool, Self::Error>;
-    async fn record_audit(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewStationTrustAudit
-    ) -> Result<StationTrustAudit, Self::Error>;
-    async fn list_audits(
-        &mut self,
-        enrollment_name: &str,
-        limit: usize
-    ) -> Result<Vec<StationTrustAudit>, Self::Error>;
-);

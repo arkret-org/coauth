@@ -206,253 +206,74 @@ impl RepositoryTransaction for PgRepository {
     }
 }
 
-impl RepositoryAccess for PgRepository {
-    type Error = DatabaseError;
+/// Implement [`RepositoryAccess`] for [`PgRepository`] from a list of
+/// `accessor: DataTrait => PgRepositoryType` triples.
+///
+/// Every accessor has the same body — box the backend repository over a
+/// borrow of the open connection — so only the three names differ. Keeping
+/// them as one list makes the diff for a new repository a single line and
+/// stops the trait and its backend implementation from drifting apart.
+macro_rules! pg_repository_access {
+    ($(
+        $name:ident: $($repo:ident)::+ => $pg:ident
+    ),* $(,)?) => {
+        impl RepositoryAccess for PgRepository {
+            type Error = DatabaseError;
 
-    fn account<'c>(&'c mut self) -> Box<dyn AccountRepository<Error = Self::Error> + 'c> {
-        Box::new(PgAccountRepository::new(&mut self.conn))
-    }
+            $(
+                fn $name<'c>(&'c mut self)
+                -> Box<dyn $($repo)::+ <Error = Self::Error> + 'c> {
+                    Box::new($pg::new(&mut self.conn))
+                }
+            )*
+        }
+    };
+}
 
-    fn account_handoff<'c>(
-        &'c mut self,
-    ) -> Box<dyn AccountHandoffRepository<Error = Self::Error> + 'c> {
-        Box::new(PgAccountHandoffRepository::new(&mut self.conn))
-    }
-
-    fn account_status_ledger<'c>(
-        &'c mut self,
-    ) -> Box<dyn AccountStatusLedgerRepository<Error = Self::Error> + 'c> {
-        Box::new(PgAccountStatusLedgerRepository::new(&mut self.conn))
-    }
-
-    fn accountability_grant<'c>(
-        &'c mut self,
-    ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c> {
-        Box::new(PgAccountabilityGrantRepository::new(&mut self.conn))
-    }
-
-    fn agent_key_authorization<'c>(
-        &'c mut self,
-    ) -> Box<dyn AgentKeyAuthorizationRepository<Error = Self::Error> + 'c> {
-        Box::new(PgAgentKeyAuthorizationRepository::new(&mut self.conn))
-    }
-
-    fn circle_capability_grant<'c>(
-        &'c mut self,
-    ) -> Box<dyn CircleCapabilityGrantRepository<Error = Self::Error> + 'c> {
-        Box::new(PgCircleCapabilityGrantRepository::new(&mut self.conn))
-    }
-
-    fn collaboration_capability_grant<'c>(
-        &'c mut self,
-    ) -> Box<dyn CollaborationCapabilityGrantRepository<Error = Self::Error> + 'c> {
-        Box::new(PgCollaborationCapabilityGrantRepository::new(
-            &mut self.conn,
-        ))
-    }
-
-    fn organization_control<'c>(
-        &'c mut self,
-    ) -> Box<dyn OrganizationControlRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOrganizationControlRepository::new(&mut self.conn))
-    }
-
-    fn verified_did_binding<'c>(
-        &'c mut self,
-    ) -> Box<dyn VerifiedDidBindingRepository<Error = Self::Error> + 'c> {
-        Box::new(PgVerifiedDidBindingRepository::new(&mut self.conn))
-    }
-
-    fn dpop_replay<'c>(&'c mut self) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c> {
-        Box::new(PgDpopReplayRepository::new(&mut self.conn))
-    }
-
-    fn user_erasure_request<'c>(
-        &'c mut self,
-    ) -> Box<dyn UserErasureRequestRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserErasureRequestRepository::new(&mut self.conn))
-    }
-
-    fn recovery_authority<'c>(
-        &'c mut self,
-    ) -> Box<dyn RecoveryAuthorityRepository<Error = Self::Error> + 'c> {
-        Box::new(PgRecoveryAuthorityRepository::new(&mut self.conn))
-    }
-
-    fn upstream_oauth_link<'c>(
-        &'c mut self,
-    ) -> Box<dyn UpstreamOAuthLinkRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUpstreamOAuthLinkRepository::new(&mut self.conn))
-    }
-
-    fn upstream_oauth_provider<'c>(
-        &'c mut self,
-    ) -> Box<dyn UpstreamOAuthProviderRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUpstreamOAuthProviderRepository::new(&mut self.conn))
-    }
-
-    fn upstream_oauth_session<'c>(
-        &'c mut self,
-    ) -> Box<dyn UpstreamOAuthSessionRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUpstreamOAuthSessionRepository::new(&mut self.conn))
-    }
-
-    fn user<'c>(&'c mut self) -> Box<dyn UserRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserRepository::new(&mut self.conn))
-    }
-
-    fn user_email<'c>(&'c mut self) -> Box<dyn UserEmailRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserEmailRepository::new(&mut self.conn))
-    }
-
-    fn user_phone<'c>(&'c mut self) -> Box<dyn UserPhoneRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserPhoneRepository::new(&mut self.conn))
-    }
-
-    fn user_password<'c>(
-        &'c mut self,
-    ) -> Box<dyn UserPasswordRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserPasswordRepository::new(&mut self.conn))
-    }
-
-    fn user_recovery<'c>(
-        &'c mut self,
-    ) -> Box<dyn UserRecoveryRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserRecoveryRepository::new(&mut self.conn))
-    }
-
-    fn user_terms<'c>(&'c mut self) -> Box<dyn UserTermsRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserTermsRepository::new(&mut self.conn))
-    }
-
-    fn user_primary_handle_preference<'c>(
-        &'c mut self,
-    ) -> Box<dyn UserPrimaryHandlePreferenceRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserPrimaryHandlePreferenceRepository::new(&mut self.conn))
-    }
-
-    fn principal_did<'c>(
-        &'c mut self,
-    ) -> Box<dyn PrincipalDidRepository<Error = Self::Error> + 'c> {
-        Box::new(PgPrincipalDidRepository::new(&mut self.conn))
-    }
-
-    fn user_registration<'c>(
-        &'c mut self,
-    ) -> Box<dyn UserRegistrationRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserRegistrationRepository::new(&mut self.conn))
-    }
-
-    fn user_registration_token<'c>(
-        &'c mut self,
-    ) -> Box<dyn UserRegistrationTokenRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserRegistrationTokenRepository::new(&mut self.conn))
-    }
-
-    fn browser_session<'c>(
-        &'c mut self,
-    ) -> Box<dyn BrowserSessionRepository<Error = Self::Error> + 'c> {
-        Box::new(PgBrowserSessionRepository::new(&mut self.conn))
-    }
-
-    fn app_session<'c>(&'c mut self) -> Box<dyn AppSessionRepository<Error = Self::Error> + 'c> {
-        Box::new(PgAppSessionRepository::new(&mut self.conn))
-    }
-
-    fn audit<'c>(&'c mut self) -> Box<dyn AuditRepository<Error = Self::Error> + 'c> {
-        Box::new(PgAuditRepository::new(&mut self.conn))
-    }
-
-    fn handle_audit<'c>(&'c mut self) -> Box<dyn HandleAuditRepository<Error = Self::Error> + 'c> {
-        Box::new(PgHandleAuditRepository::new(&mut self.conn))
-    }
-
-    fn notification<'c>(&'c mut self) -> Box<dyn NotificationRepository<Error = Self::Error> + 'c> {
-        Box::new(PgNotificationRepository::new(&mut self.conn))
-    }
-
-    fn oauth_client<'c>(&'c mut self) -> Box<dyn OAuthClientRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuthClientRepository::new(&mut self.conn))
-    }
-
-    fn oauth_authorization_grant<'c>(
-        &'c mut self,
-    ) -> Box<dyn OAuthAuthorizationGrantRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuthAuthorizationGrantRepository::new(&mut self.conn))
-    }
-
-    fn oauth_session<'c>(
-        &'c mut self,
-    ) -> Box<dyn OAuthSessionRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuthSessionRepository::new(&mut self.conn))
-    }
-
-    fn oauth_session_grant<'c>(
-        &'c mut self,
-    ) -> Box<dyn SessionGrantRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuthSessionGrantRepository::new(&mut self.conn))
-    }
-
-    fn oauth_access_token<'c>(
-        &'c mut self,
-    ) -> Box<dyn OAuthAccessTokenRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuthAccessTokenRepository::new(&mut self.conn))
-    }
-
-    fn oauth_refresh_token<'c>(
-        &'c mut self,
-    ) -> Box<dyn OAuthRefreshTokenRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuthRefreshTokenRepository::new(&mut self.conn))
-    }
-
-    fn oauth_device_code_grant<'c>(
-        &'c mut self,
-    ) -> Box<dyn OAuthDeviceCodeGrantRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuthDeviceCodeGrantRepository::new(&mut self.conn))
-    }
-
-    fn personal_access_token<'c>(
-        &'c mut self,
-    ) -> Box<dyn coauth_data::personal::PersonalAccessTokenRepository<Error = Self::Error> + 'c>
-    {
-        Box::new(PgPersonalAccessTokenRepository::new(&mut self.conn))
-    }
-
-    fn personal_session<'c>(
-        &'c mut self,
-    ) -> Box<dyn PersonalSessionRepository<Error = Self::Error> + 'c> {
-        Box::new(PgPersonalSessionRepository::new(&mut self.conn))
-    }
-
-    fn queue_worker<'c>(&'c mut self) -> Box<dyn QueueWorkerRepository<Error = Self::Error> + 'c> {
-        Box::new(PgQueueWorkerRepository::new(&mut self.conn))
-    }
-
-    fn queue_job<'c>(&'c mut self) -> Box<dyn QueueJobRepository<Error = Self::Error> + 'c> {
-        Box::new(PgQueueJobRepository::new(&mut self.conn))
-    }
-
-    fn queue_schedule<'c>(
-        &'c mut self,
-    ) -> Box<dyn QueueScheduleRepository<Error = Self::Error> + 'c> {
-        Box::new(PgQueueScheduleRepository::new(&mut self.conn))
-    }
-
-    fn policy_data<'c>(&'c mut self) -> Box<dyn PolicyDataRepository<Error = Self::Error> + 'c> {
-        Box::new(PgPolicyDataRepository::new(&mut self.conn))
-    }
-
-    fn station_trust<'c>(
-        &'c mut self,
-    ) -> Box<
-        dyn coauth_data::storage::station_trust::StationTrustRepository<Error = Self::Error> + 'c,
-    > {
-        Box::new(PgStationTrustRepository::new(&mut self.conn))
-    }
-
-    fn notification_template<'c>(
-        &'c mut self,
-    ) -> Box<dyn NotificationTemplateRepository<Error = Self::Error> + 'c> {
-        Box::new(PgNotificationTemplateRepository::new(&mut self.conn))
-    }
+pg_repository_access! {
+    account: AccountRepository => PgAccountRepository,
+    account_handoff: AccountHandoffRepository => PgAccountHandoffRepository,
+    account_status_ledger: AccountStatusLedgerRepository => PgAccountStatusLedgerRepository,
+    accountability_grant: AccountabilityGrantRepository => PgAccountabilityGrantRepository,
+    agent_key_authorization: AgentKeyAuthorizationRepository => PgAgentKeyAuthorizationRepository,
+    circle_capability_grant: CircleCapabilityGrantRepository => PgCircleCapabilityGrantRepository,
+    collaboration_capability_grant: CollaborationCapabilityGrantRepository => PgCollaborationCapabilityGrantRepository,
+    organization_control: OrganizationControlRepository => PgOrganizationControlRepository,
+    verified_did_binding: VerifiedDidBindingRepository => PgVerifiedDidBindingRepository,
+    dpop_replay: DpopReplayRepository => PgDpopReplayRepository,
+    user_erasure_request: UserErasureRequestRepository => PgUserErasureRequestRepository,
+    recovery_authority: RecoveryAuthorityRepository => PgRecoveryAuthorityRepository,
+    upstream_oauth_link: UpstreamOAuthLinkRepository => PgUpstreamOAuthLinkRepository,
+    upstream_oauth_provider: UpstreamOAuthProviderRepository => PgUpstreamOAuthProviderRepository,
+    upstream_oauth_session: UpstreamOAuthSessionRepository => PgUpstreamOAuthSessionRepository,
+    user: UserRepository => PgUserRepository,
+    user_email: UserEmailRepository => PgUserEmailRepository,
+    user_phone: UserPhoneRepository => PgUserPhoneRepository,
+    user_password: UserPasswordRepository => PgUserPasswordRepository,
+    user_recovery: UserRecoveryRepository => PgUserRecoveryRepository,
+    user_terms: UserTermsRepository => PgUserTermsRepository,
+    user_primary_handle_preference: UserPrimaryHandlePreferenceRepository => PgUserPrimaryHandlePreferenceRepository,
+    principal_did: PrincipalDidRepository => PgPrincipalDidRepository,
+    user_registration: UserRegistrationRepository => PgUserRegistrationRepository,
+    user_registration_token: UserRegistrationTokenRepository => PgUserRegistrationTokenRepository,
+    browser_session: BrowserSessionRepository => PgBrowserSessionRepository,
+    app_session: AppSessionRepository => PgAppSessionRepository,
+    audit: AuditRepository => PgAuditRepository,
+    handle_audit: HandleAuditRepository => PgHandleAuditRepository,
+    notification: NotificationRepository => PgNotificationRepository,
+    oauth_client: OAuthClientRepository => PgOAuthClientRepository,
+    oauth_authorization_grant: OAuthAuthorizationGrantRepository => PgOAuthAuthorizationGrantRepository,
+    oauth_session: OAuthSessionRepository => PgOAuthSessionRepository,
+    oauth_session_grant: SessionGrantRepository => PgOAuthSessionGrantRepository,
+    oauth_access_token: OAuthAccessTokenRepository => PgOAuthAccessTokenRepository,
+    oauth_refresh_token: OAuthRefreshTokenRepository => PgOAuthRefreshTokenRepository,
+    oauth_device_code_grant: OAuthDeviceCodeGrantRepository => PgOAuthDeviceCodeGrantRepository,
+    personal_access_token: coauth_data::personal::PersonalAccessTokenRepository => PgPersonalAccessTokenRepository,
+    personal_session: PersonalSessionRepository => PgPersonalSessionRepository,
+    queue_worker: QueueWorkerRepository => PgQueueWorkerRepository,
+    queue_job: QueueJobRepository => PgQueueJobRepository,
+    queue_schedule: QueueScheduleRepository => PgQueueScheduleRepository,
+    policy_data: PolicyDataRepository => PgPolicyDataRepository,
+    station_trust: coauth_data::storage::station_trust::StationTrustRepository => PgStationTrustRepository,
+    notification_template: NotificationTemplateRepository => PgNotificationTemplateRepository,
 }

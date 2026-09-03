@@ -1,6 +1,5 @@
 use std::net::IpAddr;
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::personal::PersonalAccessToken;
 use coauth_data::personal::session::{PersonalSession, PersonalSessionOwner};
@@ -11,171 +10,133 @@ use ulid::Ulid;
 
 use crate::{Page, Pagination, repository_impl};
 
-/// A [`PersonalSessionRepository`] helps interacting with
-/// [`PersonalSession`] saved in the storage backend
-#[async_trait]
-pub trait PersonalSessionRepository: Send + Sync {
-    /// The error type returned by the repository
-    type Error;
+repository_impl! {
+    /// A [`PersonalSessionRepository`] helps interacting with
+    /// [`PersonalSession`] saved in the storage backend
+    pub trait PersonalSessionRepository {
+        /// The error type returned by the repository
+        type Error;
 
-    /// Lookup a Personal session by its ID
-    ///
-    /// Returns the Personal session if it exists, `None` otherwise
-    ///
-    /// # Parameters
-    ///
-    /// * `id`: The ID of the Personal session to lookup
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn lookup(&mut self, id: Ulid) -> Result<Option<PersonalSession>, Self::Error>;
+        /// Lookup a Personal session by its ID
+        ///
+        /// Returns the Personal session if it exists, `None` otherwise
+        ///
+        /// # Parameters
+        ///
+        /// * `id`: The ID of the Personal session to lookup
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn lookup(&mut self, id: Ulid) -> Result<Option<PersonalSession>, Self::Error>;
 
-    /// Start a new Personal session
-    ///
-    /// Returns the newly created Personal session
-    ///
-    /// # Parameters
-    ///
-    /// * `rng`: The random number generator to use
-    /// * `clock`: The clock used to generate timestamps
-    /// * `owner_user`: The user that will own the personal session
-    /// * `actor_user`: The user that will be represented by the personal session
-    /// * `device`: The device ID of this session
-    /// * `human_name`: The human-readable name of the session provided by the client or the user
-    /// * `scope`: The [`Scope`] of the [`PersonalSession`]
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        owner: PersonalSessionOwner,
-        actor_user: &User,
-        human_name: String,
-        scope: Scope,
-    ) -> Result<PersonalSession, Self::Error>;
+        /// Start a new Personal session
+        ///
+        /// Returns the newly created Personal session
+        ///
+        /// # Parameters
+        ///
+        /// * `rng`: The random number generator to use
+        /// * `clock`: The clock used to generate timestamps
+        /// * `owner_user`: The user that will own the personal session
+        /// * `actor_user`: The user that will be represented by the personal session
+        /// * `device`: The device ID of this session
+        /// * `human_name`: The human-readable name of the session provided by the client or the user
+        /// * `scope`: The [`Scope`] of the [`PersonalSession`]
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn add(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            owner: PersonalSessionOwner,
+            actor_user: &User,
+            human_name: String,
+            scope: Scope,
+        ) -> Result<PersonalSession, Self::Error>;
 
-    /// End a Personal session
-    ///
-    /// Returns the ended Personal session
-    ///
-    /// # Parameters
-    ///
-    /// * `clock`: The clock used to generate timestamps
-    /// * `Personal_session`: The Personal session to end
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn revoke(
-        &mut self,
-        clock: &dyn Clock,
-        personal_session: PersonalSession,
-    ) -> Result<PersonalSession, Self::Error>;
+        /// End a Personal session
+        ///
+        /// Returns the ended Personal session
+        ///
+        /// # Parameters
+        ///
+        /// * `clock`: The clock used to generate timestamps
+        /// * `Personal_session`: The Personal session to end
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn revoke(
+            &mut self,
+            clock: &dyn Clock,
+            personal_session: PersonalSession,
+        ) -> Result<PersonalSession, Self::Error>;
 
-    /// Revoke all the [`PersonalSession`]s matching the given filter.
-    ///
-    /// Returns the number of sessions affected
-    ///
-    /// # Parameters
-    ///
-    /// * `clock`: The clock used to generate timestamps
-    /// * `filter`: The filter to apply
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn revoke_bulk(
-        &mut self,
-        clock: &dyn Clock,
-        filter: PersonalSessionFilter<'_>,
-    ) -> Result<usize, Self::Error>;
+        /// Revoke all the [`PersonalSession`]s matching the given filter.
+        ///
+        /// Returns the number of sessions affected
+        ///
+        /// # Parameters
+        ///
+        /// * `clock`: The clock used to generate timestamps
+        /// * `filter`: The filter to apply
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn revoke_bulk(
+            &mut self,
+            clock: &dyn Clock,
+            filter: PersonalSessionFilter<'_>,
+        ) -> Result<usize, Self::Error>;
 
-    /// List [`PersonalSession`]s matching the given filter and pagination
-    /// parameters
-    ///
-    /// # Parameters
-    ///
-    /// * `filter`: The filter parameters
-    /// * `pagination`: The pagination parameters
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn list(
-        &mut self,
-        filter: PersonalSessionFilter<'_>,
-        pagination: Pagination,
-    ) -> Result<Page<(PersonalSession, Option<PersonalAccessToken>)>, Self::Error>;
+        /// List [`PersonalSession`]s matching the given filter and pagination
+        /// parameters
+        ///
+        /// # Parameters
+        ///
+        /// * `filter`: The filter parameters
+        /// * `pagination`: The pagination parameters
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn list(
+            &mut self,
+            filter: PersonalSessionFilter<'_>,
+            pagination: Pagination,
+        ) -> Result<Page<(PersonalSession, Option<PersonalAccessToken>)>, Self::Error>;
 
-    /// Count [`PersonalSession`]s matching the given filter
-    ///
-    /// # Parameters
-    ///
-    /// * `filter`: The filter parameters
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn count(&mut self, filter: PersonalSessionFilter<'_>) -> Result<usize, Self::Error>;
+        /// Count [`PersonalSession`]s matching the given filter
+        ///
+        /// # Parameters
+        ///
+        /// * `filter`: The filter parameters
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn count(&mut self, filter: PersonalSessionFilter<'_>) -> Result<usize, Self::Error>;
 
-    /// Record a batch of [`PersonalSession`] activity
-    ///
-    /// # Parameters
-    ///
-    /// * `activity`: A list of tuples containing the session ID, the last activity timestamp and
-    ///   the IP address of the client
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn record_batch_activity(
-        &mut self,
-        activity: Vec<(Ulid, DateTime<Utc>, Option<IpAddr>)>,
-    ) -> Result<(), Self::Error>;
+        /// Record a batch of [`PersonalSession`] activity
+        ///
+        /// # Parameters
+        ///
+        /// * `activity`: A list of tuples containing the session ID, the last activity timestamp and
+        ///   the IP address of the client
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn record_batch_activity(
+            &mut self,
+            activity: Vec<(Ulid, DateTime<Utc>, Option<IpAddr>)>,
+        ) -> Result<(), Self::Error>;
+    }
 }
-
-repository_impl!(PersonalSessionRepository:
-    async fn lookup(&mut self, id: Ulid) -> Result<Option<PersonalSession>, Self::Error>;
-
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        owner: PersonalSessionOwner,
-        actor_user: &User,
-        human_name: String,
-        scope: Scope,
-    ) -> Result<PersonalSession, Self::Error>;
-
-    async fn revoke(
-        &mut self,
-        clock: &dyn Clock,
-        personal_session: PersonalSession,
-    ) -> Result<PersonalSession, Self::Error>;
-
-    async fn revoke_bulk(
-        &mut self,
-        clock: &dyn Clock,
-        filter: PersonalSessionFilter<'_>,
-    ) -> Result<usize, Self::Error>;
-
-    async fn list(
-        &mut self,
-        filter: PersonalSessionFilter<'_>,
-        pagination: Pagination,
-    ) -> Result<Page<(PersonalSession, Option<PersonalAccessToken>)>, Self::Error>;
-
-    async fn count(&mut self, filter: PersonalSessionFilter<'_>) -> Result<usize, Self::Error>;
-
-    async fn record_batch_activity(
-        &mut self,
-        activity: Vec<(Ulid, DateTime<Utc>, Option<IpAddr>)>,
-    ) -> Result<(), Self::Error>;
-);
 
 /// Filter parameters for listing personal sessions alongside personal access
 /// tokens

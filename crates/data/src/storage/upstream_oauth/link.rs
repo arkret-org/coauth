@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use coauth_data::{Clock, UpstreamOAuthLink, UpstreamOAuthLinkPatch, UpstreamOAuthProvider, User};
 use rand_core::RngCore;
 use ulid::Ulid;
@@ -80,205 +79,158 @@ impl<'a> UpstreamOAuthLinkFilter<'a> {
     }
 }
 
-/// An [`UpstreamOAuthLinkRepository`] helps interacting with
-/// [`UpstreamOAuthLink`] with the storage backend
-#[async_trait]
-pub trait UpstreamOAuthLinkRepository: Send + Sync {
-    /// The error type returned by the repository
-    type Error;
+repository_impl! {
+    /// An [`UpstreamOAuthLinkRepository`] helps interacting with
+    /// [`UpstreamOAuthLink`] with the storage backend
+    pub trait UpstreamOAuthLinkRepository {
+        /// The error type returned by the repository
+        type Error;
 
-    /// Lookup an upstream OAuth link by its ID
-    ///
-    /// Returns `None` if the link does not exist
-    ///
-    /// # Parameters
-    ///
-    /// * `id`: The ID of the upstream OAuth link to lookup
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn lookup(&mut self, id: Ulid) -> Result<Option<UpstreamOAuthLink>, Self::Error>;
+        /// Lookup an upstream OAuth link by its ID
+        ///
+        /// Returns `None` if the link does not exist
+        ///
+        /// # Parameters
+        ///
+        /// * `id`: The ID of the upstream OAuth link to lookup
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn lookup(&mut self, id: Ulid) -> Result<Option<UpstreamOAuthLink>, Self::Error>;
 
-    /// Find an upstream OAuth link for a provider by its subject
-    ///
-    /// Returns `None` if no matching upstream OAuth link was found
-    ///
-    /// # Parameters
-    ///
-    /// * `upstream_oauth_provider`: The upstream OAuth provider on which to find the link
-    /// * `subject`: The subject of the upstream OAuth link to find
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn find_by_subject(
-        &mut self,
-        upstream_oauth_provider: &UpstreamOAuthProvider,
-        subject: &str,
-    ) -> Result<Option<UpstreamOAuthLink>, Self::Error>;
+        /// Find an upstream OAuth link for a provider by its subject
+        ///
+        /// Returns `None` if no matching upstream OAuth link was found
+        ///
+        /// # Parameters
+        ///
+        /// * `upstream_oauth_provider`: The upstream OAuth provider on which to find the link
+        /// * `subject`: The subject of the upstream OAuth link to find
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn find_by_subject(
+            &mut self,
+            upstream_oauth_provider: &UpstreamOAuthProvider,
+            subject: &str,
+        ) -> Result<Option<UpstreamOAuthLink>, Self::Error>;
 
-    /// Add a new upstream OAuth link
-    ///
-    /// Returns the newly created upstream OAuth link
-    ///
-    /// # Parameters
-    ///
-    /// * `rng`: The random number generator to use
-    /// * `clock`: The clock used to generate timestamps
-    /// * `upstream_oauth_provider`: The upstream OAuth provider for which to create the link
-    /// * `subject`: The subject of the upstream OAuth link to create
-    /// * `human_account_name`: A human-readable name for the upstream account
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        upstream_oauth_provider: &UpstreamOAuthProvider,
-        subject: String,
-        human_account_name: Option<String>,
-    ) -> Result<UpstreamOAuthLink, Self::Error>;
+        /// Add a new upstream OAuth link
+        ///
+        /// Returns the newly created upstream OAuth link
+        ///
+        /// # Parameters
+        ///
+        /// * `rng`: The random number generator to use
+        /// * `clock`: The clock used to generate timestamps
+        /// * `upstream_oauth_provider`: The upstream OAuth provider for which to create the link
+        /// * `subject`: The subject of the upstream OAuth link to create
+        /// * `human_account_name`: A human-readable name for the upstream account
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn add(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            upstream_oauth_provider: &UpstreamOAuthProvider,
+            subject: String,
+            human_account_name: Option<String>,
+        ) -> Result<UpstreamOAuthLink, Self::Error>;
 
-    /// Associate an upstream OAuth link to a user
-    ///
-    /// Returns the updated upstream OAuth link
-    ///
-    /// # Parameters
-    ///
-    /// * `upstream_oauth_link`: The upstream OAuth link to update
-    /// * `user`: The user to associate to the upstream OAuth link
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn associate_to_user(
-        &mut self,
-        upstream_oauth_link: &UpstreamOAuthLink,
-        user: &User,
-    ) -> Result<(), Self::Error>;
+        /// Associate an upstream OAuth link to a user
+        ///
+        /// Returns the updated upstream OAuth link
+        ///
+        /// # Parameters
+        ///
+        /// * `upstream_oauth_link`: The upstream OAuth link to update
+        /// * `user`: The user to associate to the upstream OAuth link
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn associate_to_user(
+            &mut self,
+            upstream_oauth_link: &UpstreamOAuthLink,
+            user: &User,
+        ) -> Result<(), Self::Error>;
 
-    /// Apply a patch to an upstream OAuth link.
-    async fn patch(
-        &mut self,
-        clock: &dyn Clock,
-        upstream_oauth_link: UpstreamOAuthLink,
-        patch: UpstreamOAuthLinkPatch,
-    ) -> Result<UpstreamOAuthLink, Self::Error>;
+        /// Apply a patch to an upstream OAuth link.
+        async fn patch(
+            &mut self,
+            clock: &dyn Clock,
+            upstream_oauth_link: UpstreamOAuthLink,
+            patch: UpstreamOAuthLinkPatch,
+        ) -> Result<UpstreamOAuthLink, Self::Error>;
 
-    /// List [`UpstreamOAuthLink`] with the given filter and pagination
-    ///
-    /// # Parameters
-    ///
-    /// * `filter`: The filter to apply
-    /// * `pagination`: The pagination parameters
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn list(
-        &mut self,
-        filter: UpstreamOAuthLinkFilter<'_>,
-        pagination: Pagination,
-    ) -> Result<Page<UpstreamOAuthLink>, Self::Error>;
+        /// List [`UpstreamOAuthLink`] with the given filter and pagination
+        ///
+        /// # Parameters
+        ///
+        /// * `filter`: The filter to apply
+        /// * `pagination`: The pagination parameters
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn list(
+            &mut self,
+            filter: UpstreamOAuthLinkFilter<'_>,
+            pagination: Pagination,
+        ) -> Result<Page<UpstreamOAuthLink>, Self::Error>;
 
-    /// Count the number of [`UpstreamOAuthLink`] with the given filter
-    ///
-    /// # Parameters
-    ///
-    /// * `filter`: The filter to apply
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn count(&mut self, filter: UpstreamOAuthLinkFilter<'_>) -> Result<usize, Self::Error>;
+        /// Count the number of [`UpstreamOAuthLink`] with the given filter
+        ///
+        /// # Parameters
+        ///
+        /// * `filter`: The filter to apply
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn count(&mut self, filter: UpstreamOAuthLinkFilter<'_>) -> Result<usize, Self::Error>;
 
-    /// Delete a [`UpstreamOAuthLink`]
-    ///
-    /// # Parameters
-    ///
-    /// * `clock`: The clock used to generate timestamps
-    /// * `upstream_oauth_link`: The [`UpstreamOAuthLink`] to delete
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn remove(
-        &mut self,
-        clock: &dyn Clock,
-        upstream_oauth_link: UpstreamOAuthLink,
-    ) -> Result<(), Self::Error>;
+        /// Delete a [`UpstreamOAuthLink`]
+        ///
+        /// # Parameters
+        ///
+        /// * `clock`: The clock used to generate timestamps
+        /// * `upstream_oauth_link`: The [`UpstreamOAuthLink`] to delete
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn remove(
+            &mut self,
+            clock: &dyn Clock,
+            upstream_oauth_link: UpstreamOAuthLink,
+        ) -> Result<(), Self::Error>;
 
-    /// Cleanup orphaned upstream OAuth links
-    ///
-    /// This will delete orphaned links (where `user_id IS NULL`) with IDs up to
-    /// and including `until`. Uses ULID cursor-based pagination for efficiency.
-    ///
-    /// Returns the number of links deleted and the cursor for the next batch
-    ///
-    /// # Parameters
-    ///
-    /// * `since`: The cursor to start from (exclusive), or `None` to start from the beginning
-    /// * `until`: The maximum ULID to delete (inclusive upper bound)
-    /// * `limit`: The maximum number of links to delete in this batch
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails
-    async fn cleanup_orphaned(
-        &mut self,
-        since: Option<Ulid>,
-        until: Ulid,
-        limit: usize,
-    ) -> Result<(usize, Option<Ulid>), Self::Error>;
+        /// Cleanup orphaned upstream OAuth links
+        ///
+        /// This will delete orphaned links (where `user_id IS NULL`) with IDs up to
+        /// and including `until`. Uses ULID cursor-based pagination for efficiency.
+        ///
+        /// Returns the number of links deleted and the cursor for the next batch
+        ///
+        /// # Parameters
+        ///
+        /// * `since`: The cursor to start from (exclusive), or `None` to start from the beginning
+        /// * `until`: The maximum ULID to delete (inclusive upper bound)
+        /// * `limit`: The maximum number of links to delete in this batch
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails
+        async fn cleanup_orphaned(
+            &mut self,
+            since: Option<Ulid>,
+            until: Ulid,
+            limit: usize,
+        ) -> Result<(usize, Option<Ulid>), Self::Error>;
+    }
 }
-
-repository_impl!(UpstreamOAuthLinkRepository:
-    async fn lookup(&mut self, id: Ulid) -> Result<Option<UpstreamOAuthLink>, Self::Error>;
-
-    async fn find_by_subject(
-        &mut self,
-        upstream_oauth_provider: &UpstreamOAuthProvider,
-        subject: &str,
-    ) -> Result<Option<UpstreamOAuthLink>, Self::Error>;
-
-    async fn add(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        upstream_oauth_provider: &UpstreamOAuthProvider,
-        subject: String,
-        human_account_name: Option<String>,
-    ) -> Result<UpstreamOAuthLink, Self::Error>;
-
-    async fn associate_to_user(
-        &mut self,
-        upstream_oauth_link: &UpstreamOAuthLink,
-        user: &User,
-    ) -> Result<(), Self::Error>;
-    async fn patch(
-        &mut self,
-        clock: &dyn Clock,
-        upstream_oauth_link: UpstreamOAuthLink,
-        patch: UpstreamOAuthLinkPatch,
-    ) -> Result<UpstreamOAuthLink, Self::Error>;
-
-    async fn list(
-        &mut self,
-        filter: UpstreamOAuthLinkFilter<'_>,
-        pagination: Pagination,
-    ) -> Result<Page<UpstreamOAuthLink>, Self::Error>;
-
-    async fn count(&mut self, filter: UpstreamOAuthLinkFilter<'_>) -> Result<usize, Self::Error>;
-
-    async fn remove(&mut self, clock: &dyn Clock, upstream_oauth_link: UpstreamOAuthLink) -> Result<(), Self::Error>;
-
-    async fn cleanup_orphaned(
-        &mut self,
-        since: Option<Ulid>,
-        until: Ulid,
-        limit: usize,
-    ) -> Result<(usize, Option<Ulid>), Self::Error>;
-);

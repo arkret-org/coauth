@@ -1,7 +1,6 @@
 //! Durable self-service account erasure intents
 //! (`ak.gate.account.command.request_erasure.v1`, account-lifecycle.md §8.1).
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ulid::Ulid;
 
@@ -61,53 +60,36 @@ pub struct NewUserErasureRequest {
     pub withdrawal_window_ends_at: Option<DateTime<Utc>>,
 }
 
-/// Repository for durable self-service erasure intents.
-#[async_trait]
-pub trait UserErasureRequestRepository: Send + Sync {
-    /// Backend error type.
-    type Error;
+repository_impl! {
+    /// Repository for durable self-service erasure intents.
+    pub trait UserErasureRequestRepository {
+        /// Backend error type.
+        type Error;
 
-    /// Look up a recorded erasure request by its `request_id`.
-    async fn lookup(&mut self, request_id: &str)
-    -> Result<Option<UserErasureRequest>, Self::Error>;
+        /// Look up a recorded erasure request by its `request_id`.
+        async fn lookup(&mut self, request_id: &str)
+        -> Result<Option<UserErasureRequest>, Self::Error>;
 
-    /// Find the user's live intent (recorded, `erasure_pending` record not
-    /// yet signed), if any.
-    async fn find_live_for_user(
-        &mut self,
-        user_id: Ulid,
-    ) -> Result<Option<UserErasureRequest>, Self::Error>;
+        /// Find the user's live intent (recorded, `erasure_pending` record not
+        /// yet signed), if any.
+        async fn find_live_for_user(
+            &mut self,
+            user_id: Ulid,
+        ) -> Result<Option<UserErasureRequest>, Self::Error>;
 
-    /// Insert a new intent. Returns `false` when another transaction already
-    /// recorded the same `request_id` (or the user's single live-intent slot),
-    /// in which case the caller must re-read and apply the replay/conflict
-    /// rules.
-    async fn insert(&mut self, params: NewUserErasureRequest) -> Result<bool, Self::Error>;
+        /// Insert a new intent. Returns `false` when another transaction already
+        /// recorded the same `request_id` (or the user's single live-intent slot),
+        /// in which case the caller must re-read and apply the replay/conflict
+        /// rules.
+        async fn insert(&mut self, params: NewUserErasureRequest) -> Result<bool, Self::Error>;
 
-    /// Mark the intent's `erasure_pending` record as signed. Returns `false`
-    /// when the row does not exist or was already marked.
-    async fn mark_record_issued(
-        &mut self,
-        request_id: &str,
-        account_status_record_id: &str,
-        issued_at: DateTime<Utc>,
-    ) -> Result<bool, Self::Error>;
+        /// Mark the intent's `erasure_pending` record as signed. Returns `false`
+        /// when the row does not exist or was already marked.
+        async fn mark_record_issued(
+            &mut self,
+            request_id: &str,
+            account_status_record_id: &str,
+            issued_at: DateTime<Utc>,
+        ) -> Result<bool, Self::Error>;
+    }
 }
-
-repository_impl!(UserErasureRequestRepository:
-    async fn lookup(
-        &mut self,
-        request_id: &str,
-    ) -> Result<Option<UserErasureRequest>, Self::Error>;
-    async fn find_live_for_user(
-        &mut self,
-        user_id: Ulid,
-    ) -> Result<Option<UserErasureRequest>, Self::Error>;
-    async fn insert(&mut self, params: NewUserErasureRequest) -> Result<bool, Self::Error>;
-    async fn mark_record_issued(
-        &mut self,
-        request_id: &str,
-        account_status_record_id: &str,
-        issued_at: DateTime<Utc>,
-    ) -> Result<bool, Self::Error>;
-);

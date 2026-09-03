@@ -17,7 +17,6 @@
 //! `20260527000200_handle_canonicalize_rename`.
 
 use arkret_identifiers::DidCoreId;
-use async_trait::async_trait;
 use coauth_data::Clock;
 use coauth_data::audit::HandleAuditEvent;
 use rand_core::RngCore;
@@ -169,62 +168,39 @@ pub enum HandleAuditEventType {
     AlsoKnownAsWatcherUnconfigured,
 }
 
-/// Repository accessor for the append-only handle audit log.
-#[async_trait]
-pub trait HandleAuditRepository: Send + Sync {
-    /// Backend error type.
-    type Error;
+repository_impl! {
+    /// Repository accessor for the append-only handle audit log.
+    pub trait HandleAuditRepository {
+        /// Backend error type.
+        type Error;
 
-    /// Insert a new audit event. There is no companion update / delete by
-    /// design; the database enforces append-only at the trigger level.
-    async fn record(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewHandleAuditEvent,
-    ) -> Result<HandleAuditEvent, Self::Error>;
+        /// Insert a new audit event. There is no companion update / delete by
+        /// design; the database enforces append-only at the trigger level.
+        async fn record(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            params: NewHandleAuditEvent,
+        ) -> Result<HandleAuditEvent, Self::Error>;
 
-    /// List all audit events for a given user, newest first.
-    async fn list_for_user(
-        &mut self,
-        user_id: Ulid,
-        limit: usize,
-    ) -> Result<Vec<HandleAuditEvent>, Self::Error>;
+        /// List all audit events for a given user, newest first.
+        async fn list_for_user(
+            &mut self,
+            user_id: Ulid,
+            limit: usize,
+        ) -> Result<Vec<HandleAuditEvent>, Self::Error>;
 
-    /// List the most recent N events of a given type across all users.
-    async fn list_by_event_type(
-        &mut self,
-        event_type: HandleAuditEventType,
-        limit: usize,
-    ) -> Result<Vec<HandleAuditEvent>, Self::Error>;
+        /// List the most recent N events of a given type across all users.
+        async fn list_by_event_type(
+            &mut self,
+            event_type: HandleAuditEventType,
+            limit: usize,
+        ) -> Result<Vec<HandleAuditEvent>, Self::Error>;
 
-    /// Look up a single audit event by id.
-    async fn lookup(&mut self, id: Ulid) -> Result<Option<HandleAuditEvent>, Self::Error>;
+        /// Look up a single audit event by id.
+        async fn lookup(&mut self, id: Ulid) -> Result<Option<HandleAuditEvent>, Self::Error>;
 
-    /// Count events for a given user (audit-summary endpoints).
-    async fn count_for_user(&mut self, user_id: Ulid) -> Result<usize, Self::Error>;
+        /// Count events for a given user (audit-summary endpoints).
+        async fn count_for_user(&mut self, user_id: Ulid) -> Result<usize, Self::Error>;
+    }
 }
-
-repository_impl!(HandleAuditRepository:
-    async fn record(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewHandleAuditEvent,
-    ) -> Result<HandleAuditEvent, Self::Error>;
-    async fn list_for_user(
-        &mut self,
-        user_id: Ulid,
-        limit: usize,
-    ) -> Result<Vec<HandleAuditEvent>, Self::Error>;
-    async fn list_by_event_type(
-        &mut self,
-        event_type: HandleAuditEventType,
-        limit: usize,
-    ) -> Result<Vec<HandleAuditEvent>, Self::Error>;
-    async fn lookup(
-        &mut self,
-        id: Ulid,
-    ) -> Result<Option<HandleAuditEvent>, Self::Error>;
-    async fn count_for_user(&mut self, user_id: Ulid) -> Result<usize, Self::Error>;
-);

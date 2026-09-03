@@ -33,7 +33,6 @@
 //! it made every lookup miss and filed every rotation as a parallel row nobody
 //! could reach. It stays a binding field inside the payload.
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
@@ -109,75 +108,58 @@ impl VerifiedDidBindingInvalidation {
     }
 }
 
-/// Repository for durable accepted DID bindings.
-#[async_trait]
-pub trait VerifiedDidBindingRepository: Send + Sync {
-    /// Backend error type.
-    type Error;
+repository_impl! {
+    /// Repository for durable accepted DID bindings.
+    pub trait VerifiedDidBindingRepository {
+        /// Backend error type.
+        type Error;
 
-    /// Look up one acceptance, honouring hard expiry.
-    ///
-    /// A row whose `expires_at` has passed MUST NOT be returned: hard-expired
-    /// acceptances stop existing for readers (`did-usage-and-verification.md`
-    /// §5), independently of when the row is physically removed.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails.
-    async fn get(
-        &mut self,
-        key: &VerifiedDidBindingKeyColumns,
-        now: DateTime<Utc>,
-    ) -> Result<Option<VerifiedDidBindingRow>, Self::Error>;
+        /// Look up one acceptance, honouring hard expiry.
+        ///
+        /// A row whose `expires_at` has passed MUST NOT be returned: hard-expired
+        /// acceptances stop existing for readers (`did-usage-and-verification.md`
+        /// §5), independently of when the row is physically removed.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails.
+        async fn get(
+            &mut self,
+            key: &VerifiedDidBindingKeyColumns,
+            now: DateTime<Utc>,
+        ) -> Result<Option<VerifiedDidBindingRow>, Self::Error>;
 
-    /// Insert or replace one acceptance, and opportunistically drop rows that
-    /// are already hard-expired at `now`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails.
-    async fn upsert(
-        &mut self,
-        row: VerifiedDidBindingRow,
-        now: DateTime<Utc>,
-    ) -> Result<(), Self::Error>;
+        /// Insert or replace one acceptance, and opportunistically drop rows that
+        /// are already hard-expired at `now`.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails.
+        async fn upsert(
+            &mut self,
+            row: VerifiedDidBindingRow,
+            now: DateTime<Utc>,
+        ) -> Result<(), Self::Error>;
 
-    /// Delete every acceptance matching `selector`; returns the number removed.
-    /// An empty selector removes nothing and returns `0`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails.
-    async fn invalidate(
-        &mut self,
-        selector: &VerifiedDidBindingInvalidation,
-    ) -> Result<usize, Self::Error>;
+        /// Delete every acceptance matching `selector`; returns the number removed.
+        /// An empty selector removes nothing and returns `0`.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails.
+        async fn invalidate(
+            &mut self,
+            selector: &VerifiedDidBindingInvalidation,
+        ) -> Result<usize, Self::Error>;
 
-    /// Remove every hard-expired row; returns the number removed.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Self::Error`] if the underlying repository fails.
-    async fn prune_expired(&mut self, now: DateTime<Utc>) -> Result<usize, Self::Error>;
+        /// Remove every hard-expired row; returns the number removed.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails.
+        async fn prune_expired(&mut self, now: DateTime<Utc>) -> Result<usize, Self::Error>;
+    }
 }
-
-repository_impl!(VerifiedDidBindingRepository:
-    async fn get(
-        &mut self,
-        key: &VerifiedDidBindingKeyColumns,
-        now: DateTime<Utc>,
-    ) -> Result<Option<VerifiedDidBindingRow>, Self::Error>;
-    async fn upsert(
-        &mut self,
-        row: VerifiedDidBindingRow,
-        now: DateTime<Utc>,
-    ) -> Result<(), Self::Error>;
-    async fn invalidate(
-        &mut self,
-        selector: &VerifiedDidBindingInvalidation,
-    ) -> Result<usize, Self::Error>;
-    async fn prune_expired(&mut self, now: DateTime<Utc>) -> Result<usize, Self::Error>;
-);
 
 #[cfg(test)]
 mod tests {

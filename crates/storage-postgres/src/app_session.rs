@@ -5,7 +5,6 @@ use chrono::{DateTime, Utc};
 use coauth_data::app_session::{
     AppSession, AppSessionFilter, AppSessionRepository, AppSessionState,
 };
-use coauth_data::pagination::PaginationDirection;
 use coauth_data::{Clock, Page, Pagination, Session, SessionState, User};
 use coauth_oauth_types::scope::{Scope, ScopeToken};
 use diesel::prelude::*;
@@ -154,26 +153,7 @@ impl AppSessionRepository for PgAppSessionRepository<'_> {
 
         query = apply_app_session_filter!(query, filter);
 
-        // Apply pagination
-        if let Some(after) = pagination.after {
-            query = query.filter(oauth_sessions::id.gt(Uuid::from(after)));
-        }
-        if let Some(before) = pagination.before {
-            query = query.filter(oauth_sessions::id.lt(Uuid::from(before)));
-        }
-
-        match pagination.direction {
-            PaginationDirection::Forward => {
-                query = query
-                    .order(oauth_sessions::id.asc())
-                    .limit((pagination.count + 1) as i64);
-            }
-            PaginationDirection::Backward => {
-                query = query
-                    .order(oauth_sessions::id.desc())
-                    .limit((pagination.count + 1) as i64);
-            }
-        }
+        query = crate::paginate_by_id!(query, pagination, oauth_sessions::id);
 
         let edges: Vec<AppSessionLookup> = query.load(self.conn).await?;
 

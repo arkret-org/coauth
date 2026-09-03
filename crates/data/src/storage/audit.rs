@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::Clock;
 use coauth_data::audit::{
@@ -254,92 +253,57 @@ impl AdminOperationFilter {
     }
 }
 
-/// Repository for admin operation logs and account security events.
-#[async_trait]
-pub trait AuditRepository: Send + Sync {
-    /// The error type returned by the repository.
-    type Error;
+repository_impl! {
+    /// Repository for admin operation logs and account security events.
+    pub trait AuditRepository {
+        /// The error type returned by the repository.
+        type Error;
 
-    /// Record a new admin operation log entry.
-    async fn add_admin_operation(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewAdminOperationLog,
-    ) -> Result<AdminOperationLog, Self::Error>;
+        /// Record a new admin operation log entry.
+        async fn add_admin_operation(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            params: NewAdminOperationLog,
+        ) -> Result<AdminOperationLog, Self::Error>;
 
-    /// Look up an admin operation log entry by id.
-    async fn lookup_admin_operation(
-        &mut self,
-        id: Ulid,
-    ) -> Result<Option<AdminOperationLog>, Self::Error>;
+        /// Look up an admin operation log entry by id.
+        async fn lookup_admin_operation(
+            &mut self,
+            id: Ulid,
+        ) -> Result<Option<AdminOperationLog>, Self::Error>;
 
-    /// Set the detached signature for an existing admin operation log entry.
-    async fn set_admin_operation_signature(
-        &mut self,
-        id: Ulid,
-        audit_signature: &str,
-    ) -> Result<AdminOperationLog, Self::Error>;
+        /// Set the detached signature for an existing admin operation log entry.
+        async fn set_admin_operation_signature(
+            &mut self,
+            id: Ulid,
+            audit_signature: &str,
+        ) -> Result<AdminOperationLog, Self::Error>;
 
-    /// List admin operation log entries, optionally filtered by admin user.
-    async fn list_admin_operations(
-        &mut self,
-        filter: AdminOperationFilter,
-    ) -> Result<Vec<AdminOperationLog>, Self::Error>;
+        /// List admin operation log entries, optionally filtered by admin user.
+        async fn list_admin_operations(
+            &mut self,
+            filter: AdminOperationFilter,
+        ) -> Result<Vec<AdminOperationLog>, Self::Error>;
 
-    /// Count admin operation log entries matching the given filter.
-    async fn count_admin_operations(
-        &mut self,
-        filter: AdminOperationFilter,
-    ) -> Result<usize, Self::Error>;
+        /// Count admin operation log entries matching the given filter.
+        async fn count_admin_operations(
+            &mut self,
+            filter: AdminOperationFilter,
+        ) -> Result<usize, Self::Error>;
 
-    /// Record a new account security event.
-    async fn add_security_event(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewAccountSecurityEvent,
-    ) -> Result<AccountSecurityEvent, Self::Error>;
+        /// Record a new account security event.
+        async fn add_security_event(
+            &mut self,
+            rng: &mut (dyn RngCore + Send),
+            clock: &dyn Clock,
+            params: NewAccountSecurityEvent,
+        ) -> Result<AccountSecurityEvent, Self::Error>;
 
-    /// List security events for a specific user.
-    async fn list_security_events(
-        &mut self,
-        user_id: Ulid,
-    ) -> Result<Vec<AccountSecurityEvent>, Self::Error>;
+        /// List security events for a specific user.
+        async fn list_security_events(
+            &mut self,
+            user_id: Ulid,
+        ) -> Result<Vec<AccountSecurityEvent>, Self::Error>;
+    }
 }
-
-repository_impl!(AuditRepository:
-    async fn add_admin_operation(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewAdminOperationLog,
-    ) -> Result<AdminOperationLog, Self::Error>;
-    async fn lookup_admin_operation(
-        &mut self,
-        id: Ulid,
-    ) -> Result<Option<AdminOperationLog>, Self::Error>;
-    async fn set_admin_operation_signature(
-        &mut self,
-        id: Ulid,
-        audit_signature: &str,
-    ) -> Result<AdminOperationLog, Self::Error>;
-    async fn list_admin_operations(
-        &mut self,
-        filter: AdminOperationFilter,
-    ) -> Result<Vec<AdminOperationLog>, Self::Error>;
-    async fn count_admin_operations(
-        &mut self,
-        filter: AdminOperationFilter,
-    ) -> Result<usize, Self::Error>;
-    async fn add_security_event(
-        &mut self,
-        rng: &mut (dyn RngCore + Send),
-        clock: &dyn Clock,
-        params: NewAccountSecurityEvent,
-    ) -> Result<AccountSecurityEvent, Self::Error>;
-    async fn list_security_events(
-        &mut self,
-        user_id: Ulid,
-    ) -> Result<Vec<AccountSecurityEvent>, Self::Error>;
-);

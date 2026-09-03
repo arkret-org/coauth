@@ -98,6 +98,47 @@ impl DatabaseError {
     }
 }
 
+/// Declare `From<$error> for DatabaseError` mapping onto
+/// [`DatabaseError::InvalidOperation`].
+///
+/// Only failures that a well-formed row and a well-formed caller argument can
+/// never provoke belong here: decoding an identifier, a canonical encoding or
+/// a JSON payload that this backend itself wrote, and narrowing an integer the
+/// schema already constrains. Every such failure means the stored bytes no
+/// longer satisfy an invariant the writer enforced, which is exactly what
+/// [`DatabaseError::InvalidOperation`] denotes.
+///
+/// Anything a caller can steer towards a *distinguishable* outcome MUST keep
+/// its explicit mapping. In particular a uniqueness conflict has to reach
+/// [`DatabaseError::UniqueViolation`] so [`DatabaseError::is_unique_violation`]
+/// can turn a concurrent insert into a domain conflict instead of a `500`, and
+/// a row-shape mismatch that can name its table and column belongs in
+/// [`DatabaseInconsistencyError`] rather than here — a bare `?` would discard
+/// the table/column/row breadcrumb those carry.
+///
+/// The conversion keeps the original error as the `source`, so it is strictly
+/// more informative than the `map_err(|_| …)` closures it replaces while
+/// producing the same variant: no caller in this workspace discriminates
+/// between `InvalidOperation` with and without a source.
+macro_rules! invalid_operation_from {
+    ($($error:ty),+ $(,)?) => {
+        $(
+            impl From<$error> for DatabaseError {
+                fn from(value: $error) -> Self {
+                    Self::to_invalid_operation(value)
+                }
+            }
+        )+
+    };
+}
+
+invalid_operation_from!(
+    arkret_canonical::CanonicalError,
+    arkret_identifiers::IdentifierError,
+    serde_json::Error,
+    std::num::TryFromIntError,
+);
+
 /// An error which occurred while converting the data from the database
 #[derive(Debug, Error)]
 pub struct DatabaseInconsistencyError {
