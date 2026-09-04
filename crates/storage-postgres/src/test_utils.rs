@@ -329,3 +329,38 @@ pub fn verified_principal_binding_input(
         principal_control_realm_id: principal_control_realm_id(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The receipt fixture carries a real Account Authority signature, not a
+    /// placeholder: it verifies, and it stops verifying when one byte of the
+    /// transcript it covers changes.
+    #[test]
+    fn the_fixture_receipt_proof_verifies_and_one_changed_byte_breaks_it() {
+        let receipt = account_binding_receipt(
+            "did:webvh:zaccountauthority:account.example",
+            arkret_identifiers::Did::new("did:webvh:zfixturereceipt:principal.example").unwrap(),
+            "1-fixture",
+            arkret_identifiers::Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
+        );
+        let material = arkret_signatures::proof::PublicKeyMaterial::Ed25519Raw {
+            bytes: fixture_account_authority_verifying_key().to_vec(),
+        };
+        let transcript = receipt
+            .canonical_proof_binding_bytes()
+            .expect("the fixture receipt has a proof binding");
+
+        arkret_signatures::Ed25519DetachedJwsVerifier::new()
+            .verify_detached_jws(receipt.proof.jws.as_str(), &transcript, &material)
+            .expect("the fixture receipt proof must really verify");
+
+        let mut tampered = transcript.clone();
+        let last = tampered.len() - 2;
+        tampered[last] ^= 0x01;
+        arkret_signatures::Ed25519DetachedJwsVerifier::new()
+            .verify_detached_jws(receipt.proof.jws.as_str(), &tampered, &material)
+            .expect_err("one changed transcript byte must invalidate the receipt proof");
+    }
+}
