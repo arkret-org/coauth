@@ -1,8 +1,9 @@
-use arkret_identifiers::DidCoreId;
+use arkret_identifiers::{DeviceId, DidCoreId, EventId};
 use arkret_models_identity::{
     CanonicalSessionPublicJwk, SESSION_GRANT_CREDENTIAL_KIND, SESSION_GRANT_ISSUANCE_SCHEMA,
-    SessionGrantCredentialClass, SessionGrantHolderBinding, SessionGrantIssuanceNonce,
-    SessionGrantIssuancePreimage, SessionGrantProofKind, SignedSessionGrantClaims,
+    SessionGrantCredentialClass, SessionGrantDeviceBinding, SessionGrantHolderBinding,
+    SessionGrantIssuanceNonce, SessionGrantIssuancePreimage, SessionGrantProofKind,
+    SignedSessionGrantClaims,
 };
 use chrono::Duration;
 use coauth_data::clock::MockClock;
@@ -25,6 +26,15 @@ const TEST_SESSION_GRANT_ISSUER: &str = "ak:did_core:web:issuer_id.example";
 const TEST_SESSION_GRANT_SUBJECT: &str = "ak:did_core:web:subject_id.example";
 const TEST_SESSION_GRANT_AUDIENCE: &str = "ak:did_core:web:audience_id.example";
 const TEST_SESSION_GRANT_SIGNING_KEY_ID: &str = "test-signing-key";
+/// Accepted device-authorization Event the fixture device binding cites.
+///
+/// `account-lifecycle.md` §2 only lets the origin Station sign a Standard
+/// grant that carries `device_binding`, and the SDK enforces it: a Standard +
+/// `HumanDevice` grant without one is rejected as
+/// "standard human session grant requires a signed device_binding". The
+/// fixture used to omit it, which only ever surfaced with a database attached.
+const TEST_DEVICE_AUTHORIZE_EVENT_ID: &str =
+    "ak:event:Ae6YFfDokA1FLUx_l-MhAbSvTvoys2ZpRPmqFwrWjd9g";
 
 /// Closed inputs a test needs to land one committed session grant.
 ///
@@ -116,7 +126,11 @@ where
         holder_binding: SessionGrantHolderBinding::HumanDevice {
             device_binding: seed.device_id.to_owned(),
         },
-        device_binding: None,
+        device_binding: Some(SessionGrantDeviceBinding {
+            device_id: DeviceId::new(seed.device_id).unwrap(),
+            authorization_event_id: EventId::new(TEST_DEVICE_AUTHORIZE_EVENT_ID).unwrap(),
+            model_generation_ref: 1,
+        }),
         proof_kind: Some(SessionGrantProofKind::AccountHandoff),
         scope_details: None,
     };
@@ -621,7 +635,7 @@ async fn refresh_token_chain_root_and_bulk_revoke() {
         TestSessionGrantSeed {
             request_identity: "refresh-chain-issue",
             browser_session_id: Some(user_session.id),
-            device_id: "device-1",
+            device_id: "ak:device:019a0000-0000-7000-8000-000000000001",
             session_id: "session-chain-1",
             issuance_nonce: [0x11; 32],
             scope: scope.clone(),
@@ -807,7 +821,7 @@ async fn revoke_if_active_consumes_a_grant_exactly_once() {
         TestSessionGrantSeed {
             request_identity: "revoke-if-active-issue",
             browser_session_id: Some(browser_session.id),
-            device_id: "device-cas",
+            device_id: "ak:device:019a0000-0000-7000-8000-00000000ca50",
             session_id: "session-chain-cas",
             issuance_nonce: [0x22; 32],
             scope,

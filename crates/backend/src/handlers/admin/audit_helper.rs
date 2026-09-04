@@ -571,11 +571,18 @@ mod tests {
             rows[0].operation,
             AdminOperation::Other("accountability_grant_issued".to_owned())
         );
+        let expected_prefix = format!(
+            "{}#{}:",
+            service_did.as_str(),
+            coauth_keystore::AUDIT_SIGNING_KEY_ID
+        );
         assert!(
             rows[0]
                 .audit_signature
                 .as_ref()
-                .is_some_and(|sig| sig.starts_with("did:web:coauth.example#audit-test:"))
+                .is_some_and(|sig| sig.starts_with(&expected_prefix)),
+            "audit signature must name the designated audit kid: {:?}",
+            rows[0].audit_signature
         );
         assert_eq!(
             verify_admin_operation_signature(&rows[0], &keystore, &service_did),

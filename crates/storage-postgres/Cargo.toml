@@ -10,6 +10,13 @@ homepage.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[features]
+default = []
+# `test_utils` is fixture material, not a runtime surface: it seeds and
+# TRUNCATEs a database and signs an Account Authority receipt with a public
+# seed. Gating it keeps both out of a production build of this crate.
+test-support = ["dep:arkret-signatures"]
+
 [dependencies]
 anyhow = { workspace = true }
 arkret-canonical = { workspace = true }
@@ -17,6 +24,7 @@ arkret-identifiers = { workspace = true, features = ["diesel"] }
 arkret-locale = { workspace = true }
 arkret-models-collaboration = { workspace = true }
 arkret-models-identity = { workspace = true }
+arkret-signatures = { workspace = true, optional = true }
 arkret-wire = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }

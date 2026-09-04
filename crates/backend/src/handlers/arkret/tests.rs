@@ -143,6 +143,19 @@ fn test_account_authority_keystore() -> Keystore {
     Keystore::new(JsonWebKeySet::new(vec![account_authority]))
 }
 
+/// The `cnf_jkt` introspection reports.
+///
+/// `introspection.rs` derives it from the signed `session_public_key`
+/// ("it is not duplicated as an independently authorable claim or database
+/// column"), so a fixture cannot pin an arbitrary string here and a test that
+/// did was asserting against a value the endpoint never had a way to return.
+fn expected_cnf_jkt(session_public_key: &str) -> String {
+    arkret_models_identity::CanonicalSessionPublicJwk::new(session_public_key)
+        .expect("fixture session public key is a canonical JWK")
+        .thumbprint_sha256()
+        .expect("a canonical session public key has a thumbprint")
+}
+
 fn test_account_id(principal_id: &str, station_id: &str) -> arkret_wire::AccountId {
     arkret_wire::AccountId::new(
         arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
@@ -920,9 +933,9 @@ async fn session_grant_http_list_and_filter_work() {
         )
         .await;
     response.assert_status(StatusCode::BAD_REQUEST);
-    let body: serde_json::Value = response.json();
-    assert_eq!(body["error"]["code"], "json_invalid");
-    assert_eq!(body["error"]["message"], "invalid browser_session_id");
+    let body: arkret_wire::problem_details::ErrorEnvelope = response.json();
+    assert_eq!(body.code(), "json_invalid");
+    assert_eq!(body.message(), "invalid browser_session_id");
 }
 
 #[tokio::test]
@@ -956,7 +969,12 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     // the same grant still sees it active.
     assert_eq!(body["one_time_use_consumed"], false);
     assert_eq!(body["grant"]["id"], grant.grant_id.to_string());
-    assert_eq!(body["grant"]["subject_id"], grant.subject_id.as_str());
+    // `service-operation-dtos.schema.json#/$defs/SessionGrantIntrospectGrant`
+    // carries the complete `account_id`; it has no bare `subject_id` member.
+    assert_eq!(
+        body["grant"]["account_id"]["principal_id"],
+        grant.subject_id.as_str()
+    );
     assert_eq!(body["grant"]["audience_id"], grant.audience_id.as_str());
     assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
     assert!(body["grant"].get("grant_jwt").is_none());
@@ -968,7 +986,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     );
     assert_eq!(
         body["grant"]["cnf_jkt"],
-        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        expected_cnf_jkt(&grant.session_public_key)
     );
 
     // A second introspection of the same grant: still active (read-only — the
@@ -1144,7 +1162,10 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     assert_eq!(body["active"], true, "{body}");
     assert_eq!(body["status"], "active");
     assert_eq!(body["proof_required"], true);
-    assert_eq!(body["grant"]["cnf_jkt"], bound_jkt);
+    assert_eq!(
+        body["grant"]["cnf_jkt"],
+        expected_cnf_jkt(&grant.session_public_key)
+    );
 
     // ② With a grant-binding DPoP proof the bound grant introspects active
     // and exposes `cnf.jkt` to the Station.
@@ -1168,7 +1189,10 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     let body: serde_json::Value = response.json();
     assert_eq!(body["active"], true);
     assert_eq!(body["proof_required"], false);
-    assert_eq!(body["grant"]["cnf_jkt"], bound_jkt);
+    assert_eq!(
+        body["grant"]["cnf_jkt"],
+        expected_cnf_jkt(&grant.session_public_key)
+    );
 }
 
 #[tokio::test]
@@ -1298,7 +1322,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     // once as the credential `subject_id` and once inside the agent-runtime
     // holder binding, which is what binds the runtime key to it.
     assert_eq!(
-        raw_payload["subject_id"].as_str(),
+        raw_payload["account_id"]["principal_id"].as_str(),
         Some("ak:did_core:web:agent.example")
     );
     assert_eq!(
@@ -1394,7 +1418,10 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     assert_eq!(body["active"], true, "{body}");
     assert_eq!(body["status"], "active");
     assert_eq!(body["proof_required"], false);
-    assert_eq!(body["grant"]["subject_id"], "ak:did_core:web:agent.example");
+    assert_eq!(
+        body["grant"]["account_id"]["principal_id"],
+        "ak:did_core:web:agent.example"
+    );
     assert_eq!(
         body["grant"]["device_id"],
         "ak:device:0196419b-0000-7000-8000-000000000005"
@@ -1405,7 +1432,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     assert_eq!(body["grant"]["freshness_state"], serde_json::Value::Null);
     assert_eq!(
         body["grant"]["cnf_jkt"],
-        "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+        expected_cnf_jkt(&persisted.session_public_key)
     );
     // The wire record re-serializes the embedded JWK canonically, so compare
     // the parsed key material rather than byte-level JSON member order.
@@ -1449,8 +1476,8 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
         )
         .await;
     response.assert_status(StatusCode::UNPROCESSABLE_ENTITY);
-    let body: serde_json::Value = response.json();
-    assert_eq!(body["error"]["code"], "schema_violation");
+    let body: arkret_wire::problem_details::ErrorEnvelope = response.json();
+    assert_eq!(body.code(), "schema_violation");
 
     // Neither present → 422 schema_violation.
     let response = state
@@ -1461,8 +1488,8 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
         )
         .await;
     response.assert_status(StatusCode::UNPROCESSABLE_ENTITY);
-    let body: serde_json::Value = response.json();
-    assert_eq!(body["error"]["code"], "schema_violation");
+    let body: arkret_wire::problem_details::ErrorEnvelope = response.json();
+    assert_eq!(body.code(), "schema_violation");
 }
 
 #[tokio::test]
@@ -1594,11 +1621,8 @@ async fn primary_handle_patch_validates_claims() {
         ))
         .await;
     response.assert_status(StatusCode::BAD_REQUEST);
-    let body: serde_json::Value = response.json();
-    assert_eq!(
-        body["error"]["message"],
-        "primary_handle_not_verified_for_holder"
-    );
+    let body: arkret_wire::problem_details::ErrorEnvelope = response.json();
+    assert_eq!(body.message(), "primary_handle_not_verified_for_holder");
 
     let bob_cookies = CookieHelper::new();
     bob_cookies.import(state.cookie_jar().set_session(&bob_session));

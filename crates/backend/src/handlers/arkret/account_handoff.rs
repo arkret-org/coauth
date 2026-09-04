@@ -1944,11 +1944,8 @@ mod tests {
             ))
             .await;
         failed.assert_status(StatusCode::UNAUTHORIZED);
-        let envelope: serde_json::Value = failed.json();
-        assert_eq!(
-            envelope["error"]["code"].as_str(),
-            Some(arkret_wire::ReasonCode::PROOF_INVALID)
-        );
+        let envelope: arkret_wire::problem_details::ErrorEnvelope = failed.json();
+        assert_eq!(envelope.code(), arkret_wire::ReasonCode::PROOF_INVALID);
 
         assert_eq!(
             grant_stage_label(&state, seed.authorization_grant_id).await,
@@ -2069,11 +2066,8 @@ mod tests {
             ))
             .await;
         response.assert_status(StatusCode::UNAUTHORIZED);
-        let envelope: serde_json::Value = response.json();
-        assert_eq!(
-            envelope["error"]["code"].as_str(),
-            Some(arkret_wire::ReasonCode::PROOF_INVALID)
-        );
+        let envelope: arkret_wire::problem_details::ErrorEnvelope = response.json();
+        assert_eq!(envelope.code(), arkret_wire::ReasonCode::PROOF_INVALID);
 
         // Callback state mismatch.
         let response = state
@@ -2089,11 +2083,8 @@ mod tests {
             ))
             .await;
         response.assert_status(StatusCode::UNAUTHORIZED);
-        let envelope: serde_json::Value = response.json();
-        assert_eq!(
-            envelope["error"]["code"].as_str(),
-            Some(arkret_wire::ReasonCode::PROOF_INVALID)
-        );
+        let envelope: arkret_wire::problem_details::ErrorEnvelope = response.json();
+        assert_eq!(envelope.code(), arkret_wire::ReasonCode::PROOF_INVALID);
 
         // Unconfigured audience.
         let response = state
@@ -2109,11 +2100,8 @@ mod tests {
             ))
             .await;
         response.assert_status(StatusCode::BAD_REQUEST);
-        let envelope: serde_json::Value = response.json();
-        assert_eq!(
-            envelope["error"]["code"].as_str(),
-            Some(arkret_wire::ErrorCode::AUDIENCE_MISMATCH)
-        );
+        let envelope: arkret_wire::problem_details::ErrorEnvelope = response.json();
+        assert_eq!(envelope.code(), arkret_wire::ErrorCode::AUDIENCE_MISMATCH);
 
         // Every rejection rolled back: the code is still consumable.
         assert_eq!(

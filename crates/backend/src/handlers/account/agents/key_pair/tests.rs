@@ -7,20 +7,53 @@ use super::*;
 const AGENT: &str = "ak:did_core:web:agent.example";
 const AGENT_FULL: &str = "did:web:agent.example";
 const CONTROLLER: &str = "ak:did_core:web:controller.example";
+const CONTROLLER_FULL: &str = "did:web:controller.example";
+const CONTROLLER_VM: &str = "did:web:controller.example#key-1";
 const VM: &str = "did:web:agent.example#runtime-key-1";
 const AUDIENCE: &str = "ak:did_core:web:soland.local";
 const PAIRING_REQUEST_ID: &str = "agent_pairing_request:01999999-0000-7000-8000-00000000feed";
+/// Runtime-request digest domain: SHA-256 over RFC 8785 JCS of the request JWK
+/// (`kty` / `kid` / `algorithm` / `key`).
 const PUBLIC_KEY_DIGEST: &str =
-    "sha256:225e8b1ac962ec6c55284d4a00c7e6c484db19fbe7c51abe118f1edc5e04a517";
+    "sha256:8dd5dbdf14ce6690e0c83f42f568ec3d1f15c292039d6be24dad93115ec8fe64";
+/// Authorization digest domain: SHA-256 over the raw 32-byte Ed25519 key.
 const SIGNING_KEY_PUBLIC_KEY_DIGEST: &str =
-    "sha256:544e62cee8033709e389e5b2755343d0d0fa8c4850215cfb6331717e80d1aea3";
+    "sha256:b600306cfa76723fdec395e53a9b3d9fdb78b1e2d7a23c32fcbcd2dc6d0c4092";
+
+/// Seed of the Agent runtime signing key these fixtures pair.
+///
+/// The fixture publishes the *verifying key* derived from this seed, never the
+/// seed bytes as a public key. A raw 32-byte constant is a value nobody holds
+/// the private half of, so no case built on one can produce the proof of
+/// possession `pair_agent_key` verifies before it reaches the authorization
+/// checks these tests cover.
+const RUNTIME_KEY_SEED: [u8; 32] = [42u8; 32];
+
+/// Seed of the controller signing key that authors the authorize Event.
+const CONTROLLER_KEY_SEED: [u8; 32] = [43u8; 32];
+
+fn runtime_signing_key() -> ed25519_dalek::SigningKey {
+    ed25519_dalek::SigningKey::from_bytes(&RUNTIME_KEY_SEED)
+}
+
+fn runtime_public_key_b64() -> String {
+    Base64UrlUnpadded::encode_string(runtime_signing_key().verifying_key().as_bytes())
+}
+
+fn controller_signer() -> arkret_signatures::Ed25519PayloadSigner {
+    arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
+        CONTROLLER_KEY_SEED,
+        arkret_wire::Did::new(CONTROLLER_FULL).expect("controller DID"),
+        arkret_wire::DidUrl::new(CONTROLLER_VM).expect("controller verification method"),
+    )
+}
 
 fn valid_public_key() -> Value {
     json!({
         "kty": "OKP",
         "kid": VM,
         "algorithm": "Ed25519",
-        "key": Base64UrlUnpadded::encode_string(&[42u8; 32]),
+        "key": runtime_public_key_b64(),
     })
 }
 
@@ -110,7 +143,7 @@ fn valid_signing_key_binding_core()
         "public_key": {
             "kty": "OKP",
             "algorithm": "Ed25519",
-            "key": Base64UrlUnpadded::encode_string(&[42u8; 32])
+            "key": runtime_public_key_b64()
         },
         "public_key_digest": SIGNING_KEY_PUBLIC_KEY_DIGEST,
         "issued_at": "2026-07-06T00:00:00.000Z",
@@ -125,7 +158,7 @@ fn valid_authorize_event_typed(pairing_request_id: &str) -> arkret_wire::Event {
         &valid_signing_key_binding_core(),
     )
     .unwrap();
-    let mut event: arkret_wire::Event = serde_json::from_value(json!({
+    let event: arkret_wire::Event = serde_json::from_value(json!({
         "event_id": "ak:event:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
         "kind": "ak.agent.key.authorize",
         "realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG",
@@ -171,57 +204,88 @@ fn valid_authorize_event_typed(pairing_request_id: &str) -> arkret_wire::Event {
                 "approved_by": CONTROLLER
             }
         },
-        "proofs": [{
-            "kind": "detached_jws",
-            "verification_method": "did:web:controller.example#key-1",
-            "event_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-            "created_at": "2026-07-06T00:01:00.000Z",
-            "jws": "eyJhbGciOiJFZDI1NTE5In0..c2ln"
-        }]
+        "proofs": []
     }))
     .unwrap();
-    event
-        .refresh_content_bound_identity_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
-        .unwrap();
-    let digest = arkret_identifiers::Hash::new(
-        event
-            .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
-            .unwrap(),
+    let mut authored = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
+        event,
+        arkret_canonical::DigestSuite::Sha256,
     )
-    .unwrap();
-    event.proofs[0]
-        .as_producer_mut()
-        .expect("fixture carries a producer proof")
-        .event_digest = digest;
-    event
+    .expect("authorize fixture finalizes");
+    arkret_signatures::sign_event(
+        &mut authored,
+        &controller_signer(),
+        &arkret_wire::DidUrl::new(CONTROLLER_VM).expect("controller verification method"),
+        arkret_signatures::SignEventOptions::new().with_created_at(
+            DateTime::parse_from_rfc3339("2026-07-06T00:01:00.000Z")
+                .unwrap()
+                .with_timezone(&Utc),
+        ),
+    )
+    .expect("controller signs the authorize Event");
+    authored.into_event()
+}
+
+/// The canonical Event digest preimage the controller proof binds.
+fn authorize_event_proof_transcript(event: &arkret_wire::Event) -> Vec<u8> {
+    arkret_canonical::canonical_json_bytes(&event.digest_payload().expect("digest preimage"))
+        .expect("canonical digest preimage")
 }
 
 fn valid_signing_key_binding_for(
     pairing_request_id: &str,
 ) -> arkret_models_identity::agent_signer_evidence::AgentSigningKeyBinding {
     let event_id = valid_authorize_event_typed(pairing_request_id).event_id;
-    serde_json::from_value(json!({
-        "schema": "ak.schema.agent_signing_key_binding.v1",
-        "agent_id": AGENT,
-        "agent_key_id": "runtime-key-1",
-        "verification_method": VM,
-        "public_key": {
-            "kty": "OKP",
-            "algorithm": "Ed25519",
-            "key": Base64UrlUnpadded::encode_string(&[42u8; 32])
-        },
-        "public_key_digest": SIGNING_KEY_PUBLIC_KEY_DIGEST,
-        "agent_key_authorize_event_id": event_id,
-        "issued_at": "2026-07-06T00:00:00.000Z",
-        "expires_at": "2026-07-06T00:10:00.000Z",
-        "controller_principal_id": CONTROLLER,
-        "controller_proof": {
-            "kind": "detached_jws",
-            "verification_method": "did:web:controller.example#key-1",
-            "jws": "header..signature"
-        }
-    }))
-    .unwrap()
+    let mut binding: arkret_models_identity::agent_signer_evidence::AgentSigningKeyBinding =
+        serde_json::from_value(json!({
+            "schema": "ak.schema.agent_signing_key_binding.v1",
+            "agent_id": AGENT,
+            "agent_key_id": "runtime-key-1",
+            "verification_method": VM,
+            "public_key": {
+                "kty": "OKP",
+                "algorithm": "Ed25519",
+                "key": runtime_public_key_b64()
+            },
+            "public_key_digest": SIGNING_KEY_PUBLIC_KEY_DIGEST,
+            "agent_key_authorize_event_id": event_id,
+            "issued_at": "2026-07-06T00:00:00.000Z",
+            "expires_at": "2026-07-06T00:10:00.000Z",
+            "controller_principal_id": CONTROLLER,
+            "controller_proof": {
+                "kind": "detached_jws",
+                "verification_method": CONTROLLER_VM,
+                "jws": "eyJhbGciOiJFZDI1NTE5In0..unsigned"
+            }
+        }))
+        .unwrap();
+    // The controller proof signs the binding transcript, so it is attached
+    // after the binding exists. The transcript covers only the proof's `kind`
+    // and `verification_method`, and `agent_signing_key_binding_digest`
+    // excludes `controller_proof` entirely, so replacing the placeholder JWS
+    // moves neither the transcript nor the digest the authorize Event commits
+    // to.
+    binding.controller_proof.jws = arkret_wire::NonEmptyString::new(controller_detached_jws(
+        &arkret_signatures::agent_evidence::agent_signing_key_binding_signing_bytes(&binding)
+            .expect("binding transcript"),
+    ))
+    .expect("a detached JWS is not empty");
+    binding
+}
+
+/// A detached JWS from the fixture controller over `transcript`.
+fn controller_detached_jws(transcript: &[u8]) -> String {
+    arkret_signatures::Ed25519DetachedJwsSigner::from_seed(
+        CONTROLLER_KEY_SEED,
+        CONTROLLER_VM.to_owned(),
+    )
+    .sign_detached_jws(transcript)
+}
+
+fn controller_public_key_material() -> arkret_signatures::proof::PublicKeyMaterial {
+    arkret_signatures::proof::PublicKeyMaterial::Ed25519Raw {
+        bytes: controller_signer().verifying_key().to_bytes().to_vec(),
+    }
 }
 
 fn valid_signing_key_binding()
@@ -231,6 +295,130 @@ fn valid_signing_key_binding()
 
 fn valid_authorize_event(pairing_request_id: &str) -> Value {
     serde_json::to_value(valid_authorize_event_typed(pairing_request_id)).unwrap()
+}
+
+#[test]
+fn fixture_runtime_key_is_a_real_ed25519_key_the_fixture_can_sign_with() {
+    let published = Base64UrlUnpadded::decode_vec(&runtime_public_key_b64())
+        .expect("the published runtime key is canonical base64url");
+    let published: [u8; 32] = published
+        .try_into()
+        .expect("an Ed25519 verifying key is 32 bytes");
+    // Curve validation. `pair_agent_key` runs exactly this decompression before
+    // it verifies the runtime proof of possession;
+    // `validate_agent_runtime_public_key` does not, so the fixture owes the
+    // check itself rather than publishing bytes the endpoint would reject.
+    let verifying = ed25519_dalek::VerifyingKey::from_bytes(&published)
+        .expect("the fixture runtime key must decompress to an Ed25519 curve point");
+    assert_eq!(verifying.as_bytes(), &published);
+
+    // Possession. The fixture holds the private half, so it can produce a
+    // signature the pairing verifier accepts -- which a bare 32-byte constant
+    // can never do, whether or not that constant happens to decompress.
+    use ed25519_dalek::Signer as _;
+    let transcript = b"agent runtime proof-of-possession fixture transcript";
+    let signature = runtime_signing_key().sign(transcript);
+    let material = arkret_signatures::proof::PublicKeyMaterial::Ed25519Raw {
+        bytes: published.to_vec(),
+    };
+    assert!(arkret_signatures::proof::verify_detached_ed25519_signature(
+        &material,
+        transcript,
+        &Base64UrlUnpadded::encode_string(&signature.to_bytes()),
+    ));
+
+    let mut tampered = signature.to_bytes();
+    tampered[0] ^= 0x01;
+    assert!(
+        !arkret_signatures::proof::verify_detached_ed25519_signature(
+            &material,
+            transcript,
+            &Base64UrlUnpadded::encode_string(&tampered),
+        ),
+        "one changed signature byte must not still verify"
+    );
+}
+
+#[test]
+fn fixture_public_key_digests_are_pinned_in_both_domains() {
+    assert_eq!(
+        arkret_signatures::agent::agent_runtime_public_key_digest(&valid_public_key())
+            .expect("runtime request digest")
+            .as_str(),
+        PUBLIC_KEY_DIGEST
+    );
+    assert_eq!(
+        valid_signing_key_binding().public_key_digest.as_str(),
+        SIGNING_KEY_PUBLIC_KEY_DIGEST
+    );
+}
+
+#[test]
+fn authorize_event_controller_proof_verifies_and_one_changed_byte_breaks_it() {
+    let event = valid_authorize_event_typed(PAIRING_REQUEST_ID);
+    let proof = event.proofs[0]
+        .as_producer()
+        .expect("the fixture carries a controller producer proof")
+        .clone();
+    let material = arkret_signatures::proof::PublicKeyMaterial::Ed25519Raw {
+        bytes: controller_signer().verifying_key().to_bytes().to_vec(),
+    };
+    let transcript = authorize_event_proof_transcript(&event);
+    arkret_signatures::proof::verify_ed25519_detached_jws_proof(
+        &proof,
+        &transcript,
+        &event.actor_id,
+        &material,
+    )
+    .expect("the controller proof on the fixture must really verify");
+
+    let mut tampered = transcript.clone();
+    let last = tampered.len() - 2;
+    tampered[last] ^= 0x01;
+    arkret_signatures::proof::verify_ed25519_detached_jws_proof(
+        &proof,
+        &tampered,
+        &event.actor_id,
+        &material,
+    )
+    .expect_err("one changed transcript byte must invalidate the controller proof");
+}
+
+#[test]
+fn signing_key_binding_controller_proof_verifies_and_one_changed_byte_breaks_it() {
+    let binding = valid_signing_key_binding();
+    let expected_binding_digest =
+        arkret_signatures::agent_evidence::agent_signing_key_binding_digest(&binding)
+            .expect("binding digest");
+    let verify =
+        |candidate: &arkret_models_identity::agent_signer_evidence::AgentSigningKeyBinding| {
+            arkret_signatures::agent_evidence::verify_agent_signing_key_binding(
+                candidate,
+                &arkret_identifiers::DidCoreId::new(AGENT).expect("agent core id"),
+                &candidate.agent_key_id.clone(),
+                &arkret_identifiers::DidCoreId::new(CONTROLLER).expect("controller core id"),
+                &arkret_wire::DidUrl::new(VM).expect("runtime verification method"),
+                &candidate.agent_key_authorize_event_id.clone(),
+                &arkret_identifiers::Hash::new(SIGNING_KEY_PUBLIC_KEY_DIGEST)
+                    .expect("signing key digest"),
+                &expected_binding_digest,
+                &controller_public_key_material(),
+            )
+        };
+    verify(&binding).expect("the fixture controller proof must really verify");
+
+    let mut tampered = valid_signing_key_binding();
+    let mut jws = tampered.controller_proof.jws.as_str().to_owned();
+    let signature_start = jws.rfind('.').expect("compact JWS") + 1;
+    let flipped = if jws.as_bytes()[signature_start] == b'A' {
+        "B"
+    } else {
+        "A"
+    };
+    jws.replace_range(signature_start..=signature_start, flipped);
+    tampered.controller_proof.jws =
+        arkret_wire::NonEmptyString::new(jws).expect("a tampered JWS is not empty");
+    verify(&tampered).expect_err("one changed signature byte must not still verify");
 }
 
 #[test]

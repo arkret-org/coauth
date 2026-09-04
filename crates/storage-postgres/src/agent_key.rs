@@ -198,7 +198,11 @@ mod tests {
 
         let active_event_ids = repo
             .agent_key_authorization()
-            .list_active_for_agent(&format!("did:web:{label}-agent.example"))
+            // `authorization()` persists the stable core id, and
+            // `list_active_for_agent` compares `agent_id` byte-for-byte, so the
+            // lookup key is the core id. Querying the complete DID matched no
+            // row and made the assertion compare two empty sets.
+            .list_active_for_agent(&format!("ak:did_core:web:{label}-agent.example"))
             .await
             .unwrap()
             .into_iter()

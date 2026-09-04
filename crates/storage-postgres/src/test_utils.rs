@@ -47,28 +47,46 @@ impl Deref for TestDatabase {
 /// Take exclusive ownership of the test database and return a connection pool
 /// for it.
 ///
-/// Returns `Some(database)` when the `DATABASE_URL` env var is set (typical CI
-/// or a developer with a local Postgres available), or `None` when it is
-/// not set. Tests requiring a live Postgres should early-return on `None`,
-/// e.g.:
+/// Returns `Some(database)` when `DATABASE_URL` names a scratch Postgres.
 ///
-/// ```ignore
-/// let Some(pool) = setup_test_pool().await else { return; };
-/// ```
+/// Without `DATABASE_URL` this **panics** by default. Returning `None`
+/// silently made `cargo test --workspace` green on a machine with no
+/// database while every Postgres-backed case had run zero assertions, which
+/// is the opposite of soland's `TestDatabase::lease_blocking()` in the same
+/// workspace and hid the real state of this crate for as long as it existed.
 ///
-/// This makes the test suite's "happy path" — `cargo test --workspace`
-/// without any environment — actually pass, while still fully exercising
-/// the Postgres path under CI. Migrations are expected to already have
-/// been applied to the test database.
+/// Set `COAUTH_SKIP_POSTGRES_TESTS=1` to accept the skip deliberately; each
+/// skipped case then prints one `SKIP(no DATABASE_URL)` line naming itself,
+/// so the count of what did not run is visible in the output instead of
+/// being indistinguishable from a pass.
+///
+/// Migrations are expected to already have been applied to the test database.
 ///
 /// # Panics
 ///
-/// Panics when `DATABASE_URL` is set but the database cannot be reached or
-/// reset; a test database that cannot be isolated must fail loudly rather
-/// than run against leftover rows.
+/// Panics when `DATABASE_URL` is unset and the skip has not been opted into,
+/// and when it is set but the database cannot be reached or reset; a test
+/// database that cannot be isolated must fail loudly rather than run against
+/// leftover rows.
 #[must_use = "tests should early-return when this returns None"]
 pub async fn setup_test_pool() -> Option<TestDatabase> {
-    let database_url = std::env::var("DATABASE_URL").ok()?;
+    let database_url = match std::env::var("DATABASE_URL") {
+        Ok(database_url) => database_url,
+        Err(_) => {
+            assert!(
+                std::env::var_os("COAUTH_SKIP_POSTGRES_TESTS").is_some(),
+                "DATABASE_URL is unset, so this case cannot exercise anything. Point it at a \
+                 scratch database (`just db-migrate` against it first), or set \
+                 COAUTH_SKIP_POSTGRES_TESTS=1 to accept that every Postgres-backed case is \
+                 skipped."
+            );
+            eprintln!(
+                "SKIP(no DATABASE_URL): {}",
+                std::thread::current().name().unwrap_or("<unnamed test>")
+            );
+            return None;
+        }
+    };
 
     let mut lock = AsyncPgConnection::establish(&database_url)
         .await
@@ -163,7 +181,40 @@ pub fn principal_control_realm_id() -> arkret_identifiers::RealmId {
     ))
 }
 
-/// Shape-valid authority-signed account binding receipt for fixtures.
+/// Seed of the deterministic Account Authority key that signs fixture receipts.
+///
+/// Public by construction: nothing may trust a receipt carrying this
+/// signature outside a test, which is why `test_utils` is feature-gated.
+const FIXTURE_ACCOUNT_AUTHORITY_SEED: [u8; 32] = [0x9a; 32];
+
+/// The public half of [`FIXTURE_ACCOUNT_AUTHORITY_SEED`], for tests that
+/// verify a fixture receipt rather than merely persist one.
+#[must_use]
+pub fn fixture_account_authority_verifying_key() -> [u8; 32] {
+    fixture_account_authority_signer("did:web:fixture.example#service-key")
+        .verifying_key()
+        .to_bytes()
+}
+
+fn fixture_account_authority_signer(
+    verification_method: &str,
+) -> arkret_signatures::Ed25519DetachedJwsSigner {
+    arkret_signatures::Ed25519DetachedJwsSigner::from_seed(
+        FIXTURE_ACCOUNT_AUTHORITY_SEED,
+        verification_method.to_owned(),
+    )
+}
+
+/// Account binding receipt carrying a real Account Authority signature.
+///
+/// The proof is a genuine detached JWS over `canonical_proof_binding_bytes`,
+/// the same transcript `sign_account_binding_receipt` produces in the
+/// register handler. It used to be the literal `"test-detached-jws"`, which is
+/// not even a compact JWS: `event-envelope.schema.json#/$defs/proof` pins
+/// `jws` to `^[A-Za-z0-9_-]+\.(?:[A-Za-z0-9_-]+)?\.[A-Za-z0-9_-]+$`, and
+/// `PayloadProof::validate` -- unlike `ProducerEventProof::validate` -- does
+/// not enforce that grammar, so the wire-invalid value survived every check
+/// this fixture passes through.
 ///
 /// # Panics
 ///
@@ -171,11 +222,18 @@ pub fn principal_control_realm_id() -> arkret_identifiers::RealmId {
 #[must_use]
 pub fn account_binding_receipt(
     account_authority_did: &str,
-    principal_id: arkret_identifiers::DidCoreId,
     did: arkret_identifiers::Did,
     version_id: &str,
     head_event_digest: arkret_identifiers::Hash,
 ) -> arkret_models_identity::AccountBindingReceipt {
+    // The receipt's `principal_id` is the projection of its own `did`:
+    // `AccountBindingReceipt::validate_shape` requires exactly that, so a
+    // receipt cannot express a mismatch between the two. Fixtures that need a
+    // mismatched *binding* express it in `VerifiedPrincipalDidBindingInput`
+    // instead, which is where `add_verified` compares the two and where the
+    // case under test expects the rejection.
+    let principal_id = arkret_identifiers::project_did_to_core_id(&did)
+        .expect("a fixture receipt DID projects to a core id");
     let issued_at = chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
         .expect("fixture timestamp")
         .with_timezone(&chrono::Utc);
@@ -210,10 +268,16 @@ pub fn account_binding_receipt(
             domain: None,
             audience: None,
             proof_purpose: None,
-            jws: "test-detached-jws".to_owned(),
+            jws: String::new(),
         },
     };
     receipt.proof.payload_digest = receipt.canonical_payload_digest().unwrap();
+    let signer = fixture_account_authority_signer(receipt.proof.verification_method.as_str());
+    receipt.proof.jws = signer.sign_detached_jws(
+        &receipt
+            .canonical_proof_binding_bytes()
+            .expect("a self-consistent fixture receipt has a proof binding"),
+    );
     receipt.validate_shape().unwrap();
     receipt
 }
@@ -247,7 +311,6 @@ pub fn verified_principal_binding_input(
         verified_version_id: "1-fixture".to_owned(),
         binding_receipt: account_binding_receipt(
             account_authority_did,
-            principal_id,
             did,
             "1-fixture",
             key_log_head,

@@ -109,6 +109,22 @@ pub(crate) async fn policy_factory(
     anyhow::bail!("tests require the `cedar` feature to be enabled")
 }
 
+/// `kid` of the general-purpose Ed25519 key in the fixture keystore.
+pub(crate) const TEST_ED25519_KEY_ID: &str = "test-ed25519";
+
+/// The private half of [`TEST_ED25519_KEY_ID`].
+///
+/// Fixtures that both sign something and pin the matching public JWK in a DID
+/// document MUST select this key by `kid`. The fixture keystore holds four
+/// Ed25519 keys and `Keystore::signer_for_algorithm` picks by key order, so an
+/// algorithm-only selection signs with whichever key happens to come first --
+/// which stopped being `test-ed25519` once the designated account-authority,
+/// audit and session-grant keys were added, and made such a proof fail to
+/// verify against the document the same fixture pinned.
+pub(crate) fn test_ed25519_private_key() -> PrivateKey {
+    PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(43))
+}
+
 #[derive(Clone)]
 pub(crate) struct TestState {
     pub repository_factory: PgRepositoryFactory,
@@ -456,8 +472,7 @@ impl TestState {
         let rsa = PrivateKey::load_pem(include_str!("../../../keystore/tests/keys/rsa.pkcs1.pem"))
             .unwrap();
         let rsa = JsonWebKey::new(rsa).with_kid("test-rsa");
-        let ed25519 = JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(43)))
-            .with_kid("test-ed25519");
+        let ed25519 = JsonWebKey::new(test_ed25519_private_key()).with_kid(TEST_ED25519_KEY_ID);
         // Server-to-server payloads (account-status records, peer requests) are
         // signed with the explicitly designated Account Authority key, so a
         // deployment without one cannot publish at all.
@@ -960,9 +975,15 @@ impl ResponseExt for Response<String> {
             .to_str()
             .expect("Content-Type header is not valid ASCII");
 
+        // RFC 9457 problem documents are served as `application/problem+json`,
+        // and every error envelope this service renders goes out that way. The
+        // helper used to accept only `application/json`, so a test that read
+        // the body of a deliberate rejection failed on the content type before
+        // it could assert the rejection -- hiding what actually came back.
         assert!(
-            content_type.starts_with("application/json"),
-            "Header mismatch: got {:?}, expected content type starting with \"application/json\"",
+            content_type.starts_with("application/json")
+                || content_type.starts_with("application/problem+json"),
+            "Header mismatch: got {:?}, expected an application/json or              application/problem+json content type",
             self.headers().get(CONTENT_TYPE)
         );
         serde_json::from_str(self.body()).expect("JSON deserialization failed")

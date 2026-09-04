@@ -120,9 +120,13 @@ pub mod station_trust;
 pub(crate) mod telemetry;
 /// Test utilities for creating temporary test databases.
 ///
-/// This module is always compiled (not `#[cfg(test)]`) so that other crates
-/// can use `coauth_storage_postgres::test_utils::setup_test_pool()` in their own
-/// test code.
+/// Compiled for this crate's own tests and, for other crates' test code,
+/// behind the `test-support` feature they opt into from `[dev-dependencies]`.
+/// It is not `#[cfg(test)]` alone because `coauth-backend` consumes
+/// `coauth_storage_postgres::test_utils::setup_test_pool()`; it is not
+/// unconditional either, because it truncates every application table and
+/// signs an Account Authority receipt with a publicly known seed.
+#[cfg(any(test, feature = "test-support"))]
 pub mod test_utils;
 
 pub use self::errors::DatabaseError;

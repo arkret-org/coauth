@@ -1105,7 +1105,7 @@ mod tests {
             .await
             .unwrap();
         repo.save().await.unwrap();
-        let bound_did = state.seed_principal_binding(&user, "didinventory").await;
+        let bound_principal_id = state.seed_principal_binding(&user, "didinventory").await;
 
         let response = state
             .request(
@@ -1117,7 +1117,17 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
         let did = body["data"][0]["did"].as_str().unwrap().to_owned();
-        assert_eq!(did, bound_did);
+        // `data[].did` is the complete DID; `seed_principal_binding` returns
+        // the stable core id it projects to. Comparing the two directly was
+        // comparing a DID against a `ak:did_core:` core id.
+        assert_eq!(
+            arkret_identifiers::project_did_to_core_id(
+                &arkret_identifiers::Did::new(did.clone()).unwrap()
+            )
+            .unwrap()
+            .as_str(),
+            bound_principal_id
+        );
         assert_eq!(body["data"][0]["state"], "active");
         assert_eq!(body["data"][0]["active"], true);
         assert_eq!(body["meta"]["supports_write_operations"], true);
@@ -1184,7 +1194,7 @@ mod tests {
             .key_store
             .public_jwks()
             .iter()
-            .find(|jwk| jwk.kid() == Some("test-ed25519"))
+            .find(|jwk| jwk.kid() == Some(crate::handlers::test_utils::TEST_ED25519_KEY_ID))
             .expect("test keystore should expose its Ed25519 public key")
             .clone();
         let resolution = crate::services::did_resolver::DidResolution {
@@ -1243,10 +1253,13 @@ mod tests {
         approved_by: &str,
     ) -> String {
         let alg = JsonWebSignatureAlg::Ed25519;
-        let signer = state
-            .key_store
-            .signer_for_algorithm(&alg)
-            .expect("test keystore should expose an Ed25519 signing key");
+        // Select by `kid`, not by algorithm: `seed_admin_authority_acceptance`
+        // pins `test-ed25519`'s public JWK in the fixture DID document, and the
+        // fixture keystore holds four Ed25519 keys whose order decides what
+        // `signer_for_algorithm` returns.
+        let signer = crate::handlers::test_utils::test_ed25519_private_key()
+            .signing_key_for_alg(&alg)
+            .expect("the fixture Ed25519 key signs Ed25519");
         let header = JsonWebSignatureHeader::new(alg).with_kid(format!("{approved_by}#key-1"));
         let header_b64 = Base64UrlUnpadded::encode_string(&serde_json::to_vec(&header).unwrap());
         let payload = super::risk_action::risk_action_approval_transcript_bytes(

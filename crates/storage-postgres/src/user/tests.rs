@@ -26,8 +26,15 @@ use crate::test_utils::{
     principal_control_realm_id, verified_principal_binding_input,
 };
 
-/// Stable Account Authority identity these repository fixtures are bound under.
-const TEST_ACCOUNT_AUTHORITY_ID: &str = "ak:did_core:webvh:zaccountauthority:account.example";
+/// Complete Account Authority DID these repository fixtures are bound under.
+///
+/// `account_binding_receipt` takes a resolvable DID: it projects the core id
+/// from it and builds `<did>#service-key` as the receipt proof's verification
+/// method, neither of which a `ak:did_core:` core id can produce. The constant
+/// used to hold a core id, which made every case that touched it panic in
+/// `Did::new` — invisible for as long as `setup_test_pool()` returned `None`
+/// without a database.
+const TEST_ACCOUNT_AUTHORITY_DID: &str = "did:webvh:zaccountauthority:account.example";
 
 fn registration_binding_input(
     audience_id: impl Into<String>,
@@ -48,8 +55,7 @@ fn registration_binding_input(
         verified_did: did.clone(),
         verified_version_id: version_id.to_owned(),
         binding_receipt: account_binding_receipt(
-            TEST_ACCOUNT_AUTHORITY_ID,
-            principal_id,
+            TEST_ACCOUNT_AUTHORITY_DID,
             did,
             version_id,
             key_log_head,
@@ -1379,7 +1385,7 @@ async fn principal_did_has_one_global_owner_under_concurrent_binding() {
                 &MockClock::default(),
                 &alice,
                 verified_principal_binding_input(
-                    TEST_ACCOUNT_AUTHORITY_ID,
+                    TEST_ACCOUNT_AUTHORITY_DID,
                     "ak:did_core:web:ps-a.example",
                     first_principal_id,
                     first_head,
@@ -1407,7 +1413,7 @@ async fn principal_did_has_one_global_owner_under_concurrent_binding() {
                 &MockClock::default(),
                 &bob,
                 verified_principal_binding_input(
-                    TEST_ACCOUNT_AUTHORITY_ID,
+                    TEST_ACCOUNT_AUTHORITY_DID,
                     "ak:did_core:web:ps-b.example",
                     second_principal_id,
                     key_log_head,
@@ -1472,7 +1478,7 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
             &clock,
             &alice,
             verified_principal_binding_input(
-                TEST_ACCOUNT_AUTHORITY_ID,
+                TEST_ACCOUNT_AUTHORITY_DID,
                 audience_id,
                 first_did.clone(),
                 first_head,
@@ -1491,7 +1497,7 @@ async fn principal_did_rejects_a_second_did_for_the_same_user_and_audience() {
             &clock,
             &alice,
             verified_principal_binding_input(
-                TEST_ACCOUNT_AUTHORITY_ID,
+                TEST_ACCOUNT_AUTHORITY_DID,
                 audience_id,
                 second_did.clone(),
                 second_head,

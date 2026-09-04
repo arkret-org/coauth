@@ -150,6 +150,7 @@ vergen-gitcl = { workspace = true }
 
 [dev-dependencies]
 arkret-wire = { workspace = true, features = ["test-support"] }
+coauth-storage-postgres = { workspace = true, features = ["test-support"] }
 cookie_store = { workspace = true }
 insta = { workspace = true }
 salvo = { workspace = true, features = ["test"] }
