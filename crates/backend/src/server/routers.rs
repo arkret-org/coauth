@@ -180,7 +180,7 @@ fn account_api_subrouters() -> (Router, Router) {
         .push(
             Router::with_path("gate/account/onboarding")
                 .options(oidc_preflight_handler)
-                .get(arkret::account_onboarding_snapshot),
+                .get(arkret::account_onboarding_state),
         )
         .push(
             Router::with_path("gate/account/did-binding-challenges")
