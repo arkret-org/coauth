@@ -323,8 +323,7 @@ impl Options {
                     || coauth_config::runtime_var("COAUTH_FIRST_PROVISIONING")
                         .is_ok_and(|value| value.trim() == "1"),
                 shutdown.soft_shutdown_token(),
-                coauth_backend::services::station_trust::DEFAULT_INITIAL_RETRY_INTERVAL,
-                coauth_backend::services::station_trust::DEFAULT_REFRESH_INTERVAL,
+                coauth_backend::services::station_trust::RevalidationSchedule::DEFAULT,
             );
             s
         };

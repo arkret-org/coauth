@@ -1122,6 +1122,25 @@ pub async fn preflight_and_spawn(
     Ok(())
 }
 
+/// How often the background verifier retries a cold Station and how often it
+/// revalidates a warm one.
+///
+/// The two intervals are one decision — the retry cadence before trust is
+/// ready and the refresh cadence after — so they travel together rather than
+/// as two adjacent `Duration` parameters a caller can silently transpose.
+#[derive(Clone, Copy, Debug)]
+pub struct RevalidationSchedule {
+    pub initial_retry: Duration,
+    pub refresh: Duration,
+}
+
+impl RevalidationSchedule {
+    pub const DEFAULT: Self = Self {
+        initial_retry: DEFAULT_INITIAL_RETRY_INTERVAL,
+        refresh: DEFAULT_REFRESH_INTERVAL,
+    };
+}
+
 /// Start Station trust verification without delaying the HTTP listener.
 ///
 /// This is the server startup path. A fresh Station needs Coauth's public JWK
@@ -1139,11 +1158,12 @@ pub fn spawn_preflight_and_revalidation(
     development_mode: bool,
     first_provisioning: bool,
     soft_shutdown: CancellationToken,
-    initial_retry_interval: Duration,
-    refresh_interval: Duration,
+    schedule: RevalidationSchedule,
 ) {
-    let initial_retry_interval = initial_retry_interval.max(Duration::from_secs(1));
-    let refresh_interval = refresh_interval.clamp(MIN_REFRESH_INTERVAL, MAX_REFRESH_INTERVAL);
+    let initial_retry_interval = schedule.initial_retry.max(Duration::from_secs(1));
+    let refresh_interval = schedule
+        .refresh
+        .clamp(MIN_REFRESH_INTERVAL, MAX_REFRESH_INTERVAL);
     let resolver = shared().clone();
     tokio::spawn(async move {
         loop {

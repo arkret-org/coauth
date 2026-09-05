@@ -117,9 +117,10 @@ fn map_peer_gate_error(error: PeerProtocolClientError) -> ArkretRouteError {
             problem: Some(problem),
         } if (400..500).contains(&status) => {
             let status = StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_REQUEST);
-            let code = arkret_wire::ErrorCode::from_wire(problem.code())
-                .map(arkret_wire::ErrorCode::as_str)
-                .unwrap_or(arkret_wire::ErrorCode::SCHEMA_VIOLATION);
+            let code = arkret_wire::ErrorCode::from_wire(problem.code()).map_or(
+                arkret_wire::ErrorCode::SCHEMA_VIOLATION,
+                arkret_wire::ErrorCode::as_str,
+            );
             ArkretRouteError::coded(status, code, problem.detail)
         }
         PeerProtocolClientError::Status { status, .. } if (400..500).contains(&status) => {
@@ -236,11 +237,11 @@ mod tests {
     fn peer_problem_4xx_keeps_status_and_registered_code() {
         let error = map_peer_gate_error(PeerProtocolClientError::Status {
             status: 400,
-            problem: Some(arkret_wire::Problem::new(
+            problem: Some(Box::new(arkret_wire::Problem::new(
                 arkret_wire::ErrorCode::SCHEMA_VIOLATION,
                 400,
                 "accepted-device possession proof is invalid",
-            )),
+            ))),
         });
         assert!(matches!(
             error,

@@ -68,7 +68,11 @@ pub enum PeerProtocolClientError {
     )]
     Status {
         status: u16,
-        problem: Option<arkret_wire::Problem>,
+        // Boxed: `Problem` is by far the widest thing this enum carries, and
+        // every peer call returns `Result<_, PeerProtocolClientError>`, so an
+        // inline copy makes the whole federation path move it on the happy
+        // path too.
+        problem: Option<Box<arkret_wire::Problem>>,
     },
     #[error("peer protocol response body invalid: {0}")]
     Response(String),
@@ -422,7 +426,8 @@ where
             .json::<arkret_wire::Problem>()
             .await
             .ok()
-            .filter(|problem| problem.status == status.as_u16());
+            .filter(|problem| problem.status == status.as_u16())
+            .map(Box::new);
         return Err(PeerProtocolClientError::Status {
             status: status.as_u16(),
             problem,
