@@ -40,16 +40,16 @@ async fn rate_limited_error_fixture() -> Result<(), ArkretRouteError> {
 fn internal_error_details_are_development_only() {
     let error = std::io::Error::other("database exploded");
     let production = internal_error_envelope(&error, false);
-    assert_eq!(production.error.message, "internal server error");
-    assert!(production.error.details.is_empty());
+    assert_eq!(production.detail, "internal server error");
+    assert!(production.extensions.is_empty());
 
     let development = internal_error_envelope(&error, true);
     assert_eq!(
-        development.error.message,
+        development.detail,
         "internal server error: database exploded"
     );
     assert_eq!(
-        development.error.details.get("cause"),
+        development.extensions.get("cause"),
         Some(&serde_json::json!("database exploded"))
     );
 }
@@ -933,9 +933,9 @@ async fn session_grant_http_list_and_filter_work() {
         )
         .await;
     response.assert_status(StatusCode::BAD_REQUEST);
-    let body: arkret_wire::problem_details::ErrorEnvelope = response.json();
+    let body: arkret_wire::problem_details::Problem = response.json();
     assert_eq!(body.code(), "json_invalid");
-    assert_eq!(body.message(), "invalid browser_session_id");
+    assert_eq!(body.detail, "invalid browser_session_id");
 }
 
 #[tokio::test]
@@ -1476,7 +1476,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
         )
         .await;
     response.assert_status(StatusCode::UNPROCESSABLE_ENTITY);
-    let body: arkret_wire::problem_details::ErrorEnvelope = response.json();
+    let body: arkret_wire::problem_details::Problem = response.json();
     assert_eq!(body.code(), "schema_violation");
 
     // Neither present → 422 schema_violation.
@@ -1488,7 +1488,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
         )
         .await;
     response.assert_status(StatusCode::UNPROCESSABLE_ENTITY);
-    let body: arkret_wire::problem_details::ErrorEnvelope = response.json();
+    let body: arkret_wire::problem_details::Problem = response.json();
     assert_eq!(body.code(), "schema_violation");
 }
 
@@ -1621,8 +1621,8 @@ async fn primary_handle_patch_validates_claims() {
         ))
         .await;
     response.assert_status(StatusCode::BAD_REQUEST);
-    let body: arkret_wire::problem_details::ErrorEnvelope = response.json();
-    assert_eq!(body.message(), "primary_handle_not_verified_for_holder");
+    let body: arkret_wire::problem_details::Problem = response.json();
+    assert_eq!(body.detail, "primary_handle_not_verified_for_holder");
 
     let bob_cookies = CookieHelper::new();
     bob_cookies.import(state.cookie_jar().set_session(&bob_session));

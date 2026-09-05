@@ -943,7 +943,7 @@ mod tests {
             ))
             .await;
         after.assert_status(hyper::StatusCode::UNAUTHORIZED);
-        let error: arkret_wire::problem_details::ErrorEnvelope = after.json();
+        let error: arkret_wire::problem_details::Problem = after.json();
         assert_eq!(error.code(), "account_erased");
     }
 }

@@ -513,21 +513,21 @@ async fn arkret_not_found(req: &Request, res: &mut Response) {
         arkret::render_problem(
             res,
             StatusCode::METHOD_NOT_ALLOWED,
-            arkret_wire::ErrorEnvelope::new(
+            arkret_wire::Problem::from_code(
                 arkret_wire::ErrorCode::METHOD_NOT_ALLOWED,
                 "method not allowed",
             )
-            .with_request_id(&request_id),
+            .with_instance(&request_id),
         );
     } else {
         arkret::render_problem(
             res,
             StatusCode::NOT_FOUND,
-            arkret_wire::ErrorEnvelope::new(
+            arkret_wire::Problem::from_code(
                 arkret_wire::ErrorCode::UNRECOGNIZED_ENDPOINT,
                 "unrecognized Arkret endpoint",
             )
-            .with_request_id(&request_id),
+            .with_instance(&request_id),
         );
     }
 }

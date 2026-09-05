@@ -5,7 +5,7 @@ use crate::components::empty_state::EmptyState;
 use crate::components::loading::LoadingScreen;
 use crate::components::oauth_session::OAuthSessionCard;
 use crate::components::pagination::{
-    PaginationState, SessionFilterToggle, SessionPaginationControls,
+    PaginationState, SessionFilterToggle, SessionPaginationControls, session_query,
 };
 use crate::components::separator::{Separator, SeparatorKind};
 use crate::pages::Route;
@@ -19,9 +19,8 @@ pub fn Sessions() -> Element {
     // serves both the browser-session overview and the app-session list.
     // Re-fetch when the filter toggle or pagination cursor changes.
     let sessions = use_resource(move || {
-        let _inactive = show_inactive();
-        let _pag = &*pagination.read();
-        async move { crate::api::api_get::<ViewerOutcome>("/self/viewer").await }
+        let query = session_query("app", &pagination.read(), show_inactive());
+        async move { crate::api::api_get::<ViewerOutcome>(&format!("/self/viewer{query}")).await }
     });
 
     let sessions_binding = sessions.read();

@@ -12,10 +12,17 @@ pub fn DeviceRedirect(route: Vec<String>) -> Element {
     let nav = navigator();
 
     let data = use_resource(move || {
-        let _device_id = device_id.clone();
+        // Ask for the session that carries *this* device. Before 2026-09-05
+        // the route parameter was bound and dropped, and the page redirected
+        // to whichever app session came back first -- so a device id that did
+        // not exist still landed somewhere, and one that did could land on a
+        // different device's session.
+        let device_id = device_id.clone();
         async move {
-            // Get the combined viewer data (includes app sessions)
-            crate::api::api_get::<ViewerOutcome>("/self/viewer").await
+            crate::api::api_get::<ViewerOutcome>(&format!(
+                "/self/viewer?session_limit=1&app_device={device_id}"
+            ))
+            .await
         }
     });
 

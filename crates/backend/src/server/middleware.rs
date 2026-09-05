@@ -100,9 +100,9 @@ pub(crate) async fn arkret_operation_selector_middleware(
         }
     };
     let request_id = depot.get::<String>("arkret_request_id").ok().cloned();
-    let mut envelope = arkret_wire::ErrorEnvelope::new(code, message);
+    let mut envelope = arkret_wire::Problem::from_code(code, message);
     if let Some(request_id) = request_id {
-        envelope = envelope.with_request_id(request_id);
+        envelope = envelope.with_instance(request_id);
     }
     crate::handlers::arkret::render_problem(res, status, envelope);
     ctrl.skip_rest();

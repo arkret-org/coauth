@@ -2,8 +2,8 @@ use coauth_data::oauth::{OAuthClientRepository, OAuthSessionFilter, OAuthSession
 use coauth_data::queue::{QueueJobRepositoryExt as _, SyncDevicesJob};
 use coauth_data::user::{BrowserSessionFilter, BrowserSessionRepository, UserRepository};
 use coauth_data::{
-    Authentication, BoxRepository, BrowserSession, Client, Clock, Pagination, RepositoryError,
-    Session, User,
+    Authentication, BoxRepository, BrowserSession, Client, Clock, Edge, Page, Pagination,
+    RepositoryError, Session, User,
 };
 use coauth_principal::ConnectorAdmin;
 use rand_chacha::rand_core::CryptoRngCore;
@@ -122,6 +122,102 @@ pub async fn list_active_oauth_sessions_for_requester(
         sessions,
         next_cursor: page.has_next_page.then_some(next_cursor).flatten(),
         has_more: page.has_next_page,
+    })
+}
+
+/// Which slice of each session connection `/self/viewer` should return.
+///
+/// The two settings pages both fetch the viewer and each paginates exactly one
+/// connection, so the cursors are named per connection rather than shared: a
+/// cursor is a node id, and a `BrowserSession` id applied to the OAuth list
+/// would silently slice it by an unrelated ULID.
+pub struct ViewerSessionPage {
+    pub browser: Pagination,
+    pub app: Pagination,
+    /// Include sessions that have already ended. Default is active only.
+    pub include_ended: bool,
+    /// Narrow the app connection to the sessions whose scope carries this
+    /// device. The device redirect resolves a device id to its session this
+    /// way; it used to take whichever session happened to be first on the
+    /// page, which is not the device the user asked for.
+    pub app_device: Option<String>,
+}
+
+/// Both session connections of the viewer payload, with their unpaginated
+/// totals.
+pub struct ViewerSessionConnections {
+    pub browser: Page<BrowserSession>,
+    pub browser_total: usize,
+    pub app: Page<OAuthSessionDetailData>,
+    pub app_total: usize,
+}
+
+/// Load the browser- and app-session connections for the viewer payload.
+///
+/// Until 2026-09-05 the viewer hard-coded both to `None`. The frontend reads
+/// them through `map_or(0, …)` / `unwrap_or_default()`, so `None` and "zero
+/// sessions" were indistinguishable: the session pages rendered as empty and
+/// the device redirect never found its target, with nothing failing.
+///
+/// `last_authentication` is deliberately not resolved per row -- it would be
+/// one query per session and no list card reads it; the viewer's own session
+/// carries it, which is where the UI shows it.
+pub async fn load_viewer_session_connections(
+    repo: &mut BoxRepository,
+    user: &User,
+    page: &ViewerSessionPage,
+) -> Result<ViewerSessionConnections, RepositoryError> {
+    let browser_filter = BrowserSessionFilter::new().for_user(user);
+    let browser_filter = if page.include_ended {
+        browser_filter
+    } else {
+        browser_filter.active_only()
+    };
+    // Count first, from the same filter the page is drawn with: the total the
+    // UI shows must describe the set being paged, not a wider one.
+    let browser_total = repo.browser_session().count(browser_filter).await?;
+    let browser = repo
+        .browser_session()
+        .list(browser_filter, page.browser)
+        .await?;
+
+    let app_filter = OAuthSessionFilter::new().for_user(user);
+    let app_filter = if page.include_ended {
+        app_filter
+    } else {
+        app_filter.active_only()
+    };
+    let app_filter = match page.app_device.as_deref() {
+        Some(device) => app_filter.for_device(device),
+        None => app_filter,
+    };
+    let app_total = repo.oauth_session().count(app_filter).await?;
+    let app_page = repo.oauth_session().list(app_filter, page.app).await?;
+
+    // Resolve each session's client for display. `Page::try_map` cannot be used
+    // because the lookup is async.
+    let mut edges = Vec::with_capacity(app_page.edges.len());
+    for edge in app_page.edges {
+        let client = repo.oauth_client().lookup(edge.node.client_id).await?;
+        edges.push(Edge {
+            cursor: edge.cursor,
+            node: OAuthSessionDetailData {
+                session: edge.node,
+                client,
+            },
+        });
+    }
+    let app = Page {
+        has_next_page: app_page.has_next_page,
+        has_previous_page: app_page.has_previous_page,
+        edges,
+    };
+
+    Ok(ViewerSessionConnections {
+        browser,
+        browser_total,
+        app,
+        app_total,
     })
 }
 

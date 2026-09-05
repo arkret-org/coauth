@@ -92,8 +92,8 @@ pub struct InvalidTransitionError;
 pub use ulid::Ulid;
 
 pub use self::storage::{
-    BoxRepository, BoxRepositoryFactory, MapErr, Page, Pagination, Repository, RepositoryAccess,
-    RepositoryError, RepositoryFactory, RepositoryTransaction, pagination,
+    BoxRepository, BoxRepositoryFactory, Edge, MapErr, Page, Pagination, Repository,
+    RepositoryAccess, RepositoryError, RepositoryFactory, RepositoryTransaction, pagination,
 };
 
 /// Generate a new UUID v7-compatible identifier (RFC 9562).

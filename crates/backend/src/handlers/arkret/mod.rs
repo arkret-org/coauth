@@ -25,7 +25,7 @@ pub use session_grant::*;
 mod tests;
 
 use anyhow::Error as AnyhowError;
-use arkret_wire::ErrorEnvelope;
+use arkret_wire::Problem;
 use coauth_config::ArkretConfig;
 #[cfg(debug_assertions)]
 use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
@@ -539,22 +539,22 @@ fn station_static_session_grant_bearer_audiences(
 fn internal_error_envelope(
     error: &(dyn std::error::Error + Send + Sync + 'static),
     development_mode: bool,
-) -> ErrorEnvelope {
+) -> Problem {
     let message = if development_mode {
         format!("internal server error: {error}")
     } else {
         "internal server error".to_owned()
     };
-    let envelope = ErrorEnvelope::new(arkret_wire::ErrorCode::INTERNAL_ERROR, message);
+    let envelope = Problem::from_code(arkret_wire::ErrorCode::INTERNAL_ERROR, message);
     if development_mode {
-        envelope.with_detail("cause", serde_json::json!(error.to_string()))
+        envelope.with_extension("cause", serde_json::json!(error.to_string()))
     } else {
         envelope
     }
 }
 
-pub(crate) fn render_problem(res: &mut Response, status: StatusCode, envelope: ErrorEnvelope) {
-    let problem = arkret_wire::Problem::from_error_envelope(&envelope, status.as_u16());
+pub(crate) fn render_problem(res: &mut Response, status: StatusCode, envelope: Problem) {
+    let problem = envelope.with_status(status.as_u16());
     let mut output = salvo::http::Problem::new(status)
         .kind(problem.problem_type)
         .title(problem.title)
@@ -594,26 +594,26 @@ impl Scribe for ArkretRouteError {
             }
             Self::NotFound => (
                 StatusCode::NOT_FOUND,
-                ErrorEnvelope::new(arkret_wire::ErrorCode::NOT_FOUND, "not found"),
+                Problem::from_code(arkret_wire::ErrorCode::NOT_FOUND, "not found"),
             ),
             Self::BadRequest(message) => (
                 StatusCode::BAD_REQUEST,
-                ErrorEnvelope::new(arkret_wire::ErrorCode::JSON_INVALID, message),
+                Problem::from_code(arkret_wire::ErrorCode::JSON_INVALID, message),
             ),
             Self::Coded {
                 status,
                 code,
                 message,
-            } => (status, ErrorEnvelope::new(code, message)),
+            } => (status, Problem::from_code(code, message)),
             Self::CodedDetailed {
                 status,
                 code,
                 message,
                 details,
             } => {
-                let mut envelope = ErrorEnvelope::new(code, message);
+                let mut envelope = Problem::from_code(code, message);
                 for (key, value) in details {
-                    envelope = envelope.with_detail(key, value);
+                    envelope = envelope.with_extension(key, value);
                 }
                 (status, envelope)
             }
@@ -622,18 +622,15 @@ impl Scribe for ArkretRouteError {
                 retry_after_ms,
             } => (
                 StatusCode::TOO_MANY_REQUESTS,
-                ErrorEnvelope::new(arkret_wire::ErrorCode::RATE_LIMITED, message)
+                Problem::from_code(arkret_wire::ErrorCode::RATE_LIMITED, message)
                     .with_retry_after_ms(Some(retry_after_ms)),
             ),
             Self::HumanApprovalRequired(details) => (
                 StatusCode::FORBIDDEN,
-                ErrorEnvelope::claim_required_human_approval(
-                    "controller approval required",
-                    details,
-                ),
+                Problem::claim_required_human_approval("controller approval required", details),
             ),
             Self::SessionGrantReplayExpired(details) => {
-                let mut envelope = ErrorEnvelope::new(
+                let mut envelope = Problem::from_code(
                     arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_EXPIRED,
                     "session grant exact replay has expired",
                 );
@@ -641,13 +638,13 @@ impl Scribe for ArkretRouteError {
                     serde_json::to_value(details).expect("typed replay details serialize")
                 {
                     for (key, value) in values {
-                        envelope = envelope.with_detail(key, value);
+                        envelope = envelope.with_extension(key, value);
                     }
                 }
                 (StatusCode::GONE, envelope)
             }
             Self::SessionGrantReplayTerminal(details) => {
-                let mut envelope = ErrorEnvelope::new(
+                let mut envelope = Problem::from_code(
                     arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_TERMINAL,
                     "session grant exact replay is terminal",
                 );
@@ -655,18 +652,18 @@ impl Scribe for ArkretRouteError {
                     serde_json::to_value(details).expect("typed replay details serialize")
                 {
                     for (key, value) in values {
-                        envelope = envelope.with_detail(key, value);
+                        envelope = envelope.with_extension(key, value);
                     }
                 }
                 (StatusCode::CONFLICT, envelope)
             }
             Self::Unauthorized(message) => (
                 StatusCode::UNAUTHORIZED,
-                ErrorEnvelope::new(arkret_wire::ErrorCode::UNAUTHENTICATED, message),
+                Problem::from_code(arkret_wire::ErrorCode::UNAUTHENTICATED, message),
             ),
             Self::Forbidden(message) => (
                 StatusCode::FORBIDDEN,
-                ErrorEnvelope::new(arkret_wire::ErrorCode::CAPABILITY_DENIED, message),
+                Problem::from_code(arkret_wire::ErrorCode::CAPABILITY_DENIED, message),
             ),
         };
 
@@ -687,7 +684,7 @@ impl Scribe for ArkretRouteError {
         }
 
         let envelope = match request_id {
-            Some(request_id) => envelope.with_request_id(request_id),
+            Some(request_id) => envelope.with_instance(request_id),
             None => envelope,
         };
         render_problem(res, status, envelope);

@@ -28,8 +28,38 @@ impl PaginationState {
     }
 }
 
-/// The "Show inactive (90+ days)" filter toggle shared by the session list
-/// pages. Flipping it also resets pagination back to the first page.
+/// Query string for `/self/viewer`'s session connections.
+///
+/// `prefix` names the connection the cursor belongs to (`browser` or `app`).
+/// The two are not interchangeable: a cursor is a node id and the viewer
+/// rejects one of the wrong kind rather than slicing the other list by an
+/// unrelated ULID. A node id is `<prefix>:<ulid>`, and `:` is legal in a query
+/// component, so it needs no escaping.
+#[must_use]
+pub fn session_query(prefix: &str, state: &PaginationState, include_ended: bool) -> String {
+    let mut query = format!("?session_limit={}", state.page_size);
+    match &state.direction {
+        PaginationDirection::LastPage => {}
+        PaginationDirection::Forward(cursor) => {
+            query.push_str(&format!("&{prefix}_after={cursor}"));
+        }
+        PaginationDirection::Backward(cursor) => {
+            query.push_str(&format!("&{prefix}_before={cursor}"));
+        }
+    }
+    if include_ended {
+        query.push_str("&include_ended=true");
+    }
+    query
+}
+
+/// The "Show ended sessions" filter toggle shared by the session list pages.
+/// Flipping it also resets pagination back to the first page.
+///
+/// It used to read "Show ended sessions". The storage filter behind it
+/// is `active_only` -- whether a session has ended -- and there is no
+/// age threshold anywhere in the query, so the old label described a
+/// behaviour that did not exist.
 #[component]
 pub fn SessionFilterToggle(active: Signal<bool>, pagination: Signal<PaginationState>) -> Element {
     let page_size = pagination.read().page_size;

@@ -153,7 +153,7 @@ pub mod upstream_oauth;
 pub mod user;
 
 pub use self::notification_template::NotificationTemplateRepository;
-pub use self::pagination::{Page, Pagination};
+pub use self::pagination::{Edge, Page, Pagination};
 pub use self::repository::{
     BoxRepository, BoxRepositoryFactory, Repository, RepositoryAccess, RepositoryError,
     RepositoryFactory, RepositoryTransaction,

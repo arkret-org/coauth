@@ -1944,7 +1944,7 @@ mod tests {
             ))
             .await;
         failed.assert_status(StatusCode::UNAUTHORIZED);
-        let envelope: arkret_wire::problem_details::ErrorEnvelope = failed.json();
+        let envelope: arkret_wire::problem_details::Problem = failed.json();
         assert_eq!(envelope.code(), arkret_wire::ReasonCode::PROOF_INVALID);
 
         assert_eq!(
@@ -2066,7 +2066,7 @@ mod tests {
             ))
             .await;
         response.assert_status(StatusCode::UNAUTHORIZED);
-        let envelope: arkret_wire::problem_details::ErrorEnvelope = response.json();
+        let envelope: arkret_wire::problem_details::Problem = response.json();
         assert_eq!(envelope.code(), arkret_wire::ReasonCode::PROOF_INVALID);
 
         // Callback state mismatch.
@@ -2083,7 +2083,7 @@ mod tests {
             ))
             .await;
         response.assert_status(StatusCode::UNAUTHORIZED);
-        let envelope: arkret_wire::problem_details::ErrorEnvelope = response.json();
+        let envelope: arkret_wire::problem_details::Problem = response.json();
         assert_eq!(envelope.code(), arkret_wire::ReasonCode::PROOF_INVALID);
 
         // Unconfigured audience.
@@ -2100,7 +2100,7 @@ mod tests {
             ))
             .await;
         response.assert_status(StatusCode::BAD_REQUEST);
-        let envelope: arkret_wire::problem_details::ErrorEnvelope = response.json();
+        let envelope: arkret_wire::problem_details::Problem = response.json();
         assert_eq!(envelope.code(), arkret_wire::ErrorCode::AUDIENCE_MISMATCH);
 
         // Every rejection rolled back: the code is still consumable.
