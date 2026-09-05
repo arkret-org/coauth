@@ -15,6 +15,11 @@ doc = false
 
 [features]
 docker = []
+# `RuntimeOwningStationIdentity::fixture` installs a delegated owning
+# Station identity without the trust preflight that normally authorises it.
+# Gating it keeps that bypass out of a production build of this crate;
+# consumers opt in from `[dev-dependencies]`.
+test-support = []
 
 [dependencies]
 anyhow = { workspace = true }

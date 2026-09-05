@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use arkret_identifiers::{Did, DidCoreId, project_did_to_core_id};
+use arkret_identifiers::{Did, DidCoreId};
 use chrono::Duration;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -130,11 +130,18 @@ impl RuntimeOwningStationIdentity {
             Some(DelegatedStationIdentity { station_id, did });
     }
 
-    #[doc(hidden)]
+    /// Install a delegated identity directly, skipping the owning Station
+    /// trust preflight that [`store`](Self::store) normally follows.
+    ///
+    /// Compiled for this crate's own tests and, for other crates' test code,
+    /// behind the `test-support` feature they opt into from
+    /// `[dev-dependencies]`.
+    #[cfg(any(test, feature = "test-support"))]
     #[must_use]
     pub fn fixture(did: &str) -> Self {
         let did = Did::new(did.to_owned()).expect("fixture Station DID");
-        let station_id = project_did_to_core_id(&did).expect("fixture Station core ID");
+        let station_id =
+            arkret_identifiers::project_did_to_core_id(&did).expect("fixture Station core ID");
         let value = Self::default();
         value.store(station_id, did);
         value

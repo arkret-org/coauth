@@ -18,6 +18,10 @@ use diesel_async::{AsyncConnection as _, AsyncPgConnection, RunQueryDsl as _};
 /// when the owning session closes, so the guard needs no async drop.
 const TEST_DATABASE_ADVISORY_LOCK_KEY: i64 = 0x0063_6f61_7574_68db;
 
+/// The migration this repository rewrites in place, embedded so its bytes
+/// can be fingerprinted.
+const INITIAL_MIGRATION_SQL: &str = include_str!("../migrations/00000000000000_initial/up.sql");
+
 /// Exclusive handle on the shared test database.
 ///
 /// Holding one guarantees two things for the duration of a test:
@@ -97,6 +101,7 @@ pub async fn setup_test_pool() -> Option<TestDatabase> {
     .execute(&mut lock)
     .await
     .expect("could not acquire the test database advisory lock");
+    verify_schema_fingerprint(&mut lock, &database_url).await;
     reset_database(&mut lock).await;
 
     let manager = AsyncDieselConnectionManager::<AsyncPgConnection>::new(&database_url);
@@ -108,18 +113,91 @@ pub async fn setup_test_pool() -> Option<TestDatabase> {
 }
 
 #[derive(diesel::QueryableByName)]
+struct FingerprintRow {
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    fingerprint: String,
+}
+
+/// Refuse a test database whose schema predates the current migration.
+///
+/// coauth does **not** apply migrations from the test harness ([`setup_test_pool`]
+/// documents that they "are expected to already have been applied"), and this
+/// repository rewrites its single migration in place rather than adding a new
+/// one -- so a database prepared before an edit keeps its old schema silently.
+/// Measured on 2026-09-05, that produced 73 failures reading `字段 X 不存在` /
+/// `关系 Y 不存在` spread across unrelated modules: a shape that reads like a
+/// broad functional regression and costs a full debugging cycle before anyone
+/// suspects the database.
+///
+/// The first connection to a database records the fingerprint; every later one
+/// compares. That misses only the first transition on a database created before
+/// this fence existed -- from then on an edit is caught on the next run.
+///
+/// soland solves the same problem differently because its harness *does* create
+/// databases: there the fingerprint is part of the leased slot name, so a stale
+/// slot is never a candidate. Here nothing can create the database for you, so
+/// the honest move is to fail with the commands that fix it.
+async fn verify_schema_fingerprint(connection: &mut AsyncPgConnection, database_url: &str) {
+    let current: String = arkret_canonical::sha256_hex(INITIAL_MIGRATION_SQL.as_bytes())
+        .chars()
+        .take(8)
+        .collect();
+    diesel::sql_query(
+        "CREATE TABLE IF NOT EXISTS coauth_test_schema_fingerprint (
+             singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+             fingerprint text NOT NULL)",
+    )
+    .execute(connection)
+    .await
+    .expect("could not create the test schema fingerprint table");
+    let recorded = diesel::sql_query(
+        "SELECT fingerprint FROM coauth_test_schema_fingerprint WHERE singleton = TRUE",
+    )
+    .get_results::<FingerprintRow>(connection)
+    .await
+    .expect("could not read the test schema fingerprint");
+    // `.first()` here would resolve to diesel's `LimitDsl::first`, not the
+    // slice method: `RunQueryDsl` is in scope for this module.
+    match recorded.into_iter().next() {
+        None => {
+            diesel::sql_query(
+                "INSERT INTO coauth_test_schema_fingerprint (singleton, fingerprint)
+                 VALUES (true, $1)",
+            )
+            .bind::<diesel::sql_types::Text, _>(current)
+            .execute(connection)
+            .await
+            .expect("could not record the test schema fingerprint");
+        }
+        Some(row) if row.fingerprint == current => {}
+        Some(row) => panic!(
+            "the test database at {database_url} was migrated under schema {}, but \
+             migrations/00000000000000_initial/up.sql now fingerprints as {current}. coauth \
+             rewrites that migration in place and never re-applies it, so this database keeps \
+             its old columns; the failures you would otherwise see read `... 不存在` and are \
+             not regressions. Recreate the database from the current up.sql, apply the diesel \
+             ledger row for 00000000000000, and point DATABASE_URL at it -- \
+             arkret-work/memory/coauth-postgres-face-only-runs-with-database-url.md has the \
+             exact commands.",
+            row.fingerprint
+        ),
+    }
+}
+
+#[derive(diesel::QueryableByName)]
 struct QualifiedTableName {
     #[diesel(sql_type = diesel::sql_types::Text)]
     qualified_name: String,
 }
 
-/// Empty every application table. The diesel migration ledger is preserved so
-/// the already-applied schema stays valid.
+/// Empty every application table. The diesel migration ledger and this
+/// harness's own fingerprint row are preserved: truncating either would
+/// invalidate the already-applied schema or disarm the staleness fence.
 async fn reset_database(connection: &mut AsyncPgConnection) {
     let tables = diesel::sql_query(
         "SELECT format('%I.%I', schemaname, tablename) AS qualified_name \
          FROM pg_tables \
-         WHERE schemaname = 'public' AND tablename <> '__diesel_schema_migrations'",
+         WHERE schemaname = 'public' AND tablename NOT IN ('__diesel_schema_migrations', 'coauth_test_schema_fingerprint')",
     )
     .get_results::<QualifiedTableName>(connection)
     .await

@@ -306,14 +306,15 @@ psl = "2.1.226"
 #
 # The `_10` aliases are the generation the Arkret SDK exposes, matching
 # `ed25519-dalek 3`'s `rand_core`. They are declared by `coauth-backend`
-# alone, and as of this note there is exactly one call site:
+# alone and only in its `[dev-dependencies]`, because the single call site is
 # `crates/backend/src/services/did_resolver.rs`, in `#[cfg(test)] mod tests`,
 # seeding a `rand_chacha_10::ChaCha20Rng` for
 # `arkret_signatures::webvh::prepare_service_inception`, which takes an RNG of
 # the SDK generation. No production path in coauth is bound to the `_10`
-# generation. Nothing enforces the split at compile time when both
-# generations expose a `RngCore` a call can accept, so keep new SDK-facing
-# RNG uses on the aliases and everything else on the default.
+# generation, and the dev-only declaration is what keeps it that way: a new
+# production call site fails to compile rather than silently linking a second
+# RNG generation into the binary. Keep SDK-facing test RNG uses on the aliases
+# and everything else on the default.
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 rand_chacha_10 = { package = "rand_chacha", version = "0.10.0" }
