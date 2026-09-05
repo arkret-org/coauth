@@ -75,6 +75,11 @@ pub mod advisory_lock;
 pub mod agent_key;
 /// PostgreSQL app session repositories.
 pub mod app_session;
+/// The only place this crate names the Arkret SDK's `ed25519-dalek`
+/// generation. `#[cfg(test)]` because `ed25519-dalek-3` is a dev-dependency
+/// here: no production path in this crate signs or verifies Ed25519.
+#[cfg(test)]
+mod arkret_key_bridge;
 /// PostgreSQL audit log repositories.
 pub mod audit;
 /// PostgreSQL Circle capability grant repository.

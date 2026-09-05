@@ -12,6 +12,9 @@
 #![allow(clippy::disallowed_methods)]
 
 pub mod app_state;
+/// The one place where `ed25519-dalek` 2.x (JOSE/keystore) and `ed25519-dalek`
+/// 3.x (Arkret SDK) keys convert into each other.
+pub mod arkret_key_bridge;
 pub mod error;
 pub mod lifecycle;
 /// Network listener infrastructure: TCP/Unix sockets, TLS, and PROXY protocol.

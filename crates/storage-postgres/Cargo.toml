@@ -56,7 +56,14 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 arkret-signatures = { workspace = true }
-ed25519-dalek = { workspace = true }
+# Used by the `arkret_key_bridge` source-scan guard, which walks this
+# crate's `src/` tree; the workspace clippy config disallows
+# `std::path::Path` in favour of `camino::Utf8Path`.
+camino = { workspace = true }
+# Only the SDK generation is linked here, and only by tests: the Account
+# Status fixture in `account_status`'s rollback test signs with it through
+# `crate::arkret_key_bridge`. No production path in this crate touches
+# Ed25519, so `ed25519-dalek` 2.x is not a dependency at all.
 ed25519-dalek-3 = { workspace = true }
 
 [lints]

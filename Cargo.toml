@@ -168,6 +168,17 @@ dioxus = { version = "=0.7.10", default-features = false, features = [
 ] }
 dotenvy = "0.15.7"
 ecdsa = { version = "0.16.9", features = ["signing", "verifying"] }
+# Two Ed25519 generations, on purpose and under guard. `ed25519-dalek 2.2`
+# is the JOSE/keystore generation: it carries the `pkcs8` feature that keeps
+# every `coauth_keystore::PrivateKey` variant behind one return type (see the
+# `generic-array` note below), and `coauth_jose::jwa::Ed25519SigningKey` is an
+# alias for its type. `ed25519-dalek-3` is the generation the Arkret SDK signs
+# and verifies with, so anything crossing into `arkret-signatures` /
+# `arkret-identity` needs it. Only `coauth-backend` links both, and the two
+# meet in exactly one module, `coauth_backend::arkret_key_bridge`;
+# `coauth-storage-postgres` names the SDK generation only in test code,
+# through its own `arkret_key_bridge` mirror. Both modules carry a source-scan
+# test that fails if `ed25519_dalek_3` is named anywhere else under `src/`.
 ed25519-dalek = { version = "2.2.0", features = ["rand_core", "pkcs8"] }
 ed25519-dalek-3 = { package = "ed25519-dalek", version = "3.0.0" }
 elliptic-curve = { version = "0.13.8", features = ["std", "pem", "sec1"] }
@@ -176,17 +187,35 @@ figment = { version = "0.10.19", features = ["env", "yaml", "test"] }
 fluent-bundle = "0.16"
 form_urlencoded = "1.2.2"
 futures-util = "0.3.34"
-# NOTE: pinned to 0.14 because the entire RustCrypto stack we depend on
-# transitively (digest 0.10, sha2 0.10, hmac 0.12, aead 0.5, aes-gcm 0.10,
-# chacha20poly1305 0.10) still re-exports `generic_array 0.14`. The crates
-# that bridge to generic-array 1.x (digest 0.11, sha2 0.11, aead 0.6, ...)
-# are still in pre-release as of 2026-05; bumping `generic-array` here in
-# isolation would land us with two side-by-side versions and break any
-# trait bound like `OutputSizeUser::OutputSize: ArrayLength<u8>`. The
-# `#[deprecated]` warnings on `digest::generic_array::*` are expected
-# until the upstream RustCrypto migration ships (last verified: cargo tree
-# -i generic-array shows 13+ transitive consumers all on 0.14). Revisit
-# once `sha2 0.11` is stable on crates.io.
+# Pinned to 0.14, and the reason is narrower than "RustCrypto is not ready".
+# The 1.x generation is already resolved in this repo's own `Cargo.lock`:
+# generic-array 1.4.5, digest 0.11.3, sha2 0.11.0, hmac 0.13.0,
+# elliptic-curve 0.14.1, ecdsa 0.17.0, p256 0.14.0, pkcs8 0.11.0,
+# signature 3.0.0, spki 0.8.0, der 0.8.1 and sec1 0.8.1 all appear there
+# today, pulled in through the Arkret SDK. So the 0.14 pin is not waiting on
+# the ecosystem; it is waiting on four specific crates.
+#
+# What blocks the move is `coauth_keystore::PrivateKey::to_pkcs8_der`: every
+# enum variant has to hand back the same `pkcs8` generation's document, and
+# `rsa 0.9.10`, `p384 0.13.1`, `p521 0.13.3` and `k256 0.13.4` have no
+# release built on `elliptic-curve 0.14` / `pkcs8 0.11`. Those four variants
+# are RS256/PS256, ES384, ES512 and ES256K - all required by our OIDC
+# surface, so they cannot be dropped to unblock the pin, and bumping
+# `generic-array` alone would only split `ArrayLength<u8>` bounds in two.
+#
+# Expiry condition, observable without trusting this comment: `rsa`, `p384`,
+# `p521` and `k256` each publish a release built on `elliptic-curve 0.14` /
+# `pkcs8 0.11`. Until then `cargo tree -i elliptic-curve@0.13.8` in this
+# workspace keeps `k256 0.13.4`, `p256 0.13.2`, `p384 0.13.1`, `p521 0.13.3`,
+# `ecdsa 0.16.9` and `primeorder 0.13.6` alive next to our own
+# `coauth-backend` / `coauth-jose` / `coauth-keystore` (`voprf 0.6.0-pre.1`
+# also sits in that subtree, via `arkret-models-discovery`, but it is not a
+# keystore concern), and `rsa 0.9.10`'s manifest still pins `pkcs8 0.10` /
+# `spki 0.7` / `signature 2.2`. When that subtree collapses, this pin can go.
+# The `#[deprecated]` notes on `digest::generic_array::*` stay expected until
+# then. `chacha20poly1305 0.10` / `aead 0.5` are a separate axis: the
+# keystore's encrypter needs only `KeyInit` + `AeadInPlace`, never `pkcs8`,
+# and is tracked on its own.
 generic-array = "0.14.9"
 getrandom = { version = "0.4.3", default-features = false }
 gloo-timers = { version = "0.4", features = ["futures"] }
@@ -269,6 +298,22 @@ pin-project-lite = "0.2.17"
 pkcs1 = { version = "0.7.5", features = ["std"] }
 pkcs8 = { version = "0.10.2", features = ["std", "pkcs5", "encryption", "pem"] }
 psl = "2.1.226"
+# `rand 0.8` / `rand_core 0.6` / `rand_chacha 0.3` are the workspace default:
+# every injected-RNG signature in coauth (`&mut impl RngCore` through
+# `coauth_data::new_id`, token and password generation, keystore key
+# generation, the deterministic `ChaChaRng` seeds in storage tests) is that
+# generation, and ten of the crates here declare it.
+#
+# The `_10` aliases are the generation the Arkret SDK exposes, matching
+# `ed25519-dalek 3`'s `rand_core`. They are declared by `coauth-backend`
+# alone, and as of this note there is exactly one call site:
+# `crates/backend/src/services/did_resolver.rs`, in `#[cfg(test)] mod tests`,
+# seeding a `rand_chacha_10::ChaCha20Rng` for
+# `arkret_signatures::webvh::prepare_service_inception`, which takes an RNG of
+# the SDK generation. No production path in coauth is bound to the `_10`
+# generation. Nothing enforces the split at compile time when both
+# generations expose a `RngCore` a call can accept, so keep new SDK-facing
+# RNG uses on the aliases and everything else on the default.
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 rand_chacha_10 = { package = "rand_chacha", version = "0.10.0" }

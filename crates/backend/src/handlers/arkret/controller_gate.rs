@@ -21,6 +21,9 @@ use coauth_data::{Clock as _, RepositoryAccess as _};
 use salvo::prelude::*;
 
 use super::{ArkretRouteError, owning_station_id_for};
+use crate::arkret_key_bridge::{
+    sdk_signing_key_from_seed_bytes, sdk_verifying_key_from_public_key_bytes,
+};
 use crate::handlers::common::DepotExt;
 
 const GATE_TTL: Duration = Duration::minutes(5);
@@ -163,7 +166,7 @@ pub async fn issue_controller_gate_attestation(
                 .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?,
         },
     };
-    let sdk_signing_key = ed25519_dalek_3::SigningKey::from_bytes(&signing_seed);
+    let sdk_signing_key = sdk_signing_key_from_seed_bytes(&signing_seed);
     arkret_signatures::agent_evidence::sign_controller_account_gate_attestation(
         &mut attestation,
         &sdk_signing_key,
@@ -286,7 +289,7 @@ async fn authenticate_agent_authority_request(
         .ed25519_bytes()
         .map_err(|_| not_found())?;
     let public_key =
-        ed25519_dalek_3::VerifyingKey::from_bytes(&key_bytes).map_err(|_| not_found())?;
+        sdk_verifying_key_from_public_key_bytes(&key_bytes).map_err(|_| not_found())?;
 
     let source = required_header(req, "source-service-id")?;
     let destination = required_header(req, "destination-service-id")?;

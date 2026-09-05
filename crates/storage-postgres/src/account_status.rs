@@ -250,7 +250,7 @@ mod tests {
         arkret_signatures::account_status::sign_account_status_record(
             unsigned,
             DidUrl::new("did:webvh:zrollbackauthority:auth.example#account-status-key").unwrap(),
-            &ed25519_dalek_3::SigningKey::from_bytes(&[0x52; 32]),
+            &crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&[0x52; 32]),
         )
         .unwrap()
     }

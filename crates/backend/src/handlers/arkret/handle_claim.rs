@@ -10,6 +10,7 @@ use coauth_data::{Clock, UrlBuilder, User};
 use coauth_keystore::Keystore;
 
 use super::*;
+use crate::arkret_key_bridge::{SdkSigningKey, sdk_signing_key_from_seed_bytes};
 
 /// Output of [`issue_handle_claim`]. Carries the signed payload and the
 /// wire-level claim digest used as the audit-chain anchor.
@@ -84,7 +85,7 @@ pub(crate) fn issue_handle_claim(
             )));
         }
     };
-    let signing_key = ed25519_dalek_3::SigningKey::from_bytes(
+    let signing_key = sdk_signing_key_from_seed_bytes(
         &key_store
             .account_authority_seed()
             .map_err(|error| SessionGrantError::Other(error.into()))?,
@@ -180,7 +181,7 @@ fn handle_claim_proof(
     created_at: DateTime<Utc>,
     audience: Option<&str>,
     verification_method: arkret_wire::DidUrl,
-    signing_key: &ed25519_dalek_3::SigningKey,
+    signing_key: &SdkSigningKey,
 ) -> Result<PayloadProof, SessionGrantError> {
     let domain = match proof_purpose {
         PayloadProofPurpose::IssuerAttestation | PayloadProofPurpose::HolderAcceptance => {

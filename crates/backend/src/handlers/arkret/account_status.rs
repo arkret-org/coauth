@@ -13,6 +13,7 @@ use coauth_data::{Clock as _, LocalAccountId, RepositoryAccess as _};
 use salvo::prelude::*;
 
 use super::{ArkretRouteError, owning_station_id_for};
+use crate::arkret_key_bridge::sdk_verifying_key_from_jose_verifying_key;
 use crate::handlers::common::DepotExt;
 use crate::services::did_binding;
 
@@ -183,8 +184,8 @@ fn verify_request(
     .require_content_digest(true)
     .max_clock_skew_seconds(300)
     .max_validity_window_seconds(300);
-    let sdk_public_key = ed25519_dalek_3::VerifyingKey::from_bytes(&public_key.to_bytes())
-        .map_err(|_| not_found())?;
+    let sdk_public_key =
+        sdk_verifying_key_from_jose_verifying_key(public_key).map_err(|_| not_found())?;
     verify_signed_canonical_json_message(
         req.method().as_str(),
         target_uri.as_str(),
