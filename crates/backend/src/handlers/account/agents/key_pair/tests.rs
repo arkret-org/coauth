@@ -288,6 +288,66 @@ fn controller_public_key_material() -> arkret_signatures::proof::PublicKeyMateri
     }
 }
 
+/// The controller DID document the pairing path resolves for itself.
+///
+/// Production takes this from the deployment's accepted principal binding for
+/// the authoritative controller account; the tests build the same normalized
+/// shape so the key under test still arrives from a *document*, never from the
+/// request body the verifier is judging.
+fn controller_did_document(
+    method_id: &str,
+    published_key: &[u8; 32],
+) -> arkret_models_identity::DidDocument {
+    serde_json::from_value(json!({
+        "id": CONTROLLER_FULL,
+        "verificationMethod": [{
+            "id": method_id,
+            "type": "Multikey",
+            "controller": CONTROLLER_FULL,
+            "publicKeyMultibase":
+                arkret_canonical::ed25519_pubkey_to_did_key_multibase(published_key),
+        }],
+        "authentication": [method_id],
+        "assertionMethod": [method_id],
+    }))
+    .expect("controller DID document")
+}
+
+fn controller_signing_keys() -> ControllerSigningKeys {
+    ControllerSigningKeys {
+        document: controller_did_document(
+            CONTROLLER_VM,
+            &controller_signer().verifying_key().to_bytes(),
+        ),
+    }
+}
+
+/// A controller document that publishes `CONTROLLER_VM` holding somebody
+/// else's key. Every fixture proof stays well-formed under it and none verify.
+fn impostor_controller_signing_keys() -> ControllerSigningKeys {
+    ControllerSigningKeys {
+        document: controller_did_document(
+            CONTROLLER_VM,
+            &ed25519_dalek::SigningKey::from_bytes(&[44u8; 32])
+                .verifying_key()
+                .to_bytes(),
+        ),
+    }
+}
+
+/// Flip one byte of a compact JWS signature segment.
+fn tamper_jws_signature(jws: &str) -> String {
+    let mut jws = jws.to_owned();
+    let signature_start = jws.rfind('.').expect("compact JWS") + 1;
+    let flipped = if jws.as_bytes()[signature_start] == b'A' {
+        "B"
+    } else {
+        "A"
+    };
+    jws.replace_range(signature_start..=signature_start, flipped);
+    jws
+}
+
 fn valid_signing_key_binding()
 -> arkret_models_identity::agent_signer_evidence::AgentSigningKeyBinding {
     valid_signing_key_binding_for(PAIRING_REQUEST_ID)
@@ -408,16 +468,10 @@ fn signing_key_binding_controller_proof_verifies_and_one_changed_byte_breaks_it(
     verify(&binding).expect("the fixture controller proof must really verify");
 
     let mut tampered = valid_signing_key_binding();
-    let mut jws = tampered.controller_proof.jws.as_str().to_owned();
-    let signature_start = jws.rfind('.').expect("compact JWS") + 1;
-    let flipped = if jws.as_bytes()[signature_start] == b'A' {
-        "B"
-    } else {
-        "A"
-    };
-    jws.replace_range(signature_start..=signature_start, flipped);
-    tampered.controller_proof.jws =
-        arkret_wire::NonEmptyString::new(jws).expect("a tampered JWS is not empty");
+    tampered.controller_proof.jws = arkret_wire::NonEmptyString::new(tamper_jws_signature(
+        tampered.controller_proof.jws.as_str(),
+    ))
+    .expect("a tampered JWS is not empty");
     verify(&tampered).expect_err("one changed signature byte must not still verify");
 }
 
@@ -780,4 +834,119 @@ fn authorize_event_rejects_non_positive_authorization_lifetime() {
     .expect_err("key authorization must end after it is issued");
 
     assert!(err.message().contains("must be after issued_at"));
+}
+
+#[test]
+fn pairing_verifies_the_authorize_event_proof_against_the_resolved_controller_key() {
+    let keys = controller_signing_keys();
+    let event = valid_authorize_event_typed(PAIRING_REQUEST_ID);
+    verify_controller_authorize_event_proofs(&event, &keys)
+        .expect("the controller Event proof must verify against the published controller key");
+
+    let mut tampered = valid_authorize_event_typed(PAIRING_REQUEST_ID);
+    let proof = tampered.proofs[0]
+        .as_producer_mut()
+        .expect("the fixture carries a controller producer proof");
+    proof.jws = tamper_jws_signature(&proof.jws);
+    let err = verify_controller_authorize_event_proofs(&tampered, &keys)
+        .expect_err("one changed signature byte must fail closed");
+    assert_eq!(err.status(), http::StatusCode::UNAUTHORIZED);
+
+    // The endpoint's own resolution decides the key. The very proof the
+    // fixture just accepted is rejected once the controller document publishes
+    // a different key under the method that proof names -- which is what stops
+    // a caller submitting evidence signed by a key of its own.
+    verify_controller_authorize_event_proofs(&event, &impostor_controller_signing_keys())
+        .expect_err("a proof only verifies under the key the controller document publishes");
+
+    // An unpublished method is a rejection, not a fallback to whatever key
+    // material travelled with the request.
+    let other_method = ControllerSigningKeys {
+        document: controller_did_document(
+            &format!("{CONTROLLER_FULL}#some-other-key"),
+            &controller_signer().verifying_key().to_bytes(),
+        ),
+    };
+    verify_controller_authorize_event_proofs(&event, &other_method)
+        .expect_err("a verification method absent from the controller document must reject");
+}
+
+#[test]
+fn pairing_verifies_the_signing_key_binding_proof_against_the_resolved_controller_key() {
+    let keys = controller_signing_keys();
+    let event = valid_authorize_event_typed(PAIRING_REQUEST_ID);
+    let payload =
+        AgentKeyAuthorizePayload::try_from(&event).expect("the fixture carries a valid payload");
+    let verification_method = arkret_wire::DidUrl::new(VM).expect("runtime verification method");
+    let key_state = authoritative_key_state();
+
+    verify_controller_pairing_evidence(
+        &event,
+        &valid_signing_key_binding(),
+        &payload,
+        &verification_method,
+        &key_state,
+        &keys,
+    )
+    .expect("both controller-signed evidences must verify");
+
+    let mut tampered = valid_signing_key_binding();
+    tampered.controller_proof.jws = arkret_wire::NonEmptyString::new(tamper_jws_signature(
+        tampered.controller_proof.jws.as_str(),
+    ))
+    .expect("a tampered JWS is not empty");
+    let err = verify_controller_pairing_evidence(
+        &event,
+        &tampered,
+        &payload,
+        &verification_method,
+        &key_state,
+        &keys,
+    )
+    .expect_err("one changed controller_proof signature byte must fail closed");
+    assert_eq!(err.status(), http::StatusCode::UNAUTHORIZED);
+
+    // The binding's own key is looked up in the resolved document too, so a
+    // `controller_proof` naming a method the controller never published is
+    // rejected -- even though the Event proof beside it still verifies and the
+    // named method is under the controller's own DID.
+    let mut unpublished = valid_signing_key_binding();
+    unpublished.controller_proof.verification_method =
+        arkret_wire::DidUrl::new(format!("{CONTROLLER_FULL}#some-other-key"))
+            .expect("another controller method");
+    verify_controller_pairing_evidence(
+        &event,
+        &unpublished,
+        &payload,
+        &verification_method,
+        &key_state,
+        &keys,
+    )
+    .expect_err("an unpublished controller_proof method must reject");
+}
+
+#[test]
+fn pairing_evidence_expectations_come_from_authoritative_state_not_the_binding() {
+    let keys = controller_signing_keys();
+    let event = valid_authorize_event_typed(PAIRING_REQUEST_ID);
+    let payload =
+        AgentKeyAuthorizePayload::try_from(&event).expect("the fixture carries a valid payload");
+    let verification_method = arkret_wire::DidUrl::new(VM).expect("runtime verification method");
+
+    // The binding is internally consistent and re-verifies cleanly under the
+    // controller key. It still fails, because the Agent it names is not the
+    // Agent the authoritative key state binds -- the expectation is read from
+    // that state, never back out of the evidence being judged.
+    let mut key_state = authoritative_key_state();
+    key_state.agent_id = arkret_identifiers::DidCoreId::new("ak:did_core:web:other-agent.example")
+        .expect("another Agent core id");
+    verify_controller_pairing_evidence(
+        &event,
+        &valid_signing_key_binding(),
+        &payload,
+        &verification_method,
+        &key_state,
+        &keys,
+    )
+    .expect_err("the expected Agent must come from the authoritative key state");
 }
