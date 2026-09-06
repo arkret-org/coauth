@@ -2,7 +2,7 @@
 use arkret_models_identity::{
     ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffAllowedOperation, AccountHandoffBinding,
     AccountHandoffOutcome, AccountHandoffRequestBody, AccountOnboardingGoal,
-    AccountOnboardingSnapshot, DidBindingChallengeRequestBody, Handle,
+    AccountOnboardingState, DidBindingChallengeRequestBody, Handle,
     IdentityAbandonmentChallengeRequestBody, IdentityAbandonmentRequestBody,
     IdentityBindingChallengeRequestBody,
 };
@@ -576,11 +576,11 @@ async fn create_local_account_handoff(
 /// its completed register command remains valid for this read-only projection
 /// until its original expiry so response-loss recovery can observe `bound`.
 #[handler]
-pub async fn account_onboarding_snapshot(
+pub async fn account_onboarding_state(
     req: &Request,
     depot: &Depot,
-) -> Result<Json<AccountOnboardingSnapshot>, ArkretRouteError> {
-    let (grant, _dpop) = authenticate_account_handoff_snapshot(req, depot).await?;
+) -> Result<Json<AccountOnboardingState>, ArkretRouteError> {
+    let (grant, _dpop) = authenticate_account_handoff_state(req, depot).await?;
     let observed_at = make_clock().now();
     let account_subject = account_subject(
         &super::owning_station_id_for(&depot.arkret_config()?),
@@ -623,7 +623,7 @@ pub async fn account_onboarding_snapshot(
         AccountOnboardingGoal::CompleteIdentity
     };
     repo.cancel().await.ok();
-    let snapshot = AccountOnboardingSnapshot {
+    let snapshot = AccountOnboardingState {
         handoff_request_id: grant.request_id,
         account_subject,
         observed_at,
@@ -1237,7 +1237,7 @@ async fn authenticate_account_handoff_inner(
     Ok((grant, verification))
 }
 
-async fn authenticate_account_handoff_snapshot(
+async fn authenticate_account_handoff_state(
     req: &Request,
     depot: &Depot,
 ) -> Result<(AccountHandoffGrant, VerifiedDpopProof), ArkretRouteError> {
