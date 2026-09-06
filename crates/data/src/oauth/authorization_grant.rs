@@ -13,16 +13,7 @@ use url::Url;
 
 use super::session::Session;
 use crate::InvalidTransitionError;
-
-fn generate_alphanumeric(rng: &mut (impl RngCore + ?Sized), len: usize) -> String {
-    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let mut bytes = vec![0u8; len];
-    rng.fill_bytes(&mut bytes);
-    bytes
-        .iter()
-        .map(|b| CHARSET[*b as usize % CHARSET.len()] as char)
-        .collect()
-}
+use crate::tokens::generate_alphanumeric;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Pkce {

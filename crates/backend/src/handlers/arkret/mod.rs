@@ -1,6 +1,7 @@
 mod account_handoff;
 mod account_register;
 mod account_status;
+pub(crate) mod canonical_response;
 mod controller_gate;
 mod did_document;
 mod erasure_request;
@@ -13,6 +14,7 @@ mod test_chaos;
 pub use account_handoff::*;
 pub use account_register::*;
 pub use account_status::*;
+pub use canonical_response::ArkretCanonicalJson;
 pub use controller_gate::*;
 pub use did_document::*;
 pub use erasure_request::*;

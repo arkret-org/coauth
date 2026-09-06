@@ -14,21 +14,8 @@ use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
 
 use super::*;
+use crate::handlers::arkret::canonical_response::ArkretCanonicalJson;
 use crate::handlers::arkret::*;
-
-pub struct RefreshCanonicalJson(Vec<u8>);
-
-impl Scribe for RefreshCanonicalJson {
-    fn render(self, response: &mut Response) {
-        response.headers_mut().insert(
-            http::header::CONTENT_TYPE,
-            http::HeaderValue::from_static("application/json"),
-        );
-        response
-            .write_body(self.0)
-            .expect("canonical JSON is writable");
-    }
-}
 
 fn refresh_proof_invalid(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
@@ -148,7 +135,7 @@ fn ensure_refreshable_credential_class(
 pub async fn refresh_session_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<RefreshCanonicalJson, ArkretRouteError> {
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
     use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
 
     let url_builder = depot.url_builder()?;
@@ -411,7 +398,7 @@ pub async fn refresh_session_grant(
                 )
             })?;
             repo.cancel().await.ok();
-            return Ok(RefreshCanonicalJson(bytes));
+            return Ok(ArkretCanonicalJson(bytes));
         }
         SessionGrantReserveOutcome::Conflict(_) => {
             repo.cancel().await.ok();
@@ -657,10 +644,10 @@ pub async fn refresh_session_grant(
             .await;
         }
         return match committed {
-            LedgerRefreshOutcome::Committed { .. } => Ok(RefreshCanonicalJson(canonical_outcome)),
+            LedgerRefreshOutcome::Committed { .. } => Ok(ArkretCanonicalJson(canonical_outcome)),
             LedgerRefreshOutcome::Replay(operation) => operation
                 .canonical_outcome
-                .map(RefreshCanonicalJson)
+                .map(ArkretCanonicalJson)
                 .ok_or_else(|| {
                     ArkretRouteError::coded(
                         StatusCode::SERVICE_UNAVAILABLE,
@@ -911,10 +898,10 @@ pub async fn refresh_session_grant(
         .await;
     }
     match committed {
-        LedgerRefreshOutcome::Committed { .. } => Ok(RefreshCanonicalJson(canonical_outcome)),
+        LedgerRefreshOutcome::Committed { .. } => Ok(ArkretCanonicalJson(canonical_outcome)),
         LedgerRefreshOutcome::Replay(operation) => operation
             .canonical_outcome
-            .map(RefreshCanonicalJson)
+            .map(ArkretCanonicalJson)
             .ok_or_else(|| {
                 ArkretRouteError::coded(
                     StatusCode::SERVICE_UNAVAILABLE,

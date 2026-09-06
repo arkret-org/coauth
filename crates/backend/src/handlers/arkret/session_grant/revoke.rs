@@ -347,25 +347,13 @@ async fn verify_cross_session_lifecycle_proof(
     Ok(())
 }
 
-pub struct RevokeCanonicalJson(Vec<u8>);
-
-impl Scribe for RevokeCanonicalJson {
-    fn render(self, response: &mut Response) {
-        response.headers_mut().insert(
-            http::header::CONTENT_TYPE,
-            http::HeaderValue::from_static("application/json"),
-        );
-        response
-            .write_body(self.0)
-            .expect("canonical JSON is writable");
-    }
-}
+use crate::handlers::arkret::canonical_response::ArkretCanonicalJson;
 
 #[handler]
 pub async fn revoke_session_grant_endpoint(
     req: &mut Request,
     depot: &Depot,
-) -> Result<RevokeCanonicalJson, ArkretRouteError> {
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
     use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
 
     let url_builder = depot.url_builder()?;
@@ -576,7 +564,7 @@ pub async fn revoke_session_grant_endpoint(
                 )
             })?;
             repo.cancel().await.ok();
-            return Ok(RevokeCanonicalJson(bytes));
+            return Ok(ArkretCanonicalJson(bytes));
         }
         SessionGrantReserveOutcome::Conflict(_) => {
             repo.cancel().await.ok();
@@ -715,7 +703,7 @@ pub async fn revoke_session_grant_endpoint(
         )
         .await;
     }
-    Ok(RevokeCanonicalJson(response))
+    Ok(ArkretCanonicalJson(response))
 }
 
 #[cfg(test)]

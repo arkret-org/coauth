@@ -20,6 +20,7 @@ use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
 use coauth_data::{Clock as _, RepositoryAccess as _};
 use salvo::prelude::*;
 
+use super::account_status::required_header;
 use super::{ArkretRouteError, owning_station_id_for};
 use crate::arkret_key_bridge::{
     sdk_signing_key_from_seed_bytes, sdk_verifying_key_from_public_key_bytes,
@@ -355,16 +356,6 @@ async fn authenticate_agent_authority_request(
     arkret_signatures::http_signature::verify_content_digest(&parsed_digest, canonical_body)
         .map_err(|_| not_found())?;
     Ok(())
-}
-
-fn required_header(req: &Request, name: &str) -> Result<String, ArkretRouteError> {
-    req.headers()
-        .get(name)
-        .and_then(|value| value.to_str().ok())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .ok_or_else(not_found)
 }
 
 fn controller_status(

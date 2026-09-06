@@ -11,21 +11,8 @@ use coauth_data::{
 use salvo::prelude::*;
 
 use super::*;
+use crate::handlers::arkret::canonical_response::ArkretCanonicalJson;
 use crate::handlers::arkret::*;
-
-pub struct CanonicalJsonResponse(Vec<u8>);
-
-impl Scribe for CanonicalJsonResponse {
-    fn render(self, response: &mut Response) {
-        response.headers_mut().insert(
-            http::header::CONTENT_TYPE,
-            http::HeaderValue::from_static("application/json"),
-        );
-        response
-            .write_body(self.0)
-            .expect("canonical JSON response body is writable");
-    }
-}
 
 fn redact_session_grant_intent(
     body: &SessionGrantRequestBody,
@@ -268,7 +255,7 @@ async fn reserve_issue_operation(
 pub async fn issue_session_grant_endpoint(
     req: &mut Request,
     depot: &Depot,
-) -> Result<CanonicalJsonResponse, ArkretRouteError> {
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
     let raw_body: serde_json::Value = req
         .parse_json()
         .await
@@ -298,7 +285,7 @@ pub async fn issue_session_grant_endpoint(
             let operation =
                 match reserve_issue_operation(depot, &request, &binding.jkt, None).await? {
                     Ok(operation) => operation,
-                    Err(outcome) => return Ok(CanonicalJsonResponse(outcome)),
+                    Err(outcome) => return Ok(ArkretCanonicalJson(outcome)),
                 };
             issue_agent_key_proof_session_grant(req, depot, binding, &agent, operation).await
         }
@@ -311,7 +298,7 @@ pub async fn issue_session_grant_endpoint(
             let request = SessionGrantRequestBody::Human(human.clone());
             let operation = match reserve_issue_operation(depot, &request, &dpop.jkt, None).await? {
                 Ok(operation) => operation,
-                Err(outcome) => return Ok(CanonicalJsonResponse(outcome)),
+                Err(outcome) => return Ok(ArkretCanonicalJson(outcome)),
             };
             issue_account_handoff_session_grant(depot, &human, handoff_token, dpop, operation).await
         }
@@ -335,7 +322,7 @@ pub async fn issue_session_grant_endpoint(
                     Ok(operation) => operation,
                     Err(outcome) => {
                         consume_recovery_dpop_jti(depot, &dpop).await?;
-                        return Ok(CanonicalJsonResponse(outcome));
+                        return Ok(ArkretCanonicalJson(outcome));
                     }
                 };
             issue_recovery_session_grant(depot, &recovery, handoff_token, dpop, operation).await
@@ -489,7 +476,7 @@ async fn issue_account_handoff_session_grant(
     handoff_token: String,
     dpop: arkret_signatures::dpop::VerifiedDpopProof,
     operation: SessionGrantOperation,
-) -> Result<CanonicalJsonResponse, ArkretRouteError> {
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
     use arkret_models_identity::{AccountHandoffAllowedOperation, SessionGrantProofKind};
     use coauth_data::storage::user::BrowserSessionRepository as _;
     use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
@@ -707,13 +694,13 @@ async fn issue_account_handoff_session_grant(
                 return Err(proof_invalid("handoff DPoP JTI was already consumed"));
             }
             repo.save().await?;
-            Ok(CanonicalJsonResponse(canonical_outcome))
+            Ok(ArkretCanonicalJson(canonical_outcome))
         }
         SessionGrantCommitOutcome::Replay(operation) => {
             repo.cancel().await.ok();
             operation
                 .canonical_outcome
-                .map(CanonicalJsonResponse)
+                .map(ArkretCanonicalJson)
                 .ok_or_else(|| {
                     ArkretRouteError::coded(
                         StatusCode::SERVICE_UNAVAILABLE,
@@ -739,7 +726,7 @@ async fn issue_recovery_session_grant(
     handoff_token: String,
     dpop: arkret_signatures::dpop::VerifiedDpopProof,
     operation: SessionGrantOperation,
-) -> Result<CanonicalJsonResponse, ArkretRouteError> {
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
     use coauth_data::storage::user::BrowserSessionRepository as _;
     use coauth_data::user::UserRepository as _;
 
@@ -909,7 +896,7 @@ async fn issue_recovery_session_grant(
                 return Err(proof_invalid("handoff DPoP JTI was already consumed"));
             }
             repo.save().await?;
-            Ok(CanonicalJsonResponse(canonical_outcome))
+            Ok(ArkretCanonicalJson(canonical_outcome))
         }
         SessionGrantCommitOutcome::Replay(operation) => {
             let outcome = operation.canonical_outcome.ok_or_else(|| {
@@ -931,7 +918,7 @@ async fn issue_recovery_session_grant(
                 return Err(proof_invalid("handoff DPoP JTI was already consumed"));
             }
             repo.save().await?;
-            Ok(CanonicalJsonResponse(outcome))
+            Ok(ArkretCanonicalJson(outcome))
         }
         SessionGrantCommitOutcome::Indeterminate(_) => {
             repo.cancel().await.ok();
@@ -995,7 +982,7 @@ async fn issue_agent_key_proof_session_grant(
     dpop_binding: crate::handlers::account::auth::DpopSessionBinding,
     body: &AgentSessionGrantRequest,
     operation: SessionGrantOperation,
-) -> Result<CanonicalJsonResponse, ArkretRouteError> {
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
     use crate::handlers::account::agents::{
         AgentSessionProofError, enforce_authoritative_agent_lifecycle, validate_agent_session_proof,
     };
@@ -1184,7 +1171,7 @@ async fn issue_agent_key_proof_session_grant(
                 &operation.request_identity,
             )
             .await;
-            Ok(CanonicalJsonResponse(canonical_outcome))
+            Ok(ArkretCanonicalJson(canonical_outcome))
         }
         SessionGrantCommitOutcome::Replay(operation) => {
             repo.cancel().await.ok();
@@ -1195,7 +1182,7 @@ async fn issue_agent_key_proof_session_grant(
                     "replayed agent operation has no canonical outcome",
                 )
             })?;
-            Ok(CanonicalJsonResponse(bytes))
+            Ok(ArkretCanonicalJson(bytes))
         }
         SessionGrantCommitOutcome::Indeterminate(_) => {
             repo.cancel().await.ok();

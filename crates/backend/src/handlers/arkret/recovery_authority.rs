@@ -26,6 +26,7 @@ use super::account_handoff::{
     authenticate_account_handoff, enforce_handoff_operation,
     verify_account_handoff_holder_without_lookup,
 };
+use super::canonical_response::ArkretCanonicalJson;
 use super::session_grant::{
     SessionGrantIssuanceSeed, acquire_human_device_binding, issue_session_grant_for_audience,
     new_session_grant_record,
@@ -35,20 +36,6 @@ use crate::services::account_status_publication::{
     author_transition_plan, enqueue_exact_publication, validate_transition_plan,
 };
 use crate::services::station_trust::{effective_audience, shared};
-
-pub struct RecoveryCompletionCanonicalJson(Vec<u8>);
-
-impl Scribe for RecoveryCompletionCanonicalJson {
-    fn render(self, response: &mut Response) {
-        response.headers_mut().insert(
-            http::header::CONTENT_TYPE,
-            http::HeaderValue::from_static("application/json"),
-        );
-        response
-            .write_body(self.0)
-            .expect("canonical JSON is writable");
-    }
-}
 
 /// `POST /_arkret/gate/account/recovery-session-grants/issue`.
 ///
@@ -61,7 +48,7 @@ impl Scribe for RecoveryCompletionCanonicalJson {
 pub async fn issue_recovery_completion_grant_endpoint(
     req: &mut Request,
     depot: &Depot,
-) -> Result<RecoveryCompletionCanonicalJson, ArkretRouteError> {
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
     let request: IssueRecoveryCompletionGrantRequest = req
         .parse_json()
         .await
@@ -484,7 +471,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         ));
     }
     repo.save().await?;
-    Ok(RecoveryCompletionCanonicalJson(canonical_outcome))
+    Ok(ArkretCanonicalJson(canonical_outcome))
 }
 
 fn validate_completion_evidence(
@@ -672,7 +659,7 @@ fn exact_replay(
     request: &IssueRecoveryCompletionGrantRequest,
     canonical_request: &[u8],
     account_id: coauth_data::Ulid,
-) -> Result<RecoveryCompletionCanonicalJson, ArkretRouteError> {
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
     if record.transaction_request_digest != request.transaction_request_digest.as_str()
         || record.canonical_request_digest != request.canonical_request_digest.as_str()
         || record.local_account_id != account_id
@@ -682,7 +669,7 @@ fn exact_replay(
             "recovery transaction id was reused with different account or request bytes",
         ));
     }
-    Ok(RecoveryCompletionCanonicalJson(record.canonical_outcome))
+    Ok(ArkretCanonicalJson(record.canonical_outcome))
 }
 
 async fn replay_record_after_ledger_race(
@@ -691,7 +678,7 @@ async fn replay_record_after_ledger_race(
     canonical_request: &[u8],
     account_id: coauth_data::Ulid,
     ledger_outcome: Option<Vec<u8>>,
-) -> Result<RecoveryCompletionCanonicalJson, ArkretRouteError> {
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
     let mut repo = depot.repo().await?;
     let record = repo
         .recovery_authority()

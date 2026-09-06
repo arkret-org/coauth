@@ -202,7 +202,13 @@ fn verify_request(
     Ok(())
 }
 
-fn required_header(req: &Request, name: &str) -> Result<String, ArkretRouteError> {
+/// Trimmed, non-empty value of a required request header.
+///
+/// Both the account-status surface and the controller gate read their
+/// caller-supplied selectors this way, and both answer a missing or blank
+/// header with `NotFound` rather than a distinguishable validation error so
+/// the header cannot be used to probe which selectors exist.
+pub(super) fn required_header(req: &Request, name: &str) -> Result<String, ArkretRouteError> {
     req.headers()
         .get(name)
         .and_then(|value| value.to_str().ok())

@@ -39,19 +39,7 @@ const IDENTITY_BINDING_CHALLENGE_TTL: Duration = Duration::minutes(5);
 const IDENTITY_ABANDONMENT_CHALLENGE_TTL: Duration = Duration::minutes(5);
 const HANDOFF_ATTEMPT_RETENTION: Duration = Duration::days(7);
 
-pub struct AccountHandoffCanonicalJson(Vec<u8>);
-
-impl Scribe for AccountHandoffCanonicalJson {
-    fn render(self, response: &mut Response) {
-        response.headers_mut().insert(
-            http::header::CONTENT_TYPE,
-            http::HeaderValue::from_static("application/json"),
-        );
-        response
-            .write_body(self.0)
-            .expect("canonical JSON response body is writable");
-    }
-}
+use super::canonical_response::ArkretCanonicalJson;
 
 /// `POST /_arkret/gate/account/did-binding-challenges`.
 #[handler]
@@ -183,7 +171,7 @@ pub async fn issue_did_binding_challenge(
 pub async fn create_account_handoff(
     req: &mut Request,
     depot: &Depot,
-) -> Result<AccountHandoffCanonicalJson, ArkretRouteError> {
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
     if req.headers().contains_key(http::header::AUTHORIZATION) {
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
@@ -398,7 +386,7 @@ async fn create_local_account_handoff(
     authorization_code_digest: arkret_identifiers::Hash,
     dpop_jti_digest: arkret_identifiers::Hash,
     request_digest: arkret_identifiers::Hash,
-) -> Result<AccountHandoffCanonicalJson, ArkretRouteError> {
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let clock = make_clock();
@@ -567,7 +555,7 @@ async fn create_local_account_handoff(
     crate::handlers::account::extract_bound_activity_tracker(req, depot)
         .record_oauth_session(&clock, &authenticated.oauth_session)
         .await;
-    Ok(AccountHandoffCanonicalJson(bytes))
+    Ok(ArkretCanonicalJson(bytes))
 }
 
 /// Read-only reconciliation surface for an unexpired account handoff. The
@@ -708,13 +696,13 @@ async fn commit_authorized_handoff(
     depot: &Depot,
     attempt: AccountHandoffCreationAttempt,
     checkpoint: AccountHandoffAuthorizationCheckpoint,
-) -> Result<AccountHandoffCanonicalJson, ArkretRouteError> {
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
     let mut repo = depot.repo().await?;
     match finalize_handoff_creation(&mut repo, &depot.arkret_config()?, &attempt, &checkpoint).await
     {
         Ok(bytes) => {
             repo.save().await?;
-            Ok(AccountHandoffCanonicalJson(bytes))
+            Ok(ArkretCanonicalJson(bytes))
         }
         Err(error) => {
             repo.cancel().await.ok();
@@ -807,10 +795,10 @@ async fn finalize_handoff_creation(
 
 fn replay_handoff_outcome(
     attempt: AccountHandoffCreationAttempt,
-) -> Result<AccountHandoffCanonicalJson, ArkretRouteError> {
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
     attempt
         .canonical_outcome
-        .map(AccountHandoffCanonicalJson)
+        .map(ArkretCanonicalJson)
         .ok_or_else(indeterminate_handoff_replay)
 }
 

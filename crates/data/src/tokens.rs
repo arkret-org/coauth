@@ -333,7 +333,11 @@ impl PartialEq<OAuthTokenTypeHint> for TokenType {
     }
 }
 
-fn generate_alphanumeric(rng: &mut (impl RngCore + ?Sized), len: usize) -> String {
+/// Random alphanumeric string of `len` characters drawn from `rng`.
+///
+/// Shared by the OAuth token generator and the authorization-grant fixtures;
+/// the charset is the 62-character alphanumeric alphabet in both.
+pub(crate) fn generate_alphanumeric(rng: &mut (impl RngCore + ?Sized), len: usize) -> String {
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     let mut bytes = vec![0u8; len];
     rng.fill_bytes(&mut bytes);
