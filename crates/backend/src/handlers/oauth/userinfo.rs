@@ -221,7 +221,7 @@ mod tests {
     use super::UserInfo;
 
     #[test]
-    fn userinfo_serializes_canonical_handle_without_legacy_username_claims() {
+    fn userinfo_serializes_canonical_handle_without_username_claims() {
         let value = serde_json::to_value(UserInfo {
             sub: "ak:did_core:webvh:z6mkfixture".to_owned(),
             handle: "alice:auth.example.com".to_owned(),

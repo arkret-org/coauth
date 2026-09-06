@@ -16,9 +16,9 @@ IP 地址、User-Agent 与 schema 版本。管理审计的读取 / 导出接口�
 - `key_unavailable` —— 该行引用的服务 DID/kid 本进程无法验证。
 
 `ak.session.grant` 由 kid 为 `coauth-session-grant-v1` 的密钥签名，同样按名字
-选取。未配置该密钥的旧部署回落到历史的按算法选取（即升级前的行为），签发不会
-中断；配置它之后，新增或重排其它密钥不再改变签发用的密钥与 grant 头部的 kid。
-轮换时把退役公钥保留在 JWKS 中直到相关 grant 全部过期。
+选取。密钥集中没有该 kid 时不签发任何 grant：若改按算法顺序选取，新增或重排
+其它密钥就会悄悄改变签发密钥与 grant 头部的 kid。上线前必须配置该密钥；轮换时
+把退役公钥保留在 JWKS 中直到相关 grant 全部过期。
 
 审计行由 `secrets.keys` 中 kid 为 `coauth-audit-signing-v1` 的 Ed25519 密钥
 签名。它按名字选取，不按算法：密钥集按算法查找返回的是**最后一个**匹配项，

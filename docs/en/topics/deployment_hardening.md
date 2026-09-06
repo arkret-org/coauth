@@ -18,12 +18,12 @@ read/export surfaces return `signature_status`:
   cannot verify.
 
 `ak.session.grant` credentials are signed with the key whose kid is
-`coauth-session-grant-v1`, also selected by name. A deployment configured
-before that kid existed falls back to the historical algorithm-order selection
-- exactly what it had before - so issuance never stops on upgrade; once the key
-is configured, adding or reordering other keys no longer changes the signing
-key or the kid clients read out of a grant. Keep a retired public key in the
-JWKS until every grant it signed has expired.
+`coauth-session-grant-v1`, also selected by name. A keystore that does not
+carry that kid issues no grants at all: selecting by algorithm order instead
+would move the signing key - and the kid clients read out of a grant -
+whenever another key is added or reordered. Configure the designated key
+before serving traffic, and keep a retired public key in the JWKS until every
+grant it signed has expired.
 
 Audit rows are signed with the Ed25519 key whose kid is
 `coauth-audit-signing-v1` in `secrets.keys`. It is selected by name, never by

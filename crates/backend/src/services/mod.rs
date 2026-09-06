@@ -80,13 +80,4 @@ mod tests {
         }
     }
 
-    /// A config written before the designated kid existed still has to issue
-    /// grants: refusing would take an upgrading deployment's logins down.
-    #[test]
-    fn a_keystore_without_the_designated_key_still_signs() {
-        let key_store = Keystore::new(JsonWebKeySet::new(vec![ed25519(24, "legacy-only")]));
-        let (_, key) = preferred_service_signing_key(&key_store)
-            .expect("legacy keystores keep their historical selection");
-        assert_eq!(key.kid(), Some("legacy-only"));
-    }
 }

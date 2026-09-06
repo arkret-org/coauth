@@ -819,34 +819,24 @@ impl Keystore {
     /// The key that signs `ak.session.grant` credentials, with the algorithm to
     /// sign them under.
     ///
-    /// Prefers the key designated by [`SESSION_GRANT_SIGNING_KEY_ID`], picking
-    /// the most preferred algorithm that key can actually sign with. A
-    /// deployment configured before that kid existed has none, and refusing to
-    /// issue grants would take its logins down on upgrade, so it falls back to
-    /// the historical algorithm-order selection - which is what it was already
-    /// getting. Configure the designated key to stop new keys from moving grant
-    /// issuance around underneath the deployment.
+    /// Resolves the key designated by [`SESSION_GRANT_SIGNING_KEY_ID`], picking
+    /// the most preferred algorithm that key can actually sign with. A keystore
+    /// that does not carry the designated kid issues no grants: selecting by
+    /// algorithm order instead would move grant issuance - and the `kid` every
+    /// client reads out of a grant - whenever a key is added or reordered.
     pub fn session_grant_signing_key(
         &self,
     ) -> Option<(JsonWebSignatureAlg, &JsonWebKey<PrivateKey>)> {
-        if let Some(key) = self
+        let key = self
             .inner
             .iter()
-            .find(|jwk| jwk.kid() == Some(SESSION_GRANT_SIGNING_KEY_ID))
-        {
-            // Capability-tested rather than inferred: the algorithm chosen here
-            // is the one the signing path will build a signer for.
-            return SERVICE_SIGNING_ALG_PREFERENCE
-                .iter()
-                .find(|alg| key.params().signing_key_for_alg(alg).is_ok())
-                .map(|alg| (alg.clone(), key));
-        }
-
-        SERVICE_SIGNING_ALG_PREFERENCE.iter().find_map(|alg| {
-            self.inner
-                .signing_key_for_algorithm(alg)
-                .map(|key| (alg.clone(), key))
-        })
+            .find(|jwk| jwk.kid() == Some(SESSION_GRANT_SIGNING_KEY_ID))?;
+        // Capability-tested rather than inferred: the algorithm chosen here
+        // is the one the signing path will build a signer for.
+        SERVICE_SIGNING_ALG_PREFERENCE
+            .iter()
+            .find(|alg| key.params().signing_key_for_alg(alg).is_ok())
+            .map(|alg| (alg.clone(), key))
     }
 
     /// Get a signer for the given algorithm, reusing a previously built signer
