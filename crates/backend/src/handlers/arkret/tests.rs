@@ -1538,6 +1538,22 @@ async fn session_grant_http_revoke_updates_followup_introspection() {
     assert!(body["grant"]["revoked_at"].is_string());
 }
 
+/// Field names of a JSON object response, sorted.
+///
+/// `body["field"]` yields `Value::Null` for a field that is absent as well as
+/// for one that is present and null, so `is_null()` cannot tell a deleted
+/// field from an empty one. Asserting the whole set does.
+fn sorted_field_names(body: &serde_json::Value) -> Vec<&str> {
+    let mut names: Vec<&str> = body
+        .as_object()
+        .expect("response body is a JSON object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    names.sort_unstable();
+    names
+}
+
 #[tokio::test]
 async fn primary_handle_patch_validates_claims() {
     setup();
@@ -1611,7 +1627,15 @@ async fn primary_handle_patch_validates_claims() {
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
     assert_eq!(body["primary_handle"], handle);
-    assert!(body["source_claim_digest"].is_null());
+    assert_eq!(
+        sorted_field_names(&body),
+        ["effective_at", "primary_handle", "source_claim_id"],
+        "the outcome carries exactly this field set, and no more"
+    );
+    assert!(
+        !body["source_claim_id"].is_null(),
+        "setting a handle records the audit claim that authorised it"
+    );
 
     let response = state
         .request(alice_cookies.with_cookies(
@@ -1645,6 +1669,15 @@ async fn primary_handle_patch_validates_claims() {
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
     assert_eq!(body["primary_handle"], serde_json::Value::Null);
+    assert_eq!(
+        sorted_field_names(&body),
+        ["effective_at", "primary_handle", "source_claim_id"]
+    );
+    assert_eq!(
+        body["source_claim_id"],
+        serde_json::Value::Null,
+        "clearing the preference carries no source claim"
+    );
 }
 
 #[test]

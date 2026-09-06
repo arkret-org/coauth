@@ -1160,12 +1160,11 @@ CREATE TABLE public.user_primary_handle_preferences (
     effective_at timestamp with time zone NOT NULL,
     replaced_at timestamp with time zone,
     source_claim_id uuid,
-    source_claim_digest text,
     actor_user_id uuid,
     source text NOT NULL,
     created_at timestamp with time zone NOT NULL,
     CONSTRAINT user_primary_handle_preferences_check CHECK (((replaced_at IS NULL) OR (replaced_at > effective_at))),
-    CONSTRAINT user_primary_handle_preferences_check1 CHECK (((handle IS NULL) OR ((source_claim_id IS NOT NULL) AND (source_claim_digest IS NOT NULL)))),
+    CONSTRAINT user_primary_handle_preferences_check1 CHECK (((handle IS NULL) OR (source_claim_id IS NOT NULL))),
     CONSTRAINT user_primary_handle_preferences_handle_check CHECK (((handle IS NULL) OR ((char_length(handle) <= 319) AND (octet_length(handle) <= 512) AND (POSITION((':'::text) IN (handle)) > 1) AND (handle !~ '[[:space:][:cntrl:]@/#?]'::text) AND (POSITION(('\\'::text) IN (handle)) = 0) AND (handle !~~ 'acct:%'::text) AND (handle !~~ 'arkret://%'::text))))
 );
 

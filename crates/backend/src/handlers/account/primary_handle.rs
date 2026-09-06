@@ -81,6 +81,5 @@ pub async fn patch_primary_handle_preference(
         primary_handle: preference.handle,
         effective_at: preference.effective_at,
         source_claim_id: preference.source_claim_id.map(|id| id.to_string()),
-        source_claim_digest: preference.source_claim_digest,
     }))
 }

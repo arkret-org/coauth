@@ -88,7 +88,6 @@ diesel::table! {
         effective_at -> Timestamptz,
         replaced_at -> Nullable<Timestamptz>,
         source_claim_id -> Nullable<Uuid>,
-        source_claim_digest -> Nullable<Text>,
         actor_user_id -> Nullable<Uuid>,
         source -> Text,
         created_at -> Timestamptz,

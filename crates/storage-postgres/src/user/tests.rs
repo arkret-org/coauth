@@ -383,6 +383,56 @@ async fn primary_handle_preference_versions_current_and_as_of() {
     assert_eq!(as_of_first.handle.as_deref(), Some(handle));
 }
 
+/// The remaining half of `user_primary_handle_preferences_check1`.
+///
+/// The constraint used to demand a second column, a claim digest, that no call
+/// site ever wrote, so *every* non-null handle was rejected and the product
+/// path could not succeed. Only the source-claim half is normative here —
+/// `metadata.primary_handle` is a preference pointer, and a verifier re-checks
+/// the signed claim itself — so the digest column is gone and this case pins
+/// that the surviving half still refuses a handle with no audit source behind
+/// it.
+#[tokio::test]
+async fn primary_handle_preference_rejects_a_handle_without_a_source_claim() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+
+    let mut repo = PgRepositoryFactory::new(pool.clone())
+        .create()
+        .await
+        .unwrap();
+    let mut rng = ChaChaRng::seed_from_u64(0x4844_4c33);
+    let clock = MockClock::default();
+    let user = repo
+        .user()
+        .add(&mut rng, &clock, "alice".to_owned())
+        .await
+        .unwrap();
+
+    let error = repo
+        .user_primary_handle_preference()
+        .set(
+            &mut rng,
+            &clock,
+            NewUserPrimaryHandlePreference::self_service(
+                user.id,
+                Some("alice:example.com".to_owned()),
+                None,
+                user.id,
+            ),
+        )
+        .await
+        .expect_err("a non-null handle with no source claim must be refused");
+    assert!(
+        format!("{error:?}").contains("user_primary_handle_preferences_check1"),
+        "expected the source-claim check violation, got: {error:?}"
+    );
+
+    // The insert aborted the request transaction; nothing may be committed.
+    repo.cancel().await.unwrap();
+}
+
 #[tokio::test]
 async fn primary_handle_verified_claim_rejects_unknown_wrong_holder_and_expired_claims() {
     let Some(pool) = crate::test_utils::setup_test_pool().await else {

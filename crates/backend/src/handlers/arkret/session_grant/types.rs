@@ -198,5 +198,4 @@ pub struct PrimaryHandlePreferenceOutcome {
     #[serde(serialize_with = "arkret_canonical::serialize_canonical_timestamp")]
     pub effective_at: DateTime<Utc>,
     pub source_claim_id: Option<String>,
-    pub source_claim_digest: Option<String>,
 }
