@@ -547,11 +547,11 @@ mod tests {
     /// relay fixture without one is not a delivery request coauth could ever
     /// receive. The Seal is hand-built rather than notarised: everything the
     /// relay path touches is destination selection, and
-    /// `CbaProofBundle::validate_structural` checks shape (sorted, same-Realm,
+    /// `CbsProofBundle::validate_structural` checks shape (sorted, same-Realm,
     /// target reachable, JWS in three non-empty base64url segments), never
     /// cryptography. Verifying the capability closure is the *destination*
     /// Station's job, exercised in soland.
-    fn capability_bundle() -> arkret_wire::CbaProofBundle {
+    fn capability_bundle() -> arkret_wire::CbsProofBundle {
         let hash = |byte: &str| {
             arkret_identifiers::Hash::new(format!("sha256:{}", byte.repeat(32))).unwrap()
         };
@@ -584,7 +584,7 @@ mod tests {
                 .with_timezone(&chrono::Utc),
             hlc: arkret_identifiers::Hlc::new("01970e589d21-0000-a13f9c2e").unwrap(),
         };
-        arkret_wire::CbaProofBundle {
+        arkret_wire::CbsProofBundle {
             target_seal_ref: seal.id.clone(),
             seals: vec![seal],
             control_moves: Vec::new(),
