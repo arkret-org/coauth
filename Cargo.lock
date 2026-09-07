@@ -467,6 +467,7 @@ dependencies = [
  "arkret-canonical",
  "arkret-models-collaboration",
  "arkret-models-identity",
+ "arkret-schema",
  "arkret-state",
  "arkret-wire",
  "base64 0.23.1",
