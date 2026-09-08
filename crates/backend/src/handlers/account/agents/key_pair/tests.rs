@@ -4,6 +4,33 @@ use serde_json::json;
 
 use super::*;
 
+#[test]
+fn controller_station_for_pairing_uses_trusted_enrollment() {
+    let station_id = arkret_identifiers::DidCoreId::new(AUDIENCE).unwrap();
+    let mut config = coauth_config::ArkretConfig::default();
+    config.stations.push(coauth_config::StationConfig {
+        name: "controller".to_owned(),
+        endpoint: "https://controller-station.example/".parse().unwrap(),
+        service_id: None,
+        session_grant_introspection_bearer: None,
+        embedded_webvh_registration_bearer: None,
+    });
+    let resolver = crate::services::station_trust::StationTrustResolver::new();
+    assert!(controller_station_for_pairing(&config, &resolver, &station_id).is_err());
+    resolver.insert_for_test(&config.stations[0].endpoint, AUDIENCE);
+    assert_eq!(
+        controller_station_for_pairing(&config, &resolver, &station_id)
+            .unwrap()
+            .name,
+        "controller"
+    );
+    let other_id = arkret_identifiers::DidCoreId::new("ak:did_core:web:other.example").unwrap();
+    assert!(controller_station_for_pairing(&config, &resolver, &other_id).is_err());
+    config.stations[0].service_id = Some(other_id.clone());
+    assert!(controller_station_for_pairing(&config, &resolver, &station_id).is_err());
+    assert!(controller_station_for_pairing(&config, &resolver, &other_id).is_ok());
+}
+
 const AGENT: &str = "ak:did_core:web:agent.example";
 const AGENT_FULL: &str = "did:web:agent.example";
 const CONTROLLER: &str = "ak:did_core:web:controller.example";

@@ -938,11 +938,11 @@ async fn resolve_controller_signing_keys(
         method_devices.insert((*method).to_owned(), device_id);
     }
 
-    let station = arkret_config
-        .stations
-        .iter()
-        .find(|station| station.service_id.as_ref() == Some(&controller_account_id.station_id))
-        .ok_or_else(|| AppError::forbidden("controller Station is not configured"))?;
+    let station = controller_station_for_pairing(
+        &arkret_config,
+        crate::services::station_trust::shared(),
+        &controller_account_id.station_id,
+    )?;
     let bearer = station
         .embedded_webvh_registration_bearer
         .as_deref()
@@ -1017,6 +1017,26 @@ async fn resolve_controller_signing_keys(
         document,
         accepted_device_material,
     })
+}
+
+fn controller_station_for_pairing<'a>(
+    config: &'a coauth_config::ArkretConfig,
+    resolver: &crate::services::station_trust::StationTrustResolver,
+    station_id: &arkret_identifiers::DidCoreId,
+) -> Result<&'a coauth_config::StationConfig, AppError> {
+    config
+        .stations
+        .iter()
+        .find(|station| {
+            crate::services::station_trust::effective_audience(station, resolver).as_ref()
+                == Some(station_id)
+        })
+        .ok_or_else(|| {
+            AppError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "controller Station is not configured or its trusted identity is unavailable",
+            )
+        })
 }
 
 /// Verify both controller-signed pairing evidences.
