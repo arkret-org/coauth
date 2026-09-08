@@ -43,19 +43,30 @@ fn introspection_grant_record(
         || format!("org.arkret.coauth.session_grant:{}", grant.grant_id),
         |id| format!("org.arkret.coauth.browser_session:{id}"),
     );
-    let device_id = grant
-        .device_id
-        .as_ref()
-        .map(|device_id| DeviceId::new(device_id.clone()))
-        .transpose()
-        .map_err(|error| {
-            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                "stored session grant device_id is invalid: {error}"
-            )))
-        })?;
+    // The database retains the session/DPOP device coordinate for refresh and
+    // replay accounting. It is not a human accepted-device binding for an
+    // Agent grant, so the closed introspection union must omit the top-level
+    // `device_id` and expose the coordinate only inside `holder_binding`.
+    let device_id = if matches!(
+        &parsed_payload.holder_binding,
+        arkret_models_identity::SessionGrantHolderBinding::AgentRuntime { .. }
+    ) {
+        None
+    } else {
+        grant
+            .device_id
+            .as_ref()
+            .map(|device_id| DeviceId::new(device_id.clone()))
+            .transpose()
+            .map_err(|error| {
+                ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                    format!("stored session grant device_id is invalid: {error}"),
+                ))
+            })?
+    };
     let audience_id = grant.audience_id.clone();
 
-    Ok(SessionGrantIntrospectGrant {
+    let record = SessionGrantIntrospectGrant {
         id: grant.grant_id.clone(),
         issuer_id: grant.issuer_id.clone(),
         account_id: parsed_payload.account_id,
@@ -76,7 +87,13 @@ fn introspection_grant_record(
         cnf_jkt,
         credential_class: parsed_payload.credential_class,
         holder_binding: parsed_payload.holder_binding,
-    })
+    };
+    record.validate().map_err(|error| {
+        ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "stored session grant introspection projection is invalid: {error}"
+        )))
+    })?;
+    Ok(record)
 }
 
 pub(crate) fn introspection_status(

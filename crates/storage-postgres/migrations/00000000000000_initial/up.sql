@@ -1758,7 +1758,11 @@ CREATE INDEX oauth_session_grants_applet_delegation_active_idx ON public.oauth_s
 
 CREATE INDEX oauth_session_grants_applet_effective_scope_idx ON public.oauth_session_grants USING gin (effective_scope) WHERE (effective_scope IS NOT NULL);
 
-CREATE UNIQUE INDEX oauth_session_grants_grant_jwt_idx ON public.oauth_session_grants USING btree (grant_jwt);
+-- Session grants are compact JWS values and can exceed PostgreSQL's B-tree
+-- per-index-row limit. `grant_id` and `issuance_operation_id` already provide
+-- the durable uniqueness constraints; this hash index supports exact JWT
+-- lookup and lets PostgreSQL recheck the full text value on collisions.
+CREATE INDEX oauth_session_grants_grant_jwt_idx ON public.oauth_session_grants USING hash (grant_jwt);
 
 CREATE UNIQUE INDEX oauth_session_grants_grant_id_idx ON public.oauth_session_grants USING btree (grant_id);
 

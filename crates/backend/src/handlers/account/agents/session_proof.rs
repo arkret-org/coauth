@@ -99,13 +99,6 @@ where
         .filter(|value| !value.is_empty())
         .ok_or(AgentAuthRejection::ProofInvalid)?;
     let verification_method = &proof.verification_method;
-    if !agent_runtime_method_matches_endpoint(
-        prior_claims.account_id.principal_id.as_str(),
-        device_id,
-        verification_method.as_str(),
-    ) {
-        return Err(AgentAuthRejection::VerificationMethodPrincipalMismatch.into());
-    }
     let now = clock.now();
     if expires_at <= issued_at
         || expires_at - issued_at > AGENT_REFRESH_PROOF_MAX_WINDOW
@@ -260,17 +253,6 @@ pub async fn validate_agent_session_proof(
         );
         return Err(error.into());
     }
-    let device_id = &body.device_id;
-    if !agent_runtime_method_matches_endpoint(agent_id, device_id, verification_method) {
-        tracing::warn!(
-            agent_id,
-            verification_method,
-            device_id = %device_id,
-            "agent_key_proof rejected: runtime key is not bound to the stable Agent endpoint"
-        );
-        return Err(AgentAuthRejection::VerificationMethodPrincipalMismatch.into());
-    }
-
     // expiry / audience.
     let expires_at = proof.expires_at;
     if expires_at <= now {
@@ -345,20 +327,11 @@ pub async fn validate_agent_session_proof(
         authoritative_agent,
         &body.requested_scope,
     )?;
-    // Reconstruct the exact SDK-owned signing input used by clients. Keeping
-    // this canonical shape in one owner prevents the session verifier from
-    // silently drifting from the request builder.
-    let signed_fields = arkret_auth::session_grant::AgentKeyProofSigningInput {
-        audience_id: proof.audience_id.clone(),
-        challenge: proof.challenge.clone(),
-        nonce: nonce.to_owned(),
-        expires_at,
-        request_canonical_digest: proof.request_canonical_digest.clone(),
-        verification_method: arkret_wire::DidUrl::new(verification_method.to_owned())
-            .map_err(|_| AgentAuthRejection::ProofInvalid)?,
-    };
-    let signed_bytes = signed_fields
-        .canonical_bytes()
+    // Verify the SDK-owned closed proof transcript directly. Reconstructing a
+    // parallel shape here previously omitted `proof_kind`, so conforming
+    // clients and this verifier signed different canonical bytes.
+    let signed_bytes = proof
+        .canonical_signing_bytes()
         .map_err(|_| AgentAuthRejection::ProofInvalid)?;
     let verification_public_key =
         runtime_public_key_material_from_spec(&authorization.public_key, verification_method)?;
@@ -1007,14 +980,6 @@ fn normalize_requested_scope(scope: &[String]) -> Vec<String> {
         .into_iter()
         .map(str::to_owned)
         .collect()
-}
-
-fn agent_runtime_method_matches_endpoint(
-    agent_id: &str,
-    device_id: &arkret_identifiers::DeviceId,
-    verification_method: &str,
-) -> bool {
-    verification_method == format!("{agent_id}#{}", device_id.as_str())
 }
 
 fn normalize_string_set(values: &[String]) -> BTreeSet<String> {
@@ -1826,24 +1791,6 @@ mod tests {
         .expect_err("authorization must bind the exact runtime verification method");
 
         assert_eq!(err, AgentAuthRejection::VerificationMethodPrincipalMismatch);
-    }
-
-    #[test]
-    fn agent_runtime_method_is_bound_to_the_stable_endpoint() {
-        let device_id = arkret_identifiers::DeviceId::new(
-            "ak:device:01964137-0000-7000-8000-000000000008".to_owned(),
-        )
-        .unwrap();
-        assert!(agent_runtime_method_matches_endpoint(
-            "did:web:agent.example",
-            &device_id,
-            "did:web:agent.example#ak:device:01964137-0000-7000-8000-000000000008",
-        ));
-        assert!(!agent_runtime_method_matches_endpoint(
-            "did:web:agent.example",
-            &device_id,
-            "did:web:agent.example#runtime-1",
-        ));
     }
 
     #[test]

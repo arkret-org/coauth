@@ -1,6 +1,6 @@
 use arkret_models_collaboration::session_grant_bodies::{
-    SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND, SessionGrantIntrospectStatus,
-    SessionGrantIntrospectionProofClaims,
+    SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND, SessionGrantIntrospectOutcome,
+    SessionGrantIntrospectStatus, SessionGrantIntrospectionProofClaims,
 };
 use arkret_models_identity::{
     SessionGrantCredentialClass, SessionGrantHolderBinding, SignedSessionGrantClaims,
@@ -1422,8 +1422,13 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         body["grant"]["account_id"]["principal_id"],
         "ak:did_core:web:agent.example"
     );
+    // Agent-runtime grants keep the session/DPOP device coordinate only in
+    // `holder_binding`. The closed introspection union reserves top-level
+    // `device_id`/`device_binding` for human accepted-device grants.
+    assert_eq!(body["grant"]["device_id"], serde_json::Value::Null);
+    assert_eq!(body["grant"]["device_binding"], serde_json::Value::Null);
     assert_eq!(
-        body["grant"]["device_id"],
+        body["grant"]["holder_binding"]["device_id"],
         "ak:device:0196419b-0000-7000-8000-000000000005"
     );
     // `proof_kind`/`scope_details` were asserted on the signed payload above:
@@ -1444,6 +1449,8 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         serde_json::from_str::<serde_json::Value>(&session_public_key).unwrap()
     );
     assert_eq!(body["grant"]["id"], persisted.grant_id.to_string());
+    serde_json::from_value::<SessionGrantIntrospectOutcome>(body)
+        .expect("agent introspection response must satisfy the shared closed wire model");
 }
 
 /// `id` and `grant_jwt` are an exactly-one selector: rejecting both-missing

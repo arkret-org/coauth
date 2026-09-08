@@ -166,7 +166,10 @@ fn valid_authorize_event_typed(pairing_request_id: &str) -> arkret_wire::Event {
             "kind": "realm",
             "realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG"
         },
-        "actor_id": {"kind": "service", "service_id": AGENT},
+        "actor_id": {"kind": "account", "account_id": {
+            "principal_id": AGENT,
+            "station_id": AUDIENCE
+        }},
         "executed_by": {"kind": "account", "account_id": {
             "principal_id": CONTROLLER,
             "station_id": AUDIENCE
@@ -319,6 +322,7 @@ fn controller_signing_keys() -> ControllerSigningKeys {
             CONTROLLER_VM,
             &controller_signer().verifying_key().to_bytes(),
         ),
+        accepted_device_material: BTreeMap::new(),
     }
 }
 
@@ -332,6 +336,7 @@ fn impostor_controller_signing_keys() -> ControllerSigningKeys {
                 .verifying_key()
                 .to_bytes(),
         ),
+        accepted_device_material: BTreeMap::new(),
     }
 }
 
@@ -866,6 +871,7 @@ fn pairing_verifies_the_authorize_event_proof_against_the_resolved_controller_ke
             &format!("{CONTROLLER_FULL}#some-other-key"),
             &controller_signer().verifying_key().to_bytes(),
         ),
+        accepted_device_material: BTreeMap::new(),
     };
     verify_controller_authorize_event_proofs(&event, &other_method)
         .expect_err("a verification method absent from the controller document must reject");

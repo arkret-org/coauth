@@ -25,7 +25,7 @@ mod agent_auth_error_matrix_tests {
 
     #[test]
     fn verification_method_mismatch_fires_before_proof_validator() {
-        let agent_did = "did:web:agent.example";
+        let agent_did = "ak:did_core:web:agent.example";
         let bad_vm = "did:web:other.example#key-1";
         let err = enforce_verification_method_binding(bad_vm, agent_did).expect_err("must reject");
         assert_eq!(
@@ -38,7 +38,7 @@ mod agent_auth_error_matrix_tests {
 
     #[test]
     fn verification_method_match_succeeds_with_fragment() {
-        let agent_did = "did:web:agent.example";
+        let agent_did = "ak:did_core:web:agent.example";
         let good_vm = "did:web:agent.example#key-1";
         enforce_verification_method_binding(good_vm, agent_did).expect("must accept exact match");
     }

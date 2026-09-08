@@ -9,6 +9,8 @@
 //! caller closes it into an accepted Agent-PCR frontier and retries the same
 //! idempotent request before the runtime is reported active.
 
+use std::collections::BTreeMap;
+
 use arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload;
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
@@ -31,7 +33,6 @@ use crate::handlers::arkret::{
     ArkretRouteError, is_allowed_session_grant_audience, owning_station_did_for,
     owning_station_id_for,
 };
-use crate::services::did_binding_proof::normalize_did_for_binding;
 
 /// Durable retry queue used when the authoritative Station cannot be
 /// reached after the exact pairing request has been persisted locally.
@@ -82,8 +83,10 @@ pub async fn post_agent_key_pair(
         .into());
     }
 
-    let agent_id = normalize_did_for_binding(body.agent_id.as_str())
-        .map_err(|error| AppError::bad_request(format!("agent_id invalid: {error}")))?;
+    // `agent_id` is already a closed `DidCoreId` on the wire model. Do not
+    // feed it through the full-DID normalizer: that parser deliberately
+    // rejects `ak:did_core:*` identifiers.
+    let agent_id = body.agent_id.to_string();
     ensure_body_pairing_request_id_present(&body.pairing_request_id)?;
 
     enforce_verification_method_binding(&body.verification_method, &agent_id)
@@ -318,9 +321,27 @@ pub async fn post_agent_key_pair(
     // Everything above is a structural check over untrusted bytes. The two
     // controller-signed evidences are only believed after their signatures
     // verify against key material this service resolved for itself.
-    let controller_keys =
-        resolve_controller_signing_keys(depot, &authoritative_key_state.controller_account_id, now)
-            .await?;
+    let controller_verification_methods = body
+        .authorize_event
+        .event
+        .proofs
+        .iter()
+        .filter_map(arkret_wire::EventProof::as_producer)
+        .map(|proof| proof.verification_method.as_str())
+        .chain(std::iter::once(
+            body.signing_key_binding
+                .controller_proof
+                .verification_method
+                .as_str(),
+        ))
+        .collect::<Vec<_>>();
+    let controller_keys = resolve_controller_signing_keys(
+        depot,
+        &authoritative_key_state.controller_account_id,
+        &controller_verification_methods,
+        now,
+    )
+    .await?;
     verify_controller_pairing_evidence(
         &body.authorize_event.event,
         &body.signing_key_binding,
@@ -533,9 +554,16 @@ fn validate_controller_authorize_event(
         .map_err(|error| AppError::bad_request(format!("authorize_event.event {error}")))?;
 
     let expected_agent_id = parse_principal_id(agent_id, "agent_id")?;
-    if event.actor_id != arkret_wire::ActorId::service(expected_agent_id.clone()) {
+    let expected_actor_id = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+        expected_agent_id.clone(),
+        authoritative_key_state
+            .controller_account_id
+            .station_id
+            .clone(),
+    ));
+    if event.actor_id != expected_actor_id {
         return Err(AppError::forbidden(
-            "authorize_event.event.actor_id must equal the Agent DID",
+            "authorize_event.event.actor_id must equal the Agent account at the authoritative Station",
         ));
     }
     let controller_account_id = event
@@ -818,6 +846,7 @@ fn ensure_authorize_event_has_controller_signature(
 /// checks the signature.
 struct ControllerSigningKeys {
     document: arkret_models_identity::DidDocument,
+    accepted_device_material: BTreeMap<String, arkret_signatures::PublicKeyMaterial>,
 }
 
 impl ControllerSigningKeys {
@@ -829,6 +858,9 @@ impl ControllerSigningKeys {
         &self,
         verification_method: &str,
     ) -> Result<arkret_signatures::PublicKeyMaterial, AppError> {
+        if let Some(material) = self.accepted_device_material.get(verification_method) {
+            return Ok(material.clone());
+        }
         arkret_identity::resolve_verification_method_key_from_document(
             &self.document,
             verification_method,
@@ -852,8 +884,10 @@ impl ControllerSigningKeys {
 async fn resolve_controller_signing_keys(
     depot: &Depot,
     controller_account_id: &arkret_wire::AccountId,
+    verification_methods: &[&str],
     now: DateTime<Utc>,
 ) -> Result<ControllerSigningKeys, AppError> {
+    let arkret_config = depot.arkret_config()?;
     let mut repo = depot.repo().await?;
     let binding = repo
         .principal_did()
@@ -873,7 +907,7 @@ async fn resolve_controller_signing_keys(
     let authority = crate::services::did_binding::authority_document(
         &depot.http_client()?,
         &depot.url_builder()?,
-        &depot.arkret_config()?,
+        &arkret_config,
         &depot.key_store()?,
         &mut repo,
         depot.did_resolver_service()?.as_ref(),
@@ -889,8 +923,100 @@ async fn resolve_controller_signing_keys(
         AgentAuthRejection::PolicyUnavailable.into_app_error()
     })?;
     let document = authority.accepted.document().clone();
+    let controller_did = binding.verified_did.as_str();
+    let mut method_devices = BTreeMap::new();
+    for method in verification_methods {
+        if verification_method_controller(method) != controller_did {
+            return Err(AgentAuthRejection::ProofInvalid.into_app_error());
+        }
+        let device = method
+            .rsplit_once('#')
+            .map(|(_, fragment)| fragment)
+            .ok_or_else(|| AgentAuthRejection::ProofInvalid.into_app_error())?;
+        let device_id = arkret_identifiers::DeviceId::new(device.to_owned())
+            .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
+        method_devices.insert((*method).to_owned(), device_id);
+    }
+
+    let station = arkret_config
+        .stations
+        .iter()
+        .find(|station| station.service_id.as_ref() == Some(&controller_account_id.station_id))
+        .ok_or_else(|| AppError::forbidden("controller Station is not configured"))?;
+    let bearer = station
+        .embedded_webvh_registration_bearer
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            AppError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "controller Station device signing-key directory bearer is not configured",
+            )
+        })?;
+    let mut directory_url = station.endpoint.clone();
+    directory_url.set_path("/_soland/gate/account/device-signing-keys/query");
+    directory_url.set_query(None);
+    directory_url.set_fragment(None);
+    let query = soland_contracts::admin::device_signing_directory::DeviceSigningKeyDirectoryQueryRequestBody {
+        principal_id: controller_account_id.principal_id.clone(),
+        device_ids: method_devices.values().cloned().collect(),
+    };
+    let query_bytes = arkret_canonical::canonical_json_bytes(&query)
+        .map_err(|error| AppError::internal_box(Box::new(error)))?;
+    let response = depot
+        .http_client()?
+        .post(directory_url)
+        .bearer_auth(bearer)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(query_bytes)
+        .send()
+        .await
+        .map_err(|error| AppError::new(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))?;
+    if !response.status().is_success() {
+        return Err(AppError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "controller Station device signing-key directory rejected the request",
+        ));
+    }
+    let directory: soland_contracts::admin::device_signing_directory::DeviceSigningKeyDirectoryOutcome =
+        response
+            .json()
+            .await
+            .map_err(|error| AppError::new(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))?;
+    if directory.principal_id != controller_account_id.principal_id {
+        return Err(AgentAuthRejection::ProofInvalid.into_app_error());
+    }
+    let mut accepted_device_material = BTreeMap::new();
+    for (method, device_id) in method_devices {
+        let device = directory
+            .devices
+            .iter()
+            .find(|candidate| {
+                candidate.device_id == device_id
+                    && matches!(
+                        candidate.device_status,
+                        arkret_models_crypto::DeviceStatus::Active
+                    )
+            })
+            .ok_or_else(|| AgentAuthRejection::ProofInvalid.into_app_error())?;
+        let multibase = device
+            .device_signing_key_did
+            .strip_prefix("did:key:")
+            .ok_or_else(|| AgentAuthRejection::ProofInvalid.into_app_error())?;
+        let public_key = arkret_canonical::decode_ed25519_multibase(multibase)
+            .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
+        accepted_device_material.insert(
+            method,
+            arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                bytes: public_key.to_vec(),
+            },
+        );
+    }
     repo.save().await?;
-    Ok(ControllerSigningKeys { document })
+    Ok(ControllerSigningKeys {
+        document,
+        accepted_device_material,
+    })
 }
 
 /// Verify both controller-signed pairing evidences.

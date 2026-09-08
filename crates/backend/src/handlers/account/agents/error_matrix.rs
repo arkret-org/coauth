@@ -225,20 +225,21 @@ pub const PAUSED_REVOCATION_FRESHNESS_WINDOW: chrono::Duration = chrono::Duratio
 
 /// AUTH-1: fail-closed DID match. Returns
 /// [`AgentAuthRejection::VerificationMethodPrincipalMismatch`] when the
-/// proof's verification_method DID does not exactly equal the agent
-/// principal DID derived from the agent_id in the request body.
+/// proof's verification_method DID does not project to the Agent
+/// principal core ID carried by the request body.
 /// This MUST be invoked **before** the proof validator so a crypto bug
 /// can't mask a principal-binding bug.
 ///
 /// `verification_method` is the DID URL extracted from the JWS header (or
 /// the embedded `verification_method` claim); `agent_principal_id` is the
-/// canonical DID carried by `agent_id`.
+/// canonical `DidCoreId` carried by `agent_id`.
 pub fn enforce_verification_method_binding(
     verification_method: &str,
     agent_principal_id: &str,
 ) -> Result<(), AgentAuthRejection> {
-    // The verification_method is a DID URL. Strip query and fragment before
-    // comparing to the scalar principal DID.
+    // The verification_method is a complete DID URL, while the Agent wire
+    // identity is a `DidCoreId`. Compare them only after applying the
+    // normative DID -> core-ID projection.
     let vm_did = verification_method
         .split('#')
         .next()
@@ -246,7 +247,14 @@ pub fn enforce_verification_method_binding(
         .split('?')
         .next()
         .unwrap_or("");
-    if vm_did != agent_principal_id {
+    let projected = arkret_identifiers::Did::new(vm_did.to_owned())
+        .ok()
+        .and_then(|did| arkret_identifiers::project_did_to_core_id(&did).ok());
+    if projected
+        .as_ref()
+        .map(arkret_identifiers::DidCoreId::as_str)
+        != Some(agent_principal_id)
+    {
         return Err(AgentAuthRejection::VerificationMethodPrincipalMismatch);
     }
     Ok(())
