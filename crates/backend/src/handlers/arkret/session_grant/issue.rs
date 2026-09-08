@@ -118,7 +118,7 @@ async fn reserve_issue_operation(
     if let Some(ttl_cap) = ttl_cap {
         grant_ttl = grant_ttl.min(ttl_cap);
     }
-    let grant_expires_at = expires_at_cap.map_or(now + grant_ttl, |cap| (now + grant_ttl).min(cap));
+    let grant_expires_at = bounded_issue_expiry(now, grant_ttl, expires_at_cap);
     if grant_expires_at <= now {
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
@@ -1291,12 +1291,50 @@ pub(crate) fn map_oidc_exchange_error(
     ArkretRouteError::coded(status, code, message)
 }
 
+fn bounded_issue_expiry(
+    now: chrono::DateTime<chrono::Utc>,
+    ttl: chrono::Duration,
+    cap: Option<chrono::DateTime<chrono::Utc>>,
+) -> chrono::DateTime<chrono::Utc> {
+    // Freeze the same canonical precision before both reservation and signing.
+    // PostgreSQL handoff timestamps may contain microseconds; rounding down
+    // preserves the authority's expiry bound without changing frozen material.
+    arkret_canonical::normalize_timestamp_canonical(
+        cap.map_or(now + ttl, |cap| (now + ttl).min(cap)),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes;
     use crate::handlers::account::auth::DpopSessionBinding;
     use crate::handlers::account::auth::oidc_bridge::OidcExchangeError;
+
+    #[test]
+    fn recovery_handoff_expiry_is_frozen_at_signed_precision() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-09-08T01:00:00.123Z")
+            .unwrap()
+            .to_utc();
+        let cap = chrono::DateTime::parse_from_rfc3339("2026-09-08T01:05:00.456789Z")
+            .unwrap()
+            .to_utc();
+        let reserved = bounded_issue_expiry(now, chrono::Duration::minutes(15), Some(cap));
+        assert!(reserved <= cap);
+        assert_eq!(reserved.timestamp_subsec_nanos(), 456_000_000);
+        let seed = SessionGrantIssuanceSeed::new(
+            arkret_canonical::base64url_encode(&[0x23; 32]),
+            "expiry-regression-session",
+            now,
+            reserved,
+            "expiry-regression-signing-key",
+        )
+        .unwrap();
+        assert_eq!(
+            seed.expires_at, reserved,
+            "reservation and signed preimage must be identical"
+        );
+    }
 
     fn test_dpop_binding(proof_jwt: &str) -> DpopSessionBinding {
         let signing = sdk_signing_key_from_seed_bytes(&[0x73; 32]);

@@ -441,7 +441,7 @@ mod tests {
     use super::*;
     use crate::handlers::test_utils::setup;
 
-    /// The Realm the invite Event and its capability bundle both name. A
+    /// The Realm named by the invite Event. A
     /// bundle whose Seal sits in another Realm is rejected as cross-Realm.
     const FIXTURE_REALM: &str = "ak:realm:Acewuy1nKbK90D-V6pWEnoWq1drBx9FVel0gtDQlninN";
 
@@ -481,11 +481,10 @@ mod tests {
 
     fn service_resolution() -> arkret_models_identity::identity_resolution::ServiceResolutionCarrier
     {
-        arkret_models_identity::identity_resolution::ServiceResolutionCarrier::CurrentRecordUrl {
-            current_record_url:
+        arkret_models_identity::identity_resolution::ServiceResolutionCarrier::ResolutionUrl {
+            resolution_url:
                 "https://auth.example/_arkret/open/services/ak%3Adid_core%3Aweb%3Aauth.example/resolution"
                     .to_owned(),
-            pinned_record_digest: None,
         }
     }
 
@@ -535,64 +534,11 @@ mod tests {
                 service_resolution(),
             ),
             arkret_models_collaboration::governance::invite_addressing::IntroductionEvidence::ExplicitAddress,
-            vec![capability_bundle()],
             "idem-1",
         )
     }
 
-    /// One structurally valid single-Seal capability bundle.
     ///
-    /// `invite-addressing.md` §7 makes the bundle a required wire member, and
-    /// `InviteDeliveryRequestBody::validate_minimal` enforces `1..=64` -- so a
-    /// relay fixture without one is not a delivery request coauth could ever
-    /// receive. The Seal is hand-built rather than notarised: everything the
-    /// relay path touches is destination selection, and
-    /// `CbsProofBundle::validate_structural` checks shape (sorted, same-Realm,
-    /// target reachable, JWS in three non-empty base64url segments), never
-    /// cryptography. Verifying the capability closure is the *destination*
-    /// Station's job, exercised in soland.
-    fn capability_bundle() -> arkret_wire::CbsProofBundle {
-        let hash = |byte: &str| {
-            arkret_identifiers::Hash::new(format!("sha256:{}", byte.repeat(32))).unwrap()
-        };
-        let seal = arkret_wire::Seal {
-            id: arkret_identifiers::SealId::new(format!("ak:seal:sha256:{}", "aa".repeat(32)))
-                .unwrap(),
-            realm_id: arkret_identifiers::RealmId::new(FIXTURE_REALM).unwrap(),
-            predecessor_refs: Vec::new(),
-            delta: Vec::new(),
-            control_event_set_root: hash("11"),
-            state_root: hash("22"),
-            completeness_root: hash("33"),
-            notary_seq: 1,
-            data_view_root: None,
-            data_event_set_root: None,
-            availability_receipt_digests: Vec::new(),
-            covered_event_digests: Vec::new(),
-            previous_state_root: None,
-            previous_digest_algorithm: None,
-            notary_signature: arkret_wire::NotarySig::Single(arkret_wire::SealSignature {
-                verification_method: arkret_wire::DidUrl::new(
-                    "did:web:auth.example#notary-key".to_owned(),
-                )
-                .unwrap(),
-                payload_digest: hash("44"),
-                jws: "eyJhbGciOiJFZERTQSJ9..c2lnbmF0dXJl".to_owned(),
-            }),
-            sealed_at: chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00.000Z")
-                .unwrap()
-                .with_timezone(&chrono::Utc),
-            hlc: arkret_identifiers::Hlc::new("01970e589d21-0000-a13f9c2e").unwrap(),
-        };
-        arkret_wire::CbsProofBundle {
-            target_seal_ref: seal.id.clone(),
-            seals: vec![seal],
-            control_moves: Vec::new(),
-            inclusion_proofs: Vec::new(),
-            availability_proofs: Vec::new(),
-        }
-    }
-
     fn relay_config() -> ArkretConfig {
         let station = |name: &str, endpoint: &str, service_id: &str| coauth_config::StationConfig {
             name: name.to_owned(),

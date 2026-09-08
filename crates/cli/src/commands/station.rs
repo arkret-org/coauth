@@ -111,7 +111,6 @@ impl TrustOptions {
                     "did": outcome.enrollment.did.as_str(),
                     "method_history_head": outcome.enrollment.method_history_head,
                     "version_id": outcome.enrollment.version_id,
-                    "resolution_record_digest": outcome.enrollment.resolution_record_digest,
                     "source": outcome.enrollment.source.as_str(),
                 }));
             }

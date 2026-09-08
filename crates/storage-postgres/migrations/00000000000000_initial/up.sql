@@ -1004,7 +1004,6 @@ CREATE TABLE public.station_trust_enrollments (
     did text NOT NULL,
     method_history_head text NOT NULL,
     version_id text NOT NULL,
-    resolution_record_digest text NOT NULL,
     source text NOT NULL,
     enrolled_at timestamp with time zone DEFAULT now() NOT NULL,
     last_verified_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -1015,7 +1014,6 @@ CREATE TABLE public.station_trust_enrollments (
     CONSTRAINT station_trust_enrollments_did_non_empty CHECK ((btrim(did) <> ''::text)),
     CONSTRAINT station_trust_enrollments_method_history_head_non_empty CHECK ((btrim(method_history_head) <> ''::text)),
     CONSTRAINT station_trust_enrollments_version_id_non_empty CHECK ((btrim(version_id) <> ''::text)),
-    CONSTRAINT station_trust_enrollments_resolution_record_digest_non_empty CHECK ((btrim(resolution_record_digest) <> ''::text)),
     CONSTRAINT station_trust_enrollments_source_valid CHECK ((source = ANY (ARRAY['operator_cli'::text, 'deployment_artifact'::text, 'development_auto'::text])))
 );
 

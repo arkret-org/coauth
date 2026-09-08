@@ -219,9 +219,8 @@ async fn authenticate_agent_authority_request(
 
     let did = &request
         .agent_authority_resolution
-        .service_resolution_record
-        .record
-        .did;
+        .normalized_did_document
+        .id;
     let resolved = crate::services::did_binding::authority_document(
         &depot.http_client()?,
         &depot.url_builder()?,
@@ -258,9 +257,15 @@ async fn authenticate_agent_authority_request(
     }
 
     let resolution = &request.agent_authority_resolution;
-    arkret_signatures::service_resolution::verify_authenticated_service_resolution(
+    let current =
+        crate::services::station_trust::resolve_current_service_did(&depot.http_client()?, did)
+            .await
+            .map_err(|_| not_found())?;
+    arkret_identity::verify_current_service_resolution(
         resolution,
         &request.agent_authority_id,
+        "station",
+        &current,
         now,
     )
     .map_err(|_| not_found())?;

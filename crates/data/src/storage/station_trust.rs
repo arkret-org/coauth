@@ -103,8 +103,6 @@ pub struct StationTrustEnrollment {
     pub method_history_head: String,
     /// Verified WebVH version id (anti-rollback floor).
     pub version_id: String,
-    /// `sha256:` digest of the canonical verified resolution record.
-    pub resolution_record_digest: String,
     /// Where this enrollment came from.
     pub source: StationTrustSource,
     /// When the pin was first accepted.
@@ -128,8 +126,6 @@ pub struct NewStationTrustEnrollment {
     pub method_history_head: String,
     /// Verified WebVH version id (anti-rollback floor).
     pub version_id: String,
-    /// `sha256:` digest of the canonical verified resolution record.
-    pub resolution_record_digest: String,
     /// Where this enrollment came from.
     pub source: StationTrustSource,
 }
@@ -215,9 +211,9 @@ repository_impl! {
             &mut self,
             clock: &dyn Clock,
             canonical_endpoint: &str,
+            did: &arkret_identifiers::Did,
             method_history_head: &str,
             version_id: &str,
-            resolution_record_digest: &str,
         ) -> Result<bool, Self::Error>;
 
         /// Delete an enrollment (explicit operator revocation). Returns `false`

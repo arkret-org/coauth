@@ -146,7 +146,9 @@ pub(crate) async fn fetch_bounded(
     url: url::Url,
     max_bytes: usize,
 ) -> Result<Vec<u8>, BoundedFetchError> {
-    fetch_bounded_inner(http_client, policy, url, max_bytes, None).await
+    fetch_bounded_inner(http_client, policy, url, max_bytes, None)
+        .await
+        .map(|(_, body)| body)
 }
 
 pub(crate) async fn fetch_bounded_arkret(
@@ -156,7 +158,19 @@ pub(crate) async fn fetch_bounded_arkret(
     max_bytes: usize,
     operation_id: &str,
 ) -> Result<Vec<u8>, BoundedFetchError> {
-    fetch_bounded_inner(http_client, policy, url, max_bytes, Some(operation_id)).await
+    fetch_bounded_inner(http_client, policy, url, max_bytes, Some(operation_id))
+        .await
+        .map(|(_, body)| body)
+}
+
+/// Bounded method-adapter fetch preserving the actual response media type.
+pub(crate) async fn fetch_bounded_with_content_type(
+    http_client: &reqwest::Client,
+    policy: OutboundRequestPolicy,
+    url: url::Url,
+    max_bytes: usize,
+) -> Result<(String, Vec<u8>), BoundedFetchError> {
+    fetch_bounded_inner(http_client, policy, url, max_bytes, None).await
 }
 
 async fn fetch_bounded_inner(
@@ -165,7 +179,7 @@ async fn fetch_bounded_inner(
     url: url::Url,
     max_bytes: usize,
     operation_id: Option<&str>,
-) -> Result<Vec<u8>, BoundedFetchError> {
+) -> Result<(String, Vec<u8>), BoundedFetchError> {
     let operation = policy.operation();
     let response = send_with_policy(policy, || {
         let mut request = http_client.get(url.clone());
@@ -196,6 +210,12 @@ async fn fetch_bounded_inner(
             "{operation} response exceeds {max_bytes} bytes"
         )));
     }
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
     let mut body = Vec::new();
     let mut response = response;
     while let Some(chunk) = response
@@ -210,7 +230,7 @@ async fn fetch_bounded_inner(
         }
         body.extend_from_slice(&chunk);
     }
-    Ok(body)
+    Ok((content_type, body))
 }
 
 /// Policy for calls to the Station.

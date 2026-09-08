@@ -32,11 +32,11 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
 use std::time::{Duration, Instant};
 
-use arkret_identity::DidWebvhResolver;
+use arkret_identity::{DidResolver as _, DidWebvhResolver};
 use arkret_models_discovery::ServiceDescribe;
 use arkret_models_identity::service_identity::CanonicalServiceUrl;
 use arkret_models_identity::{
-    AuthenticatedServiceResolution, DidDocument, canonical_service_current_record_path,
+    AuthenticatedServiceResolution, DidDocument, canonical_service_resolution_path,
 };
 use arkret_wire::{Did, DidCoreId, Hash, ServiceKind};
 use chrono::Utc;
@@ -294,7 +294,7 @@ pub enum TrustVerificationError {
         /// The service id the endpoint currently presents.
         observed: String,
     },
-    /// The signed record does not bind to the configured endpoint.
+    /// The DID service state does not bind to the configured endpoint.
     #[error("endpoint binding mismatch: {0}")]
     EndpointBinding(String),
     /// The verified method history regressed below the stored floor.
@@ -324,8 +324,6 @@ pub struct VerifiedStationIdentity {
     pub method_history_head: String,
     /// Verified WebVH version id of the head entry.
     pub version_id: String,
-    /// `sha256:` digest of the canonical signed resolution record.
-    pub resolution_record_digest: String,
     /// Canonical endpoint the identity is bound to.
     pub canonical_endpoint: String,
 }
@@ -398,11 +396,9 @@ fn check_anti_rollback(
 /// 3. `project(did) == service_id`;
 /// 4. full WebVH history verification; the describe resolution commitment must equal the verified
 ///    head (version id and head digest);
-/// 5. signed `ServiceResolutionRecord` from the canonical path, proof verified against the
+/// 5. complete DID service resolution from the canonical path, proof verified against the
 ///    WebVH-anchored DID Document, freshness checked;
-/// 6. endpoint binding: record `base_url` must be the canonical configured endpoint,
-///    `current_record_url` must derive from it, and the route-binding projection digest must match
-///    `describe_digest`;
+/// 6. the verified DID endpoint matches the configured endpoint and Describe transport;
 /// 7. the observed `service_id` must equal `expected_service_id` when given;
 /// 8. anti-rollback: the verified coordinates must not regress below `floor` when given.
 pub async fn verify_station_identity(
@@ -514,7 +510,7 @@ pub async fn verify_station_identity(
         )));
     }
 
-    // 8. Anti-rollback floor before accepting any derived state.
+    // The accepted native head must occur in the independently fetched history.
     if let Some((floor_head, floor_version_id)) = floor {
         check_anti_rollback(
             floor_head,
@@ -522,15 +518,24 @@ pub async fn verify_station_identity(
             &commitment.method_history_head,
             &commitment.version_id,
         )?;
+        let accepted_present = verified_log.raw_entries.iter().any(|entry| {
+            entry.get("versionId").and_then(serde_json::Value::as_str) == Some(floor_version_id)
+                && arkret_canonical::canonical_sha256(entry).ok().as_deref() == Some(floor_head)
+        });
+        if !accepted_present {
+            return Err(TrustVerificationError::InvalidEvidence(
+                "current DID history omits the accepted native state".into(),
+            ));
+        }
     }
 
     // 5. Complete authenticated resolution from the canonical path. The open
-    // endpoint carries the signed record together with its retained method
-    // history and normalized DID Document; the signed record remains the
+    // endpoint carries the DID service state together with its retained method
+    // history and normalized DID Document; the DID service state remains the
     // persisted digest/pin material.
     let record_url = Url::parse(&format!(
         "{canonical_endpoint}{}",
-        canonical_service_current_record_path(&service_id).trim_start_matches('/')
+        canonical_service_resolution_path(&service_id).trim_start_matches('/')
     ))
     .map_err(|error| TrustVerificationError::InvalidEndpoint(error.to_string()))?;
     let record_bytes = fetch_bounded(
@@ -544,124 +549,37 @@ pub async fn verify_station_identity(
     let authenticated_resolution: AuthenticatedServiceResolution =
         arkret_canonical::canonical::from_canonical_json_slice(&record_bytes)
             .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;
-    let record = &authenticated_resolution.service_resolution_record;
-    let resolution_record_digest = Hash::new(
-        arkret_canonical::canonical_sha256(record)
-            .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?,
-    )
-    .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;
-    if record.record.service_id != service_id {
-        return Err(TrustVerificationError::InvalidEvidence(
-            "resolution record targets a different service".to_owned(),
-        ));
-    }
-    if record.record.service_kind != ServiceKind::Station.as_str() {
-        return Err(TrustVerificationError::WrongServiceKind(
-            record.record.service_kind.clone(),
-        ));
-    }
-    if record.record.did != commitment.did
-        || record.record.method_history_head != commitment.method_history_head
-        || record.record.version_id != commitment.version_id
-    {
-        return Err(TrustVerificationError::InvalidEvidence(
-            "resolution record does not match the describe resolution commitment".to_owned(),
-        ));
-    }
-
-    // 6. Endpoint binding.
-    let record_base = CanonicalServiceUrl::canonicalize(&record.record.base_url)
-        .map_err(|error| TrustVerificationError::EndpointBinding(error.to_string()))?;
-    if record_base.to_string() != record.record.base_url {
-        return Err(TrustVerificationError::EndpointBinding(
-            "resolution record base_url is not canonical".to_owned(),
-        ));
-    }
-    if record_base.to_string() != canonical_endpoint {
-        return Err(TrustVerificationError::EndpointBinding(format!(
-            "resolution record base_url {} does not match the configured endpoint {}",
-            record.record.base_url, canonical_endpoint
-        )));
-    }
-    if record.record.current_record_url != record_url.as_str() {
-        return Err(TrustVerificationError::EndpointBinding(format!(
-            "resolution record current_record_url {} is not the canonical locator {}",
-            record.record.current_record_url,
-            record_url.as_str()
-        )));
-    }
-    let history_hex = commitment
-        .method_history_head
-        .strip_prefix("sha256:")
-        .ok_or_else(|| {
-            TrustVerificationError::InvalidEvidence(
-                "method-history head is not a sha256 digest".to_owned(),
-            )
-        })?;
-    if record.record.resolution_event_ref != format!("did-webvh-entry-sha256:{history_hex}") {
-        return Err(TrustVerificationError::InvalidEvidence(
-            "resolution event ref does not match the verified method-history head".to_owned(),
-        ));
-    }
-    let mut http_json_bindings = description.transport_bindings.iter().filter_map(|binding| {
-        if let arkret_models_discovery::TransportBinding::HttpJson { base_url, .. } = binding {
-            Some(base_url)
-        } else {
-            None
-        }
-    });
-    let binding = http_json_bindings.next().ok_or_else(|| {
-        TrustVerificationError::EndpointBinding(
-            "ServiceDescribe has no http_json binding".to_owned(),
-        )
-    })?;
-    if http_json_bindings.next().is_some() {
-        return Err(TrustVerificationError::EndpointBinding(
-            "ServiceDescribe has multiple http_json bindings".to_owned(),
-        ));
-    }
-    let advertised_base = binding.as_str();
-    if advertised_base != record.record.base_url {
-        return Err(TrustVerificationError::EndpointBinding(format!(
-            "ServiceDescribe http_json base {advertised_base} does not match the signed record target {}",
-            record.record.base_url
-        )));
-    }
-    let route_binding_digest = arkret_models_identity::route_binding_describe_digest(
-        &service_id,
-        ServiceKind::Station.as_str(),
-        &commitment,
-        advertised_base,
-    )
-    .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;
-    if route_binding_digest != record.record.describe_digest {
-        return Err(TrustVerificationError::EndpointBinding(
-            "route-binding projection digest does not match the signed record".to_owned(),
-        ));
-    }
-
-    // 5b. Verify the complete retained history, record proof and freshness.
-    // The independently fetched describe/history chain above and the
-    // authenticated resolution must converge on the same normalized document.
-    if authenticated_resolution.normalized_did_document != document {
-        return Err(TrustVerificationError::InvalidEvidence(
-            "authenticated resolution DID Document differs from the verified describe history"
-                .to_owned(),
-        ));
-    }
-    arkret_identity::verify_authenticated_service_resolution_history(
+    let current = resolve_current_service_did(http_client, &commitment.did).await?;
+    let projection = arkret_identity::verify_current_service_resolution(
         &authenticated_resolution,
         &service_id,
+        ServiceKind::Station.as_str(),
+        &current,
         Utc::now(),
     )
     .map_err(|error| TrustVerificationError::InvalidEvidence(error.to_string()))?;
+    if projection.did != commitment.did
+        || projection.method_history_head != commitment.method_history_head
+        || projection.version_id != commitment.version_id
+    {
+        return Err(TrustVerificationError::InvalidEvidence(
+            "resolution disagrees with describe method commitment".into(),
+        ));
+    }
+    if projection.base_url != canonical_endpoint {
+        return Err(TrustVerificationError::EndpointBinding(
+            "DID service endpoint differs from configured endpoint".into(),
+        ));
+    }
+    description
+        .validate_route_projection(&projection)
+        .map_err(|error| TrustVerificationError::EndpointBinding(error.to_string()))?;
 
     Ok(VerifiedStationIdentity {
         service_id,
         did: commitment.did,
         method_history_head: commitment.method_history_head,
         version_id: commitment.version_id,
-        resolution_record_digest: resolution_record_digest.as_str().to_owned(),
         canonical_endpoint,
     })
 }
@@ -744,7 +662,6 @@ fn enrollment_params(
         did: verified.did.clone(),
         method_history_head: verified.method_history_head.clone(),
         version_id: verified.version_id.clone(),
-        resolution_record_digest: verified.resolution_record_digest.clone(),
         source,
     }
 }
@@ -856,9 +773,9 @@ pub async fn bootstrap(
             .record_verification(
                 &SystemClock::default(),
                 &verified.canonical_endpoint,
+                &verified.did,
                 &verified.method_history_head,
                 &verified.version_id,
-                &verified.resolution_record_digest,
             )
             .await?;
         repo.save().await?;
@@ -1013,7 +930,6 @@ pub async fn replace(
             did: verified.did.clone(),
             method_history_head: verified.method_history_head.clone(),
             version_id: verified.version_id.clone(),
-            resolution_record_digest: verified.resolution_record_digest.clone(),
             source: StationTrustSource::OperatorCli,
             enrolled_at: existing.enrolled_at,
             last_verified_at: Utc::now(),
@@ -1324,9 +1240,9 @@ async fn preflight_server(
             .record_verification(
                 &SystemClock::default(),
                 &canonical_endpoint,
+                &verified.did,
                 &verified.method_history_head,
                 &verified.version_id,
-                &verified.resolution_record_digest,
             )
             .await?;
         repo.save().await?;
@@ -1399,9 +1315,9 @@ async fn revalidate_all(
                         .record_verification(
                             &SystemClock::default(),
                             &endpoint,
+                            &verified.did,
                             &verified.method_history_head,
                             &verified.version_id,
-                            &verified.resolution_record_digest,
                         )
                         .await;
                     match result {
@@ -1580,4 +1496,94 @@ mod tests {
             &config, &insecure, true
         ));
     }
+}
+
+/// Fetch the method authority independently of carried evidence, with the shared egress policy.
+pub(crate) async fn resolve_current_service_did(
+    http: &reqwest::Client,
+    did: &Did,
+) -> Result<arkret_identity::ResolvedDid, TrustVerificationError> {
+    let invalid =
+        |e: arkret_identity::IdentityError| TrustVerificationError::InvalidEvidence(e.to_string());
+    let doc_url = DidWebvhResolver::document_url(did).map_err(invalid)?;
+    let log_url = DidWebvhResolver::log_url(did).map_err(invalid)?;
+    let parse_url = |value: &str| {
+        Url::parse(value).map_err(|e| TrustVerificationError::InvalidEndpoint(e.to_string()))
+    };
+    let (doc_type, doc) = fetch_method_response(
+        http,
+        "service_current_document",
+        parse_url(&doc_url)?,
+        AUTHENTICATED_RESOLUTION_MAX_BYTES,
+    )
+    .await?;
+    let (log_type, log) = fetch_method_response(
+        http,
+        "service_current_log",
+        parse_url(&log_url)?,
+        outbound_http::WEBVH_LOG_MAX_BYTES,
+    )
+    .await?;
+    let mut resolver = DidWebvhResolver::new();
+    resolver
+        .insert_from_https_response(
+            did,
+            arkret_identity::DidWebvhDocumentOutcome {
+                url: doc_url,
+                content_type: doc_type,
+                body: doc,
+            },
+        )
+        .map_err(invalid)?;
+    resolver
+        .ingest_log(
+            did,
+            arkret_identity::DidWebvhLogOutcome {
+                url: log_url,
+                content_type: log_type,
+                body: log,
+            },
+        )
+        .map_err(invalid)?;
+    let witness_url = DidWebvhResolver::witness_url(did).map_err(invalid)?;
+    if let Ok(witness) = fetch_bounded(
+        http,
+        "service_current_witness",
+        parse_url(&witness_url)?,
+        AUTHENTICATED_RESOLUTION_MAX_BYTES,
+        None,
+    )
+    .await
+    {
+        resolver
+            .ingest_witness_records(did, &witness)
+            .map_err(invalid)?;
+    }
+    resolver.resolve_did(did).map_err(invalid)
+}
+
+async fn fetch_method_response(
+    http: &reqwest::Client,
+    operation: &'static str,
+    url: Url,
+    max_bytes: usize,
+) -> Result<(String, Vec<u8>), TrustVerificationError> {
+    outbound_http::fetch_bounded_with_content_type(
+        http,
+        outbound_http::principal_trust_policy(operation),
+        url,
+        max_bytes,
+    )
+    .await
+    .map_err(|error| match error {
+        outbound_http::BoundedFetchError::Unreachable(message) => {
+            TrustVerificationError::Unreachable(message)
+        }
+        outbound_http::BoundedFetchError::EgressDenied(message) => {
+            TrustVerificationError::EgressDenied(message)
+        }
+        outbound_http::BoundedFetchError::TooLarge(message) => {
+            TrustVerificationError::InvalidEvidence(message)
+        }
+    })
 }

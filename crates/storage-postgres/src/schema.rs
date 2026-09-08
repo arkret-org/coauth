@@ -929,7 +929,6 @@ diesel::table! {
         did -> Text,
         method_history_head -> Text,
         version_id -> Text,
-        resolution_record_digest -> Text,
         source -> Text,
         enrolled_at -> Timestamptz,
         last_verified_at -> Timestamptz,

@@ -79,5 +79,4 @@ mod tests {
             assert_eq!(alg, coauth_iana::jose::JsonWebSignatureAlg::Ed25519);
         }
     }
-
 }

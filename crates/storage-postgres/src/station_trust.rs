@@ -40,7 +40,6 @@ struct EnrollmentRow {
     did: String,
     method_history_head: String,
     version_id: String,
-    resolution_record_digest: String,
     source: String,
     enrolled_at: DateTime<Utc>,
     last_verified_at: DateTime<Utc>,
@@ -72,7 +71,6 @@ impl TryFrom<EnrollmentRow> for StationTrustEnrollment {
             did,
             method_history_head: value.method_history_head,
             version_id: value.version_id,
-            resolution_record_digest: value.resolution_record_digest,
             source,
             enrolled_at: value.enrolled_at,
             last_verified_at: value.last_verified_at,
@@ -90,7 +88,6 @@ struct NewEnrollmentRow {
     did: String,
     method_history_head: String,
     version_id: String,
-    resolution_record_digest: String,
     source: String,
     enrolled_at: DateTime<Utc>,
     last_verified_at: DateTime<Utc>,
@@ -104,7 +101,6 @@ struct EnrollmentReplacement {
     did: String,
     method_history_head: String,
     version_id: String,
-    resolution_record_digest: String,
     source: String,
     last_verified_at: DateTime<Utc>,
 }
@@ -119,7 +115,6 @@ impl NewEnrollmentRow {
             did: params.did.to_string(),
             method_history_head: params.method_history_head.clone(),
             version_id: params.version_id.clone(),
-            resolution_record_digest: params.resolution_record_digest.clone(),
             source: params.source.as_str().to_owned(),
             enrolled_at: now,
             last_verified_at: now,
@@ -232,7 +227,6 @@ impl StationTrustRepository for PgStationTrustRepository<'_> {
             did: params.did,
             method_history_head: params.method_history_head,
             version_id: params.version_id,
-            resolution_record_digest: params.resolution_record_digest,
             source: params.source,
             enrolled_at: now,
             last_verified_at: now,
@@ -258,7 +252,6 @@ impl StationTrustRepository for PgStationTrustRepository<'_> {
             did: params.did.to_string(),
             method_history_head: params.method_history_head.clone(),
             version_id: params.version_id.clone(),
-            resolution_record_digest: params.resolution_record_digest.clone(),
             source: params.source.as_str().to_owned(),
             last_verified_at: clock.now(),
         };
@@ -278,9 +271,9 @@ impl StationTrustRepository for PgStationTrustRepository<'_> {
         &mut self,
         clock: &dyn Clock,
         canonical_endpoint: &str,
+        did: &arkret_identifiers::Did,
         method_history_head: &str,
         version_id: &str,
-        resolution_record_digest: &str,
     ) -> Result<bool, Self::Error> {
         let rows_affected = diesel::update(
             station_trust_enrollments::table
@@ -288,9 +281,9 @@ impl StationTrustRepository for PgStationTrustRepository<'_> {
         )
         .set((
             station_trust_enrollments::last_verified_at.eq(clock.now()),
+            station_trust_enrollments::did.eq(did.as_str()),
             station_trust_enrollments::method_history_head.eq(method_history_head),
             station_trust_enrollments::version_id.eq(version_id),
-            station_trust_enrollments::resolution_record_digest.eq(resolution_record_digest),
         ))
         .execute(self.conn)
         .await?;
@@ -384,7 +377,6 @@ mod tests {
                 .expect("valid DID"),
             method_history_head: "sha256:aa".to_owned(),
             version_id: "1-bb".to_owned(),
-            resolution_record_digest: "sha256:cc".to_owned(),
             source: StationTrustSource::OperatorCli,
         }
     }
@@ -486,12 +478,22 @@ mod tests {
                 .record_verification(
                     &clock,
                     "https://soland.example/",
+                    &arkret_identifiers::Did::new("did:webvh:new:replacement.example").unwrap(),
                     "sha256:ee",
-                    "3-ff",
-                    "sha256:00"
+                    "3-ff"
                 )
                 .await
                 .unwrap()
+        );
+        assert_eq!(
+            repo.station_trust()
+                .find_by_name("soland")
+                .await
+                .unwrap()
+                .unwrap()
+                .did
+                .as_str(),
+            "did:webvh:new:replacement.example"
         );
         repo.station_trust()
             .record_audit(
