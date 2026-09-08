@@ -8,14 +8,6 @@ license.workspace = true
 [features]
 # Policy engine backends
 cedar = ["dep:cedar-policy"]
-# Dev-only password-bootstrap session-grant scaffold (auth.rs). This P0
-# scaffold mints a station session grant directly from a password
-# login, bypassing the canonical OIDC `authorize -> token` ceremony. It is
-# compiled OUT of the binary unless this feature is explicitly enabled, so a
-# production build cannot be coaxed into the path by config alone (the
-# `arkret.password_login_session_grants_enabled` runtime flag is only honoured
-# when this feature is present). Never enable for production.
-password-bootstrap = []
 
 [dependencies]
 

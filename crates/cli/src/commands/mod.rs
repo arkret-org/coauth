@@ -76,10 +76,6 @@ pub struct Options {
     #[arg(long, global = true)]
     allow_insecure_dev_email_bypass: bool,
 
-    /// Confirm that the configured password bootstrap flow is intentional
-    #[arg(long, global = true)]
-    allow_insecure_password_bootstrap: bool,
-
     /// Debug/test only: allow outbound plain HTTP to loopback services
     #[arg(long, global = true)]
     allow_insecure_loopback_http: bool,
@@ -103,10 +99,6 @@ impl Options {
             (
                 "COAUTH_ALLOW_INSECURE_DEV_EMAIL_BYPASS",
                 self.allow_insecure_dev_email_bypass,
-            ),
-            (
-                "COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP",
-                self.allow_insecure_password_bootstrap,
             ),
             (
                 "COAUTH_ALLOW_INSECURE_LOOPBACK_HTTP",

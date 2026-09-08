@@ -1375,10 +1375,6 @@
             "null"
           ]
         },
-        "password_login_session_grants_enabled": {
-          "description": "Fail-closed gate for the temporary password-login bridge that returns a\nArkret station session grant directly from\n`POST /_coauth/gate/account/auth/login`.\n\nDefaults to `false`: production callers must use the OIDC/passkey bridge\nand proof-bound grant exchange. When enabled for development, the login\nhandler still requires a valid DPoP proof before minting the grant.",
-          "type": "boolean"
-        },
         "admin_org_id": {
           "description": "Deployment-scoped organization id accepted by the Admin API.\n\ncoauth does not yet model true multi-tenant ownership on every entity.\nSetting this makes admin requests supply the same\n`x-coauth-org-id` value and rejects all other orgs, so a deployment can\nfail closed instead of pretending cross-tenant admin isolation exists.",
           "type": [

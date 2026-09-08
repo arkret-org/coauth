@@ -41,9 +41,9 @@ pub(crate) struct DpopSessionBinding {
 }
 
 /// Extract a DPoP proof from the "kickoff" request — i.e. the initial
-/// auth-side request that mints a session grant (login or
-/// `oidc/exchange`). When no `DPoP` header is present we return
-/// `Ok(None)` so the grant is issued unbound; when the header is present
+/// auth-side request before a grant exists. When no `DPoP` header is present
+/// we return `Ok(None)`; grant issuers enforce their own required-binding
+/// policy. When the header is present
 /// but malformed we surface the failure so the caller can emit
 /// `invalid_dpop_proof` rather than silently degrade.
 ///
@@ -118,8 +118,8 @@ struct ProvidersQuery {
 // ── POST /_coauth/account/auth/login ────────────────────────────────────
 
 /// Authenticate a user with username and password, returning viewer info,
-/// setting a session cookie on success, and minting a temporary scaffold
-/// session grant for the configured station bridge.
+/// setting a session cookie on success. Proof-bound session grants are issued
+/// separately through the OIDC/passkey bridge.
 #[endpoint]
 pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Result<(), RouteError> {
     let mut rng = make_rng();
@@ -140,11 +140,10 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         .and_then(|h| h.to_str().ok())
         .map(std::borrow::ToOwned::to_owned);
 
-    // Same DPoP extraction as AccountHandoff creation: a present-but-broken
-    // proof rejects the login outright, and session-grant issuance below
-    // requires a verified proof-bound public key.
-    let dpop_binding = match extract_dpop_binding_for_kickoff(req, depot, &url_builder).await {
-        Ok(jkt) => jkt,
+    // A supplied DPoP proof must remain valid even though password login
+    // only establishes a browser session.
+    match extract_dpop_binding_for_kickoff(req, depot, &url_builder).await {
+        Ok(_) => {}
         Err(error @ DpopError::VerifierUnavailable(_)) => {
             return Err(RouteError::Internal(Box::new(error)));
         }
@@ -186,16 +185,6 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             return Ok(());
         }
     }
-
-    let requested_audience = input.audience.clone();
-    let requested_device_id = input.device_id.clone();
-
-    // When the password-bootstrap scaffold is compiled out these are only
-    // consumed by the disabled-by-default grant-minting branch; the DPoP
-    // extraction above is still performed for its security side effect of
-    // rejecting present-but-broken proofs.
-    #[cfg(not(feature = "password-bootstrap"))]
-    let _ = (&dpop_binding, &requested_audience, &requested_device_id);
 
     match login_with_password(
         repo,
@@ -263,73 +252,16 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 Ok(info) => info.displayname,
                 Err(_) => None,
             };
-            // The P0 password-bootstrap scaffold is compiled out unless the
-            // `password-bootstrap` feature is enabled, so a production build
-            // always takes the disabled path regardless of the runtime config
-            // flag. This is the compile-time half of the defence-in-depth
-            // (the other halves are the default-off config flag and the
-            // mandatory dev-only startup escape hatch in `coauth-config`).
-            #[cfg(feature = "password-bootstrap")]
-            let session_grants_enabled = arkret_config.password_login_session_grants_enabled;
-            #[cfg(not(feature = "password-bootstrap"))]
-            let session_grants_enabled = false;
-
-            // A password-login session grant is minted only when the client
-            // explicitly opts in by supplying a `device_id` to bind it to (see
-            // `LoginReqBody::device_id`: "Required when password-login session
-            // grants are enabled"). Interactive browser logins — e.g. the coauth
-            // login page that fronts the OIDC `authorize` ceremony — send neither
-            // a device_id nor a DPoP proof; they authenticate, set the session
-            // cookie, and let the OIDC/passkey bridge issue the proof-bound grant
-            // afterwards. Forcing those logins down the grant-minting branch
-            // wrongly rejected them with `invalid_dpop_proof`.
-            let client_requested_session_grant = requested_device_id
-                .as_deref()
-                .map(str::trim)
-                .is_some_and(|value| !value.is_empty());
-
-            if !session_grants_enabled || !client_requested_session_grant {
-                cookie_jar.finalize(
-                    res,
-                    Json(LoginOutcome::success(
-                        Some(ViewerInfo {
-                            id: NodeType::User.serialize(user.id),
-                            handle: user.localpart.clone(),
-                            federated_handle: arkret::user_handle(&url_builder, &user),
-                            principal_address: station.principal_address(&user.localpart),
-                            display_name,
-                        }),
-                        None,
-                        vec![
-                            "password_login_session_grants_disabled; use the OIDC/passkey bridge"
-                                .to_owned(),
-                        ],
-                    )),
-                );
-                return Ok(());
-            }
-            #[cfg(feature = "password-bootstrap")]
-            {
-                // Password authentication is allowed to establish the browser
-                // session only. Session-grant issuance requires the durable
-                // OIDC/passkey proof and operation-ledger path; retaining the
-                // former direct mint here would create a second, replay-unsafe
-                // issuer boundary.
-                let _ = (dpop_binding, requested_audience);
-                PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-                res.status_code(StatusCode::NOT_IMPLEMENTED);
-                res.render(Json(
-                    LoginOutcome::error("unsupported_feature").with_warnings(vec![
-                        "password login cannot issue session grants; use the OIDC/passkey bridge"
-                            .to_owned(),
-                    ]),
-                ));
-                return Ok(());
-            }
-            // Feature compiled out: the disabled-path `if` above always
-            // returns first, so this is the (statically-required) trailing
-            // value for the match arm.
-            #[cfg(not(feature = "password-bootstrap"))]
+            cookie_jar.finalize(
+                res,
+                Json(LoginOutcome::success(Some(ViewerInfo {
+                    id: NodeType::User.serialize(user.id),
+                    handle: user.localpart.clone(),
+                    federated_handle: arkret::user_handle(&url_builder, &user),
+                    principal_address: station.principal_address(&user.localpart),
+                    display_name,
+                }))),
+            );
             Ok(())
         }
     }

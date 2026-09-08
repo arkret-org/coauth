@@ -19,7 +19,6 @@ docker = ["coauth-config/docker"]
 
 # Policy engine backends
 cedar = ["coauth-backend/cedar"]
-password-bootstrap = ["coauth-backend/password-bootstrap"]
 
 [dependencies]
 anyhow = { workspace = true }

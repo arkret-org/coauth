@@ -127,20 +127,10 @@ pub enum UpstreamLinkState {
 pub struct LoginReqBody {
     pub handle: String,
     pub password: String,
-    /// Audience the client wants the issued session grant to be bound to.
-    /// Must exactly match a configured station audience. When
-    /// omitted, the caller is implicitly accepting the deployment's only
-    /// configured server name.
-    #[serde(default)]
-    pub audience: Option<String>,
     /// Solved CAPTCHA token, supplied when the deployment has a CAPTCHA
     /// provider configured.
     #[serde(default)]
     pub captcha_token: Option<String>,
-    /// Device the issued station session grant is bound to. Required
-    /// when password-login session grants are enabled.
-    #[serde(default)]
-    pub device_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -151,24 +141,17 @@ pub struct LoginOutcome {
     pub error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub viewer: Option<ViewerInfo>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_grant: Option<SessionGrantOneShotInfo>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
 }
 
 impl LoginOutcome {
-    pub fn success(
-        viewer: Option<ViewerInfo>,
-        session_grant: Option<SessionGrantOneShotInfo>,
-        warnings: Vec<String>,
-    ) -> Self {
+    pub fn success(viewer: Option<ViewerInfo>) -> Self {
         Self {
             status: "success".to_owned(),
             error: None,
             viewer,
-            session_grant,
-            warnings,
+            warnings: Vec::new(),
         }
     }
 
@@ -177,7 +160,6 @@ impl LoginOutcome {
             status: "error".to_owned(),
             error: Some(error.into()),
             viewer: None,
-            session_grant: None,
             warnings: Vec::new(),
         }
     }
@@ -501,37 +483,6 @@ pub struct BootstrapAdminStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
-#[serde(rename_all = "snake_case")]
-pub enum SessionGrantKind {
-    PrincipalSession,
-    PushRegister,
-    DevicePairing,
-    AdminBridge,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
-pub struct SessionGrantOneShotInfo {
-    pub kind: SessionGrantKind,
-    pub id: String,
-    pub grant_jwt: String,
-    pub session_public_key: String,
-    pub expires_at: String,
-    pub audience: String,
-    pub scopes: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub station: Option<SessionGrantStationInfo>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
-pub struct SessionGrantStationInfo {
-    pub name: String,
-    pub endpoint: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 pub struct LogoutOutcome {
     pub status: String,
 }
@@ -708,7 +659,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn password_login_without_session_grant_decodes() {
+    fn password_login_returns_browser_viewer() {
         let outcome: LoginOutcome = serde_json::from_value(serde_json::json!({
             "status": "success",
             "viewer": {
@@ -717,11 +668,7 @@ mod tests {
                 "federated_handle": "alice:auth.local.host",
                 "principal_address": "alice@auth.local.host",
                 "display_name": "alice"
-            },
-            "session_grant": null,
-            "warnings": [
-                "password_login_session_grants_disabled; use the OIDC/passkey bridge"
-            ]
+            }
         }))
         .expect("password login response decodes");
 
@@ -730,8 +677,10 @@ mod tests {
             outcome.viewer.as_ref().expect("viewer").handle.as_str(),
             "alice"
         );
-        assert!(outcome.session_grant.is_none());
-        assert_eq!(outcome.warnings.len(), 1);
+        assert!(outcome.warnings.is_empty());
+        let response = serde_json::to_value(LoginOutcome::success(outcome.viewer)).unwrap();
+        assert!(response.get("session_grant").is_none());
+        assert!(response.get("warnings").is_none());
     }
 
     #[test]

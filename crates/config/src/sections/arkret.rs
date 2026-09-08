@@ -244,16 +244,6 @@ pub struct ArkretConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trust_domain: Option<String>,
 
-    /// Fail-closed gate for the temporary password-login bridge that returns a
-    /// Arkret station session grant directly from
-    /// `POST /_coauth/gate/account/auth/login`.
-    ///
-    /// Defaults to `false`: production callers must use the OIDC/passkey bridge
-    /// and proof-bound grant exchange. When enabled for development, the login
-    /// handler still requires a valid DPoP proof before minting the grant.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub password_login_session_grants_enabled: bool,
-
     /// Deployment-scoped organization id accepted by the Admin API.
     ///
     /// coauth does not yet model true multi-tenant ownership on every entity.
@@ -322,7 +312,6 @@ impl Default for ArkretConfig {
             admin_audience: None,
             high_risk_threshold: default_high_risk_threshold(),
             trust_domain: None,
-            password_login_session_grants_enabled: false,
             admin_org_id: None,
             audit_signature_fail_closed: false,
             erasure_request_max_auth_age: None,
@@ -344,7 +333,6 @@ impl ArkretConfig {
             && self.admin_audience.is_none()
             && self.high_risk_threshold == default_high_risk_threshold()
             && self.trust_domain.is_none()
-            && !self.password_login_session_grants_enabled
             && self.admin_org_id.is_none()
             && !self.audit_signature_fail_closed
             && self.erasure_request_max_auth_age.is_none()
@@ -539,36 +527,9 @@ impl ConfigurationSection for ArkretConfig {
             .into());
         }
 
-        // Fail closed: `password_login_session_grants_enabled` activates the
-        // P0 password-bootstrap scaffold (auth.rs), which mints a
-        // station session grant directly from a password login,
-        // bypassing the canonical OIDC `authorize -> token` ceremony, PKCE
-        // binding and the PoP strand. It is a development-only bring-up
-        // path that MUST be replaced before production. Require an explicit
-        // dev-only environment escape hatch so a mis-configured production
-        // deployment refuses to start instead of silently trusting these
-        // grants. Mirrors `account.registration_email_delivery_bypass_allowed`.
-        if self.password_login_session_grants_enabled
-            && crate::runtime_var_os(PASSWORD_BOOTSTRAP_ESCAPE_HATCH).is_none()
-        {
-            return Err(std::io::Error::other(format!(
-                "arkret.password_login_session_grants_enabled is enabled but the dev-only escape \
-                 hatch {PASSWORD_BOOTSTRAP_ESCAPE_HATCH} is not set; this password-bootstrap \
-                 scaffold is for dev/test only and must never run in production"
-            ))
-            .into());
-        }
-
         Ok(())
     }
 }
-
-/// Dev-only escape hatch gating the P0 password-bootstrap session-grant
-/// scaffold. Production deployments must never set
-/// `arkret.password_login_session_grants_enabled=true`; requiring this
-/// environment variable makes a mis-configured production process fail
-/// closed at startup.
-const PASSWORD_BOOTSTRAP_ESCAPE_HATCH: &str = "COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP";
 
 /// Trusted Station metadata published through Arkret discovery.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -702,7 +663,13 @@ mod tests {
     }
 
     #[test]
-    fn stale_service_identity_fields_are_rejected() {
+    fn retired_arkret_config_fields_are_rejected() {
+        assert!(
+            serde_json::from_value::<ArkretConfig>(serde_json::json!({
+                "password_login_session_grants_enabled": true
+            }))
+            .is_err()
+        );
         assert!(
             serde_json::from_value::<ArkretConfig>(serde_json::json!({
                 "service_id": "did:webvh:zold:auth.example:webvh:service"

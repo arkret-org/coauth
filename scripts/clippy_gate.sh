@@ -9,7 +9,7 @@
 #
 # Both halves of the command matter:
 #
-#   * `--all-features` — `password-bootstrap` and `cedar` gate whole modules
+#   * `--all-features` — `cedar` gates policy modules
 #     out of the default build, so without it those files are never
 #     type-checked at all.
 #   * `-D warnings` — a warning nobody fails on is a warning nobody fixes.
