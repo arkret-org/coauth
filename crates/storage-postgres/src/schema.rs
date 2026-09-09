@@ -175,9 +175,9 @@ diesel::table! {
     agent_session_proof_replay (id) {
         id -> Uuid,
         agent_id -> Text,
+        authorization_ref -> Text,
         verification_method -> Text,
         challenge -> Text,
-        nonce -> Text,
         request_canonical_digest -> Text,
         audience_id -> Text,
         consumed_at -> Timestamptz,

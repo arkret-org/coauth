@@ -128,9 +128,9 @@ CREATE TABLE public.agent_key_authorizations (
 CREATE TABLE public.agent_session_proof_replay (
     id uuid NOT NULL,
     agent_id text NOT NULL,
+    authorization_ref text NOT NULL,
     verification_method text NOT NULL,
     challenge text NOT NULL,
-    nonce text NOT NULL,
     request_canonical_digest text NOT NULL,
     audience_id text NOT NULL,
     consumed_at timestamp with time zone NOT NULL,
@@ -1328,10 +1328,8 @@ ALTER TABLE ONLY public.agent_session_proof_replay
     ADD CONSTRAINT agent_session_proof_replay_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.agent_session_proof_replay
-    ADD CONSTRAINT agent_session_proof_replay_challenge_key UNIQUE (agent_id, verification_method, challenge);
+    ADD CONSTRAINT agent_session_proof_replay_challenge_key UNIQUE (agent_id, authorization_ref, verification_method, challenge);
 
-ALTER TABLE ONLY public.agent_session_proof_replay
-    ADD CONSTRAINT agent_session_proof_replay_nonce_key UNIQUE (agent_id, verification_method, nonce);
 
 ALTER TABLE ONLY public.dpop_jti_replay
     ADD CONSTRAINT dpop_jti_replay_pkey PRIMARY KEY (jti_digest);

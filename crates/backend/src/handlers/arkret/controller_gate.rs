@@ -73,7 +73,8 @@ pub async fn issue_controller_gate_attestation(
 
     let mut repo = depot.repo().await?;
     authenticate_agent_authority_request(req, depot, &mut repo, &request, &canonical_body, now)
-        .await?;
+        .await
+        .inspect_err(|_| tracing::warn!("controller gate Agent Authority authentication failed"))?;
     let binding = repo
         .principal_did()
         .get_by_principal_id_and_audience(
@@ -82,7 +83,10 @@ pub async fn issue_controller_gate_attestation(
         )
         .await?
         .filter(|binding| binding.accepted_id == request.agent_authority_id)
-        .ok_or_else(not_found)?;
+        .ok_or_else(|| {
+            tracing::warn!("controller gate principal binding unavailable for Agent Authority");
+            not_found()
+        })?;
     let user = repo
         .user()
         .lookup(binding.user_id)
@@ -394,7 +398,9 @@ fn controller_status(
     }
 }
 
+#[track_caller]
 fn not_found() -> ArkretRouteError {
+    tracing::warn!(location = %std::panic::Location::caller(), "controller gate verification rejected");
     ArkretRouteError::coded(
         StatusCode::NOT_FOUND,
         arkret_wire::ErrorCode::NOT_FOUND,

@@ -344,6 +344,12 @@ repository_impl! {
             operation: NewSessionGrantOperation<'_>,
         ) -> Result<SessionGrantReserveOutcome, Self::Error>;
 
+        /// Lock an issuance operation before consuming a local one-shot proof.
+        async fn lock_operation(
+            &mut self,
+            operation_id: Ulid,
+        ) -> Result<SessionGrantOperation, Self::Error>;
+
         /// Persist an external one-shot authorization checkpoint before later commit.
         async fn checkpoint_authorization(
             &mut self,

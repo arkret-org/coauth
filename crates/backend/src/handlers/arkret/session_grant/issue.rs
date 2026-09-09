@@ -103,6 +103,7 @@ async fn reserve_issue_operation(
             arkret_models_identity::SessionGrantProofKind::AgentKeyProof,
             serde_json::json!({
                 "proof_kind": "agent_key_proof",
+                "principal_id": request.principal_id,
                 "authorization_ref": request.agent_key_authorization_ref,
                 "verification_method": request.proof.verification_method,
                 "challenge": request.proof.challenge,
@@ -160,50 +161,16 @@ async fn reserve_issue_operation(
 
     match reserved {
         SessionGrantReserveOutcome::Reserved(operation) => {
+            if let SessionGrantRequestBody::Agent(agent) = body {
+                validate_agent_before_reservation(depot, &mut repo, agent, holder_jkt).await?;
+            }
             // The reservation must be durable before any OIDC code, handoff or
             // agent proof can be consumed in a later transaction.
             repo.save().await?;
             Ok(Ok(operation))
         }
         SessionGrantReserveOutcome::Replay(operation) => {
-            let grant_id = operation.result_grant_id.as_ref().ok_or_else(|| {
-                ArkretRouteError::coded(
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
-                    "committed issue operation has no result grant identity",
-                )
-            })?;
-            let grant = repo
-                .oauth_session_grant()
-                .lookup_by_grant_id(grant_id)
-                .await?
-                .ok_or_else(|| {
-                    ArkretRouteError::coded(
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
-                        "committed issue operation result grant is no longer provable",
-                    )
-                })?;
-            if grant.expires_at <= now {
-                return Err(ArkretRouteError::session_grant_replay_expired(
-                    grant.grant_id,
-                ));
-            }
-            if grant.lifecycle_state != coauth_data::SessionGrantLifecycleState::Active {
-                let state = super::replay_terminal_state(grant.lifecycle_state)
-                    .expect("lifecycle state checked to be terminal above");
-                return Err(ArkretRouteError::session_grant_replay_terminal(
-                    grant.grant_id,
-                    state,
-                ));
-            }
-            let outcome = operation.canonical_outcome.ok_or_else(|| {
-                ArkretRouteError::coded(
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
-                    "committed session-grant operation has no retained canonical outcome",
-                )
-            })?;
+            let outcome = retained_issue_outcome(&mut repo, operation, now).await?;
             repo.cancel().await.ok();
             Ok(Err(outcome))
         }
@@ -243,6 +210,52 @@ async fn reserve_issue_operation(
     }
 }
 
+async fn retained_issue_outcome(
+    repo: &mut coauth_data::BoxRepository,
+    operation: SessionGrantOperation,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<Vec<u8>, ArkretRouteError> {
+    let grant_id = operation.result_grant_id.as_ref().ok_or_else(|| {
+        ArkretRouteError::coded(
+            StatusCode::SERVICE_UNAVAILABLE,
+            arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+            "committed issue operation has no result grant identity",
+        )
+    })?;
+    let grant = repo
+        .oauth_session_grant()
+        .lookup_by_grant_id(grant_id)
+        .await?
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "committed issue operation result grant is no longer provable",
+            )
+        })?;
+    if grant.expires_at <= now {
+        return Err(ArkretRouteError::session_grant_replay_expired(
+            grant.grant_id,
+        ));
+    }
+    if grant.lifecycle_state != coauth_data::SessionGrantLifecycleState::Active {
+        let state = super::replay_terminal_state(grant.lifecycle_state)
+            .expect("lifecycle state checked to be terminal above");
+        return Err(ArkretRouteError::session_grant_replay_terminal(
+            grant.grant_id,
+            state,
+        ));
+    }
+    let outcome = operation.canonical_outcome.ok_or_else(|| {
+        ArkretRouteError::coded(
+            StatusCode::SERVICE_UNAVAILABLE,
+            arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+            "committed session-grant operation has no retained canonical outcome",
+        )
+    })?;
+    Ok(outcome)
+}
+
 // ── Canonical Account Authority session-grant issuance ─────────────
 //
 // Human issuance consumes a Bound AccountHandoff plus an accepted-device PoP.
@@ -279,13 +292,15 @@ pub async fn issue_session_grant_endpoint(
     match body {
         SessionGrantRequestBody::Agent(agent) => {
             let dpop_binding = extract_kickoff_dpop(req, depot).await?;
-            let binding =
-                require_agent_key_proof_dpop_binding(dpop_binding, &agent.dpop_binding_proof)?;
+            let binding = require_agent_key_proof_dpop_binding(dpop_binding)?;
             let request = SessionGrantRequestBody::Agent(agent.clone());
             let operation =
                 match reserve_issue_operation(depot, &request, &binding.jkt, None).await? {
                     Ok(operation) => operation,
-                    Err(outcome) => return Ok(ArkretCanonicalJson(outcome)),
+                    Err(outcome) => {
+                        consume_agent_replay_dpop(depot, &binding.jti).await?;
+                        return Ok(ArkretCanonicalJson(outcome));
+                    }
                 };
             issue_agent_key_proof_session_grant(req, depot, binding, &agent, operation).await
         }
@@ -952,7 +967,6 @@ async fn extract_kickoff_dpop(
 
 fn require_agent_key_proof_dpop_binding(
     binding: Option<crate::handlers::account::auth::DpopSessionBinding>,
-    body_binding: &arkret_models_collaboration::session_grant_bodies::SessionGrantDpopBindingProof,
 ) -> Result<crate::handlers::account::auth::DpopSessionBinding, ArkretRouteError> {
     let binding = binding.ok_or_else(|| {
         ArkretRouteError::coded(
@@ -961,14 +975,120 @@ fn require_agent_key_proof_dpop_binding(
             "agent_key_proof session grant requires a grant-binding DPoP proof",
         )
     })?;
-    if body_binding.proof_jwt != binding.proof_jwt {
+    Ok(binding)
+}
+
+fn verify_agent_body_dpop(
+    holder_jkt: &str,
+    body: &arkret_models_collaboration::session_grant_bodies::SessionGrantDpopBindingProof,
+    method: &str,
+    target: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<arkret_signatures::dpop::VerifiedDpopProof, ArkretRouteError> {
+    let verified = crate::services::dpop::DpopVerifier::verify_without_replay(
+        &body.proof_jwt,
+        method,
+        target,
+        now,
+        None,
+    )
+    .map_err(|error| {
+        ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            arkret_wire::ErrorCode::SIGNATURE_INVALID,
+            format!("reason_code=proof_invalid; invalid initial holder proof: {error}"),
+        )
+    })?;
+    if verified.jkt != holder_jkt {
         return Err(ArkretRouteError::coded(
             StatusCode::UNAUTHORIZED,
             arkret_wire::ErrorCode::SIGNATURE_INVALID,
-            "reason_code=proof_invalid; DPoP header does not match body dpop_binding_proof",
+            "reason_code=proof_invalid; initial and current holder keys differ",
         ));
     }
-    Ok(binding)
+    Ok(verified)
+}
+
+async fn consume_agent_replay_dpop(depot: &Depot, jti: &str) -> Result<(), ArkretRouteError> {
+    let mut repo = depot.repo().await?;
+    if !repo
+        .dpop_replay()
+        .consume_jti(crate::services::dpop::dpop_replay_record(
+            jti,
+            crate::handlers::make_clock().now(),
+        ))
+        .await?
+    {
+        repo.cancel().await.ok();
+        return Err(ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            arkret_wire::ErrorCode::SIGNATURE_INVALID,
+            "reason_code=proof_invalid; agent HTTP DPoP JTI was already consumed",
+        ));
+    }
+    repo.save().await?;
+    Ok(())
+}
+
+async fn validate_agent_before_reservation(
+    depot: &Depot,
+    repo: &mut coauth_data::BoxRepository,
+    body: &AgentSessionGrantRequest,
+    holder_jkt: &str,
+) -> Result<(), ArkretRouteError> {
+    use crate::handlers::account::agents::{
+        AgentSessionProofError, enforce_authoritative_agent_lifecycle, validate_agent_session_proof,
+    };
+    let config = depot.arkret_config()?;
+    let urls = depot.url_builder()?;
+    let clock = crate::handlers::make_clock();
+    let target = urls
+        .http_base()
+        .join("_arkret/gate/account/session-grants")
+        .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
+    verify_agent_body_dpop(
+        holder_jkt,
+        &body.dpop_binding_proof,
+        "POST",
+        target.as_str(),
+        clock.now(),
+    )?;
+    let reject = |rejection: crate::handlers::account::agents::AgentAuthRejection| {
+        ArkretRouteError::coded(
+            rejection.http_status(),
+            rejection.code(),
+            format!(
+                "reason_code={}; {}",
+                rejection.reason_code().unwrap_or(rejection.code()),
+                rejection.code()
+            ),
+        )
+    };
+    let view = enforce_authoritative_agent_lifecycle(
+        &depot.http_client()?,
+        &config,
+        body.principal_id.as_str(),
+    )
+    .await
+    .map_err(reject)?;
+    match validate_agent_session_proof(
+        repo,
+        &mut crate::handlers::make_rng(),
+        &*clock,
+        &urls,
+        &config,
+        &view,
+        body,
+        false,
+    )
+    .await
+    {
+        Ok(_) => Ok(()),
+        Err(AgentSessionProofError::Rejection(error)) => Err(reject(error)),
+        Err(AgentSessionProofError::HumanApprovalRequired(approval)) => {
+            Err(ArkretRouteError::HumanApprovalRequired(approval))
+        }
+    }
 }
 
 /// AKP-0008 §4.6 agent runtime authentication branch. Validates the
@@ -977,7 +1097,7 @@ fn require_agent_key_proof_dpop_binding(
 /// `scope_details` overlay. Human-approval and fail-closed rejections surface
 /// as structured errors.
 async fn issue_agent_key_proof_session_grant(
-    _req: &mut Request,
+    req: &mut Request,
     depot: &Depot,
     dpop_binding: crate::handlers::account::auth::DpopSessionBinding,
     body: &AgentSessionGrantRequest,
@@ -994,7 +1114,35 @@ async fn issue_agent_key_proof_session_grant(
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
 
+    // Serialize proof consumption with completion: a concurrent exact retry
+    // observes the committed outcome before rechecking the original body proof.
     let mut repo = depot.repo().await?;
+    let operation = repo
+        .oauth_session_grant()
+        .lock_operation(operation.id)
+        .await?;
+    if operation.state == coauth_data::SessionGrantOperationState::Committed {
+        let bytes = retained_issue_outcome(&mut repo, operation, clock.now()).await?;
+        repo.cancel().await.ok();
+        consume_agent_replay_dpop(depot, &dpop_binding.jti).await?;
+        return Ok(ArkretCanonicalJson(bytes));
+    }
+    if operation.state != coauth_data::SessionGrantOperationState::Reserved {
+        return Err(ArkretRouteError::coded(
+            StatusCode::SERVICE_UNAVAILABLE,
+            arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+            "agent operation is no longer available for issuance",
+        ));
+    }
+
+    let body_dpop = verify_agent_body_dpop(
+        &dpop_binding.jkt,
+        &body.dpop_binding_proof,
+        req.method().as_str(),
+        &crate::services::dpop::dpop_htu(&url_builder.http_base(), req),
+        clock.now(),
+    )?;
+
     let agent_id = body.principal_id.as_str();
     let authoritative_agent =
         match enforce_authoritative_agent_lifecycle(&http_client, &arkret_config, agent_id).await {
@@ -1020,6 +1168,7 @@ async fn issue_agent_key_proof_session_grant(
         &arkret_config,
         &authoritative_agent,
         body,
+        true,
     )
     .await
     {
@@ -1165,6 +1314,22 @@ async fn issue_agent_key_proof_session_grant(
                     "reason_code=proof_invalid; agent DPoP JTI was already consumed",
                 ));
             }
+            if body_dpop.claims.jti != dpop_binding.jti
+                && !repo
+                    .dpop_replay()
+                    .consume_jti(crate::services::dpop::dpop_replay_record(
+                        &body_dpop.claims.jti,
+                        clock.now(),
+                    ))
+                    .await?
+            {
+                repo.cancel().await.ok();
+                return Err(ArkretRouteError::coded(
+                    StatusCode::UNAUTHORIZED,
+                    arkret_wire::ErrorCode::SIGNATURE_INVALID,
+                    "reason_code=proof_invalid; initial holder DPoP was already consumed",
+                ));
+            }
             repo.save().await?;
             super::super::test_chaos::maybe_delay_post_commit(
                 "session_grant_issue_post_commit_pre_response",
@@ -1182,6 +1347,7 @@ async fn issue_agent_key_proof_session_grant(
                     "replayed agent operation has no canonical outcome",
                 )
             })?;
+            consume_agent_replay_dpop(depot, &dpop_binding.jti).await?;
             Ok(ArkretCanonicalJson(bytes))
         }
         SessionGrantCommitOutcome::Indeterminate(_) => {
@@ -1336,19 +1502,6 @@ mod tests {
         );
     }
 
-    fn test_dpop_binding(proof_jwt: &str) -> DpopSessionBinding {
-        let signing = sdk_signing_key_from_seed_bytes(&[0x73; 32]);
-        let public_jwk = arkret_signatures::jwk::JsonWebKey::from_ed25519_verifying_key(
-            &signing.verifying_key(),
-        );
-        DpopSessionBinding {
-            proof_jwt: proof_jwt.to_owned(),
-            jti: "test-jti".to_owned(),
-            jkt: "test-jkt".to_owned(),
-            public_jwk,
-        }
-    }
-
     fn assert_coded(error: ArkretRouteError, expected_status: StatusCode, expected_code: &str) {
         match error {
             ArkretRouteError::Coded { status, code, .. } => {
@@ -1464,12 +1617,7 @@ mod tests {
 
     #[test]
     fn agent_key_proof_session_grant_requires_dpop_header_binding() {
-        let err = unwrap_binding_error(require_agent_key_proof_dpop_binding(
-            None,
-            &arkret_models_collaboration::session_grant_bodies::SessionGrantDpopBindingProof {
-                proof_jwt: "proof.jwt".to_owned(),
-            },
-        ));
+        let err = unwrap_binding_error(require_agent_key_proof_dpop_binding(None));
 
         assert_coded(
             err,
@@ -1480,15 +1628,75 @@ mod tests {
 
     #[test]
     fn agent_key_proof_session_grant_rejects_mismatched_body_dpop_binding() {
-        let err = unwrap_binding_error(require_agent_key_proof_dpop_binding(
-            Some(test_dpop_binding("header.proof.jwt")),
+        let err = match verify_agent_body_dpop(
+            "test-jkt",
             &arkret_models_collaboration::session_grant_bodies::SessionGrantDpopBindingProof {
                 proof_jwt: "body.proof.jwt".to_owned(),
             },
-        ));
+            "POST",
+            "https://auth.example/_arkret/gate/account/session-grants",
+            chrono::Utc::now(),
+        ) {
+            Err(error) => error,
+            Ok(_) => panic!("invalid body proof accepted"),
+        };
 
         assert_coded(
             err,
+            StatusCode::UNAUTHORIZED,
+            arkret_wire::ErrorCode::SIGNATURE_INVALID,
+        );
+    }
+    #[test]
+    fn agent_body_dpop_accepts_fresh_header_from_same_holder_and_rejects_other_holder() {
+        use arkret_models_collaboration::session_grant_bodies::SessionGrantDpopBindingProof;
+        use arkret_signatures::dpop::{DpopProofRequest, build_dpop_proof};
+        let key = sdk_signing_key_from_seed_bytes(&[0x73; 32]);
+        let other_key = sdk_signing_key_from_seed_bytes(&[0x74; 32]);
+        let now = chrono::Utc::now();
+        let target = "https://auth.example/_arkret/gate/account/session-grants";
+        let original = build_dpop_proof(
+            &DpopProofRequest::new("POST", target)
+                .issued_at(now)
+                .jti("original"),
+            &key,
+        )
+        .unwrap();
+        let fresh = build_dpop_proof(
+            &DpopProofRequest::new("POST", target)
+                .issued_at(now)
+                .jti("fresh"),
+            &key,
+        )
+        .unwrap();
+        assert_ne!(original.proof_jwt, fresh.proof_jwt);
+        let header = crate::services::dpop::DpopVerifier::verify_without_replay(
+            &fresh.proof_jwt,
+            "POST",
+            target,
+            now,
+            None,
+        )
+        .unwrap();
+        let body = SessionGrantDpopBindingProof {
+            proof_jwt: original.proof_jwt,
+        };
+        let verified = verify_agent_body_dpop(&header.jkt, &body, "POST", target, now).unwrap();
+        assert_eq!(verified.claims.jti, "original");
+        assert_eq!(header.claims.jti, "fresh");
+        let other = build_dpop_proof(
+            &DpopProofRequest::new("POST", target)
+                .issued_at(now)
+                .jti("other"),
+            &other_key,
+        )
+        .unwrap();
+        let error = match verify_agent_body_dpop(&other.jkt, &body, "POST", target, now) {
+            Err(error) => error,
+            Ok(_) => panic!("different holder accepted"),
+        };
+        assert_coded(
+            error,
             StatusCode::UNAUTHORIZED,
             arkret_wire::ErrorCode::SIGNATURE_INVALID,
         );

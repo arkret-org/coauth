@@ -1030,6 +1030,13 @@ macro_rules! apply_session_grant_filter {
 impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
     type Error = DatabaseError;
 
+    async fn lock_operation(
+        &mut self,
+        operation_id: Ulid,
+    ) -> Result<SessionGrantOperation, Self::Error> {
+        load_operation_for_update(self.conn, operation_id).await
+    }
+
     #[tracing::instrument(name = "db.oauth_session_grant.reserve_operation", skip_all, err)]
     async fn reserve_operation(
         &mut self,

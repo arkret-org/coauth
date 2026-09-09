@@ -60,9 +60,9 @@ mod tests {
         let now = clock.now();
         NewAgentSessionProofReplay {
             agent_id: format!("ak:did_core:web:{label}-agent.example"),
+            authorization_ref: format!("authorization-{label}"),
             verification_method: format!("did:web:{label}-agent.example#runtime-key-1"),
             challenge: format!("challenge-{label}"),
-            nonce: format!("nonce-{label}"),
             request_canonical_digest: format!("sha256:{}", "1".repeat(64)),
             audience_id: "ak:did_core:web:arkret.example".to_owned(),
             proof_expires_at: now + chrono::Duration::minutes(5),
@@ -123,12 +123,23 @@ mod tests {
             .unwrap();
         let second = repo
             .agent_key_authorization()
-            .consume_proof_challenge(&mut rng, &clock, replay)
+            .consume_proof_challenge(&mut rng, &clock, replay.clone())
             .await
             .unwrap();
 
         assert!(first, "first challenge consumption must win");
         assert!(!second, "replayed challenge must fail closed");
+        let mut another_authorization = replay;
+        another_authorization
+            .authorization_ref
+            .push_str("-replacement");
+        assert!(
+            repo.agent_key_authorization()
+                .consume_proof_challenge(&mut rng, &clock, another_authorization)
+                .await
+                .unwrap(),
+            "a different authorization has an independent proof identity"
+        );
 
         repo.cancel().await.unwrap();
     }
@@ -389,9 +400,9 @@ struct InsertableAgentKeyAuthorization {
 struct InsertableProofReplay {
     id: Uuid,
     agent_id: String,
+    authorization_ref: String,
     verification_method: String,
     challenge: String,
-    nonce: String,
     request_canonical_digest: String,
     audience_id: String,
     consumed_at: DateTime<Utc>,
@@ -673,9 +684,9 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
         let row = InsertableProofReplay {
             id: Uuid::from(id),
             agent_id: params.agent_id,
+            authorization_ref: params.authorization_ref,
             verification_method: params.verification_method,
             challenge: params.challenge,
-            nonce: params.nonce,
             request_canonical_digest: params.request_canonical_digest,
             audience_id: params.audience_id,
             consumed_at: now,
@@ -684,7 +695,7 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
             created_at: now,
         };
 
-        // Single-use: either a repeated challenge or repeated nonce makes the
+        // Single-use: a repeated challenge makes the
         // insert a no-op. The first caller inserts one row and wins; a replay
         // inserts zero and loses.
         let inserted = diesel::insert_into(agent_session_proof_replay::table)

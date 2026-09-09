@@ -173,9 +173,9 @@ where
             clock,
             NewAgentSessionProofReplay {
                 agent_id: prior_claims.account_id.principal_id.to_string(),
+                authorization_ref: authorization_ref.to_owned(),
                 verification_method: verification_method.to_string(),
                 challenge: request_digest.to_string(),
-                nonce: request_digest.to_string(),
                 request_canonical_digest: request_digest.to_string(),
                 audience_id: proof_audience.to_string(),
                 proof_expires_at: expires_at,
@@ -236,6 +236,7 @@ pub async fn validate_agent_session_proof(
     arkret_config: &ArkretConfig,
     authoritative_agent: &arkret_models_collaboration::agent_operations::AgentView,
     body: &arkret_models_collaboration::session_grant_bodies::AgentSessionGrantRequest,
+    consume_challenge: bool,
 ) -> Result<AgentSessionAuthorization, AgentSessionProofError> {
     let now = clock.now();
     let proof = &body.proof;
@@ -255,8 +256,8 @@ pub async fn validate_agent_session_proof(
     }
     // expiry / audience.
     let expires_at = proof.expires_at;
-    if expires_at <= now {
-        tracing::warn!(agent_id, verification_method, %expires_at, %now, "agent_key_proof rejected: proof expired");
+    if proof.validate_at(now).is_err() {
+        tracing::warn!(agent_id, verification_method, %expires_at, %now, "agent_key_proof rejected: invalid proof structure or time window");
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
     if !is_allowed_session_grant_audience(
@@ -285,10 +286,6 @@ pub async fn validate_agent_session_proof(
             presented_request_digest = %proof.request_canonical_digest,
             "agent_key_proof rejected: request canonical digest mismatch"
         );
-        return Err(AgentAuthRejection::ProofInvalid.into());
-    }
-    let nonce = proof.nonce.trim();
-    if nonce.is_empty() {
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
 
@@ -354,29 +351,31 @@ pub async fn validate_agent_session_proof(
         "agent_key_proof debug: detached runtime signature accepted"
     );
 
-    // Replay defense: consume the challenge exactly once. A replayed challenge
-    // (or one already consumed within the grace window) fails closed.
-    let prune_after = expires_at + AGENT_PROOF_REPLAY_GRACE;
-    let won = repo
-        .agent_key_authorization()
-        .consume_proof_challenge(
-            rng,
-            clock,
-            NewAgentSessionProofReplay {
-                agent_id: agent_id.to_owned(),
-                verification_method: verification_method.to_owned(),
-                challenge: proof.challenge.clone(),
-                nonce: nonce.to_owned(),
-                request_canonical_digest: proof.request_canonical_digest.as_str().to_owned(),
-                audience_id: proof.audience_id.to_string(),
-                proof_expires_at: expires_at,
-                prune_after,
-            },
-        )
-        .await
-        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    if !won {
-        return Err(AgentAuthRejection::ProofInvalid.into());
+    if consume_challenge {
+        // Replay defense: consume the challenge exactly once. A replayed challenge
+        // (or one already consumed within the grace window) fails closed.
+        let prune_after = expires_at + AGENT_PROOF_REPLAY_GRACE;
+        let won = repo
+            .agent_key_authorization()
+            .consume_proof_challenge(
+                rng,
+                clock,
+                NewAgentSessionProofReplay {
+                    agent_id: agent_id.to_owned(),
+                    authorization_ref: authorization_ref.to_owned(),
+                    verification_method: verification_method.to_owned(),
+                    challenge: proof.challenge.clone(),
+                    request_canonical_digest: proof.request_canonical_digest.as_str().to_owned(),
+                    audience_id: proof.audience_id.to_string(),
+                    proof_expires_at: expires_at,
+                    prune_after,
+                },
+            )
+            .await
+            .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+        if !won {
+            return Err(AgentAuthRejection::ProofInvalid.into());
+        }
     }
 
     // Parse the `agent_scope_request` overlay. An `act_on_behalf` participation
@@ -2292,7 +2291,7 @@ mod tests {
             applet_authority: None,
             proof: arkret_models_collaboration::session_grant_bodies::AgentSessionGrantProof {
                 proof_kind: arkret_models_collaboration::session_grant_bodies::AgentSessionGrantProofKind::AgentKeyProof,
-                challenge: "challenge-abc".to_owned(),
+                challenge: "AAECAwQFBgcICQoLDA0ODw".to_owned(),
                 request_canonical_digest: arkret_identifiers::Hash::new(format!(
                     "sha256:{}",
                     "0".repeat(64)
@@ -2300,11 +2299,11 @@ mod tests {
                 .unwrap(),
                 audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example")
                     .unwrap(),
-                expires_at: chrono::Utc::now() + chrono::Duration::minutes(5),
+                issued_at: "2026-09-09T00:00:00.000Z".parse().unwrap(),
+                expires_at: "2026-09-09T00:05:00.000Z".parse().unwrap(),
                 signature: "sig-a".to_owned(),
                 verification_method:
                     arkret_wire::DidUrl::new("did:web:agent.example#runtime-key-1").unwrap(),
-                nonce: "nonce-abc".to_owned(),
             },
         };
         let digest = canonical_session_grant_request_digest_without_signature(&body)
