@@ -135,17 +135,18 @@ pub(super) async fn run_leader_duties(
     let clock = state.clock();
     let mut rng = state.rng();
 
-    let mut conn = state
+    let conn = state
         .pool()
         .get()
         .await
         .map_err(|e| QueueRunnerError::Pool(Box::new(e)))?;
+    let mut repo = PgRepository::new(conn);
 
     let lock_key = advisory_lock_key("leader-duties");
     let lock_result: AdvisoryLockResult = sql_query(format!(
         "SELECT pg_try_advisory_lock({lock_key}) AS acquired"
     ))
-    .get_result(&mut *conn)
+    .get_result(repo.connection())
     .await
     .map_err(DatabaseError::from)?;
 
@@ -154,7 +155,6 @@ pub(super) async fn run_leader_duties(
         return Ok(());
     }
 
-    let mut repo = PgRepository::new(conn);
     recover_abandoned_jobs(&mut repo, &mut rng, clock).await?;
 
     let mut schedules_status = repo.queue_schedule().list().await?;
@@ -222,10 +222,9 @@ pub(super) async fn run_leader_duties(
         n => tracing::info!("{n} scheduled jobs marked as available"),
     }
 
-    let mut conn = repo.into_inner();
-    let _ = sql_query(format!("SELECT pg_advisory_unlock({lock_key})"))
-        .execute(&mut *conn)
-        .await;
+    // Closing the owned connection releases the session advisory lock on
+    // success and on every earlier error or cancellation path.
+    drop(repo);
 
     Ok(())
 }

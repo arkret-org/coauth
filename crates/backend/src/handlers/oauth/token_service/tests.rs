@@ -62,7 +62,8 @@ fn client_with_auth_method(method: Option<OAuthClientAuthenticationMethod>) -> C
 
 fn ed25519_keystore() -> Keystore {
     let mut rng = ChaChaRng::seed_from_u64(701);
-    let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("test-ed25519");
+    let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+        .with_kid(coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID);
     Keystore::new(JsonWebKeySet::new(vec![key]))
 }
 

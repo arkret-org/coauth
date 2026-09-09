@@ -121,9 +121,20 @@ async fn registration_admission(
     input: &IdentityBindingChallengeInput,
 ) -> IdentityCreationRegistrationAdmission {
     conn.batch_execute("BEGIN").await.unwrap();
+    #[derive(diesel::QueryableByName)]
+    struct GrantRequest {
+        #[diesel(sql_type = SqlUuid)]
+        request_id: Uuid,
+    }
+    let grant_request =
+        diesel::sql_query("SELECT request_id FROM account_handoff_grants WHERE id = $1")
+            .bind::<SqlUuid, _>(Uuid::from(input.handoff_grant_id))
+            .get_result::<GrantRequest>(conn)
+            .await
+            .unwrap();
     let mut storage = PgAccountHandoffRepository::new(conn);
     let grant = storage
-        .handoff_by_request_uuid(request(1).uuid())
+        .handoff_by_request_uuid(grant_request.request_id)
         .await
         .unwrap()
         .unwrap();
@@ -370,6 +381,55 @@ async fn challenge_terminal_states_and_invalid_canonical_window_are_distinct() {
         issue(&mut conn, input.clone()).await,
         IdentityBindingChallengeIssue::Issued(_)
     ));
+    for other_account in [false, true] {
+        let mut repo = crate::PgRepositoryFactory::new((*pool).clone())
+            .create()
+            .await
+            .unwrap();
+        let mut other = handoff.clone();
+        let tag = if other_account { 2101 } else { 2100 };
+        other.id = Ulid::from(Uuid::from_u128(tag));
+        other.request_id = request(tag as u64);
+        other.request_digest = hash(if other_account { 'c' } else { 'd' });
+        other.account_handoff_grant = format!("{tag:040}");
+        if other_account {
+            let clock = coauth_data::clock::SystemClock::default();
+            let mut rng = rand_chacha::ChaChaRng::seed_from_u64(2101);
+            let user = repo
+                .user()
+                .add(&mut rng, &clock, "other-challenge-account".to_owned())
+                .await
+                .unwrap();
+            other.local_account_id = user.id;
+            other.account_subject = hash('c');
+            other.lease_id = "o".repeat(24);
+        } else {
+            other.cnf_jkt = "o".repeat(43);
+        }
+        let outcome = repo
+            .account_handoff()
+            .create_with_lease(other.clone())
+            .await
+            .unwrap();
+        assert!(matches!(
+            outcome,
+            AccountHandoffCreation::Active { .. } | AccountHandoffCreation::Busy { .. }
+        ));
+        repo.save().await.unwrap();
+        let mut mismatch = input.clone();
+        mismatch.handoff_grant_id = other.id;
+        mismatch.local_account_id = other.local_account_id;
+        mismatch.account_subject = other.account_subject;
+        mismatch.holder_jkt = other.cnf_jkt;
+        assert!(matches!(
+            issue(&mut conn, mismatch.clone()).await,
+            IdentityBindingChallengeIssue::LeaseMismatch
+        ));
+        assert!(matches!(
+            registration_admission(&mut conn, &mismatch).await,
+            IdentityCreationRegistrationAdmission::ExecutionAuthorityInvalid
+        ));
+    }
     diesel::sql_query("UPDATE identity_binding_challenges SET consumed_at = clock_timestamp() WHERE request_id = $1")
         .bind::<SqlUuid, _>(input.request_id.uuid()).execute(&mut conn).await.unwrap();
     assert!(matches!(

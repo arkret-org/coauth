@@ -172,7 +172,8 @@ impl PgRepository {
         }))
     }
 
-    fn connection(&mut self) -> &mut AsyncPgConnection {
+    /// Borrow the connection for SQL while retaining its cancellation guard.
+    pub fn connection(&mut self) -> &mut AsyncPgConnection {
         self.conn.as_mut().expect("open repository transaction")
     }
 }

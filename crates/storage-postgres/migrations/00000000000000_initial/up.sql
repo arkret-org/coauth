@@ -793,10 +793,10 @@ CREATE TABLE public.identity_creation_rate_limit_events (
     holder_jkt text NOT NULL,
     action text NOT NULL,
     occurred_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT identity_creation_lease_rate_subject_valid CHECK ((account_subject ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT identity_creation_lease_rate_audience_id_nonempty CHECK ((btrim(audience_id) <> ''::text)),
+    CONSTRAINT identity_creation_rate_subject_valid CHECK ((account_subject ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_creation_rate_audience_id_nonempty CHECK ((btrim(audience_id) <> ''::text)),
     CONSTRAINT identity_creation_rate_holder_jkt_nonempty CHECK ((btrim(holder_jkt) <> ''::text)),
-    CONSTRAINT identity_creation_lease_rate_action_closed CHECK ((action = ANY (ARRAY['acquisition'::text, 'renewal'::text, 'challenge_issuance'::text])))
+    CONSTRAINT identity_creation_rate_action_closed CHECK ((action = ANY (ARRAY['acquisition'::text, 'renewal'::text, 'challenge_issuance'::text])))
 );
 
 CREATE TABLE public.identity_binding_challenges (
@@ -1485,7 +1485,7 @@ ALTER TABLE ONLY public.identity_creation_rate_limit_events
     ADD CONSTRAINT identity_creation_rate_limit_events_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.identity_creation_rate_limit_events
-    ADD CONSTRAINT identity_creation_lease_rate_request_action_unique UNIQUE (request_id, action);
+    ADD CONSTRAINT identity_creation_rate_request_action_unique UNIQUE (request_id, action);
 
 ALTER TABLE ONLY public.identity_binding_challenges
     ADD CONSTRAINT identity_binding_challenges_pkey PRIMARY KEY (request_id);
@@ -1694,7 +1694,7 @@ CREATE INDEX idx_account_handoff_grants_expiry ON public.account_handoff_grants 
 
 CREATE INDEX idx_identity_creation_leases_expiry ON public.identity_creation_leases USING btree (expires_at) WHERE (state <> 'completed'::text);
 
-CREATE INDEX idx_identity_creation_lease_rate_acquisition ON public.identity_creation_rate_limit_events USING btree (account_subject, audience_id, occurred_at DESC) WHERE (action = 'acquisition'::text);
+CREATE INDEX idx_identity_creation_rate_acquisition ON public.identity_creation_rate_limit_events USING btree (account_subject, audience_id, occurred_at DESC) WHERE (action = 'acquisition'::text);
 
 CREATE INDEX idx_identity_creation_rate_holder ON public.identity_creation_rate_limit_events USING btree (account_subject, audience_id, holder_jkt, action, occurred_at DESC);
 

@@ -72,12 +72,13 @@ fn map_claims_imports(
 pub async fn config_sync(
     upstream_oauth_config: UpstreamOAuthConfig,
     clients_config: ClientsConfig,
-    mut conn: PooledConnection<AsyncPgConnection>,
+    conn: PooledConnection<AsyncPgConnection>,
     encrypter: &Encrypter,
     clock: &dyn Clock,
     prune: bool,
     dry_run: bool,
 ) -> anyhow::Result<()> {
+    let mut repo = PgRepository::new(conn);
     // Grab an advisory lock on the connection
     tracing::info!("Acquiring configuration lock");
     // Note: this string is hashed into a pg advisory-lock key. Do not rename
@@ -88,11 +89,8 @@ pub async fn config_sync(
     // pg_advisory_lock blocks until the lock is acquired (returns void), so
     // there is no boolean to inspect here.
     sql_query(format!("SELECT pg_advisory_lock({lock_key})"))
-        .execute(&mut *conn)
+        .execute(repo.connection())
         .await?;
-
-    // Create a repository from the locked connection
-    let mut repo = PgRepository::new(conn);
 
     tracing::info!(
         prune,
@@ -432,11 +430,8 @@ pub async fn config_sync(
         }
     }
 
-    // Release the advisory lock
-    let mut conn = repo.into_inner();
-    let _ = sql_query(format!("SELECT pg_advisory_unlock({lock_key})"))
-        .execute(&mut *conn)
-        .await;
+    // The owned connection releases its session lock on success, error, and cancellation.
+    drop(repo);
 
     if dry_run {
         info!("Dry run mode - changes were already auto-committed per statement");

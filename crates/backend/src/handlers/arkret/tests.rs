@@ -131,7 +131,7 @@ async fn human_approval_endpoint_renders_closed_claim_required_details() {
 fn test_keystore() -> Keystore {
     let mut rng = ChaChaRng::seed_from_u64(42);
     let ed25519 = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-        .with_kid("test-ed25519");
+        .with_kid(coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID);
     Keystore::new(JsonWebKeySet::new(vec![ed25519]))
 }
 
@@ -489,7 +489,7 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
         "recovery-session-chain-1",
         now,
         now + Duration::minutes(15),
-        "test-ed25519",
+        coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID,
     )
     .unwrap();
     let mut signing_rng = ChaChaRng::seed_from_u64(77);
@@ -547,7 +547,7 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
         "recovery-session-chain-2",
         now,
         now + Duration::minutes(15) + Duration::milliseconds(1),
-        "test-ed25519",
+        coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID,
     )
     .unwrap();
     assert!(
@@ -670,7 +670,7 @@ fn session_grant_record_exposes_metadata_without_secrets() {
         issuance_nonce: arkret_canonical::base64url_encode([0x11; 32]),
         issuance_preimage: Vec::new(),
         issuance_digest: [0_u8; 32],
-        signing_key_id: "test-ed25519".to_owned(),
+        signing_key_id: coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID.to_owned(),
         session_public_key: "{\"kty\":\"OKP\"}".to_owned(),
         credential_class: "standard".to_owned(),
         created_at: now,
@@ -730,7 +730,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
         issuance_nonce: arkret_canonical::base64url_encode([0x22; 32]),
         issuance_preimage: Vec::new(),
         issuance_digest: [0_u8; 32],
-        signing_key_id: "test-ed25519".to_owned(),
+        signing_key_id: coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID.to_owned(),
         session_public_key: "{\"kty\":\"OKP\"}".to_owned(),
         credential_class: "standard".to_owned(),
         created_at: now,
@@ -1089,7 +1089,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         browser_session.id.to_string(),
         issued_at,
         issued_at + grant_config.session_grant_ttl,
-        "test-ed25519",
+        coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID,
     )
     .unwrap();
     let principal_id = arkret_identifiers::DidCoreId::new(format!(
@@ -1294,7 +1294,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         "agent-test-session",
         now,
         now + Duration::try_minutes(15).unwrap(),
-        "test-ed25519",
+        coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID,
     )
     .unwrap();
     let material = mint_agent_session_grant(
