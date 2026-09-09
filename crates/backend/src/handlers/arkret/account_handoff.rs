@@ -1513,6 +1513,14 @@ mod tests {
     }
 
     async fn seed_local_handoff(state: &TestState, label: &str) -> LocalHandoffSeed {
+        seed_local_handoff_for_user(state, label, None).await
+    }
+
+    async fn seed_local_handoff_for_user(
+        state: &TestState,
+        label: &str,
+        existing_handle: Option<&str>,
+    ) -> LocalHandoffSeed {
         let mut repo = state.repository().await.unwrap();
         let mut rng = state.rng();
         let clock = SystemClock::default();
@@ -1542,11 +1550,14 @@ mod tests {
             )
             .await
             .unwrap();
-        let user = repo
-            .user()
-            .add(&mut rng, &clock, label.to_owned())
-            .await
-            .unwrap();
+        let user = if let Some(handle) = existing_handle {
+            repo.user().find_by_handle(handle).await.unwrap().unwrap()
+        } else {
+            repo.user()
+                .add(&mut rng, &clock, label.to_owned())
+                .await
+                .unwrap()
+        };
         let browser_session = repo
             .browser_session()
             .add(&mut rng, &clock, &user, None)

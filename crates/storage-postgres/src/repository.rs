@@ -113,21 +113,22 @@ impl PgRepositoryFactory {
 impl RepositoryFactory for PgRepositoryFactory {
     async fn create(&self) -> Result<BoxRepository, RepositoryError> {
         let start = std::time::Instant::now();
-        let mut conn = self.pool.get().await.map_err(|e| {
+        let conn = self.pool.get().await.map_err(|e| {
             RepositoryError::from_error(DatabaseError::Pool {
                 source: Box::new(e),
             })
         })?;
 
+        let mut repo = PgRepository::new(conn);
         // Start a transaction so that all operations within one request are
         // atomic. The transaction is committed by `save()` or rolled back by
         // `cancel()` / on drop.
         diesel::sql_query("BEGIN")
-            .execute(&mut *conn)
+            .execute(repo.connection())
             .await
             .map_err(|e| RepositoryError::from_error(DatabaseError::from(e)))?;
 
-        let repo = PgRepository::new(conn).boxed();
+        let repo = repo.boxed();
 
         // Measure the time it took to create the connection
         let duration = start.elapsed();
@@ -144,21 +145,20 @@ impl RepositoryFactory for PgRepositoryFactory {
 /// A `BEGIN` is issued when the repository is created (via
 /// [`PgRepositoryFactory::create`]). Calling [`RepositoryTransaction::save`]
 /// issues `COMMIT`; calling [`RepositoryTransaction::cancel`] issues
-/// `ROLLBACK`. If the repository is dropped without either, the connection is
-/// returned to the pool and PostgreSQL will automatically roll back the
-/// incomplete transaction.
+/// `ROLLBACK`. If the repository is dropped without either, its physical
+/// connection is detached from the pool and closed, so PostgreSQL rolls back
+/// the transaction before another checkout can observe it.
 pub struct PgRepository {
-    conn: PooledConnection<AsyncPgConnection>,
+    conn: Option<PooledConnection<AsyncPgConnection>>,
 }
 
 impl PgRepository {
     /// Create a new [`PgRepository`] from a pooled connection.
     ///
-    /// **Important:** The caller is responsible for issuing `BEGIN` before
-    /// constructing this, or using [`PgRepositoryFactory::create`] which does
-    /// it automatically.
+    /// The factory wraps the connection before issuing `BEGIN` so cancellation
+    /// during transaction creation also closes the physical connection.
     pub fn new(conn: PooledConnection<AsyncPgConnection>) -> Self {
-        Self { conn }
+        Self { conn: Some(conn) }
     }
 
     /// Transform the repository into a type-erased [`BoxRepository`]
@@ -172,9 +172,16 @@ impl PgRepository {
         }))
     }
 
-    /// Consume this [`PgRepository`], returning the underlying connection.
-    pub fn into_inner(self) -> PooledConnection<AsyncPgConnection> {
-        self.conn
+    fn connection(&mut self) -> &mut AsyncPgConnection {
+        self.conn.as_mut().expect("open repository transaction")
+    }
+}
+
+impl Drop for PgRepository {
+    fn drop(&mut self) {
+        if let Some(conn) = self.conn.take() {
+            drop(PooledConnection::take(conn));
+        }
     }
 }
 
@@ -186,7 +193,10 @@ impl RepositoryTransaction for PgRepository {
     fn save(mut self: Box<Self>) -> BoxFuture<'static, Result<(), Self::Error>> {
         let span = tracing::info_span!("db.save");
         async move {
-            diesel::sql_query("COMMIT").execute(&mut *self.conn).await?;
+            diesel::sql_query("COMMIT")
+                .execute(self.connection())
+                .await?;
+            drop(self.conn.take());
             Ok(())
         }
         .instrument(span)
@@ -197,8 +207,9 @@ impl RepositoryTransaction for PgRepository {
         let span = tracing::info_span!("db.cancel");
         async move {
             diesel::sql_query("ROLLBACK")
-                .execute(&mut *self.conn)
+                .execute(self.connection())
                 .await?;
+            drop(self.conn.take());
             Ok(())
         }
         .instrument(span)
@@ -223,7 +234,7 @@ macro_rules! pg_repository_access {
             $(
                 fn $name<'c>(&'c mut self)
                 -> Box<dyn $($repo)::+ <Error = Self::Error> + 'c> {
-                    Box::new($pg::new(&mut self.conn))
+                    Box::new($pg::new(self.connection()))
                 }
             )*
         }

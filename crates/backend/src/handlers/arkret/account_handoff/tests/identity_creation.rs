@@ -182,6 +182,40 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
         "pcr_genesis_unit": fixture["checkpoint"]["pcr_genesis_unit"],
         "initial_session":fixture["checkpoint"]["initial_session"], "recovery_key":fixture["recovery_key"],
     })).unwrap();
+    let fresh_authentication =
+        seed_local_handoff_for_user(&state, "registeragain", Some("registerhttp")).await;
+    let response = state
+        .request(local_handoff_request(
+            &state,
+            &fresh_authentication,
+            &signing,
+            test_request_id(unique_test_nonce()),
+            format!("register-reauthenticated-{}", unique_test_nonce()),
+            TEST_STATION_AUDIENCE,
+            None,
+            None,
+        ))
+        .await;
+    response.assert_status(StatusCode::OK);
+    let reauthenticated: AccountHandoffOutcome = response.json();
+    let AccountHandoffBinding::IdentityCreationActive {
+        identity_creation_lease: renewed_lease,
+    } = &reauthenticated.binding
+    else {
+        panic!("same-holder reauthentication lost its lease")
+    };
+    assert_eq!(
+        renewed_lease.identity_creation_lease_id,
+        lease.identity_creation_lease_id
+    );
+    assert_eq!(renewed_lease.fence, lease.fence);
+    assert_eq!(reauthenticated.account_subject, handoff.account_subject);
+    assert_ne!(
+        reauthenticated.account_handoff_grant,
+        handoff.account_handoff_grant
+    );
+    assert_eq!(table_count(&state, "identity_binding_challenges").await, 1);
+    // Only current authentication changed. Keep the original challenge and proof bytes.
     Mock::given(method("POST")).and(path("/_arkret/root/identity/submit-did-operation"))
         .respond_with(|request: &wiremock::Request| {
             let operation: arkret_models_identity::DidOperationSubmitRequestBody = request.body_json().unwrap();
@@ -210,7 +244,7 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
     let rejected = state
         .request(authenticated_request(
             REGISTER_PATH,
-            &handoff.account_handoff_grant,
+            &reauthenticated.account_handoff_grant,
             &signing,
             &body,
         ))
@@ -228,7 +262,7 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
     let rejected = state
         .request(authenticated_request(
             REGISTER_PATH,
-            &handoff.account_handoff_grant,
+            &reauthenticated.account_handoff_grant,
             &signing,
             &body,
         ))
@@ -247,7 +281,7 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
     let first = state
         .request(authenticated_request(
             REGISTER_PATH,
-            &handoff.account_handoff_grant,
+            &reauthenticated.account_handoff_grant,
             &signing,
             &body,
         ))
@@ -277,7 +311,7 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
     let second = state
         .request(authenticated_request(
             REGISTER_PATH,
-            &handoff.account_handoff_grant,
+            &reauthenticated.account_handoff_grant,
             &signing,
             &body,
         ))
