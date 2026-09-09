@@ -13,9 +13,9 @@ use coauth_data::account_handoff::{
     IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
     IdentityBindingChallengeIssue, IdentityBindingChallengeRecord, IdentityCreationBindingCommit,
     IdentityCreationLeaseRecord, IdentityCreationLeaseRiskDecision, IdentityCreationRegisterLedger,
-    IdentityCreationRegisterReplay, IdentityCreationRegistrationContext,
-    NewAccountHandoffCreationAttempt, NewControllerGateAttestationIssuance,
-    PublishedDidRegisterCommit, PublishedDidRegisterReplay,
+    IdentityCreationRegisterReplay, IdentityCreationRegistrationAdmission,
+    IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
+    NewControllerGateAttestationIssuance, PublishedDidRegisterCommit, PublishedDidRegisterReplay,
 };
 use coauth_data::{AccountHandoffRepository, Ulid};
 use diesel::OptionalExtension as _;
@@ -399,7 +399,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
     }
 
     async fn server_now(&mut self) -> Result<DateTime<Utc>, DatabaseError> {
-        Ok(diesel::sql_query("SELECT CURRENT_TIMESTAMP AS now")
+        Ok(diesel::sql_query("SELECT clock_timestamp() AS now")
             .get_result::<ServerNowRow>(self.conn)
             .await?
             .now)
@@ -451,7 +451,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         action: &str,
     ) -> Result<bool, DatabaseError> {
         Ok(diesel::sql_query(
-            "SELECT EXISTS(SELECT 1 FROM identity_creation_lease_rate_limit_events \
+            "SELECT EXISTS(SELECT 1 FROM identity_creation_rate_limit_events \
              WHERE request_id = $1 AND action = $2) AS present",
         )
         .bind::<SqlUuid, _>(request_id)
@@ -466,7 +466,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         request_id: Uuid,
         account_subject: &arkret_identifiers::Hash,
         audience_id: &str,
-        lease_id: &str,
+        holder_jkt: &str,
         now: DateTime<Utc>,
     ) -> Result<Option<u64>, DatabaseError> {
         if self.quota_event_exists(request_id, "acquisition").await? {
@@ -474,7 +474,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         }
         let window = diesel::sql_query(
             "SELECT COUNT(*)::bigint AS count, MIN(occurred_at) AS oldest_at \
-             FROM identity_creation_lease_rate_limit_events \
+             FROM identity_creation_rate_limit_events \
              WHERE account_subject = $1 AND audience_id = $2 AND action = 'acquisition' \
              AND occurred_at > $3",
         )
@@ -494,37 +494,44 @@ impl<'c> PgAccountHandoffRepository<'c> {
             request_id,
             account_subject,
             audience_id,
-            lease_id,
+            holder_jkt,
             "acquisition",
+            now,
         )
         .await?;
         Ok(None)
     }
 
-    async fn consume_renewal_quota(
+    async fn consume_holder_quota(
         &mut self,
         request_id: Uuid,
         account_subject: &arkret_identifiers::Hash,
         audience_id: &str,
-        lease_id: &str,
+        holder_jkt: &str,
+        action: &str,
         now: DateTime<Utc>,
     ) -> Result<Option<u64>, DatabaseError> {
-        if self.quota_event_exists(request_id, "renewal").await? {
+        if self.quota_event_exists(request_id, action).await? {
             return Ok(None);
         }
-        let minute = self
-            .renewal_window(lease_id, now - Duration::minutes(1))
-            .await?;
-        let hour = self
-            .renewal_window(lease_id, now - Duration::hours(1))
-            .await?;
         let mut retry_at = None;
-        if minute.count >= 1 {
-            retry_at = minute.oldest_at.map(|value| value + Duration::minutes(1));
-        }
-        if hour.count >= 12 {
-            let hour_retry = hour.oldest_at.map(|value| value + Duration::hours(1));
-            retry_at = retry_at.max(hour_retry);
+        for (duration, limit) in [(Duration::minutes(1), 1), (Duration::hours(1), 12)] {
+            let window = diesel::sql_query(
+                "SELECT COUNT(*)::bigint AS count, MIN(occurred_at) AS oldest_at \
+                 FROM identity_creation_rate_limit_events \
+                 WHERE account_subject = $1 AND audience_id = $2 AND holder_jkt = $3 \
+                 AND action = $4 AND occurred_at > $5",
+            )
+            .bind::<Text, _>(account_subject.as_str())
+            .bind::<Text, _>(audience_id)
+            .bind::<Text, _>(holder_jkt)
+            .bind::<Text, _>(action)
+            .bind::<Timestamptz, _>(now - duration)
+            .get_result::<RateWindowRow>(self.conn)
+            .await?;
+            if window.count >= limit {
+                retry_at = retry_at.max(window.oldest_at.map(|oldest| oldest + duration));
+            }
         }
         if let Some(retry_at) = retry_at {
             return Ok(Some(retry_after_ms(retry_at, now)));
@@ -533,27 +540,12 @@ impl<'c> PgAccountHandoffRepository<'c> {
             request_id,
             account_subject,
             audience_id,
-            lease_id,
-            "renewal",
+            holder_jkt,
+            action,
+            now,
         )
         .await?;
         Ok(None)
-    }
-
-    async fn renewal_window(
-        &mut self,
-        lease_id: &str,
-        since: DateTime<Utc>,
-    ) -> Result<RateWindowRow, DatabaseError> {
-        Ok(diesel::sql_query(
-            "SELECT COUNT(*)::bigint AS count, MIN(occurred_at) AS oldest_at \
-             FROM identity_creation_lease_rate_limit_events \
-             WHERE lease_id = $1 AND action = 'renewal' AND occurred_at > $2",
-        )
-        .bind::<Text, _>(lease_id)
-        .bind::<Timestamptz, _>(since)
-        .get_result::<RateWindowRow>(self.conn)
-        .await?)
     }
 
     async fn insert_quota_event(
@@ -561,19 +553,21 @@ impl<'c> PgAccountHandoffRepository<'c> {
         request_id: Uuid,
         account_subject: &arkret_identifiers::Hash,
         audience_id: &str,
-        lease_id: &str,
+        holder_jkt: &str,
         action: &str,
+        now: DateTime<Utc>,
     ) -> Result<(), DatabaseError> {
         diesel::sql_query(
-            "INSERT INTO identity_creation_lease_rate_limit_events \
-             (request_id, account_subject, audience_id, lease_id, action) \
-             VALUES ($1, $2, $3, $4, $5) ON CONFLICT (request_id, action) DO NOTHING",
+            "INSERT INTO identity_creation_rate_limit_events \
+             (request_id, account_subject, audience_id, holder_jkt, action, occurred_at) \
+             VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (request_id, action) DO NOTHING",
         )
         .bind::<SqlUuid, _>(request_id)
         .bind::<Text, _>(account_subject.as_str())
         .bind::<Text, _>(audience_id)
-        .bind::<Text, _>(lease_id)
+        .bind::<Text, _>(holder_jkt)
         .bind::<Text, _>(action)
+        .bind::<Timestamptz, _>(now)
         .execute(self.conn)
         .await?;
         Ok(())
@@ -1688,19 +1682,17 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
                 input.request_id.uuid(),
                 &input.account_subject,
                 input.audience_id.as_str(),
-                &input.lease_id,
+                &input.cnf_jkt,
                 server_now,
             )
             .await?
         } else {
-            let lease = existing_lease
-                .as_ref()
-                .ok_or_else(DatabaseError::invalid_operation)?;
-            self.consume_renewal_quota(
+            self.consume_holder_quota(
                 input.request_id.uuid(),
                 &input.account_subject,
                 &input.audience_id,
-                &lease.lease_id,
+                &input.cnf_jkt,
+                "renewal",
                 server_now,
             )
             .await?
@@ -1830,55 +1822,28 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         &mut self,
         input: IdentityBindingChallengeInput,
     ) -> Result<IdentityBindingChallengeIssue, Self::Error> {
-        // These timestamps are replayed verbatim in the client-signed control
-        // proof. Canonical wire serialization uses fixed millisecond precision,
-        // so persist that same value rather than PostgreSQL's finer-grained
-        // representation; otherwise the proof can never equal the durable row.
-        let input = IdentityBindingChallengeInput {
-            issued_at: arkret_canonical::normalize_timestamp_canonical(input.issued_at),
-            expires_at: arkret_canonical::normalize_timestamp_canonical(input.expires_at),
-            lease_expires_at: arkret_canonical::normalize_timestamp_canonical(
-                input.lease_expires_at,
-            ),
-            ..input
-        };
         ensure_did_projects_to_principal(&input.did, &input.principal_id)?;
-        if let Some(existing) = self.challenge_by_request(input.request_id.uuid()).await? {
-            if existing.request_digest != input.request_digest
-                || existing.local_account_id != input.local_account_id
-            {
-                return Ok(IdentityBindingChallengeIssue::DuplicateConflict);
-            }
-            if existing.consumed_at.is_some()
-                || existing.replaced_at.is_some()
-                || existing.expires_at <= input.issued_at
-            {
-                return Ok(IdentityBindingChallengeIssue::StaleRequest);
-            }
-            return Ok(IdentityBindingChallengeIssue::Replay(existing));
+        if input.challenge_ttl <= Duration::zero() || input.challenge_ttl > Duration::seconds(300) {
+            return Err(DatabaseError::invalid_operation());
         }
-
         self.lock_lease_quota(&input.account_subject, input.audience_id.as_str())
             .await?;
-        // A concurrent exact request may have committed while this transaction
-        // waited for the quota lock. Re-read before consuming renewal quota or
-        // replacing the active challenge so response-loss replay remains
-        // byte-for-byte stable across instances.
-        if let Some(existing) = self.challenge_by_request(input.request_id.uuid()).await? {
-            if existing.request_digest != input.request_digest
-                || existing.local_account_id != input.local_account_id
-            {
-                return Ok(IdentityBindingChallengeIssue::DuplicateConflict);
-            }
-            if existing.consumed_at.is_some()
-                || existing.replaced_at.is_some()
-                || existing.expires_at <= input.issued_at
-            {
-                return Ok(IdentityBindingChallengeIssue::StaleRequest);
-            }
-            return Ok(IdentityBindingChallengeIssue::Replay(existing));
+        if !self
+            .account_risk_allows_identity_creation(Uuid::from(input.local_account_id))
+            .await?
+        {
+            return Ok(IdentityBindingChallengeIssue::RiskRejected);
         }
-        let server_now = self.server_now().await?;
+        let grant = diesel::sql_query(
+            "SELECT id, request_id, request_digest, local_account_id, browser_session_id, \
+             audience_id, cnf_jkt, allowed_operations, account_handoff_grant, issued_at, expires_at, \
+             revoked_at, consumed_at FROM account_handoff_grants WHERE id = $1 FOR SHARE",
+        )
+        .bind::<SqlUuid, _>(Uuid::from(input.handoff_grant_id))
+        .get_result::<HandoffRow>(self.conn).await.optional()?;
+        let Some(grant) = grant.map(handoff_from_row).transpose()? else {
+            return Ok(IdentityBindingChallengeIssue::LeaseMismatch);
+        };
         let lease = self
             .lease_for_account(
                 Uuid::from(input.local_account_id),
@@ -1889,16 +1854,55 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let Some(lease) = lease else {
             return Ok(IdentityBindingChallengeIssue::LeaseMismatch);
         };
+        let server_now = self.server_now().await?;
+        let issued_at = arkret_canonical::normalize_timestamp_canonical(server_now);
+        let expires_at =
+            arkret_canonical::normalize_timestamp_canonical(issued_at + input.challenge_ttl);
+        if expires_at <= issued_at {
+            return Err(DatabaseError::invalid_operation());
+        }
+        if grant.local_account_id != input.local_account_id
+            || grant.audience_id != input.audience_id.as_str()
+            || grant.cnf_jkt != input.holder_jkt
+            || grant.expires_at <= server_now
+            || grant.revoked_at.is_some()
+            || grant.consumed_at.is_some()
+        {
+            return Ok(IdentityBindingChallengeIssue::LeaseMismatch);
+        }
         if lease.lease_id != input.lease_id
             || lease.fence != input.lease_fence
             || lease.holder_jkt != input.holder_jkt
-            || lease.expires_at <= input.issued_at
+            || lease.expires_at <= server_now
             || matches!(
                 lease.state,
                 IdentityCreationLeaseState::AccountBound | IdentityCreationLeaseState::Completed
             )
         {
             return Ok(IdentityBindingChallengeIssue::LeaseMismatch);
+        }
+
+        if let Some(existing) = self.challenge_by_request(input.request_id.uuid()).await? {
+            if existing.request_digest != input.request_digest
+                || existing.local_account_id != input.local_account_id
+                || existing.account_subject != input.account_subject
+                || existing.audience_id != input.audience_id
+                || existing.dpop_jkt != input.holder_jkt
+                || existing.lease_id != input.lease_id
+                || existing.lease_fence != input.lease_fence
+            {
+                return Ok(IdentityBindingChallengeIssue::DuplicateConflict);
+            }
+            if existing.consumed_at.is_some() {
+                return Ok(IdentityBindingChallengeIssue::Consumed);
+            }
+            if existing.expires_at <= server_now {
+                return Ok(IdentityBindingChallengeIssue::Expired);
+            }
+            if existing.replaced_at.is_some() {
+                return Ok(IdentityBindingChallengeIssue::StaleRequest);
+            }
+            return Ok(IdentityBindingChallengeIssue::Replay(existing));
         }
 
         let reserved = arkret_models_identity::ReservedIdentityCreation::from_operation(
@@ -1928,11 +1932,12 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         }
 
         if let Some(retry_after_ms) = self
-            .consume_renewal_quota(
+            .consume_holder_quota(
                 input.request_id.uuid(),
                 &input.account_subject,
                 input.audience_id.as_str(),
-                &input.lease_id,
+                &input.holder_jkt,
+                "challenge_issuance",
                 server_now,
             )
             .await?
@@ -1944,9 +1949,9 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             "UPDATE identity_creation_leases SET reserved_principal_id = $3, \
              reserved_operation_digest = $4, did_operation = $5, \
              state = CASE WHEN state <> 'active' THEN state ELSE 'reserved' END, \
-             expires_at = GREATEST(expires_at, $6), updated_at = $7 \
-             WHERE local_account_id = $1 AND audience_id = $2 AND lease_id = $8 \
-             AND fence = $9 AND holder_jkt = $10 \
+             updated_at = $6 \
+             WHERE local_account_id = $1 AND audience_id = $2 AND lease_id = $7 \
+             AND fence = $8 AND holder_jkt = $9 \
              AND state IN ('active', 'reserved', 'did_published', 'pcr_accepted', 'account_bound')",
         )
         .bind::<SqlUuid, _>(Uuid::from(input.local_account_id))
@@ -1954,8 +1959,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(reserved.principal_id.as_str())
         .bind::<Text, _>(reserved.operation_digest.as_str())
         .bind::<Jsonb, _>(serde_json::to_value(&reserved.did_operation)?)
-        .bind::<Timestamptz, _>(input.lease_expires_at)
-        .bind::<Timestamptz, _>(input.issued_at)
+        .bind::<Timestamptz, _>(issued_at)
         .bind::<Text, _>(&input.lease_id)
         .bind::<BigInt, _>(i64::try_from(input.lease_fence)?)
         .bind::<Text, _>(&input.holder_jkt)
@@ -1968,7 +1972,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
              AND lease_fence = $5 AND operation_digest = $6 \
              AND consumed_at IS NULL AND replaced_at IS NULL AND expires_at > $1",
         )
-        .bind::<Timestamptz, _>(input.issued_at)
+        .bind::<Timestamptz, _>(issued_at)
         .bind::<SqlUuid, _>(Uuid::from(input.local_account_id))
         .bind::<Text, _>(input.audience_id.as_str())
         .bind::<Text, _>(&input.lease_id)
@@ -2008,8 +2012,8 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(input.audience_id.as_str())
         .bind::<Text, _>(&input.origin)
         .bind::<Text, _>(input.trust_domain.as_str())
-        .bind::<Timestamptz, _>(input.issued_at)
-        .bind::<Timestamptz, _>(input.expires_at)
+        .bind::<Timestamptz, _>(issued_at)
+        .bind::<Timestamptz, _>(expires_at)
         .execute(self.conn)
         .await?;
         let challenge = self
@@ -2539,40 +2543,76 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         lease_id: &str,
         lease_fence: u64,
         challenge_id: &str,
-        now: DateTime<Utc>,
-    ) -> Result<Option<IdentityCreationRegistrationContext>, Self::Error> {
+    ) -> Result<IdentityCreationRegistrationAdmission, Self::Error> {
+        if !self
+            .account_risk_allows_identity_creation(Uuid::from(grant.local_account_id))
+            .await?
+        {
+            return Ok(IdentityCreationRegistrationAdmission::AccountInactive);
+        }
+        let current_grant = diesel::sql_query(
+            "SELECT id, request_id, request_digest, local_account_id, browser_session_id, \
+             audience_id, cnf_jkt, allowed_operations, account_handoff_grant, issued_at, expires_at, \
+             revoked_at, consumed_at FROM account_handoff_grants WHERE id = $1 FOR SHARE",
+        ).bind::<SqlUuid, _>(Uuid::from(grant.id))
+        .get_result::<HandoffRow>(self.conn).await.optional()?;
+        let Some(current_grant) = current_grant.map(handoff_from_row).transpose()? else {
+            return Ok(IdentityCreationRegistrationAdmission::ExecutionAuthorityInvalid);
+        };
         let Some(lease) = self
             .lease_for_account(Uuid::from(grant.local_account_id), &grant.audience_id, true)
             .await?
         else {
-            return Ok(None);
+            return Ok(IdentityCreationRegistrationAdmission::ExecutionAuthorityInvalid);
         };
+        let now = self.server_now().await?;
+        if current_grant.local_account_id != grant.local_account_id
+            || current_grant.audience_id != grant.audience_id
+            || current_grant.cnf_jkt != grant.cnf_jkt
+            || current_grant.expires_at <= now
+            || current_grant.revoked_at.is_some()
+            || current_grant.consumed_at.is_some()
+        {
+            return Ok(IdentityCreationRegistrationAdmission::ExecutionAuthorityInvalid);
+        }
         if lease.lease_id != lease_id
             || lease.fence != lease_fence
             || lease.holder_jkt != grant.cnf_jkt
             || lease.expires_at <= now
         {
-            return Ok(None);
+            return Ok(IdentityCreationRegistrationAdmission::ExecutionAuthorityInvalid);
         }
         let Some(challenge) = self.challenge_by_id(challenge_id, false).await? else {
-            return Ok(None);
+            return Ok(IdentityCreationRegistrationAdmission::ChallengeMismatch);
         };
         if challenge.local_account_id != grant.local_account_id
             || challenge.audience_id.as_str() != grant.audience_id
             || challenge.lease_id != lease_id
             || challenge.lease_fence != lease_fence
             || challenge.dpop_jkt != grant.cnf_jkt
-            || challenge.replaced_at.is_some()
-            || challenge.expires_at <= now
-            || !registration_challenge_state_is_usable(lease.state, challenge.consumed_at.is_some())
         {
-            return Ok(None);
+            return Ok(IdentityCreationRegistrationAdmission::ChallengeMismatch);
         }
-        Ok(Some(IdentityCreationRegistrationContext {
-            grant: grant.clone(),
-            lease,
-            challenge,
-        }))
+        if challenge.replaced_at.is_some() {
+            return Ok(IdentityCreationRegistrationAdmission::ChallengeReplaced);
+        }
+        if !registration_challenge_state_is_usable(lease.state, challenge.consumed_at.is_some()) {
+            return Ok(if challenge.consumed_at.is_some() {
+                IdentityCreationRegistrationAdmission::ChallengeConsumed
+            } else {
+                IdentityCreationRegistrationAdmission::ChallengeMismatch
+            });
+        }
+        if challenge.expires_at <= now {
+            return Ok(IdentityCreationRegistrationAdmission::ChallengeExpired);
+        }
+        Ok(IdentityCreationRegistrationAdmission::Ready(Box::new(
+            IdentityCreationRegistrationContext {
+                grant: grant.clone(),
+                lease,
+                challenge,
+            },
+        )))
     }
 
     async fn registration_replay(
@@ -3116,3 +3156,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod challenge_tests;

@@ -785,18 +785,18 @@ CREATE TABLE public.identity_creation_leases (
 
 -- Durable, append-only quota consumption.  The subject is the service's
 -- salted account-subject digest, never the raw upstream OIDC `sub`.
-CREATE TABLE public.identity_creation_lease_rate_limit_events (
+CREATE TABLE public.identity_creation_rate_limit_events (
     id bigserial NOT NULL,
     request_id uuid NOT NULL,
     account_subject text NOT NULL,
     audience_id text NOT NULL,
-    lease_id text NOT NULL,
+    holder_jkt text NOT NULL,
     action text NOT NULL,
     occurred_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT identity_creation_lease_rate_subject_valid CHECK ((account_subject ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT identity_creation_lease_rate_audience_id_nonempty CHECK ((btrim(audience_id) <> ''::text)),
-    CONSTRAINT identity_creation_lease_rate_lease_id_valid CHECK ((lease_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
-    CONSTRAINT identity_creation_lease_rate_action_closed CHECK ((action = ANY (ARRAY['acquisition'::text, 'renewal'::text])))
+    CONSTRAINT identity_creation_rate_holder_jkt_nonempty CHECK ((btrim(holder_jkt) <> ''::text)),
+    CONSTRAINT identity_creation_lease_rate_action_closed CHECK ((action = ANY (ARRAY['acquisition'::text, 'renewal'::text, 'challenge_issuance'::text])))
 );
 
 CREATE TABLE public.identity_binding_challenges (
@@ -1481,10 +1481,10 @@ ALTER TABLE ONLY public.identity_creation_leases
 ALTER TABLE ONLY public.identity_creation_leases
     ADD CONSTRAINT identity_creation_leases_lease_id_unique UNIQUE (lease_id);
 
-ALTER TABLE ONLY public.identity_creation_lease_rate_limit_events
-    ADD CONSTRAINT identity_creation_lease_rate_limit_events_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.identity_creation_rate_limit_events
+    ADD CONSTRAINT identity_creation_rate_limit_events_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.identity_creation_lease_rate_limit_events
+ALTER TABLE ONLY public.identity_creation_rate_limit_events
     ADD CONSTRAINT identity_creation_lease_rate_request_action_unique UNIQUE (request_id, action);
 
 ALTER TABLE ONLY public.identity_binding_challenges
@@ -1694,9 +1694,9 @@ CREATE INDEX idx_account_handoff_grants_expiry ON public.account_handoff_grants 
 
 CREATE INDEX idx_identity_creation_leases_expiry ON public.identity_creation_leases USING btree (expires_at) WHERE (state <> 'completed'::text);
 
-CREATE INDEX idx_identity_creation_lease_rate_acquisition ON public.identity_creation_lease_rate_limit_events USING btree (account_subject, audience_id, occurred_at DESC) WHERE (action = 'acquisition'::text);
+CREATE INDEX idx_identity_creation_lease_rate_acquisition ON public.identity_creation_rate_limit_events USING btree (account_subject, audience_id, occurred_at DESC) WHERE (action = 'acquisition'::text);
 
-CREATE INDEX idx_identity_creation_lease_rate_renewal ON public.identity_creation_lease_rate_limit_events USING btree (lease_id, occurred_at DESC) WHERE (action = 'renewal'::text);
+CREATE INDEX idx_identity_creation_rate_holder ON public.identity_creation_rate_limit_events USING btree (account_subject, audience_id, holder_jkt, action, occurred_at DESC);
 
 CREATE INDEX idx_identity_binding_challenges_reservation ON public.identity_binding_challenges USING btree (local_account_id, audience_id, lease_id, lease_fence, operation_digest);
 

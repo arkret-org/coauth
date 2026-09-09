@@ -9,9 +9,10 @@ use coauth_data::{
     IdentityAbandonmentChallengeInput, IdentityAbandonmentChallengeIssue,
     IdentityAbandonmentChallengeRecord, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
     IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityCreationBindingCommit,
-    IdentityCreationRegisterReplay, IdentityCreationRegistrationContext,
-    NewAccountHandoffCreationAttempt, NewControllerGateAttestationIssuance,
-    PublishedDidRegisterCommit, PublishedDidRegisterReplay, Ulid,
+    IdentityCreationRegisterReplay, IdentityCreationRegistrationAdmission,
+    IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
+    NewControllerGateAttestationIssuance, PublishedDidRegisterCommit, PublishedDidRegisterReplay,
+    Ulid,
 };
 
 use crate::repository_impl;
@@ -180,8 +181,7 @@ repository_impl! {
             lease_id: &str,
             lease_fence: u64,
             challenge_id: &str,
-            now: DateTime<Utc>,
-        ) -> Result<Option<IdentityCreationRegistrationContext>, Self::Error>;
+        ) -> Result<IdentityCreationRegistrationAdmission, Self::Error>;
 
         /// Resolve a completed register request against its exact durable
         /// handoff/challenge boundary and canonical request digest.

@@ -7,7 +7,7 @@ use arkret_models_identity::agent_signer_evidence::{
     ControllerAccountGateBasis, ControllerAccountStatus,
 };
 use arkret_signatures::http_signature::{
-    Component, ContentDigest, SignatureVerificationPolicy, parse_signature_input,
+    Component, SignatureVerificationPolicy, parse_signature_input,
     verify_signed_canonical_json_message,
 };
 use arkret_wire::{DidUrl, NonEmptyString};
@@ -72,7 +72,7 @@ pub async fn issue_controller_gate_attestation(
         .ok_or_else(|| ArkretRouteError::Internal("invalid clock precision".into()))?;
 
     let mut repo = depot.repo().await?;
-    authenticate_agent_authority_request(req, depot, &mut repo, &request, &canonical_body, now)
+    authenticate_agent_authority_request(req, depot, &request, &canonical_body, now)
         .await
         .inspect_err(|_| tracing::warn!("controller gate Agent Authority authentication failed"))?;
     let binding = repo
@@ -210,7 +210,6 @@ pub async fn issue_controller_gate_attestation(
 async fn authenticate_agent_authority_request(
     req: &Request,
     depot: &Depot,
-    repo: &mut coauth_data::BoxRepository,
     request: &ControllerAccountGateAttestationIssueRequestBody,
     canonical_body: &[u8],
     now: chrono::DateTime<chrono::Utc>,
@@ -225,41 +224,6 @@ async fn authenticate_agent_authority_request(
         .agent_authority_resolution
         .normalized_did_document
         .id;
-    let resolved = crate::services::did_binding::authority_document(
-        &depot.http_client()?,
-        &depot.url_builder()?,
-        &config,
-        &depot.key_store()?,
-        repo,
-        depot.did_resolver_service()?.as_ref(),
-        depot.verified_did_binding_store()?.as_ref(),
-        did.as_str(),
-        arkret_identity::DidBindingPurpose::Controller,
-        crate::services::did_binding::controller_freshness(),
-        now,
-    )
-    .await
-    .map_err(|_| not_found())?;
-    let resolved_document = serde_json::to_value(&resolved.document).map_err(|_| not_found())?;
-    let carried_document =
-        serde_json::to_value(&request.agent_authority_resolution.normalized_did_document)
-            .map_err(|_| not_found())?;
-    let resolved_evidence = resolved.accepted.evidence_receipt();
-    let carried_evidence = serde_json::to_value(
-        request
-            .agent_authority_resolution
-            .method_history_evidence
-            .evidence(),
-    )
-    .map_err(|_| not_found())?;
-    if arkret_canonical::canonical_sha256(&resolved_document).map_err(|_| not_found())?
-        != arkret_canonical::canonical_sha256(&carried_document).map_err(|_| not_found())?
-        || arkret_canonical::canonical_sha256(&resolved_evidence).map_err(|_| not_found())?
-            != arkret_canonical::canonical_sha256(&carried_evidence).map_err(|_| not_found())?
-    {
-        return Err(not_found());
-    }
-
     let resolution = &request.agent_authority_resolution;
     let current =
         crate::services::station_trust::resolve_current_service_did(&depot.http_client()?, did)
@@ -289,6 +253,13 @@ async fn authenticate_agent_authority_request(
     if key_controller != did.as_str() {
         return Err(not_found());
     }
+    arkret_identity::validate_verification_method_relationship(
+        &resolution.normalized_did_document,
+        &key_id,
+        did,
+        arkret_identity::DidVerificationRelationship::AssertionMethod,
+    )
+    .map_err(|_| not_found())?;
     let resolved_key = arkret_identity::resolve_verification_method_key_from_document(
         &resolution.normalized_did_document,
         key_id.as_str(),
@@ -360,10 +331,6 @@ async fn authenticate_agent_authority_request(
         now.timestamp(),
     )
     .map_err(|_| not_found())?;
-    let parsed_digest = ContentDigest::parse(required_header(req, "content-digest")?.as_str())
-        .map_err(|_| not_found())?;
-    arkret_signatures::http_signature::verify_content_digest(&parsed_digest, canonical_body)
-        .map_err(|_| not_found())?;
     Ok(())
 }
 

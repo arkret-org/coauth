@@ -148,15 +148,37 @@ pub async fn account_register_endpoint(
             &identity_creation.identity_creation_lease_id,
             identity_creation.lease_fence,
             &identity_creation.control_proof.challenge_id,
-            now,
         )
-        .await?
-        .ok_or_else(|| {
-            failed_precondition(
-                "reason_code=identity_creation_challenge_expired; lease, fence, reservation, or challenge is stale",
-            )
-        })?;
-    repo.cancel().await.ok();
+        .await?;
+    let context = match context {
+        coauth_data::IdentityCreationRegistrationAdmission::Ready(context) => *context,
+        coauth_data::IdentityCreationRegistrationAdmission::AccountInactive => {
+            return Err(ArkretRouteError::coded(
+                StatusCode::FORBIDDEN,
+                arkret_wire::ErrorCode::ACCOUNT_DEACTIVATED,
+                "account is not active",
+            ));
+        }
+        coauth_data::IdentityCreationRegistrationAdmission::ChallengeExpired => {
+            return Err(super::account_handoff::identity_creation_error(
+                arkret_wire::ReasonCode::IDENTITY_CREATION_CHALLENGE_EXPIRED,
+                "identity binding challenge expired",
+            ));
+        }
+        coauth_data::IdentityCreationRegistrationAdmission::ChallengeConsumed => {
+            return Err(super::account_handoff::identity_creation_error(
+                arkret_wire::ReasonCode::IDENTITY_CREATION_CHALLENGE_ALREADY_CONSUMED,
+                "identity binding challenge was already consumed",
+            ));
+        }
+        coauth_data::IdentityCreationRegistrationAdmission::ExecutionAuthorityInvalid
+        | coauth_data::IdentityCreationRegistrationAdmission::ChallengeMismatch
+        | coauth_data::IdentityCreationRegistrationAdmission::ChallengeReplaced => {
+            return Err(failed_precondition(
+                "lease, fence, reservation, or challenge is stale",
+            ));
+        }
+    };
 
     identity_creation
         .validate()
@@ -207,6 +229,21 @@ pub async fn account_register_endpoint(
 
     let (registry_outcome, registration_did_evidence) = match context.lease.state {
         IdentityCreationLeaseState::Reserved => {
+            let dispatch_now = clock.now();
+            if context.grant.expires_at <= dispatch_now || context.lease.expires_at <= dispatch_now
+            {
+                return Err(failed_precondition(
+                    "identity creation execution authority expired before registry dispatch",
+                ));
+            }
+            if context.challenge.expires_at <= dispatch_now {
+                return Err(super::account_handoff::identity_creation_error(
+                    arkret_wire::ReasonCode::IDENTITY_CREATION_CHALLENGE_EXPIRED,
+                    "identity binding challenge expired before registry dispatch",
+                ));
+            }
+            // Keep the admission transaction's account/grant/lease locks until
+            // the first external effect and its durable checkpoint complete.
             let outcome = soland_webvh::submit_did_operation(
                 &depot.http_client()?,
                 &station.endpoint,
@@ -228,7 +265,6 @@ pub async fn account_register_endpoint(
                 .accept(outcome.accepted_at)
                 .map_err(|error| proof_invalid(error.to_string()))?;
             let head = outcome.head_event_digest.as_ref().expect("validated head");
-            let mut repo = depot.repo().await?;
             if !repo
                 .account_handoff()
                 .mark_did_published(&context, &outcome, head, &registration_did_evidence, now)
@@ -245,6 +281,7 @@ pub async fn account_register_endpoint(
         IdentityCreationLeaseState::DidPublished
         | IdentityCreationLeaseState::PcrAccepted
         | IdentityCreationLeaseState::AccountBound => {
+            repo.cancel().await.ok();
             let outcome: DidOperationSubmitOutcome =
                 context.lease.registry_receipt.clone().ok_or_else(|| {
                     failed_precondition("published identity has no registry receipt")
@@ -287,8 +324,9 @@ pub async fn account_register_endpoint(
             ));
         }
         IdentityCreationLeaseState::Completed => {
-            return Err(failed_precondition(
-                "reason_code=identity_creation_challenge_already_consumed; identity binding challenge was already consumed",
+            return Err(super::account_handoff::identity_creation_error(
+                arkret_wire::ReasonCode::IDENTITY_CREATION_CHALLENGE_ALREADY_CONSUMED,
+                "identity binding challenge was already consumed",
             ));
         }
     };

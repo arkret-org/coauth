@@ -335,9 +335,8 @@ pub struct IdentityBindingChallengeInput {
     pub challenge: String,
     pub origin: WebOrigin,
     pub trust_domain: arkret_identifiers::TrustDomainId,
-    pub issued_at: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>,
-    pub lease_expires_at: DateTime<Utc>,
+    pub handoff_grant_id: Ulid,
+    pub challenge_ttl: chrono::Duration,
 }
 
 #[derive(Clone, Debug)]
@@ -410,6 +409,9 @@ pub enum IdentityBindingChallengeIssue {
     LeaseMismatch,
     ReservationConflict,
     StaleRequest,
+    Expired,
+    Consumed,
+    RiskRejected,
     RateLimited { retry_after_ms: u64 },
 }
 
@@ -622,4 +624,15 @@ pub struct IdentityCreationRegistrationContext {
     pub grant: AccountHandoffGrant,
     pub lease: IdentityCreationLeaseRecord,
     pub challenge: IdentityBindingChallengeRecord,
+}
+
+#[derive(Clone, Debug)]
+pub enum IdentityCreationRegistrationAdmission {
+    Ready(Box<IdentityCreationRegistrationContext>),
+    AccountInactive,
+    ExecutionAuthorityInvalid,
+    ChallengeMismatch,
+    ChallengeReplaced,
+    ChallengeExpired,
+    ChallengeConsumed,
 }

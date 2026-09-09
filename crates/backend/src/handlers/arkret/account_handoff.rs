@@ -870,8 +870,6 @@ pub async fn issue_identity_binding_challenge(
             .ascii_serialization(),
     )
     .map_err(|error| failed_precondition(error.to_string()))?;
-    let clock = make_clock();
-    let now = clock.now();
     let mut rng = make_rng();
     let mut repo = depot.repo().await?;
     let issue = repo
@@ -900,9 +898,8 @@ pub async fn issue_identity_binding_challenge(
             challenge: random_opaque(&mut *rng, 32),
             origin,
             trust_domain,
-            issued_at: now,
-            expires_at: now + IDENTITY_BINDING_CHALLENGE_TTL,
-            lease_expires_at: now + IDENTITY_CREATION_LEASE_TTL,
+            handoff_grant_id: grant.id,
+            challenge_ttl: IDENTITY_BINDING_CHALLENGE_TTL,
         })
         .await?;
     match issue {
@@ -933,11 +930,31 @@ pub async fn issue_identity_binding_challenge(
                 "identity-creation lease, fence, holder, or challenge request is stale",
             ))
         }
+        IdentityBindingChallengeIssue::Expired | IdentityBindingChallengeIssue::Consumed => {
+            repo.cancel().await.ok();
+            let reason_code = if matches!(issue, IdentityBindingChallengeIssue::Expired) {
+                arkret_wire::ReasonCode::IDENTITY_CREATION_CHALLENGE_EXPIRED
+            } else {
+                arkret_wire::ReasonCode::IDENTITY_CREATION_CHALLENGE_ALREADY_CONSUMED
+            };
+            Err(identity_creation_error(
+                reason_code,
+                "identity-binding challenge is no longer usable",
+            ))
+        }
+        IdentityBindingChallengeIssue::RiskRejected => {
+            repo.cancel().await.ok();
+            Err(ArkretRouteError::coded(
+                StatusCode::FORBIDDEN,
+                arkret_wire::ErrorCode::ACCOUNT_DEACTIVATED,
+                "account is not active",
+            ))
+        }
         IdentityBindingChallengeIssue::RateLimited { retry_after_ms } => {
             repo.cancel().await.ok();
             Err(ArkretRouteError::rate_limited(
                 format!(
-                    "identity-creation lease renewal is rate limited; retry after {retry_after_ms} ms"
+                    "identity-binding challenge issuance is rate limited; retry after {retry_after_ms} ms"
                 ),
                 retry_after_ms,
             ))
@@ -1029,7 +1046,7 @@ pub async fn issue_identity_abandonment_challenge(
         }
         IdentityAbandonmentChallengeIssue::LeaseFenced => {
             repo.cancel().await.ok();
-            Err(identity_abandonment_error(
+            Err(identity_creation_error(
                 arkret_wire::ReasonCode::IDENTITY_CREATION_LEASE_FENCED,
                 "identity-creation lease is absent, expired, held by another key, or fenced",
             ))
@@ -1042,7 +1059,7 @@ pub async fn issue_identity_abandonment_challenge(
         }
         IdentityAbandonmentChallengeIssue::AlreadyAccepted => {
             repo.cancel().await.ok();
-            Err(identity_abandonment_error(
+            Err(identity_creation_error(
                 arkret_wire::ReasonCode::IDENTITY_CREATION_ALREADY_ACCEPTED,
                 "the Principal Control Realm has already been accepted",
             ))
@@ -1114,28 +1131,28 @@ pub async fn abandon_identity_creation(
         }
         IdentityAbandonmentCommit::ChallengeExpired => {
             repo.cancel().await.ok();
-            Err(identity_abandonment_error(
+            Err(identity_creation_error(
                 arkret_wire::ReasonCode::IDENTITY_CREATION_CHALLENGE_EXPIRED,
                 "identity-abandonment challenge expired",
             ))
         }
         IdentityAbandonmentCommit::ChallengeConsumed => {
             repo.cancel().await.ok();
-            Err(identity_abandonment_error(
+            Err(identity_creation_error(
                 arkret_wire::ReasonCode::IDENTITY_CREATION_CHALLENGE_ALREADY_CONSUMED,
                 "identity-abandonment challenge was already consumed",
             ))
         }
         IdentityAbandonmentCommit::LeaseFenced => {
             repo.cancel().await.ok();
-            Err(identity_abandonment_error(
+            Err(identity_creation_error(
                 arkret_wire::ReasonCode::IDENTITY_CREATION_LEASE_FENCED,
                 "identity-creation lease is absent, expired, held by another key, or fenced",
             ))
         }
         IdentityAbandonmentCommit::AlreadyAccepted => {
             repo.cancel().await.ok();
-            Err(identity_abandonment_error(
+            Err(identity_creation_error(
                 arkret_wire::ReasonCode::IDENTITY_CREATION_ALREADY_ACCEPTED,
                 "the Principal Control Realm has already been accepted",
             ))
@@ -1446,19 +1463,21 @@ fn failed_precondition(message: impl Into<String>) -> ArkretRouteError {
     )
 }
 
-fn identity_abandonment_error(
+pub(super) fn identity_creation_error(
     reason_code: &'static str,
     message: impl Into<String>,
 ) -> ArkretRouteError {
-    ArkretRouteError::coded(
-        StatusCode::CONFLICT,
-        arkret_wire::ErrorCode::FAILED_PRECONDITION,
-        format!("reason_code={reason_code}; {}", message.into()),
-    )
+    ArkretRouteError::CodedDetailed {
+        status: StatusCode::CONFLICT,
+        code: arkret_wire::ErrorCode::FAILED_PRECONDITION,
+        message: message.into(),
+        details: vec![("reason_code", serde_json::json!(reason_code))],
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    mod identity_creation;
     use coauth_data::{AuthorizationCode, Pkce, SystemClock};
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_iana::oauth::{OAuthClientAuthenticationMethod, PkceCodeChallengeMethod};
