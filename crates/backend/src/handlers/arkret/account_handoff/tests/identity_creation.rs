@@ -164,7 +164,7 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
     let fixture = cotest_test_support::wire::principal_registration_fixture(serde_json::json!({
         "station_url":"https://principal.example", "gate_account_base_url":"https://example.com/_arkret/gate/account",
         "handoff_request_id": handoff.request_id, "identity_creation_lease": lease,
-        "device_id":"initial-http-device", "trust_domain":trust_domain_for(&state.url_builder, &state.arkret_config),
+        "device_id":"ak:device:0196419b-0000-7000-8000-000000000009", "trust_domain":trust_domain_for(&state.url_builder, &state.arkret_config),
         "initial_session":{"session_public_key":public_jwk,"audience_id":TEST_STATION_AUDIENCE},
     })).unwrap();
     let challenge = state
