@@ -48,7 +48,7 @@ fn pcr_outcome(
     request: &arkret_models_collaboration::principal_operations::PcrGenesisSubmitRequestBody,
 ) -> arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome {
     use arkret_wire::{
-        EventBatchReceipt, EventBatchReceiptItem, EventBatchReceiptScope, PcrGenesisReceiptScope,
+        EventBatchReceipt, EventBatchReceiptRow, EventBatchReceiptScope, PcrGenesisReceiptScope,
         PcrGenesisReceiptScopeKind,
     };
     let descriptor: arkret_models_collaboration::events_payloads::realm::FoundingDeviceDescriptor =
@@ -96,7 +96,7 @@ fn pcr_outcome(
             request.genesis_unit.founding_authorize(),
         ]
         .into_iter()
-        .map(|event| EventBatchReceiptItem {
+        .map(|event| EventBatchReceiptRow {
             event_id: event.event_id.clone(),
             kind: arkret_wire::NonEmptyString::new(event.kind.as_str()).unwrap(),
         })
