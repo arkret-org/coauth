@@ -455,7 +455,8 @@ pub trait ConnectorAdmin: Send + Sync {
     async fn commit_agent_key_pair(
         &self,
         _request: &PrincipalAgentKeyPairCommitRequest,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome, anyhow::Error>
+    {
         Err(anyhow::anyhow!(
             "Agent key-pair commit is not implemented by this principal connector"
         ))
@@ -611,7 +612,8 @@ where
     async fn commit_agent_key_pair(
         &self,
         request: &PrincipalAgentKeyPairCommitRequest,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome, anyhow::Error>
+    {
         self.as_admin().commit_agent_key_pair(request).await
     }
 

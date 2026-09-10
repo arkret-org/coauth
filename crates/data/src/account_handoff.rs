@@ -230,7 +230,7 @@ pub struct IdentityCreationLeaseRecord {
     pub reserved_identity: Option<arkret_models_identity::ReservedIdentityCreation>,
     pub state: arkret_models_identity::IdentityCreationLeaseState,
     pub registry_receipt: Option<arkret_models_identity::DidOperationSubmitOutcome>,
-    pub head_event_digest: Option<arkret_identifiers::Hash>,
+    pub log_head_digest: Option<arkret_identifiers::Hash>,
     /// Complete historical registration evidence frozen at the registry's
     /// original acceptance time.  Renewed handoffs and replacement devices
     /// must reuse this object instead of combining a new client proof with an

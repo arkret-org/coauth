@@ -271,8 +271,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             && binding_receipt.validate_shape().is_ok()
             && binding_receipt.principal_id == principal_id
             && binding_receipt.did == verified_did
-            && binding_receipt.did_version_id == verified_version_id
-            && binding_receipt.head_event_digest == key_log_head;
+            && binding_receipt.did_version_id == verified_version_id;
         if !resolution_snapshot_is_valid
             || binding_version < 1
             || accepted_id != audience_id

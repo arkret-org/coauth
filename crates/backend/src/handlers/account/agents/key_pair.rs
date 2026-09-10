@@ -6,8 +6,8 @@
 //! validates the request binding, persists the pending local authorization for
 //! `agent_key_proof`, and commits the unchanged signed request to the
 //! authoritative Station before reporting the Event as durable. The
-//! caller closes it into an accepted Agent-PCR frontier and retries the same
-//! idempotent request before the runtime is reported active.
+//! Station activates the frozen candidate after its authorize Event enters an
+//! accepted Agent-PCR frontier; polling only observes this transition.
 
 use std::collections::BTreeMap;
 
@@ -86,24 +86,21 @@ pub async fn post_agent_key_pair(
     // `agent_id` is already a closed `DidCoreId` on the wire model. Do not
     // feed it through the full-DID normalizer: that parser deliberately
     // rejects `ak:did_core:*` identifiers.
-    let agent_id = body.agent_id.to_string();
+    let submitted_payload = AgentKeyAuthorizePayload::try_from(&body.authorize_event.event)
+        .map_err(|error| AppError::bad_request(error.to_string()))?;
+    let agent_id = submitted_payload.agent_id.to_string();
     ensure_body_pairing_request_id_present(&body.pairing_request_id)?;
 
-    enforce_verification_method_binding(&body.verification_method, &agent_id)
+    enforce_verification_method_binding(&submitted_payload.verification_method, &agent_id)
         .map_err(AgentAuthRejection::into_app_error)?;
 
-    let public_key_value = serde_json::to_value(&body.public_key)
+    let public_key_value = serde_json::to_value(&submitted_payload.public_key)
         .map_err(|error| AppError::bad_request(format!("public_key invalid: {error}")))?;
     let public_key = arkret_signatures::agent::validate_agent_runtime_public_key(
-        &body.public_key,
-        &body.verification_method,
+        &submitted_payload.public_key,
+        &submitted_payload.verification_method,
     )
     .map_err(|error| AppError::bad_request(format!("public_key invalid: {error}")))?;
-
-    let pop = &body.proof_of_possession;
-    if pop.challenge != body.pairing_request_id {
-        return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
-    }
 
     // Final pairing idempotency is the controller-minted authorize Event id,
     // not the one-time pairing handle. Resolve an exact persisted retry before
@@ -168,7 +165,7 @@ pub async fn post_agent_key_pair(
             return Err(AppError::conflict("witness_disagreement").into());
         }
         let same_request = existing.agent_id == agent_id
-            && existing.verification_method == body.verification_method.as_str()
+            && existing.verification_method == submitted_payload.verification_method.as_str()
             && existing.public_key == public_key_value
             && existing.pairing_request_id == body.pairing_request_id.as_str()
             && existing.authorized_event_id == authorized_event_id
@@ -181,10 +178,7 @@ pub async fn post_agent_key_pair(
             .into());
         }
         idempotency_repo.cancel().await?;
-        let authorize_event_ref =
-            arkret_identifiers::EventId::new(existing.authorized_event_id.clone())
-                .map_err(|error| AppError::internal_box(Box::new(error)))?;
-        let (authoritative_view, authoritative_server) =
+        let (_authoritative_view, authoritative_server) =
             super::session_proof::fetch_authoritative_agent_view(
                 &http_client,
                 &arkret_config,
@@ -192,29 +186,7 @@ pub async fn post_agent_key_pair(
             )
             .await
             .map_err(AgentAuthRejection::into_app_error)?;
-        if existing.soland_fanout_state == AccountabilityGrantFanoutState::Delivered {
-            let activation_state = if authoritative_view.key_state.as_ref().is_some_and(
-                |key_state| {
-                    key_state.active_authorizations.iter().any(|authorization| {
-                        authorization.authorized_event_ref.as_str() == authorize_event_ref.as_str()
-                            && authorization.verification_method == stored_body.verification_method
-                    })
-                },
-            ) {
-                arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Active
-            } else {
-                arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::AwaitingAcceptedFrontier
-            };
-            return Ok(Json(
-                arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
-                    activation_state,
-                    authorize_event_ref,
-                    signing_key_binding: stored_body.signing_key_binding,
-                },
-            ));
-        }
-        let signing_key_binding = stored_body.signing_key_binding.clone();
-        commit_and_mark_agent_key_authorization(
+        let outcome = commit_and_mark_agent_key_authorization(
             depot,
             &existing.authorized_event_id,
             &existing.soland_fanout_idempotency_key,
@@ -223,13 +195,7 @@ pub async fn post_agent_key_pair(
             stored_body,
         )
         .await?;
-        return Ok(Json(
-            arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
-                activation_state: arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::AwaitingAcceptedFrontier,
-                authorize_event_ref,
-                signing_key_binding,
-            },
-        ));
+        return Ok(Json(outcome));
     }
     idempotency_repo.cancel().await?;
 
@@ -246,9 +212,29 @@ pub async fn post_agent_key_pair(
     .await
     .map_err(AgentAuthRejection::into_app_error)?;
 
-    // Expiry: a stale pairing PoP is rejected as `pairing_request_expired`.
-    // Audience MUST be this service (the coauth issuer audience or a configured
-    // station audience).
+    let authoritative_key_state = authoritative_view
+        .key_state
+        .as_ref()
+        .ok_or_else(|| AppError::forbidden("authoritative Agent key state is missing"))?;
+    let material = authoritative_key_state
+        .runtime_verifier_material
+        .as_ref()
+        .ok_or_else(|| {
+            AppError::forbidden("private authoritative runtime verifier material is missing")
+        })?;
+    let candidate = &material.candidate;
+    if material.approval_request_id != body.approval_request_id
+        || candidate.approval_request_id != body.approval_request_id
+        || candidate.pairing_request_id != body.pairing_request_id
+        || candidate.agent_id != submitted_payload.agent_id
+        || candidate.verification_method != submitted_payload.verification_method
+        || candidate.public_key != submitted_payload.public_key
+        || candidate.runtime_attestation != submitted_payload.runtime_attestation
+        || material.proof_verified_at > now
+    {
+        return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
+    }
+    let pop = &material.proof_of_possession;
     if !is_allowed_session_grant_audience(
         &url_builder,
         &arkret_config,
@@ -264,19 +250,20 @@ pub async fn post_agent_key_pair(
         arkret_models_collaboration::agent_operations::agent_runtime_key_binding_digest(
             &agent_id,
             &body.pairing_request_id,
-            &body.verification_method,
-            &body.public_key,
-            body.runtime_attestation.as_ref(),
+            &submitted_payload.verification_method,
+            &submitted_payload.public_key,
+            submitted_payload.runtime_attestation.as_ref(),
         )
         .map_err(|error| {
             AppError::bad_request(format!(
                 "proof_of_possession runtime binding failed: {error}"
             ))
         })?;
-    let authoritative_key_state = authoritative_view
-        .key_state
-        .as_ref()
-        .ok_or_else(|| AppError::forbidden("authoritative Agent key state is missing"))?;
+    if candidate.runtime_key_binding_digest != expected_binding
+        || pop.runtime_key_binding_digest != expected_binding
+    {
+        return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
+    }
     let pairing_code = authoritative_key_state
         .pairing_code
         .as_deref()
@@ -288,12 +275,12 @@ pub async fn post_agent_key_pair(
         .validate_shape(
             &agent_id,
             &body.pairing_request_id,
-            &body.verification_method,
-            &body.public_key,
+            &submitted_payload.verification_method,
+            &submitted_payload.public_key,
             &expected_binding,
             pairing_code,
             pairing_expires_at,
-            now,
+            material.proof_verified_at,
         )
         .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
     let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(&public_key.raw_public_key)
@@ -302,24 +289,67 @@ pub async fn post_agent_key_pair(
         .ok()
         .and_then(|bytes| ed25519_dalek::Signature::from_slice(&bytes).ok())
         .ok_or_else(|| AgentAuthRejection::ProofInvalid.into_app_error())?;
-    use ed25519_dalek::Verifier as _;
     verifying_key
-        .verify(&transcript, &signature)
+        .verify_strict(&transcript, &signature)
         .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
 
     let authorize_event = validate_controller_authorize_event(
         &body.authorize_event.event,
         agent_id.as_str(),
-        &body.verification_method,
-        &body.public_key,
-        &body.signing_key_binding,
+        &submitted_payload.verification_method,
+        &submitted_payload.public_key,
         &body.pairing_request_id,
         pop.audience_id.as_str(),
         authoritative_key_state,
         now,
     )?;
-    // Everything above is a structural check over untrusted bytes. The two
-    // controller-signed evidences are only believed after their signatures
+    let expected_approval =
+        arkret_models_collaboration::agent_operations::agent_key_pairing_request_binding_digest(
+            "ak.gate.account.command.pair_agent_key.v1",
+            &authoritative_key_state.controller_account_id.principal_id,
+            &agent_id,
+            &body.pairing_request_id,
+            &body.approval_request_id,
+            pairing_expires_at,
+            &pop.audience_id,
+            &expected_binding,
+        )
+        .map_err(|error| AppError::bad_request(error.to_string()))?;
+    if authorize_event
+        .payload
+        .approval_evidence
+        .request_canonical_digest
+        .as_ref()
+        != Some(&expected_approval)
+    {
+        return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
+    }
+    let disclosure = &body.requested_scope_disclosure;
+    disclosure
+        .validate()
+        .map_err(|error| AppError::bad_request(error.to_string()))?;
+    if disclosure.agent_id != agent_id
+        || disclosure.controller_principal_id
+            != authoritative_key_state.controller_account_id.principal_id
+        || disclosure.requested_scope != authoritative_key_state.requested_scope
+        || disclosure.verifier_id != pop.audience_id
+        || disclosure.audience.as_str() != "ak.gate.account.command.pair_agent_key.v1"
+        || disclosure.request_id.as_str()
+            != format!(
+                "ak:request:{}",
+                body.pairing_request_id
+                    .as_str()
+                    .strip_prefix("agent_pairing_request:")
+                    .unwrap_or("")
+            )
+        || now < disclosure.issued_at
+        || now > disclosure.expires_at
+        || disclosure.challenge.as_str() != body.pairing_request_id.as_str()
+    {
+        return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
+    }
+    // Everything above is a structural check over untrusted bytes. The
+    // controller-authored Event is only believed after its signatures
     // verify against key material this service resolved for itself.
     let controller_verification_methods = body
         .authorize_event
@@ -328,12 +358,12 @@ pub async fn post_agent_key_pair(
         .iter()
         .filter_map(arkret_wire::EventProof::as_producer)
         .map(|proof| proof.verification_method.as_str())
-        .chain(std::iter::once(
-            body.signing_key_binding
-                .controller_proof
-                .verification_method
-                .as_str(),
-        ))
+        .chain(
+            disclosure
+                .proofs
+                .iter()
+                .map(|proof| proof.verification_method.as_str()),
+        )
         .collect::<Vec<_>>();
     let controller_keys = resolve_controller_signing_keys(
         depot,
@@ -342,14 +372,28 @@ pub async fn post_agent_key_pair(
         now,
     )
     .await?;
-    verify_controller_pairing_evidence(
-        &body.authorize_event.event,
-        &body.signing_key_binding,
-        &authorize_event.payload,
-        &body.verification_method,
-        authoritative_key_state,
-        &controller_keys,
-    )?;
+    verify_controller_authorize_event_proofs(&body.authorize_event.event, &controller_keys)?;
+    for proof in &disclosure.proofs {
+        if proof.created_at < disclosure.issued_at || proof.created_at > disclosure.expires_at {
+            return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
+        }
+        let transcript = disclosure
+            .canonical_proof_binding_bytes(proof)
+            .map_err(|error| AppError::bad_request(error.to_string()))?;
+        let parts = arkret_signatures::proof::validate_ed25519_detached_jws_shape(&proof.jws)
+            .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
+        let signing_input = format!(
+            "{}.{}",
+            parts[0],
+            Base64UrlUnpadded::encode_string(&transcript)
+        );
+        arkret_signatures::proof::verify_ed25519_raw_transcript_signature(
+            signing_input.as_bytes(),
+            parts[2],
+            &controller_keys.material(proof.verification_method.as_str())?,
+        )
+        .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
+    }
     super::session_proof::validate_agent_runtime_key_scope_layers(
         &authoritative_key_state.requested_scope.actions,
         &authorize_event.payload.agent_key_scope.actions,
@@ -384,8 +428,6 @@ pub async fn post_agent_key_pair(
         .list_active_for_agent(agent_id.as_str())
         .await?;
     let service_id = owning_station_id_for(&arkret_config);
-    let outcome_event_id = arkret_identifiers::EventId::new(authorized_event_id.clone())
-        .map_err(|err| AppError::internal_box(Box::new(err)))?;
 
     let raw_payload_digest = request_digest;
     let fanout_payload =
@@ -402,7 +444,7 @@ pub async fn post_agent_key_pair(
                 authorized_event_id: authorized_event_id.clone(),
                 agent_id: agent_id.to_string(),
                 key_id: key_id.clone(),
-                verification_method: body.verification_method.to_string(),
+                verification_method: submitted_payload.verification_method.to_string(),
                 public_key: public_key_value.clone(),
                 accountable_principal_id: arkret_identifiers::DidCoreId::new(
                     authorize_event.controller_principal_id.clone(),
@@ -448,7 +490,7 @@ pub async fn post_agent_key_pair(
         "authorized_event_id": &authorized_event_id,
         "agent_id": &agent_id,
         "controller_principal_id": &authorize_event.controller_principal_id,
-        "verification_method": &body.verification_method,
+        "verification_method": &submitted_payload.verification_method,
         "audience_id": &pop.audience_id,
         "issued_at": issued_at,
         "expires_at": expires_at,
@@ -505,8 +547,7 @@ pub async fn post_agent_key_pair(
         .await?;
     repo.save().await?;
 
-    let signing_key_binding = body.signing_key_binding.clone();
-    commit_and_mark_agent_key_authorization(
+    let outcome = commit_and_mark_agent_key_authorization(
         depot,
         &authorized_event_id,
         &idempotency_key,
@@ -516,13 +557,7 @@ pub async fn post_agent_key_pair(
     )
     .await?;
 
-    Ok(Json(
-        arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
-            activation_state: arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::AwaitingAcceptedFrontier,
-            authorize_event_ref: outcome_event_id,
-            signing_key_binding,
-        },
-    ))
+    Ok(Json(outcome))
 }
 
 /// The controller-signed authorize Event after every business-field check.
@@ -542,7 +577,6 @@ fn validate_controller_authorize_event(
     agent_id: &str,
     verification_method: &str,
     runtime_public_key: &arkret_models_collaboration::governance::agent_artifacts::PublicKey,
-    signing_key_binding: &arkret_models_identity::agent_signer_evidence::AgentSigningKeyBinding,
     pairing_request_id: &str,
     audience: &str,
     authoritative_key_state: &arkret_models_collaboration::agent_operations::KeyState,
@@ -600,6 +634,7 @@ fn validate_controller_authorize_event(
         ));
     }
     ensure_authorize_event_has_controller_signature(event, controller_principal_id)?;
+    validate_authorize_event_supersedes(&payload, authoritative_key_state)?;
 
     if payload.agent_id.as_str() != agent_id {
         return Err(AppError::bad_request(
@@ -624,34 +659,14 @@ fn validate_controller_authorize_event(
     }
     let verification_method =
         arkret_wire::DidUrl::new(verification_method.to_owned()).map_err(AppError::bad_request)?;
-    let validated_key_material =
-        arkret_signatures::agent_evidence::validate_agent_pairing_key_material(
-            runtime_public_key,
-            &verification_method,
-            signing_key_binding,
-        )
-        .map_err(|reason| AppError::bad_request(reason.as_str()))?;
-    if payload.public_key_digest != validated_key_material.authorization_digest {
+    arkret_signatures::agent::validate_agent_runtime_public_key(
+        runtime_public_key,
+        &verification_method,
+    )
+    .map_err(|error| AppError::bad_request(error.to_string()))?;
+    if payload.public_key != *runtime_public_key {
         return Err(AppError::bad_request(
-            "authorize_event.event.payload.public_key_digest must bind the raw signing key",
-        ));
-    }
-    let actual_binding_digest =
-        arkret_signatures::agent_evidence::agent_signing_key_binding_digest(signing_key_binding)
-            .map_err(|reason| AppError::bad_request(reason.as_str()))?;
-    if payload.signing_key_binding_digest != actual_binding_digest {
-        return Err(AppError::bad_request(
-            "authorize_event.event.payload.signing_key_binding_digest must bind signing_key_binding",
-        ));
-    }
-    if signing_key_binding.agent_id != expected_agent_id
-        || signing_key_binding.verification_method != verification_method
-        || signing_key_binding.agent_key_authorize_event_id.as_str() != event.event_id.as_str()
-        || signing_key_binding.public_key_digest != validated_key_material.authorization_digest
-        || signing_key_binding.controller_principal_id.as_str() != controller_principal_id
-    {
-        return Err(AppError::bad_request(
-            "signing_key_binding does not match the pairing authorization",
+            "authorize Event key differs from the frozen candidate",
         ));
     }
     if !payload
@@ -663,12 +678,6 @@ fn validate_controller_authorize_event(
             "authorize_event.event.payload.audience must include proof_of_possession.audience",
         ));
     }
-    if signing_key_binding.agent_key_id.as_str() != payload.key_id.as_str() {
-        return Err(AppError::bad_request(
-            "signing_key_binding.agent_key_id must match authorize_event.event.payload.key_id",
-        ));
-    }
-    validate_authorize_event_supersedes(&payload, authoritative_key_state)?;
     if payload.agent_key_scope.actions.is_empty()
         || payload
             .agent_key_scope
@@ -689,13 +698,6 @@ fn validate_controller_authorize_event(
                 "authorize_event.event.payload.expires_at must be after issued_at",
             ));
         }
-    }
-    if signing_key_binding.issued_at != payload.issued_at
-        || signing_key_binding.expires_at != payload.expires_at
-    {
-        return Err(AppError::bad_request(
-            "signing_key_binding validity must match the authorize Event",
-        ));
     }
     let approval = &payload.approval_evidence;
     if approval.kind
@@ -839,9 +841,9 @@ fn ensure_authorize_event_has_controller_signature(
 /// Controller signing keys resolved by this service, never by the request.
 ///
 /// `key-management.md` §3.6.1 makes the Account Authority verify the controller
-/// Event proof and the `signing_key_binding` controller proof itself, and
+/// Event proof independently, and
 /// `service-http-binding.md` forbids trusting an upstream "already verified"
-/// boolean. Both requirements collapse to one rule: the request body may name
+/// boolean. The request body may name
 /// *which* published method signed, but it may never supply the key that
 /// checks the signature.
 struct ControllerSigningKeys {
@@ -1039,48 +1041,6 @@ fn controller_station_for_pairing<'a>(
         })
 }
 
-/// Verify both controller-signed pairing evidences.
-///
-/// Order matters: the Event proof runs first, so every `payload` value used
-/// below as an expectation for the binding is already controller-authenticated
-/// rather than merely well-shaped. Nothing is read back out of the binding —
-/// the expectations come from the authoritative key state, the typed request
-/// fields and the content-bound Event id.
-fn verify_controller_pairing_evidence(
-    event: &arkret_wire::Event,
-    signing_key_binding: &arkret_models_identity::agent_signer_evidence::AgentSigningKeyBinding,
-    payload: &AgentKeyAuthorizePayload,
-    verification_method: &arkret_wire::DidUrl,
-    authoritative_key_state: &arkret_models_collaboration::agent_operations::KeyState,
-    controller_keys: &ControllerSigningKeys,
-) -> Result<(), AppError> {
-    verify_controller_authorize_event_proofs(event, controller_keys)?;
-    arkret_signatures::agent_evidence::verify_agent_signing_key_binding(
-        signing_key_binding,
-        &authoritative_key_state.agent_id,
-        &payload.key_id,
-        &authoritative_key_state.controller_account_id.principal_id,
-        verification_method,
-        &event.event_id,
-        &payload.public_key_digest,
-        &payload.signing_key_binding_digest,
-        &controller_keys.material(
-            signing_key_binding
-                .controller_proof
-                .verification_method
-                .as_str(),
-        )?,
-    )
-    .map_err(|reason| {
-        tracing::debug!(
-            reason = reason.as_str(),
-            "Agent signing key binding rejected"
-        );
-        AgentAuthRejection::ProofInvalid.into_app_error()
-    })?;
-    Ok(())
-}
-
 /// Verify every producer proof on the controller-signed authorize Event.
 ///
 /// The signed transcript is the proof binding object, not the raw Event bytes;
@@ -1153,7 +1113,7 @@ async fn commit_and_mark_agent_key_authorization(
     request_digest: &str,
     station_name: &str,
     body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody,
-) -> Result<(), AppError> {
+) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome, AppError> {
     let superseded_event_refs = pairing_superseded_event_refs(&body)?;
     let http_client = depot.http_client()?;
     let arkret_config = depot.arkret_config()?;
@@ -1163,7 +1123,7 @@ async fn commit_and_mark_agent_key_authorization(
         station_name.to_owned(),
         body,
     );
-    crate::services::principal_facade::commit_agent_key_pair_to_station(
+    let outcome = crate::services::principal_facade::commit_agent_key_pair_to_station(
         &http_client,
         &arkret_config,
         &request,
@@ -1179,6 +1139,11 @@ async fn commit_and_mark_agent_key_authorization(
         )
     })?;
 
+    if outcome.activation_state
+        != arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Active
+    {
+        return Ok(outcome);
+    }
     let clock = make_clock();
     let mut repo = depot.repo().await?;
     let updated = repo
@@ -1197,7 +1162,7 @@ async fn commit_and_mark_agent_key_authorization(
         ));
     }
     repo.save().await?;
-    Ok(())
+    Ok(outcome)
 }
 
 fn pairing_superseded_event_refs(

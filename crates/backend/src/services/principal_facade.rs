@@ -107,7 +107,7 @@ pub(crate) async fn commit_agent_key_pair_to_station(
     http_client: &reqwest::Client,
     arkret_config: &ArkretConfig,
     request: &PrincipalAgentKeyPairCommitRequest,
-) -> Result<(), anyhow::Error> {
+) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome, anyhow::Error> {
     let server = arkret_config
         .stations
         .iter()
@@ -126,7 +126,7 @@ async fn submit_agent_key_pair_to_target(
     target: &StationConfig,
     bearer: &str,
     request: &PrincipalAgentKeyPairCommitRequest,
-) -> Result<(), anyhow::Error> {
+) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome, anyhow::Error> {
     let url = agent_key_pair_url(&target.endpoint);
     let body_bytes = arkret_canonical::canonical_json_bytes(request.body())
         .context("canonicalize Agent key-pair commit")?;
@@ -169,7 +169,7 @@ async fn submit_agent_key_pair_to_target(
         authorized_event_id = request.authorized_event_id(),
         "committed Agent key pair at authoritative Station"
     );
-    Ok(())
+    Ok(response)
 }
 
 fn agent_key_pair_url(endpoint: &Url) -> Url {
@@ -465,7 +465,8 @@ impl ConnectorAdmin for DbConnectorAdmin {
     async fn commit_agent_key_pair(
         &self,
         request: &PrincipalAgentKeyPairCommitRequest,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome, anyhow::Error>
+    {
         commit_agent_key_pair_to_station(&self.http_client, &self.arkret_config, request).await
     }
 

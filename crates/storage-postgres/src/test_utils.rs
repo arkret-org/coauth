@@ -302,7 +302,7 @@ pub fn account_binding_receipt(
     account_authority_did: &str,
     did: arkret_identifiers::Did,
     version_id: &str,
-    head_event_digest: arkret_identifiers::Hash,
+    _log_head_digest: arkret_identifiers::Hash,
 ) -> arkret_models_identity::AccountBindingReceipt {
     // The receipt's `principal_id` is the projection of its own `did`:
     // `AccountBindingReceipt::validate_shape` requires exactly that, so a
@@ -331,7 +331,6 @@ pub fn account_binding_receipt(
         operation_status: arkret_models_identity::IdentityCreationOperationStatus::Accepted,
         operation_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "3".repeat(64)))
             .unwrap(),
-        head_event_digest,
         issued_at,
         proof: arkret_wire::PayloadProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),

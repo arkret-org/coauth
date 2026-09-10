@@ -63,12 +63,19 @@ impl RunnableJob for AgentKeyPairCommitJob {
             self.station_name().to_owned(),
             self.body().clone(),
         );
-        state
+        let outcome = state
             .principal_connection()
             .commit_agent_key_pair(&request)
             .await
             .map_err(JobError::retry)?;
 
+        match outcome.activation_state {
+            arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::AwaitingAcceptedFrontier => {
+                return Err(JobError::retry(anyhow::anyhow!("Agent authorize Event awaits accepted frontier")));
+            }
+            arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Cancelled => return Ok(()),
+            arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Active => {}
+        }
         let superseded_event_ids = match self.body().authorize_event.event.payload.get("supersedes")
         {
             None => Vec::new(),

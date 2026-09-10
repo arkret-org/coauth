@@ -258,13 +258,15 @@ pub async fn account_register_endpoint(
                     format!("principal registry rejected identity creation: {error}"),
                 )
             })?;
-            validate_registry_outcome(&outcome, &body.did)?;
+            outcome
+                .validate_accepted_for_request(&identity_creation.did_operation)
+                .map_err(|error| failed_precondition(error.to_string()))?;
             let registration_did_evidence = identity_creation
                 .registration_did_evidence_draft
                 .clone()
                 .accept(outcome.accepted_at)
                 .map_err(|error| proof_invalid(error.to_string()))?;
-            let head = outcome.head_event_digest.as_ref().expect("validated head");
+            let head = &validated.log_head_digest;
             if !repo
                 .account_handoff()
                 .mark_did_published(&context, &outcome, head, &registration_did_evidence, now)
@@ -286,7 +288,9 @@ pub async fn account_register_endpoint(
                 context.lease.registry_receipt.clone().ok_or_else(|| {
                     failed_precondition("published identity has no registry receipt")
                 })?;
-            validate_registry_outcome(&outcome, &body.did)?;
+            outcome
+                .validate_accepted_for_request(&identity_creation.did_operation)
+                .map_err(|error| failed_precondition(error.to_string()))?;
             let registration_did_evidence = context
                 .lease
                 .registration_did_evidence
@@ -301,7 +305,7 @@ pub async fn account_register_endpoint(
                     "frozen registration DID evidence does not carry the registry acceptance time",
                 ));
             }
-            let head = outcome.head_event_digest.as_ref().expect("validated head");
+            let head = &validated.log_head_digest;
             if context.lease.state == IdentityCreationLeaseState::DidPublished {
                 let mut repo = depot.repo().await?;
                 if !repo
@@ -424,10 +428,7 @@ pub async fn account_register_endpoint(
         DidOperationSubmitStatus::Duplicate => IdentityCreationOperationStatus::Duplicate,
         _ => unreachable!("registry outcome validated above"),
     };
-    let head_event_digest = registry_outcome
-        .head_event_digest
-        .clone()
-        .expect("registry outcome head validated above");
+    let log_head_digest = validated.log_head_digest.clone();
     let mut receipt = AccountBindingReceipt {
         binding_state: AccountBindingState::Bound,
         binding_kind: AccountBindingKind::IdentityCreation,
@@ -441,7 +442,6 @@ pub async fn account_register_endpoint(
         lease_fence: Some(identity_creation.lease_fence),
         operation_status,
         operation_digest: validated.operation_digest,
-        head_event_digest: head_event_digest.clone(),
         issued_at: now,
         proof: arkret_wire::PayloadProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
@@ -489,7 +489,7 @@ pub async fn account_register_endpoint(
         let durable_binding = match existing_binding {
             Some(existing)
                 if existing.principal_id == body.principal_id
-                    && existing.key_log_head == head_event_digest =>
+                    && existing.key_log_head == log_head_digest =>
             {
                 existing
             }
@@ -508,7 +508,7 @@ pub async fn account_register_endpoint(
                         VerifiedPrincipalDidBindingInput {
                             audience_id: station.service_id.clone(),
                             principal_id: body.principal_id.clone(),
-                            key_log_head: head_event_digest,
+                            key_log_head: log_head_digest,
                             verified_did: body.did.clone(),
                             verified_version_id: identity_creation
                                 .control_proof
@@ -797,25 +797,6 @@ fn canonical_register_request_digest(
         arkret_canonical::canonical_sha256(body)
             .map_err(|_| schema_violation("account register body is not canonicalizable"))?,
     )?)
-}
-
-fn validate_registry_outcome(
-    outcome: &DidOperationSubmitOutcome,
-    did: &arkret_identifiers::Did,
-) -> Result<(), ArkretRouteError> {
-    if outcome.did.as_str() != did.as_str()
-        || !matches!(
-            outcome.status,
-            DidOperationSubmitStatus::Accepted | DidOperationSubmitStatus::Duplicate
-        )
-        || outcome.seq != Some(1)
-        || outcome.head_event_digest.is_none()
-    {
-        return Err(failed_precondition(
-            "identity registry outcome does not verify the exact accepted inception",
-        ));
-    }
-    Ok(())
 }
 
 struct StationTarget {

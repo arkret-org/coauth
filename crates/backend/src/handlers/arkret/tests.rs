@@ -1250,7 +1250,6 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
                     "resources": []
                 },
                 "pairing_request_id": "agent-pairing-request",
-                "pairing_mode": "bootstrap",
                 "pairing_expires_at": "2099-01-01T00:00:00.000Z",
                 "active_authorizations": []
             }

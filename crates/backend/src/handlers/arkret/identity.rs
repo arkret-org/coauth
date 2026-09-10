@@ -110,7 +110,6 @@ pub async fn identity_document(
 
     Ok(Json(IdentityDocumentViewOutcome(IdentityDocumentView {
         did_document: did_document_object(read.document)?,
-        head_event_digest: read.history_head,
         seq: None,
         receipts: Vec::new(),
     })))

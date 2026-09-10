@@ -308,9 +308,9 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
             let operation: arkret_models_identity::DidOperationSubmitRequestBody = request.body_json().unwrap();
             let validated = arkret_signatures::webvh::validate_principal_inception_operation(&operation).unwrap();
             ResponseTemplate::new(200).set_body_json(arkret_models_identity::DidOperationSubmitOutcome {
-                status: arkret_models_identity::DidOperationSubmitStatus::Accepted, did: operation.did,
+                status: arkret_models_identity::DidOperationSubmitStatus::Accepted, did: operation.did.clone(),
                 accepted_at: arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now()), seq: Some(1),
-                head_event_digest: Some(validated.log_head_digest), operation_ref: None, receipts: Vec::new(),
+                operation_ref: format!("{}?versionId={}", operation.did, validated.did_version_id), receipts: Vec::new(),
             })
         }).expect(1).mount(&peer).await;
     Mock::given(method("POST"))

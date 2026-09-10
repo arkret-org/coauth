@@ -621,8 +621,13 @@ fn validate_authoritative_agent_session_evidence(
     disclosure
         .validate()
         .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
-    if paired_request.agent_id.as_str() != authorization.agent_id
-        || paired_request.verification_method.as_str() != authorization.verification_method
+    let authorized_key =
+        arkret_models_identity::agent_signer_evidence::AgentAuthorizedSigningKey::from_event(
+            &paired_request.authorize_event.event,
+        )
+        .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
+    if authorized_key.agent_id.as_str() != authorization.agent_id
+        || authorized_key.verification_method.as_str() != authorization.verification_method
         || paired_request.authorize_event.event.event_id.as_str()
             != authorization.authorized_event_id
         || disclosure.agent_id.as_str() != authorization.agent_id
@@ -1471,7 +1476,6 @@ mod tests {
                         "resources": []
                     },
                     "pairing_request_id": pairing_request_id,
-                    "pairing_mode": "bootstrap",
                     "pairing_expires_at": "2099-01-01T00:00:00.000Z",
                     "active_authorizations": []
                 }

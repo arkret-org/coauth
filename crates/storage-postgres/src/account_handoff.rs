@@ -172,7 +172,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let query = format!(
             "SELECT local_account_id, audience_id, lease_id, holder_jkt, fence, expires_at, \
              reserved_principal_id, reserved_operation_digest, did_operation, state, \
-             registry_receipt, head_event_digest, registration_did_evidence, pcr_genesis_request_digest, \
+             registry_receipt, log_head_digest, registration_did_evidence, pcr_genesis_request_digest, \
              pcr_genesis_receipt, binding_receipt, register_handoff_grant_id, \
              register_challenge_id, register_request_digest, register_outcome, created_at, updated_at \
              FROM identity_creation_leases WHERE local_account_id = $1 AND audience_id = $2{suffix}"
@@ -846,7 +846,7 @@ struct LeaseRow {
     #[diesel(sql_type = Nullable<Jsonb>)]
     registry_receipt: Option<serde_json::Value>,
     #[diesel(sql_type = Nullable<Text>)]
-    head_event_digest: Option<String>,
+    log_head_digest: Option<String>,
     #[diesel(sql_type = Nullable<Jsonb>)]
     registration_did_evidence: Option<serde_json::Value>,
     #[diesel(sql_type = Nullable<Text>)]
@@ -922,8 +922,8 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
             .map(serde_json::from_value)
             .transpose()
             .map_err(|_| DatabaseError::invalid_operation())?,
-        head_event_digest: row
-            .head_event_digest
+        log_head_digest: row
+            .log_head_digest
             .map(arkret_identifiers::Hash::new)
             .transpose()?,
         registration_did_evidence: row
@@ -2658,7 +2658,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         &mut self,
         context: &IdentityCreationRegistrationContext,
         registry_receipt: &arkret_models_identity::DidOperationSubmitOutcome,
-        head_event_digest: &arkret_identifiers::Hash,
+        log_head_digest: &arkret_identifiers::Hash,
         registration_did_evidence: &arkret_wire::RegistrationDidEvidence,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error> {
@@ -2742,13 +2742,13 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let registry_receipt = serde_json::to_value(registry_receipt)?;
         let updated = diesel::sql_query(
             "UPDATE identity_creation_leases SET state = 'did_published', registry_receipt = $1, \
-             head_event_digest = $2, registration_did_evidence = $3, updated_at = $4 \
+             log_head_digest = $2, registration_did_evidence = $3, updated_at = $4 \
              WHERE local_account_id = $5 AND audience_id = $6 AND lease_id = $7 AND fence = $8 \
              AND holder_jkt = $9 AND reserved_operation_digest = $10 \
              AND state IN ('reserved', 'did_published')",
         )
         .bind::<Jsonb, _>(registry_receipt)
-        .bind::<Text, _>(head_event_digest.as_str())
+        .bind::<Text, _>(log_head_digest.as_str())
         .bind::<Jsonb, _>(serde_json::to_value(registration_did_evidence)?)
         .bind::<Timestamptz, _>(now)
         .bind::<SqlUuid, _>(Uuid::from(context.grant.local_account_id))
@@ -2863,7 +2863,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         if binding_receipt.identity_creation_lease_id.as_deref() != Some(lease.lease_id.as_str())
             || binding_receipt.lease_fence != Some(lease.fence)
             || binding_receipt.operation_digest != context.challenge.operation_digest
-            || lease.head_event_digest.as_ref() != Some(&binding_receipt.head_event_digest)
+            || lease.log_head_digest.as_ref() != Some(&context.challenge.log_head_digest)
         {
             return Ok(false);
         }

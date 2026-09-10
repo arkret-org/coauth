@@ -199,7 +199,7 @@ repository_impl! {
             &mut self,
             context: &IdentityCreationRegistrationContext,
             registry_receipt: &arkret_models_identity::DidOperationSubmitOutcome,
-            head_event_digest: &arkret_identifiers::Hash,
+            log_head_digest: &arkret_identifiers::Hash,
             registration_did_evidence: &arkret_wire::RegistrationDidEvidence,
             now: DateTime<Utc>,
         ) -> Result<bool, Self::Error>;
