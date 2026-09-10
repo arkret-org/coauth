@@ -584,11 +584,16 @@ fn validate_grant_material(
     let bound_device_id = if let Some(binding) = preimage.device_binding.as_ref() {
         Some(binding.device_id.as_str())
     } else {
-        Some(match &preimage.holder_binding {
-            SessionGrantHolderBinding::HumanDevice { device_binding } => device_binding.as_str(),
-            SessionGrantHolderBinding::RecoveryCandidateDevice { device_id } => device_id.as_str(),
-            SessionGrantHolderBinding::AgentRuntime { device_id, .. } => device_id.as_str(),
-        })
+        match &preimage.holder_binding {
+            SessionGrantHolderBinding::HumanDevice { device_binding } => {
+                Some(device_binding.as_str())
+            }
+            SessionGrantHolderBinding::RecoveryCandidateDevice { device_id } => {
+                Some(device_id.as_str())
+            }
+            SessionGrantHolderBinding::AgentRuntime { device_id, .. } => Some(device_id.as_str()),
+            SessionGrantHolderBinding::MinimalMetadataPairwise { .. } => None,
+        }
     };
     if grant.device_id != bound_device_id {
         return Err(DatabaseError::invalid_operation());
