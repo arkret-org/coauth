@@ -20,7 +20,7 @@
    `/_arkret/describe` 公布了协调后的新值；coauth 没有独立 role-local Describe。
 3. 滚动重启其余副本。
 4. 通过设备恢复流程重新签发 reset 证明。受影响的证明族
-   包括 `principal_signing`、`recovery_unlock`、
+   包括 `did_root`、`recovery_unlock`、
    `device_quorum` 与 `trusted_recovery_service`。
 5. 在新证明可用之后再完成 root-anchored 设备 re-anchor。
 
