@@ -125,7 +125,7 @@ async fn execute_command(
         .with_writer(writer)
         .with_ansi(use_ansi);
     let default_filter = if coauth_backend::error::development_mode_from_env() {
-        "debug"
+        "info,coauth_backend=debug"
     } else {
         "info"
     };
