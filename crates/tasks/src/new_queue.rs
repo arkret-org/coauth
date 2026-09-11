@@ -124,31 +124,53 @@ impl QueueWorker {
         self
     }
 
-    /// Run the worker until the cancellation token fires. Logs errors and
-    /// returns.
+    /// Run the worker until the cancellation token fires.
+    ///
+    /// Initialization errors remain fatal, but an established worker treats
+    /// database failures from an individual tick as transient. Dropping the
+    /// worker also drops its cancellation guard, which shuts down the entire
+    /// service, so a single exhausted pool checkout must not end this future.
     pub(crate) async fn run(mut self) {
-        if let Err(e) = self.run_inner().await {
+        if let Err(e) = self.setup_schedules().await {
             tracing::error!(
                 error = &e as &dyn std::error::Error,
-                "Failed to run new queue"
+                "Failed to initialize new queue"
             );
+            return;
         }
-    }
 
-    async fn run_inner(&mut self) -> Result<(), QueueRunnerError> {
-        self.setup_schedules().await?;
-
+        let mut consecutive_failures = 0_u32;
         loop {
             if self.cancellation_token.is_cancelled() {
                 break;
             }
 
-            self.run_loop().await?;
+            match self.run_loop().await {
+                Ok(()) => consecutive_failures = 0,
+                Err(error) => {
+                    consecutive_failures = consecutive_failures.saturating_add(1);
+                    let retry_delay = runtime_retry_delay(consecutive_failures);
+                    tracing::warn!(
+                        error = &error as &dyn std::error::Error,
+                        consecutive_failures,
+                        retry_delay_ms = retry_delay.as_millis(),
+                        "Queue tick failed, retrying"
+                    );
+
+                    tokio::select! {
+                        () = self.cancellation_token.cancelled() => break,
+                        () = tokio::time::sleep(retry_delay) => {}
+                    }
+                }
+            }
         }
 
-        self.shutdown().await?;
-
-        Ok(())
+        if let Err(error) = self.shutdown().await {
+            tracing::error!(
+                error = &error as &dyn std::error::Error,
+                "Failed to shut down new queue cleanly"
+            );
+        }
     }
 
     /// Ensure all schedule names are present in the `queue_schedules` table.
@@ -268,5 +290,24 @@ impl QueueWorker {
             .ok_or(QueueRunnerError::NotLeader)?;
 
         leader::run_leader_duties(&self.state, &self.schedules).await
+    }
+}
+
+fn runtime_retry_delay(consecutive_failures: u32) -> std::time::Duration {
+    const MAX_RETRY_SECONDS: u64 = 30;
+    let exponent = consecutive_failures.saturating_sub(1).min(5);
+    std::time::Duration::from_secs((1_u64 << exponent).min(MAX_RETRY_SECONDS))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::runtime_retry_delay;
+
+    #[test]
+    fn runtime_retry_delay_backs_off_and_caps() {
+        let seconds = (1..=8)
+            .map(|attempt| runtime_retry_delay(attempt).as_secs())
+            .collect::<Vec<_>>();
+        assert_eq!(seconds, vec![1, 2, 4, 8, 16, 30, 30, 30]);
     }
 }
