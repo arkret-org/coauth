@@ -9,10 +9,10 @@ use coauth_data::{
     IdentityAbandonmentChallengeInput, IdentityAbandonmentChallengeIssue,
     IdentityAbandonmentChallengeRecord, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
     IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityCreationBindingCommit,
-    IdentityCreationRegisterReplay, IdentityCreationRegistrationAdmission,
-    IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
-    NewControllerGateAttestationIssuance, PublishedDidRegisterCommit, PublishedDidRegisterReplay,
-    Ulid,
+    IdentityCreationRegisterReplay, IdentityCreationRegisterReserve,
+    IdentityCreationRegistrationAdmission, IdentityCreationRegistrationContext,
+    NewAccountHandoffCreationAttempt, NewControllerGateAttestationIssuance,
+    PublishedDidRegisterCommit, PublishedDidRegisterReplay, Ulid,
 };
 
 use crate::repository_impl;
@@ -193,6 +193,16 @@ repository_impl! {
             challenge_id: &str,
             request_digest: &arkret_identifiers::Hash,
         ) -> Result<IdentityCreationRegisterReplay, Self::Error>;
+
+        /// Freeze the exact complete registration request before its first
+        /// external side effect. Exact retries may resume after challenge
+        /// expiry; different bytes can never reuse this dispatch fence.
+        async fn reserve_registration_dispatch(
+            &mut self,
+            context: &IdentityCreationRegistrationContext,
+            request_digest: &arkret_identifiers::Hash,
+            now: DateTime<Utc>,
+        ) -> Result<IdentityCreationRegisterReserve, Self::Error>;
 
         /// Record that the reserved inception operation has been durably published.
         async fn mark_did_published(

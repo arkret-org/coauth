@@ -179,6 +179,22 @@ pub async fn account_register_endpoint(
             ));
         }
     };
+    if let Some(reservation) = context.lease.register_reservation.as_ref() {
+        if reservation.handoff_grant_id != grant.id
+            || reservation.challenge_id != identity_creation.control_proof.challenge_id
+            || reservation.request_digest != request_digest
+        {
+            repo.cancel().await.ok();
+            return Err(duplicate_conflict(
+                "identity-creation dispatch is frozen to another request",
+            ));
+        }
+    } else if context.lease.state != IdentityCreationLeaseState::Reserved {
+        repo.cancel().await.ok();
+        return Err(failed_precondition(
+            "identity-creation saga has no durable register request fence",
+        ));
+    }
 
     identity_creation
         .validate()
@@ -236,14 +252,31 @@ pub async fn account_register_endpoint(
                     "identity creation execution authority expired before registry dispatch",
                 ));
             }
-            if context.challenge.expires_at <= dispatch_now {
-                return Err(super::account_handoff::identity_creation_error(
-                    arkret_wire::ReasonCode::IDENTITY_CREATION_CHALLENGE_EXPIRED,
-                    "identity binding challenge expired before registry dispatch",
-                ));
+            let dispatch_reservation = repo
+                .account_handoff()
+                .reserve_registration_dispatch(&context, &request_digest, dispatch_now)
+                .await?;
+            match dispatch_reservation {
+                coauth_data::IdentityCreationRegisterReserve::Reserved
+                | coauth_data::IdentityCreationRegisterReserve::Replay => {}
+                coauth_data::IdentityCreationRegisterReserve::DuplicateConflict => {
+                    repo.cancel().await.ok();
+                    return Err(duplicate_conflict(
+                        "identity-creation dispatch is frozen to another request",
+                    ));
+                }
+                coauth_data::IdentityCreationRegisterReserve::Stale => {
+                    repo.cancel().await.ok();
+                    return Err(failed_precondition(
+                        "identity creation lost its lease, challenge, or dispatch fence",
+                    ));
+                }
             }
-            // Keep the admission transaction's account/grant/lease locks until
-            // the first external effect and its durable checkpoint complete.
+            // Commit the exact request fence before the first external effect.
+            // A response-loss retry can now distinguish recovery from a new,
+            // expired first attempt without holding a database transaction
+            // open across network I/O.
+            repo.save().await?;
             let outcome = soland_webvh::submit_did_operation(
                 &depot.http_client()?,
                 &station.endpoint,
@@ -267,6 +300,7 @@ pub async fn account_register_endpoint(
                 .accept(outcome.accepted_at)
                 .map_err(|error| proof_invalid(error.to_string()))?;
             let head = &validated.log_head_digest;
+            let mut repo = depot.repo().await?;
             if !repo
                 .account_handoff()
                 .mark_did_published(&context, &outcome, head, &registration_did_evidence, now)

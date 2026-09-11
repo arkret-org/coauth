@@ -139,6 +139,7 @@ pub use self::account_handoff::{
     IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
     IdentityBindingChallengeIssue, IdentityBindingChallengeRecord, IdentityCreationBindingCommit,
     IdentityCreationLeaseRecord, IdentityCreationLeaseRiskDecision, IdentityCreationRegisterReplay,
+    IdentityCreationRegisterReservation, IdentityCreationRegisterReserve,
     IdentityCreationRegistrationAdmission, IdentityCreationRegistrationContext,
     NewAccountHandoffCreationAttempt, NewControllerGateAttestationIssuance,
     PublishedDidRegisterCommit, PublishedDidRegisterReplay,

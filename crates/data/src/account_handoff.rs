@@ -240,6 +240,7 @@ pub struct IdentityCreationLeaseRecord {
     pub pcr_genesis_receipt:
         Option<arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome>,
     pub binding_receipt: Option<arkret_models_identity::AccountBindingReceipt>,
+    pub register_reservation: Option<IdentityCreationRegisterReservation>,
     pub register_ledger: Option<IdentityCreationRegisterLedger>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -257,12 +258,27 @@ impl IdentityCreationLeaseRecord {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IdentityCreationRegisterReservation {
+    pub handoff_grant_id: Ulid,
+    pub challenge_id: String,
+    pub request_digest: arkret_identifiers::Hash,
+}
+
 #[derive(Clone, Debug)]
 pub struct IdentityCreationRegisterLedger {
     pub handoff_grant_id: Ulid,
     pub challenge_id: String,
     pub request_digest: arkret_identifiers::Hash,
     pub outcome: arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IdentityCreationRegisterReserve {
+    Reserved,
+    Replay,
+    DuplicateConflict,
+    Stale,
 }
 
 #[derive(Clone, Debug)]

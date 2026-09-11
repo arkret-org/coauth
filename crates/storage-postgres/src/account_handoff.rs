@@ -13,7 +13,8 @@ use coauth_data::account_handoff::{
     IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
     IdentityBindingChallengeIssue, IdentityBindingChallengeRecord, IdentityCreationBindingCommit,
     IdentityCreationLeaseRecord, IdentityCreationLeaseRiskDecision, IdentityCreationRegisterLedger,
-    IdentityCreationRegisterReplay, IdentityCreationRegistrationAdmission,
+    IdentityCreationRegisterReplay, IdentityCreationRegisterReservation,
+    IdentityCreationRegisterReserve, IdentityCreationRegistrationAdmission,
     IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
     NewControllerGateAttestationIssuance, PublishedDidRegisterCommit, PublishedDidRegisterReplay,
 };
@@ -890,20 +891,36 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
         }
         _ => return Err(DatabaseError::invalid_operation()),
     };
-    let register_ledger = match (
+    let (register_reservation, register_ledger) = match (
         row.register_handoff_grant_id,
         row.register_challenge_id,
         row.register_request_digest,
         row.register_outcome,
     ) {
-        (None, None, None, None) => None,
-        (Some(handoff_grant_id), Some(challenge_id), Some(request_digest), Some(outcome)) => {
-            Some(IdentityCreationRegisterLedger {
+        (None, None, None, None) => (None, None),
+        (Some(handoff_grant_id), Some(challenge_id), Some(request_digest), None) => {
+            let reservation = IdentityCreationRegisterReservation {
                 handoff_grant_id: Ulid::from(handoff_grant_id),
                 challenge_id,
                 request_digest: arkret_identifiers::Hash::new(request_digest)?,
-                outcome: serde_json::from_value(outcome)?,
-            })
+            };
+            (Some(reservation), None)
+        }
+        (Some(handoff_grant_id), Some(challenge_id), Some(request_digest), Some(outcome)) => {
+            let reservation = IdentityCreationRegisterReservation {
+                handoff_grant_id: Ulid::from(handoff_grant_id),
+                challenge_id: challenge_id.clone(),
+                request_digest: arkret_identifiers::Hash::new(request_digest.clone())?,
+            };
+            (
+                Some(reservation),
+                Some(IdentityCreationRegisterLedger {
+                    handoff_grant_id: Ulid::from(handoff_grant_id),
+                    challenge_id,
+                    request_digest: arkret_identifiers::Hash::new(request_digest)?,
+                    outcome: serde_json::from_value(outcome)?,
+                }),
+            )
         }
         _ => return Err(DatabaseError::invalid_operation()),
     };
@@ -942,6 +959,7 @@ fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, Database
             .binding_receipt
             .map(serde_json::from_value)
             .transpose()?,
+        register_reservation,
         register_ledger,
         created_at: row.created_at,
         updated_at: row.updated_at,
@@ -2603,7 +2621,14 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
                 IdentityCreationRegistrationAdmission::ChallengeMismatch
             });
         }
-        if challenge.expires_at <= now {
+        let dispatch_is_frozen = lease
+            .register_reservation
+            .as_ref()
+            .is_some_and(|reservation| {
+                reservation.handoff_grant_id == grant.id
+                    && reservation.challenge_id == challenge.challenge_id
+            });
+        if challenge.expires_at <= now && !dispatch_is_frozen {
             return Ok(IdentityCreationRegistrationAdmission::ChallengeExpired);
         }
         Ok(IdentityCreationRegistrationAdmission::Ready(Box::new(
@@ -2654,6 +2679,85 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         )))
     }
 
+    async fn reserve_registration_dispatch(
+        &mut self,
+        context: &IdentityCreationRegistrationContext,
+        request_digest: &arkret_identifiers::Hash,
+        now: DateTime<Utc>,
+    ) -> Result<IdentityCreationRegisterReserve, Self::Error> {
+        let Some(lease) = self
+            .lease_for_account(
+                Uuid::from(context.grant.local_account_id),
+                &context.grant.audience_id,
+                true,
+            )
+            .await?
+        else {
+            return Ok(IdentityCreationRegisterReserve::Stale);
+        };
+        if lease.lease_id != context.lease.lease_id
+            || lease.fence != context.lease.fence
+            || lease.holder_jkt != context.grant.cnf_jkt
+            || lease.reserved_identity.as_ref().is_none_or(|reserved| {
+                reserved.operation_digest != context.challenge.operation_digest
+            })
+        {
+            return Ok(IdentityCreationRegisterReserve::Stale);
+        }
+        let expected = IdentityCreationRegisterReservation {
+            handoff_grant_id: context.grant.id,
+            challenge_id: context.challenge.challenge_id.clone(),
+            request_digest: request_digest.clone(),
+        };
+        if let Some(existing) = lease.register_reservation.as_ref() {
+            return Ok(if existing == &expected {
+                IdentityCreationRegisterReserve::Replay
+            } else {
+                IdentityCreationRegisterReserve::DuplicateConflict
+            });
+        }
+        if lease.state != IdentityCreationLeaseState::Reserved {
+            return Ok(IdentityCreationRegisterReserve::Stale);
+        }
+        let Some(challenge) = self
+            .challenge_by_id(&context.challenge.challenge_id, true)
+            .await?
+        else {
+            return Ok(IdentityCreationRegisterReserve::Stale);
+        };
+        if !challenge_matches_context(&challenge, context)
+            || challenge.consumed_at.is_some()
+            || challenge.replaced_at.is_some()
+            || challenge.expires_at <= now
+        {
+            return Ok(IdentityCreationRegisterReserve::Stale);
+        }
+        let updated = diesel::sql_query(
+            "UPDATE identity_creation_leases SET register_handoff_grant_id = $1, \
+             register_challenge_id = $2, register_request_digest = $3, updated_at = $4 \
+             WHERE local_account_id = $5 AND audience_id = $6 AND lease_id = $7 AND fence = $8 \
+             AND holder_jkt = $9 AND state = 'reserved' \
+             AND register_handoff_grant_id IS NULL AND register_challenge_id IS NULL \
+             AND register_request_digest IS NULL AND register_outcome IS NULL",
+        )
+        .bind::<SqlUuid, _>(Uuid::from(context.grant.id))
+        .bind::<Text, _>(&context.challenge.challenge_id)
+        .bind::<Text, _>(request_digest.as_str())
+        .bind::<Timestamptz, _>(now)
+        .bind::<SqlUuid, _>(Uuid::from(context.grant.local_account_id))
+        .bind::<Text, _>(&context.grant.audience_id)
+        .bind::<Text, _>(&context.lease.lease_id)
+        .bind::<BigInt, _>(i64::try_from(context.lease.fence)?)
+        .bind::<Text, _>(&context.grant.cnf_jkt)
+        .execute(self.conn)
+        .await?;
+        Ok(if updated == 1 {
+            IdentityCreationRegisterReserve::Reserved
+        } else {
+            IdentityCreationRegisterReserve::Stale
+        })
+    }
+
     async fn mark_did_published(
         &mut self,
         context: &IdentityCreationRegistrationContext,
@@ -2698,9 +2802,26 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         };
         if !challenge_matches_context(&challenge, context)
             || challenge.replaced_at.is_some()
-            || challenge.expires_at <= now
+            || lease
+                .register_reservation
+                .as_ref()
+                .is_none_or(|reservation| {
+                    reservation.handoff_grant_id != context.grant.id
+                        || reservation.challenge_id != context.challenge.challenge_id
+                })
         {
             return Ok(false);
+        }
+        if lease.state == IdentityCreationLeaseState::DidPublished {
+            let stored = lease
+                .registry_receipt
+                .as_ref()
+                .and_then(|receipt| arkret_canonical::canonical_json_bytes(receipt).ok());
+            let received = arkret_canonical::canonical_json_bytes(registry_receipt).ok();
+            return Ok(challenge.consumed_at.is_some()
+                && lease.log_head_digest.as_ref() == Some(log_head_digest)
+                && stored.is_some()
+                && stored == received);
         }
         match (context.lease.state, lease.state) {
             (IdentityCreationLeaseState::Reserved, IdentityCreationLeaseState::Reserved) => {
@@ -2939,6 +3060,14 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             || lease.reserved_identity.as_ref().is_none_or(|reserved| {
                 reserved.operation_digest != context.challenge.operation_digest
             })
+            || lease
+                .register_reservation
+                .as_ref()
+                .is_none_or(|reservation| {
+                    reservation.handoff_grant_id != context.grant.id
+                        || reservation.challenge_id != context.challenge.challenge_id
+                        || reservation.request_digest != *request_digest
+                })
         {
             return Ok(IdentityCreationBindingCommit::Stale);
         }
@@ -2962,7 +3091,9 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
              register_request_digest = $3, register_outcome = $4, updated_at = $5 \
              WHERE local_account_id = $6 AND audience_id = $7 \
              AND lease_id = $8 AND fence = $9 AND holder_jkt = $10 \
-             AND reserved_operation_digest = $11 AND state = 'account_bound'",
+             AND reserved_operation_digest = $11 AND state = 'account_bound' \
+             AND register_handoff_grant_id = $1 AND register_challenge_id = $2 \
+             AND register_request_digest = $3 AND register_outcome IS NULL",
         )
         .bind::<SqlUuid, _>(Uuid::from(context.grant.id))
         .bind::<Text, _>(&context.challenge.challenge_id)

@@ -208,6 +208,9 @@ fn registration_device_gate_outcome(
 #[tokio::test]
 async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repeat_accepted_effects()
  {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
     setup();
@@ -303,23 +306,61 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
     );
     assert_eq!(table_count(&state, "identity_binding_challenges").await, 1);
     // Only current authentication changed. Keep the original challenge and proof bytes.
-    Mock::given(method("POST")).and(path("/_arkret/root/identity/submit-did-operation"))
-        .respond_with(|request: &wiremock::Request| {
-            let operation: arkret_models_identity::DidOperationSubmitRequestBody = request.body_json().unwrap();
-            let validated = arkret_signatures::webvh::validate_principal_inception_operation(&operation).unwrap();
-            ResponseTemplate::new(200).set_body_json(arkret_models_identity::DidOperationSubmitOutcome {
-                status: arkret_models_identity::DidOperationSubmitStatus::Accepted, did: operation.did.clone(),
-                accepted_at: arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now()), seq: Some(1),
-                operation_ref: format!("{}?versionId={}", operation.did, validated.did_version_id), receipts: Vec::new(),
-            })
-        }).expect(1).mount(&peer).await;
+    let registry_calls = Arc::new(AtomicUsize::new(0));
+    let registry_bodies = Arc::new(Mutex::new(Vec::<Vec<u8>>::new()));
+    let accepted_at = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
+    let registry_calls_for_mock = registry_calls.clone();
+    let registry_bodies_for_mock = registry_bodies.clone();
+    Mock::given(method("POST"))
+        .and(path("/_arkret/root/identity/submit-did-operation"))
+        .respond_with(move |request: &wiremock::Request| {
+            registry_bodies_for_mock
+                .lock()
+                .unwrap()
+                .push(request.body.clone());
+            if registry_calls_for_mock.fetch_add(1, Ordering::SeqCst) < 2 {
+                return ResponseTemplate::new(503);
+            }
+            let operation: arkret_models_identity::DidOperationSubmitRequestBody =
+                request.body_json().unwrap();
+            let validated =
+                arkret_signatures::webvh::validate_principal_inception_operation(&operation)
+                    .unwrap();
+            ResponseTemplate::new(200).set_body_json(
+                arkret_models_identity::DidOperationSubmitOutcome {
+                    status: arkret_models_identity::DidOperationSubmitStatus::Accepted,
+                    did: operation.did.clone(),
+                    accepted_at,
+                    seq: Some(1),
+                    operation_ref: format!(
+                        "{}?versionId={}",
+                        operation.did, validated.did_version_id
+                    ),
+                    receipts: Vec::new(),
+                },
+            )
+        })
+        .expect(3)
+        .mount(&peer)
+        .await;
+    let pcr_calls = Arc::new(AtomicUsize::new(0));
+    let pcr_bodies = Arc::new(Mutex::new(Vec::<Vec<u8>>::new()));
+    let pcr_calls_for_mock = pcr_calls.clone();
+    let pcr_bodies_for_mock = pcr_bodies.clone();
     Mock::given(method("POST"))
         .and(path("/_arkret/peer/principal-genesis"))
-        .respond_with(|request: &wiremock::Request| {
+        .respond_with(move |request: &wiremock::Request| {
+            pcr_bodies_for_mock
+                .lock()
+                .unwrap()
+                .push(request.body.clone());
+            if pcr_calls_for_mock.fetch_add(1, Ordering::SeqCst) < 2 {
+                return ResponseTemplate::new(503);
+            }
             let body = request.body_json().unwrap();
             ResponseTemplate::new(200).set_body_json(pcr_outcome(&body))
         })
-        .expect(1)
+        .expect(3)
         .mount(&peer)
         .await;
     let mut conn = state.repository_factory.pool().get().await.unwrap();
@@ -362,6 +403,80 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
         .execute(&mut conn)
         .await
         .unwrap();
+    diesel::sql_query(
+        "UPDATE identity_binding_challenges SET expires_at = issued_at + interval '1 microsecond'",
+    )
+    .execute(&mut conn)
+    .await
+    .unwrap();
+    drop(conn);
+    let expired_first_attempt = state
+        .request(authenticated_request(
+            REGISTER_PATH,
+            &reauthenticated.account_handoff_grant,
+            &signing,
+            &body,
+        ))
+        .await;
+    expired_first_attempt.assert_status(StatusCode::CONFLICT);
+    assert!(peer.received_requests().await.unwrap().is_empty());
+    let mut conn = state.repository_factory.pool().get().await.unwrap();
+    let recovery_expires_at = arkret_canonical::normalize_timestamp_canonical(
+        chrono::Utc::now() + chrono::Duration::seconds(3),
+    );
+    diesel::sql_query("UPDATE identity_binding_challenges SET expires_at = $1")
+        .bind::<diesel::sql_types::Timestamptz, _>(recovery_expires_at)
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    drop(conn);
+    let mut recovery_challenge = challenge.clone();
+    recovery_challenge.expires_at = recovery_expires_at;
+    let body = cotest_test_support::wire::identity_creation_register_request(serde_json::json!({
+        "challenge": recovery_challenge, "did_operation": fixture["did_operation"],
+        "pcr_genesis_unit": fixture["checkpoint"]["pcr_genesis_unit"],
+        "initial_session":fixture["checkpoint"]["initial_session"], "recovery_key":fixture["recovery_key"],
+    })).unwrap();
+    // The first registry call accepts the exact dispatch in the remote world,
+    // but its response is lost. Coauth must retain a durable request fence,
+    // remain resumable, and resend byte-identical operation bytes.
+    let uncertain = state
+        .request(authenticated_request(
+            REGISTER_PATH,
+            &reauthenticated.account_handoff_grant,
+            &signing,
+            &body,
+        ))
+        .await;
+    uncertain.assert_status(StatusCode::SERVICE_UNAVAILABLE);
+    if let Ok(wait) =
+        (recovery_expires_at - chrono::Utc::now() + chrono::Duration::milliseconds(100)).to_std()
+    {
+        tokio::time::sleep(wait).await;
+    }
+    // The exact registry replay succeeds, then the PCR receiver accepts while
+    // its response is lost. The durable phase remains did_published and the
+    // next attempt must replay the same PCR request without republishing DID.
+    let pcr_uncertain = state
+        .request(authenticated_request(
+            REGISTER_PATH,
+            &reauthenticated.account_handoff_grant,
+            &signing,
+            &body,
+        ))
+        .await;
+    assert!(!pcr_uncertain.status().is_success());
+    let mut conn = state.repository_factory.pool().get().await.unwrap();
+    #[derive(diesel::QueryableByName)]
+    struct Phase {
+        #[diesel(sql_type = diesel::sql_types::Text)]
+        state: String,
+    }
+    let phase = diesel::sql_query("SELECT state FROM identity_creation_leases")
+        .get_result::<Phase>(&mut conn)
+        .await
+        .unwrap();
+    assert_eq!(phase.state, "did_published");
     drop(conn);
     // Deliberately leave the subsequent account projection unavailable. Both
     // native identity effects must remain committed and never be reminted.
@@ -378,11 +493,6 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
         "fault after PCR acceptance must be observable"
     );
     let mut conn = state.repository_factory.pool().get().await.unwrap();
-    #[derive(diesel::QueryableByName)]
-    struct Phase {
-        #[diesel(sql_type = diesel::sql_types::Text)]
-        state: String,
-    }
     let phase = diesel::sql_query("SELECT state FROM identity_creation_leases")
         .get_result::<Phase>(&mut conn)
         .await
@@ -527,7 +637,17 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
     }
     assert_eq!(table_count(&state, "identity_binding_challenges").await, 1);
     assert_eq!(table_count(&state, "oauth_session_grants").await, 1);
-    assert_eq!(peer.received_requests().await.unwrap().len(), 5);
+    let registry_bodies = registry_bodies.lock().unwrap();
+    assert_eq!(registry_bodies.len(), 3);
+    assert_eq!(registry_bodies[0], registry_bodies[1]);
+    assert_eq!(registry_bodies[1], registry_bodies[2]);
+    drop(registry_bodies);
+    let pcr_bodies = pcr_bodies.lock().unwrap();
+    assert_eq!(pcr_bodies.len(), 3);
+    assert_eq!(pcr_bodies[0], pcr_bodies[1]);
+    assert_eq!(pcr_bodies[1], pcr_bodies[2]);
+    drop(pcr_bodies);
+    assert_eq!(peer.received_requests().await.unwrap().len(), 9);
     peer.verify().await;
 }
 
