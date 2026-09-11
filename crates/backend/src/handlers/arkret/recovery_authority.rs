@@ -137,12 +137,11 @@ pub async fn issue_recovery_completion_grant_endpoint(
             "terminal receipt account_id does not match the accepted AccountHandoff binding",
         ));
     }
-    verify_station_completion_signatures(
+    verify_station_completion_attestation(
         depot,
         &mut prerequisite_repo,
         &handoff.audience_id,
         &request,
-        &receipt,
     )
     .await?;
     let browser_session_id = handoff.browser_session_id.ok_or_else(|| {
@@ -504,7 +503,7 @@ fn validate_completion_evidence(
         || receipt.authorization_event_id != request.device_authorization_event_id
         || receipt.authorization_event_id != attestation.device_authorization_event_id
         || receipt_generation != request_generation
-        || receipt.completed_at != attestation.completed_at
+        || receipt.completed_at > attestation.completed_at
         || attestation.coordinator_id.as_str() != handoff.audience_id
     {
         return Err(failed_precondition(
@@ -566,21 +565,22 @@ fn account_status_reactivation_failed(
     )
 }
 
-async fn verify_station_completion_signatures(
+async fn verify_station_completion_attestation(
     depot: &Depot,
     repo: &mut coauth_data::BoxRepository,
     expected_station: &str,
     request: &IssueRecoveryCompletionGrantRequest,
-    receipt: &RecoveryReceipt,
 ) -> Result<(), ArkretRouteError> {
     let attestation = &request.completion_attestation;
-    if verification_method_did(attestation.auth_data.verification_method.as_str())
-        != expected_station
-        || verification_method_did(receipt.auth_data.verification_method.as_str())
-            != expected_station
-    {
+    let signer_did = arkret_identifiers::Did::new(verification_method_did(
+        attestation.auth_data.verification_method.as_str(),
+    ))
+    .map_err(|error| signature_invalid(error.to_string()))?;
+    let signer_core = arkret_identifiers::project_did_to_core_id(&signer_did)
+        .map_err(|error| signature_invalid(error.to_string()))?;
+    if signer_core.as_str() != expected_station {
         return Err(signature_invalid(
-            "recovery receipt and completion attestation must be signed by the handoff audience",
+            "recovery completion attestation must be signed by the handoff audience",
         ));
     }
     let config = depot.arkret_config()?;
@@ -602,7 +602,7 @@ async fn verify_station_completion_signatures(
         repo,
         depot.did_resolver_service()?.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),
-        expected_station,
+        signer_did.as_str(),
         arkret_identity::DidBindingPurpose::Recovery,
         crate::services::did_binding::high_risk_freshness(),
         crate::handlers::make_clock().now(),
@@ -621,15 +621,6 @@ async fn verify_station_completion_signatures(
             .map_err(|error| signature_invalid(error.to_string()))?,
         &attestation.auth_data.signature,
         "completion attestation",
-    )?;
-    verify_with_document_method(
-        &resolution.document,
-        receipt.auth_data.verification_method.as_str(),
-        &receipt
-            .signature_transcript_bytes()
-            .map_err(|error| signature_invalid(error.to_string()))?,
-        &receipt.auth_data.signature,
-        "terminal recovery receipt",
     )
 }
 
