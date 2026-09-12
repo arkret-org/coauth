@@ -14,9 +14,10 @@
 //! resolves the *issuer's own* effective capability under the Control Move's
 //! `seal_basis`. The issuer is the Event actor, so the grant has to be authored
 //! and signed by the administrator who holds that authority, from a client that
-//! custodies their key, and submitted through ordinary admission. An OAuth
-//! admin console holds no such key; bridging that gap here would make coauth a
-//! signing oracle for the control plane.
+//! custodies their key, submitted through the registered Event surface, and
+//! executed in the Realm's confirmed safety sequence. An OAuth admin console
+//! holds no such key; bridging that gap here would make coauth a signing oracle
+//! for the control plane.
 //!
 //! The review surfaces stay because they need no key. See the arkret-work task
 //! `2026-08-08-collaboration-capability-review-source.md` for repointing them
