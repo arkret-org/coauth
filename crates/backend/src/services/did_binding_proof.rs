@@ -71,7 +71,6 @@ pub fn validate_account_registration_control_proof(
         || proof.principal_id != stored.principal_id
         || proof.did != stored.did
         || proof.did_version_id != stored.did_version_id
-        || proof.log_head_digest != stored.log_head_digest
         || proof.control_key_digest != stored.control_key_digest
         || proof.dpop_jkt != stored.dpop_jkt
         || proof.audience_id != stored.audience_id
@@ -95,14 +94,13 @@ pub fn validate_account_registration_control_proof(
     }
     let Some(arkret_models_identity::IdentityMethodEvidence::DidWebvh {
         version_id,
-        log_head_digest,
         control_key_digest,
     }) = resolution.closed_method_evidence.as_ref()
     else {
         return Err(DidBindingProofError::ResolutionPinsMismatch);
     };
     if version_id.as_str() != proof.did_version_id
-        || log_head_digest != &proof.log_head_digest
+        || resolution.key_log_head.as_ref() != Some(&stored.log_head_digest)
         || control_key_digest != &proof.control_key_digest
         || resolution.document.id != proof.did.as_str()
     {
@@ -319,7 +317,6 @@ mod tests {
             principal_id: principal_id.clone(),
             did: did.clone(),
             did_version_id: "2-QmHead".to_owned(),
-            log_head_digest: log_head_digest.clone(),
             control_key_digest: control_key_digest.clone(),
             dpop_jkt: "dpop-thumbprint".to_owned(),
             audience_id: audience.clone(),
@@ -391,7 +388,6 @@ mod tests {
             closed_method_evidence: Some(
                 arkret_models_identity::IdentityMethodEvidence::DidWebvh {
                     version_id: arkret_wire::NonEmptyString::new("2-QmHead").unwrap(),
-                    log_head_digest,
                     control_key_digest,
                 },
             ),
@@ -427,6 +423,39 @@ mod tests {
     }
 
     #[test]
+    fn wire_pin_reduction_preserves_the_durable_full_entry_pin_check() {
+        let (proof, challenge, mut resolution, account_id, subject, audience, trust_domain) =
+            fixture();
+        assert!(
+            serde_json::to_value(&proof)
+                .unwrap()
+                .get("log_head_digest")
+                .is_none()
+        );
+        for head in [
+            None,
+            Some(arkret_identifiers::Hash::new(format!("sha256:{}", "e".repeat(64))).unwrap()),
+        ] {
+            resolution.key_log_head = head;
+            assert!(matches!(
+                validate_account_registration_control_proof(
+                    &proof,
+                    &challenge,
+                    &resolution,
+                    account_id,
+                    &subject,
+                    &audience,
+                    "https://auth.example",
+                    &trust_domain,
+                    "dpop-thumbprint",
+                    proof.issued_at + chrono::Duration::seconds(1),
+                ),
+                Err(DidBindingProofError::ResolutionPinsMismatch)
+            ));
+        }
+    }
+
+    #[test]
     fn standard_control_proof_rejects_pin_and_receiver_mismatch() {
         let (mut proof, challenge, resolution, account_id, subject, audience, trust_domain) =
             fixture();
@@ -459,7 +488,6 @@ mod tests {
         resolution.closed_method_evidence =
             Some(arkret_models_identity::IdentityMethodEvidence::DidWebvh {
                 version_id: arkret_wire::NonEmptyString::new("2-QmHead").unwrap(),
-                log_head_digest: proof.log_head_digest.clone(),
                 control_key_digest: unbound_digest,
             });
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[9u8; 32]);

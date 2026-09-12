@@ -96,11 +96,12 @@ pub async fn issue_did_binding_challenge(
         match resolution.closed_method_evidence {
             Some(arkret_models_identity::IdentityMethodEvidence::DidWebvh {
                 version_id,
-                log_head_digest,
                 control_key_digest,
             }) => (
                 version_id.as_str().to_owned(),
-                log_head_digest,
+                resolution.key_log_head.clone().ok_or_else(|| {
+                    failed_precondition("verified DID resolution omits its full entry history pin")
+                })?,
                 control_key_digest,
             ),
             None => {

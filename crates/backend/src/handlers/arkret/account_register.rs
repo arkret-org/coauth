@@ -381,7 +381,6 @@ pub async fn account_register_endpoint(
         .map_err(schema_violation)?,
         registration_request_digest: request_digest.clone(),
         did_version_id: identity_creation.control_proof.did_version_id.clone(),
-        log_head_digest: identity_creation.control_proof.log_head_digest.clone(),
         control_key_digest: identity_creation.control_proof.control_key_digest.clone(),
         registration_did_operation: identity_creation.did_operation.clone(),
         registration_did_evidence,
@@ -765,7 +764,8 @@ fn validate_registration_transcript(
         || challenge.did != proof.did
         || challenge.operation_digest != proof.operation_digest
         || challenge.did_version_id != proof.did_version_id
-        || challenge.log_head_digest != proof.log_head_digest
+        || challenge.log_head_digest.as_str()
+            != arkret_canonical::canonical::canonical_sha256(&registration.did_operation.operation)?
         || challenge.control_key_digest != proof.control_key_digest
         || challenge.pcr_realm_id != proof.pcr_realm_id
         || challenge.realm_create_payload_digest != proof.realm_create_payload_digest

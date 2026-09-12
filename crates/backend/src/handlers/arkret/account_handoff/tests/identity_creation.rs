@@ -79,7 +79,6 @@ fn pcr_outcome(
             principal_id: request.principal_id.clone(),
             realm_id: request.pcr_realm_id.clone(),
             did_version_id: request.did_version_id.clone(),
-            log_head_digest: request.log_head_digest.clone(),
             control_key_digest: request.control_key_digest.clone(),
             registration_evidence_digest: request
                 .registration_did_evidence
@@ -267,11 +266,37 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
         .await;
     challenge.assert_status(StatusCode::OK);
     let challenge: IdentityBindingChallengeOutcome = challenge.json();
+    let wire_challenge = serde_json::to_value(&challenge).unwrap();
+    assert_eq!(wire_challenge.as_object().unwrap().len(), 6);
+    assert!(wire_challenge.get("account_subject").is_none());
+    assert!(wire_challenge.get("log_head_digest").is_none());
     let body = cotest_test_support::wire::identity_creation_register_request(serde_json::json!({
-        "challenge": challenge, "did_operation": fixture["did_operation"],
+        "challenge": challenge, "challenge_request": fixture["challenge_request"],
+        "account_subject": handoff.account_subject,
+        "origin":state.url_builder.http_base().origin().ascii_serialization(),
+        "trust_domain":trust_domain_for(&state.url_builder, &state.arkret_config),
         "pcr_genesis_unit": fixture["checkpoint"]["pcr_genesis_unit"],
         "initial_session":fixture["checkpoint"]["initial_session"], "recovery_key":fixture["recovery_key"],
     })).unwrap();
+    assert_eq!(
+        body["identity_creation"]["control_proof"]["account_subject"],
+        serde_json::to_value(&handoff.account_subject).unwrap()
+    );
+    assert!(
+        body["identity_creation"]["control_proof"]
+            .get("log_head_digest")
+            .is_none()
+    );
+    let mut wrong_challenge = challenge.clone();
+    wrong_challenge.request_id = arkret_wire::RequestId::new_v7_at(1_800_000_000_000);
+    assert!(cotest_test_support::wire::identity_creation_register_request(serde_json::json!({
+        "challenge": wrong_challenge, "challenge_request": fixture["challenge_request"],
+        "account_subject":handoff.account_subject,
+        "origin":state.url_builder.http_base().origin().ascii_serialization(),
+        "trust_domain":trust_domain_for(&state.url_builder, &state.arkret_config),
+        "pcr_genesis_unit":fixture["checkpoint"]["pcr_genesis_unit"],
+        "initial_session":fixture["checkpoint"]["initial_session"], "recovery_key":fixture["recovery_key"],
+    })).is_err());
     let fresh_authentication =
         seed_local_handoff_for_user(&state, "registeragain", Some("registerhttp")).await;
     let response = state
@@ -433,7 +458,10 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
     let mut recovery_challenge = challenge.clone();
     recovery_challenge.expires_at = recovery_expires_at;
     let body = cotest_test_support::wire::identity_creation_register_request(serde_json::json!({
-        "challenge": recovery_challenge, "did_operation": fixture["did_operation"],
+        "challenge": recovery_challenge, "challenge_request": fixture["challenge_request"],
+        "account_subject": handoff.account_subject,
+        "origin":state.url_builder.http_base().origin().ascii_serialization(),
+        "trust_domain":trust_domain_for(&state.url_builder, &state.arkret_config),
         "pcr_genesis_unit": fixture["checkpoint"]["pcr_genesis_unit"],
         "initial_session":fixture["checkpoint"]["initial_session"], "recovery_key":fixture["recovery_key"],
     })).unwrap();
