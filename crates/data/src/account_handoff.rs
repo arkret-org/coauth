@@ -162,7 +162,7 @@ pub struct AccountHandoffGrant {
     pub browser_session_id: Option<Ulid>,
     pub audience_id: String,
     pub cnf_jkt: String,
-    pub allowed_operations: [arkret_models_identity::AccountHandoffAllowedOperation; 7],
+    pub allowed_operations: [arkret_models_identity::AccountHandoffAllowedOperation; 6],
     pub account_handoff_grant: String,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -501,90 +501,6 @@ pub enum PublishedDidRegisterCommit {
     Stale,
 }
 
-/// Durable issue input for the explicit provisional-identity abandonment
-/// challenge. The issuing handoff identifier is retained so confirmation can
-/// require a different, freshly authenticated handoff.
-#[derive(Clone, Debug)]
-pub struct IdentityAbandonmentChallengeInput {
-    pub request_id: arkret_identifiers::RequestId,
-    pub request_digest: arkret_identifiers::Hash,
-    pub issuing_handoff_grant_id: Ulid,
-    pub local_account_id: Ulid,
-    pub audience_id: arkret_identifiers::DidCoreId,
-    pub account_subject: arkret_identifiers::Hash,
-    pub holder_jkt: String,
-    pub lease_id: String,
-    pub lease_fence: u64,
-    pub principal_id: arkret_identifiers::DidCoreId,
-    pub did_version_id: String,
-    pub challenge_id: String,
-    pub challenge: String,
-    pub origin: WebOrigin,
-    pub trust_domain: arkret_identifiers::TrustDomainId,
-    pub issued_at: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug)]
-pub struct IdentityAbandonmentChallengeRecord {
-    pub request_id: arkret_identifiers::RequestId,
-    pub request_digest: arkret_identifiers::Hash,
-    pub issuing_handoff_grant_id: Ulid,
-    pub local_account_id: Ulid,
-    pub audience_id: arkret_identifiers::DidCoreId,
-    pub account_subject: arkret_identifiers::Hash,
-    pub holder_jkt: String,
-    pub lease_id: String,
-    pub lease_fence: u64,
-    pub principal_id: arkret_identifiers::DidCoreId,
-    pub did_version_id: String,
-    pub challenge_id: String,
-    pub challenge: String,
-    pub origin: WebOrigin,
-    pub trust_domain: arkret_identifiers::TrustDomainId,
-    pub issued_at: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>,
-    pub consumed_at: Option<DateTime<Utc>>,
-    pub confirmation_request_id: Option<arkret_identifiers::RequestId>,
-    pub confirmation_request_digest: Option<arkret_identifiers::Hash>,
-    pub outcome: Option<arkret_models_identity::IdentityAbandonmentOutcome>,
-}
-
-impl IdentityAbandonmentChallengeRecord {
-    pub fn wire_outcome(&self) -> arkret_models_identity::IdentityAbandonmentChallengeOutcome {
-        arkret_models_identity::IdentityAbandonmentChallengeOutcome {
-            request_id: self.request_id.clone(),
-            challenge_id: self.challenge_id.clone(),
-            challenge: self.challenge.clone(),
-            purpose:
-                arkret_models_identity::IdentityAbandonmentPurpose::ProvisionalIdentityAbandonment,
-            account_subject: self.account_subject.clone(),
-            principal_id: self.principal_id.clone(),
-            did_version_id: self.did_version_id.clone(),
-            identity_creation_lease_id: self.lease_id.clone(),
-            lease_fence: self.lease_fence,
-            consequence_disclosure:
-                arkret_models_identity::IDENTITY_ABANDONMENT_CONSEQUENCE_DISCLOSURE,
-            dpop_jkt: self.holder_jkt.clone(),
-            audience_id: self.audience_id.clone(),
-            origin: self.origin.clone(),
-            trust_domain: self.trust_domain.clone(),
-            issued_at: self.issued_at,
-            expires_at: self.expires_at,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum IdentityAbandonmentChallengeIssue {
-    Issued(IdentityAbandonmentChallengeRecord),
-    Replay(IdentityAbandonmentChallengeRecord),
-    DuplicateConflict,
-    LeaseFenced,
-    CheckpointMismatch,
-    AlreadyAccepted,
-}
-
 #[derive(Clone, Debug)]
 pub struct IdentityAbandonmentCommitInput {
     pub request_id: arkret_identifiers::RequestId,
@@ -593,13 +509,11 @@ pub struct IdentityAbandonmentCommitInput {
     pub local_account_id: Ulid,
     pub audience_id: arkret_identifiers::DidCoreId,
     pub holder_jkt: String,
-    pub challenge_id: String,
-    pub challenge: String,
     pub lease_id: String,
     pub lease_fence: u64,
     pub principal_id: arkret_identifiers::DidCoreId,
     pub did_version_id: String,
-    pub now: DateTime<Utc>,
+    pub account_subject: arkret_identifiers::Hash,
 }
 
 #[derive(Clone, Debug)]
@@ -607,11 +521,9 @@ pub enum IdentityAbandonmentCommit {
     Abandoned(arkret_models_identity::IdentityAbandonmentOutcome),
     Replay(arkret_models_identity::IdentityAbandonmentOutcome),
     DuplicateConflict,
-    UnknownChallenge,
-    GrantReused,
-    ChallengeMismatch,
-    ChallengeExpired,
-    ChallengeConsumed,
+    AuthenticationRequired,
+    DispatchUncertain,
+    CheckpointMismatch,
     LeaseFenced,
     AlreadyAccepted,
 }

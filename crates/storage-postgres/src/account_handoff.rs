@@ -8,11 +8,10 @@ use coauth_data::account_handoff::{
     AccountHandoffCreationAttemptReserve, AccountHandoffCreationAttemptState, AccountHandoffGrant,
     AccountHandoffGrantInput, ControllerGateAttestationCommit, ControllerGateAttestationIssuance,
     ControllerGateAttestationReserve, DidBindingChallengeConsume, DidBindingChallengeInput,
-    DidBindingChallengeIssue, DidBindingChallengeRecord, IdentityAbandonmentChallengeInput,
-    IdentityAbandonmentChallengeIssue, IdentityAbandonmentChallengeRecord,
-    IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
-    IdentityBindingChallengeIssue, IdentityBindingChallengeRecord, IdentityCreationBindingCommit,
-    IdentityCreationLeaseRecord, IdentityCreationLeaseRiskDecision, IdentityCreationRegisterLedger,
+    DidBindingChallengeIssue, DidBindingChallengeRecord, IdentityAbandonmentCommit,
+    IdentityAbandonmentCommitInput, IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
+    IdentityBindingChallengeRecord, IdentityCreationBindingCommit, IdentityCreationLeaseRecord,
+    IdentityCreationLeaseRiskDecision, IdentityCreationRegisterLedger,
     IdentityCreationRegisterReplay, IdentityCreationRegisterReservation,
     IdentityCreationRegisterReserve, IdentityCreationRegistrationAdmission,
     IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
@@ -30,10 +29,9 @@ use uuid::Uuid;
 
 use crate::DatabaseError;
 
-const ALLOWED_OPERATIONS: [&str; 7] = [
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_DID_BINDING_CHALLENGE_V1,
+const ALLOWED_OPERATIONS: [&str; 6] = [
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE_V1,
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_ABANDONMENT_CHALLENGE_V1,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_DID_BINDING_CHALLENGE_V1,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ABANDON_IDENTITY_CREATION_V1,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER_V1,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT_V1,
@@ -284,72 +282,6 @@ impl<'c> PgAccountHandoffRepository<'c> {
             .await
             .optional()?
             .map(did_binding_challenge_from_row)
-            .transpose()
-    }
-
-    async fn abandonment_challenge_by_request(
-        &mut self,
-        request_id: Uuid,
-        for_update: bool,
-    ) -> Result<Option<IdentityAbandonmentChallengeRecord>, DatabaseError> {
-        let suffix = if for_update { " FOR UPDATE" } else { "" };
-        let query = format!(
-            "SELECT request_id, request_digest, issuing_handoff_grant_id, local_account_id, \
-             audience_id, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
-             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
-             consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
-             FROM identity_abandonment_challenges WHERE request_id = $1{suffix}"
-        );
-        diesel::sql_query(query)
-            .bind::<SqlUuid, _>(request_id)
-            .get_result::<AbandonmentChallengeRow>(self.conn)
-            .await
-            .optional()?
-            .map(abandonment_challenge_from_row)
-            .transpose()
-    }
-
-    async fn abandonment_challenge_by_id(
-        &mut self,
-        challenge_id: &str,
-        for_update: bool,
-    ) -> Result<Option<IdentityAbandonmentChallengeRecord>, DatabaseError> {
-        let suffix = if for_update { " FOR UPDATE" } else { "" };
-        let query = format!(
-            "SELECT request_id, request_digest, issuing_handoff_grant_id, local_account_id, \
-             audience_id, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
-             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
-             consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
-             FROM identity_abandonment_challenges WHERE challenge_id = $1{suffix}"
-        );
-        diesel::sql_query(query)
-            .bind::<Text, _>(challenge_id)
-            .get_result::<AbandonmentChallengeRow>(self.conn)
-            .await
-            .optional()?
-            .map(abandonment_challenge_from_row)
-            .transpose()
-    }
-
-    async fn abandonment_challenge_by_confirmation_request(
-        &mut self,
-        request_id: Uuid,
-        for_update: bool,
-    ) -> Result<Option<IdentityAbandonmentChallengeRecord>, DatabaseError> {
-        let suffix = if for_update { " FOR UPDATE" } else { "" };
-        let query = format!(
-            "SELECT request_id, request_digest, issuing_handoff_grant_id, local_account_id, \
-             audience_id, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
-             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
-             consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
-             FROM identity_abandonment_challenges WHERE confirmation_request_id = $1{suffix}"
-        );
-        diesel::sql_query(query)
-            .bind::<SqlUuid, _>(request_id)
-            .get_result::<AbandonmentChallengeRow>(self.conn)
-            .await
-            .optional()?
-            .map(abandonment_challenge_from_row)
             .transpose()
     }
 
@@ -1116,83 +1048,17 @@ fn did_binding_challenge_from_row(
 }
 
 #[derive(QueryableByName)]
-struct AbandonmentChallengeRow {
-    #[diesel(sql_type = SqlUuid)]
-    request_id: Uuid,
+struct AbandonmentRow {
     #[diesel(sql_type = Text)]
     request_digest: String,
     #[diesel(sql_type = SqlUuid)]
-    issuing_handoff_grant_id: Uuid,
-    #[diesel(sql_type = SqlUuid)]
     local_account_id: Uuid,
     #[diesel(sql_type = Text)]
-    audience_id: arkret_identifiers::DidCoreId,
-    #[diesel(sql_type = Text)]
-    account_subject: String,
+    audience_id: String,
     #[diesel(sql_type = Text)]
     holder_jkt: String,
-    #[diesel(sql_type = Text)]
-    lease_id: String,
-    #[diesel(sql_type = BigInt)]
-    lease_fence: i64,
-    #[diesel(sql_type = Text)]
-    principal_id: arkret_identifiers::DidCoreId,
-    #[diesel(sql_type = Text)]
-    did_version_id: String,
-    #[diesel(sql_type = Text)]
-    challenge_id: String,
-    #[diesel(sql_type = Text)]
-    challenge: String,
-    #[diesel(sql_type = Text)]
-    origin: arkret_identifiers::WebOrigin,
-    #[diesel(sql_type = Text)]
-    trust_domain: String,
-    #[diesel(sql_type = Timestamptz)]
-    issued_at: DateTime<Utc>,
-    #[diesel(sql_type = Timestamptz)]
-    expires_at: DateTime<Utc>,
-    #[diesel(sql_type = Nullable<Timestamptz>)]
-    consumed_at: Option<DateTime<Utc>>,
-    #[diesel(sql_type = Nullable<SqlUuid>)]
-    confirmation_request_id: Option<Uuid>,
-    #[diesel(sql_type = Nullable<Text>)]
-    confirmation_request_digest: Option<String>,
-    #[diesel(sql_type = Nullable<Jsonb>)]
-    outcome: Option<serde_json::Value>,
-}
-
-fn abandonment_challenge_from_row(
-    row: AbandonmentChallengeRow,
-) -> Result<IdentityAbandonmentChallengeRecord, DatabaseError> {
-    Ok(IdentityAbandonmentChallengeRecord {
-        request_id: arkret_identifiers::RequestId::new(format!("ak:request:{}", row.request_id))?,
-        request_digest: arkret_identifiers::Hash::new(row.request_digest)?,
-        issuing_handoff_grant_id: Ulid::from(row.issuing_handoff_grant_id),
-        local_account_id: Ulid::from(row.local_account_id),
-        audience_id: row.audience_id,
-        account_subject: arkret_identifiers::Hash::new(row.account_subject)?,
-        holder_jkt: row.holder_jkt,
-        lease_id: row.lease_id,
-        lease_fence: u64::try_from(row.lease_fence)?,
-        principal_id: row.principal_id,
-        did_version_id: row.did_version_id,
-        challenge_id: row.challenge_id,
-        challenge: row.challenge,
-        origin: row.origin,
-        trust_domain: arkret_identifiers::TrustDomainId::new(row.trust_domain)?,
-        issued_at: row.issued_at,
-        expires_at: row.expires_at,
-        consumed_at: row.consumed_at,
-        confirmation_request_id: row
-            .confirmation_request_id
-            .map(|id| arkret_identifiers::RequestId::new(format!("ak:request:{id}")))
-            .transpose()?,
-        confirmation_request_digest: row
-            .confirmation_request_digest
-            .map(arkret_identifiers::Hash::new)
-            .transpose()?,
-        outcome: row.outcome.map(serde_json::from_value).transpose()?,
-    })
+    #[diesel(sql_type = Jsonb)]
+    outcome: serde_json::Value,
 }
 
 fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecord, DatabaseError> {
@@ -2231,233 +2097,59 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         }
     }
 
-    async fn issue_identity_abandonment_challenge(
-        &mut self,
-        input: IdentityAbandonmentChallengeInput,
-    ) -> Result<IdentityAbandonmentChallengeIssue, Self::Error> {
-        let input = IdentityAbandonmentChallengeInput {
-            issued_at: arkret_canonical::normalize_timestamp_canonical(input.issued_at),
-            expires_at: arkret_canonical::normalize_timestamp_canonical(input.expires_at),
-            ..input
-        };
-        if input.expires_at <= input.issued_at
-            || input.expires_at - input.issued_at > Duration::minutes(5)
-        {
-            return Err(DatabaseError::invalid_operation());
-        }
-        if let Some(existing) = self
-            .abandonment_challenge_by_request(input.request_id.uuid(), false)
-            .await?
-        {
-            if existing.request_digest != input.request_digest
-                || existing.issuing_handoff_grant_id != input.issuing_handoff_grant_id
-                || existing.local_account_id != input.local_account_id
-                || existing.audience_id.as_str() != input.audience_id.as_str()
-                || existing.holder_jkt != input.holder_jkt
-            {
-                return Ok(IdentityAbandonmentChallengeIssue::DuplicateConflict);
-            }
-            return Ok(IdentityAbandonmentChallengeIssue::Replay(existing));
-        }
-
-        self.lock_lease_quota(&input.account_subject, input.audience_id.as_str())
-            .await?;
-        if let Some(existing) = self
-            .abandonment_challenge_by_request(input.request_id.uuid(), false)
-            .await?
-        {
-            if existing.request_digest != input.request_digest
-                || existing.issuing_handoff_grant_id != input.issuing_handoff_grant_id
-                || existing.local_account_id != input.local_account_id
-                || existing.audience_id.as_str() != input.audience_id.as_str()
-                || existing.holder_jkt != input.holder_jkt
-            {
-                return Ok(IdentityAbandonmentChallengeIssue::DuplicateConflict);
-            }
-            return Ok(IdentityAbandonmentChallengeIssue::Replay(existing));
-        }
-
-        let server_now = self.server_now().await?;
-        let Some(lease) = self
-            .lease_for_account(
-                Uuid::from(input.local_account_id),
-                input.audience_id.as_str(),
-                true,
-            )
-            .await?
-        else {
-            return Ok(IdentityAbandonmentChallengeIssue::LeaseFenced);
-        };
-        if lease.lease_id != input.lease_id
-            || lease.fence != input.lease_fence
-            || lease.holder_jkt != input.holder_jkt
-            || lease.expires_at <= server_now
-        {
-            return Ok(IdentityAbandonmentChallengeIssue::LeaseFenced);
-        }
-        if matches!(
-            lease.state,
-            IdentityCreationLeaseState::PcrAccepted
-                | IdentityCreationLeaseState::AccountBound
-                | IdentityCreationLeaseState::Completed
-        ) {
-            return Ok(IdentityAbandonmentChallengeIssue::AlreadyAccepted);
-        }
-        if lease.state != IdentityCreationLeaseState::DidPublished {
-            return Ok(IdentityAbandonmentChallengeIssue::CheckpointMismatch);
-        }
-        let Some(reserved) = lease.reserved_identity.as_ref() else {
-            return Ok(IdentityAbandonmentChallengeIssue::CheckpointMismatch);
-        };
-        // The abandonment transcript pins the stable projected principal id,
-        // not the method-specific DID.  For did:webvh those are distinct
-        // strings, so comparing `did` here rejects every valid reserved
-        // principal even though the lease carries the matching projection.
-        if !reserved_identity_matches_abandonment_checkpoint(
-            reserved,
-            &input.principal_id,
-            &input.did_version_id,
-        ) {
-            return Ok(IdentityAbandonmentChallengeIssue::CheckpointMismatch);
-        }
-
-        diesel::sql_query(
-            "INSERT INTO identity_abandonment_challenges \
-             (request_id, request_digest, issuing_handoff_grant_id, local_account_id, audience_id, \
-              account_subject, holder_jkt, lease_id, lease_fence, principal_id, did_version_id, \
-              challenge_id, challenge, origin, trust_domain, issued_at, expires_at) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) \
-             ON CONFLICT (request_id) DO NOTHING",
-        )
-        .bind::<SqlUuid, _>(input.request_id.uuid())
-        .bind::<Text, _>(input.request_digest.as_str())
-        .bind::<SqlUuid, _>(Uuid::from(input.issuing_handoff_grant_id))
-        .bind::<SqlUuid, _>(Uuid::from(input.local_account_id))
-        .bind::<Text, _>(input.audience_id.as_str())
-        .bind::<Text, _>(input.account_subject.as_str())
-        .bind::<Text, _>(&input.holder_jkt)
-        .bind::<Text, _>(&input.lease_id)
-        .bind::<BigInt, _>(i64::try_from(input.lease_fence)?)
-        .bind::<Text, _>(input.principal_id.as_str())
-        .bind::<Text, _>(&input.did_version_id)
-        .bind::<Text, _>(&input.challenge_id)
-        .bind::<Text, _>(&input.challenge)
-        .bind::<Text, _>(&input.origin)
-        .bind::<Text, _>(input.trust_domain.as_str())
-        .bind::<Timestamptz, _>(input.issued_at)
-        .bind::<Timestamptz, _>(input.expires_at)
-        .execute(self.conn)
-        .await?;
-        let challenge = self
-            .abandonment_challenge_by_request(input.request_id.uuid(), false)
-            .await?
-            .ok_or_else(DatabaseError::invalid_operation)?;
-        if challenge.request_digest != input.request_digest
-            || challenge.issuing_handoff_grant_id != input.issuing_handoff_grant_id
-            || challenge.local_account_id != input.local_account_id
-        {
-            return Ok(IdentityAbandonmentChallengeIssue::DuplicateConflict);
-        }
-        Ok(IdentityAbandonmentChallengeIssue::Issued(challenge))
-    }
-
-    async fn active_identity_abandonment_challenge(
-        &mut self,
-        local_account_id: Ulid,
-        audience_id: &arkret_identifiers::DidCoreId,
-        lease_id: &str,
-        now: DateTime<Utc>,
-    ) -> Result<Option<IdentityAbandonmentChallengeRecord>, Self::Error> {
-        diesel::sql_query(
-            "SELECT request_id, request_digest, issuing_handoff_grant_id, local_account_id, \
-             audience_id, account_subject, holder_jkt, lease_id, lease_fence, principal_id, \
-             did_version_id, challenge_id, challenge, origin, trust_domain, issued_at, expires_at, \
-             consumed_at, confirmation_request_id, confirmation_request_digest, outcome \
-             FROM identity_abandonment_challenges \
-             WHERE local_account_id = $1 AND audience_id = $2 AND lease_id = $3 \
-             AND consumed_at IS NULL AND expires_at > $4 \
-             ORDER BY issued_at DESC LIMIT 1",
-        )
-        .bind::<SqlUuid, _>(Uuid::from(local_account_id))
-        .bind::<Text, _>(audience_id.as_str())
-        .bind::<Text, _>(lease_id)
-        .bind::<Timestamptz, _>(now)
-        .get_result::<AbandonmentChallengeRow>(self.conn)
-        .await
-        .optional()?
-        .map(abandonment_challenge_from_row)
-        .transpose()
-    }
-
     async fn abandon_identity_creation(
         &mut self,
         input: IdentityAbandonmentCommitInput,
     ) -> Result<IdentityAbandonmentCommit, Self::Error> {
-        let now = arkret_canonical::normalize_timestamp_canonical(input.now);
-        if let Some(existing) = self
-            .abandonment_challenge_by_confirmation_request(input.request_id.uuid(), true)
+        // Share the account/authority lock with reservation and renewal. The
+        // terminal ledger is read after serialization, including exact retries.
+        self.lock_lease_quota(&input.account_subject, input.audience_id.as_str())
+            .await?;
+        if !self
+            .account_risk_allows_identity_creation(Uuid::from(input.local_account_id))
             .await?
         {
-            if existing.confirmation_request_digest.as_ref() == Some(&input.request_digest)
-                && existing.local_account_id == input.local_account_id
-                && existing.audience_id.as_str() == input.audience_id.as_str()
+            return Ok(IdentityAbandonmentCommit::AuthenticationRequired);
+        }
+        let current = diesel::sql_query(
+            "SELECT id, request_id, request_digest, local_account_id, browser_session_id, \
+             audience_id, cnf_jkt, allowed_operations, account_handoff_grant, issued_at, expires_at, \
+             revoked_at, consumed_at FROM account_handoff_grants WHERE id = $1 FOR SHARE",
+        ).bind::<SqlUuid, _>(Uuid::from(input.confirming_handoff_grant_id))
+            .get_result::<HandoffRow>(self.conn).await.optional()?;
+        let Some(grant) = current.map(handoff_from_row).transpose()? else {
+            return Ok(IdentityAbandonmentCommit::AuthenticationRequired);
+        };
+        let now = self.server_now().await?;
+        if grant.local_account_id != input.local_account_id
+            || grant.audience_id != input.audience_id.as_str()
+            || grant.cnf_jkt != input.holder_jkt
+            || grant.expires_at <= now
+            || grant.revoked_at.is_some()
+            || grant.consumed_at.is_some()
+        {
+            return Ok(IdentityAbandonmentCommit::AuthenticationRequired);
+        }
+        if let Some(existing) = diesel::sql_query(
+            "SELECT request_digest, local_account_id, audience_id, holder_jkt, outcome \
+             FROM identity_abandonments WHERE request_id = $1",
+        )
+        .bind::<SqlUuid, _>(input.request_id.uuid())
+        .get_result::<AbandonmentRow>(self.conn)
+        .await
+        .optional()?
+        {
+            if existing.request_digest == input.request_digest.as_str()
+                && existing.local_account_id == Uuid::from(input.local_account_id)
+                && existing.audience_id == input.audience_id.as_str()
                 && existing.holder_jkt == input.holder_jkt
             {
-                return existing
-                    .outcome
-                    .map(IdentityAbandonmentCommit::Replay)
-                    .ok_or_else(DatabaseError::invalid_operation);
+                return Ok(IdentityAbandonmentCommit::Replay(serde_json::from_value(
+                    existing.outcome,
+                )?));
             }
             return Ok(IdentityAbandonmentCommit::DuplicateConflict);
         }
-
-        let Some(challenge) = self
-            .abandonment_challenge_by_id(&input.challenge_id, true)
-            .await?
-        else {
-            return Ok(IdentityAbandonmentCommit::UnknownChallenge);
-        };
-        // The initial confirmation-request lookup can race a transaction that
-        // is currently consuming this same challenge. SELECT FOR UPDATE above
-        // observes its committed ledger after waiting, so exact concurrent
-        // replay must be recognized here as well.
-        if let Some(confirmation_request_id) = challenge.confirmation_request_id.as_ref() {
-            if confirmation_request_id == &input.request_id {
-                if challenge.confirmation_request_digest.as_ref() == Some(&input.request_digest)
-                    && challenge.local_account_id == input.local_account_id
-                    && challenge.audience_id.as_str() == input.audience_id.as_str()
-                    && challenge.holder_jkt == input.holder_jkt
-                {
-                    return challenge
-                        .outcome
-                        .map(IdentityAbandonmentCommit::Replay)
-                        .ok_or_else(DatabaseError::invalid_operation);
-                }
-                return Ok(IdentityAbandonmentCommit::DuplicateConflict);
-            }
-            return Ok(IdentityAbandonmentCommit::ChallengeConsumed);
-        }
-        if challenge.issuing_handoff_grant_id == input.confirming_handoff_grant_id {
-            return Ok(IdentityAbandonmentCommit::GrantReused);
-        }
-        if challenge.consumed_at.is_some() {
-            return Ok(IdentityAbandonmentCommit::ChallengeConsumed);
-        }
-        if challenge.expires_at <= now {
-            return Ok(IdentityAbandonmentCommit::ChallengeExpired);
-        }
-        if challenge.local_account_id != input.local_account_id
-            || challenge.audience_id.as_str() != input.audience_id.as_str()
-            || challenge.holder_jkt != input.holder_jkt
-            || challenge.challenge != input.challenge
-            || challenge.lease_id != input.lease_id
-            || challenge.lease_fence != input.lease_fence
-            || challenge.principal_id != input.principal_id
-            || challenge.did_version_id != input.did_version_id
-        {
-            return Ok(IdentityAbandonmentCommit::ChallengeMismatch);
-        }
-
         let Some(lease) = self
             .lease_for_account(
                 Uuid::from(input.local_account_id),
@@ -2483,73 +2175,92 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         ) {
             return Ok(IdentityAbandonmentCommit::AlreadyAccepted);
         }
-        if lease.state != IdentityCreationLeaseState::DidPublished {
-            return Ok(IdentityAbandonmentCommit::ChallengeMismatch);
+        if !matches!(
+            lease.state,
+            IdentityCreationLeaseState::Reserved | IdentityCreationLeaseState::DidPublished
+        ) {
+            return Ok(IdentityAbandonmentCommit::CheckpointMismatch);
         }
         let Some(reserved) = lease.reserved_identity.as_ref() else {
-            return Ok(IdentityAbandonmentCommit::ChallengeMismatch);
+            return Ok(IdentityAbandonmentCommit::CheckpointMismatch);
         };
         if !reserved_identity_matches_abandonment_checkpoint(
             reserved,
             &input.principal_id,
             &input.did_version_id,
         ) {
-            return Ok(IdentityAbandonmentCommit::ChallengeMismatch);
+            return Ok(IdentityAbandonmentCommit::CheckpointMismatch);
         }
-
+        let dispatch_attempted = diesel::sql_query(
+            "SELECT (pcr_dispatch_request_digest IS NOT NULL) AS present FROM identity_creation_leases WHERE lease_id = $1",
+        ).bind::<Text, _>(&input.lease_id).get_result::<ExistsRow>(self.conn).await?.present;
+        if dispatch_attempted {
+            return Ok(IdentityAbandonmentCommit::DispatchUncertain);
+        }
+        let Some(session_id) = grant.browser_session_id else {
+            return Ok(IdentityAbandonmentCommit::AuthenticationRequired);
+        };
+        let active_session = diesel::sql_query(
+            "SELECT true AS present FROM user_sessions WHERE id = $1 AND user_id = $2 AND finished_at IS NULL FOR SHARE",
+        ).bind::<SqlUuid, _>(Uuid::from(session_id)).bind::<SqlUuid, _>(Uuid::from(input.local_account_id))
+            .get_result::<ExistsRow>(self.conn).await.optional()?.is_some();
+        // The first immutable binding challenge was inserted in the same
+        // transaction that froze this exact operation. Renewal does not move
+        // this boundary. Token issuance/code exchange is not authentication.
+        let fresh_auth = diesel::sql_query(
+            "SELECT EXISTS (SELECT 1 FROM user_session_authentications a \
+             WHERE a.user_session_id = $1 AND a.created_at <= $2 \
+             AND a.created_at > (SELECT min(issued_at) FROM identity_binding_challenges \
+             WHERE local_account_id = $3 AND lease_id = $4 AND operation_digest = $5)) AS present",
+        )
+        .bind::<SqlUuid, _>(Uuid::from(session_id))
+        .bind::<Timestamptz, _>(grant.issued_at)
+        .bind::<SqlUuid, _>(Uuid::from(input.local_account_id))
+        .bind::<Text, _>(&input.lease_id)
+        .bind::<Text, _>(reserved.operation_digest.as_str())
+        .get_result::<ExistsRow>(self.conn)
+        .await?
+        .present;
+        if !active_session || !fresh_auth {
+            return Ok(IdentityAbandonmentCommit::AuthenticationRequired);
+        }
         let outcome = arkret_models_identity::IdentityAbandonmentOutcome {
             request_id: input.request_id.clone(),
-            status: arkret_models_identity::IdentityAbandonmentStatus::Abandoned,
-            account_subject: challenge.account_subject.clone(),
+            account_subject: input.account_subject.clone(),
             principal_id: input.principal_id.clone(),
             did_version_id: input.did_version_id.clone(),
             abandoned_at: now,
         };
-        let outcome_value = serde_json::to_value(&outcome)?;
-        let tombstones = diesel::sql_query(
+        let inserted = diesel::sql_query(
             "INSERT INTO identity_orphan_anchor_tombstones \
              (principal_id, did_version_id, account_subject, abandonment_request_id, abandoned_at) \
              VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
         )
         .bind::<Text, _>(input.principal_id.as_str())
         .bind::<Text, _>(&input.did_version_id)
-        .bind::<Text, _>(challenge.account_subject.as_str())
+        .bind::<Text, _>(input.account_subject.as_str())
         .bind::<SqlUuid, _>(input.request_id.uuid())
         .bind::<Timestamptz, _>(now)
         .execute(self.conn)
         .await?;
-        if tombstones != 1 {
+        if inserted != 1 {
             return Err(DatabaseError::invalid_operation());
         }
-        let challenges = diesel::sql_query(
-            "UPDATE identity_abandonment_challenges SET consumed_at = $1, \
-             confirmation_request_id = $2, confirmation_request_digest = $3, outcome = $4 \
-             WHERE challenge_id = $5 AND consumed_at IS NULL",
-        )
-        .bind::<Timestamptz, _>(now)
-        .bind::<SqlUuid, _>(input.request_id.uuid())
-        .bind::<Text, _>(input.request_digest.as_str())
-        .bind::<Jsonb, _>(outcome_value)
-        .bind::<Text, _>(&input.challenge_id)
-        .execute(self.conn)
-        .await?;
-        if challenges != 1 {
-            return Err(DatabaseError::invalid_operation());
-        }
+        diesel::sql_query(
+            "INSERT INTO identity_abandonments (request_id, request_digest, local_account_id, audience_id, holder_jkt, outcome) VALUES ($1,$2,$3,$4,$5,$6)",
+        ).bind::<SqlUuid, _>(input.request_id.uuid()).bind::<Text, _>(input.request_digest.as_str())
+            .bind::<SqlUuid, _>(Uuid::from(input.local_account_id)).bind::<Text, _>(input.audience_id.as_str())
+            .bind::<Text, _>(&input.holder_jkt).bind::<Jsonb, _>(serde_json::to_value(&outcome)?)
+            .execute(self.conn).await?;
         self.suppress_reserved_identity_checkpoints(input.local_account_id, &input.lease_id, now)
             .await?;
-        let leases = diesel::sql_query(
+        let deleted = diesel::sql_query(
             "DELETE FROM identity_creation_leases WHERE local_account_id = $1 AND audience_id = $2 \
-             AND lease_id = $3 AND fence = $4 AND holder_jkt = $5 AND state = 'did_published'",
-        )
-        .bind::<SqlUuid, _>(Uuid::from(input.local_account_id))
-        .bind::<Text, _>(input.audience_id.as_str())
-        .bind::<Text, _>(&input.lease_id)
-        .bind::<BigInt, _>(i64::try_from(input.lease_fence)?)
-        .bind::<Text, _>(&input.holder_jkt)
-        .execute(self.conn)
-        .await?;
-        if leases != 1 {
+             AND lease_id = $3 AND fence = $4 AND holder_jkt = $5 AND state IN ('reserved','did_published')",
+        ).bind::<SqlUuid, _>(Uuid::from(input.local_account_id)).bind::<Text, _>(input.audience_id.as_str())
+            .bind::<Text, _>(&input.lease_id).bind::<BigInt, _>(i64::try_from(input.lease_fence)?)
+            .bind::<Text, _>(&input.holder_jkt).execute(self.conn).await?;
+        if deleted != 1 {
             return Err(DatabaseError::invalid_operation());
         }
         Ok(IdentityAbandonmentCommit::Abandoned(outcome))
@@ -2883,6 +2594,39 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         Ok(updated == 1)
     }
 
+    async fn reserve_pcr_genesis_dispatch(
+        &mut self,
+        context: &IdentityCreationRegistrationContext,
+        request_digest: &arkret_identifiers::Hash,
+        registration_request_digest: &arkret_identifiers::Hash,
+    ) -> Result<bool, Self::Error> {
+        let active = diesel::sql_query(
+            "SELECT true AS present FROM account_handoff_grants WHERE id=$1 AND local_account_id=$2 AND audience_id=$3 AND cnf_jkt=$4 AND revoked_at IS NULL AND consumed_at IS NULL AND expires_at > clock_timestamp() FOR SHARE",
+        ).bind::<SqlUuid,_>(Uuid::from(context.grant.id)).bind::<SqlUuid,_>(Uuid::from(context.grant.local_account_id))
+            .bind::<Text,_>(&context.grant.audience_id).bind::<Text,_>(&context.grant.cnf_jkt)
+            .get_result::<ExistsRow>(self.conn).await.optional()?.is_some();
+        if !active {
+            return Ok(false);
+        }
+        let updated = diesel::sql_query(
+            "UPDATE identity_creation_leases SET pcr_dispatch_request_digest = $1 \
+             WHERE local_account_id = $2 AND audience_id = $3 AND lease_id = $4 AND fence = $5 \
+             AND holder_jkt = $6 AND state = 'did_published' AND register_request_digest = $7 \
+             AND (pcr_dispatch_request_digest IS NULL OR pcr_dispatch_request_digest = $1) \
+             AND expires_at > clock_timestamp()",
+        )
+        .bind::<Text, _>(request_digest.as_str())
+        .bind::<SqlUuid, _>(Uuid::from(context.grant.local_account_id))
+        .bind::<Text, _>(&context.grant.audience_id)
+        .bind::<Text, _>(&context.lease.lease_id)
+        .bind::<BigInt, _>(i64::try_from(context.lease.fence)?)
+        .bind::<Text, _>(&context.grant.cnf_jkt)
+        .bind::<Text, _>(registration_request_digest.as_str())
+        .execute(self.conn)
+        .await?;
+        Ok(updated == 1)
+    }
+
     async fn mark_pcr_accepted(
         &mut self,
         context: &IdentityCreationRegistrationContext,
@@ -2942,7 +2686,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             "UPDATE identity_creation_leases SET state = 'pcr_accepted', \
              pcr_genesis_request_digest = $1, pcr_genesis_receipt = $2, updated_at = $3 \
              WHERE local_account_id = $4 AND audience_id = $5 AND lease_id = $6 AND fence = $7 \
-             AND holder_jkt = $8 AND state = 'did_published'",
+             AND holder_jkt = $8 AND state = 'did_published' AND pcr_dispatch_request_digest = $1",
         )
         .bind::<Text, _>(request_digest.as_str())
         .bind::<Jsonb, _>(receipt)

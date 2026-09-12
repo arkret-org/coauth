@@ -591,3 +591,106 @@ async fn challenge_hour_budget_uses_durable_holder_scope_and_exact_window_bounda
     );
     conn.batch_execute("COMMIT").await.unwrap();
 }
+
+#[tokio::test]
+async fn abandonment_checks_real_authentication_and_fences_uncertain_pcr_dispatch() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let (handoff, binding) = seed(&pool).await;
+    let mut conn = pool.get().await.unwrap();
+    assert!(matches!(
+        issue(&mut conn, binding.clone()).await,
+        IdentityBindingChallengeIssue::Issued(_)
+    ));
+    let session_id = Uuid::from_u128(90101);
+    diesel::sql_query("INSERT INTO user_sessions (id,user_id,created_at) VALUES ($1,$2,clock_timestamp() - interval '10 seconds')")
+        .bind::<SqlUuid,_>(session_id).bind::<SqlUuid,_>(Uuid::from(handoff.local_account_id)).execute(&mut conn).await.unwrap();
+    diesel::sql_query("INSERT INTO user_session_authentications (id,user_session_id,created_at) VALUES ($1,$2,clock_timestamp() - interval '10 seconds')")
+        .bind::<SqlUuid,_>(Uuid::from_u128(90102)).bind::<SqlUuid,_>(session_id).execute(&mut conn).await.unwrap();
+    diesel::sql_query("UPDATE account_handoff_grants SET browser_session_id=$1, issued_at=clock_timestamp() WHERE id=$2")
+        .bind::<SqlUuid,_>(session_id).bind::<SqlUuid,_>(Uuid::from(handoff.id)).execute(&mut conn).await.unwrap();
+    let input = IdentityAbandonmentCommitInput {
+        request_id: request(90901),
+        request_digest: hash('a'),
+        confirming_handoff_grant_id: handoff.id,
+        local_account_id: handoff.local_account_id,
+        audience_id: binding.audience_id.clone(),
+        holder_jkt: handoff.cnf_jkt.clone(),
+        lease_id: handoff.lease_id.clone(),
+        lease_fence: 1,
+        principal_id: binding.principal_id.clone(),
+        did_version_id: binding.did_version_id.clone(),
+        account_subject: handoff.account_subject.clone(),
+    };
+    conn.batch_execute("BEGIN").await.unwrap();
+    // A newer token backed by the old authentication event proves no fresh authentication.
+    assert!(matches!(
+        PgAccountHandoffRepository::new(&mut conn)
+            .abandon_identity_creation(input.clone())
+            .await
+            .unwrap(),
+        IdentityAbandonmentCommit::AuthenticationRequired
+    ));
+    conn.batch_execute("ROLLBACK").await.unwrap();
+    diesel::sql_query("UPDATE identity_binding_challenges SET issued_at=statement_timestamp()-interval '2 seconds', expires_at=statement_timestamp()+interval '298 seconds' WHERE challenge_id=$1")
+        .bind::<Text,_>(&binding.challenge_id).execute(&mut conn).await.unwrap();
+    diesel::sql_query("UPDATE user_session_authentications SET created_at=clock_timestamp()-interval '1 second' WHERE user_session_id=$1")
+        .bind::<SqlUuid,_>(session_id).execute(&mut conn).await.unwrap();
+    diesel::sql_query("UPDATE account_handoff_grants SET issued_at=clock_timestamp() WHERE id=$1")
+        .bind::<SqlUuid, _>(Uuid::from(handoff.id))
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    conn.batch_execute("BEGIN").await.unwrap();
+    // Consumer fixture: a dispatch fence survives even when no response/receipt was recorded.
+    diesel::sql_query(
+        "UPDATE identity_creation_leases SET pcr_dispatch_request_digest=$1 WHERE lease_id=$2",
+    )
+    .bind::<Text, _>(hash('b').as_str())
+    .bind::<Text, _>(&handoff.lease_id)
+    .execute(&mut conn)
+    .await
+    .unwrap();
+    assert!(matches!(
+        PgAccountHandoffRepository::new(&mut conn)
+            .abandon_identity_creation(input.clone())
+            .await
+            .unwrap(),
+        IdentityAbandonmentCommit::DispatchUncertain
+    ));
+    let no_orphan = diesel::sql_query(
+        "SELECT EXISTS(SELECT 1 FROM identity_orphan_anchor_tombstones) AS present",
+    )
+    .get_result::<ExistsRow>(&mut conn)
+    .await
+    .unwrap();
+    assert!(!no_orphan.present);
+    conn.batch_execute("ROLLBACK").await.unwrap();
+    conn.batch_execute("BEGIN").await.unwrap();
+    let outcome = match PgAccountHandoffRepository::new(&mut conn)
+        .abandon_identity_creation(input.clone())
+        .await
+        .unwrap()
+    {
+        IdentityAbandonmentCommit::Abandoned(outcome) => outcome,
+        other => panic!("unexpected abandonment result: {other:?}"),
+    };
+    conn.batch_execute("COMMIT").await.unwrap();
+    conn.batch_execute("BEGIN").await.unwrap();
+    assert!(
+        matches!(PgAccountHandoffRepository::new(&mut conn).abandon_identity_creation(input.clone()).await.unwrap(), IdentityAbandonmentCommit::Replay(replay) if replay == outcome)
+    );
+    conn.batch_execute("ROLLBACK").await.unwrap();
+    let mut changed = input;
+    changed.request_digest = hash('c');
+    conn.batch_execute("BEGIN").await.unwrap();
+    assert!(matches!(
+        PgAccountHandoffRepository::new(&mut conn)
+            .abandon_identity_creation(changed)
+            .await
+            .unwrap(),
+        IdentityAbandonmentCommit::DuplicateConflict
+    ));
+    conn.batch_execute("ROLLBACK").await.unwrap();
+}

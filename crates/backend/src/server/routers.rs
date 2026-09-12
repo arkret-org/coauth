@@ -193,11 +193,6 @@ fn account_api_subrouters() -> (Router, Router) {
                 .post(arkret::issue_identity_binding_challenge),
         )
         .push(
-            Router::with_path("gate/account/identity-abandonment-challenges")
-                .options(oidc_preflight_handler)
-                .post(arkret::issue_identity_abandonment_challenge),
-        )
-        .push(
             Router::with_path("gate/account/identity-abandonments")
                 .options(oidc_preflight_handler)
                 .post(arkret::abandon_identity_creation),
@@ -543,7 +538,6 @@ fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
         | "/_arkret/gate/account/authentication-handoffs"
         | "/_arkret/gate/account/did-binding-challenges"
         | "/_arkret/gate/account/identity-binding-challenges"
-        | "/_arkret/gate/account/identity-abandonment-challenges"
         | "/_arkret/gate/account/identity-abandonments"
         | "/_arkret/gate/account/controller-gate-attestations"
         | "/_arkret/gate/account/register"

@@ -5,7 +5,7 @@ DROP TABLE IF EXISTS account_status_records CASCADE;
 DROP TABLE IF EXISTS account_status_ledger_heads CASCADE;
 DROP TABLE IF EXISTS identity_orphan_anchor_tombstones CASCADE;
 DROP TABLE IF EXISTS controller_gate_attestation_issuances CASCADE;
-DROP TABLE IF EXISTS identity_abandonment_challenges CASCADE;
+DROP TABLE IF EXISTS identity_abandonments CASCADE;
 DROP TABLE IF EXISTS identity_binding_challenges CASCADE;
 DROP TABLE IF EXISTS did_binding_challenges CASCADE;
 DROP TABLE IF EXISTS identity_creation_rate_limit_events CASCADE;

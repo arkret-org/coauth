@@ -415,6 +415,18 @@ pub async fn account_register_endpoint(
             trust_domain,
         )
         .map_err(map_peer_error)?;
+        let mut repo = depot.repo().await?;
+        if !repo
+            .account_handoff()
+            .reserve_pcr_genesis_dispatch(&context, &pcr_request_digest, &request_digest)
+            .await?
+        {
+            repo.cancel().await.ok();
+            return Err(failed_precondition(
+                "PCR dispatch no longer matches its active frozen registration",
+            ));
+        }
+        repo.save().await?;
         let outcome = peer
             .post_principal_genesis(&pcr_request)
             .await

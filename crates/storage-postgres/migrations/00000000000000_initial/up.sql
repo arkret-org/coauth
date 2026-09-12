@@ -735,7 +735,7 @@ CREATE TABLE public.account_handoff_grants (
     CONSTRAINT account_handoff_grants_request_digest_valid CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT account_handoff_grants_audience_id_nonempty CHECK ((btrim(audience_id) <> ''::text)),
     CONSTRAINT account_handoff_grants_cnf_jkt_valid CHECK ((cnf_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
-    CONSTRAINT account_handoff_grants_allowed_operations_closed CHECK ((allowed_operations = ARRAY['ak.gate.account.command.issue_did_binding_challenge.v1'::text, 'ak.gate.account.command.issue_identity_binding_challenge.v1'::text, 'ak.gate.account.command.issue_identity_abandonment_challenge.v1'::text, 'ak.gate.account.command.abandon_identity_creation.v1'::text, 'ak.gate.account.command.register.v1'::text, 'ak.gate.account.command.issue_session_grant.v1'::text, 'ak.gate.account.command.issue_recovery_completion_grant.v1'::text])),
+    CONSTRAINT account_handoff_grants_allowed_operations_closed CHECK ((allowed_operations = ARRAY['ak.gate.account.command.issue_identity_binding_challenge.v1'::text, 'ak.gate.account.command.issue_did_binding_challenge.v1'::text, 'ak.gate.account.command.abandon_identity_creation.v1'::text, 'ak.gate.account.command.register.v1'::text, 'ak.gate.account.command.issue_session_grant.v1'::text, 'ak.gate.account.command.issue_recovery_completion_grant.v1'::text])),
     CONSTRAINT account_handoff_grants_token_nonempty CHECK ((length(account_handoff_grant) >= 32)),
     CONSTRAINT account_handoff_grants_expiry_valid CHECK ((expires_at > issued_at))
 );
@@ -754,6 +754,7 @@ CREATE TABLE public.identity_creation_leases (
     state text NOT NULL,
     registry_receipt jsonb,
     log_head_digest text,
+    pcr_dispatch_request_digest text CHECK (pcr_dispatch_request_digest IS NULL OR pcr_dispatch_request_digest ~ '^sha256:[0-9a-f]{64}$'),
     pcr_genesis_request_digest text,
     pcr_genesis_receipt jsonb,
     binding_receipt jsonb,
@@ -885,42 +886,14 @@ CREATE TABLE public.did_binding_challenges (
     CONSTRAINT did_binding_challenges_register_complete CHECK (((register_request_digest IS NULL AND register_outcome IS NULL) OR (consumed_at IS NOT NULL AND register_request_digest ~ '^sha256:[0-9a-f]{64}$'::text AND jsonb_typeof(register_outcome) = 'object'::text)))
 );
 
--- Durable explicit-abandonment transcript. The challenge retains both the
--- issuing handoff and its holder key so confirmation can require a different
--- freshly authenticated handoff without weakening the holder binding.
-CREATE TABLE public.identity_abandonment_challenges (
+-- Exact terminal replay ledger for explicit provisional-identity abandonment.
+CREATE TABLE public.identity_abandonments (
     request_id uuid PRIMARY KEY,
-    request_digest text NOT NULL,
-    issuing_handoff_grant_id uuid NOT NULL,
+    request_digest text NOT NULL CHECK (request_digest ~ '^sha256:[0-9a-f]{64}$'),
     local_account_id uuid NOT NULL,
     audience_id text NOT NULL,
-    account_subject text NOT NULL,
-    holder_jkt text NOT NULL,
-    lease_id text NOT NULL,
-    lease_fence bigint NOT NULL,
-    principal_id text NOT NULL,
-    did_version_id text NOT NULL,
-    challenge_id text NOT NULL UNIQUE,
-    challenge text NOT NULL,
-    origin text NOT NULL,
-    trust_domain text NOT NULL,
-    issued_at timestamp with time zone NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    consumed_at timestamp with time zone,
-    confirmation_request_id uuid UNIQUE,
-    confirmation_request_digest text,
-    outcome jsonb,
-    CONSTRAINT identity_abandonment_principal_core_valid CHECK ((principal_id ~ '^ak:did_core:[a-z0-9]+:[^[:space:]/?#]+$'::text)),
-    CONSTRAINT identity_abandonment_request_digest_valid CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT identity_abandonment_account_subject_valid CHECK ((account_subject ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT identity_abandonment_holder_jkt_valid CHECK ((holder_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
-    CONSTRAINT identity_abandonment_lease_id_valid CHECK ((lease_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
-    CONSTRAINT identity_abandonment_lease_fence_positive CHECK ((lease_fence >= 1)),
-    CONSTRAINT identity_abandonment_did_version_nonempty CHECK ((btrim(did_version_id) <> ''::text)),
-    CONSTRAINT identity_abandonment_challenge_id_valid CHECK ((challenge_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
-    CONSTRAINT identity_abandonment_challenge_nonempty CHECK ((length(challenge) >= 22)),
-    CONSTRAINT identity_abandonment_expiry_valid CHECK ((expires_at > issued_at AND expires_at <= (issued_at + '00:05:00'::interval))),
-    CONSTRAINT identity_abandonment_confirmation_shape CHECK (((consumed_at IS NULL AND confirmation_request_id IS NULL AND confirmation_request_digest IS NULL AND outcome IS NULL) OR (consumed_at IS NOT NULL AND confirmation_request_id IS NOT NULL AND confirmation_request_digest IS NOT NULL AND confirmation_request_digest ~ '^sha256:[0-9a-f]{64}$'::text AND outcome IS NOT NULL AND jsonb_typeof(outcome) = 'object'::text)))
+    holder_jkt text NOT NULL CHECK (holder_jkt ~ '^[A-Za-z0-9_-]{43}$'),
+    outcome jsonb NOT NULL CHECK (jsonb_typeof(outcome) = 'object')
 );
 
 -- Append-only reservation preventing a published entry-0 orphan anchor from

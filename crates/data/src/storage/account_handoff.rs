@@ -6,13 +6,12 @@ use coauth_data::{
     AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve, AccountHandoffGrant,
     AccountHandoffGrantInput, ControllerGateAttestationCommit, ControllerGateAttestationReserve,
     DidBindingChallengeConsume, DidBindingChallengeInput, DidBindingChallengeIssue,
-    IdentityAbandonmentChallengeInput, IdentityAbandonmentChallengeIssue,
-    IdentityAbandonmentChallengeRecord, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
-    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityCreationBindingCommit,
-    IdentityCreationRegisterReplay, IdentityCreationRegisterReserve,
-    IdentityCreationRegistrationAdmission, IdentityCreationRegistrationContext,
-    NewAccountHandoffCreationAttempt, NewControllerGateAttestationIssuance,
-    PublishedDidRegisterCommit, PublishedDidRegisterReplay, Ulid,
+    IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
+    IdentityBindingChallengeIssue, IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
+    IdentityCreationRegisterReserve, IdentityCreationRegistrationAdmission,
+    IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
+    NewControllerGateAttestationIssuance, PublishedDidRegisterCommit, PublishedDidRegisterReplay,
+    Ulid,
 };
 
 use crate::repository_impl;
@@ -150,25 +149,8 @@ repository_impl! {
             now: DateTime<Utc>,
         ) -> Result<PublishedDidRegisterCommit, Self::Error>;
 
-        /// Issue or replay the durable explicit-abandonment challenge while the
-        /// reserved identity has a published DID but no accepted PCR.
-        async fn issue_identity_abandonment_challenge(
-            &mut self,
-            input: IdentityAbandonmentChallengeInput,
-        ) -> Result<IdentityAbandonmentChallengeIssue, Self::Error>;
-
-        /// Load the current durable abandonment goal for one identity-creation
-        /// lease. Expired and consumed challenges are never projected.
-        async fn active_identity_abandonment_challenge(
-            &mut self,
-            local_account_id: Ulid,
-            audience_id: &arkret_identifiers::DidCoreId,
-            lease_id: &str,
-            now: DateTime<Utc>,
-        ) -> Result<Option<IdentityAbandonmentChallengeRecord>, Self::Error>;
-
-        /// Atomically consume the challenge, reserve the orphan anchor, suppress
-        /// the holder checkpoint and release the identity-creation lease.
+        /// Atomically verify fresh authentication, reserve the orphan anchor,
+        /// record the terminal replay outcome and release the creation lease.
         async fn abandon_identity_creation(
             &mut self,
             input: IdentityAbandonmentCommitInput,
@@ -212,6 +194,15 @@ repository_impl! {
             log_head_digest: &arkret_identifiers::Hash,
             registration_did_evidence: &arkret_wire::RegistrationDidEvidence,
             now: DateTime<Utc>,
+        ) -> Result<bool, Self::Error>;
+
+        /// Freeze an exact PCR dispatch before the network call. Once recorded,
+        /// missing local acceptance cannot establish that the PCR was never accepted.
+        async fn reserve_pcr_genesis_dispatch(
+            &mut self,
+            context: &IdentityCreationRegistrationContext,
+            request_digest: &arkret_identifiers::Hash,
+        registration_request_digest: &arkret_identifiers::Hash,
         ) -> Result<bool, Self::Error>;
 
         /// Record the verified remote PCR-genesis acceptance receipt.
