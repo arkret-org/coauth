@@ -145,7 +145,14 @@ fn valid_authorize_event_typed(pairing_request_id: &str) -> arkret_wire::Event {
         &mut authored,
         &controller_signer(),
         &arkret_wire::DidUrl::new(CONTROLLER_VM).expect("controller verification method"),
-        arkret_signatures::SignEventOptions::new().with_created_at(
+        arkret_signatures::SignEventOptions::new(
+            arkret_wire::SignerEvidenceRef::new(format!(
+                "ak:signer_evidence:sha256:{}",
+                "ab".repeat(32)
+            ))
+            .expect("fixture signer evidence ref"),
+        )
+        .with_created_at(
             DateTime::parse_from_rfc3339("2026-07-06T00:01:00.000Z")
                 .unwrap()
                 .with_timezone(&Utc),
@@ -292,10 +299,7 @@ fn pairing_scope_precheck_returns_key_reason_before_queueing() {
 #[test]
 fn authorize_event_controller_proof_verifies_and_one_changed_byte_breaks_it() {
     let event = valid_authorize_event_typed(PAIRING_REQUEST_ID);
-    let proof = event.proofs[0]
-        .as_producer()
-        .expect("the fixture carries a controller producer proof")
-        .clone();
+    let proof = event.proofs[0].clone();
     let material = arkret_signatures::proof::PublicKeyMaterial::Ed25519Raw {
         bytes: controller_signer().verifying_key().to_bytes().to_vec(),
     };
@@ -542,9 +546,7 @@ fn pairing_verifies_the_authorize_event_proof_against_the_resolved_controller_ke
         .expect("the controller Event proof must verify against the published controller key");
 
     let mut tampered = valid_authorize_event_typed(PAIRING_REQUEST_ID);
-    let proof = tampered.proofs[0]
-        .as_producer_mut()
-        .expect("the fixture carries a controller producer proof");
+    let proof = &mut tampered.proofs[0];
     proof.jws = tamper_jws_signature(&proof.jws);
     let err = verify_controller_authorize_event_proofs(&tampered, &keys)
         .expect_err("one changed signature byte must fail closed");

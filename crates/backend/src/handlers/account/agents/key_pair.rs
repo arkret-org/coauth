@@ -356,7 +356,6 @@ pub async fn post_agent_key_pair(
         .event
         .proofs
         .iter()
-        .filter_map(arkret_wire::EventProof::as_producer)
         .map(|proof| proof.verification_method.as_str())
         .chain(
             disclosure
@@ -821,15 +820,10 @@ fn ensure_authorize_event_has_controller_signature(
             "authorize_event must carry controller signature proofs",
         ));
     }
-    let signed_by_controller = event
-        .proofs
-        .iter()
-        .filter_map(|proof| proof.as_producer())
-        .any(|proof| {
-            verification_method_controller_principal_id(&proof.verification_method).is_some_and(
-                |proof_controller| proof_controller.as_str() == controller_principal_id,
-            )
-        });
+    let signed_by_controller = event.proofs.iter().any(|proof| {
+        verification_method_controller_principal_id(&proof.verification_method)
+            .is_some_and(|proof_controller| proof_controller.as_str() == controller_principal_id)
+    });
     if !signed_by_controller {
         return Err(AppError::bad_request(
             "authorize_event proof verification_method controller must match executed_by.account_id.principal_id",
@@ -1054,11 +1048,7 @@ fn verify_controller_authorize_event_proofs(
 ) -> Result<(), AppError> {
     let canonical_bytes = authorize_event_preimage_bytes(event)?;
     let mut verified = 0usize;
-    for proof in event
-        .proofs
-        .iter()
-        .filter_map(arkret_wire::EventProof::as_producer)
-    {
+    for proof in &event.proofs {
         let material = controller_keys.material(proof.verification_method.as_str())?;
         arkret_signatures::proof::verify_ed25519_detached_jws_proof(
             proof,

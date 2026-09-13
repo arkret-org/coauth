@@ -880,13 +880,12 @@ pub async fn issue_identity_binding_challenge(
         IdentityBindingChallengeIssue::Issued(challenge)
         | IdentityBindingChallengeIssue::Replay(challenge) => {
             repo.save().await?;
-            let outcome = challenge.wire_outcome();
-            if outcome.audience_id != audience {
+            if challenge.audience_id != audience {
                 return Err(failed_precondition(
                     "persisted challenge audience does not match the handoff",
                 ));
             }
-            Ok(Json(outcome))
+            Ok(Json(challenge.wire_outcome()))
         }
         IdentityBindingChallengeIssue::DuplicateConflict
         | IdentityBindingChallengeIssue::ReservationConflict => {
