@@ -278,18 +278,6 @@ pub struct ArkretConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<serde_with::DurationSeconds<i64>>")]
     pub erasure_request_max_auth_age: Option<Duration>,
-
-    /// Exact local HTTPS host names eligible for development-mode automatic
-    /// station trust enrollment.
-    ///
-    /// Every entry must be a bare lowercase host name (no scheme, port, path
-    /// or wildcard). Auto-enrollment only runs when ALL of these hold: the
-    /// process runs in explicit development mode, the configured endpoint is
-    /// an HTTPS URL whose host exactly matches one entry, and neither a
-    /// config pin nor a persisted enrollment exists. It never overwrites an
-    /// existing pin and must stay empty in production.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub development_auto_enrollment_hosts: Vec<String>,
 }
 
 fn default_high_risk_threshold() -> u32 {
@@ -316,7 +304,6 @@ impl Default for ArkretConfig {
             admin_org_id: None,
             audit_signature_fail_closed: false,
             erasure_request_max_auth_age: None,
-            development_auto_enrollment_hosts: Vec::new(),
         }
     }
 }
@@ -337,7 +324,6 @@ impl ArkretConfig {
             && self.admin_org_id.is_none()
             && !self.audit_signature_fail_closed
             && self.erasure_request_max_auth_age.is_none()
-            && self.development_auto_enrollment_hosts.is_empty()
     }
 
     /// Set of host names this deployment trusts as outbound
@@ -381,16 +367,6 @@ impl ArkretConfig {
         self.trusted_outbound_hosts()
             .iter()
             .any(|trusted| trusted == &host)
-    }
-
-    /// Returns `true` when `host` is an exact entry of the development-mode
-    /// automatic trust-enrollment allowlist. Comparison is exact — no
-    /// wildcard or suffix matching.
-    #[must_use]
-    pub fn is_development_auto_enrollment_host(&self, host: &str) -> bool {
-        self.development_auto_enrollment_hosts
-            .iter()
-            .any(|allowed| allowed == host)
     }
 
     /// Primary Station endpoint for call sites that operate on a
@@ -476,20 +452,6 @@ impl ConfigurationSection for ArkretConfig {
             && org_id.trim().is_empty()
         {
             return Err(std::io::Error::other("arkret.admin_org_id must not be empty").into());
-        }
-
-        for host in &self.development_auto_enrollment_hosts {
-            let valid = !host.is_empty()
-                && host.len() <= 253
-                && host.bytes().all(|b| {
-                    b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'-')
-                });
-            if !valid {
-                return Err(std::io::Error::other(format!(
-                    "arkret.development_auto_enrollment_hosts entry {host:?} must be a bare lowercase host name (no scheme, port, path or wildcard)"
-                ))
-                .into());
-            }
         }
 
         let mut station_names = std::collections::BTreeSet::new();
@@ -592,9 +554,8 @@ pub struct StationConfig {
     ///
     /// Optional explicit authorization pin, highest priority. When omitted,
     /// the effective pin comes from the persisted trust enrollment written by
-    /// `coauth station trust bootstrap` (or, under the strict
-    /// development-mode gate, the automatic first enrollment). Describe
-    /// metadata may confirm a pin but can never discover or replace it; an
+    /// `coauth station trust bootstrap`. Describe metadata may confirm a pin
+    /// but can never discover or replace it; an
     /// endpoint URL or bearer token is never converted into an identity core.
     /// A configured value that conflicts with the persisted enrollment fails
     /// startup closed. An internal authority bearer requires this pin
@@ -743,6 +704,12 @@ mod tests {
     fn retired_arkret_config_fields_are_rejected() {
         assert!(
             serde_json::from_value::<ArkretConfig>(serde_json::json!({
+                "development_auto_enrollment_hosts": ["localhost"]
+            }))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<ArkretConfig>(serde_json::json!({
                 "password_login_session_grants_enabled": true
             }))
             .is_err()
@@ -881,36 +848,6 @@ mod tests {
         duplicate_bearer.stations.push(second);
         duplicate_bearer.owning_station = Some("principal-a".to_owned());
         assert!(duplicate_bearer.validate(&figment::Figment::new()).is_err());
-    }
-
-    #[test]
-    fn development_auto_enrollment_hosts_validate_shape() {
-        let figment = figment::Figment::new();
-        let config = ArkretConfig {
-            development_auto_enrollment_hosts: vec!["localhost".to_owned()],
-            ..ArkretConfig::default()
-        };
-        assert!(config.validate(&figment).is_ok());
-        assert!(config.is_development_auto_enrollment_host("localhost"));
-        assert!(!config.is_development_auto_enrollment_host("localhost.evil"));
-        assert!(!config.is_development_auto_enrollment_host(""));
-
-        for bad in [
-            "Localhost",
-            "https://localhost",
-            "localhost:8448",
-            "*.local",
-            "",
-        ] {
-            let config = ArkretConfig {
-                development_auto_enrollment_hosts: vec![bad.to_owned()],
-                ..ArkretConfig::default()
-            };
-            assert!(
-                config.validate(&figment).is_err(),
-                "entry {bad:?} must be rejected"
-            );
-        }
     }
 
     /// The target's trust domain is a registered fact of the Station entry

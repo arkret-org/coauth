@@ -1395,13 +1395,6 @@
           "format": "uint64",
           "minimum": 1,
           "maximum": 86400
-        },
-        "development_auto_enrollment_hosts": {
-          "description": "Exact local HTTPS host names eligible for development-mode automatic\nstation trust enrollment.\n\nEvery entry must be a bare lowercase host name (no scheme, port, path\nor wildcard). Auto-enrollment only runs when ALL of these hold: the\nprocess runs in explicit development mode, the configured endpoint is\nan HTTPS URL whose host exactly matches one entry, and neither a\nconfig pin nor a persisted enrollment exists. It never overwrites an\nexisting pin and must stay empty in production.",
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         }
       },
       "additionalProperties": false
@@ -1420,7 +1413,7 @@
           "format": "uri"
         },
         "service_id": {
-          "description": "Stable service identity core for authenticated S2S authorization.\n\nOptional explicit authorization pin, highest priority. When omitted,\nthe effective pin comes from the persisted trust enrollment written by\n`coauth station trust bootstrap` (or, under the strict\ndevelopment-mode gate, the automatic first enrollment). Describe\nmetadata may confirm a pin but can never discover or replace it; an\nendpoint URL or bearer token is never converted into an identity core.\nA configured value that conflicts with the persisted enrollment fails\nstartup closed. An internal authority bearer requires this pin\nexplicitly; a persisted or hostname-derived identity cannot complete\nthat contract.",
+          "description": "Stable service identity core for authenticated S2S authorization.\n\nOptional explicit authorization pin, highest priority. When omitted,\nthe effective pin comes from the persisted trust enrollment written by\n`coauth station trust bootstrap`. Describe metadata may confirm a pin\nbut can never discover or replace it; an endpoint URL or bearer token\nis never converted into an identity core. A configured value that\nconflicts with the persisted enrollment fails startup closed. An\ninternal authority bearer requires this pin explicitly; a persisted or\nhostname-derived identity cannot complete that contract.",
           "type": [
             "string",
             "null"

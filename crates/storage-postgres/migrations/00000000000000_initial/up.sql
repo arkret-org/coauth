@@ -987,10 +987,10 @@ CREATE TABLE public.station_trust_enrollments (
     CONSTRAINT station_trust_enrollments_did_non_empty CHECK ((btrim(did) <> ''::text)),
     CONSTRAINT station_trust_enrollments_method_history_head_non_empty CHECK ((btrim(method_history_head) <> ''::text)),
     CONSTRAINT station_trust_enrollments_version_id_non_empty CHECK ((btrim(version_id) <> ''::text)),
-    CONSTRAINT station_trust_enrollments_source_valid CHECK ((source = ANY (ARRAY['operator_cli'::text, 'deployment_artifact'::text, 'development_auto'::text])))
+    CONSTRAINT station_trust_enrollments_source_valid CHECK ((source = ANY (ARRAY['operator_cli'::text, 'deployment_artifact'::text])))
 );
 
-COMMENT ON TABLE public.station_trust_enrollments IS 'Deployment-local station trust enrollment: the accepted authorization pin per canonical endpoint, written only by explicit bootstrap/replace or the narrowly-scoped development auto-enrollment.';
+COMMENT ON TABLE public.station_trust_enrollments IS 'Deployment-local station trust enrollment: the accepted authorization pin per canonical endpoint, written only by explicit bootstrap/replace or trusted deployment provisioning.';
 
 CREATE TABLE public.station_trust_audits (
     id uuid NOT NULL,

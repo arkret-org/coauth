@@ -1,10 +1,10 @@
 //! Deployment-local Station trust enrollment persistence.
 //!
 //! These records are deployment control-plane state, not Arkret wire types:
-//! they persist the authorization pin an operator (or the narrowly-scoped
-//! development auto-enrollment) accepted for a canonical Station
-//! endpoint, plus the WebVH anti-rollback floor verified at enrollment time.
-//! Public `/_arkret/describe` responses can never create or replace them.
+//! they persist the authorization pin accepted by an operator or trusted
+//! deployment artifact for a canonical Station endpoint, plus the WebVH
+//! anti-rollback floor verified at enrollment time. Public
+//! `/_arkret/describe` responses can never create or replace them.
 
 use chrono::{DateTime, Utc};
 use rand_core::RngCore;
@@ -21,8 +21,6 @@ pub enum StationTrustSource {
     OperatorCli,
     /// Pin material provisioned by a trusted deployment artifact.
     DeploymentArtifact,
-    /// Automatic first enrollment under the strict development-mode gate.
-    DevelopmentAuto,
 }
 
 impl StationTrustSource {
@@ -32,7 +30,6 @@ impl StationTrustSource {
         match self {
             Self::OperatorCli => "operator_cli",
             Self::DeploymentArtifact => "deployment_artifact",
-            Self::DevelopmentAuto => "development_auto",
         }
     }
 
@@ -42,7 +39,6 @@ impl StationTrustSource {
         match value {
             "operator_cli" => Some(Self::OperatorCli),
             "deployment_artifact" => Some(Self::DeploymentArtifact),
-            "development_auto" => Some(Self::DevelopmentAuto),
             _ => None,
         }
     }
@@ -234,5 +230,23 @@ repository_impl! {
             enrollment_name: &str,
             limit: usize,
         ) -> Result<Vec<StationTrustAudit>, Self::Error>;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StationTrustSource;
+
+    #[test]
+    fn station_trust_source_has_no_automatic_enrollment_variant() {
+        assert_eq!(
+            StationTrustSource::from_stored("operator_cli"),
+            Some(StationTrustSource::OperatorCli)
+        );
+        assert_eq!(
+            StationTrustSource::from_stored("deployment_artifact"),
+            Some(StationTrustSource::DeploymentArtifact)
+        );
+        assert_eq!(StationTrustSource::from_stored("development_auto"), None);
     }
 }

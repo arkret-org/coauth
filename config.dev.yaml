@@ -164,11 +164,6 @@ rate_limiting:
       per_second: 100000
 arkret:
   trust_domain: ak:trust_domain:local.host
-  # Dev auto-enrollment remains available for non-internal Station entries.
-  # This internal channel instead requires an explicit identity pin; update it
-  # if the local Station identity is regenerated.
-  development_auto_enrollment_hosts:
-  - local.host
   stations:
   - name: soland-dev
     endpoint: https://local.host/

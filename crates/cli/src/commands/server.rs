@@ -311,7 +311,6 @@ impl Options {
                 PgRepositoryFactory::new(pool.clone()),
                 s.arkret_config.clone(),
                 s.http_client.clone(),
-                s.development_mode,
                 shutdown.soft_shutdown_token(),
                 coauth_backend::services::station_trust::RevalidationSchedule::DEFAULT,
             );

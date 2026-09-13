@@ -74,7 +74,6 @@ impl Options {
             PgRepositoryFactory::new(db_pool.clone()),
             app_cfg.arkret.clone(),
             arkret_http_client.clone(),
-            coauth_backend::error::development_mode_from_env(),
             lifecycle.soft_shutdown_token(),
             coauth_backend::services::station_trust::DEFAULT_REFRESH_INTERVAL,
         )

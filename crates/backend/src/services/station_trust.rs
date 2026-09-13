@@ -15,7 +15,7 @@
 //!
 //! 1. the explicit config pin (`stations[].service_id`);
 //! 2. the persisted trust enrollment written by an explicit `coauth station trust bootstrap` /
-//!    `replace` (or, in development mode only, the host-allowlisted auto-enrollment);
+//!    `replace`;
 //! 3. nothing — business routes remain unavailable and point at the bootstrap command.
 //!
 //! A remote describe response only ever *confirms* a pin. It can never
@@ -1002,22 +1002,6 @@ pub async fn revoke(
     Ok(revoked)
 }
 
-/// Whether the narrowly-scoped development auto-enrollment may run for
-/// `server`: explicit development mode, an exact configured local host
-/// allowlist entry, HTTPS scheme, and no existing pin of either layer.
-#[must_use]
-pub fn development_auto_enrollment_allowed(
-    arkret_config: &ArkretConfig,
-    server: &StationConfig,
-    development_mode: bool,
-) -> bool {
-    development_mode
-        && server.endpoint.scheme() == "https"
-        && server.endpoint.host_str().is_some_and(|host| {
-            arkret_config.is_development_auto_enrollment_host(&host.to_ascii_lowercase())
-        })
-}
-
 /// Mandatory online startup preflight for every configured Station.
 ///
 /// Resolves the effective pin (config layer, then persisted enrollment),
@@ -1035,19 +1019,11 @@ pub async fn preflight_and_spawn(
     repository_factory: PgRepositoryFactory,
     arkret_config: ArkretConfig,
     http_client: reqwest::Client,
-    development_mode: bool,
     soft_shutdown: CancellationToken,
     refresh_interval: Duration,
 ) -> anyhow::Result<()> {
     for server in &arkret_config.stations {
-        preflight_server(
-            &repository_factory,
-            &arkret_config,
-            &http_client,
-            server,
-            development_mode,
-        )
-        .await?;
+        preflight_server(&repository_factory, &arkret_config, &http_client, server).await?;
     }
 
     let interval = refresh_interval.clamp(MIN_REFRESH_INTERVAL, MAX_REFRESH_INTERVAL);
@@ -1101,7 +1077,6 @@ pub fn spawn_preflight_and_revalidation(
     repository_factory: PgRepositoryFactory,
     arkret_config: ArkretConfig,
     http_client: reqwest::Client,
-    development_mode: bool,
     soft_shutdown: CancellationToken,
     schedule: RevalidationSchedule,
 ) {
@@ -1114,14 +1089,9 @@ pub fn spawn_preflight_and_revalidation(
         loop {
             let mut failure = None;
             for server in &arkret_config.stations {
-                if let Err(error) = preflight_server(
-                    &repository_factory,
-                    &arkret_config,
-                    &http_client,
-                    server,
-                    development_mode,
-                )
-                .await
+                if let Err(error) =
+                    preflight_server(&repository_factory, &arkret_config, &http_client, server)
+                        .await
                 {
                     failure = Some((server, error));
                     break;
@@ -1189,7 +1159,6 @@ async fn preflight_server(
     arkret_config: &ArkretConfig,
     http_client: &reqwest::Client,
     server: &StationConfig,
-    development_mode: bool,
 ) -> anyhow::Result<()> {
     let canonical_endpoint = canonical_endpoint_key(&server.endpoint)
         .ok_or_else(|| anyhow::anyhow!("Station {:?} endpoint is invalid", server.name))?;
@@ -1216,35 +1185,11 @@ async fn preflight_server(
         }
         (Some(configured), _) => configured.clone(),
         (None, Some(persisted)) => persisted.service_id.clone(),
-        (None, None) => {
-            if !development_auto_enrollment_allowed(arkret_config, server, development_mode) {
-                anyhow::bail!(
-                    "Station {:?} ({canonical_endpoint}) is not enrolled: no config service_id pin and no persisted trust enrollment; set `stations[].service_id` or run `coauth station trust bootstrap --name {}` first",
-                    server.name,
-                    server.name,
-                );
-            }
-            let source = StationTrustSource::DevelopmentAuto;
-            let outcome = bootstrap(repository_factory, http_client, server, source)
-                .await
-                .map_err(|error| {
-                    anyhow::anyhow!("Station {:?} trust bootstrap failed: {error}", server.name)
-                })?;
-            tracing::info!(
-                name = %server.name,
-                endpoint = %canonical_endpoint,
-                service_id = %outcome.enrollment.service_id,
-                source = source.as_str(),
-                "enrolled station trust pin",
-            );
-            delegate_owning_station_identity(
-                arkret_config,
-                server,
-                outcome.enrollment.service_id,
-                outcome.enrollment.did,
-            );
-            return Ok(());
-        }
+        (None, None) => anyhow::bail!(
+            "Station {:?} ({canonical_endpoint}) is not enrolled: no config service_id pin and no persisted trust enrollment; set `stations[].service_id` or run `coauth station trust bootstrap --name {}` first",
+            server.name,
+            server.name,
+        ),
     };
 
     let floor = enrollment.as_ref().map(|persisted| {
@@ -1602,35 +1547,5 @@ mod tests {
         assert!(check_anti_rollback("sha256:bb", "2-bb", "sha256:aa", "1-aa").is_err());
         // Same sequence with a different head is a fork, not progress.
         assert!(check_anti_rollback("sha256:aa", "1-aa", "sha256:cc", "1-cc").is_err());
-    }
-
-    #[test]
-    fn development_auto_enrollment_requires_conjunction() {
-        let config = ArkretConfig {
-            development_auto_enrollment_hosts: vec!["localhost".to_owned()],
-            ..ArkretConfig::default()
-        };
-        let mut server = server("https://localhost:8448/");
-        server.service_id = None;
-
-        assert!(development_auto_enrollment_allowed(&config, &server, true));
-        // Not in development mode.
-        assert!(!development_auto_enrollment_allowed(
-            &config, &server, false
-        ));
-        // Host not in the exact allowlist.
-        let other = StationConfig {
-            endpoint: Url::parse("https://soland.local/").unwrap(),
-            ..server.clone()
-        };
-        assert!(!development_auto_enrollment_allowed(&config, &other, true));
-        // Plain HTTP is never auto-enrolled.
-        let insecure = StationConfig {
-            endpoint: Url::parse("http://localhost:8448/").unwrap(),
-            ..server.clone()
-        };
-        assert!(!development_auto_enrollment_allowed(
-            &config, &insecure, true
-        ));
     }
 }
