@@ -401,9 +401,8 @@ pub(crate) async fn require_session_grant_caller(
     // authz only — never `Admin` — so it cannot revoke session grants. The
     // matching server's audience is the only one this caller may read.
     let arkret_config = depot.arkret_config()?;
-    let static_bearer_audience = internal_operation.and_then(|operation| {
-        station_internal_channel_caller_for_request(&arkret_config, token, req.headers(), operation)
-    });
+    let static_bearer_audience =
+        internal_operation.and_then(|_| station_internal_channel_caller(&arkret_config, token));
     if let Some(static_bearer_audience) = static_bearer_audience {
         return Ok(SessionGrantCaller::station(vec![static_bearer_audience]));
     }
@@ -519,10 +518,9 @@ pub(crate) fn station_static_session_grant_bearer_matches(
 /// (`sync/service-http-binding.md` §2.2.3) by `credential`.
 ///
 /// The identity is the one explicit service id whose configured channel
-/// credential matches, never a `Source-Service-ID` header, a body field or a
-/// self-reported `internal` marker. Configuration validation rejects duplicate
-/// credentials, and this helper independently rejects an ambiguous match
-/// rather than choosing whichever Station happens to appear first.
+/// credential matches, never a request header or body field. Configuration
+/// validation rejects duplicate credentials, and this helper independently
+/// rejects an ambiguous match rather than choosing the first Station.
 pub(crate) fn station_internal_channel_caller(
     arkret_config: &ArkretConfig,
     token: &str,
@@ -534,7 +532,7 @@ pub(crate) fn station_internal_channel_caller(
         .stations
         .iter()
         .filter(|server| {
-            server.permits_unsigned_internal_channel()
+            server.has_internal_authority_peer()
                 && server.service_id.is_some()
                 && server.trust_domain.is_some()
                 && server
@@ -551,61 +549,6 @@ pub(crate) fn station_internal_channel_caller(
         return None;
     }
     Some(caller)
-}
-
-pub(crate) fn station_internal_channel_caller_for_request(
-    arkret_config: &ArkretConfig,
-    token: &str,
-    headers: &http::HeaderMap,
-    expected_operation: &str,
-) -> Option<String> {
-    let authenticated_caller = station_internal_channel_caller(arkret_config, token)?;
-    let destination_service_id = arkret_config
-        .runtime_owning_station_identity
-        .get()
-        .map(|identity| identity.station_id)?;
-    let destination_trust_domain = arkret_config.trust_domain.as_deref()?;
-    arkret_config
-        .stations
-        .iter()
-        .filter(|station| {
-            station.permits_unsigned_internal_channel()
-                && station
-                    .session_grant_introspection_bearer
-                    .as_deref()
-                    .is_some_and(|configured| {
-                        crate::util::constant_time_token_eq(configured, token)
-                    })
-        })
-        .filter_map(|station| {
-            let source_service_id = station.service_id.as_ref()?;
-            let source_trust_domain = station.trust_domain.as_deref()?;
-            if authenticated_caller != source_service_id.as_str() {
-                return None;
-            }
-            let expected = [
-                ("source-service-id", Some(source_service_id.as_str())),
-                (
-                    "destination-service-id",
-                    Some(destination_service_id.as_str()),
-                ),
-                ("arkret-operation", Some(expected_operation)),
-                ("source-trust-domain", Some(source_trust_domain)),
-                ("destination-trust-domain", Some(destination_trust_domain)),
-            ];
-            for (name, configured) in expected {
-                if let Some(value) = headers.get(name) {
-                    let Ok(observed) = value.to_str() else {
-                        return None;
-                    };
-                    if !configured.is_some_and(|configured| observed == configured) {
-                        return None;
-                    }
-                }
-            }
-            Some(source_service_id.to_string())
-        })
-        .next()
 }
 
 fn internal_error_envelope(

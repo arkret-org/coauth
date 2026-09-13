@@ -22,8 +22,6 @@ use crate::handlers::common::DepotExt;
 
 const GATE_TTL: Duration = Duration::minutes(5);
 const REPLAY_RETENTION: Duration = Duration::days(7);
-const GATE_OPERATION_ID: &str =
-    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_CONTROLLER_GATE_ATTESTATION_V1;
 
 pub struct ControllerGateCanonicalJson(Vec<u8>);
 
@@ -203,12 +201,9 @@ pub async fn issue_controller_gate_attestation(
 /// (`sync/service-http-binding.md` §2.2.3).
 ///
 /// The internal identity comes only from verifying the credential configured
-/// for this exact Account Authority / Station edge. `Source-Service-ID`,
-/// `Destination-Service-ID`, a path segment, a `DidCoreId`/URL in the body and
-/// any caller-supplied key MUST NOT decide the identity or supply a
-/// verification key; when those redundant transport inputs are present they are
-/// compared verbatim against the authenticated facts and any disagreement is a
-/// rejection. The channel is the complete authentication contract for this
+/// for this exact Account Authority / Station edge. Request identity headers,
+/// path fields and body fields do not decide that identity. The fixed route and
+/// matched peer configuration provide the remaining binding. The channel is the complete authentication contract for this
 /// operation and replaces the RFC 9421 request signature, so the request body
 /// no longer carries a service-resolution carrier.
 ///
@@ -238,41 +233,10 @@ fn authenticate_internal_channel_caller(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(not_found)?;
-    let authenticated_caller = super::station_internal_channel_caller_for_request(
-        &config,
-        credential,
-        req.headers(),
-        GATE_OPERATION_ID,
-    )
-    .ok_or_else(not_found)?;
+    let authenticated_caller =
+        super::station_internal_channel_caller(&config, credential).ok_or_else(not_found)?;
     if authenticated_caller != request.agent_authority_id.as_str() {
         return Err(not_found());
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-fn validate_redundant_channel_headers(
-    headers: &http::HeaderMap,
-    source_service_id: &str,
-    destination_service_id: &str,
-    source_trust_domain: Option<&str>,
-    destination_trust_domain: Option<&str>,
-) -> Result<(), ArkretRouteError> {
-    let redundant = [
-        ("source-service-id", Some(source_service_id)),
-        ("destination-service-id", Some(destination_service_id)),
-        ("arkret-operation", Some(GATE_OPERATION_ID)),
-        ("source-trust-domain", source_trust_domain),
-        ("destination-trust-domain", destination_trust_domain),
-    ];
-    for (header, expected) in redundant {
-        if let Some(value) = headers.get(header) {
-            let observed = value.to_str().map_err(|_| not_found())?;
-            if !expected.is_some_and(|expected| observed == expected) {
-                return Err(not_found());
-            }
-        }
     }
     Ok(())
 }
@@ -340,89 +304,4 @@ fn schema_violation(message: impl Into<String>) -> ArkretRouteError {
         arkret_wire::ErrorCode::SCHEMA_VIOLATION,
         message,
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const SOURCE: &str = "ak:did_core:web:agent-authority.example";
-    const DESTINATION: &str = "ak:did_core:web:station.example";
-    const SOURCE_DOMAIN: &str = "ak:trust_domain:agent-authority.example";
-    const DESTINATION_DOMAIN: &str = "ak:trust_domain:station.example";
-
-    fn canonical_headers() -> http::HeaderMap {
-        let mut headers = http::HeaderMap::new();
-        headers.insert("source-service-id", SOURCE.parse().unwrap());
-        headers.insert("destination-service-id", DESTINATION.parse().unwrap());
-        headers.insert("arkret-operation", GATE_OPERATION_ID.parse().unwrap());
-        headers.insert("source-trust-domain", SOURCE_DOMAIN.parse().unwrap());
-        headers.insert(
-            "destination-trust-domain",
-            DESTINATION_DOMAIN.parse().unwrap(),
-        );
-        headers
-    }
-
-    fn validate(headers: &http::HeaderMap) -> Result<(), ArkretRouteError> {
-        validate_redundant_channel_headers(
-            headers,
-            SOURCE,
-            DESTINATION,
-            Some(SOURCE_DOMAIN),
-            Some(DESTINATION_DOMAIN),
-        )
-    }
-
-    #[test]
-    fn redundant_internal_channel_headers_match_registered_facts_verbatim() {
-        assert!(validate(&canonical_headers()).is_ok());
-
-        for (name, wrong) in [
-            ("source-service-id", "ak:did_core:web:other-station.example"),
-            (
-                "destination-service-id",
-                "ak:did_core:web:other-auth.example",
-            ),
-            ("source-trust-domain", "ak:trust_domain:wrong.example"),
-            ("destination-trust-domain", "ak:trust_domain:wrong.example"),
-            (
-                "arkret-operation",
-                arkret_wire::ServiceOperationId::PEER_DEVICE_REVOCATIONS_COMMAND_CHECK_V1,
-            ),
-        ] {
-            let mut headers = canonical_headers();
-            headers.insert(name, wrong.parse().unwrap());
-            assert!(validate(&headers).is_err(), "{name} mismatch must reject");
-        }
-
-        let mut whitespace_changed = canonical_headers();
-        whitespace_changed.insert("source-service-id", format!(" {SOURCE}").parse().unwrap());
-        assert!(validate(&whitespace_changed).is_err());
-    }
-
-    #[test]
-    fn a_present_redundant_header_requires_the_corresponding_configuration() {
-        let headers = canonical_headers();
-        assert!(
-            validate_redundant_channel_headers(
-                &headers,
-                SOURCE,
-                DESTINATION,
-                None,
-                Some(DESTINATION_DOMAIN),
-            )
-            .is_err()
-        );
-        assert!(
-            validate_redundant_channel_headers(
-                &headers,
-                SOURCE,
-                DESTINATION,
-                Some(SOURCE_DOMAIN),
-                None,
-            )
-            .is_err()
-        );
-    }
 }

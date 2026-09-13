@@ -271,9 +271,6 @@ fn personal_node_did_web_config() -> ArkretConfig {
                     .unwrap(),
             ),
             session_grant_introspection_bearer: Some(SESSION_GRANT_INTROSPECTION_BEARER.to_owned()),
-            internal_channel: Some(coauth_config::InternalChannelConfig {
-                integrity: coauth_config::InternalChannelIntegrityConfig::MtlsDirectProcess {},
-            }),
             embedded_webvh_registration_bearer: None,
             trust_domain: Some("ak:trust_domain:principal.example.com".to_owned()),
         }],
@@ -346,9 +343,6 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
                     .unwrap(),
             ),
             session_grant_introspection_bearer: Some(bearer.to_owned()),
-            internal_channel: Some(coauth_config::InternalChannelConfig {
-                integrity: coauth_config::InternalChannelIntegrityConfig::MtlsDirectProcess {},
-            }),
             embedded_webvh_registration_bearer: None,
             trust_domain: Some("ak:trust_domain:station.example".to_owned()),
         }],
@@ -376,9 +370,6 @@ fn shared_static_bearer_is_rejected_as_ambiguous() {
                 .unwrap(),
         ),
         session_grant_introspection_bearer: Some("shared-cluster-token".to_owned()),
-        internal_channel: Some(coauth_config::InternalChannelConfig {
-            integrity: coauth_config::InternalChannelIntegrityConfig::MtlsDirectProcess {},
-        }),
         embedded_webvh_registration_bearer: None,
         trust_domain: Some("ak:trust_domain:station-beta.example".to_owned()),
     });
@@ -407,103 +398,23 @@ fn station_static_session_grant_bearer_ignores_unset_field() {
 }
 
 #[test]
-fn station_static_session_grant_bearer_requires_valid_integrity_configuration() {
-    let mut config = config_with_static_session_grant_bearer("placeholder");
-    config.stations[0].internal_channel = None;
-    assert!(!station_static_session_grant_bearer_matches(
-        &config,
-        "placeholder"
-    ));
-
-    config.stations[0].internal_channel = Some(coauth_config::InternalChannelConfig {
-        integrity: coauth_config::InternalChannelIntegrityConfig::RegisteredTcb {
-            decrypting_forwarding_proxies: vec!["edge-a".to_owned(), "edge-a".to_owned()],
-        },
-    });
-    assert!(!station_static_session_grant_bearer_matches(
-        &config,
-        "placeholder"
-    ));
-}
-
-#[test]
-fn internal_channel_request_headers_are_bound_to_station_domain_and_operation() {
+fn internal_authority_peer_requires_configured_identity_and_domains() {
     let mut config = config_with_static_session_grant_bearer("channel-key");
-    config.trust_domain = Some("ak:trust_domain:auth.example".to_owned());
-    config.stations[0].trust_domain = Some("ak:trust_domain:station.example".to_owned());
-    let operation =
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_INTROSPECT_SESSION_GRANT_V1;
-    let mut headers = http::HeaderMap::new();
-    headers.insert(
-        "source-service-id",
-        "ak:did_core:web:session-grant-static.test".parse().unwrap(),
-    );
-    headers.insert(
-        "destination-service-id",
-        "ak:did_core:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x"
-            .parse()
-            .unwrap(),
-    );
-    headers.insert(
-        "source-trust-domain",
-        "ak:trust_domain:station.example".parse().unwrap(),
-    );
-    headers.insert(
-        "destination-trust-domain",
-        "ak:trust_domain:auth.example".parse().unwrap(),
-    );
-    headers.insert("arkret-operation", operation.parse().unwrap());
     assert_eq!(
-        station_internal_channel_caller_for_request(&config, "channel-key", &headers, operation,),
+        station_internal_channel_caller(&config, "channel-key"),
         Some("ak:did_core:web:session-grant-static.test".to_owned())
     );
 
-    for (name, wrong) in [
-        ("source-service-id", "ak:did_core:web:wrong-station.example"),
-        (
-            "destination-service-id",
-            "ak:did_core:web:wrong-authority.example",
-        ),
-        ("source-trust-domain", "ak:trust_domain:wrong.example"),
-        ("destination-trust-domain", "ak:trust_domain:wrong.example"),
-        (
-            "arkret-operation",
-            arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_LOGOUT_AUTH_SESSION_V1,
-        ),
-    ] {
-        let mut wrong_headers = headers.clone();
-        wrong_headers.insert(name, wrong.parse().unwrap());
-        assert!(
-            station_internal_channel_caller_for_request(
-                &config,
-                "channel-key",
-                &wrong_headers,
-                operation,
-            )
-            .is_none(),
-            "{name} mismatch must reject the registered channel",
-        );
-    }
-
     config.stations[0].trust_domain = None;
-    assert!(
-        station_internal_channel_caller_for_request(&config, "channel-key", &headers, operation,)
-            .is_none()
-    );
+    assert!(station_internal_channel_caller(&config, "channel-key").is_none());
 
     let mut config = config_with_static_session_grant_bearer("channel-key");
     config.trust_domain = None;
-    assert!(
-        station_internal_channel_caller_for_request(&config, "channel-key", &headers, operation,)
-            .is_none()
-    );
+    assert!(station_internal_channel_caller(&config, "channel-key").is_none());
 
     let mut config = config_with_static_session_grant_bearer("channel-key");
     config.stations[0].service_id = None;
-    assert!(
-        station_internal_channel_caller_for_request(&config, "channel-key", &headers, operation,)
-            .is_none()
-    );
+    assert!(station_internal_channel_caller(&config, "channel-key").is_none());
 }
 
 #[test]

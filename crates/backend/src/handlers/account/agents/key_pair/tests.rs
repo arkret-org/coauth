@@ -237,7 +237,6 @@ fn controller_station_for_pairing_uses_trusted_enrollment() {
         endpoint: "https://controller-station.example/".parse().unwrap(),
         service_id: None,
         session_grant_introspection_bearer: None,
-        internal_channel: None,
         embedded_webvh_registration_bearer: None,
         trust_domain: None,
     });

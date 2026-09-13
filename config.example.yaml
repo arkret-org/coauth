@@ -129,21 +129,12 @@ arkret:
   # keys and JWKS publication are operational.
   audit_signature_fail_closed: false
   stations:
-    # service_id may be omitted only for Stations without internal_channel.
-    # An unsigned internal channel requires this explicit identity pin.
+    # A Station with an internal authority bearer requires this explicit
+    # identity pin and trust domain.
   - name: soland-example
     endpoint: https://local.host/
     service_id: ak:did_core:web:local.host
     session_grant_introspection_bearer: ${SOLAND_SESSION_GRANT_INTROSPECTION_BEARER}
-    # Required before this bearer may authorize an unsigned §2.2.3 internal
-    # operation. Use mtls_direct_process only when mTLS terminates in the
-    # Station business process. Otherwise select registered_tcb and list every
-    # decrypting/forwarding proxy explicitly.
-    internal_channel:
-      integrity:
-        mode: registered_tcb
-        decrypting_forwarding_proxies:
-        - edge-proxy-1
     embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
     trust_domain: ak:trust_domain:soland.example
   # Standalone identity Providers use the same standard operations. Configure

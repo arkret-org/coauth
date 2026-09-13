@@ -1307,7 +1307,7 @@
       "type": "object",
       "properties": {
         "stations": {
-          "description": "Station audiences trusted to consume session grants and admin\ntokens emitted by coauth. Every Station that enables\n`internal_channel` must use a credential unique within this list.",
+          "description": "Station audiences trusted to consume session grants and admin\ntokens emitted by coauth. Every Station that configures an internal\nauthority bearer must use a credential unique within this list.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/StationConfig"
@@ -1420,28 +1420,17 @@
           "format": "uri"
         },
         "service_id": {
-          "description": "Stable service identity core for authenticated S2S authorization.\n\nOptional explicit authorization pin, highest priority. When omitted,\nthe effective pin comes from the persisted trust enrollment written by\n`coauth station trust bootstrap` (or, under the strict\ndevelopment-mode gate, the automatic first enrollment). Describe\nmetadata may confirm a pin but can never discover or replace it; an\nendpoint URL or bearer token is never converted into an identity core.\nA configured value that conflicts with the persisted enrollment fails\nstartup closed. `internal_channel` requires this pin explicitly; a\npersisted or hostname-derived identity cannot complete that contract.",
+          "description": "Stable service identity core for authenticated S2S authorization.\n\nOptional explicit authorization pin, highest priority. When omitted,\nthe effective pin comes from the persisted trust enrollment written by\n`coauth station trust bootstrap` (or, under the strict\ndevelopment-mode gate, the automatic first enrollment). Describe\nmetadata may confirm a pin but can never discover or replace it; an\nendpoint URL or bearer token is never converted into an identity core.\nA configured value that conflicts with the persisted enrollment fails\nstartup closed. An internal authority bearer requires this pin\nexplicitly; a persisted or hostname-derived identity cannot complete\nthat contract.",
           "type": [
             "string",
             "null"
           ]
         },
         "session_grant_introspection_bearer": {
-          "description": "Optional static bearer for the Account Authority / Station\ntrust edge. The Station presents it to coauth introspection and\nAuth-side logout; coauth presents the same deployment credential when\nreading the standard agent projection for lifecycle authorization.\nIt is mandatory and unique across Station entries whenever\n`internal_channel` is present.",
+          "description": "Optional static bearer for the Account Authority / Station\ntrust edge. The Station presents it to coauth introspection and\nAuth-side logout; coauth presents the same deployment credential when\nreading the standard agent projection for lifecycle authorization.\nWhen present it defines the internal authority peer and must be unique\nacross Station entries.",
           "type": [
             "string",
             "null"
-          ]
-        },
-        "internal_channel": {
-          "description": "Explicit integrity contract for unsigned deployment-internal calls on\nthis Account Authority / Station edge.\n\nMerely provisioning a bearer does not establish transport integrity.\nOperations whose RFC 9421 signature is replaced by the internal\nchannel may use this Station only when this block is present and its\nintegrity declaration is valid.",
-          "anyOf": [
-            {
-              "$ref": "#/definitions/InternalChannelConfig"
-            },
-            {
-              "type": "null"
-            }
           ]
         },
         "embedded_webvh_registration_bearer": {
@@ -1452,7 +1441,7 @@
           ]
         },
         "trust_domain": {
-          "description": "This Station's trust domain, as a registered deployment fact.\n\n`sync/service-http-binding.md` §2.2.3 binds every internal call to the\nconfigured caller identity, the configured *target* service identity\nand the configured trust domain. The target's trust domain is therefore\na fact of this Station entry, never something derived from the\nendpoint URL, the hostname or `arkret.trust_domain` (which is coauth's\nown domain and differs from the Station's whenever they run on\ndifferent hosts). When it is absent, operations that must bind it fail\nclosed rather than guessing.\n\nWire form: `ak:trust_domain:<scope>`, validated by\n[`ArkretConfig::validate_trust_domain`].",
+          "description": "This Station's trust domain, as a registered deployment fact.\n\nThis is a fact of the Station peer entry, never something derived from\nthe endpoint URL, hostname or `arkret.trust_domain` (coauth's own\ndomain). When an internal authority bearer is present, this value is\nmandatory and is never repeated in request headers.\n\nWire form: `ak:trust_domain:<scope>`, validated by\n[`ArkretConfig::validate_trust_domain`].",
           "type": [
             "string",
             "null"
@@ -1463,65 +1452,6 @@
       "required": [
         "name",
         "endpoint"
-      ]
-    },
-    "InternalChannelConfig": {
-      "description": "Deployment contract for one unsigned internal Account Authority / Station\nchannel.",
-      "type": "object",
-      "properties": {
-        "integrity": {
-          "description": "How transport integrity is preserved after TLS termination.",
-          "allOf": [
-            {
-              "$ref": "#/definitions/InternalChannelIntegrityConfig"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "integrity"
-      ]
-    },
-    "InternalChannelIntegrityConfig": {
-      "description": "Integrity mechanism that permits RFC 9421 to be omitted on a registered\ninternal channel.",
-      "oneOf": [
-        {
-          "description": "Mutually authenticated TLS terminates directly in the business\nprocess; no decrypting or forwarding intermediary exists.",
-          "type": "object",
-          "properties": {
-            "mode": {
-              "type": "string",
-              "const": "mtls_direct_process"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "mode"
-          ]
-        },
-        {
-          "description": "Every intermediary that can decrypt or forward the channel is an\nexplicitly registered member of the same trusted computing base.",
-          "type": "object",
-          "properties": {
-            "decrypting_forwarding_proxies": {
-              "description": "Complete, deployment-defined identifiers of all decrypting or\nforwarding proxies on the channel.",
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "mode": {
-              "type": "string",
-              "const": "registered_tcb"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "mode",
-            "decrypting_forwarding_proxies"
-          ]
-        }
       ]
     },
     "DeploymentProfileConfig": {

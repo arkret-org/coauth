@@ -174,11 +174,6 @@ arkret:
     endpoint: https://local.host/
     service_id: ak:did_core:web:local.host
     session_grant_introspection_bearer: local-coauth-session-grant-introspection
-    internal_channel:
-      integrity:
-        mode: registered_tcb
-        decrypting_forwarding_proxies:
-        - local-dev-reverse-proxy
     embedded_webvh_registration_bearer: local-soland-webvh-registration
     # The Station's own trust domain, as a registered fact of this entry
     # (service-http-binding.md 2.2.3). `arkret.trust_domain` above is coauth's

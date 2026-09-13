@@ -362,13 +362,10 @@ impl<'a> PeerProtocolClient<'a> {
 /// One registered deployment-internal authenticated channel
 /// (`sync/service-http-binding.md` §2.2.3).
 ///
-/// Every fact this channel binds — the calling service identity, the target
-/// service identity, the trust domain and the credential — comes from explicit
-/// deployment configuration. A response body, a `Source-Service-ID` header, a
-/// path segment or any self-reported `internal` marker MUST NOT decide the
-/// internal relationship, and a missing or conflicting configuration fails
-/// closed rather than falling back to `describe`, to the first configured
-/// Station or to an unsigned anonymous call.
+/// The configured Station origin, per-edge credential and trust-domain-bearing
+/// peer entry define this relationship. Request headers do not repeat it, and
+/// a missing configuration fails closed rather than falling back to `describe`
+/// or an anonymous call.
 ///
 /// The channel is per-operation: only the operations registered in §2.2.3 may
 /// use it. Everything else on `/_arkret/peer/*` keeps the RFC 9421 service
@@ -377,10 +374,7 @@ pub struct InternalAuthorityChannel<'a> {
     base_url: &'a Url,
     http_client: &'a reqwest::Client,
     credential: &'a str,
-    source_service_id: arkret_identifiers::DidCoreId,
     destination_service_id: arkret_identifiers::DidCoreId,
-    source_trust_domain: arkret_identifiers::TrustDomainId,
-    destination_trust_domain: arkret_identifiers::TrustDomainId,
 }
 
 impl<'a> InternalAuthorityChannel<'a> {
@@ -393,19 +387,8 @@ impl<'a> InternalAuthorityChannel<'a> {
         base_url: &'a Url,
         http_client: &'a reqwest::Client,
         credential: Option<&'a str>,
-        internal_channel: Option<&coauth_config::InternalChannelConfig>,
-        source_service_id: arkret_identifiers::DidCoreId,
         destination_service_id: arkret_identifiers::DidCoreId,
-        source_trust_domain: arkret_identifiers::TrustDomainId,
-        destination_trust_domain: arkret_identifiers::TrustDomainId,
     ) -> Result<Self, PeerProtocolClientError> {
-        if !internal_channel
-            .is_some_and(coauth_config::InternalChannelConfig::permits_unsigned_transport)
-        {
-            return Err(PeerProtocolClientError::InternalChannelNotConfigured(
-                "no valid channel integrity contract is configured".to_owned(),
-            ));
-        }
         let credential = credential
             .map(str::trim)
             .filter(|value| !value.is_empty())
@@ -418,10 +401,7 @@ impl<'a> InternalAuthorityChannel<'a> {
             base_url,
             http_client,
             credential,
-            source_service_id,
             destination_service_id,
-            source_trust_domain,
-            destination_trust_domain,
         })
     }
 
@@ -468,9 +448,8 @@ impl<'a> InternalAuthorityChannel<'a> {
     /// No `Content-Digest` and no RFC 9421 signature: with no signature
     /// covering the transport shell, §2.5.1 forbids the shell digest, and the
     /// receiver MUST NOT treat whole-body byte equality as an authentication
-    /// means. The service-identity and trust-domain headers travel only as
-    /// redundant inputs the receiver compares verbatim against the identity it
-    /// authenticated from the credential.
+    /// means. The fixed call site and target origin supply operation and
+    /// destination; no redundant identity or trust-domain headers are sent.
     async fn post_json<T, R>(
         &self,
         policy_name: &'static str,
@@ -488,36 +467,15 @@ impl<'a> InternalAuthorityChannel<'a> {
             .map_err(|error| PeerProtocolClientError::InvalidUrl(error.to_string()))?;
         let body_bytes = canonical_json_bytes(body)
             .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
-        let headers = [
-            (SOURCE_SERVICE_ID_HEADER, self.source_service_id.to_string()),
-            (
-                DESTINATION_SERVICE_ID_HEADER,
-                self.destination_service_id.to_string(),
-            ),
-            (
-                HEADER_SOURCE_TRUST_DOMAIN,
-                self.source_trust_domain.to_string(),
-            ),
-            (
-                HEADER_DESTINATION_TRUST_DOMAIN,
-                self.destination_trust_domain.to_string(),
-            ),
-            (ARKRET_OPERATION_HEADER, operation_id.to_owned()),
-        ];
-
         let response = outbound_http::send_with_policy(
             outbound_http::soland_policy(policy_name).with_timeout(Duration::from_secs(5)),
             || {
-                let mut request = self
-                    .http_client
+                self.http_client
                     .post(url.clone())
                     .bearer_auth(self.credential)
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
-                    .body(body_bytes.clone());
-                for (name, value) in &headers {
-                    request = request.header(*name, value.as_str());
-                }
-                request
+                    .header(ARKRET_OPERATION_HEADER, operation_id)
+                    .body(body_bytes.clone())
             },
         )
         .await

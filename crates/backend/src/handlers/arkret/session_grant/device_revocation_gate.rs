@@ -7,7 +7,7 @@ use arkret_wire::{
 use chrono::{DateTime, Utc};
 use salvo::prelude::{Depot, StatusCode};
 
-use crate::handlers::arkret::{ArkretRouteError, owning_station_id_for};
+use crate::handlers::arkret::ArkretRouteError;
 use crate::handlers::common::DepotExt as _;
 use crate::services::peer_protocol_client::{InternalAuthorityChannel, PeerProtocolClientError};
 
@@ -58,16 +58,6 @@ pub(crate) async fn acquire_human_device_binding(
     };
     request.validate().map_err(gate_protocol_error)?;
 
-    let source_id = owning_station_id_for(&config);
-    // Both trust-domain positions are registered facts (§2.2.3 binds the
-    // channel's trust domain as configuration). The source domain is this
-    // deployment's explicitly configured `arkret.trust_domain`; the
-    // destination domain is the target Station entry's own. Neither may come
-    // from a URL or a hostname: the hostname-derived default describes
-    // whichever host coauth happens to run on, which is not the peer's domain
-    // in a split deployment and is not a registered fact in either position.
-    let source_trust_domain = configured_deployment_trust_domain(&config)?;
-    let destination_trust_domain = configured_station_trust_domain(destination)?;
     let http_client = depot.http_client()?;
     // `PeerProtocolClientError` deliberately has no `From` for
     // `ArkretRouteError`: `account_register.rs::map_peer_error` maps the same
@@ -77,11 +67,7 @@ pub(crate) async fn acquire_human_device_binding(
         &destination.endpoint,
         &http_client,
         destination.session_grant_introspection_bearer.as_deref(),
-        destination.internal_channel.as_ref(),
-        source_id,
         account_id.station_id.clone(),
-        source_trust_domain,
-        destination_trust_domain,
     )
     .map_err(map_peer_gate_error)?;
     let outcome = channel
@@ -112,64 +98,6 @@ pub(crate) async fn acquire_human_device_binding(
             "device authorization is revoked or generation-fenced",
         )),
     }
-}
-
-/// This deployment's own trust domain, from explicit configuration.
-///
-/// `trust_domain_for` falls back to a value derived from coauth's public
-/// hostname, which is a guess about where this process happens to run rather
-/// than a registered fact. §2.2.3 requires the channel's trust domain to come
-/// from deployment configuration, so the internal channel refuses the derived
-/// default instead of sending it.
-fn configured_deployment_trust_domain(
-    config: &coauth_config::ArkretConfig,
-) -> Result<arkret_identifiers::TrustDomainId, ArkretRouteError> {
-    let configured = config
-        .trust_domain
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            ArkretRouteError::coded(
-                StatusCode::SERVICE_UNAVAILABLE,
-                arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
-                "arkret.trust_domain is not configured; the internal channel cannot bind this deployment's trust domain",
-            )
-        })?;
-    Ok(arkret_identifiers::TrustDomainId::new(
-        configured.to_owned(),
-    )?)
-}
-
-/// The target Station's own trust domain, from explicit configuration.
-///
-/// `sync/service-http-binding.md` §2.2.3 makes the target service identity and
-/// its trust domain registered deployment facts. `arkret.trust_domain` (and
-/// its hostname-derived default) describes *this* service, so it must never
-/// stand in for the peer's: in a split deployment the two differ and the call
-/// would claim the wrong destination domain. An unconfigured
-/// `arkret.stations[].trust_domain` fails closed.
-fn configured_station_trust_domain(
-    station: &coauth_config::StationConfig,
-) -> Result<arkret_identifiers::TrustDomainId, ArkretRouteError> {
-    let configured = station
-        .trust_domain
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            ArkretRouteError::coded(
-                StatusCode::SERVICE_UNAVAILABLE,
-                arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
-                format!(
-                    "origin Station {:?} has no configured trust_domain; the internal channel cannot bind its trust domain",
-                    station.name
-                ),
-            )
-        })?;
-    Ok(arkret_identifiers::TrustDomainId::new(
-        configured.to_owned(),
-    )?)
 }
 
 fn map_peer_gate_error(error: PeerProtocolClientError) -> ArkretRouteError {
@@ -266,44 +194,16 @@ mod tests {
         arkret_identifiers::DidCoreId::new(value.to_owned()).expect("test service core id")
     }
 
-    fn trust_domain(scope: &str) -> arkret_identifiers::TrustDomainId {
-        arkret_identifiers::TrustDomainId::new(format!("ak:trust_domain:{scope}"))
-            .expect("test trust domain")
-    }
-
-    fn station(name: &str, trust_domain: Option<&str>) -> coauth_config::StationConfig {
-        coauth_config::StationConfig {
-            name: name.to_owned(),
-            endpoint: "https://station.example/".parse().expect("test endpoint"),
-            service_id: Some(core_id("ak:did_core:web:station.example")),
-            session_grant_introspection_bearer: Some("configured-credential".to_owned()),
-            internal_channel: Some(coauth_config::InternalChannelConfig {
-                integrity: coauth_config::InternalChannelIntegrityConfig::MtlsDirectProcess {},
-            }),
-            embedded_webvh_registration_bearer: None,
-            trust_domain: trust_domain.map(ToOwned::to_owned),
-        }
-    }
-
     fn channel_to<'a>(
         endpoint: &'a url::Url,
         http_client: &'a reqwest::Client,
         destination: &str,
     ) -> InternalAuthorityChannel<'a> {
-        let internal_channel = coauth_config::InternalChannelConfig {
-            integrity: coauth_config::InternalChannelIntegrityConfig::MtlsDirectProcess {},
-        };
         InternalAuthorityChannel::new(
             endpoint,
             http_client,
             Some("configured-internal-channel-credential"),
-            Some(&internal_channel),
-            core_id("ak:did_core:web:auth.example"),
             core_id(destination),
-            // Source and destination domains are distinct facts: this
-            // deployment's own, and the target Station's registered one.
-            trust_domain("auth.example"),
-            trust_domain("station.example"),
         )
         .expect("configured internal channel")
     }
@@ -346,20 +246,13 @@ mod tests {
     fn internal_channel_without_a_configured_credential_fails_closed() {
         let endpoint = url::Url::parse("https://station.example/").expect("test endpoint");
         let http_client = crate::reqwest_client();
-        let internal_channel = coauth_config::InternalChannelConfig {
-            integrity: coauth_config::InternalChannelIntegrityConfig::MtlsDirectProcess {},
-        };
         // `InternalAuthorityChannel` is deliberately not `Debug` (it holds a
         // credential), so destructure rather than using `expect_err`.
         let Err(error) = InternalAuthorityChannel::new(
             &endpoint,
             &http_client,
             None,
-            Some(&internal_channel),
-            core_id("ak:did_core:web:auth.example"),
             core_id("ak:did_core:web:station.example"),
-            trust_domain("auth.example"),
-            trust_domain("station.example"),
         ) else {
             panic!("an unconfigured channel must not be usable");
         };
@@ -369,80 +262,6 @@ mod tests {
         ));
         assert!(matches!(
             map_peer_gate_error(error),
-            ArkretRouteError::Coded {
-                status: StatusCode::SERVICE_UNAVAILABLE,
-                ..
-            }
-        ));
-    }
-
-    #[test]
-    fn internal_channel_without_a_valid_integrity_contract_fails_closed() {
-        let endpoint = url::Url::parse("https://station.example/").expect("test endpoint");
-        let http_client = crate::reqwest_client();
-        let invalid_tcb = coauth_config::InternalChannelConfig {
-            integrity: coauth_config::InternalChannelIntegrityConfig::RegisteredTcb {
-                decrypting_forwarding_proxies: vec!["edge-a".to_owned(), "edge-a".to_owned()],
-            },
-        };
-
-        for integrity in [None, Some(&invalid_tcb)] {
-            let result = InternalAuthorityChannel::new(
-                &endpoint,
-                &http_client,
-                Some("configured-internal-channel-credential"),
-                integrity,
-                core_id("ak:did_core:web:auth.example"),
-                core_id("ak:did_core:web:station.example"),
-                trust_domain("auth.example"),
-                trust_domain("station.example"),
-            );
-            assert!(matches!(
-                result,
-                Err(PeerProtocolClientError::InternalChannelNotConfigured(_))
-            ));
-        }
-    }
-
-    /// Both trust-domain positions are configured facts. The deployment's own
-    /// must not fall back to the hostname-derived default on this channel.
-    #[test]
-    fn source_trust_domain_comes_from_configuration_and_fails_closed() {
-        let configured = configured_deployment_trust_domain(&coauth_config::ArkretConfig {
-            trust_domain: Some("ak:trust_domain:auth.example".to_owned()),
-            ..coauth_config::ArkretConfig::default()
-        })
-        .expect("a configured deployment trust domain is used verbatim");
-        assert_eq!(configured.as_str(), "ak:trust_domain:auth.example");
-
-        let error = configured_deployment_trust_domain(&coauth_config::ArkretConfig::default())
-            .expect_err("an unconfigured deployment trust domain must fail closed");
-        assert!(matches!(
-            error,
-            ArkretRouteError::Coded {
-                status: StatusCode::SERVICE_UNAVAILABLE,
-                ..
-            }
-        ));
-    }
-
-    /// The destination trust domain is a registered fact of the Station entry.
-    /// Without it the call fails closed; it is never derived from the endpoint
-    /// host, and `arkret.trust_domain` (this deployment's own) is not a
-    /// substitute.
-    #[test]
-    fn destination_trust_domain_comes_from_the_station_entry_and_fails_closed() {
-        let configured = configured_station_trust_domain(&station(
-            "soland",
-            Some("ak:trust_domain:station.example"),
-        ))
-        .expect("a configured Station trust domain is used verbatim");
-        assert_eq!(configured.as_str(), "ak:trust_domain:station.example");
-
-        let error = configured_station_trust_domain(&station("soland", None))
-            .expect_err("a Station without a configured trust domain must fail closed");
-        assert!(matches!(
-            error,
             ArkretRouteError::Coded {
                 status: StatusCode::SERVICE_UNAVAILABLE,
                 ..

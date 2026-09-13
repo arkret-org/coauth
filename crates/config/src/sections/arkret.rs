@@ -155,8 +155,8 @@ impl RuntimeOwningStationIdentity {
 #[serde(deny_unknown_fields)]
 pub struct ArkretConfig {
     /// Station audiences trusted to consume session grants and admin
-    /// tokens emitted by coauth. Every Station that enables
-    /// `internal_channel` must use a credential unique within this list.
+    /// tokens emitted by coauth. Every Station that configures an internal
+    /// authority bearer must use a credential unique within this list.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stations: Vec<StationConfig>,
 
@@ -493,7 +493,7 @@ impl ConfigurationSection for ArkretConfig {
         }
 
         let mut station_names = std::collections::BTreeSet::new();
-        let mut internal_channel_bearers = std::collections::BTreeSet::new();
+        let mut internal_authority_bearers = std::collections::BTreeSet::new();
         for server in &self.stations {
             if server.name.trim().is_empty() {
                 return Err(
@@ -525,38 +525,32 @@ impl ConfigurationSection for ArkretConfig {
                     std::io::Error::other(format!("arkret.stations[].trust_domain: {error}"))
                 })?;
             }
-            if let Some(internal_channel) = server.internal_channel.as_ref() {
-                internal_channel.validate().map_err(std::io::Error::other)?;
-                let bearer = server
-                    .session_grant_introspection_bearer
-                    .as_deref()
-                    .filter(|value| !value.trim().is_empty())
-                    .ok_or_else(|| {
-                        std::io::Error::other(
-                            "arkret.stations[].internal_channel requires a non-empty session_grant_introspection_bearer",
-                        )
-                    })?;
+            if let Some(bearer) = server
+                .session_grant_introspection_bearer
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+            {
                 if server.service_id.is_none() {
                     return Err(std::io::Error::other(
-                        "arkret.stations[].internal_channel requires an explicit service_id",
+                        "arkret.stations[].session_grant_introspection_bearer requires an explicit service_id",
                     )
                     .into());
                 }
                 if server.trust_domain.is_none() {
                     return Err(std::io::Error::other(
-                        "arkret.stations[].internal_channel requires an explicit Station trust_domain",
+                        "arkret.stations[].session_grant_introspection_bearer requires an explicit Station trust_domain",
                     )
                     .into());
                 }
                 if self.trust_domain.is_none() {
                     return Err(std::io::Error::other(
-                        "arkret.stations[].internal_channel requires an explicit arkret.trust_domain",
+                        "arkret.stations[].session_grant_introspection_bearer requires an explicit arkret.trust_domain",
                     )
                     .into());
                 }
-                if !internal_channel_bearers.insert(bearer) {
+                if !internal_authority_bearers.insert(bearer) {
                     return Err(std::io::Error::other(
-                        "arkret.stations[].internal_channel bearer credentials must be unique across Stations",
+                        "arkret.stations[].session_grant_introspection_bearer credentials must be unique across Stations",
                     )
                     .into());
                 }
@@ -603,8 +597,9 @@ pub struct StationConfig {
     /// metadata may confirm a pin but can never discover or replace it; an
     /// endpoint URL or bearer token is never converted into an identity core.
     /// A configured value that conflicts with the persisted enrollment fails
-    /// startup closed. `internal_channel` requires this pin explicitly; a
-    /// persisted or hostname-derived identity cannot complete that contract.
+    /// startup closed. An internal authority bearer requires this pin
+    /// explicitly; a persisted or hostname-derived identity cannot complete
+    /// that contract.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<String>")]
     pub service_id: Option<arkret_identifiers::DidCoreId>,
@@ -613,20 +608,10 @@ pub struct StationConfig {
     /// trust edge. The Station presents it to coauth introspection and
     /// Auth-side logout; coauth presents the same deployment credential when
     /// reading the standard agent projection for lifecycle authorization.
-    /// It is mandatory and unique across Station entries whenever
-    /// `internal_channel` is present.
+    /// When present it defines the internal authority peer and must be unique
+    /// across Station entries.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_grant_introspection_bearer: Option<String>,
-
-    /// Explicit integrity contract for unsigned deployment-internal calls on
-    /// this Account Authority / Station edge.
-    ///
-    /// Merely provisioning a bearer does not establish transport integrity.
-    /// Operations whose RFC 9421 signature is replaced by the internal
-    /// channel may use this Station only when this block is present and its
-    /// integrity declaration is valid.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub internal_channel: Option<InternalChannelConfig>,
 
     /// Optional static bearer token coauth should send when writing embedded
     /// `did:webvh` registration records into this Station.
@@ -635,14 +620,10 @@ pub struct StationConfig {
 
     /// This Station's trust domain, as a registered deployment fact.
     ///
-    /// `sync/service-http-binding.md` §2.2.3 binds every internal call to the
-    /// configured caller identity, the configured *target* service identity
-    /// and the configured trust domain. The target's trust domain is therefore
-    /// a fact of this Station entry, never something derived from the
-    /// endpoint URL, the hostname or `arkret.trust_domain` (which is coauth's
-    /// own domain and differs from the Station's whenever they run on
-    /// different hosts). When it is absent, operations that must bind it fail
-    /// closed rather than guessing.
+    /// This is a fact of the Station peer entry, never something derived from
+    /// the endpoint URL, hostname or `arkret.trust_domain` (coauth's own
+    /// domain). When an internal authority bearer is present, this value is
+    /// mandatory and is never repeated in request headers.
     ///
     /// Wire form: `ak:trust_domain:<scope>`, validated by
     /// [`ArkretConfig::validate_trust_domain`].
@@ -651,92 +632,16 @@ pub struct StationConfig {
 }
 
 impl StationConfig {
-    /// Whether this Station explicitly declares a complete integrity contract
-    /// for operations that omit their RFC 9421 request signature.
+    /// Whether this Station has the complete minimal peer binding used by the
+    /// fixed internal authority routes.
     #[must_use]
-    pub fn permits_unsigned_internal_channel(&self) -> bool {
+    pub fn has_internal_authority_peer(&self) -> bool {
         self.service_id.is_some()
             && self.trust_domain.is_some()
             && self
                 .session_grant_introspection_bearer
                 .as_deref()
                 .is_some_and(|bearer| !bearer.trim().is_empty())
-            && self
-                .internal_channel
-                .as_ref()
-                .is_some_and(InternalChannelConfig::permits_unsigned_transport)
-    }
-}
-
-/// Deployment contract for one unsigned internal Account Authority / Station
-/// channel.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct InternalChannelConfig {
-    /// How transport integrity is preserved after TLS termination.
-    pub integrity: InternalChannelIntegrityConfig,
-}
-
-impl InternalChannelConfig {
-    /// Whether this declaration is complete enough to replace per-message
-    /// RFC 9421 integrity on the registered internal operations.
-    #[must_use]
-    pub fn permits_unsigned_transport(&self) -> bool {
-        self.validate().is_ok()
-    }
-
-    fn validate(&self) -> Result<(), String> {
-        self.integrity.validate()
-    }
-}
-
-/// Integrity mechanism that permits RFC 9421 to be omitted on a registered
-/// internal channel.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
-pub enum InternalChannelIntegrityConfig {
-    /// Mutually authenticated TLS terminates directly in the business
-    /// process; no decrypting or forwarding intermediary exists.
-    MtlsDirectProcess {},
-    /// Every intermediary that can decrypt or forward the channel is an
-    /// explicitly registered member of the same trusted computing base.
-    RegisteredTcb {
-        /// Complete, deployment-defined identifiers of all decrypting or
-        /// forwarding proxies on the channel.
-        decrypting_forwarding_proxies: Vec<String>,
-    },
-}
-
-impl InternalChannelIntegrityConfig {
-    fn validate(&self) -> Result<(), String> {
-        let Self::RegisteredTcb {
-            decrypting_forwarding_proxies,
-        } = self
-        else {
-            return Ok(());
-        };
-        if decrypting_forwarding_proxies.is_empty() {
-            return Err(
-                "arkret.stations[].internal_channel.integrity.decrypting_forwarding_proxies must not be empty"
-                    .to_owned(),
-            );
-        }
-        let mut members = std::collections::BTreeSet::new();
-        for member in decrypting_forwarding_proxies {
-            if member.is_empty() || member.trim() != member {
-                return Err(
-                    "arkret.stations[].internal_channel.integrity.decrypting_forwarding_proxies entries must be non-empty and contain no surrounding whitespace"
-                        .to_owned(),
-                );
-            }
-            if !members.insert(member.as_str()) {
-                return Err(
-                    "arkret.stations[].internal_channel.integrity.decrypting_forwarding_proxies entries must be unique"
-                        .to_owned(),
-                );
-            }
-        }
-        Ok(())
     }
 }
 
@@ -914,102 +819,7 @@ mod tests {
     }
 
     #[test]
-    fn station_internal_channel_requires_the_canonical_integrity_shape() {
-        let station = |internal_channel: serde_json::Value| {
-            serde_json::from_value::<ArkretConfig>(serde_json::json!({
-                "trust_domain": "ak:trust_domain:authority.example",
-                "stations": [{
-                    "name": "principal-a",
-                    "endpoint": "https://principal.example/",
-                    "service_id": "ak:did_core:web:principal.example",
-                    "session_grant_introspection_bearer": "credential-a",
-                    "trust_domain": "ak:trust_domain:principal.example",
-                    "internal_channel": internal_channel
-                }]
-            }))
-        };
-
-        let mtls = station(serde_json::json!({
-            "integrity": { "mode": "mtls_direct_process" }
-        }))
-        .expect("the canonical direct-mTLS declaration deserializes");
-        assert!(mtls.validate(&figment::Figment::new()).is_ok());
-        assert!(mtls.stations[0].permits_unsigned_internal_channel());
-
-        let registered_tcb = station(serde_json::json!({
-            "integrity": {
-                "mode": "registered_tcb",
-                "decrypting_forwarding_proxies": ["edge-a", "mesh-sidecar-a"]
-            }
-        }))
-        .expect("the canonical registered-TCB declaration deserializes");
-        assert!(registered_tcb.validate(&figment::Figment::new()).is_ok());
-        assert!(registered_tcb.stations[0].permits_unsigned_internal_channel());
-
-        assert!(station(serde_json::json!({})).is_err());
-        assert!(
-            station(serde_json::json!({
-                "transport_integrity": { "mode": "mtls_direct_process" }
-            }))
-            .is_err()
-        );
-        assert!(
-            station(serde_json::json!({
-                "integrity": { "mode": "mtls_terminated_at_proxy" }
-            }))
-            .is_err()
-        );
-        assert!(
-            station(serde_json::json!({
-                "integrity": {
-                    "mode": "mtls_direct_process",
-                    "decrypting_forwarding_proxies": ["unregistered-proxy"]
-                }
-            }))
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn registered_tcb_rejects_empty_blank_and_duplicate_proxy_members() {
-        let config = |members: Vec<&str>| ArkretConfig {
-            trust_domain: Some("ak:trust_domain:authority.example".to_owned()),
-            stations: vec![StationConfig {
-                name: "principal-a".to_owned(),
-                endpoint: "https://principal.example/".parse().unwrap(),
-                service_id: Some(
-                    arkret_identifiers::DidCoreId::new(
-                        "ak:did_core:web:principal.example".to_owned(),
-                    )
-                    .unwrap(),
-                ),
-                session_grant_introspection_bearer: Some("credential".to_owned()),
-                internal_channel: Some(InternalChannelConfig {
-                    integrity: InternalChannelIntegrityConfig::RegisteredTcb {
-                        decrypting_forwarding_proxies: members
-                            .into_iter()
-                            .map(ToOwned::to_owned)
-                            .collect(),
-                    },
-                }),
-                embedded_webvh_registration_bearer: None,
-                trust_domain: Some("ak:trust_domain:principal.example".to_owned()),
-            }],
-            ..ArkretConfig::default()
-        };
-
-        for members in [vec![], vec![""], vec!["   "], vec![" edge-a"]] {
-            let config = config(members);
-            assert!(config.validate(&figment::Figment::new()).is_err());
-            assert!(!config.stations[0].permits_unsigned_internal_channel());
-        }
-        let duplicate = config(vec!["edge-a", "edge-a"]);
-        assert!(duplicate.validate(&figment::Figment::new()).is_err());
-        assert!(!duplicate.stations[0].permits_unsigned_internal_channel());
-    }
-
-    #[test]
-    fn internal_channel_requires_complete_unique_station_binding() {
+    fn internal_authority_bearer_requires_complete_unique_station_binding() {
         let complete = ArkretConfig {
             trust_domain: Some("ak:trust_domain:authority.example".to_owned()),
             stations: vec![StationConfig {
@@ -1022,19 +832,18 @@ mod tests {
                     .unwrap(),
                 ),
                 session_grant_introspection_bearer: Some("credential-a".to_owned()),
-                internal_channel: Some(InternalChannelConfig {
-                    integrity: InternalChannelIntegrityConfig::MtlsDirectProcess {},
-                }),
                 embedded_webvh_registration_bearer: None,
                 trust_domain: Some("ak:trust_domain:principal-a.example".to_owned()),
             }],
             ..ArkretConfig::default()
         };
         assert!(complete.validate(&figment::Figment::new()).is_ok());
+        assert!(complete.stations[0].has_internal_authority_peer());
 
         let mut missing_bearer = complete.clone();
         missing_bearer.stations[0].session_grant_introspection_bearer = None;
-        assert!(missing_bearer.validate(&figment::Figment::new()).is_err());
+        assert!(missing_bearer.validate(&figment::Figment::new()).is_ok());
+        assert!(!missing_bearer.stations[0].has_internal_authority_peer());
 
         let mut missing_service_id = complete.clone();
         missing_service_id.stations[0].service_id = None;
@@ -1115,7 +924,6 @@ mod tests {
             endpoint: "https://soland.example/".parse().unwrap(),
             service_id: None,
             session_grant_introspection_bearer: None,
-            internal_channel: None,
             embedded_webvh_registration_bearer: None,
             trust_domain: trust_domain.map(ToOwned::to_owned),
         };
@@ -1153,7 +961,6 @@ mod tests {
             endpoint: format!("https://{name}.example/").parse().unwrap(),
             service_id: None,
             session_grant_introspection_bearer: None,
-            internal_channel: None,
             embedded_webvh_registration_bearer: None,
             trust_domain: None,
         };

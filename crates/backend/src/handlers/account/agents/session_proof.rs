@@ -1490,7 +1490,6 @@ mod tests {
                 arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.test").unwrap(),
             ),
             session_grant_introspection_bearer: Some("lifecycle-secret".to_owned()),
-            internal_channel: None,
             embedded_webvh_registration_bearer: None,
             trust_domain: None,
         });
