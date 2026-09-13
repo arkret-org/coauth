@@ -20,6 +20,10 @@ const DEV_SOLAND_URL: &str = "https://local.host/";
 const DEV_SOLAND_IDENTITY_RESOLVER_URL: &str = "https://local.host/_arkret/root/identity/resolve";
 const DEV_SOLAND_SESSION_GRANT_BEARER: &str = "local-coauth-session-grant-introspection";
 const DEV_SOLAND_WEBVH_REGISTRATION_BEARER: &str = "local-soland-webvh-registration";
+/// The dev Station's own trust domain. `arkret.trust_domain` is coauth's;
+/// §2.2.3 binds the *target* service's domain, so it is a fact of the
+/// Station entry and is never derived from the endpoint host.
+const DEV_SOLAND_TRUST_DOMAIN: &str = "ak:trust_domain:local.host";
 
 #[derive(Parser, Debug)]
 pub(super) struct Options {
@@ -176,6 +180,7 @@ fn apply_generated_config_options(
             embedded_webvh_registration_bearer: Some(
                 DEV_SOLAND_WEBVH_REGISTRATION_BEARER.to_owned(),
             ),
+            trust_domain: Some(DEV_SOLAND_TRUST_DOMAIN.to_owned()),
         }];
         config.arkret.identity_registry = Some(IdentityRegistryConfig {
             resolver: DEV_SOLAND_IDENTITY_RESOLVER_URL
@@ -231,6 +236,7 @@ mod tests {
             .first()
             .expect("dev config should include Soland");
         assert_eq!(station.endpoint.as_str(), DEV_SOLAND_URL);
+        assert_eq!(station.trust_domain.as_deref(), Some(DEV_SOLAND_TRUST_DOMAIN));
         let serialized = serde_json::to_value(&config).expect("dev config should serialize");
         let serialized_server = &serialized["arkret"]["stations"][0];
         assert!(serialized_server.get("audience").is_none());

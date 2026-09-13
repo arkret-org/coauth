@@ -34,7 +34,6 @@ use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu, dp
 const HANDOFF_TTL: Duration = Duration::minutes(10);
 const IDENTITY_CREATION_LEASE_TTL: Duration = Duration::minutes(15);
 const IDENTITY_BINDING_CHALLENGE_TTL: Duration = Duration::minutes(5);
-const IDENTITY_ABANDONMENT_CHALLENGE_TTL: Duration = Duration::minutes(5);
 const HANDOFF_ATTEMPT_RETENTION: Duration = Duration::days(7);
 
 use super::canonical_response::ArkretCanonicalJson;

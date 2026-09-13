@@ -538,7 +538,6 @@ mod tests {
         )
     }
 
-    ///
     fn relay_config() -> ArkretConfig {
         let station = |name: &str, endpoint: &str, service_id: &str| coauth_config::StationConfig {
             name: name.to_owned(),
@@ -546,6 +545,7 @@ mod tests {
             service_id: Some(core_id(service_id)),
             session_grant_introspection_bearer: None,
             embedded_webvh_registration_bearer: None,
+            trust_domain: None,
         };
         ArkretConfig {
             stations: vec![

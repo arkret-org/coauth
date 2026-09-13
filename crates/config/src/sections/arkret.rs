@@ -508,6 +508,11 @@ impl ConfigurationSection for ArkretConfig {
                 )
                 .into());
             }
+            if let Some(trust_domain) = server.trust_domain.as_deref() {
+                Self::validate_trust_domain(trust_domain).map_err(|error| {
+                    std::io::Error::other(format!("arkret.stations[].trust_domain: {error}"))
+                })?;
+            }
             if !station_names.insert(server.name.as_str()) {
                 return Err(std::io::Error::other("Station names must be unique").into());
             }
@@ -566,6 +571,22 @@ pub struct StationConfig {
     /// `did:webvh` registration records into this Station.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub embedded_webvh_registration_bearer: Option<String>,
+
+    /// This Station's trust domain, as a registered deployment fact.
+    ///
+    /// `sync/service-http-binding.md` §2.2.3 binds every internal call to the
+    /// configured caller identity, the configured *target* service identity
+    /// and the configured trust domain. The target's trust domain is therefore
+    /// a fact of this Station entry, never something derived from the
+    /// endpoint URL, the hostname or `arkret.trust_domain` (which is coauth's
+    /// own domain and differs from the Station's whenever they run on
+    /// different hosts). When it is absent, operations that must bind it fail
+    /// closed rather than guessing.
+    ///
+    /// Wire form: `ak:trust_domain:<scope>`, validated by
+    /// [`ArkretConfig::validate_trust_domain`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trust_domain: Option<String>,
 }
 
 /// External identity-registry resolver configuration.
@@ -771,6 +792,47 @@ mod tests {
         }
     }
 
+    /// The target's trust domain is a registered fact of the Station entry
+    /// (`service-http-binding.md` §2.2.3), validated in the same wire form as
+    /// this deployment's own and kept separate from it.
+    #[test]
+    fn station_trust_domain_is_validated_and_independent_of_the_deployment_one() {
+        let figment = figment::Figment::new();
+        let station = |trust_domain: Option<&str>| StationConfig {
+            name: "soland".to_owned(),
+            endpoint: "https://soland.example/".parse().unwrap(),
+            service_id: None,
+            session_grant_introspection_bearer: None,
+            embedded_webvh_registration_bearer: None,
+            trust_domain: trust_domain.map(ToOwned::to_owned),
+        };
+        let config = |station: StationConfig| ArkretConfig {
+            trust_domain: Some("ak:trust_domain:auth.example".to_owned()),
+            stations: vec![station],
+            ..ArkretConfig::default()
+        };
+        // A Station in a different domain from this deployment is the normal
+        // split-host case, not a conflict.
+        assert!(
+            config(station(Some("ak:trust_domain:soland.example")))
+                .validate(&figment)
+                .is_ok()
+        );
+        // Absent is allowed at the config layer; the operations that must bind
+        // it fail closed instead of guessing.
+        assert!(config(station(None)).validate(&figment).is_ok());
+        assert!(
+            config(station(Some("ak:trust_domain:Soland.Example")))
+                .validate(&figment)
+                .is_err()
+        );
+        assert!(
+            config(station(Some("soland.example")))
+                .validate(&figment)
+                .is_err()
+        );
+    }
+
     #[test]
     fn multiple_stations_require_explicit_owner() {
         let station = |name: &str| StationConfig {
@@ -779,6 +841,7 @@ mod tests {
             service_id: None,
             session_grant_introspection_bearer: None,
             embedded_webvh_registration_bearer: None,
+            trust_domain: None,
         };
         let mut config = ArkretConfig {
             stations: vec![station("one"), station("two")],

@@ -271,6 +271,7 @@ fn personal_node_did_web_config() -> ArkretConfig {
             ),
             session_grant_introspection_bearer: Some(SESSION_GRANT_INTROSPECTION_BEARER.to_owned()),
             embedded_webvh_registration_bearer: None,
+            trust_domain: None,
         }],
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
@@ -341,6 +342,7 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
             ),
             session_grant_introspection_bearer: Some(bearer.to_owned()),
             embedded_webvh_registration_bearer: None,
+            trust_domain: None,
         }],
         ..ArkretConfig::default()
     }
@@ -367,9 +369,10 @@ fn shared_static_bearer_is_scoped_to_every_matching_server() {
         ),
         session_grant_introspection_bearer: Some("shared-cluster-token".to_owned()),
         embedded_webvh_registration_bearer: None,
+        trust_domain: None,
     });
     assert_eq!(
-        station_static_session_grant_bearer_audiences(&config, "shared-cluster-token"),
+        station_internal_channel_callers(&config, "shared-cluster-token"),
         vec![
             "ak:did_core:web:session-grant-static.test".to_owned(),
             "ak:did_core:web:session-grant-static-beta.test".to_owned(),

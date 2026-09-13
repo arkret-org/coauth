@@ -591,6 +591,7 @@ mod tests {
                 ),
                 session_grant_introspection_bearer: None,
                 embedded_webvh_registration_bearer: None,
+                trust_domain: None,
             }],
             ..ArkretConfig::default()
         }

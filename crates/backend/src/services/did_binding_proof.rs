@@ -147,10 +147,6 @@ pub(crate) enum SdkJwsVerifyError {
     UnsupportedJwk(String),
     #[error("Ed25519 signature did not verify")]
     SignatureMismatch,
-    #[error("detached JWS verification failed: {0}")]
-    VerificationFailed(String),
-    #[error("detached JWS protected kid '{0}' does not match the outer verification_method")]
-    KeyIdMismatch(String),
 }
 
 fn verify_compact_jws_with_sdk(
@@ -231,37 +227,6 @@ pub(crate) fn verify_detached_jws_with_sdk(
     );
     verify_compact_jws_with_sdk(&attached, verification_methods, &verification_method)?;
     Ok(verification_method)
-}
-
-/// Verify a detached Ed25519 JWS whose signing method is named by the outer
-/// protocol field (`PayloadProof.verification_method`), not by a protected
-/// `kid`. This is the spec profile for server-issued payload proofs such as
-/// the device revocation gate decision receipt: the SDK signer
-/// (`arkret_signatures::jws::sign_jws_ed25519`) emits the canonical
-/// `{"alg":"Ed25519"}` header and the method id travels outside the JWS.
-/// A protected `kid`, when present, MUST equal the outer verification_method.
-pub(crate) fn verify_detached_jws_against_method(
-    detached_jws: &str,
-    payload_bytes: &[u8],
-    verification_methods: &[crate::handlers::arkret::VerificationMethod],
-    verification_method: &str,
-) -> Result<(), SdkJwsVerifyError> {
-    let method = verification_methods
-        .iter()
-        .find(|method| method.id == verification_method)
-        .ok_or_else(|| SdkJwsVerifyError::MethodNotFound(verification_method.to_owned()))?;
-    let material = method
-        .public_key_material()
-        .map_err(SdkJwsVerifyError::UnsupportedJwk)?;
-    let verified = arkret_signatures::proof::Ed25519DetachedJwsVerifier::new()
-        .verify_detached_jws_with_metadata(detached_jws, payload_bytes, &material)
-        .map_err(|error| SdkJwsVerifyError::VerificationFailed(error.to_string()))?;
-    if let Some(kid) = verified.key_id()
-        && kid != verification_method
-    {
-        return Err(SdkJwsVerifyError::KeyIdMismatch(kid.to_owned()));
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -514,108 +479,5 @@ mod tests {
             error,
             DidBindingProofError::ResolutionPinsMismatch
         ));
-    }
-
-    fn jwk_verification_method(
-        id: &str,
-        controller: &str,
-        verifying_key: &[u8; 32],
-    ) -> crate::handlers::arkret::VerificationMethod {
-        serde_json::from_value(serde_json::json!({
-            "id": id,
-            "type": "JsonWebKey2020",
-            "controller": controller,
-            "publicKeyJwk": {
-                "kty": "OKP",
-                "crv": "Ed25519",
-                "x": Base64UrlUnpadded::encode_string(verifying_key),
-            }
-        }))
-        .unwrap()
-    }
-
-    #[test]
-    fn detached_jws_against_method_accepts_sdk_signed_kid_less_proof() {
-        let signing_key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&[7u8; 32]);
-        let method_id = "did:webvh:QmTest:service.example#notary-key";
-        let methods = vec![jwk_verification_method(
-            method_id,
-            "did:webvh:QmTest:service.example",
-            &signing_key.verifying_key().to_bytes(),
-        )];
-        let payload = br#"{"context":"ak.proof.device_revocation_gate_decision.v1"}"#;
-        // The exact signer the Station uses for gate receipts.
-        let jws = arkret_signatures::jws::sign_jws_ed25519(payload, &signing_key).unwrap();
-        verify_detached_jws_against_method(&jws, payload, &methods, method_id).unwrap();
-    }
-
-    #[test]
-    fn detached_jws_against_method_rejects_unknown_method() {
-        let signing_key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&[8u8; 32]);
-        let method_id = "did:webvh:QmTest:service.example#notary-key";
-        let methods = vec![jwk_verification_method(
-            method_id,
-            "did:webvh:QmTest:service.example",
-            &signing_key.verifying_key().to_bytes(),
-        )];
-        let payload = b"payload";
-        let jws = arkret_signatures::jws::sign_jws_ed25519(payload, &signing_key).unwrap();
-        let error = verify_detached_jws_against_method(
-            &jws,
-            payload,
-            &methods,
-            "did:webvh:QmTest:service.example#other-key",
-        )
-        .unwrap_err();
-        assert!(matches!(error, SdkJwsVerifyError::MethodNotFound(_)));
-    }
-
-    #[test]
-    fn detached_jws_against_method_rejects_tampered_payload() {
-        let signing_key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&[9u8; 32]);
-        let method_id = "did:webvh:QmTest:service.example#notary-key";
-        let methods = vec![jwk_verification_method(
-            method_id,
-            "did:webvh:QmTest:service.example",
-            &signing_key.verifying_key().to_bytes(),
-        )];
-        let jws = arkret_signatures::jws::sign_jws_ed25519(b"payload", &signing_key).unwrap();
-        assert!(
-            verify_detached_jws_against_method(&jws, b"tampered", &methods, method_id).is_err()
-        );
-    }
-
-    #[test]
-    fn detached_jws_against_method_rejects_kid_that_disagrees_with_outer_method() {
-        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[10u8; 32]);
-        let method_id = "did:webvh:QmTest:service.example#notary-key";
-        let methods = vec![jwk_verification_method(
-            method_id,
-            "did:webvh:QmTest:service.example",
-            &signing_key.verifying_key().to_bytes(),
-        )];
-        let payload = b"payload";
-        let sign_with_kid = |kid: &str| {
-            let signing_input =
-                arkret_signatures::proof::ed25519_detached_jws_signing_input(payload, Some(kid))
-                    .unwrap();
-            let signature = signing_key.sign(signing_input.as_bytes());
-            arkret_signatures::proof::ed25519_detached_jws_from_signature(
-                &signature.to_bytes(),
-                Some(kid),
-            )
-            .unwrap()
-        };
-        // A matching kid is tolerated; a disagreeing kid fails closed.
-        verify_detached_jws_against_method(&sign_with_kid(method_id), payload, &methods, method_id)
-            .unwrap();
-        let error = verify_detached_jws_against_method(
-            &sign_with_kid("did:webvh:QmTest:service.example#other-key"),
-            payload,
-            &methods,
-            method_id,
-        )
-        .unwrap_err();
-        assert!(matches!(error, SdkJwsVerifyError::KeyIdMismatch(_)));
     }
 }

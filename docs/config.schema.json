@@ -1439,6 +1439,13 @@
             "string",
             "null"
           ]
+        },
+        "trust_domain": {
+          "description": "This Station's trust domain, as a registered deployment fact.\n\n`sync/service-http-binding.md` §2.2.3 binds every internal call to the\nconfigured caller identity, the configured *target* service identity\nand the configured trust domain. The target's trust domain is therefore\na fact of this Station entry, never something derived from the\nendpoint URL, the hostname or `arkret.trust_domain` (which is coauth's\nown domain and differs from the Station's whenever they run on\ndifferent hosts). When it is absent, operations that must bind it fail\nclosed rather than guessing.\n\nWire form: `ak:trust_domain:<scope>`, validated by\n[`ArkretConfig::validate_trust_domain`].",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false,

@@ -270,7 +270,7 @@ async fn challenge_issuance_is_independent_and_same_binding_reauthentication_reu
     handoff.request_id = request(5);
     handoff.request_digest = hash('b');
     handoff.account_handoff_grant = "s".repeat(40);
-    handoff.issued_at = Utc::now();
+    handoff.issued_at = coauth_data::clock::SystemClock::default().now();
     handoff.expires_at = handoff.issued_at + Duration::minutes(5);
     handoff.lease_expires_at = handoff.expires_at;
     handoff.lease_id = "m".repeat(24);
@@ -510,7 +510,8 @@ async fn challenge_hour_budget_uses_durable_holder_scope_and_exact_window_bounda
     };
     let mut conn = pool.get().await.unwrap();
     let subject = hash('f');
-    let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    let clock = coauth_data::clock::SystemClock::default();
+    let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
     conn.batch_execute("BEGIN").await.unwrap();
     let mut storage = PgAccountHandoffRepository::new(&mut conn);
     storage

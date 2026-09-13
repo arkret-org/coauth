@@ -1491,6 +1491,7 @@ mod tests {
             ),
             session_grant_introspection_bearer: Some("lifecycle-secret".to_owned()),
             embedded_webvh_registration_bearer: None,
+            trust_domain: None,
         });
         crate::services::station_trust::shared()
             .insert_for_test(&config.stations[0].endpoint, "ak:did_core:web:soland.test");

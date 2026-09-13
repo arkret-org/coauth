@@ -175,6 +175,11 @@ arkret:
     endpoint: https://local.host/
     session_grant_introspection_bearer: local-coauth-session-grant-introspection
     embedded_webvh_registration_bearer: local-soland-webvh-registration
+    # The Station's own trust domain, as a registered fact of this entry
+    # (service-http-binding.md 2.2.3). `arkret.trust_domain` above is coauth's
+    # own; the internal channel binds the target's separately and fails closed
+    # when it is missing rather than deriving it from the endpoint host.
+    trust_domain: ak:trust_domain:local.host
   identity_registry:
     resolver: https://local.host/_arkret/root/identity/resolve
     proof_required_for_pairwise: false

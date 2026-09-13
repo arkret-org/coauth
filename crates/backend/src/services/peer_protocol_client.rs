@@ -76,6 +76,12 @@ pub enum PeerProtocolClientError {
     },
     #[error("peer protocol response body invalid: {0}")]
     Response(String),
+    /// The deployment-internal authenticated channel
+    /// (`sync/service-http-binding.md` §2.2.3) for this operation is not
+    /// completely configured. Never a reason to fall back to guessing the
+    /// peer or to an unauthenticated call: the operation fails closed.
+    #[error("deployment-internal authenticated channel is not configured: {0}")]
+    InternalChannelNotConfigured(String),
 }
 
 pub struct PeerProtocolClient<'a> {
@@ -188,31 +194,6 @@ impl<'a> PeerProtocolClient<'a> {
             .await?;
         outcome
             .validate_against(request)
-            .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
-        Ok(outcome)
-    }
-
-    /// Linearize one exact session-grant issue or refresh intent against the
-    /// origin Station's durable device-revocation state.
-    pub async fn post_device_revocation_gate_check(
-        &self,
-        request: &DeviceRevocationGateCheckRequestBody,
-    ) -> Result<DeviceRevocationGateCheckOutcome, PeerProtocolClientError> {
-        request
-            .validate()
-            .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
-        let url = self.join_absolute(PATH_PEER_DEVICE_REVOCATIONS_CHECK)?;
-        let outcome: DeviceRevocationGateCheckOutcome = self
-            .post_json(
-                "peer_device_revocations_check",
-                url,
-                ServiceOperationId::PEER_DEVICE_REVOCATIONS_COMMAND_CHECK_V1,
-                request,
-                None,
-            )
-            .await?;
-        outcome
-            .validate_for_request(request)
             .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
         Ok(outcome)
     }
@@ -375,6 +356,169 @@ impl<'a> PeerProtocolClient<'a> {
         headers.push(("Signature".to_owned(), signature_header));
 
         Ok(SignedPeerRequest { headers })
+    }
+}
+
+/// One registered deployment-internal authenticated channel
+/// (`sync/service-http-binding.md` §2.2.3).
+///
+/// Every fact this channel binds — the calling service identity, the target
+/// service identity, the trust domain and the credential — comes from explicit
+/// deployment configuration. A response body, a `Source-Service-ID` header, a
+/// path segment or any self-reported `internal` marker MUST NOT decide the
+/// internal relationship, and a missing or conflicting configuration fails
+/// closed rather than falling back to `describe`, to the first configured
+/// Station or to an unsigned anonymous call.
+///
+/// The channel is per-operation: only the operations registered in §2.2.3 may
+/// use it. Everything else on `/_arkret/peer/*` keeps the RFC 9421 service
+/// signature of [`PeerProtocolClient`].
+pub struct InternalAuthorityChannel<'a> {
+    base_url: &'a Url,
+    http_client: &'a reqwest::Client,
+    credential: &'a str,
+    source_service_id: arkret_identifiers::DidCoreId,
+    destination_service_id: arkret_identifiers::DidCoreId,
+    source_trust_domain: arkret_identifiers::TrustDomainId,
+    destination_trust_domain: arkret_identifiers::TrustDomainId,
+}
+
+impl<'a> InternalAuthorityChannel<'a> {
+    /// Build the channel from already-resolved configuration values.
+    ///
+    /// `credential` is the deployment credential configured for this exact
+    /// Account Authority / Station edge. An absent or blank credential is a
+    /// configuration gap, not a permission to call the peer unauthenticated.
+    pub fn new(
+        base_url: &'a Url,
+        http_client: &'a reqwest::Client,
+        credential: Option<&'a str>,
+        source_service_id: arkret_identifiers::DidCoreId,
+        destination_service_id: arkret_identifiers::DidCoreId,
+        source_trust_domain: arkret_identifiers::TrustDomainId,
+        destination_trust_domain: arkret_identifiers::TrustDomainId,
+    ) -> Result<Self, PeerProtocolClientError> {
+        let credential = credential
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                PeerProtocolClientError::InternalChannelNotConfigured(format!(
+                    "no channel credential is configured for {destination_service_id}"
+                ))
+            })?;
+        Ok(Self {
+            base_url,
+            http_client,
+            credential,
+            source_service_id,
+            destination_service_id,
+            source_trust_domain,
+            destination_trust_domain,
+        })
+    }
+
+    /// The configured target service identity of this channel.
+    ///
+    /// Consumers compare an authenticated outcome against this value; they
+    /// never learn the peer's identity from the outcome itself.
+    #[must_use]
+    pub fn destination_service_id(&self) -> &arkret_identifiers::DidCoreId {
+        &self.destination_service_id
+    }
+
+    /// Linearize one exact session-grant issue or refresh intent against the
+    /// origin Station's durable device-revocation state
+    /// (`ak.peer.device_revocations.command.check.v1`).
+    ///
+    /// The decision receipt's authenticity and integrity come from this
+    /// channel; `crypto-media/device-lifecycle.md` §2.2 forbids the receipt
+    /// from carrying a detached proof or a `verification_method`, and the SDK
+    /// wire type rejects either member on arrival.
+    pub async fn post_device_revocation_gate_check(
+        &self,
+        request: &DeviceRevocationGateCheckRequestBody,
+    ) -> Result<DeviceRevocationGateCheckOutcome, PeerProtocolClientError> {
+        request
+            .validate()
+            .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
+        let outcome: DeviceRevocationGateCheckOutcome = self
+            .post_json(
+                "peer_device_revocations_check",
+                PATH_PEER_DEVICE_REVOCATIONS_CHECK,
+                ServiceOperationId::PEER_DEVICE_REVOCATIONS_COMMAND_CHECK_V1,
+                request,
+            )
+            .await?;
+        outcome
+            .validate_for_request(request)
+            .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
+        Ok(outcome)
+    }
+
+    /// POST one canonical intent over the channel.
+    ///
+    /// No `Content-Digest` and no RFC 9421 signature: with no signature
+    /// covering the transport shell, §2.5.1 forbids the shell digest, and the
+    /// receiver MUST NOT treat whole-body byte equality as an authentication
+    /// means. The service-identity and trust-domain headers travel only as
+    /// redundant inputs the receiver compares verbatim against the identity it
+    /// authenticated from the credential.
+    async fn post_json<T, R>(
+        &self,
+        policy_name: &'static str,
+        path: &str,
+        operation_id: &str,
+        body: &T,
+    ) -> Result<R, PeerProtocolClientError>
+    where
+        T: Serialize,
+        R: serde::de::DeserializeOwned,
+    {
+        let url = self
+            .base_url
+            .join(path)
+            .map_err(|error| PeerProtocolClientError::InvalidUrl(error.to_string()))?;
+        let body_bytes = canonical_json_bytes(body)
+            .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
+        let headers = [
+            (
+                SOURCE_SERVICE_ID_HEADER,
+                self.source_service_id.to_string(),
+            ),
+            (
+                DESTINATION_SERVICE_ID_HEADER,
+                self.destination_service_id.to_string(),
+            ),
+            (
+                HEADER_SOURCE_TRUST_DOMAIN,
+                self.source_trust_domain.to_string(),
+            ),
+            (
+                HEADER_DESTINATION_TRUST_DOMAIN,
+                self.destination_trust_domain.to_string(),
+            ),
+            (ARKRET_OPERATION_HEADER, operation_id.to_owned()),
+        ];
+
+        let response = outbound_http::send_with_policy(
+            outbound_http::soland_policy(policy_name).with_timeout(Duration::from_secs(5)),
+            || {
+                let mut request = self
+                    .http_client
+                    .post(url.clone())
+                    .bearer_auth(self.credential)
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .body(body_bytes.clone());
+                for (name, value) in &headers {
+                    request = request.header(*name, value.as_str());
+                }
+                request
+            },
+        )
+        .await
+        .map_err(|error| PeerProtocolClientError::Http(error.to_string()))?;
+
+        parse_json_response(response).await
     }
 }
 

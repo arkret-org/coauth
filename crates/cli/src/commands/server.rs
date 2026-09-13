@@ -39,13 +39,6 @@ pub(super) struct Options {
     /// Do not sync the configuration with the database
     #[arg(long)]
     no_sync: bool,
-
-    /// Authorize one-time trust bootstrap of unenrolled Stations at
-    /// startup (same as `COAUTH_FIRST_PROVISIONING=1`). After a successful
-    /// bootstrap the flag only idempotently re-verifies the enrolled pin; it
-    /// can never replace an identity.
-    #[arg(long)]
-    first_provisioning: bool,
 }
 
 impl Options {
@@ -319,9 +312,6 @@ impl Options {
                 s.arkret_config.clone(),
                 s.http_client.clone(),
                 s.development_mode,
-                self.first_provisioning
-                    || coauth_config::runtime_var("COAUTH_FIRST_PROVISIONING")
-                        .is_ok_and(|value| value.trim() == "1"),
                 shutdown.soft_shutdown_token(),
                 coauth_backend::services::station_trust::RevalidationSchedule::DEFAULT,
             );

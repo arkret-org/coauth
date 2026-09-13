@@ -1637,7 +1637,7 @@ mod tests {
         assert!(reserved <= cap);
         assert_eq!(reserved.timestamp_subsec_nanos(), 456_000_000);
         let seed = SessionGrantIssuanceSeed::new(
-            arkret_canonical::base64url_encode(&[0x23; 32]),
+            arkret_canonical::base64url_encode([0x23; 32]),
             "expiry-regression-session",
             now,
             reserved,

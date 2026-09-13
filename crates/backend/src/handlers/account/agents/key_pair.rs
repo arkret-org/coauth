@@ -1,9 +1,11 @@
 //! AKP-0008 §4.5 runtime key pairing (`ak.gate.account.command.pair_agent_key.v1`).
 //!
-//! `POST /_arkret/gate/account/agent-key-pair`. The agent runtime generated a
-//! key pair locally and submits the public key plus a proof-of-possession. The
-//! controller supplies the signed `ak.agent.key.authorize` event; coauth only
-//! validates the request binding, persists the pending local authorization for
+//! `POST /_arkret/gate/account/agent-key-pair`. The owning Station is the
+//! single owner of the pairing raw material and of business admission
+//! (`key-management.md` §3.6.1): it holds the frozen candidate and verifies the
+//! runtime proof-of-possession against the current handle. Coauth checks only
+//! the request / Event / Agent / controller / authorization-object bindings on
+//! that authenticated result, persists the pending local authorization for
 //! `agent_key_proof`, and commits the unchanged signed request to the
 //! authoritative Station before reporting the Event as durable. The
 //! Station activates the frozen candidate after its authorize Event enters an
@@ -41,7 +43,8 @@ const AGENT_KEY_PAIR_COMMIT_QUEUE: &str = "principal-agent-key-pair-commit";
 /// `POST /_arkret/gate/account/agent-key-pair`
 /// (`ak.gate.account.command.pair_agent_key.v1`).
 ///
-/// Validates the runtime key pairing proof-of-possession and, on success,
+/// Checks the pairing request against the Station's authenticated Agent key
+/// state and the controller-authored authorize Event and, on success,
 /// records a pending local agent key authorization, commits the exact same
 /// canonical operation to the authoritative Station, and returns only
 /// after that server durably accepts the supplied Event and activates the
@@ -96,7 +99,7 @@ pub async fn post_agent_key_pair(
 
     let public_key_value = serde_json::to_value(&submitted_payload.public_key)
         .map_err(|error| AppError::bad_request(format!("public_key invalid: {error}")))?;
-    let public_key = arkret_signatures::agent::validate_agent_runtime_public_key(
+    arkret_signatures::agent::validate_agent_runtime_public_key(
         &submitted_payload.public_key,
         &submitted_payload.verification_method,
     )
@@ -212,40 +215,46 @@ pub async fn post_agent_key_pair(
     .await
     .map_err(AgentAuthRejection::into_app_error)?;
 
+    // `key-management.md` §3.6.1: the owning Station is the single owner of the
+    // pairing raw material and of business admission. It holds and verifies the
+    // candidate proof-of-possession against the current handle; the Account
+    // Authority consumes that authenticated result and only checks the
+    // request / Event / Agent / controller / authorization-object bindings
+    // below. It never re-obtains the candidate and PoP to rebuild the stable
+    // binding and PoP transcript for a second signature check, and it never
+    // infers completion from a caller-supplied "verified" flag.
     let authoritative_key_state = authoritative_view
         .key_state
         .as_ref()
         .ok_or_else(|| AppError::forbidden("authoritative Agent key state is missing"))?;
-    let material = authoritative_key_state
-        .runtime_verifier_material
-        .as_ref()
-        .ok_or_else(|| {
-            AppError::forbidden("private authoritative runtime verifier material is missing")
-        })?;
-    let candidate = &material.candidate;
-    if material.approval_request_id != body.approval_request_id
-        || candidate.approval_request_id != body.approval_request_id
-        || candidate.pairing_request_id != body.pairing_request_id
-        || candidate.agent_id != submitted_payload.agent_id
-        || candidate.verification_method != submitted_payload.verification_method
-        || candidate.public_key != submitted_payload.public_key
-        || candidate.runtime_attestation != submitted_payload.runtime_attestation
-        || material.proof_verified_at > now
-    {
-        return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
-    }
-    let pop = &material.proof_of_possession;
+    let pairing_expires_at = authoritative_key_state
+        .pairing_expires_at
+        .ok_or_else(|| AppError::forbidden("authoritative pairing expiry is missing"))?;
+
+    let agent_id = arkret_identifiers::DidCoreId::new(agent_id.clone())
+        .map_err(|error| AppError::bad_request(format!("agent_id invalid: {error}")))?;
+    // The controller-authored disclosure names the verifier this pairing is
+    // requested for. Its signature is verified further down against controller
+    // key material this service resolved, and the controller Event's approval
+    // digest binds the same value, so it is the authorization object the
+    // Authority checks - not a raw-material input it re-validates.
+    let disclosure = &body.requested_scope_disclosure;
+    disclosure
+        .validate()
+        .map_err(|error| AppError::bad_request(error.to_string()))?;
+    let audience_id = disclosure.verifier_id.clone();
     if !is_allowed_session_grant_audience(
         &url_builder,
         &arkret_config,
         crate::services::station_trust::shared(),
-        pop.audience_id.as_str(),
+        audience_id.as_str(),
     ) {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
     }
-
-    let agent_id = arkret_identifiers::DidCoreId::new(agent_id.clone())
-        .map_err(|error| AppError::bad_request(format!("agent_id invalid: {error}")))?;
+    // Derived from the fields the request already carries, so the
+    // controller-signed approval digest can be checked. This is a binding
+    // recomputation over an authenticated object, not a second verification of
+    // the runtime's possession proof.
     let expected_binding =
         arkret_models_collaboration::agent_operations::agent_runtime_key_binding_digest(
             &agent_id,
@@ -255,43 +264,8 @@ pub async fn post_agent_key_pair(
             submitted_payload.runtime_attestation.as_ref(),
         )
         .map_err(|error| {
-            AppError::bad_request(format!(
-                "proof_of_possession runtime binding failed: {error}"
-            ))
+            AppError::bad_request(format!("runtime key binding digest failed: {error}"))
         })?;
-    if candidate.runtime_key_binding_digest != expected_binding
-        || pop.runtime_key_binding_digest != expected_binding
-    {
-        return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
-    }
-    let pairing_code = authoritative_key_state
-        .pairing_code
-        .as_deref()
-        .ok_or_else(|| AppError::forbidden("authoritative pairing code is missing"))?;
-    let pairing_expires_at = authoritative_key_state
-        .pairing_expires_at
-        .ok_or_else(|| AppError::forbidden("authoritative pairing expiry is missing"))?;
-    let transcript = pop
-        .validate_shape(
-            &agent_id,
-            &body.pairing_request_id,
-            &submitted_payload.verification_method,
-            &submitted_payload.public_key,
-            &expected_binding,
-            pairing_code,
-            pairing_expires_at,
-            material.proof_verified_at,
-        )
-        .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
-    let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(&public_key.raw_public_key)
-        .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
-    let signature = Base64UrlUnpadded::decode_vec(pop.signature.as_str())
-        .ok()
-        .and_then(|bytes| ed25519_dalek::Signature::from_slice(&bytes).ok())
-        .ok_or_else(|| AgentAuthRejection::ProofInvalid.into_app_error())?;
-    verifying_key
-        .verify_strict(&transcript, &signature)
-        .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
 
     let authorize_event = validate_controller_authorize_event(
         &body.authorize_event.event,
@@ -299,7 +273,7 @@ pub async fn post_agent_key_pair(
         &submitted_payload.verification_method,
         &submitted_payload.public_key,
         &body.pairing_request_id,
-        pop.audience_id.as_str(),
+        audience_id.as_str(),
         authoritative_key_state,
         now,
     )?;
@@ -311,7 +285,7 @@ pub async fn post_agent_key_pair(
             &body.pairing_request_id,
             &body.approval_request_id,
             pairing_expires_at,
-            &pop.audience_id,
+            &audience_id,
             &expected_binding,
         )
         .map_err(|error| AppError::bad_request(error.to_string()))?;
@@ -324,15 +298,10 @@ pub async fn post_agent_key_pair(
     {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
     }
-    let disclosure = &body.requested_scope_disclosure;
-    disclosure
-        .validate()
-        .map_err(|error| AppError::bad_request(error.to_string()))?;
     if disclosure.agent_id != agent_id
         || disclosure.controller_principal_id
             != authoritative_key_state.controller_account_id.principal_id
         || disclosure.requested_scope != authoritative_key_state.requested_scope
-        || disclosure.verifier_id != pop.audience_id
         || disclosure.audience.as_str() != "ak.gate.account.command.pair_agent_key.v1"
         || disclosure.request_id.as_str()
             != format!(
@@ -435,6 +404,16 @@ pub async fn post_agent_key_pair(
     let agent_key_scope = serde_json::to_string(&authorize_event.payload.agent_key_scope)
         .map_err(|err| AppError::internal_box(Box::new(err)))?;
 
+    // State-truth model (`key-management.md` §3.6.1): the Station holds the
+    // single command/activation truth; this row is the Account Authority's
+    // issuer-side projection plus the exact pending intent it owes a retry for.
+    // It is written from the same frozen request the Station will accept, so it
+    // can be rebuilt from that one durable outcome; it is read back only
+    // together with the current authoritative Agent view
+    // (`session_proof::validate_authoritative_agent_session_evidence`); and a
+    // locally `active` row is never evidence that the Station activated the
+    // key - `commit_and_mark_agent_key_authorization` advances it only after
+    // the Station's own outcome says `Active`.
     repo.agent_key_authorization()
         .add(
             &mut *rng,
@@ -450,7 +429,7 @@ pub async fn post_agent_key_pair(
                 )
                 .map_err(|err| AppError::internal_box(Box::new(err)))?,
                 agent_key_scope,
-                audience: vec![pop.audience_id.to_string()],
+                audience: vec![audience_id.to_string()],
                 issued_at,
                 expires_at,
                 pairing_request_id: body.pairing_request_id.to_string(),
@@ -490,7 +469,7 @@ pub async fn post_agent_key_pair(
         "agent_id": &agent_id,
         "controller_principal_id": &authorize_event.controller_principal_id,
         "verification_method": &submitted_payload.verification_method,
-        "audience_id": &pop.audience_id,
+        "audience_id": &audience_id,
         "issued_at": issued_at,
         "expires_at": expires_at,
         "superseded_active_keys": superseded_keys,
@@ -665,7 +644,7 @@ fn validate_controller_authorize_event(
     .map_err(|error| AppError::bad_request(error.to_string()))?;
     if payload.public_key != *runtime_public_key {
         return Err(AppError::bad_request(
-            "authorize Event key differs from the frozen candidate",
+            "authorize Event key differs from the submitted runtime key",
         ));
     }
     if !payload
@@ -674,7 +653,7 @@ fn validate_controller_authorize_event(
         .any(|candidate| candidate == audience)
     {
         return Err(AppError::bad_request(
-            "authorize_event.event.payload.audience must include proof_of_possession.audience",
+            "authorize_event.event.payload.audience must include requested_scope_disclosure.verifier_id",
         ));
     }
     if payload.agent_key_scope.actions.is_empty()

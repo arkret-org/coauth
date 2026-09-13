@@ -405,6 +405,11 @@ fn test_arkret_config(stations: Vec<coauth_config::StationConfig>) -> ArkretConf
         runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
             "did:web:example.com",
         ),
+        // The §2.2.3 internal channel binds this deployment's trust domain as
+        // a configured fact and refuses the hostname-derived default. The
+        // value matches what `trust_domain_for` used to derive from the test
+        // public hostname, so fixtures that call it are unchanged.
+        trust_domain: Some("ak:trust_domain:example.com".to_owned()),
         stations,
         ..ArkretConfig::default()
     }
@@ -431,6 +436,7 @@ impl TestState {
                 service_id: Some(arkret_identifiers::DidCoreId::new(TEST_STATION_AUDIENCE)?),
                 session_grant_introspection_bearer: None,
                 embedded_webvh_registration_bearer: None,
+                trust_domain: Some("ak:trust_domain:principal.example".to_owned()),
             }]),
         )
         .await

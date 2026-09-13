@@ -238,6 +238,7 @@ fn controller_station_for_pairing_uses_trusted_enrollment() {
         service_id: None,
         session_grant_introspection_bearer: None,
         embedded_webvh_registration_bearer: None,
+        trust_domain: None,
     });
     let resolver = crate::services::station_trust::StationTrustResolver::new();
     assert!(controller_station_for_pairing(&config, &resolver, &station_id).is_err());

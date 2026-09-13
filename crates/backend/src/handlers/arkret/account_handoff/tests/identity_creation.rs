@@ -168,37 +168,35 @@ async fn accept_current_registration_station(state: &TestState) {
     repo.save().await.unwrap();
 }
 
+/// The origin Station's gate answer in its current shape.
+///
+/// `crypto-media/device-lifecycle.md` §2.2: the receipt is delivered on the
+/// registered deployment-internal authenticated channel, which supplies its
+/// authenticity and integrity, so it carries neither `proof` nor
+/// `verification_method`. Every other member — complete `AccountId`,
+/// `device_id`, `action_class`, `intent_digest`, the closed decision branch,
+/// `linearization_seq` and the ≤30 second window — is unchanged and still
+/// checked by `validate_for_request`.
 fn registration_device_gate_outcome(
     request: &arkret_wire::DeviceRevocationGateCheckRequestBody,
     authorization_event_id: &arkret_wire::EventId,
 ) -> arkret_wire::DeviceRevocationGateCheckOutcome {
-    let unsigned = arkret_wire::UnsignedDeviceRevocationGateDecisionReceipt {
-        account_id: request.account_id.clone(),
-        device_id: request.device_id.clone(),
-        target_device_authorize_event_id: Some(authorization_event_id.clone()),
-        target_device_generation_ref: Some(1),
-        action_class: request.action_class,
-        intent_digest: request.intent_digest.clone(),
-        accepted_device_possession_proof_digest: None,
-        decision: arkret_wire::DeviceRevocationGateDecision::Allow,
-        linearization_seq: 1,
-        linearized_at: request.requested_at,
-        expires_at: request.requested_at + Duration::seconds(30),
-        blocking_proposal_digest: None,
-        covering_seal_id: None,
-        verification_method: arkret_wire::DidUrl::new(format!("{REGISTRATION_STATION_DID}#notary"))
-            .unwrap(),
-    };
-    let metadata = unsigned.proof_metadata().unwrap();
-    let jws = arkret_signatures::sign_ed25519_detached_jws(
-        &crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&[23; 32]),
-        &unsigned.proof_signing_bytes(&metadata).unwrap(),
-    )
-    .unwrap();
     let outcome = arkret_wire::DeviceRevocationGateCheckOutcome {
-        decision_receipt: unsigned
-            .attach_proof(metadata.finalize(jws).unwrap())
-            .unwrap(),
+        decision_receipt: arkret_wire::DeviceRevocationGateDecisionReceipt {
+            account_id: request.account_id.clone(),
+            device_id: request.device_id.clone(),
+            target_device_authorize_event_id: Some(authorization_event_id.clone()),
+            target_device_generation_ref: Some(1),
+            action_class: request.action_class,
+            intent_digest: request.intent_digest.clone(),
+            accepted_device_possession_proof_digest: None,
+            decision: arkret_wire::DeviceRevocationGateDecision::Allow,
+            linearization_seq: 1,
+            linearized_at: request.requested_at,
+            expires_at: request.requested_at + Duration::seconds(30),
+            blocking_proposal_digest: None,
+            covering_seal_id: None,
+        },
     };
     outcome.validate_for_request(request).unwrap();
     outcome
@@ -219,6 +217,12 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
     let peer = MockServer::start().await;
     state.arkret_config.stations[0].endpoint = peer.uri().parse().unwrap();
     state.arkret_config.stations[0].service_id = Some(REGISTRATION_STATION_ID.parse().unwrap());
+    // The device-revocation gate runs on the registered deployment-internal
+    // authenticated channel (`service-http-binding.md` §2.2.3); without the
+    // configured channel credential the call fails closed instead of falling
+    // back to an unauthenticated request.
+    state.arkret_config.stations[0].session_grant_introspection_bearer =
+        Some("registration-internal-channel".to_owned());
     state.arkret_config.deployment_profile = coauth_config::DeploymentProfileConfig::PersonalNode;
     state.station_admin =
         std::sync::Arc::new(crate::services::principal_facade::DbConnectorAdmin::new(
@@ -665,16 +669,20 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
     }
     assert_eq!(table_count(&state, "identity_binding_challenges").await, 1);
     assert_eq!(table_count(&state, "oauth_session_grants").await, 1);
-    let registry_bodies = registry_bodies.lock().unwrap();
-    assert_eq!(registry_bodies.len(), 3);
-    assert_eq!(registry_bodies[0], registry_bodies[1]);
-    assert_eq!(registry_bodies[1], registry_bodies[2]);
-    drop(registry_bodies);
-    let pcr_bodies = pcr_bodies.lock().unwrap();
-    assert_eq!(pcr_bodies.len(), 3);
-    assert_eq!(pcr_bodies[0], pcr_bodies[1]);
-    assert_eq!(pcr_bodies[1], pcr_bodies[2]);
-    drop(pcr_bodies);
+    // Scoped rather than `drop`ped: the guards must not be part of this async
+    // block's state across the `await` below.
+    {
+        let registry_bodies = registry_bodies.lock().unwrap();
+        assert_eq!(registry_bodies.len(), 3);
+        assert_eq!(registry_bodies[0], registry_bodies[1]);
+        assert_eq!(registry_bodies[1], registry_bodies[2]);
+    }
+    {
+        let pcr_bodies = pcr_bodies.lock().unwrap();
+        assert_eq!(pcr_bodies.len(), 3);
+        assert_eq!(pcr_bodies[0], pcr_bodies[1]);
+        assert_eq!(pcr_bodies[1], pcr_bodies[2]);
+    }
     assert_eq!(peer.received_requests().await.unwrap().len(), 9);
     peer.verify().await;
 }

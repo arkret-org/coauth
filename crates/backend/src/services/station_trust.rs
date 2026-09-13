@@ -5,16 +5,23 @@
 //! ## Why
 //!
 //! `/_arkret/describe` is capability metadata, not an authorization root.
-//! The effective audience pin for each configured Station is
+//! `overview/architecture.md` §2.8 makes the owning Station's identity,
+//! endpoint and trust domain explicit deployment configuration: a missing or
+//! conflicting configuration MUST be rejected, a target change MUST go through
+//! an explicit rebinding, and the runtime MUST NOT fall back to guessing the
+//! peer from `describe`, from the first `stations[]` entry or from a network
+//! error. The effective audience pin for each configured Station is
 //! resolved from exactly one of three layers, in priority order:
 //!
 //! 1. the explicit config pin (`stations[].service_id`);
 //! 2. the persisted trust enrollment written by an explicit `coauth station trust bootstrap` /
-//!    `replace` (or the narrowly scoped development auto-enrollment);
+//!    `replace` (or, in development mode only, the host-allowlisted auto-enrollment);
 //! 3. nothing — business routes remain unavailable and point at the bootstrap command.
 //!
 //! A remote describe response only ever *confirms* a pin. It can never
-//! create or replace one outside the explicit bootstrap/replace operations.
+//! create or replace one outside the explicit bootstrap/replace operations,
+//! and an endpoint that starts presenting a different identity keeps its
+//! pinned one until an operator rebinds it.
 //!
 //! ## Concurrency
 //!
@@ -164,11 +171,22 @@ impl StationTrustResolver {
 
     /// Record a freshly verified pin. Callers only pass endpoints from the
     /// deployment configuration; [`MAX_CACHE_ENTRIES`] is a defensive bound.
+    ///
+    /// A target change never rides in here: if the endpoint already holds a
+    /// different identity, this refuses the write and leaves the previous pin
+    /// in place. Moving an endpoint to a new identity MUST go through the
+    /// explicit rebinding operation ([`replace`], via [`Self::note_rebound`]).
     pub(crate) fn note_verified(&self, endpoint: &Url, service_id: DidCoreId) {
-        self.note_verified_at(endpoint, service_id, Instant::now());
+        self.write_pin(endpoint, service_id, Instant::now(), PinWrite::Verified);
     }
 
-    fn note_verified_at(&self, endpoint: &Url, service_id: DidCoreId, now: Instant) {
+    /// Record the outcome of an explicit rebinding, which is the only path
+    /// allowed to move an endpoint to a different identity.
+    pub(crate) fn note_rebound(&self, endpoint: &Url, service_id: DidCoreId) {
+        self.write_pin(endpoint, service_id, Instant::now(), PinWrite::Rebound);
+    }
+
+    fn write_pin(&self, endpoint: &Url, service_id: DidCoreId, now: Instant, write: PinWrite) {
         let Some(key) = canonical_endpoint_key(endpoint) else {
             return;
         };
@@ -176,14 +194,18 @@ impl StationTrustResolver {
             if let Some(existing) = map.get_mut(&key) {
                 if existing.value == service_id {
                     existing.last_verified_at = now;
-                } else {
-                    // A pin change only lands here after an explicit
-                    // `trust replace`; the runtime never adopts a new
-                    // identity from a remote self-assertion.
+                } else if write == PinWrite::Rebound {
                     *existing = ResolvedPin {
                         value: service_id,
                         last_verified_at: now,
                     };
+                } else {
+                    tracing::error!(
+                        endpoint = %endpoint,
+                        pinned = %existing.value,
+                        observed = %service_id,
+                        "station identity changed without an explicit rebinding; keeping the pinned identity",
+                    );
                 }
             } else if map.len() < MAX_CACHE_ENTRIES {
                 map.insert(
@@ -206,8 +228,17 @@ impl StationTrustResolver {
     #[cfg(test)]
     pub fn insert_for_test(&self, endpoint: &Url, service_id: impl Into<String>) {
         let service_id = DidCoreId::new(service_id.into()).expect("valid test Station core ID");
-        self.note_verified_at(endpoint, service_id, Instant::now());
+        self.write_pin(endpoint, service_id, Instant::now(), PinWrite::Rebound);
     }
+}
+
+/// Which caller is writing a pin: an ordinary verification, which MUST NOT
+/// move an endpoint to a different identity, or an explicit rebinding, which
+/// is the only operation allowed to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PinWrite {
+    Verified,
+    Rebound,
 }
 
 /// The effective authorization audience for `server`.
@@ -921,7 +952,8 @@ pub async fn replace(
         )
         .await?;
     repo.save().await?;
-    shared().note_verified(&server.endpoint, verified.service_id.clone());
+    // The one operation allowed to move this endpoint to a different identity.
+    shared().note_rebound(&server.endpoint, verified.service_id.clone());
     Ok(ReplaceOutcome {
         enrollment: StationTrustEnrollment {
             name: server.name.clone(),
@@ -1004,7 +1036,6 @@ pub async fn preflight_and_spawn(
     arkret_config: ArkretConfig,
     http_client: reqwest::Client,
     development_mode: bool,
-    first_provisioning: bool,
     soft_shutdown: CancellationToken,
     refresh_interval: Duration,
 ) -> anyhow::Result<()> {
@@ -1015,7 +1046,6 @@ pub async fn preflight_and_spawn(
             &http_client,
             server,
             development_mode,
-            first_provisioning,
         )
         .await?;
     }
@@ -1072,7 +1102,6 @@ pub fn spawn_preflight_and_revalidation(
     arkret_config: ArkretConfig,
     http_client: reqwest::Client,
     development_mode: bool,
-    first_provisioning: bool,
     soft_shutdown: CancellationToken,
     schedule: RevalidationSchedule,
 ) {
@@ -1091,7 +1120,6 @@ pub fn spawn_preflight_and_revalidation(
                     &http_client,
                     server,
                     development_mode,
-                    first_provisioning,
                 )
                 .await
                 {
@@ -1162,7 +1190,6 @@ async fn preflight_server(
     http_client: &reqwest::Client,
     server: &StationConfig,
     development_mode: bool,
-    first_provisioning: bool,
 ) -> anyhow::Result<()> {
     let canonical_endpoint = canonical_endpoint_key(&server.endpoint)
         .ok_or_else(|| anyhow::anyhow!("Station {:?} endpoint is invalid", server.name))?;
@@ -1174,6 +1201,11 @@ async fn preflight_server(
 
     // Layer resolution. A config pin that disagrees with the persisted
     // enrollment is a hard conflict, never a silent choice.
+    // `overview/architecture.md` §2.8 / `service-http-binding.md` §2.2.3: the
+    // owning Station's identity, endpoint and trust domain come from explicit
+    // deployment configuration. A missing pin is a rejection and a conflicting
+    // pin is a hard failure; neither is ever resolved by adopting whatever
+    // identity `describe` currently asserts.
     let effective = match (server.service_id.as_ref(), enrollment.as_ref()) {
         (Some(configured), Some(persisted)) if configured != &persisted.service_id => {
             anyhow::bail!(
@@ -1185,20 +1217,14 @@ async fn preflight_server(
         (Some(configured), _) => configured.clone(),
         (None, Some(persisted)) => persisted.service_id.clone(),
         (None, None) => {
-            let auto_enroll =
-                development_auto_enrollment_allowed(arkret_config, server, development_mode);
-            if !auto_enroll && !first_provisioning {
+            if !development_auto_enrollment_allowed(arkret_config, server, development_mode) {
                 anyhow::bail!(
-                    "Station {:?} ({canonical_endpoint}) is not enrolled: no config service_id pin and no persisted trust enrollment; run `coauth station trust bootstrap --name {}` first",
+                    "Station {:?} ({canonical_endpoint}) is not enrolled: no config service_id pin and no persisted trust enrollment; set `stations[].service_id` or run `coauth station trust bootstrap --name {}` first",
                     server.name,
                     server.name,
                 );
             }
-            let source = if auto_enroll {
-                StationTrustSource::DevelopmentAuto
-            } else {
-                StationTrustSource::OperatorCli
-            };
+            let source = StationTrustSource::DevelopmentAuto;
             let outcome = bootstrap(repository_factory, http_client, server, source)
                 .await
                 .map_err(|error| {
@@ -1371,133 +1397,6 @@ async fn revalidate_all(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn server(endpoint: &str) -> StationConfig {
-        StationConfig {
-            name: "soland".to_owned(),
-            endpoint: Url::parse(endpoint).unwrap(),
-            service_id: Some(DidCoreId::new("ak:did_core:webvh:configured".to_owned()).unwrap()),
-            session_grant_introspection_bearer: None,
-            embedded_webvh_registration_bearer: None,
-        }
-    }
-
-    #[test]
-    fn configured_pin_wins_over_cached_enrollment_value() {
-        let resolver = StationTrustResolver::new();
-        let endpoint = "https://local.host/";
-        resolver.insert_for_test(
-            &Url::parse(endpoint).unwrap(),
-            "ak:did_core:webvh:persisted",
-        );
-        let server = server(endpoint);
-        assert_eq!(
-            effective_audience(&server, &resolver)
-                .as_ref()
-                .map(arkret_identifiers::DidCoreId::as_str),
-            Some("ak:did_core:webvh:configured"),
-        );
-    }
-
-    #[test]
-    fn persisted_pin_resolves_when_config_omits_pin() {
-        let resolver = StationTrustResolver::new();
-        let endpoint = Url::parse("https://local.host/").unwrap();
-        resolver.insert_for_test(&endpoint, "ak:did_core:webvh:persisted");
-        let mut server = server(endpoint.as_str());
-        server.service_id = None;
-        assert_eq!(
-            effective_audience(&server, &resolver)
-                .as_ref()
-                .map(DidCoreId::as_str),
-            Some("ak:did_core:webvh:persisted"),
-        );
-    }
-
-    #[test]
-    fn missing_pin_in_both_layers_fails_closed() {
-        let resolver = StationTrustResolver::new();
-        let mut server = server("https://local.host/");
-        server.service_id = None;
-        assert_eq!(effective_audience(&server, &resolver), None);
-    }
-
-    #[test]
-    fn canonical_endpoint_key_ignores_trailing_slash() {
-        assert_eq!(
-            canonical_endpoint_key(&Url::parse("https://local.host/").unwrap()),
-            canonical_endpoint_key(&Url::parse("https://local.host").unwrap()),
-        );
-    }
-
-    #[test]
-    fn cached_pin_expires_at_maximum_trusted_age() {
-        let resolver = StationTrustResolver::new();
-        let endpoint = Url::parse("https://local.host/").unwrap();
-        let verified_at = Instant::now();
-        resolver.note_verified_at(
-            &endpoint,
-            DidCoreId::new("ak:did_core:webvh:persisted".to_owned()).unwrap(),
-            verified_at,
-        );
-
-        let before_expiry = (verified_at + MAX_TRUSTED_AUDIENCE_AGE)
-            .checked_sub(Duration::from_nanos(1))
-            .unwrap();
-        assert!(resolver.resolve_at(&endpoint, before_expiry).is_some());
-        assert_eq!(
-            resolver.resolve_at(&endpoint, verified_at + MAX_TRUSTED_AUDIENCE_AGE),
-            None
-        );
-    }
-
-    #[test]
-    fn anti_rollback_accepts_monotone_history() {
-        check_anti_rollback("sha256:aa", "1-aa", "sha256:bb", "2-bb").unwrap();
-        check_anti_rollback("sha256:aa", "1-aa", "sha256:aa", "1-aa").unwrap();
-    }
-
-    #[test]
-    fn anti_rollback_rejects_regression() {
-        assert!(check_anti_rollback("sha256:bb", "2-bb", "sha256:aa", "1-aa").is_err());
-        // Same sequence with a different head is a fork, not progress.
-        assert!(check_anti_rollback("sha256:aa", "1-aa", "sha256:cc", "1-cc").is_err());
-    }
-
-    #[test]
-    fn development_auto_enrollment_requires_conjunction() {
-        let config = ArkretConfig {
-            development_auto_enrollment_hosts: vec!["localhost".to_owned()],
-            ..ArkretConfig::default()
-        };
-        let mut server = server("https://localhost:8448/");
-        server.service_id = None;
-
-        assert!(development_auto_enrollment_allowed(&config, &server, true));
-        // Not in development mode.
-        assert!(!development_auto_enrollment_allowed(
-            &config, &server, false
-        ));
-        // Host not in the exact allowlist.
-        let other = StationConfig {
-            endpoint: Url::parse("https://soland.local/").unwrap(),
-            ..server.clone()
-        };
-        assert!(!development_auto_enrollment_allowed(&config, &other, true));
-        // Plain HTTP is never auto-enrolled.
-        let insecure = StationConfig {
-            endpoint: Url::parse("http://localhost:8448/").unwrap(),
-            ..server.clone()
-        };
-        assert!(!development_auto_enrollment_allowed(
-            &config, &insecure, true
-        ));
-    }
-}
-
 /// Fetch the method authority independently of carried evidence, with the shared egress policy.
 pub(crate) async fn resolve_current_service_did(
     http: &reqwest::Client,
@@ -1586,4 +1485,153 @@ async fn fetch_method_response(
             TrustVerificationError::InvalidEvidence(message)
         }
     })
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn server(endpoint: &str) -> StationConfig {
+        StationConfig {
+            name: "soland".to_owned(),
+            endpoint: Url::parse(endpoint).unwrap(),
+            service_id: Some(DidCoreId::new("ak:did_core:webvh:configured".to_owned()).unwrap()),
+            session_grant_introspection_bearer: None,
+            embedded_webvh_registration_bearer: None,
+            trust_domain: None,
+        }
+    }
+
+    #[test]
+    fn configured_pin_wins_over_cached_enrollment_value() {
+        let resolver = StationTrustResolver::new();
+        let endpoint = "https://local.host/";
+        resolver.insert_for_test(
+            &Url::parse(endpoint).unwrap(),
+            "ak:did_core:webvh:persisted",
+        );
+        let server = server(endpoint);
+        assert_eq!(
+            effective_audience(&server, &resolver)
+                .as_ref()
+                .map(arkret_identifiers::DidCoreId::as_str),
+            Some("ak:did_core:webvh:configured"),
+        );
+    }
+
+    #[test]
+    fn persisted_pin_resolves_when_config_omits_pin() {
+        let resolver = StationTrustResolver::new();
+        let endpoint = Url::parse("https://local.host/").unwrap();
+        resolver.insert_for_test(&endpoint, "ak:did_core:webvh:persisted");
+        let mut server = server(endpoint.as_str());
+        server.service_id = None;
+        assert_eq!(
+            effective_audience(&server, &resolver)
+                .as_ref()
+                .map(DidCoreId::as_str),
+            Some("ak:did_core:webvh:persisted"),
+        );
+    }
+
+    #[test]
+    fn missing_pin_in_both_layers_fails_closed() {
+        let resolver = StationTrustResolver::new();
+        let mut server = server("https://local.host/");
+        server.service_id = None;
+        assert_eq!(effective_audience(&server, &resolver), None);
+    }
+
+    #[test]
+    fn canonical_endpoint_key_ignores_trailing_slash() {
+        assert_eq!(
+            canonical_endpoint_key(&Url::parse("https://local.host/").unwrap()),
+            canonical_endpoint_key(&Url::parse("https://local.host").unwrap()),
+        );
+    }
+
+    #[test]
+    fn cached_pin_expires_at_maximum_trusted_age() {
+        let resolver = StationTrustResolver::new();
+        let endpoint = Url::parse("https://local.host/").unwrap();
+        let verified_at = Instant::now();
+        resolver.write_pin(
+            &endpoint,
+            DidCoreId::new("ak:did_core:webvh:persisted".to_owned()).unwrap(),
+            verified_at,
+            PinWrite::Verified,
+        );
+
+        let before_expiry = (verified_at + MAX_TRUSTED_AUDIENCE_AGE)
+            .checked_sub(Duration::from_nanos(1))
+            .unwrap();
+        assert!(resolver.resolve_at(&endpoint, before_expiry).is_some());
+        assert_eq!(
+            resolver.resolve_at(&endpoint, verified_at + MAX_TRUSTED_AUDIENCE_AGE),
+            None
+        );
+    }
+
+    /// A target change MUST go through an explicit rebinding; an endpoint that
+    /// starts presenting a different identity never silently takes over the
+    /// pin an ordinary verification refreshes.
+    #[test]
+    fn changed_station_identity_keeps_the_pin_until_an_explicit_rebinding() {
+        let resolver = StationTrustResolver::new();
+        let endpoint = Url::parse("https://local.host/").unwrap();
+        let pinned = DidCoreId::new("ak:did_core:webvh:pinned".to_owned()).unwrap();
+        let replacement = DidCoreId::new("ak:did_core:webvh:replacement".to_owned()).unwrap();
+        let at = Instant::now();
+
+        resolver.write_pin(&endpoint, pinned.clone(), at, PinWrite::Verified);
+        resolver.write_pin(&endpoint, replacement.clone(), at, PinWrite::Verified);
+        assert_eq!(resolver.resolve_at(&endpoint, at), Some(pinned));
+
+        resolver.write_pin(&endpoint, replacement.clone(), at, PinWrite::Rebound);
+        assert_eq!(resolver.resolve_at(&endpoint, at), Some(replacement));
+    }
+
+    #[test]
+    fn anti_rollback_accepts_monotone_history() {
+        check_anti_rollback("sha256:aa", "1-aa", "sha256:bb", "2-bb").unwrap();
+        check_anti_rollback("sha256:aa", "1-aa", "sha256:aa", "1-aa").unwrap();
+    }
+
+    #[test]
+    fn anti_rollback_rejects_regression() {
+        assert!(check_anti_rollback("sha256:bb", "2-bb", "sha256:aa", "1-aa").is_err());
+        // Same sequence with a different head is a fork, not progress.
+        assert!(check_anti_rollback("sha256:aa", "1-aa", "sha256:cc", "1-cc").is_err());
+    }
+
+    #[test]
+    fn development_auto_enrollment_requires_conjunction() {
+        let config = ArkretConfig {
+            development_auto_enrollment_hosts: vec!["localhost".to_owned()],
+            ..ArkretConfig::default()
+        };
+        let mut server = server("https://localhost:8448/");
+        server.service_id = None;
+
+        assert!(development_auto_enrollment_allowed(&config, &server, true));
+        // Not in development mode.
+        assert!(!development_auto_enrollment_allowed(
+            &config, &server, false
+        ));
+        // Host not in the exact allowlist.
+        let other = StationConfig {
+            endpoint: Url::parse("https://soland.local/").unwrap(),
+            ..server.clone()
+        };
+        assert!(!development_auto_enrollment_allowed(&config, &other, true));
+        // Plain HTTP is never auto-enrolled.
+        let insecure = StationConfig {
+            endpoint: Url::parse("http://localhost:8448/").unwrap(),
+            ..server.clone()
+        };
+        assert!(!development_auto_enrollment_allowed(
+            &config, &insecure, true
+        ));
+    }
 }

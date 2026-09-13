@@ -401,7 +401,7 @@ pub(crate) async fn require_session_grant_caller(
     // matching server's audience is the only one this caller may read.
     let arkret_config = depot.arkret_config()?;
     let static_bearer_audiences =
-        station_static_session_grant_bearer_audiences(&arkret_config, token);
+        station_internal_channel_callers(&arkret_config, token);
     if !static_bearer_audiences.is_empty() {
         return Ok(SessionGrantCaller::station(static_bearer_audiences));
     }
@@ -509,15 +509,21 @@ pub(crate) fn station_static_session_grant_bearer_matches(
     arkret_config: &ArkretConfig,
     token: &str,
 ) -> bool {
-    !station_static_session_grant_bearer_audiences(arkret_config, token).is_empty()
+    !station_internal_channel_callers(arkret_config, token).is_empty()
 }
 
-/// Returns every Station audience whose static
-/// `session_grant_introspection_bearer` matches `token`. Operators may
-/// deliberately share one deployment credential across a cluster; in that
-/// case the credential is authorized for exactly the matching configured
-/// audiences rather than whichever entry happens to appear first.
-fn station_static_session_grant_bearer_audiences(
+/// Callers authenticated on the deployment-internal channel
+/// (`sync/service-http-binding.md` §2.2.3) by `credential`.
+///
+/// The identity is the *configured* service id of every Station entry whose
+/// configured channel credential matches, never a `Source-Service-ID` header,
+/// a body field or a self-reported `internal` marker. Operators may
+/// deliberately share one deployment credential across a cluster; in that case
+/// the credential is authorized for exactly the matching configured
+/// identities rather than whichever entry happens to appear first. An entry
+/// with no resolved configured identity contributes nothing, so a missing
+/// configuration fails closed instead of widening the caller set.
+pub(crate) fn station_internal_channel_callers(
     arkret_config: &ArkretConfig,
     token: &str,
 ) -> Vec<String> {

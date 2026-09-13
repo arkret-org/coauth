@@ -75,8 +75,6 @@ impl Options {
             app_cfg.arkret.clone(),
             arkret_http_client.clone(),
             coauth_backend::error::development_mode_from_env(),
-            coauth_config::runtime_var("COAUTH_FIRST_PROVISIONING")
-                .is_ok_and(|value| value.trim() == "1"),
             lifecycle.soft_shutdown_token(),
             coauth_backend::services::station_trust::DEFAULT_REFRESH_INTERVAL,
         )

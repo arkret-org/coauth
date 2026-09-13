@@ -6,10 +6,6 @@ use arkret_models_identity::agent_signer_evidence::{
     ControllerAccountGateAttestationIssueOutcome, ControllerAccountGateAttestationIssueRequestBody,
     ControllerAccountGateBasis, ControllerAccountStatus,
 };
-use arkret_signatures::http_signature::{
-    Component, SignatureVerificationPolicy, parse_signature_input,
-    verify_signed_canonical_json_message,
-};
 use arkret_wire::{DidUrl, NonEmptyString};
 use chrono::{Duration, Timelike as _};
 use coauth_data::account_handoff::{
@@ -20,11 +16,8 @@ use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
 use coauth_data::{Clock as _, RepositoryAccess as _};
 use salvo::prelude::*;
 
-use super::account_status::required_header;
 use super::{ArkretRouteError, owning_station_id_for};
-use crate::arkret_key_bridge::{
-    sdk_signing_key_from_seed_bytes, sdk_verifying_key_from_public_key_bytes,
-};
+use crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes;
 use crate::handlers::common::DepotExt;
 
 const GATE_TTL: Duration = Duration::minutes(5);
@@ -72,8 +65,7 @@ pub async fn issue_controller_gate_attestation(
         .ok_or_else(|| ArkretRouteError::Internal("invalid clock precision".into()))?;
 
     let mut repo = depot.repo().await?;
-    authenticate_agent_authority_request(req, depot, &request, &canonical_body, now)
-        .await
+    authenticate_internal_channel_caller(req, depot, &request)
         .inspect_err(|_| tracing::warn!("controller gate Agent Authority authentication failed"))?;
     let binding = repo
         .principal_did()
@@ -207,130 +199,88 @@ pub async fn issue_controller_gate_attestation(
     Ok(ControllerGateCanonicalJson(response))
 }
 
-async fn authenticate_agent_authority_request(
+/// Authenticate the caller on the registered deployment-internal channel
+/// (`sync/service-http-binding.md` §2.2.3).
+///
+/// The internal identity comes only from verifying the credential configured
+/// for this exact Account Authority / Station edge. `Source-Service-ID`,
+/// `Destination-Service-ID`, a path segment, a `DidCoreId`/URL in the body and
+/// any caller-supplied key MUST NOT decide the identity or supply a
+/// verification key; when those redundant transport inputs are present they are
+/// compared verbatim against the authenticated facts and any disagreement is a
+/// rejection. The channel is the complete authentication contract for this
+/// operation and replaces the RFC 9421 request signature, so the request body
+/// no longer carries a service-resolution carrier.
+///
+/// The verified caller MUST equal `agent_authority_id`; the caller's verbatim
+/// equality with the principal's current `AcceptedAtServiceBinding.service_id`
+/// is enforced by the binding lookup in the handler, which resolves the
+/// principal only under that exact accepted service id.
+///
+/// The *response* attestation keeps its signature, its verification method's
+/// public DID assertion authorization, its TTL and its exact replay: it leaves
+/// this relationship and enters the external Agent evidence chain.
+fn authenticate_internal_channel_caller(
     req: &Request,
     depot: &Depot,
     request: &ControllerAccountGateAttestationIssueRequestBody,
-    canonical_body: &[u8],
-    now: chrono::DateTime<chrono::Utc>,
 ) -> Result<(), ArkretRouteError> {
     let config = depot.arkret_config()?;
-    request
-        .agent_authority_resolution
-        .validate_shape(&request.agent_authority_id, now)
-        .map_err(|_| not_found())?;
-
-    let did = &request
-        .agent_authority_resolution
-        .normalized_did_document
-        .id;
-    let resolution = &request.agent_authority_resolution;
-    let current =
-        crate::services::station_trust::resolve_current_service_did(&depot.http_client()?, did)
-            .await
-            .map_err(|_| not_found())?;
-    arkret_identity::verify_current_service_resolution(
-        resolution,
-        &request.agent_authority_id,
-        "station",
-        &current,
-        now,
-    )
-    .map_err(|_| not_found())?;
-
-    let signature_input = req
+    let credential = req
         .headers()
-        .get("signature-input")
+        .get(http::header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| parse_signature_input(value).ok())
+        .and_then(|value| {
+            value
+                .strip_prefix("Bearer ")
+                .or_else(|| value.strip_prefix("bearer "))
+        })
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
         .ok_or_else(not_found)?;
-    let key_id = DidUrl::new(signature_input.key_id.clone()).map_err(|_| not_found())?;
-    let key_controller = key_id
-        .as_str()
-        .split_once('#')
-        .map(|(controller, _)| controller)
-        .ok_or_else(not_found)?;
-    if key_controller != did.as_str() {
-        return Err(not_found());
-    }
-    arkret_identity::validate_verification_method_relationship(
-        &resolution.normalized_did_document,
-        &key_id,
-        did,
-        arkret_identity::DidVerificationRelationship::AssertionMethod,
-    )
-    .map_err(|_| not_found())?;
-    let resolved_key = arkret_identity::resolve_verification_method_key_from_document(
-        &resolution.normalized_did_document,
-        key_id.as_str(),
-    )
-    .map_err(|_| not_found())?;
-    let key_bytes = resolved_key
-        .public_key
-        .ed25519_bytes()
-        .map_err(|_| not_found())?;
-    let public_key =
-        sdk_verifying_key_from_public_key_bytes(&key_bytes).map_err(|_| not_found())?;
-
-    let source = required_header(req, "source-service-id")?;
-    let destination = required_header(req, "destination-service-id")?;
-    let selector = required_header(req, "arkret-operation")?;
-    let operation = required_header(req, "arkret-operation-id")?;
-    let request_id = required_header(req, "arkret-request-id")?;
-    let local_service_id = owning_station_id_for(&config);
-    if source != request.agent_authority_id.as_str()
-        || destination != local_service_id.as_str()
-        || selector != GATE_OPERATION_ID
-        || operation != GATE_OPERATION_ID
-        || request_id != request.request_id.as_str()
+    if !super::station_internal_channel_callers(&config, credential)
+        .iter()
+        .any(|caller| caller == request.agent_authority_id.as_str())
     {
         return Err(not_found());
     }
-    let public_base_url = depot.url_builder()?.http_base();
-    let authority = public_base_url
-        .host_str()
-        .map(|host| match public_base_url.port() {
-            Some(port) => format!("{host}:{port}"),
-            None => host.to_owned(),
+
+    let local_service_id = owning_station_id_for(&config);
+    // The trust domains are configured facts on both ends of this edge: the
+    // caller's is its `arkret.stations[].trust_domain` entry, ours is
+    // `arkret.trust_domain`. They are compared only as redundant inputs — an
+    // absent header is not a rejection, and neither header is ever an identity
+    // source — but a header that disagrees with the configuration is.
+    let caller_trust_domain = config
+        .stations
+        .iter()
+        .find(|station| {
+            crate::services::station_trust::effective_audience_shared(station)
+                .is_some_and(|audience| audience == request.agent_authority_id)
         })
-        .ok_or_else(not_found)?;
-    let target_uri = public_base_url
-        .join(req.uri().path().trim_start_matches('/'))
-        .map_err(|_| not_found())?;
-    let headers = req.headers().iter().filter_map(|(name, value)| {
-        value
-            .to_str()
-            .ok()
-            .map(|value| (name.as_str().to_owned(), value.to_owned()))
-    });
-    let policy = SignatureVerificationPolicy::new(vec![
-        Component::Method,
-        Component::TargetUri,
-        Component::Authority,
-        Component::Path,
-        Component::Header("content-digest".to_owned()),
-        Component::Header("source-service-id".to_owned()),
-        Component::Header("destination-service-id".to_owned()),
-        Component::Header("arkret-operation".to_owned()),
-        Component::Header("arkret-operation-id".to_owned()),
-        Component::Header("arkret-request-id".to_owned()),
-    ])
-    .require_content_digest(true)
-    .max_clock_skew_seconds(300)
-    .max_validity_window_seconds(300);
-    verify_signed_canonical_json_message(
-        req.method().as_str(),
-        target_uri.as_str(),
-        &authority,
-        req.uri().path(),
-        headers,
-        req.headers().contains_key("content-encoding"),
-        canonical_body,
-        &public_key,
-        &policy,
-        now.timestamp(),
-    )
-    .map_err(|_| not_found())?;
+        .and_then(|station| station.trust_domain.as_deref());
+    let redundant = [
+        ("source-service-id", Some(request.agent_authority_id.as_str())),
+        ("destination-service-id", Some(local_service_id.as_str())),
+        ("arkret-operation", Some(GATE_OPERATION_ID)),
+        ("source-trust-domain", caller_trust_domain),
+        ("destination-trust-domain", config.trust_domain.as_deref()),
+    ];
+    for (header, expected) in redundant {
+        let Some(expected) = expected else {
+            continue;
+        };
+        if let Some(observed) = req
+            .headers()
+            .get(header)
+            .and_then(|value| value.to_str().ok())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            && observed != expected
+        {
+            return Err(not_found());
+        }
+    }
     Ok(())
 }
 

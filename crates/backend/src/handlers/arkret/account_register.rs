@@ -227,6 +227,11 @@ pub async fn account_register_endpoint(
     prerequisite_repo.cancel().await.ok();
     let key_store = depot.key_store()?;
     let session_signing_key_id = super::preferred_signing_key_id(&key_store)?;
+    // `account-lifecycle.md` §2.1.2 ruling B.2 keeps this: the control proof and
+    // the registration DID evidence draft are verified *before* the first DID
+    // registry I/O, behind the frozen-reservation barrier. A later genesis
+    // rejection cannot withdraw an already published DID, so a lawful DID
+    // operation carrying an invalid extra proof must still be refused here.
     let validated = arkret_signatures::webvh::verify_identity_creation_control_proof(
         &identity_creation.did_operation,
         &identity_creation.control_proof,
@@ -460,6 +465,15 @@ pub async fn account_register_endpoint(
             .map_err(|error| failed_precondition(error.to_string()))?;
         outcome
     };
+    // `account-lifecycle.md` §2.1.2 step 7: the origin Station alone verifies
+    // the genesis unit from the frozen relay. The Account Authority only checks
+    // that this authenticated outcome matches its own frozen material verbatim
+    // — account/principal/PCR, the DID operation and its log pins, the
+    // registration evidence digest, the device/key/HPKE descriptor, the lease
+    // fence and the request identity, all covered by `validate_against` above
+    // plus the issuer check here. It does not re-resolve the two accepted
+    // Events or replay the genesis. A 2xx, a bare Event id or a receipt not
+    // bound to this frozen request is never enough to commit the binding.
     if pcr_outcome.receipt.issuer_id != station.service_id {
         return Err(failed_precondition(
             "PCR genesis receipt issuer does not match the selected Station",
