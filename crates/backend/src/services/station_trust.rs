@@ -1487,7 +1487,6 @@ async fn fetch_method_response(
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1498,6 +1497,7 @@ mod tests {
             endpoint: Url::parse(endpoint).unwrap(),
             service_id: Some(DidCoreId::new("ak:did_core:webvh:configured".to_owned()).unwrap()),
             session_grant_introspection_bearer: None,
+            internal_channel: None,
             embedded_webvh_registration_bearer: None,
             trust_domain: None,
         }

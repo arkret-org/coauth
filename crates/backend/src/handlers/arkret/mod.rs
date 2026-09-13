@@ -378,6 +378,7 @@ impl SessionGrantCaller {
 pub(crate) async fn require_session_grant_caller(
     req: &Request,
     depot: &Depot,
+    internal_operation: Option<&str>,
 ) -> Result<SessionGrantCaller, ArkretRouteError> {
     use coauth_data::{RepositoryAccess, TokenType};
 
@@ -400,8 +401,12 @@ pub(crate) async fn require_session_grant_caller(
     // authz only — never `Admin` — so it cannot revoke session grants. The
     // matching server's audience is the only one this caller may read.
     let arkret_config = depot.arkret_config()?;
-    let static_bearer_audiences =
-        station_internal_channel_callers(&arkret_config, token);
+    let static_bearer_audiences = station_internal_channel_callers_for_request(
+        &arkret_config,
+        token,
+        req.headers(),
+        internal_operation,
+    );
     if !static_bearer_audiences.is_empty() {
         return Ok(SessionGrantCaller::station(static_bearer_audiences));
     }
@@ -505,6 +510,7 @@ pub(crate) async fn require_session_grant_caller(
     }
 }
 
+#[cfg(test)]
 pub(crate) fn station_static_session_grant_bearer_matches(
     arkret_config: &ArkretConfig,
     token: &str,
@@ -534,13 +540,75 @@ pub(crate) fn station_internal_channel_callers(
         .stations
         .iter()
         .filter(|server| {
-            server
-                .session_grant_introspection_bearer
-                .as_deref()
-                .is_some_and(|configured| crate::util::constant_time_token_eq(configured, token))
+            server.permits_unsigned_internal_channel()
+                && server
+                    .session_grant_introspection_bearer
+                    .as_deref()
+                    .is_some_and(|configured| {
+                        crate::util::constant_time_token_eq(configured, token)
+                    })
         })
         .filter_map(|server| effective_audience(server, station_trust::shared()))
         .map(|audience| audience.to_string())
+        .collect()
+}
+
+fn station_internal_channel_callers_for_request(
+    arkret_config: &ArkretConfig,
+    token: &str,
+    headers: &http::HeaderMap,
+    expected_operation: Option<&str>,
+) -> Vec<String> {
+    let authenticated_callers = station_internal_channel_callers(arkret_config, token);
+    let destination_service_id = arkret_config
+        .runtime_owning_station_identity
+        .get()
+        .map(|identity| identity.station_id);
+    arkret_config
+        .stations
+        .iter()
+        .filter(|station| {
+            station.permits_unsigned_internal_channel()
+                && station
+                    .session_grant_introspection_bearer
+                    .as_deref()
+                    .is_some_and(|configured| {
+                        crate::util::constant_time_token_eq(configured, token)
+                    })
+        })
+        .filter_map(|station| {
+            let source_service_id = effective_audience(station, station_trust::shared())?;
+            if !authenticated_callers
+                .iter()
+                .any(|caller| caller == source_service_id.as_str())
+            {
+                return None;
+            }
+            let expected = [
+                ("source-service-id", Some(source_service_id.as_str())),
+                (
+                    "destination-service-id",
+                    destination_service_id.as_ref().map(|value| value.as_str()),
+                ),
+                ("arkret-operation", expected_operation),
+                ("source-trust-domain", station.trust_domain.as_deref()),
+                (
+                    "destination-trust-domain",
+                    arkret_config.trust_domain.as_deref(),
+                ),
+            ];
+            for (name, configured) in expected {
+                if let Some(value) = headers.get(name) {
+                    let Ok(observed) = value.to_str() else {
+                        return None;
+                    };
+                    if !configured.is_some_and(|configured| observed == configured) {
+                        return None;
+                    }
+                }
+            }
+            Some(source_service_id.to_string())
+        })
         .collect()
 }
 

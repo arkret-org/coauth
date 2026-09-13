@@ -60,7 +60,14 @@ fn require_auth_session_logout_service_caller(
     }
 
     let arkret_config = depot.arkret_config()?;
-    if super::super::station_static_session_grant_bearer_matches(&arkret_config, token) {
+    if !super::super::station_internal_channel_callers_for_request(
+        &arkret_config,
+        token,
+        req.headers(),
+        Some(arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_LOGOUT_AUTH_SESSION_V1),
+    )
+    .is_empty()
+    {
         return Ok(());
     }
 

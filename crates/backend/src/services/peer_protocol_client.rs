@@ -393,11 +393,19 @@ impl<'a> InternalAuthorityChannel<'a> {
         base_url: &'a Url,
         http_client: &'a reqwest::Client,
         credential: Option<&'a str>,
+        internal_channel: Option<&coauth_config::InternalChannelConfig>,
         source_service_id: arkret_identifiers::DidCoreId,
         destination_service_id: arkret_identifiers::DidCoreId,
         source_trust_domain: arkret_identifiers::TrustDomainId,
         destination_trust_domain: arkret_identifiers::TrustDomainId,
     ) -> Result<Self, PeerProtocolClientError> {
+        if !internal_channel
+            .is_some_and(coauth_config::InternalChannelConfig::permits_unsigned_transport)
+        {
+            return Err(PeerProtocolClientError::InternalChannelNotConfigured(
+                "no valid channel integrity contract is configured".to_owned(),
+            ));
+        }
         let credential = credential
             .map(str::trim)
             .filter(|value| !value.is_empty())
@@ -481,10 +489,7 @@ impl<'a> InternalAuthorityChannel<'a> {
         let body_bytes = canonical_json_bytes(body)
             .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
         let headers = [
-            (
-                SOURCE_SERVICE_ID_HEADER,
-                self.source_service_id.to_string(),
-            ),
+            (SOURCE_SERVICE_ID_HEADER, self.source_service_id.to_string()),
             (
                 DESTINATION_SERVICE_ID_HEADER,
                 self.destination_service_id.to_string(),

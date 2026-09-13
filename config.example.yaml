@@ -136,6 +136,15 @@ arkret:
   - name: soland-example
     endpoint: https://local.host/
     session_grant_introspection_bearer: ${SOLAND_SESSION_GRANT_INTROSPECTION_BEARER}
+    # Required before this bearer may authorize an unsigned §2.2.3 internal
+    # operation. Use mtls_direct_process only when mTLS terminates in the
+    # Station business process. Otherwise select registered_tcb and list every
+    # decrypting/forwarding proxy explicitly.
+    internal_channel:
+      integrity:
+        mode: registered_tcb
+        decrypting_forwarding_proxies:
+        - edge-proxy-1
     embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
   # Standalone identity Providers use the same standard operations. Configure
   # this instead of a registration-capable Station, or set

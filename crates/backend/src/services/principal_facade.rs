@@ -518,6 +518,7 @@ mod tests {
                     .unwrap(),
             ),
             session_grant_introspection_bearer: None,
+            internal_channel: None,
             embedded_webvh_registration_bearer: None,
             trust_domain: None,
         }

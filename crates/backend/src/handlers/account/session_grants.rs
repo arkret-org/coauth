@@ -39,7 +39,7 @@ pub async fn list_session_grants(
     let device_id = req.query::<String>("device_id");
     let requested_audience = req.query::<String>("audience");
 
-    let caller = require_session_grant_caller(req, depot).await?;
+    let caller = require_session_grant_caller(req, depot, None).await?;
 
     // SEC-SG-ENUM: a Station caller may not enumerate session-grant
     // metadata across arbitrary subjects/audiences. Pin the query to the
@@ -104,7 +104,7 @@ pub async fn revoke_session_grant(
         .map_err(|_| ArkretRouteError::BadRequest("invalid session grant id".into()))?;
 
     // Revocation is destructive — server_name scope is not enough.
-    match require_session_grant_caller(req, depot).await?.authz {
+    match require_session_grant_caller(req, depot, None).await?.authz {
         SessionGrantAuthz::Admin => {}
         SessionGrantAuthz::Station => {
             return Err(ArkretRouteError::Forbidden(

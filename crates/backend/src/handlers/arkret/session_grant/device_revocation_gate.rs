@@ -77,6 +77,7 @@ pub(crate) async fn acquire_human_device_binding(
         &destination.endpoint,
         &http_client,
         destination.session_grant_introspection_bearer.as_deref(),
+        destination.internal_channel.as_ref(),
         source_id,
         account_id.station_id.clone(),
         source_trust_domain,
@@ -276,6 +277,9 @@ mod tests {
             endpoint: "https://station.example/".parse().expect("test endpoint"),
             service_id: Some(core_id("ak:did_core:web:station.example")),
             session_grant_introspection_bearer: Some("configured-credential".to_owned()),
+            internal_channel: Some(coauth_config::InternalChannelConfig {
+                integrity: coauth_config::InternalChannelIntegrityConfig::MtlsDirectProcess {},
+            }),
             embedded_webvh_registration_bearer: None,
             trust_domain: trust_domain.map(ToOwned::to_owned),
         }
@@ -286,10 +290,14 @@ mod tests {
         http_client: &'a reqwest::Client,
         destination: &str,
     ) -> InternalAuthorityChannel<'a> {
+        let internal_channel = coauth_config::InternalChannelConfig {
+            integrity: coauth_config::InternalChannelIntegrityConfig::MtlsDirectProcess {},
+        };
         InternalAuthorityChannel::new(
             endpoint,
             http_client,
             Some("configured-internal-channel-credential"),
+            Some(&internal_channel),
             core_id("ak:did_core:web:auth.example"),
             core_id(destination),
             // Source and destination domains are distinct facts: this
@@ -338,12 +346,16 @@ mod tests {
     fn internal_channel_without_a_configured_credential_fails_closed() {
         let endpoint = url::Url::parse("https://station.example/").expect("test endpoint");
         let http_client = crate::reqwest_client();
+        let internal_channel = coauth_config::InternalChannelConfig {
+            integrity: coauth_config::InternalChannelIntegrityConfig::MtlsDirectProcess {},
+        };
         // `InternalAuthorityChannel` is deliberately not `Debug` (it holds a
         // credential), so destructure rather than using `expect_err`.
         let Err(error) = InternalAuthorityChannel::new(
             &endpoint,
             &http_client,
             None,
+            Some(&internal_channel),
             core_id("ak:did_core:web:auth.example"),
             core_id("ak:did_core:web:station.example"),
             trust_domain("auth.example"),
@@ -362,6 +374,34 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn internal_channel_without_a_valid_integrity_contract_fails_closed() {
+        let endpoint = url::Url::parse("https://station.example/").expect("test endpoint");
+        let http_client = crate::reqwest_client();
+        let invalid_tcb = coauth_config::InternalChannelConfig {
+            integrity: coauth_config::InternalChannelIntegrityConfig::RegisteredTcb {
+                decrypting_forwarding_proxies: vec!["edge-a".to_owned(), "edge-a".to_owned()],
+            },
+        };
+
+        for integrity in [None, Some(&invalid_tcb)] {
+            let result = InternalAuthorityChannel::new(
+                &endpoint,
+                &http_client,
+                Some("configured-internal-channel-credential"),
+                integrity,
+                core_id("ak:did_core:web:auth.example"),
+                core_id("ak:did_core:web:station.example"),
+                trust_domain("auth.example"),
+                trust_domain("station.example"),
+            );
+            assert!(matches!(
+                result,
+                Err(PeerProtocolClientError::InternalChannelNotConfigured(_))
+            ));
+        }
     }
 
     /// Both trust-domain positions are configured facts. The deployment's own

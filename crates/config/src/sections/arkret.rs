@@ -499,6 +499,16 @@ impl ConfigurationSection for ArkretConfig {
                 );
             }
             if server
+                .session_grant_introspection_bearer
+                .as_deref()
+                .is_some_and(|bearer| bearer.trim().is_empty())
+            {
+                return Err(std::io::Error::other(
+                    "arkret.stations[].session_grant_introspection_bearer must not be empty",
+                )
+                .into());
+            }
+            if server
                 .embedded_webvh_registration_bearer
                 .as_deref()
                 .is_some_and(|bearer| bearer.trim().is_empty())
@@ -512,6 +522,9 @@ impl ConfigurationSection for ArkretConfig {
                 Self::validate_trust_domain(trust_domain).map_err(|error| {
                     std::io::Error::other(format!("arkret.stations[].trust_domain: {error}"))
                 })?;
+            }
+            if let Some(internal_channel) = server.internal_channel.as_ref() {
+                internal_channel.validate().map_err(std::io::Error::other)?;
             }
             if !station_names.insert(server.name.as_str()) {
                 return Err(std::io::Error::other("Station names must be unique").into());
@@ -567,6 +580,16 @@ pub struct StationConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_grant_introspection_bearer: Option<String>,
 
+    /// Explicit integrity contract for unsigned deployment-internal calls on
+    /// this Account Authority / Station edge.
+    ///
+    /// Merely provisioning a bearer does not establish transport integrity.
+    /// Operations whose RFC 9421 signature is replaced by the internal
+    /// channel may use this Station only when this block is present and its
+    /// integrity declaration is valid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub internal_channel: Option<InternalChannelConfig>,
+
     /// Optional static bearer token coauth should send when writing embedded
     /// `did:webvh` registration records into this Station.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -587,6 +610,89 @@ pub struct StationConfig {
     /// [`ArkretConfig::validate_trust_domain`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trust_domain: Option<String>,
+}
+
+impl StationConfig {
+    /// Whether this Station explicitly declares a complete integrity contract
+    /// for operations that omit their RFC 9421 request signature.
+    #[must_use]
+    pub fn permits_unsigned_internal_channel(&self) -> bool {
+        self.internal_channel
+            .as_ref()
+            .is_some_and(InternalChannelConfig::permits_unsigned_transport)
+    }
+}
+
+/// Deployment contract for one unsigned internal Account Authority / Station
+/// channel.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct InternalChannelConfig {
+    /// How transport integrity is preserved after TLS termination.
+    pub integrity: InternalChannelIntegrityConfig,
+}
+
+impl InternalChannelConfig {
+    /// Whether this declaration is complete enough to replace per-message
+    /// RFC 9421 integrity on the registered internal operations.
+    #[must_use]
+    pub fn permits_unsigned_transport(&self) -> bool {
+        self.validate().is_ok()
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        self.integrity.validate()
+    }
+}
+
+/// Integrity mechanism that permits RFC 9421 to be omitted on a registered
+/// internal channel.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
+pub enum InternalChannelIntegrityConfig {
+    /// Mutually authenticated TLS terminates directly in the business
+    /// process; no decrypting or forwarding intermediary exists.
+    MtlsDirectProcess {},
+    /// Every intermediary that can decrypt or forward the channel is an
+    /// explicitly registered member of the same trusted computing base.
+    RegisteredTcb {
+        /// Complete, deployment-defined identifiers of all decrypting or
+        /// forwarding proxies on the channel.
+        decrypting_forwarding_proxies: Vec<String>,
+    },
+}
+
+impl InternalChannelIntegrityConfig {
+    fn validate(&self) -> Result<(), String> {
+        let Self::RegisteredTcb {
+            decrypting_forwarding_proxies,
+        } = self
+        else {
+            return Ok(());
+        };
+        if decrypting_forwarding_proxies.is_empty() {
+            return Err(
+                "arkret.stations[].internal_channel.integrity.decrypting_forwarding_proxies must not be empty"
+                    .to_owned(),
+            );
+        }
+        let mut members = std::collections::BTreeSet::new();
+        for member in decrypting_forwarding_proxies {
+            if member.is_empty() || member.trim() != member {
+                return Err(
+                    "arkret.stations[].internal_channel.integrity.decrypting_forwarding_proxies entries must be non-empty and contain no surrounding whitespace"
+                        .to_owned(),
+                );
+            }
+            if !members.insert(member.as_str()) {
+                return Err(
+                    "arkret.stations[].internal_channel.integrity.decrypting_forwarding_proxies entries must be unique"
+                        .to_owned(),
+                );
+            }
+        }
+        Ok(())
+    }
 }
 
 /// External identity-registry resolver configuration.
@@ -763,6 +869,91 @@ mod tests {
     }
 
     #[test]
+    fn station_internal_channel_requires_the_canonical_integrity_shape() {
+        let station = |internal_channel: serde_json::Value| {
+            serde_json::from_value::<ArkretConfig>(serde_json::json!({
+                "stations": [{
+                    "name": "principal-a",
+                    "endpoint": "https://principal.example/",
+                    "internal_channel": internal_channel
+                }]
+            }))
+        };
+
+        let mtls = station(serde_json::json!({
+            "integrity": { "mode": "mtls_direct_process" }
+        }))
+        .expect("the canonical direct-mTLS declaration deserializes");
+        assert!(mtls.validate(&figment::Figment::new()).is_ok());
+        assert!(mtls.stations[0].permits_unsigned_internal_channel());
+
+        let registered_tcb = station(serde_json::json!({
+            "integrity": {
+                "mode": "registered_tcb",
+                "decrypting_forwarding_proxies": ["edge-a", "mesh-sidecar-a"]
+            }
+        }))
+        .expect("the canonical registered-TCB declaration deserializes");
+        assert!(registered_tcb.validate(&figment::Figment::new()).is_ok());
+        assert!(registered_tcb.stations[0].permits_unsigned_internal_channel());
+
+        assert!(station(serde_json::json!({})).is_err());
+        assert!(
+            station(serde_json::json!({
+                "transport_integrity": { "mode": "mtls_direct_process" }
+            }))
+            .is_err()
+        );
+        assert!(
+            station(serde_json::json!({
+                "integrity": { "mode": "mtls_terminated_at_proxy" }
+            }))
+            .is_err()
+        );
+        assert!(
+            station(serde_json::json!({
+                "integrity": {
+                    "mode": "mtls_direct_process",
+                    "decrypting_forwarding_proxies": ["unregistered-proxy"]
+                }
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn registered_tcb_rejects_empty_blank_and_duplicate_proxy_members() {
+        let config = |members: Vec<&str>| ArkretConfig {
+            stations: vec![StationConfig {
+                name: "principal-a".to_owned(),
+                endpoint: "https://principal.example/".parse().unwrap(),
+                service_id: None,
+                session_grant_introspection_bearer: Some("credential".to_owned()),
+                internal_channel: Some(InternalChannelConfig {
+                    integrity: InternalChannelIntegrityConfig::RegisteredTcb {
+                        decrypting_forwarding_proxies: members
+                            .into_iter()
+                            .map(ToOwned::to_owned)
+                            .collect(),
+                    },
+                }),
+                embedded_webvh_registration_bearer: None,
+                trust_domain: None,
+            }],
+            ..ArkretConfig::default()
+        };
+
+        for members in [vec![], vec![""], vec!["   "], vec![" edge-a"]] {
+            let config = config(members);
+            assert!(config.validate(&figment::Figment::new()).is_err());
+            assert!(!config.stations[0].permits_unsigned_internal_channel());
+        }
+        let duplicate = config(vec!["edge-a", "edge-a"]);
+        assert!(duplicate.validate(&figment::Figment::new()).is_err());
+        assert!(!duplicate.stations[0].permits_unsigned_internal_channel());
+    }
+
+    #[test]
     fn development_auto_enrollment_hosts_validate_shape() {
         let figment = figment::Figment::new();
         let config = ArkretConfig {
@@ -803,6 +994,7 @@ mod tests {
             endpoint: "https://soland.example/".parse().unwrap(),
             service_id: None,
             session_grant_introspection_bearer: None,
+            internal_channel: None,
             embedded_webvh_registration_bearer: None,
             trust_domain: trust_domain.map(ToOwned::to_owned),
         };
@@ -840,6 +1032,7 @@ mod tests {
             endpoint: format!("https://{name}.example/").parse().unwrap(),
             service_id: None,
             session_grant_introspection_bearer: None,
+            internal_channel: None,
             embedded_webvh_registration_bearer: None,
             trust_domain: None,
         };

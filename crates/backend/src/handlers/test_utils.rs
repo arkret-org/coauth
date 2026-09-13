@@ -435,6 +435,7 @@ impl TestState {
                 endpoint: "https://principal.example/".parse()?,
                 service_id: Some(arkret_identifiers::DidCoreId::new(TEST_STATION_AUDIENCE)?),
                 session_grant_introspection_bearer: None,
+                internal_channel: None,
                 embedded_webvh_registration_bearer: None,
                 trust_domain: Some("ak:trust_domain:principal.example".to_owned()),
             }]),

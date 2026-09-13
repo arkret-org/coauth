@@ -942,6 +942,7 @@ mod tests {
                 endpoint: "https://soland-alpha.local.host/".parse().unwrap(),
                 service_id: None,
                 session_grant_introspection_bearer: None,
+                internal_channel: None,
                 embedded_webvh_registration_bearer: None,
                 trust_domain: None,
             }],

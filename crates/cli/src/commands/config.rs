@@ -177,6 +177,11 @@ fn apply_generated_config_options(
             endpoint: DEV_SOLAND_URL.parse().expect("valid dev soland URL"),
             service_id: None,
             session_grant_introspection_bearer: Some(DEV_SOLAND_SESSION_GRANT_BEARER.to_owned()),
+            internal_channel: Some(coauth_config::InternalChannelConfig {
+                integrity: coauth_config::InternalChannelIntegrityConfig::RegisteredTcb {
+                    decrypting_forwarding_proxies: vec!["local-dev-reverse-proxy".to_owned()],
+                },
+            }),
             embedded_webvh_registration_bearer: Some(
                 DEV_SOLAND_WEBVH_REGISTRATION_BEARER.to_owned(),
             ),
@@ -236,7 +241,10 @@ mod tests {
             .first()
             .expect("dev config should include Soland");
         assert_eq!(station.endpoint.as_str(), DEV_SOLAND_URL);
-        assert_eq!(station.trust_domain.as_deref(), Some(DEV_SOLAND_TRUST_DOMAIN));
+        assert_eq!(
+            station.trust_domain.as_deref(),
+            Some(DEV_SOLAND_TRUST_DOMAIN)
+        );
         let serialized = serde_json::to_value(&config).expect("dev config should serialize");
         let serialized_server = &serialized["arkret"]["stations"][0];
         assert!(serialized_server.get("audience").is_none());

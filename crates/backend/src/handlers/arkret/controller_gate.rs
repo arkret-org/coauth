@@ -238,12 +238,21 @@ fn authenticate_internal_channel_caller(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(not_found)?;
-    if !super::station_internal_channel_callers(&config, credential)
+    let caller_station = config
+        .stations
         .iter()
-        .any(|caller| caller == request.agent_authority_id.as_str())
-    {
-        return Err(not_found());
-    }
+        .find(|station| {
+            station.permits_unsigned_internal_channel()
+                && station
+                    .session_grant_introspection_bearer
+                    .as_deref()
+                    .is_some_and(|configured| {
+                        crate::util::constant_time_token_eq(configured, credential)
+                    })
+                && crate::services::station_trust::effective_audience_shared(station)
+                    .is_some_and(|audience| audience == request.agent_authority_id)
+        })
+        .ok_or_else(not_found)?;
 
     let local_service_id = owning_station_id_for(&config);
     // The trust domains are configured facts on both ends of this edge: the
@@ -251,34 +260,37 @@ fn authenticate_internal_channel_caller(
     // `arkret.trust_domain`. They are compared only as redundant inputs — an
     // absent header is not a rejection, and neither header is ever an identity
     // source — but a header that disagrees with the configuration is.
-    let caller_trust_domain = config
-        .stations
-        .iter()
-        .find(|station| {
-            crate::services::station_trust::effective_audience_shared(station)
-                .is_some_and(|audience| audience == request.agent_authority_id)
-        })
-        .and_then(|station| station.trust_domain.as_deref());
+    let caller_trust_domain = caller_station.trust_domain.as_deref();
+    validate_redundant_channel_headers(
+        req.headers(),
+        request.agent_authority_id.as_str(),
+        local_service_id.as_str(),
+        caller_trust_domain,
+        config.trust_domain.as_deref(),
+    )?;
+    Ok(())
+}
+
+fn validate_redundant_channel_headers(
+    headers: &http::HeaderMap,
+    source_service_id: &str,
+    destination_service_id: &str,
+    source_trust_domain: Option<&str>,
+    destination_trust_domain: Option<&str>,
+) -> Result<(), ArkretRouteError> {
     let redundant = [
-        ("source-service-id", Some(request.agent_authority_id.as_str())),
-        ("destination-service-id", Some(local_service_id.as_str())),
+        ("source-service-id", Some(source_service_id)),
+        ("destination-service-id", Some(destination_service_id)),
         ("arkret-operation", Some(GATE_OPERATION_ID)),
-        ("source-trust-domain", caller_trust_domain),
-        ("destination-trust-domain", config.trust_domain.as_deref()),
+        ("source-trust-domain", source_trust_domain),
+        ("destination-trust-domain", destination_trust_domain),
     ];
     for (header, expected) in redundant {
-        let Some(expected) = expected else {
-            continue;
-        };
-        if let Some(observed) = req
-            .headers()
-            .get(header)
-            .and_then(|value| value.to_str().ok())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            && observed != expected
-        {
-            return Err(not_found());
+        if let Some(value) = headers.get(header) {
+            let observed = value.to_str().map_err(|_| not_found())?;
+            if !expected.is_some_and(|expected| observed == expected) {
+                return Err(not_found());
+            }
         }
     }
     Ok(())
@@ -347,4 +359,89 @@ fn schema_violation(message: impl Into<String>) -> ArkretRouteError {
         arkret_wire::ErrorCode::SCHEMA_VIOLATION,
         message,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SOURCE: &str = "ak:did_core:web:agent-authority.example";
+    const DESTINATION: &str = "ak:did_core:web:station.example";
+    const SOURCE_DOMAIN: &str = "ak:trust_domain:agent-authority.example";
+    const DESTINATION_DOMAIN: &str = "ak:trust_domain:station.example";
+
+    fn canonical_headers() -> http::HeaderMap {
+        let mut headers = http::HeaderMap::new();
+        headers.insert("source-service-id", SOURCE.parse().unwrap());
+        headers.insert("destination-service-id", DESTINATION.parse().unwrap());
+        headers.insert("arkret-operation", GATE_OPERATION_ID.parse().unwrap());
+        headers.insert("source-trust-domain", SOURCE_DOMAIN.parse().unwrap());
+        headers.insert(
+            "destination-trust-domain",
+            DESTINATION_DOMAIN.parse().unwrap(),
+        );
+        headers
+    }
+
+    fn validate(headers: &http::HeaderMap) -> Result<(), ArkretRouteError> {
+        validate_redundant_channel_headers(
+            headers,
+            SOURCE,
+            DESTINATION,
+            Some(SOURCE_DOMAIN),
+            Some(DESTINATION_DOMAIN),
+        )
+    }
+
+    #[test]
+    fn redundant_internal_channel_headers_match_registered_facts_verbatim() {
+        assert!(validate(&canonical_headers()).is_ok());
+
+        for (name, wrong) in [
+            ("source-service-id", "ak:did_core:web:other-station.example"),
+            (
+                "destination-service-id",
+                "ak:did_core:web:other-auth.example",
+            ),
+            ("source-trust-domain", "ak:trust_domain:wrong.example"),
+            ("destination-trust-domain", "ak:trust_domain:wrong.example"),
+            (
+                "arkret-operation",
+                arkret_wire::ServiceOperationId::PEER_DEVICE_REVOCATIONS_COMMAND_CHECK_V1,
+            ),
+        ] {
+            let mut headers = canonical_headers();
+            headers.insert(name, wrong.parse().unwrap());
+            assert!(validate(&headers).is_err(), "{name} mismatch must reject");
+        }
+
+        let mut whitespace_changed = canonical_headers();
+        whitespace_changed.insert("source-service-id", format!(" {SOURCE}").parse().unwrap());
+        assert!(validate(&whitespace_changed).is_err());
+    }
+
+    #[test]
+    fn a_present_redundant_header_requires_the_corresponding_configuration() {
+        let headers = canonical_headers();
+        assert!(
+            validate_redundant_channel_headers(
+                &headers,
+                SOURCE,
+                DESTINATION,
+                None,
+                Some(DESTINATION_DOMAIN),
+            )
+            .is_err()
+        );
+        assert!(
+            validate_redundant_channel_headers(
+                &headers,
+                SOURCE,
+                DESTINATION,
+                Some(SOURCE_DOMAIN),
+                None,
+            )
+            .is_err()
+        );
+    }
 }
