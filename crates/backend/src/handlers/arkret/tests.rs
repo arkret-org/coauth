@@ -1,6 +1,7 @@
 use arkret_models_collaboration::session_grant_bodies::{
-    SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND, SessionGrantIntrospectOutcome,
-    SessionGrantIntrospectStatus, SessionGrantIntrospectionProofClaims,
+    AuthSessionLogoutOutcome, SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND,
+    SessionGrantIntrospectOutcome, SessionGrantIntrospectStatus,
+    SessionGrantIntrospectionProofClaims,
 };
 use arkret_models_identity::{
     SessionGrantCredentialClass, SessionGrantHolderBinding, SignedSessionGrantClaims,
@@ -873,6 +874,174 @@ async fn seed_persisted_session_grant(
     repo.save().await.unwrap();
 
     (browser_session, grant, material, session_key)
+}
+
+#[tokio::test]
+async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_replays() {
+    setup();
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let mut state = TestState::from_pool(pool.clone()).await.unwrap();
+    let (browser_session, grant, material, _session_key) =
+        seed_persisted_session_grant(&mut state).await;
+    let logout_body = serde_json::json!({
+        "grant_jwt": material.grant_jwt,
+        "reason_code": "account_logout",
+    });
+
+    let response = state
+        .request(
+            Request::post("/_arkret/gate/account/auth-sessions/logout")
+                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .json(&logout_body),
+        )
+        .await;
+    response.assert_status(StatusCode::OK);
+    let outcome: AuthSessionLogoutOutcome = response.json();
+    assert!(outcome.grant_chain_terminated);
+    assert!(outcome.auth_session_logged_out);
+
+    let (first_revoked_at, first_finished_at) = {
+        let mut repo = state.repository().await.unwrap();
+        let stored_grant = repo
+            .oauth_session_grant()
+            .lookup_by_grant_jwt(&material.grant_jwt)
+            .await
+            .unwrap()
+            .expect("logout keeps the exact grant ledger row");
+        let stored_session = repo
+            .browser_session()
+            .lookup(browser_session.id)
+            .await
+            .unwrap()
+            .expect("logout keeps the finished browser session row");
+        repo.cancel().await.unwrap();
+        assert_eq!(
+            stored_grant.lifecycle_state,
+            coauth_data::SessionGrantLifecycleState::Revoked
+        );
+        assert!(stored_grant.revoked_at.is_some());
+        assert!(stored_session.finished_at.is_some());
+        (stored_grant.revoked_at, stored_session.finished_at)
+    };
+
+    // The same exact-token authority surface immediately observes the terminal
+    // state written by logout; there is no second local session truth.
+    let response = state
+        .request(
+            Request::post("/_arkret/gate/account/session-grants/introspect")
+                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .json(serde_json::json!({
+                    "grant_jwt": material.grant_jwt,
+                    "audience_id": grant.audience_id,
+                })),
+        )
+        .await;
+    response.assert_status(StatusCode::OK);
+    let introspection: serde_json::Value = response.json();
+    assert_eq!(introspection["active"], false);
+    assert_eq!(introspection["status"], "revoked");
+
+    // A retry after a lost response is terminal success and must not rewrite
+    // either revocation timestamp.
+    let response = state
+        .request(
+            Request::post("/_arkret/gate/account/auth-sessions/logout")
+                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .json(&logout_body),
+        )
+        .await;
+    response.assert_status(StatusCode::OK);
+    let replay: AuthSessionLogoutOutcome = response.json();
+    assert!(replay.grant_chain_terminated);
+    assert!(replay.auth_session_logged_out);
+
+    let mut repo = state.repository().await.unwrap();
+    let replayed_grant = repo
+        .oauth_session_grant()
+        .lookup_by_grant_jwt(&material.grant_jwt)
+        .await
+        .unwrap()
+        .unwrap();
+    let replayed_session = repo
+        .browser_session()
+        .lookup(browser_session.id)
+        .await
+        .unwrap()
+        .unwrap();
+    repo.cancel().await.unwrap();
+    assert_eq!(replayed_grant.revoked_at, first_revoked_at);
+    assert_eq!(replayed_session.finished_at, first_finished_at);
+}
+
+#[tokio::test]
+async fn auth_session_logout_rejects_unbound_bearers_without_state_change() {
+    setup();
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let mut state = TestState::from_pool(pool.clone()).await.unwrap();
+    let (browser_session, _grant, material, _session_key) =
+        seed_persisted_session_grant(&mut state).await;
+    state.arkret_config.stations.push(StationConfig {
+        name: "other-station".to_owned(),
+        endpoint: "https://other-station.example/".parse().unwrap(),
+        service_id: Some(
+            arkret_identifiers::DidCoreId::new("ak:did_core:web:other-station.example").unwrap(),
+        ),
+        session_grant_introspection_bearer: Some("other-station-channel".to_owned()),
+        embedded_webvh_registration_bearer: None,
+        trust_domain: Some("ak:trust_domain:other-station.example".to_owned()),
+    });
+    let logout_body = serde_json::json!({
+        "grant_jwt": material.grant_jwt,
+        "reason_code": "account_logout",
+    });
+
+    let missing = state
+        .request(Request::post("/_arkret/gate/account/auth-sessions/logout").json(&logout_body))
+        .await;
+    missing.assert_status(StatusCode::UNAUTHORIZED);
+
+    let wrong = state
+        .request(
+            Request::post("/_arkret/gate/account/auth-sessions/logout")
+                .bearer("wrong-channel")
+                .json(&logout_body),
+        )
+        .await;
+    wrong.assert_status(StatusCode::UNAUTHORIZED);
+
+    let other_station = state
+        .request(
+            Request::post("/_arkret/gate/account/auth-sessions/logout")
+                .bearer("other-station-channel")
+                .json(&logout_body),
+        )
+        .await;
+    other_station.assert_status(StatusCode::FORBIDDEN);
+
+    let mut repo = state.repository().await.unwrap();
+    let stored_grant = repo
+        .oauth_session_grant()
+        .lookup_by_grant_jwt(&material.grant_jwt)
+        .await
+        .unwrap()
+        .unwrap();
+    let stored_session = repo
+        .browser_session()
+        .lookup(browser_session.id)
+        .await
+        .unwrap()
+        .unwrap();
+    repo.cancel().await.unwrap();
+    assert_eq!(
+        stored_grant.lifecycle_state,
+        coauth_data::SessionGrantLifecycleState::Active
+    );
+    assert!(stored_grant.revoked_at.is_none());
+    assert!(stored_session.finished_at.is_none());
 }
 
 fn session_grant_introspection_proof(

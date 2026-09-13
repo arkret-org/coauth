@@ -16,7 +16,7 @@ pub async fn logout_auth_session(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<AuthSessionLogoutOutcome>, ArkretRouteError> {
-    require_auth_session_logout_service_caller(req, depot)?;
+    let caller_service_id = require_auth_session_logout_service_caller(req, depot)?;
 
     let body: AuthSessionLogoutRequestBody = req
         .parse_json()
@@ -33,14 +33,15 @@ pub async fn logout_auth_session(
         .map_err(|_| ArkretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
 
     Ok(Json(
-        terminate_auth_side_session_by_grant_jwt(depot, &body.grant_jwt).await?,
+        terminate_auth_side_session_by_grant_jwt(depot, &caller_service_id, &body.grant_jwt)
+            .await?,
     ))
 }
 
 fn require_auth_session_logout_service_caller(
     req: &Request,
     depot: &Depot,
-) -> Result<(), ArkretRouteError> {
+) -> Result<String, ArkretRouteError> {
     let header = req
         .headers()
         .get(http::header::AUTHORIZATION)
@@ -60,8 +61,8 @@ fn require_auth_session_logout_service_caller(
     }
 
     let arkret_config = depot.arkret_config()?;
-    if super::super::station_internal_channel_caller(&arkret_config, token).is_some() {
-        return Ok(());
+    if let Some(caller) = super::super::station_internal_channel_caller(&arkret_config, token) {
+        return Ok(caller);
     }
 
     Err(ArkretRouteError::Unauthorized(
@@ -71,6 +72,7 @@ fn require_auth_session_logout_service_caller(
 
 async fn terminate_auth_side_session_by_grant_jwt(
     depot: &Depot,
+    caller_service_id: &str,
     grant_jwt: &str,
 ) -> Result<AuthSessionLogoutOutcome, ArkretRouteError> {
     let clock = crate::handlers::make_clock();
@@ -85,6 +87,15 @@ async fn terminate_auth_side_session_by_grant_jwt(
         repo.cancel().await?;
         return Ok(success_outcome());
     };
+    // The channel credential authenticates one exact configured Station. Even
+    // when another Station learns a grant's opaque bytes, it cannot terminate
+    // a browser/grant chain belonging to a different audience.
+    if grant.audience_id.as_str() != caller_service_id {
+        repo.cancel().await?;
+        return Err(ArkretRouteError::Forbidden(
+            "service bearer may only logout its own audience".to_owned(),
+        ));
+    }
     let issuer_id = grant.issuer_id.clone();
 
     let canonical_intent = arkret_canonical::canonical_json_bytes(&serde_json::json!({
