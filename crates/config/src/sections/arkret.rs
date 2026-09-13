@@ -604,12 +604,12 @@ pub struct StationConfig {
     #[schemars(with = "Option<String>")]
     pub service_id: Option<arkret_identifiers::DidCoreId>,
 
-    /// Optional static bearer for the Account Authority / Station
-    /// trust edge. The Station presents it to coauth introspection and
-    /// Auth-side logout; coauth presents the same deployment credential when
-    /// reading the standard agent projection for lifecycle authorization.
-    /// When present it defines the internal authority peer and must be unique
-    /// across Station entries.
+    /// Optional static bearer for only the registered deployment-internal
+    /// Account Authority / Station operations: session-grant introspection,
+    /// Auth-side logout, controller grant gating, and device-revocation
+    /// gating. Standard Agent resource and command operations use RFC 9421
+    /// service signatures instead. When present this bearer defines the
+    /// internal authority peer and must be unique across Station entries.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_grant_introspection_bearer: Option<String>,
 

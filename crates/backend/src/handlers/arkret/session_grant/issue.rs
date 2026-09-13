@@ -1188,6 +1188,7 @@ async fn validate_agent_before_reservation(
         AgentSessionProofError, enforce_authoritative_agent_lifecycle, validate_agent_session_proof,
     };
     let config = depot.arkret_config()?;
+    let key_store = depot.key_store()?;
     let urls = depot.url_builder()?;
     let clock = crate::handlers::make_clock();
     let target = urls
@@ -1215,6 +1216,7 @@ async fn validate_agent_before_reservation(
     let view = enforce_authoritative_agent_lifecycle(
         &depot.http_client()?,
         &config,
+        &key_store,
         body.principal_id.as_str(),
     )
     .await
@@ -1292,22 +1294,28 @@ async fn issue_agent_key_proof_session_grant(
     )?;
 
     let agent_id = body.principal_id.as_str();
-    let authoritative_agent =
-        match enforce_authoritative_agent_lifecycle(&http_client, &arkret_config, agent_id).await {
-            Ok(view) => view,
-            Err(rejection) => {
-                repo.cancel().await.ok();
-                let message = match rejection.reason_code() {
-                    Some(reason) => format!("reason_code={reason}; {}", rejection.code()),
-                    None => rejection.code().to_owned(),
-                };
-                return Err(ArkretRouteError::coded(
-                    rejection.http_status(),
-                    rejection.code(),
-                    message,
-                ));
-            }
-        };
+    let authoritative_agent = match enforce_authoritative_agent_lifecycle(
+        &http_client,
+        &arkret_config,
+        &key_store,
+        agent_id,
+    )
+    .await
+    {
+        Ok(view) => view,
+        Err(rejection) => {
+            repo.cancel().await.ok();
+            let message = match rejection.reason_code() {
+                Some(reason) => format!("reason_code={reason}; {}", rejection.code()),
+                None => rejection.code().to_owned(),
+            };
+            return Err(ArkretRouteError::coded(
+                rejection.http_status(),
+                rejection.code(),
+                message,
+            ));
+        }
+    };
     let authorization = match validate_agent_session_proof(
         &mut repo,
         &mut rng,

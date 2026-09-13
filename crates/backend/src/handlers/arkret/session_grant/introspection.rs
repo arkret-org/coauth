@@ -205,6 +205,7 @@ pub async fn introspect_session_grant(
     let clock = crate::handlers::make_clock();
     let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
+    let key_store = depot.key_store()?;
     let mut repo = depot.repo().await?;
 
     let (grant, requested_audience, presented_proof) = match body {
@@ -341,6 +342,7 @@ pub async fn introspect_session_grant(
                 crate::handlers::account::agents::enforce_authoritative_agent_lifecycle(
                     &http_client,
                     &arkret_config,
+                    &key_store,
                     grant.subject_id.as_str(),
                 )
                 .await

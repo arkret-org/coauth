@@ -1427,7 +1427,7 @@
           ]
         },
         "session_grant_introspection_bearer": {
-          "description": "Optional static bearer for the Account Authority / Station\ntrust edge. The Station presents it to coauth introspection and\nAuth-side logout; coauth presents the same deployment credential when\nreading the standard agent projection for lifecycle authorization.\nWhen present it defines the internal authority peer and must be unique\nacross Station entries.",
+          "description": "Optional static bearer for only the registered deployment-internal\nAccount Authority / Station operations: session-grant introspection,\nAuth-side logout, controller grant gating, and device-revocation\ngating. Standard Agent resource and command operations use RFC 9421\nservice signatures instead. When present this bearer defines the\ninternal authority peer and must be unique across Station entries.",
           "type": [
             "string",
             "null"

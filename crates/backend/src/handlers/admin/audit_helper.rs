@@ -98,12 +98,11 @@ pub async fn record_admin_operation_signed(
 
 /// Record a signed service-originated admin audit row.
 ///
-/// Internal service endpoints such as the Agent accountability-grant
-/// issuer are authenticated with static service bearers, so there is no
-/// `User` row to pass into [`record_admin_operation_signed`]. The audit table
-/// does not currently foreign-key `admin_user_id`, so we derive a stable
-/// synthetic id from the service DID and keep the actual actor identity in the
-/// signed details payload.
+/// Service-originated actions have no `User` row to pass into
+/// [`record_admin_operation_signed`]. The audit table does not currently
+/// foreign-key `admin_user_id`, so we derive a stable synthetic id from the
+/// service DID and keep the actual actor identity in the signed details
+/// payload.
 pub(crate) async fn record_service_admin_operation_signed(
     repo: &mut BoxRepository,
     rng: &mut (dyn RngCore + Send),

@@ -451,6 +451,7 @@ pub async fn refresh_session_grant(
         let authoritative_agent = match enforce_authoritative_agent_lifecycle(
             &http_client,
             &arkret_config,
+            &key_store,
             prior_payload.account_id.principal_id.as_str(),
         )
         .await

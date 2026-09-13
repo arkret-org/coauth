@@ -64,6 +64,7 @@ pub async fn post_agent_key_pair(
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
+    let key_store = depot.key_store()?;
 
     let body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody = req
         .parse_json()
@@ -185,6 +186,7 @@ pub async fn post_agent_key_pair(
             super::session_proof::fetch_authoritative_agent_view(
                 &http_client,
                 &arkret_config,
+                &key_store,
                 &agent_id,
             )
             .await
@@ -208,6 +210,7 @@ pub async fn post_agent_key_pair(
     let (authoritative_view, authoritative_server) = super::enforce_authoritative_pairing_handle(
         &http_client,
         &arkret_config,
+        &key_store,
         agent_id.as_str(),
         &body.pairing_request_id,
         now,
@@ -1086,6 +1089,7 @@ async fn commit_and_mark_agent_key_authorization(
     let superseded_event_refs = pairing_superseded_event_refs(&body)?;
     let http_client = depot.http_client()?;
     let arkret_config = depot.arkret_config()?;
+    let key_store = depot.key_store()?;
     let request = PrincipalAgentKeyPairCommitRequest::new(
         idempotency_key.to_owned(),
         request_digest.to_owned(),
@@ -1095,6 +1099,7 @@ async fn commit_and_mark_agent_key_authorization(
     let outcome = crate::services::principal_facade::commit_agent_key_pair_to_station(
         &http_client,
         &arkret_config,
+        &key_store,
         &request,
     )
     .await

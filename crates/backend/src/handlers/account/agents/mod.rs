@@ -1,27 +1,11 @@
-//! AKP-0008 agent controller-approval endpoints.
+//! Agent controller approval, pairing and session authorization.
 //!
-//! Phase P2 (B-A / `_before_todos.md` §1.4): when a controller approves
-//! provisioning of an Agent, coauth (as the controller's
-//! accountability domain) issues a typed `accountability_grant` credential
-//! to soland referencing the agent's principal id and the capability set
-//! covered by the grant. soland's reducer is the persistence authority;
-//! coauth is only the signed-grant issuer.
-//!
-//! Authentication: this endpoint accepts the soland / sodmin static
-//! bearer token configured under
-//! `arkret.stations[].session_grant_introspection_bearer` —
-//! the same trust anchor used elsewhere for server-to-server strands.
-//! Browser sessions and end-user OAuth tokens are NOT accepted.
-//!
-//! Persistence: coauth stores the accountability grant, writes a signed
-//! audit row, and commits the same standard request to the authoritative
-//! Station. The Station remains the reducer-side
-//! authority for agent lifecycle state.
-//!
-//! Wire shape: see [`AccountabilityGrantRequestBody`] and
-//! [`AccountabilityGrantOutcome`].
+//! Client-visible operations use their canonical sender-constrained session
+//! contracts. Split Account Authority calls to the owning Station use the
+//! Station DID's delegated `#account-authority` RFC 9421 service signature;
+//! the deployment bearer remains confined to the four operations registered
+//! by `service-http-binding.md` §2.2.3.
 
-mod accountability;
 mod error_matrix;
 mod key_pair;
 mod proof;
@@ -30,9 +14,6 @@ mod session_proof;
 #[cfg(test)]
 mod tests;
 
-pub use accountability::{
-    AccountabilityGrantOutcome, AccountabilityGrantRequestBody, post_accountability_grant,
-};
 pub use error_matrix::{
     AgentAuthRejection, PAUSED_REVOCATION_FRESHNESS_WINDOW, enforce_agent_lifecycle_gate,
     enforce_paused_revocation_freshness, enforce_verification_method_binding,

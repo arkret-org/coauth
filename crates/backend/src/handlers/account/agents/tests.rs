@@ -1,7 +1,6 @@
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
 mod agent_auth_error_matrix_tests {
-    use arkret_identifiers::DidCoreId;
     use arkret_models_collaboration::session_grant_bodies::{
         AgentSessionGrantProof, AgentSessionGrantProofKind,
     };
@@ -15,9 +14,6 @@ mod agent_auth_error_matrix_tests {
         arkret_canonical::ed25519_pubkey_to_did_key_multibase(&key.to_bytes())
     }
 
-    use super::super::accountability::{
-        accountability_capabilities_digest, normalize_capabilities,
-    };
     use super::super::error_matrix::{
         AgentAuthRejection, PAUSED_REVOCATION_FRESHNESS_WINDOW, enforce_agent_lifecycle_gate,
         enforce_paused_revocation_freshness, enforce_verification_method_binding,
@@ -102,64 +98,6 @@ mod agent_auth_error_matrix_tests {
 
         assert!(
             !pair_agent_key_rejections.contains(&AgentAuthRejection::AccountabilityGrantMissing)
-        );
-    }
-
-    #[test]
-    fn unknown_accountability_grant_action_is_rejected() {
-        let err = normalize_capabilities(vec!["ak.agent.unregistered".to_owned()])
-            .expect_err("unknown action must fail closed");
-        assert_eq!(err.status(), http::StatusCode::BAD_REQUEST);
-        assert!(
-            err.message()
-                .contains("is not a registered ak.agent.* action")
-        );
-    }
-
-    #[test]
-    fn capability_set_is_trimmed_sorted_and_deduplicated() {
-        let normalized = normalize_capabilities(vec![
-            " ak.self.agent.command.resume.v1 ".to_owned(),
-            "ak.self.agent.command.provision.v1".to_owned(),
-            "ak.self.agent.command.resume.v1".to_owned(),
-        ])
-        .expect("registered actions normalize");
-        assert_eq!(
-            normalized,
-            vec![
-                "ak.self.agent.command.provision.v1".to_owned(),
-                "ak.self.agent.command.resume.v1".to_owned()
-            ]
-        );
-    }
-
-    #[test]
-    fn capability_digest_is_stable_after_normalization() {
-        let left = normalize_capabilities(vec![
-            "ak.self.agent.command.resume.v1".to_owned(),
-            "ak.self.agent.command.provision.v1".to_owned(),
-        ])
-        .unwrap();
-        let right = normalize_capabilities(vec![
-            " ak.self.agent.command.provision.v1 ".to_owned(),
-            "ak.self.agent.command.resume.v1".to_owned(),
-            "ak.self.agent.command.resume.v1".to_owned(),
-        ])
-        .unwrap();
-        assert_eq!(left, right);
-        assert_eq!(
-            accountability_capabilities_digest(
-                &DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
-                &DidCoreId::new("ak:did_core:web:controller.example").unwrap(),
-                &left,
-            )
-            .unwrap(),
-            accountability_capabilities_digest(
-                &DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
-                &DidCoreId::new("ak:did_core:web:controller.example").unwrap(),
-                &right,
-            )
-            .unwrap()
         );
     }
 

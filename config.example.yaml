@@ -129,8 +129,9 @@ arkret:
   # keys and JWKS publication are operational.
   audit_signature_fail_closed: false
   stations:
-    # A Station with an internal authority bearer requires this explicit
-    # identity pin and trust domain.
+    # A Station using the fixed internal-authority bearer routes requires this
+    # explicit identity pin and trust domain. Standard Agent operations use
+    # RFC 9421 service signatures, not this bearer.
   - name: soland-example
     endpoint: https://local.host/
     service_id: ak:did_core:web:local.host

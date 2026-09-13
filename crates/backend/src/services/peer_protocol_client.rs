@@ -10,6 +10,9 @@ use arkret_canonical::canonical_json_bytes;
 use arkret_models_collaboration::account_lifecycle::{
     AccountStatusPublicationOutcome, AccountStatusPublicationRequestBody,
 };
+use arkret_models_collaboration::agent_operations::{
+    AgentKeyPairOutcome, AgentKeyPairRequestBody, AgentView,
+};
 use arkret_models_collaboration::governance::erasure::ErasureReceiptResource;
 use arkret_models_collaboration::governance::invite_addressing::{
     InviteDeliveryOutcome, InviteDeliveryRequestBody,
@@ -125,6 +128,80 @@ impl<'a> PeerProtocolClient<'a> {
         })
     }
 
+    /// Build the signed service client for this Account Authority's one
+    /// explicitly configured owning Station.
+    ///
+    /// A split Account Authority has no independent service identity: it
+    /// signs as the owning Station with the Station DID's delegated
+    /// `#account-authority` assertion method. Both service ids and both trust
+    /// domains therefore come only from the verified runtime identity and
+    /// explicit peer configuration. Missing or conflicting facts fail closed.
+    pub fn new_for_owning_station(
+        arkret_config: &'a coauth_config::ArkretConfig,
+        http_client: &'a reqwest::Client,
+        keystore: &'a Keystore,
+    ) -> Result<Self, PeerProtocolClientError> {
+        let target = arkret_config.owning_station().ok_or_else(|| {
+            PeerProtocolClientError::InvalidUrl(
+                "owning Station peer is not explicitly selected".to_owned(),
+            )
+        })?;
+        let delegated = arkret_config
+            .runtime_owning_station_identity
+            .get()
+            .ok_or_else(|| {
+                PeerProtocolClientError::InvalidUrl(
+                    "owning Station identity is not verified".to_owned(),
+                )
+            })?;
+        let destination_id = target.service_id.clone().ok_or_else(|| {
+            PeerProtocolClientError::InvalidUrl(
+                "owning Station service_id is not explicitly configured".to_owned(),
+            )
+        })?;
+        if delegated.station_id != destination_id {
+            return Err(PeerProtocolClientError::InvalidUrl(
+                "verified owning Station identity conflicts with configured service_id".to_owned(),
+            ));
+        }
+        let source_trust_domain = arkret_identifiers::TrustDomainId::new(
+            arkret_config
+                .trust_domain
+                .as_deref()
+                .ok_or_else(|| {
+                    PeerProtocolClientError::InvalidUrl(
+                        "Account Authority trust_domain is not configured".to_owned(),
+                    )
+                })?
+                .to_owned(),
+        )
+        .map_err(|error| PeerProtocolClientError::InvalidUrl(error.to_string()))?;
+        let destination_trust_domain = arkret_identifiers::TrustDomainId::new(
+            target
+                .trust_domain
+                .as_deref()
+                .ok_or_else(|| {
+                    PeerProtocolClientError::InvalidUrl(
+                        "owning Station trust_domain is not configured".to_owned(),
+                    )
+                })?
+                .to_owned(),
+        )
+        .map_err(|error| PeerProtocolClientError::InvalidUrl(error.to_string()))?;
+        Self::new(
+            Some(&target.endpoint),
+            http_client,
+            keystore,
+            delegated.did,
+            KeyPackagesClaimServiceBinding {
+                source_id: delegated.station_id,
+                destination_id,
+            },
+            source_trust_domain,
+            destination_trust_domain,
+        )
+    }
+
     pub async fn post_invite_delivery(
         &self,
         request: &InviteDeliveryRequestBody,
@@ -168,6 +245,47 @@ impl<'a> PeerProtocolClient<'a> {
             "peer_erasure_receipt_get",
             url,
             ServiceOperationId::PEER_ERASURE_RECEIPT_RESOURCE_GET_V1,
+        )
+        .await
+    }
+
+    /// Read the owning Station's exact Agent projection using the ordinary
+    /// RFC 9421 service contract. This is not one of the four deployment
+    /// bearer operations in §2.2.3.
+    pub async fn get_agent_projection(
+        &self,
+        agent_id: &arkret_identifiers::DidCoreId,
+    ) -> Result<AgentView, PeerProtocolClientError> {
+        let mut url = self.join_absolute("/_arkret/self/agents/")?;
+        url.path_segments_mut()
+            .map_err(|_| {
+                PeerProtocolClientError::InvalidUrl(
+                    "owning Station endpoint cannot carry path segments".to_owned(),
+                )
+            })?
+            .push(agent_id.as_str());
+        self.get_json(
+            "self_agent_resource_get",
+            url,
+            ServiceOperationId::SELF_AGENT_RESOURCE_GET_V1,
+        )
+        .await
+    }
+
+    /// Delegate the exact durable Agent pairing command to its authoritative
+    /// owning Station using the ordinary RFC 9421 service contract.
+    pub async fn post_agent_key_pair(
+        &self,
+        request: &AgentKeyPairRequestBody,
+        idempotency_key: &str,
+    ) -> Result<AgentKeyPairOutcome, PeerProtocolClientError> {
+        let url = self.join_absolute("/_arkret/gate/account/agent-key-pair")?;
+        self.post_json(
+            "gate_account_pair_agent_key",
+            url,
+            ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY_V1,
+            request,
+            Some(idempotency_key),
         )
         .await
     }

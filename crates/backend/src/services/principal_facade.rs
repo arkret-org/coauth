@@ -106,61 +106,34 @@ fn owning_station_peer_identity(
 pub(crate) async fn commit_agent_key_pair_to_station(
     http_client: &reqwest::Client,
     arkret_config: &ArkretConfig,
+    key_store: &coauth_keystore::Keystore,
     request: &PrincipalAgentKeyPairCommitRequest,
 ) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome, anyhow::Error> {
     let server = arkret_config
-        .stations
-        .iter()
-        .find(|server| server.name == request.station_name())
-        .ok_or_else(|| anyhow::anyhow!("authoritative Station is no longer configured"))?;
-    let bearer = server
-        .session_grant_introspection_bearer
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| anyhow::anyhow!("authoritative Station has no S2S bearer"))?;
-    submit_agent_key_pair_to_target(http_client, server, bearer, request).await
+        .owning_station()
+        .ok_or_else(|| anyhow::anyhow!("owning Station is not explicitly configured"))?;
+    anyhow::ensure!(
+        server.name == request.station_name(),
+        "Agent key-pair destination is not the configured owning Station"
+    );
+    let client = crate::services::peer_protocol_client::PeerProtocolClient::new_for_owning_station(
+        arkret_config,
+        http_client,
+        key_store,
+    )?;
+    submit_agent_key_pair_to_target(&client, server, request).await
 }
 
 async fn submit_agent_key_pair_to_target(
-    http_client: &reqwest::Client,
+    client: &crate::services::peer_protocol_client::PeerProtocolClient<'_>,
     target: &StationConfig,
-    bearer: &str,
     request: &PrincipalAgentKeyPairCommitRequest,
 ) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome, anyhow::Error> {
     let url = agent_key_pair_url(&target.endpoint);
-    let body_bytes = arkret_canonical::canonical_json_bytes(request.body())
-        .context("canonicalize Agent key-pair commit")?;
-    let response = http_client
-        .post(url.clone())
-        .bearer_auth(bearer)
-        .header(
-            "Arkret-Operation",
-            arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY_V1,
-        )
-        .header("idempotency-key", request.idempotency_key())
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body(body_bytes)
-        .send()
+    let response = client
+        .post_agent_key_pair(request.body(), request.idempotency_key())
         .await
         .with_context(|| format!("send Agent key-pair commit to {}", target.name))?;
-    let status = response.status();
-    let bytes = response
-        .bytes()
-        .await
-        .with_context(|| format!("read Agent key-pair response from {}", target.name))?;
-    if !status.is_success() {
-        let body = String::from_utf8_lossy(&bytes);
-        anyhow::bail!(
-            "Station {} rejected Agent key-pair commit {} with status {}: {}",
-            target.name,
-            request.authorized_event_id(),
-            status,
-            truncate_response_body(&body)
-        );
-    }
-    let response: arkret_models_collaboration::agent_operations::AgentKeyPairOutcome =
-        serde_json::from_slice(&bytes)
-            .with_context(|| format!("decode Agent key-pair response from {}", target.name))?;
     validate_agent_key_pair_response(request, &response)
         .with_context(|| format!("validate Agent key-pair response from {}", target.name))?;
     tracing::info!(
@@ -189,15 +162,6 @@ fn validate_agent_key_pair_response(
         "response authorize_event_ref mismatch"
     );
     Ok(())
-}
-
-fn truncate_response_body(body: &str) -> String {
-    const MAX: usize = 1024;
-    if body.chars().count() <= MAX {
-        body.to_owned()
-    } else {
-        format!("{}...", body.chars().take(MAX).collect::<String>())
-    }
 }
 
 #[async_trait]
@@ -467,7 +431,17 @@ impl ConnectorAdmin for DbConnectorAdmin {
         request: &PrincipalAgentKeyPairCommitRequest,
     ) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome, anyhow::Error>
     {
-        commit_agent_key_pair_to_station(&self.http_client, &self.arkret_config, request).await
+        let signing = self
+            .peer_signing
+            .as_ref()
+            .context("Agent key-pair peer signing configuration is unavailable")?;
+        commit_agent_key_pair_to_station(
+            &self.http_client,
+            &self.arkret_config,
+            &signing.keystore,
+            request,
+        )
+        .await
     }
 
     async fn delete_user(&self, _handle: &str, erase: bool) -> Result<(), anyhow::Error> {
